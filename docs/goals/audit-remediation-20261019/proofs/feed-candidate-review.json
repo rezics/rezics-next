@@ -1,0 +1,1441 @@
+{
+  "goal": "audit-remediation-20261019",
+  "worker": "G-2836",
+  "managerSession": "goal-audit-remediation-20261019",
+  "reviewer": {
+    "requestedEngine": "codex-1 / GPT-6.1 Sol / xhigh",
+    "independent": true,
+    "candidateAuthoredByReviewer": false,
+    "nestedAgentsUsed": false,
+    "accountOrModelFallbackUsed": false,
+    "reviewCount": 1,
+    "implementationChanges": false
+  },
+  "reportSemantics": {
+    "originalReview": "All pre-existing fields are retained verbatim in value as historical evidence for 18e1308c6371936b629ae921490483ef486aae5c -> 79a8d1b1c7c55a05525942200939200ac75c2d6b, including original failed assertions, request-changes outcome, missing criteria, proposed repairs and old next step.",
+    "currentConfirmation": "currentScopedVerdict and focusCorrectionConfirmation supersede only the landing disposition of the two-file c3c84ef correction. They do not rewrite the old failures or claim a full repeat review or audit-finding closure."
+  },
+  "currentScopedVerdict": {
+    "result": "candidate-correction-reviewed-and-checked",
+    "base": "79a8d1b1c7c55a05525942200939200ac75c2d6b",
+    "head": "c3c84ef50757a2d5b5915dac7312175f7b61adc8",
+    "scope": "Two-file correction only, directly over the originally reviewed candidate.",
+    "landingRecommendation": "no-blocking-finding-in-retained-two-file-delta",
+    "summary": "The reached original keyboard focus assertions pass on c3c84ef, with focus retained on one named group through pending, recovered and component error states. The changed 36-story file and scoped types/lint/guards pass. The one public cursor 409 was explicitly transport-injected and followed by genuine responses.",
+    "blockingFindings": [],
+    "originalFindingsClosed": [],
+    "missingOriginalEvidence": "Genuine signed-in persona journeys, live backend generation changes and interrupted RSC, remaining live previews, and the full original locale/theme/width matrix remain outstanding.",
+    "next": "Manager may consider landing exactly c3c84ef50757a2d5b5915dac7312175f7b61adc8 over 79a8d1b1c7c55a05525942200939200ac75c2d6b, subject to normal integration. This worker imports nothing into main and does not close D3-001, AUD-005 or D4-016."
+  },
+  "outcome": {
+    "result": "review-complete",
+    "candidateReviewedAndChecked": true,
+    "landingRecommendation": "request-changes",
+    "summary": "The exact candidate repairs explicit browser reader selection, makes Refresh establish a new cursor generation without waiting for RSC, and uses truthful body previews. A reached public-page keyboard assertion reproduces focus loss after recovery; the unchanged affected suite also has three story failures. Do not treat this review as closure of D3-001, AUD-005 or D4-016.",
+    "blockingFindings": [
+      "FEED-FOCUS-01",
+      "FEED-STORY-01",
+      "FEED-STORY-02"
+    ],
+    "originalFindingsClosed": []
+  },
+  "source": {
+    "base": "18e1308c6371936b629ae921490483ef486aae5c",
+    "head": "79a8d1b1c7c55a05525942200939200ac75c2d6b",
+    "tree": "4bd41e1b8d639cf14ebb3d93e7ff0ccd852fbc5d",
+    "immutableCheckout": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-feed-candidate",
+    "initialCleanHeadVerified": true,
+    "finalCleanHeadVerified": true,
+    "existingCandidateChangedOrRebased": false,
+    "checkSnapshot": ".temp/feed-review-candidate",
+    "checkSnapshotMethod": "A private shared clone, detached at the exact candidate head/tree, inside the authorized worker root. Its local main ref is pinned to the exact base. Dependencies, QA artifacts and browser harnesses stay in this clone or the worker .temp. Source tracked status is empty before and after checks. This avoids writing caches, environment files or dependency stamps into the read-only existing checkout.",
+    "authoredCommits": [
+      {
+        "source": "daf656657b48102c5266d2ecf4e7ec2cacd7ace8",
+        "candidate": "bb40556ea2cf346178dd13ca066472dbc86e6e3c"
+      },
+      {
+        "source": "0f5615b27c73cb7bb82a32aecf598e52a5a7b0a6",
+        "candidate": "79a8d1b1c7c55a05525942200939200ac75c2d6b"
+      }
+    ],
+    "diffPathCount": 20,
+    "changedPaths": [
+      "apps/web/features/feed/api.ts",
+      "apps/web/features/feed/card.tsx",
+      "apps/web/features/feed/feed-list.tsx",
+      "apps/web/features/feed/feed.stories.tsx",
+      "apps/web/features/feed/g-1047-projection.stories.tsx",
+      "apps/web/features/feed/messages.ts",
+      "apps/web/features/feed/messages/de.ts",
+      "apps/web/features/feed/messages/es.ts",
+      "apps/web/features/feed/messages/fr.ts",
+      "apps/web/features/feed/messages/ja.ts",
+      "apps/web/features/feed/messages/ko.ts",
+      "apps/web/features/feed/messages/zh-Hans.ts",
+      "apps/web/features/feed/messages/zh-Hant.ts",
+      "apps/web/features/feed/preview.test.ts",
+      "apps/web/features/feed/preview.ts",
+      "apps/web/features/feed/reader-identity.stories.tsx",
+      "apps/web/features/feed/reader-identity.test.ts",
+      "apps/web/features/feed/types.ts",
+      "apps/web/tests/error-state-copy.test.ts",
+      "scripts/static/web-continuations.inventory.json"
+    ],
+    "reportBranchInitialHead": "668f77dfb5a5dd925246669f7dc205e32d2f61cd",
+    "onlyPublishedPath": "docs/goals/audit-remediation-20261019/proofs/feed-candidate-review.json",
+    "mainProductMutation": false,
+    "pinVerificationCommands": [
+      "git -C /home/edge/projects/rezics/rezics-next/.temp/worktrees/site-feed-candidate status --porcelain=v1",
+      "git -C /home/edge/projects/rezics/rezics-next/.temp/worktrees/site-feed-candidate rev-parse HEAD HEAD^{tree}",
+      "git -C .temp/feed-review-candidate status --porcelain=v1",
+      "git -C .temp/feed-review-candidate diff --name-only 18e1308c6371936b629ae921490483ef486aae5c 79a8d1b1c7c55a05525942200939200ac75c2d6b"
+    ],
+    "immutableCheckoutFinalVerification": {
+      "head": "79a8d1b1c7c55a05525942200939200ac75c2d6b",
+      "tree": "4bd41e1b8d639cf14ebb3d93e7ff0ccd852fbc5d",
+      "porcelain": "",
+      "exit": 0,
+      "verifiedAt": "2026-10-19T07:00:04.703516+00:00"
+    },
+    "checkSnapshotFinalVerification": {
+      "head": "79a8d1b1c7c55a05525942200939200ac75c2d6b",
+      "tree": "4bd41e1b8d639cf14ebb3d93e7ff0ccd852fbc5d",
+      "porcelain": "",
+      "exit": 0,
+      "verifiedAt": "2026-10-19T07:00:04.842355+00:00"
+    },
+    "pinVerificationExitCodes": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "inputs": [
+    ".temp/ref/site-feed-candidate.json",
+    ".temp/ref/feed-candidate-findings.json"
+  ],
+  "sourceReview": {
+    "completeTwentyPathDiffRead": true,
+    "readerAndSecurity": [
+      "mainFeedApi chooses the explicit anonymous browser client for query.actingSubject absent; page, head and suggestions share that choice. An actor selects the authenticated client. Vote/follow/feedback/watermark commands retain the authenticated client and explicit actingSubject.",
+      "FeedProvider uses the production default mainFeedApi() construction. The optional supplied-client seam remains caller-controlled; the adapter specimens supply both clients. Specimens do not prove real session/Agent eligibility resolution.",
+      "SSR home reader selection, BFF bearer/cookie forwarding and Main's authenticated/actingSubject pairing were inspected as supporting code and are outside the 20-path patch. No Main authentication rule was relaxed.",
+      "400 invalid uses ordinary failure/retry copy; only moved/409 offers feed-changed restart. 401/403 and unavailable outcomes retain distinct handling."
+    ],
+    "generationsAndCancellation": [
+      "FeedGeneration keys on the full query; a new initial response identity replaces the generation even at unchanged projection.sequence. Client Refresh calls api.page(query) directly and increments the child generation, so it does not wait for router.refresh/RSC completion.",
+      "Request counters reject obsolete restart responses; FeedPages active guards and polling stopped guards prevent old responses applying after replacement/unmount. Two browser DOM cases reached and passed their stale-content assertions.",
+      "Cancellation evidence concerns invalidation and suppression of stale UI writes. No HTTP AbortController transport cancellation is implemented or claimed.",
+      "The focused public-page run preserves /en?lang=en and recovers unique retained rows after exactly one injected successor 409. This is a controlled reproduction of the original conflict premise, not evidence of a naturally occurring conflict frequency."
+    ],
+    "previews": [
+      "feedExcerpt removes recognized repeated headings and an Ingredients heading, retains meaningful same-title prose, and preserves chapter/release event excerpts. Card layout and line limits are unchanged.",
+      "Four candidate preview unit cases cover six recipe heading formats, empty/facts-only excerpts, meaningful same-title sentences including Chinese, and chapter/release excerpts.",
+      "Six unique retained Recipe excerpts were read from the shared Main using GET only. Their resulting preview is nonempty, comes verbatim from the original excerpt, and does not start with the duplicate title or Ingredients. One actual retained recipe row was viewed in the frontend at both widths; book/guide layout was viewed using existing authored stories."
+    ],
+    "assertionPreservation": [
+      "The reviewer changed no candidate tests, story assertions, production source, static inventory or acceptance requirements.",
+      "Candidate g-1047 projection stories only add an explicit actingSubject to the existing query; their original interaction assertions remain.",
+      "Candidate error-state-copy replaces a pre-existing compound expression with separate moved/restart and invalid/server/retry assertions. This aligns the documented distinction; it is not reviewer-authored relaxation.",
+      "The static inventory change updates one context hash for the existing mainFeedApi read.data.items entry; it adds no new exemption."
+    ],
+    "supportingPaths": [
+      "apps/web/features/feed/feed-context.tsx",
+      "apps/web/features/feed/read.ts",
+      "apps/web/features/feed/projection.ts",
+      "apps/web/features/api/browser.ts",
+      "apps/web/features/api/browser-read.ts",
+      "apps/web/features/home/server.ts",
+      "apps/web/app/api/main/[...path]/route.ts",
+      "services/main/src/routes/feed.ts",
+      "scripts/goal/check.ts",
+      "scripts/goal/tree-currency.ts"
+    ]
+  },
+  "checks": [
+    {
+      "job": "4c425950-dd54-4579-a870-df9d5863625c",
+      "step": 1,
+      "command": "task --dir .temp/feed-review-candidate install",
+      "exit": 0,
+      "classification": "dependency-preparation",
+      "log": ".temp/goal/jobs/4c425950-dd54-4579-a870-df9d5863625c.1.log"
+    },
+    {
+      "job": "4c425950-dd54-4579-a870-df9d5863625c",
+      "step": 2,
+      "command": "bun scripts/goal/goalctl.ts slot -- bun --cwd .temp/feed-review-candidate scripts/goal/goalctl.ts test apps/web/features/feed/reader-identity.test.ts apps/web/features/feed/preview.test.ts apps/web/features/feed/read.test.ts apps/web/features/feed/refusal-read.test.ts apps/web/features/feed/projection.test.ts apps/web/tests/error-state-copy.test.ts apps/web/tests/feed-state.test.ts apps/web/tests/g-1047-projection.test.ts apps/web/features/feed/feed.stories.tsx apps/web/features/feed/reader-identity.stories.tsx apps/web/features/feed/g-1047-projection.stories.tsx apps/web/features/feed/post-row.stories.tsx",
+      "exit": 1,
+      "classification": "affected-suite-story-assertion-failures",
+      "qaRun": "20261019t062853-46c2a8",
+      "unit": {
+        "files": 8,
+        "passed": 66,
+        "failed": 0,
+        "expectCalls": 437
+      },
+      "storybook": {
+        "files": 4,
+        "passed": 52,
+        "failed": 3,
+        "total": 55,
+        "failedCases": [
+          "Feed/Posts > Every Kind",
+          "Feed/Posts > Discussions",
+          "Feed/Posts > Recover Public Fallback Chinese"
+        ]
+      },
+      "artifacts": ".temp/feed-review-candidate/.artifacts/qa/20261019t062853-46c2a8",
+      "log": ".temp/goal/jobs/4c425950-dd54-4579-a870-df9d5863625c.2.log",
+      "remainingSequence": "The later static step was not run after this failure. It ran in the next recorded job."
+    },
+    {
+      "job": "7a3614f2-5357-4682-8d2d-2df2d0f16691",
+      "step": 1,
+      "command": "bun .temp/feed-review-static.ts",
+      "exit": 0,
+      "classification": "candidate-types-lint-guards",
+      "selection": "Exact 20 base/head diff paths; workerCheck({cwd:snapshot,changed,only:['types','lint','guards'],treePrepared:true,cache:false}). Uses the supported worker checker and its Task commands/admission without preparing, rebasing or advancing the immutable source tree.",
+      "results": [
+        {
+          "name": "types",
+          "code": 0,
+          "seconds": 65.989
+        },
+        {
+          "name": "guards",
+          "code": 0,
+          "seconds": 81.292
+        },
+        {
+          "name": "inference",
+          "code": 0,
+          "seconds": 141.084
+        },
+        {
+          "name": "lint",
+          "code": 0,
+          "seconds": 2.99
+        },
+        {
+          "name": "ast",
+          "code": 0,
+          "seconds": 0.452
+        }
+      ],
+      "resultArtifact": ".temp/feed-review-evidence/static-result.json",
+      "log": ".temp/goal/jobs/7a3614f2-5357-4682-8d2d-2df2d0f16691.1.log",
+      "fullCheckLog": ".temp/feed-review-candidate/.temp/goal/check/run-5VZIcG/output.log",
+      "guardNote": "The checker selected 9 of 44 repository guard files. Its built-in timeout-only retries completed successfully; the final guard result is exit 0."
+    },
+    {
+      "job": "7a3614f2-5357-4682-8d2d-2df2d0f16691",
+      "step": 2,
+      "command": "bun scripts/goal/goalctl.ts test .temp/feed-review-runtime.test.ts",
+      "exit": 1,
+      "classification": "setup-filter-path",
+      "assertionReached": false,
+      "reason": "Bun treated the .temp name as a filter and found no files; corrected once to ./.temp/feed-review-runtime.test.ts. No product finding comes from this run.",
+      "log": ".temp/goal/jobs/7a3614f2-5357-4682-8d2d-2df2d0f16691.2.log"
+    },
+    {
+      "job": "4cfbba86-a159-4054-9b13-36938828d28a",
+      "command": "bun scripts/goal/goalctl.ts test ./.temp/feed-review-runtime.test.ts",
+      "exit": 1,
+      "classification": "component-dom-outcome-assertion",
+      "passed": 2,
+      "failed": 1,
+      "expectCalls": 9,
+      "failedCase": "keyboard cursor recovery retains a useful focus destination",
+      "assertionReached": true,
+      "assertionLocation": ".temp/feed-review-runtime.test.ts:71",
+      "assertion": "expect(focus.tag).not.toBe('BODY')",
+      "actual": "BODY",
+      "passedCases": [
+        "changing the query discards an older pending restart answer",
+        "a same-sequence server answer supersedes a pending client restart"
+      ],
+      "observations": ".temp/feed-review-evidence/runtime-observations.json",
+      "log": ".temp/goal/jobs/4cfbba86-a159-4054-9b13-36938828d28a.log"
+    },
+    {
+      "job": "9ed3fbc8-eb02-43ea-b14d-1725b1154b7b",
+      "command": "bun scripts/goal/goalctl.ts test ./.temp/feed-review-live.test.ts",
+      "exit": 1,
+      "classification": "public-dom-outcome-assertion-plus-teardown-noise",
+      "passed": 1,
+      "failed": 1,
+      "expectCalls": 38,
+      "assertionReached": true,
+      "assertionLocation": ".temp/feed-review-live.test.ts:106",
+      "assertion": "expect(focus.tag).not.toBe('BODY')",
+      "actual": "BODY",
+      "passedCase": "six retained recipe excerpts provide real body clues and the live row fits both widths",
+      "teardownError": "A pending route.fetch was disposed during navigation/browser cleanup; this is harness noise, not a product failure. The focus assertion had already been reached. The next focused confirmation waits for route cleanup and eliminates this error.",
+      "observations": ".temp/feed-review-evidence/live-observations.json",
+      "log": ".temp/goal/jobs/9ed3fbc8-eb02-43ea-b14d-1725b1154b7b.log"
+    },
+    {
+      "job": "f91e320a-eb24-45c2-a861-cf441def90e1",
+      "command": "bun scripts/goal/goalctl.ts test ./.temp/feed-review-live-focus.test.ts",
+      "exit": 1,
+      "classification": "confirmed-public-dom-outcome-assertion",
+      "passed": 0,
+      "failed": 1,
+      "expectCalls": 8,
+      "assertionReached": true,
+      "assertionLocation": ".temp/feed-review-live-focus.test.ts:109",
+      "assertion": "expect(focus.tag).not.toBe('BODY')",
+      "actual": "BODY",
+      "teardownErrors": 0,
+      "observations": ".temp/feed-review-evidence/live-focus-confirmation-observations.json",
+      "log": ".temp/goal/jobs/f91e320a-eb24-45c2-a861-cf441def90e1.log"
+    }
+  ],
+  "qaMethod": {
+    "recordedJobLauncher": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- <command…>",
+    "allRecordedJobsLaunchedFromWorkerRoot": true,
+    "browser": "Repository-installed Playwright Chromium, real DOM and keyboard Enter. Existing story IDs discovered from running Storybook /index.json.",
+    "storyIdEvidence": ".temp/feed-review-evidence/storybook-index-feed-ids.json",
+    "storybookRuntime": "task --dir .temp/feed-review-candidate storybook -- --port 62836",
+    "frontendRuntime": "task --dir .temp/feed-review-candidate web:dev -- --port 62837",
+    "backend": "Existing shared Main http://127.0.0.1:3001, GET requests only; no reset, seed, import or authenticated command.",
+    "componentHarness": ".temp/feed-review-candidate/apps/web/.temp/feed-review-harness.tsx",
+    "componentHarnessBoundary": "Reuses existing candidate story args and memory API answers. Query/initial replacement cases mount the actual component and release the obsolete pending promise. These are scoped component harness inputs; no signed-in API evidence or backend personal-condition mutation is claimed.",
+    "liveBoundary": "Only the first cursor response is changed to 409. Subsequent successful responses are actual retained backend responses; one real no-cursor answer is delayed to observe loading. No fabricated successful API fixture. The retained public feed includes previous audit-owned records; this worker created none.",
+    "focusBoundary": "Programmatic focus selects the actual Refresh button, followed by native keyboard Enter. Active element is measured during loading and after recovered articles render. No screen reader or natural-tab discovery of Refresh was tested.",
+    "a11y": "The selected Storybook Vitest setup includes repository story-accessibility.setup.ts and addon a11y test:error. No separate accessibility failure was reported; the three named story failures prevent claiming an all-green suite. Automated settled-state axe does not establish keyboard focus recovery.",
+    "privateServersStoppedBeforeHandoff": true,
+    "serverStopVerification": "ss -ltnp on ports 62836 and 62837 returned no listeners."
+  },
+  "findings": [
+    {
+      "id": "FEED-FOCUS-01",
+      "severity": "P2",
+      "owner": "G-2749",
+      "blocksLanding": true,
+      "classification": "reproduced-public-ui-failure-under-one-cursor-409-injection",
+      "title": "Keyboard Refresh removes the focused control and recovery leaves document.body active",
+      "paths": [
+        {
+          "path": "apps/web/features/feed/feed-list.tsx",
+          "line": 495
+        },
+        {
+          "path": "apps/web/features/feed/feed-list.tsx",
+          "line": 505
+        },
+        {
+          "path": "apps/web/features/feed/feed-list.tsx",
+          "line": 290
+        }
+      ],
+      "observation": "The actual Refresh button is focused and activated with Enter. The error control disappears while Refreshing posts is visible; document.activeElement becomes BODY and stays BODY after a new successful cursor chain has rendered. The focused confirmation has 11 distinct retained rows, no remaining changed-feed alert and the same language URL. Its next Tab reaches the first retained author's link (AUDIT D2 A); do not infer that Tab went to global navigation.",
+      "expected": "A keyboard user who starts recovery retains an intentional focus destination while the control is replaced, and after completion focus is on the recovered list or a suitable actionable descendant.",
+      "actual": "BODY during the pending state and after completion.",
+      "sourceCause": "The restarting branch removes FeedFailure and its focused button. A completed restart remounts FeedPages with a new generation key; no focus handoff accompanies either replacement.",
+      "minimalReproduction": [
+        "Start this exact candidate frontend with Task against the retained shared Main.",
+        "Open /en?lang=en in an anonymous browser. Intercept only the first /api/main/v1/feed request that contains cursor and return HTTP 409 {code:'cursor_conflict'}; pass every later request to the actual backend.",
+        "When the feed-changed alert appears, focus its Refresh button and press Enter once.",
+        "Wait for Refreshing posts to appear, then for at least six distinct [data-feed-item] rows and the alert to disappear.",
+        "Assert document.activeElement !== document.body. The assertion fails on the reviewed head, after URL, anonymous credentials, unique IDs and successful backend response assertions have passed."
+      ],
+      "executableTest": ".temp/feed-review-live-focus.test.ts",
+      "reproductionCommand": "bun scripts/goal/goalctl.ts test ./.temp/feed-review-live-focus.test.ts",
+      "failedOutcomeAssertion": ".temp/feed-review-live-focus.test.ts:109",
+      "reachedOutcomeAssertion": true,
+      "independentComponentCorroboration": ".temp/feed-review-runtime.test.ts:71",
+      "evidence": [
+        ".temp/goal/jobs/f91e320a-eb24-45c2-a861-cf441def90e1.log",
+        ".temp/feed-review-evidence/live-focus-confirmation-observations.json",
+        ".temp/feed-review-evidence/runtime-observations.json"
+      ],
+      "repairDirection": "Preserve or transfer focus intentionally when recovery removes the control and when the new generation renders. Retain the fresh chain, busy status, URL/filter and reader-identity guarantees. Add this reached keyboard outcome to the owner's regression coverage.",
+      "sourceOnlyRelatedSites": "The initial-failure restart branch and New posts generation replacement also replace controls/subtrees. They are class-level source risks, not separately reproduced public failures in this review.",
+      "executedReproductionSource": "import { afterAll, beforeAll, expect, test } from 'bun:test';\nimport { chromium, type Browser, type Page } from 'playwright';\nimport { spawn, type ChildProcess } from 'node:child_process';\nimport { mkdirSync, openSync, writeFileSync } from 'node:fs';\nimport { resolve } from 'node:path';\nimport { feedExcerpt } from './feed-review-candidate/apps/web/features/feed/preview.ts';\n\nconst snapshot = resolve('.temp/feed-review-candidate');\nconst evidence = resolve('.temp/feed-review-evidence');\nconst origin = 'http://127.0.0.1:62837';\nlet server: ChildProcess;\nlet browser: Browser;\nlet browserPage: Page;\nlet release = () => {};\nlet injected = false;\nlet delayFresh = false;\nconst network: any[] = [];\nconst observations: any[] = [];\nmkdirSync(evidence, { recursive: true });\nconst save = () => writeFileSync(`${evidence}/live-focus-confirmation-observations.json`, JSON.stringify({ network, observations }, null, 2));\n\nbeforeAll(async () => {\n  server = spawn('task', ['--dir', snapshot, 'web:dev', '--', '--port', '62837'], {\n    detached: true, stdio: ['ignore', openSync(`${evidence}/web-server.log`, 'a'), openSync(`${evidence}/web-server.log`, 'a')],\n    env: { ...process.env, WRANGLER_SEND_METRICS: 'false' },\n  });\n  let ready = false;\n  for (let attempt = 0; attempt < 150; attempt++) {\n    try { const response = await fetch(`${origin}/favicon.ico`, { signal: AbortSignal.timeout(2000) }); if (response.status !== 503) { ready = true; break; } } catch {}\n    await Bun.sleep(1000);\n  }\n  if (!ready) throw new Error('Candidate web frontend did not become ready');\n  browser = await chromium.launch({ headless: true });\n  browserPage = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' });\n  browserPage.setDefaultTimeout(60000);\n  await browserPage.addInitScript(() => {\n    const send = window.fetch;\n    (window as any).feedReviewRequests = [];\n    window.fetch = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {\n      const url = input instanceof Request ? input.url : String(input);\n      if (url.includes('/api/main/v1/feed')) (window as any).feedReviewRequests.push({ url, credentials: init?.credentials, method: init?.method ?? 'GET' });\n      return send(input, init);\n    }, { preconnect: send.preconnect });\n  });\n  await browserPage.route('**/api/main/v1/feed?**', async route => {\n    const url = new URL(route.request().url());\n    if (url.searchParams.has('cursor') && !injected) {\n      injected = true;\n      network.push({ cursor: true, url: url.href, status: 409, injected: true });\n      await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ code: 'cursor_conflict' }) });\n      return;\n    }\n    if (delayFresh && !url.searchParams.has('cursor')) {\n      delayFresh = false;\n      const gate = new Promise<void>(resolve => { release = resolve; });\n      const response = await route.fetch({ timeout: 60000 });\n      await gate;\n      network.push({ cursor: false, url: url.href, status: response.status(), retainedResponse: true });\n      writeFileSync(`${evidence}/live-recovery-first-page.json`, await response.body());\n      await route.fulfill({ response });\n      return;\n    }\n    const response = await route.fetch({ timeout: 60000 });\n    network.push({ cursor: url.searchParams.has('cursor'), url: url.href, status: response.status(), retainedResponse: true });\n    if (response.ok()) writeFileSync(`${evidence}/live-browser-page-${network.length}.json`, await response.body());\n    await route.fulfill({ response });\n  });\n}, 180000);\n\nafterAll(async () => {\n  release(); save();\n  await browserPage?.unrouteAll({ behavior: 'wait' });\n  await browser?.close();\n  if (server?.pid) { try { process.kill(-server.pid, 'SIGTERM'); } catch {} }\n});\n\ntest('live anonymous feed recovers once from an injected cursor 409 and retains keyboard focus', async () => {\n  await browserPage.goto(`${origin}/en?lang=en`, { waitUntil: 'domcontentloaded', timeout: 120000 });\n  const alert = browserPage.getByRole('alert').filter({ hasText: 'The feed changed while you were reading' });\n  await alert.waitFor();\n  const beforeUrl = browserPage.url();\n  const refresh = alert.getByRole('button', { name: 'Refresh', exact: true });\n  await refresh.focus();\n  delayFresh = true;\n  await browserPage.keyboard.press('Enter');\n  await browserPage.getByText('Refreshing posts…', { exact: true }).waitFor();\n  await browserPage.screenshot({ path: `${evidence}/live-focus-confirmation-pending-1440.png` });\n  const pendingFocus = await browserPage.evaluate(() => document.activeElement?.tagName);\n  release();\n  await browserPage.waitForFunction(() => document.querySelectorAll('[data-feed-item]').length >= 6, { timeout: 60000 });\n  await browserPage.getByRole('feed').getByRole('article').last().scrollIntoViewIfNeeded();\n  await browserPage.waitForTimeout(1000);\n  const count = await browserPage.locator('[data-feed-item]').count();\n  const ids = await browserPage.locator('[data-feed-item]').evaluateAll(elements => elements.map(element => element.getAttribute('data-feed-item')));\n  const requests = await browserPage.evaluate(() => (window as any).feedReviewRequests);\n  const focus = await browserPage.evaluate(() => ({ tag: document.activeElement?.tagName, text: document.activeElement?.textContent?.slice(0, 100) }));\n  await browserPage.screenshot({ path: `${evidence}/live-focus-confirmation-complete-1440.png` });\n  await browserPage.keyboard.press('Tab');\n  const nextTab = await browserPage.evaluate(() => ({ tag: document.activeElement?.tagName, text: document.activeElement?.textContent?.slice(0, 100), href: document.activeElement?.getAttribute('href') }));\n  observations.push({ nextTab, case: 'real anonymous one-409 recovery', beforeUrl, afterUrl: browserPage.url(), pendingFocus, focus,\n    count, uniqueIds: new Set(ids).size, ids, requests, remainingAlerts: await alert.count() }); save();\n  expect(injected).toBe(true);\n  expect(count).toBeGreaterThanOrEqual(6);\n  expect(new Set(ids).size).toBe(count);\n  expect(await alert.count()).toBe(0);\n  expect(browserPage.url()).toBe(beforeUrl);\n  expect(requests.every((request: any) => request.credentials === 'omit' && !new URL(request.url, origin).searchParams.has('actingSubject'))).toBe(true);\n  expect(network.filter(request => !request.injected).every(request => request.status === 200)).toBe(true);\n  expect(focus.tag).not.toBe('BODY');\n}, 180000);\n\n"
+    },
+    {
+      "id": "FEED-STORY-01",
+      "severity": "P2",
+      "owner": "G-2749 / story premise owner",
+      "blocksLanding": true,
+      "classification": "candidate-added-story-query-premise",
+      "title": "Chinese public-fallback story aborts on two valid status elements before releasing recovery",
+      "paths": [
+        {
+          "path": "apps/web/features/feed/feed.stories.tsx",
+          "line": 743
+        }
+      ],
+      "failedCase": "RecoverPublicFallbackChinese",
+      "observation": "canvas.getByRole('status') matches both the relationship-unavailable status and the refreshing status. The lookup throws before api.release(), so this original play function never reaches completion/fresh-chain assertions.",
+      "reachedRecoveryCompletionAssertion": false,
+      "assertionReached": "The status lookup inside the intermediate loading expectation was reached; its ambiguous query failed.",
+      "minimalReproduction": [
+        "Run the unchanged candidate feed.stories.tsx through goalctl test.",
+        "RecoverPublicFallbackChinese calls the shared recovery play; at line 743 getByRole('status') throws with 无法获取关系状态 and 正在刷新动态…."
+      ],
+      "reproductionCommand": "bun --cwd .temp/feed-review-candidate scripts/goal/goalctl.ts test apps/web/features/feed/feed.stories.tsx",
+      "evidence": [
+        ".temp/goal/jobs/4c425950-dd54-4579-a870-df9d5863625c.2.log"
+      ],
+      "repairDirection": "Resolve the query premise to identify the refreshing status without dropping the loading-text, aria-busy, released-response, new-chain or completion assertions. This finding is about the story premise, not proof that public recovery remains stuck."
+    },
+    {
+      "id": "FEED-STORY-02",
+      "severity": "P2",
+      "owner": "G-2749 / original story contract owner",
+      "blocksLanding": true,
+      "classification": "unchanged-story-accessible-name-premise",
+      "title": "EveryKind and Discussions require comment link names that differ from the rendered names",
+      "paths": [
+        {
+          "path": "apps/web/features/feed/feed.stories.tsx",
+          "line": 137
+        },
+        {
+          "path": "apps/web/features/feed/feed.stories.tsx",
+          "line": 295
+        },
+        {
+          "path": "apps/web/features/feed/card.tsx",
+          "line": 365
+        }
+      ],
+      "failedCases": [
+        "EveryKind",
+        "Discussions"
+      ],
+      "observation": "Exact role queries expect '41 comments' and '17 comments'; the rendered accessible names are '41 (41 comments)' and '17 (17 comments)'. Each role query throws before its visibility/href expectation can run.",
+      "reachedRequestedVisibilityOrHrefAssertion": false,
+      "baselineEvidence": "The same assertion lines and corresponding comment-label renderer are unchanged in the exact base/head diff. This establishes unchanged source premises only; the base runtime was not executed.",
+      "minimalReproduction": [
+        "Run the unchanged candidate feed.stories.tsx through goalctl test.",
+        "EveryKind line137 cannot find a link named exactly 41 comments; Discussions line295 cannot find exactly 17 comments. Inspect the error role dump for the count-plus-localized labels."
+      ],
+      "reproductionCommand": "bun --cwd .temp/feed-review-candidate scripts/goal/goalctl.ts test apps/web/features/feed/feed.stories.tsx",
+      "evidence": [
+        ".temp/goal/jobs/4c425950-dd54-4579-a870-df9d5863625c.2.log"
+      ],
+      "repairDirection": "Return the accessible-name contract/premise to its owner, retaining the visibility and destination expectations. Do not silently weaken existing assertions or label this an independently reproduced regression introduced by the candidate."
+    }
+  ],
+  "setupAndNonFindings": [
+    {
+      "classification": "setup",
+      "detail": "The first private runtime invocation omitted ./ before .temp and matched no Bun files. Corrected once; the next run reached the focus assertion."
+    },
+    {
+      "classification": "setup",
+      "detail": "The first live run had route-fetch teardown noise. A focus-only confirmation with unrouteAll({behavior:'wait'}) reaches the identical product assertion without that noise; the passing recipe case was not rerun."
+    },
+    {
+      "classification": "tool-warning",
+      "detail": "Storybook logged an unresolved @storybook/react-dom-shim optimizeDeps include. The run still executed all 55 cases and passed 52. The three failures are located at the specific role queries above; the warning is not their demonstrated cause."
+    },
+    {
+      "classification": "source-only-counterexample-boundary",
+      "detail": "No new Main authentication counterexample was reproduced. Optional custom mainFeedApi clients remain caller-controlled and do not substitute for testing actual signed-in persona selection."
+    }
+  ],
+  "acceptance": {
+    "D3-001": {
+      "status": "partial-verification-not-closed",
+      "verified": [
+        "Six adapter unit cases pass: five explicit reader states through first/successor/temporary-unavailable/recovery/head/suggestions plus commands retaining authentication.",
+        "Five transport specimen stories pass, including Chinese phone dark and valid-Agent actor/same-origin pairing.",
+        "Actual anonymous frontend recovery keeps credentials omit and omits actingSubject; Main pairing enforcement is unchanged."
+      ],
+      "missing": [
+        "Genuine signed-in no-selected-Agent, ineligible-Agent, acting-context-unavailable and valid-Agent journeys through actual SSR, second page, head and recovery.",
+        "The full original en/zh-Hans x 1440/390 x light/dark live persona matrix and signed-in personal content/command behavior."
+      ]
+    },
+    "AUD-005": {
+      "status": "recovery-verified-with-focus-defect-original-not-closed",
+      "verified": [
+        "Existing same-sequence review/personal stories establish a new no-cursor/fresh-cursor chain.",
+        "Real anonymous one-409 recovery preserves /en?lang=en, shows perceptible pending status, removes the error and renders unique retained rows without a full reload.",
+        "Browser DOM query and same-sequence new-initial cases suppress an obsolete pending restart answer."
+      ],
+      "missing": [
+        "True live backend reviewSequence and personal-condition changes at unchanged projection.sequence were not performed.",
+        "A naturally interrupted/slow live RSC request was not forced; source and scoped stories exercise the direct-read design that avoids waiting on RSC.",
+        "Full live locale/theme/width matrix remains outstanding. The reached focus failure needs repair."
+      ]
+    },
+    "D4-016": {
+      "status": "six-retained-data-excerpts-and-selected-rendering-verified-original-not-closed",
+      "verified": [
+        "Six unique retained Recipe records yield actual body clues without inventing description text.",
+        "Actual 25. Minestra row viewed at 1440 light and 390 dark, no horizontal overflow; existing preview stories viewed for recipe/book/guide/facts-only at both widths.",
+        "Meaningful same-title prose and chapter/release text remain intact in passing unit cases."
+      ],
+      "missing": [
+        "The other five retained recipe rows were validated as source excerpts, not individually captured as live frontend rows.",
+        "Book/guide rendering uses authored story inputs; genuine retained book/guide body previews were not independently matched to original audit samples.",
+        "Phone dark live screenshot used a manual document theme class; persisted user theme behavior and full locale matrix were not exercised."
+      ]
+    }
+  },
+  "screenshotsActuallyViewed": [
+    {
+      "path": ".temp/feed-review-candidate/.artifacts/qa/20261019t062853-46c2a8/story-screenshots/apps-web-features-feed-feed.stories.tsx/UsefulWorkPreviews.png",
+      "viewport": [
+        1440,
+        1000
+      ],
+      "sha256": "42f2562ac5605d22f5b8bf80a6f5da1416dbfab9d678eed661fef2eeb0fa5342",
+      "observation": "Story: useful recipe/book/guide/facts-only body clues, readable desktop row layout.",
+      "viewedWith": "view_image"
+    },
+    {
+      "path": ".temp/feed-review-candidate/.artifacts/qa/20261019t062853-46c2a8/story-screenshots/apps-web-features-feed-feed.stories.tsx/UsefulWorkPreviewsPhone.png",
+      "viewport": [
+        390,
+        844
+      ],
+      "sha256": "bc164b4e0a0ceb5fdc8d8f1345999b451cce44442d74217cc76ae5f67c7cb537",
+      "observation": "Story: phone dark title wrapping and useful body clues fit without horizontal overflow.",
+      "viewedWith": "view_image"
+    },
+    {
+      "path": ".temp/feed-review-candidate/.artifacts/qa/20261019t062853-46c2a8/story-screenshots/apps-web-features-feed-feed.stories.tsx/RecoverChangedReviewsAtSameSequence.png",
+      "viewport": [
+        1440,
+        1000
+      ],
+      "sha256": "0e1b45732fb536abf7b8978c07fa99a44eccc7c9801c7ac29e495fc3e5947b17",
+      "observation": "Story: recovered Work 2 and Work 3 at unchanged activity sequence; error gone.",
+      "viewedWith": "view_image"
+    },
+    {
+      "path": ".temp/feed-review-candidate/.artifacts/qa/20261019t062853-46c2a8/story-screenshots/apps-web-features-feed-reader-identity.stories.tsx/ActingContextUnavailable.png",
+      "viewport": [
+        390,
+        844
+      ],
+      "sha256": "76a9d70547944a78d476be173f78870a4e288c288f2c05cac00d35dd61a43c7e",
+      "observation": "Transport specimen: Chinese phone dark, two recovered rows and end state. This is not a real signed-in session.",
+      "viewedWith": "view_image"
+    },
+    {
+      "path": ".temp/feed-review-candidate/.artifacts/qa/20261019t062853-46c2a8/story-screenshots/apps-web-features-feed-g-1047-projection.stories.tsx/KeepsReadingPlaceChinese.png",
+      "viewport": [
+        390,
+        860
+      ],
+      "sha256": "0a9f88778c3848eb4a87bc551b73a20f6838650982a01b7d421928b9fdc382ee",
+      "observation": "Projection story: Chinese phone light, scrolled retained rows remain in view; controls and titles fit.",
+      "viewedWith": "view_image"
+    },
+    {
+      "path": ".temp/feed-review-candidate/.artifacts/qa/20261019t062853-46c2a8/story-screenshots/apps-web-features-feed-reader-identity.stories.tsx/NoSelectedAgent.png",
+      "viewport": [
+        1440,
+        1000
+      ],
+      "sha256": "18fbb4f8c91c79f2ded1cd2d7588106693338530585840f8993a2f390f281046",
+      "observation": "Transport specimen: two rows and end state; anonymous-action treatment. Not a real signed-in Agent selection outcome.",
+      "viewedWith": "view_image"
+    },
+    {
+      "path": ".temp/feed-review-candidate/.artifacts/qa/20261019t062853-46c2a8/story-screenshots/apps-web-features-feed-reader-identity.stories.tsx/EligibleAgent.png",
+      "viewport": [
+        1440,
+        1000
+      ],
+      "sha256": "f07b29d6bbbc8db309629a09c11d682f9d22d1d332b1ee8168008c4dcae90d35",
+      "observation": "Transport specimen: two rows and active signed-in action treatment. Not genuine authenticated API evidence.",
+      "viewedWith": "view_image"
+    },
+    {
+      "path": ".temp/feed-review-evidence/live-recovery-pending-1440.png",
+      "viewport": [
+        1440,
+        1000
+      ],
+      "sha256": "c3f418304137ea55d20a1ee53cfbb3523de5d86de3917becee9740789bec22ad",
+      "observation": "First live run: retained audit-owned row in full English shell, English filter and Refreshing posts visible.",
+      "viewedWith": "view_image"
+    },
+    {
+      "path": ".temp/feed-review-evidence/live-recovery-complete-1440.png",
+      "viewport": [
+        1440,
+        1000
+      ],
+      "sha256": "8ca5ec747b156b624898f24530f602e7cecdbbfade4c83500e5ed5950f762c40",
+      "observation": "First live run: recovered retained discussion/chapter rows in full shell; focus measured separately in DOM.",
+      "viewedWith": "view_image"
+    },
+    {
+      "path": ".temp/feed-review-evidence/live-recipe-1440-light.png",
+      "viewport": [
+        1440,
+        1000
+      ],
+      "sha256": "e66e9f46aa444d5925c8e58717cedf7e82b6242a83fe14ffadbca350e0cc58ee",
+      "observation": "Actual retained Minestra recipe: ingredient text adds information below title, normal desktop row rhythm.",
+      "viewedWith": "view_image"
+    },
+    {
+      "path": ".temp/feed-review-evidence/live-recipe-390-dark.png",
+      "viewport": [
+        390,
+        844
+      ],
+      "sha256": "2152a43eabbb53b5a9735254fa526d24f6c700202388f9f2f911d02c1ca58caf",
+      "observation": "Actual retained recipe at phone width: wrapped title, readable ingredients and no document horizontal overflow; theme set manually.",
+      "viewedWith": "view_image"
+    },
+    {
+      "path": ".temp/feed-review-evidence/live-focus-confirmation-pending-1440.png",
+      "viewport": [
+        1440,
+        1000
+      ],
+      "sha256": "0fcb0c53e1429070935cc962f0b2eec6e816daa8d9080b530044cc3155d2911a",
+      "observation": "Clean confirmation: full shell and language filter retained; Refreshing posts visible after Enter.",
+      "viewedWith": "view_image"
+    },
+    {
+      "path": ".temp/feed-review-evidence/live-focus-confirmation-complete-1440.png",
+      "viewport": [
+        1440,
+        1000
+      ],
+      "sha256": "a2b21fc7a5afe9121829056c9b2dfbee220d0136b0278b31daa07a174650b19c",
+      "observation": "Clean confirmation: successful real retained rows after recovery; no changed-feed alert. Screenshot alone does not establish focus.",
+      "viewedWith": "view_image"
+    },
+    {
+      "path": ".temp/feed-review-evidence/recovery-complete-desktop.png",
+      "viewport": [
+        1440,
+        1000
+      ],
+      "sha256": "0e1b45732fb536abf7b8978c07fa99a44eccc7c9801c7ac29e495fc3e5947b17",
+      "observation": "Independent component DOM harness: new Work 2/3 generation and end state; active element measured BODY.",
+      "viewedWith": "view_image"
+    },
+    {
+      "path": ".temp/feed-review-evidence/server-supersedes-restart-phone.png",
+      "viewport": [
+        390,
+        844
+      ],
+      "sha256": "b1ecc92cb7418826c9dfdf5000ca09825d1367305565dc271ca004c6e0ce5f2c",
+      "observation": "Scoped component harness: newer initial preview rows replace pending restart, with relationship-unavailable statuses. Locale content is mixed because existing preview story inputs are reused; no live localization proof.",
+      "viewedWith": "view_image"
+    }
+  ],
+  "privateEvidence": {
+    "root": ".temp/feed-review-evidence",
+    "jobLogs": ".temp/goal/jobs",
+    "candidateQa": ".temp/feed-review-candidate/.artifacts/qa/20261019t062853-46c2a8",
+    "retainedFeedPages": 3,
+    "retainedRecordsExamined": 19,
+    "retainedRecipeCount": 6,
+    "retainedRecipeEvidence": ".temp/feed-review-evidence/retained-recipe-previews.json",
+    "testArtifacts": [
+      ".temp/feed-review-runtime.test.ts",
+      ".temp/feed-review-live.test.ts",
+      ".temp/feed-review-live-focus.test.ts",
+      ".temp/feed-review-static.ts",
+      ".temp/feed-review-candidate/apps/web/.temp/feed-review-harness.tsx"
+    ],
+    "rawAnswersAndNetworkLogs": "Retained privately under .temp; no private raw log, successful response fixture or screenshot is published in git.",
+    "testArtifactHashes": [
+      {
+        "path": ".temp/feed-review-runtime.test.ts",
+        "sha256": "e55ab60dbb3439b42d5c82415c0c6968ce37ee64b2c3c5a72805d3819c2f64b0"
+      },
+      {
+        "path": ".temp/feed-review-live.test.ts",
+        "sha256": "baceb20fa9b2efa0fd5906b9737de574372d498b647a0cd730d8c7063aac33cc"
+      },
+      {
+        "path": ".temp/feed-review-live-focus.test.ts",
+        "sha256": "3d92e6262c83f760c28620327b92fa5ed30bb9a9d2f31ab9cd36239ba1fe92ac"
+      },
+      {
+        "path": ".temp/feed-review-static.ts",
+        "sha256": "ece56e0f60c2fa710ff65506a82a7b9e11d68c6725a1fe6952a73de8cc5dfd6d"
+      },
+      {
+        "path": ".temp/feed-review-candidate/apps/web/.temp/feed-review-harness.tsx",
+        "sha256": "bbdcab45d1143093deed98077bd4a9ef818a00b4c25ddeea2d7fd88b52380472"
+      }
+    ],
+    "liveFocusConfirmation": {
+      "nextTab": {
+        "tag": "A",
+        "text": "AUDIT D2 A",
+        "href": "/en/@auditd2amvdvvkss"
+      },
+      "case": "real anonymous one-409 recovery",
+      "beforeUrl": "http://127.0.0.1:62837/en?lang=en",
+      "afterUrl": "http://127.0.0.1:62837/en?lang=en",
+      "pendingFocus": "BODY",
+      "focus": {
+        "tag": "BODY",
+        "text": "Skip to contentREZICS/EnglishEnglish繁體中文简体中文日本語한국어DeutschFrançaisEspañol<style>[data-locale-js] { di"
+      },
+      "count": 11,
+      "uniqueIds": 11,
+      "remainingAlerts": 0,
+      "requestAuthorities": [
+        {
+          "credentials": "omit",
+          "actingSubjectPresent": false
+        },
+        {
+          "credentials": "omit",
+          "actingSubjectPresent": false
+        },
+        {
+          "credentials": "omit",
+          "actingSubjectPresent": false
+        },
+        {
+          "credentials": "omit",
+          "actingSubjectPresent": false
+        },
+        {
+          "credentials": "omit",
+          "actingSubjectPresent": false
+        }
+      ],
+      "network": [
+        {
+          "cursor": true,
+          "status": 409,
+          "injected": true
+        },
+        {
+          "cursor": false,
+          "status": 200,
+          "retainedResponse": true
+        },
+        {
+          "cursor": true,
+          "status": 200,
+          "retainedResponse": true
+        },
+        {
+          "cursor": true,
+          "status": 200,
+          "retainedResponse": true
+        },
+        {
+          "cursor": true,
+          "status": 200,
+          "retainedResponse": true
+        }
+      ]
+    },
+    "retainedRecipes": [
+      {
+        "id": "https://rezics.com/id/01a130a5-eab5-7149-a082-8e69110dc65a",
+        "title": "25. Minestra di mattoncini di ricotta",
+        "previewStart": "Ricotta, grammi 200.\nParmigiano grattato, grammi 30.\nUova, N. 2.\nSale, quanto basta.\nOdori di scorza di limone"
+      },
+      {
+        "id": "https://rezics.com/id/01a130a5-d7ca-7704-8bed-0a88c5ae5d8f",
+        "title": "23. Minestra di nocciuole di semolino",
+        "previewStart": "Latte, decilitri 3.\nSemolino, grammi 100.\nParmigiano grattato, grammi 20.\nUova, uno intero e un torlo.\nBurro, "
+      },
+      {
+        "id": "https://rezics.com/id/01a130a5-bc1b-7703-ae2d-1d3d606981ed",
+        "title": "21. Minestra di passatelli di carne",
+        "previewStart": "Filetto di manzo, grammi 150.\nPangrattato, grammi 50.\nParmigiano grattato, grammi 30.\nMidollo di bue, grammi 1"
+      },
+      {
+        "id": "https://rezics.com/id/01a130a5-8c8e-74c3-b0d6-324354bb0d77",
+        "title": "17. Minestra di Krapfen",
+        "previewStart": "Farina d'Ungheria, grammi 100.\nBurro, grammi 20.\nLievito di birra, quanto una noce.\nUova, N. 1\nSale, una presa"
+      },
+      {
+        "id": "https://rezics.com/id/01a130a5-7691-7557-8888-d0e2a55e04fe",
+        "title": "16. Minestra di semolino composta II",
+        "previewStart": "Per ogni uovo:\nSemolino, grammi 30.\nParmigiano grattato, grammi 20.\nBurro, grammi 20.\nSale, una presa.\nOdore d"
+      },
+      {
+        "id": "https://rezics.com/id/01a130a5-5e28-7775-b3fd-a6a225579f2d",
+        "title": "11. Panata",
+        "previewStart": "Pane del giorno avanti, grattato, non pestato, gr. 130.\nUova, N. 4.\nCacio parmigiano, grammi 50.\nOdore di noce"
+      }
+    ]
+  },
+  "administrativeReportChecks": {
+    "status": "passed",
+    "scope": "Report path only; this does not replace the pinned candidate checks.",
+    "job": "dcf14708-c2c8-41a3-b081-3164657b6bc0",
+    "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+    "exit": 0,
+    "steps": [
+      {
+        "command": "task docs:check",
+        "exit": 0,
+        "result": "13 checker tests pass; 243 Markdown files checked for local links, fragments and design navigation. External URLs and runtime behavior not tested.",
+        "log": ".temp/goal/jobs/dcf14708-c2c8-41a3-b081-3164657b6bc0.1.log"
+      },
+      {
+        "command": "task goal -- check",
+        "exit": 0,
+        "result": "types ok (no TS workspace); tests ok (none named in brief); lint ok (no source); ast ok; repository guards ok (1/44 selected). No tree update occurred.",
+        "checkId": "run-cx4Cg1",
+        "log": ".temp/goal/jobs/dcf14708-c2c8-41a3-b081-3164657b6bc0.2.log",
+        "fullLog": ".temp/goal/check/run-cx4Cg1/output.log"
+      }
+    ]
+  },
+  "instructionEffects": [
+    {
+      "file": ".agents/skills/goal-worker/SKILL.md",
+      "quote": "End that turn immediately with RESULT: parked, without a handoff, polling, reading logs or starting more work.",
+      "effect": "Recorded jobs parked and resumed this same worker. Wakes are continuations; no implementation fix round was used."
+    },
+    {
+      "file": "docs/goals/worker.md",
+      "quote": "Translate a main-checkout path into your worktree before editing it.",
+      "effect": "All private checkouts, harnesses, logs and the claimed report are within this worker. The existing candidate remains read-only. Goalctl alone owns permitted main orchestration bookkeeping."
+    },
+    {
+      "file": "user brief",
+      "quote": "For actionable findings give exact paths and smallest reproduction for G-2749, without editing implementation.",
+      "effect": "Only this review report is published. Routine Storybook repair instructions are superseded by the explicit review-only scope; fixes are assigned to the owner."
+    }
+  ],
+  "ownerChanges": [],
+  "proposedTasks": [
+    "G-2749: repair keyboard focus handoff across refresh generations, search the initial-error and New posts replacement paths for the same class, and rerun the reached keyboard test on the new exact head.",
+    "G-2749 / story premise owner: resolve the Chinese status query and the two original comment accessible-name premises while retaining their original behavior assertions; rerun the affected failing cases.",
+    "Manager: arrange the missing original signed-in persona and live locale/theme matrix on the separately selected repaired head. Do not close D3-001, AUD-005 or D4-016 from review alone."
+  ],
+  "next": "Manager routes executable findings to G-2749 and retains this exact review pin. No main mutation, whole-wave import, implementation repair, landing or finding closure is claimed.",
+  "recordedAt": "2026-10-19T06:58:45.031435+00:00",
+  "focusCorrectionConfirmation": {
+    "decision": "2026-10-19T07:49:12Z: cut confirmed remaining correction",
+    "scope": "Confirm only the retained two-file focus correction directly over the original reviewed candidate. This is the continuation of the same independent review, not a second full review or a review of another reviewer.",
+    "recordedAt": "2026-10-19T09:51:52.214226+00:00",
+    "reviewer": {
+      "requestedEngine": "codex-1 / GPT-6.1 Sol / xhigh",
+      "independent": true,
+      "candidateAuthoredByReviewer": false,
+      "nestedAgentsUsed": false,
+      "accountOrModelFallbackUsed": false,
+      "reviewCount": 1,
+      "implementationChanges": false
+    },
+    "source": {
+      "base": "79a8d1b1c7c55a05525942200939200ac75c2d6b",
+      "head": "c3c84ef50757a2d5b5915dac7312175f7b61adc8",
+      "parent": "79a8d1b1c7c55a05525942200939200ac75c2d6b",
+      "tree": "1dbf924b1e57e7e42c6471efbecb4d5e12993e61",
+      "paths": [
+        "apps/web/features/feed/feed-list.tsx",
+        "apps/web/features/feed/feed.stories.tsx"
+      ],
+      "clean": true,
+      "snapshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-focus-candidate",
+      "harnessPin": "e8ab976712007d264bbbf0049b6b4d1a9c8a9fda",
+      "diffPathCount": 2,
+      "parentVerified": true,
+      "originalReviewBase": "18e1308c6371936b629ae921490483ef486aae5c",
+      "originalReviewHead": "79a8d1b1c7c55a05525942200939200ac75c2d6b",
+      "originalReportCommit": "9246c6af6c44c8546b854f6be076521485d662dc",
+      "managerRebasedReportHead": "e8ab976712007d264bbbf0049b6b4d1a9c8a9fda",
+      "checkHarnessPin": "e8ab976712007d264bbbf0049b6b4d1a9c8a9fda",
+      "snapshotMethod": "Private shared clone with its own .git, detached at c3c84ef, inside this worker. Local main ref pinned to 79a8d1b. Dependencies copied into this snapshot, then Task install completed. Only ignored private harness/cache/evidence files added. Product source not edited.",
+      "beforeCheckClean": true,
+      "afterCheckClean": true,
+      "postCheckPins": {
+        "reviewer": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836",
+          "head": "e8ab976712007d264bbbf0049b6b4d1a9c8a9fda",
+          "tree": "25c035d7c7232100d6a537b93541624386934c79",
+          "trackedAndUntrackedStatus": ""
+        },
+        "originalImmutable": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-feed-candidate",
+          "head": "79a8d1b1c7c55a05525942200939200ac75c2d6b",
+          "tree": "4bd41e1b8d639cf14ebb3d93e7ff0ccd852fbc5d",
+          "trackedAndUntrackedStatus": ""
+        },
+        "correctionSnapshot": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-focus-candidate",
+          "head": "c3c84ef50757a2d5b5915dac7312175f7b61adc8",
+          "tree": "1dbf924b1e57e7e42c6471efbecb4d5e12993e61",
+          "trackedAndUntrackedStatus": ""
+        },
+        "recordedAt": "2026-10-19T09:49:55.549759+00:00"
+      },
+      "existingCandidateChangedOrRebased": false,
+      "pinCommands": [
+        "git -C .temp/feed-focus-candidate rev-parse HEAD HEAD^ HEAD^{tree}",
+        "git -C .temp/feed-focus-candidate diff --name-only 79a8d1b1c7c55a05525942200939200ac75c2d6b c3c84ef50757a2d5b5915dac7312175f7b61adc8",
+        "git -C .temp/feed-focus-candidate status --porcelain=v1",
+        "git -C /home/edge/projects/rezics/rezics-next/.temp/worktrees/site-feed-candidate rev-parse HEAD HEAD^{tree}",
+        "git -C /home/edge/projects/rezics/rezics-next/.temp/worktrees/site-feed-candidate status --porcelain=v1"
+      ],
+      "pinCommandExitCodes": [
+        0,
+        0,
+        0,
+        0,
+        0
+      ]
+    },
+    "sourceReview": {
+      "feed-list.tsx": "FeedGeneration now owns one mounted, translated Posts group with tabIndex=-1 and a visible focus ring. restart focuses it with preventScroll before removing Refresh. Its identity survives keyed FeedPages replacement and initial-error/pending/error branches. aria-busy covers pending and clears after success or failure.",
+      "feed.stories.tsx": "Three exact comment-link selectors now match the existing accessible names (41, 64+, 17); visibility and href expectations remain. Recovery status selection is scoped by exact refreshing text with explicit role and text assertions, avoiding the relationship status ambiguity. Existing recovery/query/language/URL/busy assertions remain. Two authored keyboard stories cover success and failure.",
+      "unchangedSecurity": "No authentication, actingSubject, reader selection, Main pairing enforcement or API contract changes in this delta. The original source review and adapter evidence remain applicable. The anonymous live probe again observed credentials omit with no actingSubject.",
+      "unchangedGenerationAndPreview": "No direct-read generation, obsolete-answer suppression or preview algorithm changes. Original source checks, units and scoped generation/preview evidence are reused only within their original limits. Cancellation still means suppressing obsolete UI writes, not aborting transport.",
+      "newBlockingSourceCounterexamples": [],
+      "boundary": "Focus remains on the named group, not on a fabricated successful response or detached Refresh button. Native Enter was used after programmatically focusing the real button; initial natural Tab discovery and assistive-technology speech were not tested."
+    },
+    "originalAssertions": {
+      "preservedWithoutWeakening": true,
+      "componentOriginalFocusCase": {
+        "source": ".temp/feed-review-runtime.test.ts",
+        "assertions": [
+          "expect(await refresh.evaluate(element => element === document.activeElement)).toBe(true);",
+          "expect(queries.map((query: any) => query.cursor ?? '')).toEqual(['old', '', 'fresh']);",
+          "expect(await browserPage.getByRole('article').count()).toBe(2);",
+          "expect(browserPage.url()).toBe(beforeUrl);",
+          "expect(focus.tag).not.toBe('BODY');"
+        ],
+        "newSource": ".temp/feed-focus-runtime.test.ts",
+        "outcomeAssertionReached": true,
+        "result": "passed"
+      },
+      "publicOriginalFocusCase": {
+        "source": ".temp/feed-review-live-focus.test.ts",
+        "assertions": [
+          "expect(injected).toBe(true);",
+          "expect(count).toBeGreaterThanOrEqual(6);",
+          "expect(new Set(ids).size).toBe(count);",
+          "expect(await alert.count()).toBe(0);",
+          "expect(browserPage.url()).toBe(beforeUrl);",
+          "expect(requests.every((request: any) => request.credentials === 'omit' && !new URL(request.url, origin).searchParams.has('actingSubject'))).toBe(true);",
+          "expect(network.filter(request => !request.injected).every(request => request.status === 200)).toBe(true);",
+          "expect(focus.tag).not.toBe('BODY');"
+        ],
+        "newSource": ".temp/feed-focus-live.test.ts",
+        "outcomeAssertionReached": true,
+        "result": "passed"
+      },
+      "additionalAssertions": "Pending focus is not BODY and is the named Posts group with aria-busy=true. The identical element retains focus after success and after a 503 error, with aria-busy=false. Existing row-count, unique-ID, URL, no-alert, query-chain and anonymous credentials assertions remain."
+    },
+    "checks": {
+      "setupAttempt": {
+        "job": "6d56bccd-987e-4695-9473-0826b89d7589",
+        "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task --dir .temp/feed-focus-candidate install' --then 'bun scripts/goal/goalctl.ts test ./.temp/feed-focus-runtime.test.ts' --then 'bun scripts/goal/goalctl.ts test ./.temp/feed-focus-live.test.ts' --then 'bun scripts/goal/goalctl.ts slot -- bun --cwd .temp/feed-focus-candidate scripts/goal/goalctl.ts test apps/web/features/feed/feed.stories.tsx' --then 'bun .temp/feed-focus-static.ts' -- bun .temp/feed-focus-prepare.ts",
+        "exit": 1,
+        "steps": [
+          {
+            "command": "bun .temp/feed-focus-prepare.ts",
+            "exit": 0,
+            "log": ".temp/goal/jobs/6d56bccd-987e-4695-9473-0826b89d7589.1.log"
+          },
+          {
+            "command": "task --dir .temp/feed-focus-candidate install",
+            "exit": 0,
+            "log": ".temp/goal/jobs/6d56bccd-987e-4695-9473-0826b89d7589.2.log"
+          },
+          {
+            "command": "bun scripts/goal/goalctl.ts test ./.temp/feed-focus-runtime.test.ts",
+            "exit": 1,
+            "log": ".temp/goal/jobs/6d56bccd-987e-4695-9473-0826b89d7589.3.log",
+            "classification": "setup-failure",
+            "outcomeAssertionReached": false,
+            "result": "Cold Storybook initial iframe navigation timed out at 15 seconds in beforeAll. One index assertion ran; no focus outcome assertion ran."
+          }
+        ],
+        "remainingSteps": "Not started after setup failure.",
+        "singleSetupCorrection": "Initial iframe navigation now waits for domcontentloaded up to 120 seconds and the existing Middlemarch ready locator up to 120 seconds. No product code, outcome assertion or API response changed."
+      },
+      "confirmation": {
+        "job": "dfdd5116-1c90-4566-acb7-1d9d8283832f",
+        "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'bun scripts/goal/goalctl.ts test ./.temp/feed-focus-live.test.ts' --then 'bun scripts/goal/goalctl.ts slot -- bun --cwd .temp/feed-focus-candidate scripts/goal/goalctl.ts test apps/web/features/feed/feed.stories.tsx' --then 'bun .temp/feed-focus-static.ts' -- bun scripts/goal/goalctl.ts test ./.temp/feed-focus-runtime.test.ts",
+        "exit": 0,
+        "steps": [
+          {
+            "command": "bun scripts/goal/goalctl.ts test ./.temp/feed-focus-runtime.test.ts",
+            "exit": 0,
+            "tests": 2,
+            "passed": 2,
+            "failed": 0,
+            "expectCalls": 13,
+            "seconds": 37.64,
+            "cases": [
+              "keyboard cursor recovery retains a useful focus destination",
+              "failed recovery keeps the same labelled focus group through pending and error"
+            ],
+            "log": ".temp/goal/jobs/dfdd5116-1c90-4566-acb7-1d9d8283832f.1.log"
+          },
+          {
+            "command": "bun scripts/goal/goalctl.ts test ./.temp/feed-focus-live.test.ts",
+            "exit": 0,
+            "tests": 1,
+            "passed": 1,
+            "failed": 0,
+            "expectCalls": 14,
+            "seconds": 153.37,
+            "case": "live anonymous feed recovers once from an injected cursor 409 and retains keyboard focus",
+            "log": ".temp/goal/jobs/dfdd5116-1c90-4566-acb7-1d9d8283832f.2.log"
+          },
+          {
+            "command": "bun scripts/goal/goalctl.ts slot -- bun --cwd .temp/feed-focus-candidate scripts/goal/goalctl.ts test apps/web/features/feed/feed.stories.tsx",
+            "exit": 0,
+            "files": 1,
+            "tests": 36,
+            "passed": 36,
+            "failed": 0,
+            "seconds": 161.68,
+            "qaRun": "20261019t094056-746fe8",
+            "artifacts": ".temp/feed-focus-candidate/.artifacts/qa/20261019t094056-746fe8",
+            "log": ".temp/goal/jobs/dfdd5116-1c90-4566-acb7-1d9d8283832f.3.log",
+            "a11y": "Repository Storybook interaction/a11y setup ran; no failing cases. This does not claim a full assistive-technology audit.",
+            "warnings": "Unresolved @storybook/react-dom-shim optimizeDeps include and future Vite configLoader warnings remained nonfailing."
+          },
+          {
+            "command": "bun .temp/feed-focus-static.ts",
+            "exit": 0,
+            "api": "workerCheck({cwd: correction snapshot, changed: exact two-file diff, only: [types, lint, guards], treePrepared: true, cache: false})",
+            "checkId": "run-upJlzJ",
+            "harnessPin": "e8ab976712007d264bbbf0049b6b4d1a9c8a9fda",
+            "result": {
+              "code": 0,
+              "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-focus-candidate/.temp/goal/check/run-upJlzJ/output.log",
+              "checks": [
+                {
+                  "name": "types",
+                  "code": 0,
+                  "seconds": 17.407
+                },
+                {
+                  "name": "guards",
+                  "code": 0,
+                  "seconds": 21.989
+                },
+                {
+                  "name": "inference",
+                  "code": 0,
+                  "seconds": 122.34
+                },
+                {
+                  "name": "lint",
+                  "code": 0,
+                  "seconds": 0.687
+                },
+                {
+                  "name": "ast",
+                  "code": 0,
+                  "seconds": 0.286
+                }
+              ]
+            },
+            "guardsSelected": 8,
+            "guardsAvailable": 44,
+            "timeoutRetry": "The supported runner retried scripts/static/web-accepted-commands.test.ts after its production-adapter case exceeded 5 seconds. The retry ran all 19 cases of that guard file with a 30-second limit and passed (case 4.812 seconds). Original timeout evidence remains in the full log; no assertion was changed.",
+            "log": ".temp/goal/jobs/dfdd5116-1c90-4566-acb7-1d9d8283832f.4.log"
+          }
+        ]
+      },
+      "reusedEvidence": {
+        "sourcePin": "79a8d1b1c7c55a05525942200939200ac75c2d6b",
+        "reference": "Original sourceReview, checks, qaMethod and acceptance fields in this report; all retained without alteration.",
+        "units": "Original 66 affected units with 437 expect calls passed. No unit file or covered reader/preview algorithm changed in the two-file correction; units were not rerun during this scoped confirmation.",
+        "stories": "36 cases in the changed feed story file were independently rerun here. The other 21 cases across the three unchanged original story files retain their original passes. 57 is combined retained coverage, not a newly executed 57-story run.",
+        "producerReport": "Manager relayed producer counts of 66 units, 57 rendered stories, 3 DOM probes, 1 public probe and static passes. Those are producer claims; the independent reruns in this section are the evidence for this confirmation."
+      }
+    },
+    "observations": {
+      "component": [
+        {
+          "case": "keyboard recovery",
+          "pendingFocus": {
+            "tag": "DIV",
+            "text": "中中文网络小说 · Chinese Web Fiction·Lin Mei 林梅·37m ago·New workFollowing · 中文网络小说 · Chinese Web "
+          },
+          "focus": {
+            "tag": "DIV",
+            "text": "中中文网络小说 · Chinese Web Fiction·Lin Mei 林梅·1h ago·New workFollowing · 中文网络小说 · Chinese Web F"
+          },
+          "queries": [
+            {
+              "scope": "following",
+              "sort": "best",
+              "contentLanguages": [
+                "en"
+              ],
+              "actingSubject": "https://rezics.com/id/00000801-bbbb-4a6f-8c2d-3e7b5c1a9f40",
+              "cursor": "old"
+            },
+            {
+              "scope": "following",
+              "sort": "best",
+              "contentLanguages": [
+                "en"
+              ],
+              "actingSubject": "https://rezics.com/id/00000801-bbbb-4a6f-8c2d-3e7b5c1a9f40"
+            },
+            {
+              "scope": "following",
+              "sort": "best",
+              "contentLanguages": [
+                "en"
+              ],
+              "actingSubject": "https://rezics.com/id/00000801-bbbb-4a6f-8c2d-3e7b5c1a9f40",
+              "cursor": "fresh"
+            }
+          ],
+          "urlRetained": true,
+          "articleCount": 2,
+          "expected": "Focus moves to the recovered list or an actionable descendant"
+        },
+        {
+          "case": "failed recovery focus",
+          "pending": {
+            "tag": "DIV",
+            "role": "group",
+            "name": "Posts",
+            "busy": "true"
+          },
+          "errorFocus": {
+            "same": true,
+            "tag": "DIV",
+            "name": "Posts",
+            "busy": "false"
+          },
+          "queries": [
+            {
+              "scope": "following",
+              "sort": "best",
+              "contentLanguages": [
+                "en"
+              ],
+              "actingSubject": "https://rezics.com/id/00000801-bbbb-4a6f-8c2d-3e7b5c1a9f40"
+            }
+          ],
+          "alert": "Couldn’t load your feed\n\nSomething went wrong on our side.\n\nTry again"
+        }
+      ],
+      "public": {
+        "transport": "Exactly one successor request was explicitly fulfilled with cursor_conflict/409 by the browser transport interceptor. This is not a naturally occurring backend conflict. Subsequent responses used route.fetch against the genuine retained shared Main dataset; one genuine first-page response was held on a gate for the pending screenshot.",
+        "recordedFulfilledResponses": {
+          "injected409": 1,
+          "genuine200": 3,
+          "genuine200Breakdown": "One no-cursor recovery first page and two cursor pages."
+        },
+        "browserRequestsAtCapture": 5,
+        "requestIdentity": "All five recorded browser feed requests used credentials=omit with no actingSubject. Only the four fulfilled responses above are counted as completed network evidence.",
+        "pendingFocus": {
+          "tag": "DIV",
+          "role": "group",
+          "name": "Posts",
+          "busy": "true"
+        },
+        "recoveredFocus": {
+          "sameElement": true,
+          "tag": "DIV",
+          "role": "group",
+          "name": "Posts",
+          "busy": "false"
+        },
+        "rows": 6,
+        "uniqueIds": 6,
+        "remainingMovementAlerts": 0,
+        "urlBefore": "http://127.0.0.1:62839/en?lang=en",
+        "urlAfter": "http://127.0.0.1:62839/en?lang=en",
+        "nextNativeTab": {
+          "tag": "A",
+          "text": "AUDIT D2 interactions",
+          "href": "/en/r/1Cg9prUe7o9kqCnSnmBkh1",
+          "classification": "observed, not an added outcome assertion"
+        },
+        "dataMutation": false,
+        "retainedDataNote": "Responses contain pre-existing audit and imported records. This worker performed no seed, reset, authored post, relationship change or API fixture write.",
+        "teardown": "unrouteAll({behavior: wait}) completed before closing browser/request context; the passing run has no prior teardown-disposed error."
+      },
+      "newReproducedPublicFailures": [],
+      "newSourceCounterexamples": [],
+      "setupFailuresAreNotProductFindings": true
+    },
+    "findingDispositions": [
+      {
+        "id": "FEED-FOCUS-01",
+        "originalHead": "79a8d1b1c7c55a05525942200939200ac75c2d6b",
+        "originalFailureRetained": true,
+        "correctionHead": "c3c84ef50757a2d5b5915dac7312175f7b61adc8",
+        "status": "scoped-repair-confirmed",
+        "evidence": "Original reached component and public focus assertions now pass; pending, recovered and error states retain the same named focus group, supported by actual viewed captures. The 503 error branch is component-story evidence, not a genuine live API error.",
+        "blocksThisTwoFileDelta": false,
+        "closesOriginalAuditFinding": false
+      },
+      {
+        "id": "FEED-STORY-01",
+        "originalFailureRetained": true,
+        "correctionHead": "c3c84ef50757a2d5b5915dac7312175f7b61adc8",
+        "status": "story-premise-corrected-and-rendered-case-passed",
+        "evidence": "Exact refreshing-text query retains status role/text, no-alert, query, URL and completion assertions. RecoverPublicFallbackChinese passed in the 36-case changed file, and its actual Chinese phone-dark screenshot was viewed.",
+        "blocksThisTwoFileDelta": false
+      },
+      {
+        "id": "FEED-STORY-02",
+        "originalFailureRetained": true,
+        "correctionHead": "c3c84ef50757a2d5b5915dac7312175f7b61adc8",
+        "status": "story-premises-corrected-and-rendered-cases-passed",
+        "evidence": "41/64+/17 selectors match existing accessible names. Visibility, at-least count, compact score and comment href assertions remain; EveryKind and Discussions passed in the changed file. The historical baseline runtime was not run.",
+        "blocksThisTwoFileDelta": false
+      }
+    ],
+    "remainingOriginalAcceptance": {
+      "allOriginalFindingsRemainOpen": [
+        "D3-001",
+        "AUD-005",
+        "D4-016"
+      ],
+      "D3-001": [
+        "Genuine signed-in no-selected-Agent, ineligible-Agent, acting-context-unavailable and valid-Agent journeys through actual SSR, second page, head and recovery.",
+        "The full original en/zh-Hans x 1440/390 x light/dark live persona matrix and signed-in personal content/command behavior."
+      ],
+      "AUD-005": [
+        "True live backend reviewSequence and personal-condition changes at unchanged projection.sequence were not performed.",
+        "A naturally interrupted/slow live RSC request was not forced. Original source and scoped stories support direct reads, not a genuine live generation-change proof.",
+        "Full genuine live locale/theme/width matrix remains outstanding. Only the separate focus repair is confirmed here."
+      ],
+      "D4-016": [
+        "The other five retained recipe rows were validated as source excerpts, not individually captured as live frontend rows.",
+        "Book/guide rendering uses authored story inputs; genuine retained book/guide body previews were not independently matched to original audit samples.",
+        "Phone dark live screenshot used a manual document theme class; persisted user theme behavior and full locale matrix were not exercised."
+      ],
+      "additionalBoundaries": [
+        "Existing component actor/story inputs remain scoped harness evidence; they are not genuine signed-in API journeys.",
+        "The new phone-dark component error case and Chinese story capture do not complete en/zh-Hans x 1440/390 x light/dark live persona coverage.",
+        "No new live generation, preview or signed-in assertions were claimed from the two-file focus checks."
+      ]
+    },
+    "screenshotsActuallyViewed": [
+      {
+        "path": ".temp/feed-focus-evidence/recovery-pending-desktop.png",
+        "sha256": "de03fe5495d3864d927a4441e7122b309999a6cee22d859214ca9f8261315a72",
+        "bytes": 30293,
+        "actuallyViewed": true,
+        "width": 1440,
+        "height": 1000,
+        "context": "Component DOM, 1440x1000, en, light; existing authored story inputs, native Enter",
+        "observation": "Visible inset focus ring encloses retained Work 1 and Refreshing posts. Status is readable and the list fits the viewport."
+      },
+      {
+        "path": ".temp/feed-focus-evidence/recovery-complete-desktop.png",
+        "sha256": "f5de299f5765c79f2999d4dbf275700df3c937edc6ba14664432fe55ffbb7fcd",
+        "bytes": 50096,
+        "actuallyViewed": true,
+        "width": 1440,
+        "height": 1000,
+        "context": "Component DOM, 1440x1000, en, light",
+        "observation": "The same focus ring encloses Work 2, Work 3 and the end state after replacement. No clipping or overlap observed."
+      },
+      {
+        "path": ".temp/feed-focus-evidence/recovery-error-pending-phone-dark.png",
+        "sha256": "ea3e365ceb4784009544dbb6dba8aa8c733f4cf7cbd425fff1101cf250ad46e4",
+        "bytes": 10713,
+        "actuallyViewed": true,
+        "width": 390,
+        "height": 844,
+        "context": "Component DOM, 390x844, en, dark through existing preview decorator",
+        "observation": "Visible focus ring encloses pending status and skeleton rows; no horizontal clipping observed."
+      },
+      {
+        "path": ".temp/feed-focus-evidence/recovery-error-complete-phone-dark.png",
+        "sha256": "3fef22e2470d6924e236a04b72a2d56245bab3ee3ca15deb75d84269d54cccc4",
+        "bytes": 13546,
+        "actuallyViewed": true,
+        "width": 390,
+        "height": 844,
+        "context": "Component DOM, 390x844, en, dark; existing authored 503 story outcome",
+        "observation": "Focus ring remains around the error result; heading, server failure explanation and Try again control are readable and fit."
+      },
+      {
+        "path": ".temp/feed-focus-evidence/live-focus-confirmation-pending-1440.png",
+        "sha256": "885913538dfdc9eadfbbb95f69d5386cc217793de1454f5d5fa878e0200acee2",
+        "bytes": 203928,
+        "actuallyViewed": true,
+        "width": 1440,
+        "height": 1000,
+        "context": "Actual anonymous frontend, 1440x1000, en, light; one explicitly injected cursor 409, genuine first-page response held pending",
+        "observation": "Real public layout shows the focus ring around retained rows and Refreshing posts. Header, filters and adjacent column remain legible."
+      },
+      {
+        "path": ".temp/feed-focus-evidence/live-focus-confirmation-complete-1440.png",
+        "sha256": "db36472ab36f727b81820b6d874a78b2362003d4f579da6ad6d56c71da2ab7e9",
+        "bytes": 141457,
+        "actuallyViewed": true,
+        "width": 1440,
+        "height": 1000,
+        "context": "Actual anonymous frontend, 1440x1000, en, light; genuine 200 responses after injected 409",
+        "observation": "The focus ring persists at the current scroll position around genuine recovered rows. Capture includes the next automatic page skeleton; it is not an all-pages-loaded assertion."
+      },
+      {
+        "path": ".temp/feed-focus-candidate/.artifacts/qa/20261019t094056-746fe8/story-screenshots/apps-web-features-feed-feed.stories.tsx/KeyboardRecoveryFocus.png",
+        "sha256": "f5de299f5765c79f2999d4dbf275700df3c937edc6ba14664432fe55ffbb7fcd",
+        "bytes": 50096,
+        "actuallyViewed": true,
+        "width": 1440,
+        "height": 1000,
+        "context": "Official Storybook Chromium interaction and a11y run, en, light",
+        "observation": "Official story capture shows recovered Work 2 and Work 3 inside the visible focus ring, with the end state."
+      },
+      {
+        "path": ".temp/feed-focus-candidate/.artifacts/qa/20261019t094056-746fe8/story-screenshots/apps-web-features-feed-feed.stories.tsx/KeyboardRecoveryFailure.png",
+        "sha256": "822bf8c29fc14941c77a29a47ce91370346a4eece106c3fe67bdf212bc323e97",
+        "bytes": 20409,
+        "actuallyViewed": true,
+        "width": 1440,
+        "height": 1000,
+        "context": "Official Storybook Chromium interaction and a11y run, en, light",
+        "observation": "Official story capture shows the retained ring around the error card and Try again control."
+      },
+      {
+        "path": ".temp/feed-focus-candidate/.artifacts/qa/20261019t094056-746fe8/story-screenshots/apps-web-features-feed-feed.stories.tsx/RecoverPublicFallbackChinese.png",
+        "sha256": "d0ef71e84ea1cf6f7c37198d1776c62602665b4b05fbbe393854aa92d23d9363",
+        "bytes": 34809,
+        "actuallyViewed": true,
+        "width": 390,
+        "height": 844,
+        "context": "Official Storybook Chromium, 390x844, zh-Hans, dark; existing public-fallback specimen",
+        "observation": "Chinese dark phone rendering completes recovery with two rows, relationship-unavailable text and the end state; no visible overflow. This is authored story evidence only."
+      },
+      {
+        "path": ".temp/feed-focus-candidate/.artifacts/qa/20261019t094056-746fe8/story-screenshots/apps-web-features-feed-feed.stories.tsx/EveryKind.png",
+        "sha256": "ab87ab823293cc96e9d62e74e5baa43b0142613e6bc1c7964e12d46bf084333e",
+        "bytes": 115415,
+        "actuallyViewed": true,
+        "width": 1280,
+        "height": 860,
+        "context": "Official Storybook Chromium interaction/a11y run, en, light; corrected selector premise",
+        "observation": "Visible comment counts 41 and 64+ and compact 1.8K score agree with the corrected accessible-name premises. Chapter-hidden state and row hierarchy remain visible; this viewport capture does not cover the full long story."
+      },
+      {
+        "path": ".temp/feed-focus-candidate/.artifacts/qa/20261019t094056-746fe8/story-screenshots/apps-web-features-feed-feed.stories.tsx/Discussions.png",
+        "sha256": "b21ab5e97cdf6dc19860f892b48cc267474e8cf781425fc9ce51a23a378c5892",
+        "bytes": 108515,
+        "actuallyViewed": true,
+        "width": 1280,
+        "height": 860,
+        "context": "Official Storybook Chromium interaction/a11y run, en, light; corrected selector premise",
+        "observation": "Visible 17-comment control, book context and thread rows are readable. The rendered interaction case also passes the original comments href assertion."
+      }
+    ],
+    "privateEvidence": [
+      {
+        "path": ".temp/feed-focus-prepare.ts",
+        "sha256": "c1567a31c11ca6b74ea50aa5b5f3553a42d402a6432da8f4c2d017ed659edc2c",
+        "bytes": 2292
+      },
+      {
+        "path": ".temp/feed-focus-runtime.test.ts",
+        "sha256": "e7dd5bebf4470fb015d3faafe8d82b80fe747e1d31b2f6f5db1592af3c120b68",
+        "bytes": 7091
+      },
+      {
+        "path": ".temp/feed-focus-live.test.ts",
+        "sha256": "3369553e4550cbb5f8b866facce22cbaeef806cf064c16cc7c17a18475617e15",
+        "bytes": 7217
+      },
+      {
+        "path": ".temp/feed-focus-static.ts",
+        "sha256": "68b7218c8cc088d3d7b65c0932dc16e0e94e9fffa906b6e530a47d2f2b57251e",
+        "bytes": 676
+      },
+      {
+        "path": ".temp/feed-focus-candidate/apps/web/.temp/feed-review-harness.tsx",
+        "sha256": "531c7769f6d1c7a34220d87e1edea7bbe5cfe4efbd5df64bb69360803acfecf3",
+        "bytes": 1850
+      },
+      {
+        "path": ".temp/feed-focus-evidence/source.json",
+        "sha256": "3ba714a70c5fb420b13cfe5404857fb37b73440e02aebbc34b22bec77fb52b60",
+        "bytes": 511
+      },
+      {
+        "path": ".temp/feed-focus-evidence/post-check-pins.json",
+        "sha256": "a209eb2b4d632f9434ce39c42f2f7e33c561ffd8a8dba2854af403536341bfe1",
+        "bytes": 852
+      },
+      {
+        "path": ".temp/feed-focus-evidence/focus.patch",
+        "sha256": "070de67c9c2f35660cd8c2b130dde7d74cce8cf20499a90ec0b8e83374d0e92f",
+        "bytes": 9747
+      },
+      {
+        "path": ".temp/feed-focus-evidence/runtime-observations.json",
+        "sha256": "ce91640518531354c24b1ff686d3328740fce6b8677384d19692f6b2e3bf78ba",
+        "bytes": 1859
+      },
+      {
+        "path": ".temp/feed-focus-evidence/live-focus-confirmation-observations.json",
+        "sha256": "0ca8f2d48d8e9b2725e9049e8c42cc4df8f5babb8022fc3e3d20d625a78bd797",
+        "bytes": 9260
+      },
+      {
+        "path": ".temp/feed-focus-evidence/live-recovery-first-page.json",
+        "sha256": "854477a1eccfba4996989bee33ff5ab7584eae0301b2018189af45d63c079d7d",
+        "bytes": 5919
+      },
+      {
+        "path": ".temp/feed-focus-evidence/static-result.json",
+        "sha256": "2fd982bb0d25c6566439eb7703aff0deca4a9337522c5fc18ce917c9583d4795",
+        "bytes": 558
+      },
+      {
+        "path": ".temp/feed-focus-evidence/storybook-index-feed-ids.json",
+        "sha256": "7f873728b08a41853486598f6abcab37f75adaa88c80f842c39283b5c0c9b10d",
+        "bytes": 4460
+      },
+      {
+        "path": ".temp/feed-focus-evidence/original-report-at-e8ab.json",
+        "sha256": "f1036b6c768bbb9b6a54244a600846232d22521172a4de26c45aed442a776f97",
+        "bytes": 49785
+      }
+    ],
+    "administrativeReportChecks": {
+      "status": "passed",
+      "scope": "Claimed JSON report on worker harness e8ab976712007d264bbbf0049b6b4d1a9c8a9fda; does not replace the pinned candidate checks.",
+      "job": "fd4b97d2-0ecd-4b16-ab88-24ed10f3b4d1",
+      "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "exit": 0,
+      "steps": [
+        {
+          "command": "task docs:check",
+          "exit": 0,
+          "result": "13 checker tests pass; 249 Markdown files checked for local links, fragments and design navigation. External URLs and runtime behavior not tested.",
+          "log": ".temp/goal/jobs/fd4b97d2-0ecd-4b16-ab88-24ed10f3b4d1.1.log"
+        },
+        {
+          "command": "task goal -- check",
+          "exit": 0,
+          "result": "types ok (no TypeScript workspace changed); tests ok (none named in brief); lint ok (no source changed); ast ok; guards ok (1/44 selected). No tree update occurred.",
+          "checkId": "run-a6KLUA",
+          "log": ".temp/goal/jobs/fd4b97d2-0ecd-4b16-ab88-24ed10f3b4d1.2.log",
+          "fullLog": ".temp/goal/check/run-a6KLUA/output.log",
+          "nonfailingNotice": "Worker harness was one commit behind main; no harness failure occurred and the worker did not rebase or mutate main."
+        }
+      ]
+    },
+    "proposedTasks": [
+      "Manager retains genuine signed-in no-Agent, ineligible-Agent, unavailable acting-context and valid-Agent SSR/page/head/recovery evidence as outstanding D3-001 work.",
+      "Manager retains live backend same-projection review/personal-condition changes and interrupted RSC as outstanding AUD-005 evidence.",
+      "Manager retains five individually unrendered recipe records, genuine retained book/guide preview matching, and the full original live locale/theme/width matrix as outstanding acceptance work."
+    ],
+    "ownerChanges": [],
+    "next": "Manager may consider landing exactly c3c84ef50757a2d5b5915dac7312175f7b61adc8 over 79a8d1b1c7c55a05525942200939200ac75c2d6b, subject to normal integration. This worker imports nothing into main and does not close D3-001, AUD-005 or D4-016."
+  }
+}
