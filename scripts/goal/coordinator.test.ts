@@ -327,6 +327,69 @@ describe('durable Goal wake coordinator', () => {
   test('task exclusions recognize brief filenames and mixed case without treating engine names as tasks', () => {
     expect(eventTasks({key:'task:G-42:1',body:'See brief-g-42.md and G-43; engine sample-b'})).toEqual(['G-42','G-43']);
   });
+  test('checkpoint history does not block independent completed-task decisions beside an active decision after restart', async () => {
+    const f = fixture();
+    try {
+      const history = [{key:'task:G-42:1',body:'G-42 completed'}, {key:'task:G-43:1',body:'G-43 completed'}];
+      f.setEvents(history);
+      const first = f.open({maxTurns:3}); first.enroll(f.descriptor); first.step();
+      await Promise.all(first.status().attempts.map(attempt=>runAttempt(f.stateDir,attempt.token)));
+      first.step();
+      // Start a new decision just before the history's thirty-minute checkpoint becomes due.
+      f.setNow(2_799_999);
+      const active = {key:'task:G-42:2',body:'Decide the next G-42 result'};
+      f.setEvents([...history,active]); first.step();
+      const activeToken = first.status().attempts.find(attempt=>attempt.event_key === active.key)!.token;
+      first.close();
+
+      const restarted = f.open({maxTurns:3});
+      const sameTask = {key:'task:G-42:3',body:'A later G-42 decision'};
+      const independent = {key:'task:G-43:2',body:'G-43 completed again'};
+      f.setEvents([...history,active,sameTask,independent]);
+      f.setNow(2_800_000); restarted.step();
+      const checkpoint = restarted.db.query("SELECT event_key,body,token FROM events WHERE event_key LIKE 'checkpoint:%'")
+        .get() as {event_key:string;body:string;token:string|null};
+      expect(checkpoint.body).toContain(history[0]!.key);
+      expect(checkpoint.body).toContain(history[1]!.key);
+      expect(restarted.status().attempts.filter(attempt=>attempt.phase !== 'done').map(attempt=>attempt.event_key))
+        .toEqual([active.key,checkpoint.event_key,independent.key]);
+      expect(restarted.db.query('SELECT token FROM events WHERE event_key=?').get(sameTask.key)).toEqual({token:null});
+      expect(restarted.db.query('SELECT token FROM events WHERE event_key=?').get(active.key)).toEqual({token:activeToken});
+      const launches = [...f.launcher.launches];
+      restarted.close();
+      const recovered = f.open({maxTurns:3}); recovered.step(); recovered.step();
+      expect(f.launcher.launches).toEqual(launches);
+      expect(recovered.db.query('SELECT token FROM events WHERE event_key=?').get(checkpoint.event_key)).toEqual({token:checkpoint.token});
+    } finally { f.cleanup(); }
+  });
+  test('an active checkpoint does not lock its history tasks after restart', async () => {
+    const f = fixture();
+    try {
+      const history = {key:'task:G-42:1',body:'G-42 completed'};
+      f.setEvents([history]);
+      const first = f.open({maxTurns:2,turnMinutes:60}); first.enroll(f.descriptor); first.step();
+      await runAttempt(f.stateDir,first.status().attempts[0]!.token); first.step();
+      f.setNow(2_800_000); first.step();
+      const checkpoint = first.status().attempts.find(attempt=>attempt.event_key?.startsWith('checkpoint:'))!;
+      expect(checkpoint.prompt).toContain(history.key);
+      first.close();
+
+      const restarted = f.open({maxTurns:2,turnMinutes:60});
+      const followup = {key:'task:G-42:2',body:'G-42 completed again'};
+      f.setEvents([history,followup]); restarted.step();
+      expect(restarted.status().attempts.filter(attempt=>attempt.phase !== 'done').map(attempt=>attempt.event_key))
+        .toEqual([checkpoint.event_key,followup.key]);
+      await runAttempt(f.stateDir,restarted.status().attempts.find(attempt=>attempt.event_key === followup.key)!.token);
+      restarted.step();
+      f.setNow(4_600_000); restarted.step();
+      expect(restarted.status().attempts.filter(attempt=>attempt.event_key?.startsWith('checkpoint:'))).toHaveLength(1);
+      await runAttempt(f.stateDir,checkpoint.token); restarted.step(); restarted.step();
+      const checkpoints = restarted.status().attempts.filter(attempt=>attempt.event_key?.startsWith('checkpoint:'));
+      expect(checkpoints).toHaveLength(2);
+      expect(checkpoints[1]!.prompt).toContain(followup.key);
+      expect(checkpoints[1]!.prompt).not.toContain(history.key);
+    } finally { f.cleanup(); }
+  });
   test('re-enrolling a role preserves a queued checkpoint and its covered-event boundary', async () => {
     const f = fixture();
     try {
