@@ -4055,5 +4055,1973 @@
       },
       "finalVerification": "JSON parsed; all 19 historical top-level values match worker HEAD; only the claimed report changed; source execution clone remains clean and at exact1d8."
     }
+  },
+  "openingPostCallerReview": {
+    "id": "current-main-opening-post-author-caller",
+    "reviewedAt": "2026-10-19T13:01:25.427359+00:00",
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "independentReviewsPerformed": 1,
+      "nestedAgentsUsed": false,
+      "accountFallbackUsed": false,
+      "candidateImplementationAuthored": false,
+      "productionEdits": false,
+      "existingAssertionsEdited": false,
+      "sameIndependentReviewerContinuation": true,
+      "additionalIndependentReviewers": 0
+    },
+    "source": "20b62bc8fb3103c2c5d587e612072c443377318e",
+    "parent": "9bca164e8ca7a9b382377d518c0bf5d922ea586e",
+    "scope": [
+      "apps/web/features/realm/thread-view.tsx"
+    ],
+    "owner": "Goal manager/root authored bounded caller correction; G-2851 authors this review report and private evidence only.",
+    "boundedReview": "Review only import and four-line current OpeningPost fieldset call. Current Thread/SubjectHeader/reactions/presentation are inherited dependencies, not imported from old d18dd or reapproved as a full wave. No backend/product/assertion changes authored by reviewer.",
+    "manifestRecordedBeforeSourceReview": true,
+    "authoredManifest": {
+      "commit": "20b62bc8fb3103c2c5d587e612072c443377318e",
+      "parent": "9bca164e8ca7a9b382377d518c0bf5d922ea586e",
+      "scope": [
+        "apps/web/features/realm/thread-view.tsx"
+      ],
+      "oldBlob": "d3ed51620cde470e55752f6864da31b161c175de",
+      "newBlob": "ab072fcd980b8b7ea98112191df7cded98c4e284",
+      "oldSha256": "bf190ec852bf9eb35b4fad5f80aafba93183f5d2914839f1496027b1c9019174",
+      "newSha256": "183d34e9128cf0ec9e94d748086daa696c19a94d063a66453ca829fdbd9b03e8",
+      "patchSha256": "42dc87a203f2a71e44487e4417e42123c0eccbb35fc9bb399d5998028b04fa78",
+      "numstat": "5\t0\tapps/web/features/realm/thread-view.tsx",
+      "patch": "diff --git a/apps/web/features/realm/thread-view.tsx b/apps/web/features/realm/thread-view.tsx\nindex d3ed51620cde470e55752f6864da31b161c175de..ab072fcd980b8b7ea98112191df7cded98c4e284 100644\n--- a/apps/web/features/realm/thread-view.tsx\n+++ b/apps/web/features/realm/thread-view.tsx\n@@ -16,6 +16,7 @@ import { browserMainApi } from '../api/browser.ts';\n import { CatalogueCover, CatalogueCoverCredit } from '../catalogue/cover.tsx';\n import { coverKindOf } from '../catalogue/work.ts';\n import { ShareButton, VoteControl } from '../feed/actions.tsx';\n+import { ReplyAuthorActions } from '../feed/author-actions.tsx';\n import { LinkMenu } from '../feed/controls.tsx';\n import { resourceHref } from '../address/path.ts';\n import { markedSpoiler, threadPath } from '../feed/discussion.ts';\n@@ -190,6 +191,10 @@ function OpeningPost({\n       <AboutWork work={read.work} />\n       <fieldset className=\"-ms-1 flex flex-wrap items-center gap-1.5\">\n         <legend className=\"sr-only\">{t.actions}</legend>\n+        {!post.blocked && post.author ? (\n+          <ReplyAuthorActions target={{ reply: post.reply, realm: read.realm, author: post.author.id,\n+            revisionId: post.revisionId, placement: post.placement }} />\n+        ) : null}\n         {post.blocked ? null : (\n           <VoteControl\n             target={{\n"
+    },
+    "executionTree": ".temp/author-opening-source",
+    "executionMode": "owned shared-object isolated clone, detached at exact candidate; existing owner checkouts untouched",
+    "executionTrackedSourceCleanBeforeAndAfter": true,
+    "compositionDependency": {
+      "source": "daebefd39e5b9ee9ba3559426a133f2056284e50",
+      "assembly": "9bca164e8ca7a9b382377d518c0bf5d922ea586e",
+      "priorReportCommit": "fa9f00c533e144e92945304507bc1b126ec88d04",
+      "receiptPath": ".temp/author-opening-review/site-author-lifecycle-current-composition-candidate.json",
+      "receiptSha256": "7547dc2bd30170005f1d9c39c1cb4c59567557263e2528d38ff56d8cff77cf67",
+      "boundedReceiptPath": ".temp/author-opening-review/site-author-opening-post-bounded-candidate.json",
+      "boundedReceiptSha256": "44d496c9930a5a6136901b14a63b5c65e834abe39182802044ad39c16d5e6092",
+      "independentVerification": "Compared actual Git objects: all55 retained selected files at assembly verified;54 remain byte-identical at20b. Only Thread caller blob changed. This comparison is provenance, not reliance on another reviewer verdict."
+    },
+    "productAudit": {
+      "originalFinding": "D2-004",
+      "acceptedContractsChanged": false,
+      "classPrinciple": "Each owned published object exposes its own correction and placement-withdrawal entry point; nested children cannot stand in for the opening Post. Frontend identity display grants no backend authority.",
+      "rootDiscoveredSourceGap": {
+        "id": "current-main-opening-post-missing-author-menu",
+        "owner": "Goal manager/root current-composition caller",
+        "path": "apps/web/features/realm/thread-view.tsx",
+        "parentLines": [
+          190,
+          193,
+          366,
+          408
+        ],
+        "minimalReproduction": "At parent9bca, sign in as opener author and open a Thread whose focus equals its thread. OpeningPost renders separately; ReplyList receives children. No ReplyAuthorActions exists in opener fieldset, so own child menus cannot provide opener correction or withdrawal. This red is source inspection; no baseline failing runtime check was run in this continuation.",
+        "parentBlob": "d3ed51620cde470e55752f6864da31b161c175de",
+        "candidateResolutionLines": [
+          19,
+          194,
+          195,
+          196,
+          197
+        ],
+        "candidateBlob": "ab072fcd980b8b7ea98112191df7cded98c4e284",
+        "status": "resolved at exact20b by bounded caller plus passing real-parent states"
+      },
+      "historicalScopeClarification": "The prior correctiveSourceEquivalence.inheritedThreadCaller observation and source approval describe1d8/d18dd, not current Main9bca. They remain preserved verbatim. Current9bca lacks the opener caller; this appended record independently confirms that gap and approves only its20b correction. No historical green is relabelled as current-opener proof.",
+      "sourceInvariants": [
+        "Actual imported ReplyAuthorActions is byte-identical to approved corrective source and consumes existing FeedProvider. Its signedIn/actingSubject/exact-author comparison remains intact; caller additionally excludes blocked or missing author.",
+        "Caller forwards actual opener reply, read.realm, post.author.id, post.revisionId and post.placement. No parent/child substitution, invented receipt, changed selected-head basis or frontend authority elevation.",
+        "No backend contracts, authoring/private reads, durable receipts, same-key retries, native identity/history, immutable bodies, final authority fences or independent supports changed by these five lines.",
+        "Distinct Structure removal, Content qualification withdrawal, Work publication withdrawal and owned Post/reply placement withdrawal remain settled. Opener action uses placement withdrawal, not erasure or global deletion."
+      ],
+      "newUnresolvedSourceFindings": []
+    },
+    "storybookUiReview": {
+      "reasonForPrivateParentStory": "Existing Thread/Phone parents exercise actual current ThreadView but do not assert the own opening menu; existing author stories exercise other containers. Added private meaningful parent context using the existing ThreadPage/FeedProvider, production ThreadView and production ReplyAuthorActions. No existing assertion edited; no API replacement or command transport used.",
+      "privateStory": {
+        "privateStoryPath": ".temp/author-opening-source/apps/web/features/realm/author-opening-review.stories.tsx",
+        "sha256": "498c87950f2c0b9d5e5fe06b4aa56efaf73d6e46faf8ae8e1d8950b98795662d",
+        "source": "import type { Meta, StoryObj } from '@storybook/react-vite';\nimport { expect, userEvent, waitFor, within } from 'storybook/test';\nimport threadMeta from './thread-view.stories.tsx';\nimport { storyThread } from '../feed/thread-fixtures.ts';\nimport { authorMessages } from '../feed/author-messages.ts';\n\n// Private reviewer evidence: exercise the real Thread parent and production caller.\n// The existing parent fixture signs in Daniel; only the opener's author is changed.\n// No author API or command transport is replaced, and no command is sent here.\nconst ThreadPage = threadMeta.component;\nconst actor = 'https://rezics.com/id/00000802-bbbb-7a6f-8c2d-3e7b5c1a9f40';\nconst ownThread = { ...storyThread, items: storyThread.items.map(item => item.reply === storyThread.focus\n  ? { ...item, author: { id: actor, name: 'Daniel Chen 陈丹尼', handle: 'daniel_chen' } } : item) };\nconst title = 'October read-along: Pride and Prejudice, chapters 1–12';\nconst t = authorMessages.en;\nconst meta = {\n  title: 'Realm/Thread opening author review', component: ThreadPage,\n  args: { read: ownThread, mode: 'open', signedIn: true, locale: 'en' },\n  parameters: threadMeta.parameters,\n  globals: { viewport: { value: 'desktop' }, locale: 'en', theme: 'light' },\n  beforeEach() { localStorage.clear(); },\n  render: args => <ThreadPage {...args} />,\n} satisfies Meta<typeof ThreadPage>;\nexport default meta;\ntype Story = StoryObj<typeof meta>;\n\nasync function ownOpeningMenu(canvasElement: HTMLElement) {\n  const canvas = within(canvasElement);\n  const opener = within(canvas.getByRole('article', { name: title }));\n  const trigger = opener.getByRole('button', { name: t.menu });\n  await expect(trigger).toBeVisible();\n  await expect(opener.getByRole('link', { name: '11 comments' })).toHaveAttribute('href', '#comments');\n  await userEvent.click(trigger);\n  const body = within(canvasElement.ownerDocument.body);\n  const menu = within(await body.findByRole('menu'));\n  await expect(menu.getByRole('menuitem', { name: t.edit })).toBeVisible();\n  await expect(menu.getByRole('menuitem', { name: t.placement })).toBeVisible();\n  await userEvent.keyboard('{Escape}');\n  await waitFor(() => expect(trigger).toHaveFocus());\n  await userEvent.keyboard('{Enter}');\n  await expect(await body.findByRole('menuitem', { name: t.edit })).toBeVisible();\n  await expect(body.getByRole('menuitem', { name: t.placement })).toBeVisible();\n}\n\nexport const OwnOpeningPost: Story = {\n  async play({ canvasElement }) { await ownOpeningMenu(canvasElement); },\n};\nexport const OwnOpeningPostPhone: Story = {\n  globals: { viewport: { value: 'phone' } },\n  async play({ canvasElement }) { await ownOpeningMenu(canvasElement); },\n};\nexport const ForeignOpeningPost: Story = {\n  args: { read: storyThread },\n  async play({ canvasElement }) {\n    const canvas = within(canvasElement);\n    const opener = within(canvas.getByRole('article', { name: title }));\n    await expect(opener.queryByRole('button', { name: t.menu })).toBeNull();\n    // Own nested replies still expose their own actions, so they cannot satisfy the opener check.\n    await expect(canvas.getAllByRole('button', { name: t.menu }).length).toBeGreaterThan(0);\n  },\n};\nexport const BlockedOpeningPost: Story = {\n  args: { read: { ...ownThread, items: ownThread.items.map(item => item.reply === ownThread.focus\n    ? { ...item, blocked: true } : item) } },\n  async play({ canvasElement }) {\n    const opener = within(within(canvasElement).getByRole('article', { name: 'Blocked user' }));\n    await expect(opener.queryByRole('button', { name: t.menu })).toBeNull();\n    await expect(opener.queryByRole('button', { name: /^Upvote/ })).toBeNull();\n  },\n};\nexport const SignedOutOpeningPost: Story = {\n  args: { signedIn: false, mode: 'sign-in' },\n  async play({ canvasElement }) {\n    const opener = within(within(canvasElement).getByRole('article', { name: title }));\n    await expect(opener.queryByRole('button', { name: t.menu })).toBeNull();\n  },\n};\n",
+        "productionOrExistingAssertionEdits": false,
+        "meaningfulNewCoverage": "Actual Thread parent opener own/foreign/blocked/signed-out discovery, desktop/phone menu layout and Escape/Enter focus; no API calls or fixture producer"
+      },
+      "privateTaskfile": {
+        "path": ".temp/author-opening-source/.temp-opening-review.yml",
+        "sha256": "53c35d032dd889e52b6e91864c58fbe905af4b24ed65b9265e2dd264b8132810",
+        "purpose": "Official Storybook index discovery only; all checks executed via Task/goal QA."
+      },
+      "officialStorybookDiscovery": {
+        "job": "1f74258e-e9d4-49d9-9cf8-8f58e837ace6",
+        "step": 1,
+        "result": "passed",
+        "indexPath": ".temp/author-opening-source/.temp/author-opening-story-index.json",
+        "indexSha256": "92f52817fa66bf2baf400527aa57a3ab65047806a5ca036ba027c10f3aa9a571",
+        "storyIds": [
+          "realm-thread-opening-author-review--own-opening-post",
+          "realm-thread-opening-author-review--own-opening-post-phone",
+          "realm-thread-opening-author-review--foreign-opening-post",
+          "realm-thread-opening-author-review--blocked-opening-post",
+          "realm-thread-opening-author-review--signed-out-opening-post",
+          "realm-thread--thread",
+          "realm-thread--phone"
+        ]
+      },
+      "qa": "20261019t125322-ae9989",
+      "result": "7 passed,23 filtered skips,30 registered across2 story files; no failed assertion",
+      "assertionReach": [
+        "Own opener desktop and phone: accessible opener article scoped independently of children; normal menu visible, existing comments link unchanged, Correct text and Withdraw from this community discoverable. Escape restores trigger focus; Enter reopens both choices.",
+        "Foreign opener has no author menu even while owned nested replies do; blocked own opener has no author/vote action; signed-out own opener has no author menu.",
+        "Existing current Thread and Phone stories executed unchanged, with their original interactions. No genuine correction, cancellation, receipt/retry or publication withdrawal command was sent by new discovery stories. Those adapter/backend behaviors retain their prior proofs and genuine acceptance remains open."
+      ],
+      "runtimeExpectCount": "Vitest summary reports story cases, not individual expect count; no assertion-total claim added.",
+      "accessibility": {
+        "result": "Configured global story-accessibility afterEach passed for all7 executed stories; final interactions and body portals scanned in light/dark at390x844 and1280x860; serious/critical WCAG violations block. No story-local gate disabled.",
+        "setupPath": "scripts/qa/story-accessibility.setup.ts",
+        "boundary": "Automated final-state accessibility gate plus actual seven PNG inspection; no extra product acceptance matrix imposed."
+      },
+      "screenshots": [
+        {
+          "name": "BlockedOpeningPost",
+          "qa": "20261019t125322-ae9989",
+          "source": "20b62bc8fb3103c2c5d587e612072c443377318e",
+          "originalPath": ".temp/author-opening-source/.artifacts/qa/20261019t125322-ae9989/story-screenshots/apps-web-features-realm-author-opening-review.stories.tsx/BlockedOpeningPost.png",
+          "retainedPath": ".temp/author-opening-review/screenshots/BlockedOpeningPost.png",
+          "sha256": "bb53b1893a3506a2b7a1000dc95207598cd5bac334c41b661ae389ef71571109",
+          "width": 1280,
+          "height": 860,
+          "viewedWith": "functions view_image, actual PNG, same reviewer",
+          "viewed": true,
+          "observation": "Blocked opener title/body suppression preserved; no author/vote powers shown."
+        },
+        {
+          "name": "ForeignOpeningPost",
+          "qa": "20261019t125322-ae9989",
+          "source": "20b62bc8fb3103c2c5d587e612072c443377318e",
+          "originalPath": ".temp/author-opening-source/.artifacts/qa/20261019t125322-ae9989/story-screenshots/apps-web-features-realm-author-opening-review.stories.tsx/ForeignOpeningPost.png",
+          "retainedPath": ".temp/author-opening-review/screenshots/ForeignOpeningPost.png",
+          "sha256": "962065fb8032ca1d9f3594f502a4b733c952f381b429a8186fbe22a327b7e7fb",
+          "width": 1280,
+          "height": 860,
+          "viewedWith": "functions view_image, actual PNG, same reviewer",
+          "viewed": true,
+          "observation": "Foreign opener has voting/comment/share controls and no author menu; own nested replies remain separate objects."
+        },
+        {
+          "name": "OwnOpeningPost",
+          "qa": "20261019t125322-ae9989",
+          "source": "20b62bc8fb3103c2c5d587e612072c443377318e",
+          "originalPath": ".temp/author-opening-source/.artifacts/qa/20261019t125322-ae9989/story-screenshots/apps-web-features-realm-author-opening-review.stories.tsx/OwnOpeningPost.png",
+          "retainedPath": ".temp/author-opening-review/screenshots/OwnOpeningPost.png",
+          "sha256": "818c062bde0489e6af6f380f7e0b67fb70d9f9b993b66857979f9b4a1916318b",
+          "width": 1280,
+          "height": 860,
+          "viewedWith": "functions view_image, actual PNG, same reviewer",
+          "viewed": true,
+          "observation": "Desktop opener own menu shows Correct text and Withdraw from this community in its action fieldset; menu fits viewport and labels are readable."
+        },
+        {
+          "name": "OwnOpeningPostPhone",
+          "qa": "20261019t125322-ae9989",
+          "source": "20b62bc8fb3103c2c5d587e612072c443377318e",
+          "originalPath": ".temp/author-opening-source/.artifacts/qa/20261019t125322-ae9989/story-screenshots/apps-web-features-realm-author-opening-review.stories.tsx/OwnOpeningPostPhone.png",
+          "retainedPath": ".temp/author-opening-review/screenshots/OwnOpeningPostPhone.png",
+          "sha256": "53d1b656abe633e59759e178960281a9356aada0f2cc816208fa21c6057d377d",
+          "width": 390,
+          "height": 844,
+          "viewedWith": "functions view_image, actual PNG, same reviewer",
+          "viewed": true,
+          "observation": "390px phone opener own menu opens above its trigger, both choices visible without horizontal clipping; surrounding opener/comment controls remain legible."
+        },
+        {
+          "name": "SignedOutOpeningPost",
+          "qa": "20261019t125322-ae9989",
+          "source": "20b62bc8fb3103c2c5d587e612072c443377318e",
+          "originalPath": ".temp/author-opening-source/.artifacts/qa/20261019t125322-ae9989/story-screenshots/apps-web-features-realm-author-opening-review.stories.tsx/SignedOutOpeningPost.png",
+          "retainedPath": ".temp/author-opening-review/screenshots/SignedOutOpeningPost.png",
+          "sha256": "678b4dd57bd3a80c01fb668a9da72ba03f473947dd013324d454803191802312",
+          "width": 1280,
+          "height": 860,
+          "viewedWith": "functions view_image, actual PNG, same reviewer",
+          "viewed": true,
+          "observation": "Owned author identity alone grants no menu; sign-in-to-reply state visible."
+        },
+        {
+          "name": "Phone",
+          "qa": "20261019t125322-ae9989",
+          "source": "20b62bc8fb3103c2c5d587e612072c443377318e",
+          "originalPath": ".temp/author-opening-source/.artifacts/qa/20261019t125322-ae9989/story-screenshots/apps-web-features-realm-thread-view.stories.tsx/Phone.png",
+          "retainedPath": ".temp/author-opening-review/screenshots/Phone.png",
+          "sha256": "daf3a6238a016c4e945fd673123486e213f0b5ebeac0ce921588ede4751175e1",
+          "width": 390,
+          "height": 844,
+          "viewedWith": "functions view_image, actual PNG, same reviewer",
+          "viewed": true,
+          "observation": "Existing current phone parent remains legible at390px; foreign opener has no own menu."
+        },
+        {
+          "name": "Thread",
+          "qa": "20261019t125322-ae9989",
+          "source": "20b62bc8fb3103c2c5d587e612072c443377318e",
+          "originalPath": ".temp/author-opening-source/.artifacts/qa/20261019t125322-ae9989/story-screenshots/apps-web-features-realm-thread-view.stories.tsx/Thread.png",
+          "retainedPath": ".temp/author-opening-review/screenshots/Thread.png",
+          "sha256": "64a3e28434799e8ed173b529f121d7bafd3d7a2f011e5cf0ade22f7e7b3ba919",
+          "width": 1280,
+          "height": 860,
+          "viewedWith": "functions view_image, actual PNG, same reviewer",
+          "viewed": true,
+          "observation": "Existing parent interaction completed; nested reply tree and rule disclosure remain usable. Final viewport is scrolled to rule focus, so this screenshot alone is not opener evidence."
+        }
+      ],
+      "newVisualFindings": [],
+      "observations": "Own opener menu is readable and in bounds on desktop and phone; foreign/blocked/signed-out absence is visible. Existing Thread screenshot finishes scrolled to rule focus, so separate own opener screenshots supply the parent evidence.",
+      "nativeOrGenuineTransport": false
+    },
+    "actualChecks": {
+      "recordedJobOwner": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job, invoked from G-2851 worker root",
+      "install": {
+        "job": "3581930b-f898-4254-8433-20f29a7ee7da",
+        "step": 1,
+        "command": "task --dir .temp/author-opening-source install",
+        "result": "passed"
+      },
+      "harnessAttempts": [
+        {
+          "job": "3581930b-f898-4254-8433-20f29a7ee7da",
+          "step": 2,
+          "result": "Taskfile resolution harness failure; no tests or assertions reached",
+          "correction": "Use absolute private Taskfile path; installation from step1 passed."
+        },
+        {
+          "job": "2aa33aaa-a2e3-44c4-8f76-92aef8c52def",
+          "step": 1,
+          "result": "Official Storybook index output write ENOENT; no tests or assertions reached",
+          "correction": "Create owned output directory .temp in exact source clone; no source/assertion edit."
+        }
+      ],
+      "passingJob": "1f74258e-e9d4-49d9-9cf8-8f58e837ace6",
+      "orderedCommands": [
+        "task --dir .temp/author-opening-source --taskfile /home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2851/.temp/author-opening-source/.temp-opening-review.yml discover",
+        "task --dir .temp/author-opening-source goal:type-files -- --project apps/web/tsconfig.json apps/web/features/realm/thread-view.tsx apps/web/features/realm/author-opening-review.stories.tsx",
+        "task --dir .temp/author-opening-source goal -- test apps/web/features/realm/author-opening-review.stories.tsx apps/web/features/realm/thread-view.stories.tsx --testNamePattern \"(Own Opening Post( Phone)?|Foreign Opening Post|Blocked Opening Post|Signed Out Opening Post|^Thread$|^Phone$)\""
+      ],
+      "results": [
+        "Official Storybook11.0.0-alpha.6 index discovery passed",
+        "Scoped Bun type check: no errors1841 imported files12.58s; CPU+1.5GiB host admission",
+        "Official Vitest5.0.4/Chromium:2 files7 pass23 filter-skip37.39s; normal goal test/4GiB QA admission"
+      ],
+      "nonFailingRunnerOutput": [
+        "Future Vite native config-loader ESM compatibility warning",
+        "optimizeDeps include could not resolve @storybook/react-dom-shim; all7 actual browser stories nevertheless passed."
+      ],
+      "executionPins": {
+        "source": "20b62bc8fb3103c2c5d587e612072c443377318e",
+        "runnerPins": [
+          {
+            "path": "scripts/goal/goalctl.ts",
+            "source": "20b62bc8fb3103c2c5d587e612072c443377318e",
+            "blob": "79ae1a7484acc4d6cd793c79aae05d5a94d61273",
+            "sha256": "cf06b6b0727f466917913fc2a607194323c43037439b8636ce8bc84342d6ccac"
+          },
+          {
+            "path": "scripts/goal/admission.ts",
+            "source": "20b62bc8fb3103c2c5d587e612072c443377318e",
+            "blob": "40721852e918194f49888c5b2496fcc9b381f77c",
+            "sha256": "85f46663491c2835525524c9f6af87e173dc6531a2e1927a15b8bf13e520536b"
+          },
+          {
+            "path": "scripts/qa/core.ts",
+            "source": "20b62bc8fb3103c2c5d587e612072c443377318e",
+            "blob": "7e73c7a7b25c09930781ef55fd0f837587c7a97f",
+            "sha256": "c22fed1e7e7665bb18690864003b58563302e8c93e1884801a6a74973be8586c"
+          },
+          {
+            "path": "scripts/qa/test.ts",
+            "source": "20b62bc8fb3103c2c5d587e612072c443377318e",
+            "blob": "81c4fa2ae7770c68b359f86ae910069aca509c08",
+            "sha256": "3f57d88efe82ff83e300594443f5c8bb824711003525ff3db615ef15a2165a80"
+          },
+          {
+            "path": "scripts/qa/host-admission.ts",
+            "source": "20b62bc8fb3103c2c5d587e612072c443377318e",
+            "blob": "20e060f612be5aac2b9653138443e351cab2874b",
+            "sha256": "a1309db2d03e9a30cfa68615e680b24dfab657ad56f4743d2de052ae66d4a684"
+          },
+          {
+            "path": "scripts/qa/story-browser.ts",
+            "source": "20b62bc8fb3103c2c5d587e612072c443377318e",
+            "blob": "bd99caa7b38c87e229d57f491b3c8b8b66ff4aad",
+            "sha256": "4098faff093e571e9354b5957d25f29a22b21a3cb7b407839d43374677762d90"
+          },
+          {
+            "path": "scripts/qa/story-screenshots.ts",
+            "source": "20b62bc8fb3103c2c5d587e612072c443377318e",
+            "blob": "531b2bb355b48534fbbbd4b4d981fb599e8c2382",
+            "sha256": "675010fc7ae9c6e13e0f3dbb32a8f692a285c35608dfad7881d037d339dc4066"
+          },
+          {
+            "path": "scripts/qa/story-accessibility.setup.ts",
+            "source": "20b62bc8fb3103c2c5d587e612072c443377318e",
+            "blob": "42250728a58a9ad42f3ca561a732b7315aee0780",
+            "sha256": "2e5dbcabc65bf85f8e83338beb6ff6613bc92edd0e9bd8e10dc747209346a5e4"
+          },
+          {
+            "path": "scripts/qa/story-accessibility.ts",
+            "source": "20b62bc8fb3103c2c5d587e612072c443377318e",
+            "blob": "917a2b35f070cdbd43aaaf5c2d5af13016e029fd",
+            "sha256": "b99208ff97fbb9f843ad3f3da16c828ab902c59838fbb6d842ec2b8bd7b21751"
+          },
+          {
+            "path": "scripts/qa/accessibility.ts",
+            "source": "20b62bc8fb3103c2c5d587e612072c443377318e",
+            "blob": "50813fdb58b6967a1bcdcf0ec9e8c933d754f263",
+            "sha256": "b35025b3b1d7204b2c383073f6fbe5a311a98d297c47424670dbe6828869b827"
+          },
+          {
+            "path": "apps/web/vitest.config.ts",
+            "source": "20b62bc8fb3103c2c5d587e612072c443377318e",
+            "blob": "87980f03e746d949c3235e27a6b1f4fcc1f19231",
+            "sha256": "6eba5c586df8eafca044a4473fb9977a66bd79f06e5efdc2ac155b43521febc4"
+          },
+          {
+            "path": "apps/web/.storybook/story-screenshots.setup.ts",
+            "source": "20b62bc8fb3103c2c5d587e612072c443377318e",
+            "blob": "92f97d8ac171d5dbb652b4506c0ceb4b038a03fd",
+            "sha256": "701ab96b0012925a0613afebc323304c10637575b447e0f6f3332ec8fdb3d43b"
+          },
+          {
+            "path": "apps/web/features/realm/thread-view.stories.tsx",
+            "source": "20b62bc8fb3103c2c5d587e612072c443377318e",
+            "blob": "2ca98d88b1b750bcabdbdf6cbcb641cb36d086aa",
+            "sha256": "0f829b6630302531217264fd58dbfc98076ea0c51891f13c274620846385e38c"
+          },
+          {
+            "path": "apps/web/features/feed/thread-fixtures.ts",
+            "source": "20b62bc8fb3103c2c5d587e612072c443377318e",
+            "blob": "9ac133d7325cd30715e9a88365d6b752c4d05649",
+            "sha256": "e6e7ea5a5b6ffdf2573ae2576abbecfdb9bd375c7d2871979db9d6999829fe4b"
+          },
+          {
+            "path": "yarn.lock",
+            "source": "20b62bc8fb3103c2c5d587e612072c443377318e",
+            "blob": "239124b3f025a9beeb23d08d75adfbdbcc18c366",
+            "sha256": "5473e2ac8b308af7e28929652f8882e71e11d81728d567d6324ca7c65eb0ac30"
+          }
+        ],
+        "versions": {
+          "storybook": "11.0.0-alpha.6",
+          "vitest": "5.0.4",
+          "playwright": "1.63.0",
+          "@storybook/addon-vitest": "11.0.0-alpha.6",
+          "axe-core": "4.14.0"
+        },
+        "logs": [
+          {
+            "job": "3581930b-f898-4254-8433-20f29a7ee7da",
+            "step": 1,
+            "path": ".temp/goal/jobs/3581930b-f898-4254-8433-20f29a7ee7da.1.log",
+            "sha256": "551f8327cf416c23a8392588386b7e2e59335e8d5c9f9002b7617e11d068778b"
+          },
+          {
+            "job": "3581930b-f898-4254-8433-20f29a7ee7da",
+            "step": 2,
+            "path": ".temp/goal/jobs/3581930b-f898-4254-8433-20f29a7ee7da.2.log",
+            "sha256": "1903b82483ed85abd8c887e03de629a1a5236927dec7ab1f9c3a4181a38a1a80"
+          },
+          {
+            "job": "2aa33aaa-a2e3-44c4-8f76-92aef8c52def",
+            "step": 1,
+            "path": ".temp/goal/jobs/2aa33aaa-a2e3-44c4-8f76-92aef8c52def.1.log",
+            "sha256": "d4aa16e1bd726e15c21efc4ac4e79a2dfbde7b2ea867f8e068e29181657fd290"
+          },
+          {
+            "job": "1f74258e-e9d4-49d9-9cf8-8f58e837ace6",
+            "step": 1,
+            "path": ".temp/goal/jobs/1f74258e-e9d4-49d9-9cf8-8f58e837ace6.1.log",
+            "sha256": "b9b8f408277a59124f5741bd88abdeae65cb45f6d304f28a20e6ad469ee2fd58"
+          },
+          {
+            "job": "1f74258e-e9d4-49d9-9cf8-8f58e837ace6",
+            "step": 2,
+            "path": ".temp/goal/jobs/1f74258e-e9d4-49d9-9cf8-8f58e837ace6.2.log",
+            "sha256": "5a74824501b349db949ba47ece6b48bc2132217c3c87a85a4f946b1c3c634fe7"
+          },
+          {
+            "job": "1f74258e-e9d4-49d9-9cf8-8f58e837ace6",
+            "step": 3,
+            "path": ".temp/goal/jobs/1f74258e-e9d4-49d9-9cf8-8f58e837ace6.3.log",
+            "sha256": "8beaceae35e3a2b77ed4812a302dd80cb86151a92cfa1dc2c7b974e673acf0a1"
+          }
+        ],
+        "qa": "20261019t125322-ae9989",
+        "fixturePin": "existing command-free Thread Storybook fixture; exact blob recorded; private opener ownership/blocked/signedIn variations inline in parent-story-provenance.json",
+        "backend": null,
+        "nativeImageUsed": null,
+        "genuineFixtureUsed": false
+      }
+    },
+    "sourceEquivalence": {
+      "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+      "candidate": "20b62bc8fb3103c2c5d587e612072c443377318e",
+      "perFile": [
+        {
+          "path": "apps/web/.storybook/preview.tsx",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "1ba5806d7f8720646dfe0a591067966745179187",
+          "candidateBlob": "1ba5806d7f8720646dfe0a591067966745179187",
+          "candidateSha256": "b6a0488d6b05e049eb07e1a560c1d78ef7fe8af5a9e674975b984fc7615b4003",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/feed/author-actions.stories.tsx",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "5a9e35b4ed345fc59076785f0912db2abc796574",
+          "candidateBlob": "5a9e35b4ed345fc59076785f0912db2abc796574",
+          "candidateSha256": "87d91b62d81790b33b916730d5c723cdfa74684ffe84853b343ec13585de1448",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/feed/author-actions.tsx",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "78a09d5a17c5b008242fa623b43a90a640314740",
+          "candidateBlob": "78a09d5a17c5b008242fa623b43a90a640314740",
+          "candidateSha256": "184cb01baf65ac16ddeb88ae115a60b812d28d08628b20edd6cb0b19b9e9b0a5",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/feed/author-api.test.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "95e062a0c3f77fc4fb574ba3caadc82eaa5ab262",
+          "candidateBlob": "95e062a0c3f77fc4fb574ba3caadc82eaa5ab262",
+          "candidateSha256": "cab7e1a1636a250582d078dbf9e0cedd8aeb31bcebb1a7cf8c051841091d8fda",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/feed/author-api.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "183691a5a8fa5127188471ad477819b940e40583",
+          "candidateBlob": "183691a5a8fa5127188471ad477819b940e40583",
+          "candidateSha256": "d9cbc06fe90467c672229c5047cd28bbd798c2bc5b486c2388098d0490616fec",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/feed/author-fixtures.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "50bfe4eb83d7797da976fe4946a12ce12898acb4",
+          "candidateBlob": "50bfe4eb83d7797da976fe4946a12ce12898acb4",
+          "candidateSha256": "78b25ed56faf269462080f13d8d90b8cf6cc088efefc2f08197154839b6e2be9",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/feed/author-messages.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "c403fd93eb0495925ecf2fc92b83172e408d349a",
+          "candidateBlob": "c403fd93eb0495925ecf2fc92b83172e408d349a",
+          "candidateSha256": "d2aeab5ccc91e5abdef28fb3fd3a78cac908b69778a0b4a40e810a980be44a43",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/feed/card.tsx",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "29765de04a513e0924890b6bd42c918b00bbbf98",
+          "candidateBlob": "29765de04a513e0924890b6bd42c918b00bbbf98",
+          "candidateSha256": "4d9d7f9a3918c039849dd14ebf7a963291f54e12c691dcf6b9869f2dc37993c2",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/feed/discussion-card.tsx",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "86c432806464caf29f89896ffac9543e40bf50d5",
+          "candidateBlob": "86c432806464caf29f89896ffac9543e40bf50d5",
+          "candidateSha256": "cc204a6ba387c3a50c4f11e4229dd044f3cc96297414d5faf24e5f3e84cccb7e",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/feed/feed-context.tsx",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "e97de6dff0da2c4ee03cdf1cc13f5c4a297b2b43",
+          "candidateBlob": "e97de6dff0da2c4ee03cdf1cc13f5c4a297b2b43",
+          "candidateSha256": "04985aac9ad6eeb4409fea94a4803d7b69d346c73e4cc171a6930142cd6901f3",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/feed/post-row.tsx",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "d9a4b379c6b751d2fa95d2f955a3564bad36cc27",
+          "candidateBlob": "d9a4b379c6b751d2fa95d2f955a3564bad36cc27",
+          "candidateSha256": "0e4a744ac02caa1d847de1b429cd13e9fd55e1e5144ce645144eccc502c41f13",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/feed/reply-tree.tsx",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "98b8362b832a8cf466ea86d71c109d2d46333c4d",
+          "candidateBlob": "98b8362b832a8cf466ea86d71c109d2d46333c4d",
+          "candidateSha256": "972a4e408b01510a09a9378ddf636b58915206e1ffcc1ae7333f4cfdd09fe719",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/feed/thread-api.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "239c3b7ed15deb02d9cfdf612a2b5e4ba5ce5d57",
+          "candidateBlob": "239c3b7ed15deb02d9cfdf612a2b5e4ba5ce5d57",
+          "candidateSha256": "82374850a3c79cb349e3aff2c0b519e0d22192c9f7a5c54ec407260092acf9b3",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/feed/thread-fixtures.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "9ac133d7325cd30715e9a88365d6b752c4d05649",
+          "candidateBlob": "9ac133d7325cd30715e9a88365d6b752c4d05649",
+          "candidateSha256": "e6e7ea5a5b6ffdf2573ae2576abbecfdb9bd375c7d2871979db9d6999829fe4b",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/realm/discussion-content.tsx",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "83daf9faf5413bc14d02f7082ac8aefac464d56d",
+          "candidateBlob": "83daf9faf5413bc14d02f7082ac8aefac464d56d",
+          "candidateSha256": "d3e7f730c88d5eae0b859adebfc7eadab32c46b054d90442655ad78e8fbc23aa",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/realm/discussion-list.tsx",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "089b6a52ed8938edfdaad17edf1d5cdf4f09964e",
+          "candidateBlob": "089b6a52ed8938edfdaad17edf1d5cdf4f09964e",
+          "candidateSha256": "11af9e99ca0e7fd0f60d198ec316365d3ed4c2ee63750d00e4dd7c5500b968e7",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/realm/ranking-page.tsx",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "f0bae222a7542b3603d0182b383e85a19fbf1057",
+          "candidateBlob": "f0bae222a7542b3603d0182b383e85a19fbf1057",
+          "candidateSha256": "a4692c9b0f57a1fc220a0fa6e0f770110fb5f399f3d1476cc480b7487c9bc4f2",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/realm/thread-view.stories.tsx",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "6431f94ccb0754c2eb58f9e931971a8d1390ae13",
+          "candidateBlob": "2ca98d88b1b750bcabdbdf6cbcb641cb36d086aa",
+          "candidateSha256": "0f829b6630302531217264fd58dbfc98076ea0c51891f13c274620846385e38c",
+          "equal": false
+        },
+        {
+          "path": "apps/web/features/realm/thread-view.tsx",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "d18ddc022d02255fcd071fa45bf3bdeb82b900b9",
+          "candidateBlob": "ab072fcd980b8b7ea98112191df7cded98c4e284",
+          "candidateSha256": "183d34e9128cf0ec9e94d748086daa696c19a94d063a66453ca829fdbd9b03e8",
+          "equal": false
+        },
+        {
+          "path": "apps/web/features/studio/chapter-editor.stories.tsx",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "d2d20966c1bb463052fb4e0cf8d4d3d042f78c46",
+          "candidateBlob": "d2d20966c1bb463052fb4e0cf8d4d3d042f78c46",
+          "candidateSha256": "5d767e498c6b4a21c41d8ce46e72a7ff95717f5417bd992d3c14bbcf1d60cc41",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/studio/chapter-editor.tsx",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "0d9b0db71782d45e1b867e390c95f5027ac6a125",
+          "candidateBlob": "0d9b0db71782d45e1b867e390c95f5027ac6a125",
+          "candidateSha256": "3ccc0d7fcc1c1914a87cc53912e65da78445a05503f3aec339b4033283f0d74f",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/studio/content-api.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "9daf9fe547854cbe984f4e11c9f3acab778e2e51",
+          "candidateBlob": "9daf9fe547854cbe984f4e11c9f3acab778e2e51",
+          "candidateSha256": "ab3ae26add1feb94b1153e880b0713e5ff056b55733c37a38a06218aa21f9417",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/studio/qualification-withdrawal.stories.tsx",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "0c28e5abf3f75fd142f607c6deb5c34e96349a69",
+          "candidateBlob": "0c28e5abf3f75fd142f607c6deb5c34e96349a69",
+          "candidateSha256": "6b4f52e16a459e96cb5b624df2b950b0ffe4c89e5b8aca28403308369169ec05",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/studio/qualification-withdrawal.test.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "03d7efd9e3eee21b23b435c29aed192f2d85cd75",
+          "candidateBlob": "03d7efd9e3eee21b23b435c29aed192f2d85cd75",
+          "candidateSha256": "bd2deebc3d4c3aedac53a908d82df2e99cb94b18ec098d67c24180ab142f31a6",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/studio/qualification-withdrawal.tsx",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "d40076495639dc03dc13c43572094da1fa4b8aa3",
+          "candidateBlob": "d40076495639dc03dc13c43572094da1fa4b8aa3",
+          "candidateSha256": "136c623101f179163511198c516423bd9bb600b40214cedbaa6ca64a2ef8b392",
+          "equal": true
+        },
+        {
+          "path": "apps/web/vitest.config.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "87980f03e746d949c3235e27a6b1f4fcc1f19231",
+          "candidateBlob": "87980f03e746d949c3235e27a6b1f4fcc1f19231",
+          "candidateSha256": "6eba5c586df8eafca044a4473fb9977a66bd79f06e5efdc2ac155b43521febc4",
+          "equal": true
+        },
+        {
+          "path": "docs/development/toolchain.md",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "bf4379fd32d61267afed0cd9e5cca1c54f7bd78a",
+          "candidateBlob": "a277c9a54246276703d1d381004a4c238c7abd71",
+          "candidateSha256": "40089e4af60152da4e359d575ccdddcadc5ef95bab14158b082ba2fe25f498a3",
+          "equal": false
+        },
+        {
+          "path": "generated/model/contexts/content-search-eligibility-withdrawal-v1.jsonld",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "528eb7256d4859b082d99616d4b268c3d2874279",
+          "candidateBlob": "528eb7256d4859b082d99616d4b268c3d2874279",
+          "candidateSha256": "0ad559b4a841e33d3d612f3433dddbe94e5dd5d7ede6c6076ac7101aec14a568",
+          "equal": true
+        },
+        {
+          "path": "generated/model/manifest.json",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "e857699823639514b957b3e802dee16eea98e8ca",
+          "candidateBlob": "ce71e7cf7a9ff14d76bedcf361d2f2a1a4bc88fa",
+          "candidateSha256": "e8f0b71cdbcac70cbbcb80306697cace87bd870f7f44e3aac34dc16b2e8c27ed",
+          "equal": false
+        },
+        {
+          "path": "generated/model/shapes/content-search-eligibility-withdrawal-v1.ttl",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "abcf3f143275f835d04fa7c6b1e08b7b0abcf663",
+          "candidateBlob": "abcf3f143275f835d04fa7c6b1e08b7b0abcf663",
+          "candidateSha256": "139d2ba84457b6559c2222e11c8f201b80cfc091eec5e8688171eff8939a40de",
+          "equal": true
+        },
+        {
+          "path": "generated/openapi/main/public.json",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "bb63eea40f1c0127ae5c5d9c8c213de79d3675aa",
+          "candidateBlob": "b859a9b4f4589695d698244898f3c826de5fdf28",
+          "candidateSha256": "9896c0251e5e9b86d6a235933509add38240217c443c6a4f30a9be0258254029",
+          "equal": false
+        },
+        {
+          "path": "infra/dev/compose.yaml",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "28e9a458e7953cfa8627dd6d5cd906602a1acb41",
+          "candidateBlob": "70d68927952cfcab64771c887f3aba2f39c0c0c4",
+          "candidateSha256": "848825272e6ff4328d35cf518a2172cd09cd624e649e36fd8b173584bc181ee2",
+          "equal": false
+        },
+        {
+          "path": "infra/jena/command-module/src/main/java/com/rezics/jena/CommandService.java",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "7b13aa43c27e6434d8cd47210464c1d651826cc2",
+          "candidateBlob": "7b13aa43c27e6434d8cd47210464c1d651826cc2",
+          "candidateSha256": "d804a280d22c7ea097e27990fb53b7215f001e75217dedc12dd7a453d709ba88",
+          "equal": true
+        },
+        {
+          "path": "infra/jena/command-module/src/main/java/com/rezics/jena/ContentSearchQualification.java",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "6ec875e19b19282882885b62a5a8a7957a7f28b8",
+          "candidateBlob": "6ec875e19b19282882885b62a5a8a7957a7f28b8",
+          "candidateSha256": "22b2742dd3a2e46eb9772f0f963e1d00b67f69a6130b881ade48a0f2bb47473c",
+          "equal": true
+        },
+        {
+          "path": "infra/jena/command-module/src/test/java/com/rezics/jena/ContentSearchQualificationTest.java",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "7ee0badd3887ca1910ddce86e9c4b364c839ad32",
+          "candidateBlob": "7ee0badd3887ca1910ddce86e9c4b364c839ad32",
+          "candidateSha256": "e37709162f8e89db25cfa682fa10e44633d8fbbcc607b27ea71be1433f53faac",
+          "equal": true
+        },
+        {
+          "path": "model/definitions/content-search-eligibility-withdrawal-v1.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "ac43b088a38a2eb675ce353d5204dc3e676fcc92",
+          "candidateBlob": "ac43b088a38a2eb675ce353d5204dc3e676fcc92",
+          "candidateSha256": "8936535f8750d70dea9070fffe8c3fbf85181fd3acbbbb9cef14f37994faef8e",
+          "equal": true
+        },
+        {
+          "path": "model/definitions/content-search-eligibility-withdrawal-v1.ttl",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "abcf3f143275f835d04fa7c6b1e08b7b0abcf663",
+          "candidateBlob": "abcf3f143275f835d04fa7c6b1e08b7b0abcf663",
+          "candidateSha256": "139d2ba84457b6559c2222e11c8f201b80cfc091eec5e8688171eff8939a40de",
+          "equal": true
+        },
+        {
+          "path": "model/tests/search-projection-turtle.test.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "ab803e6ccff228bdbcabcf2c926e675be6bbddc3",
+          "candidateBlob": "ab803e6ccff228bdbcabcf2c926e675be6bbddc3",
+          "candidateSha256": "5293ac45095d73b3223af59fbaeb1ec8a70518c705d1de76cf33a6ff556f6a08",
+          "equal": true
+        },
+        {
+          "path": "package.json",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "5b83cc84bb8984bbb72f1056d2ecc9463973fde3",
+          "candidateBlob": "5b83cc84bb8984bbb72f1056d2ecc9463973fde3",
+          "candidateSha256": "507787932c026b08db8c45a0673da53ee42a8668bda84cfc5e2d4a62d30afdb4",
+          "equal": true
+        },
+        {
+          "path": "packages/model/src/generated/profiles.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "4223913958a2c959fc68b941ad1256413577a301",
+          "candidateBlob": "c95697beb4de346c005b9b218cc4fd86626aac88",
+          "candidateSha256": "68ca50775d77f8805e4bc3e71860f4bc043b355a93f606267e43b1de55418619",
+          "equal": false
+        },
+        {
+          "path": "packages/model/src/generated/schemas.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "242239ce919f54b62b307229f22e6dd178f99033",
+          "candidateBlob": "5f1a46a202f1081faa6c6da04686fc53c69e164a",
+          "candidateSha256": "abf8d86794c14b6ef8a4e75a3d9a19b8fa7933f605c938d8f90c979f66122b05",
+          "equal": false
+        },
+        {
+          "path": "packages/model/src/generated/vocabulary.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "2a19238ea9110b6191ba8c865f10292994661690",
+          "candidateBlob": "627769786771d28829e38dd8b8ee1dab12c6de5d",
+          "candidateSha256": "97b3818840272e0c9028bff09e502f5f38771b50bbac4d2992466f83daa8e6c3",
+          "equal": false
+        },
+        {
+          "path": "scripts/dev/release-manifest.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "c9fd247d0622bf7c2c449e42654600811658ad7c",
+          "candidateBlob": "1cf12cecb6b6abc2d66baf77fbcee0b4cb81e64f",
+          "candidateSha256": "806a30acc7461c2d1ff7d6f70c8f8b2b3cf1737f9f18e80715ef2fb771542626",
+          "equal": false
+        },
+        {
+          "path": "scripts/goal/goalctl.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "329c2cfe66c9ef7ed12514b380432df97296100a",
+          "candidateBlob": "79ae1a7484acc4d6cd793c79aae05d5a94d61273",
+          "candidateSha256": "cf06b6b0727f466917913fc2a607194323c43037439b8636ce8bc84342d6ccac",
+          "equal": false
+        },
+        {
+          "path": "scripts/qa/core.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "7e73c7a7b25c09930781ef55fd0f837587c7a97f",
+          "candidateBlob": "7e73c7a7b25c09930781ef55fd0f837587c7a97f",
+          "candidateSha256": "c22fed1e7e7665bb18690864003b58563302e8c93e1884801a6a74973be8586c",
+          "equal": true
+        },
+        {
+          "path": "scripts/qa/story-accessibility.setup.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "42250728a58a9ad42f3ca561a732b7315aee0780",
+          "candidateBlob": "42250728a58a9ad42f3ca561a732b7315aee0780",
+          "candidateSha256": "2e5dbcabc65bf85f8e83338beb6ff6613bc92edd0e9bd8e10dc747209346a5e4",
+          "equal": true
+        },
+        {
+          "path": "scripts/qa/story-screenshots.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "531b2bb355b48534fbbbd4b4d981fb599e8c2382",
+          "candidateBlob": "531b2bb355b48534fbbbd4b4d981fb599e8c2382",
+          "candidateSha256": "675010fc7ae9c6e13e0f3dbb32a8f692a285c35608dfad7881d037d339dc4066",
+          "equal": true
+        },
+        {
+          "path": "scripts/qa/test.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "81c4fa2ae7770c68b359f86ae910069aca509c08",
+          "candidateBlob": "81c4fa2ae7770c68b359f86ae910069aca509c08",
+          "candidateSha256": "3f57d88efe82ff83e300594443f5c8bb824711003525ff3db615ef15a2165a80",
+          "equal": true
+        },
+        {
+          "path": "scripts/static/web-continuations.inventory.json",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "789a40dd252fe4b190e326a51e8890111c98fadb",
+          "candidateBlob": "81853783aa2cdb3c016dbe8dd9b369bfc4bcad07",
+          "candidateSha256": "cf73af399634427abe6696c69ca59049c37d1db1ebe9f2e96bb17cf3b4535eeb",
+          "equal": false
+        },
+        {
+          "path": "services/main/src/api-responses.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "b8627eb3db63bc00090d2cfec2877f78a1bfee15",
+          "candidateBlob": "b8627eb3db63bc00090d2cfec2877f78a1bfee15",
+          "candidateSha256": "dc53ae1ee5e2e1cd6e24054bd6abd974d13ff35b6fd0598431894dba8411ceb2",
+          "equal": true
+        },
+        {
+          "path": "services/main/src/modules/access/admission.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "aef348515d8573ec066c9c765af01139151d719c",
+          "candidateBlob": "5629ed2c33c53ae98eaef0043ff117d039163678",
+          "candidateSha256": "97489a8102d30b7e4a148c02a5e90daa2b3f57a7a910c0516b9e7c5cff63ad07",
+          "equal": false
+        },
+        {
+          "path": "services/main/src/modules/content-publication/eligibility-admitted.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "fb3ef4ec92638f3fc1f73555e73de3dae7ef3b52",
+          "candidateBlob": "fb3ef4ec92638f3fc1f73555e73de3dae7ef3b52",
+          "candidateSha256": "af8404aa36545f3ff9446ee7cbc63dd87abfff6815dbff1ea1151f95983fc78d",
+          "equal": true
+        },
+        {
+          "path": "services/main/src/modules/content-publication/eligibility-state.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "7f6e4e72d2ec67bba4c6d6bd2b8d3c062cf9c8c3",
+          "candidateBlob": "7f6e4e72d2ec67bba4c6d6bd2b8d3c062cf9c8c3",
+          "candidateSha256": "87815c8a3812c9f2c8ced2ade45d3a225dcdb881e5c08f5f6118abcf524df84d",
+          "equal": true
+        },
+        {
+          "path": "services/main/src/modules/content-publication/eligibility.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "e21d70b42c3ba87b3cf012a104d1275e430e358f",
+          "candidateBlob": "e21d70b42c3ba87b3cf012a104d1275e430e358f",
+          "candidateSha256": "a188d3640eadd47bd66081fcac29b55a8a6672d3649e80e00966bb466ab40013",
+          "equal": true
+        },
+        {
+          "path": "services/main/src/modules/content-publication/relay.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "9e1d2b55957c878d93e9e7d6ee3f2015717542e7",
+          "candidateBlob": "9e1d2b55957c878d93e9e7d6ee3f2015717542e7",
+          "candidateSha256": "c87fac507261b54795110d1aa2731a0d95c2aa76ecab6f4d7ae7630d33b7cbd2",
+          "equal": true
+        },
+        {
+          "path": "services/main/src/modules/outbox/relay.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "ca1e915abb1be9d7f1a710f531914248218a6430",
+          "candidateBlob": "ca1e915abb1be9d7f1a710f531914248218a6430",
+          "candidateSha256": "1ab2123e140bf85ea9505651c180af5f7b9dcda83bd66be79e7c32c6c6ffd4b6",
+          "equal": true
+        },
+        {
+          "path": "services/main/src/modules/realm-reply/content-store.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "f9912794b2d75aa4572af74680d1898d264535e6",
+          "candidateBlob": "f9912794b2d75aa4572af74680d1898d264535e6",
+          "candidateSha256": "000cbafe20afc552c0692a8898f7642556b99a3fcb76d011d3ca4456ba06f179",
+          "equal": true
+        },
+        {
+          "path": "services/main/src/modules/realm-reply/graph.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "76f614c9dc97733e3e9c486243e313953ec73ee0",
+          "candidateBlob": "76f614c9dc97733e3e9c486243e313953ec73ee0",
+          "candidateSha256": "aebe07dadc3f26466afedbaf51de134243b2817e6cbfda2667f4e6f843f01bb4",
+          "equal": true
+        },
+        {
+          "path": "services/main/src/modules/realm-reply/store.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "692ed7ad75fae6da401168143082d3721af8403e",
+          "candidateBlob": "692ed7ad75fae6da401168143082d3721af8403e",
+          "candidateSha256": "fde885d81d2f7c21f81bcfb51d0ac0e2bdd4a254effce1df8164cf37019c3b0e",
+          "equal": true
+        },
+        {
+          "path": "services/main/src/modules/realm-submission/graph.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "181def38c24eb5e290d6a71de079b88c77b6f91e",
+          "candidateBlob": "181def38c24eb5e290d6a71de079b88c77b6f91e",
+          "candidateSha256": "02006ec07bdfe362021cbad4703cebf9f45ebdb9cd3265ca7edfb6563b93a428",
+          "equal": true
+        },
+        {
+          "path": "services/main/src/modules/realm-submission/resource.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "388cb7205c8f03f0320af1d3981bf5c3bd7c726d",
+          "candidateBlob": "388cb7205c8f03f0320af1d3981bf5c3bd7c726d",
+          "candidateSha256": "3742968553e225dc37a3865a12b25b2495cd50432718f4233896d49275d1b48d",
+          "equal": true
+        },
+        {
+          "path": "services/main/src/modules/realm-submission/schema.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "9ab9dd4784107c0083479d30724768ad843e3376",
+          "candidateBlob": "9ab9dd4784107c0083479d30724768ad843e3376",
+          "candidateSha256": "533f0ddfd259e0cea089b5d516ecc53412bb0955132fd69af585234dc8b3a71e",
+          "equal": true
+        },
+        {
+          "path": "services/main/src/modules/realm-submission/store.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "cfdff868158fcefb912a56e056ab853351b3531e",
+          "candidateBlob": "cfdff868158fcefb912a56e056ab853351b3531e",
+          "candidateSha256": "3cd9a3b6aaec04ebc8194eb3e33b0663b9907ec35a06b0f62d9877b1f9591707",
+          "equal": true
+        },
+        {
+          "path": "services/main/src/modules/studio/access.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "e1a76597038a74975df36d5ec82f6166853bc6a2",
+          "candidateBlob": "f1bf889c8ab49398e7b49b7e833838c076e545e7",
+          "candidateSha256": "c39c3cd8ceae969930e3ceab868c89f0553d12351579d37d0ac0b116b2ec56f0",
+          "equal": false
+        },
+        {
+          "path": "services/main/src/modules/studio/variant-heads.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "751bdf6b4c58f3d64c0cda82f6df1ecaceaffd4b",
+          "candidateBlob": "751bdf6b4c58f3d64c0cda82f6df1ecaceaffd4b",
+          "candidateSha256": "97a1957c9f1035c9ade6a1c55191ea289ffbab2a956f6c65beff53a6ab6531d3",
+          "equal": true
+        },
+        {
+          "path": "services/main/src/routes/content.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "571840e3115ead5577620aa5f35057475cb91d2c",
+          "candidateBlob": "571840e3115ead5577620aa5f35057475cb91d2c",
+          "candidateSha256": "e91e69f4a600633a83f3fb9c59cbe35f6094455f2d119b4da71cd32b427b278d",
+          "equal": true
+        },
+        {
+          "path": "services/main/src/routes/realm-replies.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "4305eb1f6a8d4da5d3c08c0756877ac22c716585",
+          "candidateBlob": "4305eb1f6a8d4da5d3c08c0756877ac22c716585",
+          "candidateSha256": "3cd23ce27fabb46c484504359d541eddd27338f2ed05b929c53b8cce61d355c4",
+          "equal": true
+        },
+        {
+          "path": "services/main/src/routes/studio.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "332c6b0ee18c92237863e9ecd8478a03ec501802",
+          "candidateBlob": "ccdd618972cd11567f0e4a795db2acea683300ae",
+          "candidateSha256": "591ca20b921f6847cae5a584bce24e5c7bcb8dc06e1a2e15b62384cca338b4e1",
+          "equal": false
+        },
+        {
+          "path": "services/main/tests/author-lifecycle-submission.test.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "bcc8159fea4bbec1bc1c8ceec2b10f7b525c080e",
+          "candidateBlob": "bcc8159fea4bbec1bc1c8ceec2b10f7b525c080e",
+          "candidateSha256": "a98a1905bae3e471b058b9dc59f98b11370f3d70e93efdd31b4a7aa58e4bb7eb",
+          "equal": true
+        },
+        {
+          "path": "services/main/tests/author-lifecycle.test.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "28520ea909c1724a42209356dce5b0e84ab8a8da",
+          "candidateBlob": "28520ea909c1724a42209356dce5b0e84ab8a8da",
+          "candidateSha256": "a45ec36ba3bc9054f4e81198010743b382627392d0af645358581659a8ce808b",
+          "equal": true
+        },
+        {
+          "path": "services/main/tests/content-eligibility-delivery.test.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "099ed15adf816e824521787943d3af3606295a6f",
+          "candidateBlob": "099ed15adf816e824521787943d3af3606295a6f",
+          "candidateSha256": "a7a84001fe61d1d7a26f86d0a045a84f3dd0e5a968adb8be53421dfffa5234b1",
+          "equal": true
+        },
+        {
+          "path": "services/main/tests/content-eligibility-state.test.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "8395deb7bd27f42c8d1220513605b05152649221",
+          "candidateBlob": "8395deb7bd27f42c8d1220513605b05152649221",
+          "candidateSha256": "a4a8db5cc1134c9a7185c4d64a2fc536fc9c15de1aa71f10a70fc166ed5d36ae",
+          "equal": true
+        },
+        {
+          "path": "services/main/tests/content-eligibility.test.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "206a0c1df6c826adf9cba31e6489abb4ff257bfa",
+          "candidateBlob": "206a0c1df6c826adf9cba31e6489abb4ff257bfa",
+          "candidateSha256": "548edc41f529a307262c2d274b3d8b619b57b801e3ff90307921fba3a1b68b7a",
+          "equal": true
+        },
+        {
+          "path": "services/main/tests/g-903-api-contract.test.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "2a8272b0df1f30e8c8a6af8e5d1c803c11d6501c",
+          "candidateBlob": "2a8272b0df1f30e8c8a6af8e5d1c803c11d6501c",
+          "candidateSha256": "21e75eef87f64ba70e186875b155839872a959d9172267f32fb37c506e579425",
+          "equal": true
+        },
+        {
+          "path": "services/main/tests/realm-reply-outbox.test.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "3641e5060a1ca46264fccab8ec7317005bcbc169",
+          "candidateBlob": "3641e5060a1ca46264fccab8ec7317005bcbc169",
+          "candidateSha256": "cb288af52e400cfc8a8c2ea44d28879f5b87e611a4d382ab3db2c25ae49f4c17",
+          "equal": true
+        },
+        {
+          "path": "services/main/tests/realm-submission.test.ts",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "61d7d63a7cbe86813ea260142aa7a6c4a50d7884",
+          "candidateBlob": "61d7d63a7cbe86813ea260142aa7a6c4a50d7884",
+          "candidateSha256": "cbb94e174aec8489b5e95192241bb66fb53bcee074d2822d50aed48c4a319fc8",
+          "equal": true
+        },
+        {
+          "path": "yarn.lock",
+          "priorSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "priorBlob": "239124b3f025a9beeb23d08d75adfbdbcc18c366",
+          "candidateBlob": "239124b3f025a9beeb23d08d75adfbdbcc18c366",
+          "candidateSha256": "5473e2ac8b308af7e28929652f8882e71e11d81728d567d6324ca7c65eb0ac30",
+          "equal": true
+        }
+      ],
+      "generatedLifecycleSubsets": {
+        "profile": {
+          "priorSha256": "ccbebb40454233ba852a9efbd183aa08fcf2190eb24230bd7d49961bc1d7df62",
+          "candidateSha256": "ccbebb40454233ba852a9efbd183aa08fcf2190eb24230bd7d49961bc1d7df62",
+          "equal": true
+        },
+        "manifest": {
+          "priorSha256": "d5633c51ae11db096c0fa6edb2e54ee11162bc1f309036555339c854f9319f89",
+          "candidateSha256": "d5633c51ae11db096c0fa6edb2e54ee11162bc1f309036555339c854f9319f89",
+          "equal": true
+        },
+        "schemaDeclarations": {
+          "priorSha256": "6fe8e120207e63fcbaa732b08f476f7b1e1a73e263fde39df82c51d04b66ba6f",
+          "candidateSha256": "6fe8e120207e63fcbaa732b08f476f7b1e1a73e263fde39df82c51d04b66ba6f",
+          "equal": true
+        },
+        "qualificationOperation": {
+          "priorSha256": "aa5ee66699ea6861a7a122ebb4646f080b4107f5433f545ec8f734f2b9c65bb5",
+          "candidateSha256": "3de86443b313f78c7a4fe86e39e8be89587b62ac54a3982aea763442ead321be",
+          "equal": false
+        },
+        "placementOperation": {
+          "priorSha256": "6cc15157e9b98f73990fabc756bc31554bf745be3051645f0d0a6779d037e5bf",
+          "candidateSha256": "0d226494a6b00d51e1dd4b19e89967e39f14d346ca37381709aaa3bea0bfe83e",
+          "equal": false
+        }
+      },
+      "currentGeneratedProducerPins": [
+        {
+          "path": "docs/development/toolchain.md",
+          "blob": "a277c9a54246276703d1d381004a4c238c7abd71",
+          "sha256": "40089e4af60152da4e359d575ccdddcadc5ef95bab14158b082ba2fe25f498a3",
+          "bytes": 55589,
+          "candidateBlob": "a277c9a54246276703d1d381004a4c238c7abd71",
+          "candidateSha256": "40089e4af60152da4e359d575ccdddcadc5ef95bab14158b082ba2fe25f498a3",
+          "equal": true
+        },
+        {
+          "path": "generated/model/manifest.json",
+          "blob": "ce71e7cf7a9ff14d76bedcf361d2f2a1a4bc88fa",
+          "sha256": "e8f0b71cdbcac70cbbcb80306697cace87bd870f7f44e3aac34dc16b2e8c27ed",
+          "bytes": 157932,
+          "candidateBlob": "ce71e7cf7a9ff14d76bedcf361d2f2a1a4bc88fa",
+          "candidateSha256": "e8f0b71cdbcac70cbbcb80306697cace87bd870f7f44e3aac34dc16b2e8c27ed",
+          "equal": true
+        },
+        {
+          "path": "generated/openapi/main/public.json",
+          "blob": "b859a9b4f4589695d698244898f3c826de5fdf28",
+          "sha256": "9896c0251e5e9b86d6a235933509add38240217c443c6a4f30a9be0258254029",
+          "bytes": 39227469,
+          "candidateBlob": "b859a9b4f4589695d698244898f3c826de5fdf28",
+          "candidateSha256": "9896c0251e5e9b86d6a235933509add38240217c443c6a4f30a9be0258254029",
+          "equal": true
+        },
+        {
+          "path": "infra/dev/compose.yaml",
+          "blob": "70d68927952cfcab64771c887f3aba2f39c0c0c4",
+          "sha256": "848825272e6ff4328d35cf518a2172cd09cd624e649e36fd8b173584bc181ee2",
+          "bytes": 4154,
+          "candidateBlob": "70d68927952cfcab64771c887f3aba2f39c0c0c4",
+          "candidateSha256": "848825272e6ff4328d35cf518a2172cd09cd624e649e36fd8b173584bc181ee2",
+          "equal": true
+        },
+        {
+          "path": "scripts/dev/release-manifest.ts",
+          "blob": "1cf12cecb6b6abc2d66baf77fbcee0b4cb81e64f",
+          "sha256": "806a30acc7461c2d1ff7d6f70c8f8b2b3cf1737f9f18e80715ef2fb771542626",
+          "bytes": 3045,
+          "candidateBlob": "1cf12cecb6b6abc2d66baf77fbcee0b4cb81e64f",
+          "candidateSha256": "806a30acc7461c2d1ff7d6f70c8f8b2b3cf1737f9f18e80715ef2fb771542626",
+          "equal": true
+        }
+      ],
+      "proofCheckout": {
+        "head": "20b62bc8fb3103c2c5d587e612072c443377318e",
+        "trackedDifference": "",
+        "unchanged": true
+      },
+      "reportPriorSource": "3fdf54cb24bcee28af00710c8a11a14ed3261c4c",
+      "operationCompatibility": {
+        "/v1/content-search-eligibility": {
+          "requestBodyEqual": true,
+          "success200Equal": true,
+          "differenceCount": 6,
+          "differences": [
+            {
+              "path": "/responses/400/content/application/problem+json/schema/anyOf/0/anyOf/0/properties/basis",
+              "kind": "removed",
+              "oldValue": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            {
+              "path": "/responses/401/content/application/problem+json/schema/anyOf/0/anyOf/0/properties/basis",
+              "kind": "removed",
+              "oldValue": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            {
+              "path": "/responses/403/content/application/problem+json/schema/properties/basis",
+              "kind": "removed",
+              "oldValue": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            {
+              "path": "/responses/409/content/application/problem+json/schema/anyOf/0/properties/basis",
+              "kind": "removed",
+              "oldValue": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            {
+              "path": "/responses/500/content/application/problem+json/schema/anyOf/0/properties/basis",
+              "kind": "removed",
+              "oldValue": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            {
+              "path": "/responses/503/content/application/problem+json/schema/anyOf/0/anyOf/0/properties/basis",
+              "kind": "removed",
+              "oldValue": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              }
+            }
+          ],
+          "equalAfterRemovingOnlyUnrelatedProblemBasisProperty": true
+        },
+        "/v1/realm-reply-placements": {
+          "requestBodyEqual": true,
+          "success200Equal": true,
+          "differenceCount": 6,
+          "differences": [
+            {
+              "path": "/responses/400/content/application/problem+json/schema/anyOf/0/anyOf/0/properties/basis",
+              "kind": "removed",
+              "oldValue": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            {
+              "path": "/responses/401/content/application/problem+json/schema/anyOf/0/anyOf/0/properties/basis",
+              "kind": "removed",
+              "oldValue": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            {
+              "path": "/responses/403/content/application/problem+json/schema/properties/basis",
+              "kind": "removed",
+              "oldValue": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            {
+              "path": "/responses/409/content/application/problem+json/schema/anyOf/0/properties/basis",
+              "kind": "removed",
+              "oldValue": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            {
+              "path": "/responses/500/content/application/problem+json/schema/anyOf/0/properties/basis",
+              "kind": "removed",
+              "oldValue": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            {
+              "path": "/responses/503/content/application/problem+json/schema/anyOf/0/anyOf/0/properties/basis",
+              "kind": "removed",
+              "oldValue": {
+                "maxLength": 128,
+                "minLength": 1,
+                "type": "string"
+              }
+            }
+          ],
+          "equalAfterRemovingOnlyUnrelatedProblemBasisProperty": true
+        }
+      },
+      "privateReadAuthoritySegments": [
+        {
+          "path": "services/main/src/modules/studio/access.ts",
+          "start": "  async contentVariantAuthority(",
+          "end": null,
+          "priorSha256": "74c98b7dccbb0558b82746e67dd69b2f52cee4feba769be1f357d76420b82fdd",
+          "candidateSha256": "74c98b7dccbb0558b82746e67dd69b2f52cee4feba769be1f357d76420b82fdd",
+          "equal": true
+        },
+        {
+          "path": "services/main/src/routes/studio.ts",
+          "start": "}).get('/v1/works/:id/content-variants'",
+          "end": "}).post('/v1/works/:id/chapters'",
+          "priorSha256": "b0644f025babb0d2924c9b4bffd694260f906cc78ff4b57e9c1cbbd7e2dda554",
+          "candidateSha256": "b0644f025babb0d2924c9b4bffd694260f906cc78ff4b57e9c1cbbd7e2dda554",
+          "equal": true
+        }
+      ],
+      "dependencyDifferences": {
+        "currentThread": "Existing Main Thread container/presentation and parent stories are inherited current dependencies; only five caller lines reviewed. Actual current Thread and Phone stories executed alongside five new parent-context cases. No old d18dd presentation imported.",
+        "accessAdmission": "Actual file diff changes only rating inventory/fence optional parameters/import; author register/claim/fenceClaim blocks untouched. No review approval extended to rating.",
+        "studioAccess": "Actual file diff changes unrelated inventory created/updated timestamp joins; private contentVariantAuthority method remains byte-identical.",
+        "studioRoute": "Actual file diff changes unrelated Work inventory query fields; content-variants endpoint used by approved adapter remains byte-identical.",
+        "generated": "Full generated files differ due current wave dependencies. Lifecycle profile/shape/schema and requests/200 results are identical. Six optional problem basis-property removals per operation are recorded explicitly; no false whole-operation equivalence.",
+        "runner": "goalctl has inherited one-line continuation behavior change. QA core/test, Vitest config, screenshot/accessibility setup and lockfile unchanged in compared bytes. New tests ran with current exact source runner; prior runner pins retained.",
+        "proofBoundary": "Historical passing checks remain at recorded test/product/image pins; no blanket new current-source/native result inferred."
+      },
+      "currentGeneratedProducerLogVerification": [
+        {
+          "path": ".temp/goal/jobs/527f64bc-cb4b-4d23-87a8-47d528b04267.1.log",
+          "sha256": "6d4b96c8be28a9b75e89dc598b1b01b67b35dc1f5acd216ad5297a2957101443",
+          "origin": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2839/.temp/goal/jobs/527f64bc-cb4b-4d23-87a8-47d528b04267.1.log",
+          "privatePath": ".temp/author-opening-review/inputs/527f64bc-cb4b-4d23-87a8-47d528b04267.1.log",
+          "hashVerified": true,
+          "resultTail": [
+            "#29 exporting config sha256:551a63af3d04702616c2f9de503bd1c0832e7a6265e9e8b6eccd7c21084bfd9c 0.1s done",
+            "#29 exporting attestation manifest sha256:0d7ca0d6a510d1064c31fd4d4c280a3dc867243e5584600f292a1c0a4f2161a2",
+            "#29 exporting attestation manifest sha256:0d7ca0d6a510d1064c31fd4d4c280a3dc867243e5584600f292a1c0a4f2161a2 0.2s done",
+            "#29 exporting manifest list sha256:a03e88467a0d9b3a4c9598e49ac109f5db163dc1e947b130f10d07ae42330a0f",
+            "#29 exporting manifest list sha256:a03e88467a0d9b3a4c9598e49ac109f5db163dc1e947b130f10d07ae42330a0f 0.1s done",
+            "#29 naming to docker.io/rezics/fuseki:6.2.0-cmd0.5.43-f8607944ef4a",
+            "#29 naming to docker.io/rezics/fuseki:6.2.0-cmd0.5.43-f8607944ef4a 0.0s done",
+            "#29 unpacking to docker.io/rezics/fuseki:6.2.0-cmd0.5.43-f8607944ef4a",
+            "#29 unpacking to docker.io/rezics/fuseki:6.2.0-cmd0.5.43-f8607944ef4a 1.5s done",
+            "#29 DONE 5.9s",
+            "",
+            "View build details: docker-desktop://dashboard/build/default/default/s4k6k0q03wzni9lbigukp5rxe"
+          ]
+        },
+        {
+          "path": ".temp/goal/jobs/527f64bc-cb4b-4d23-87a8-47d528b04267.2.log",
+          "sha256": "22ba9c58310a4822d170a3235da8f1956d362a6bbcdbb28673c05cfe3ff563a2",
+          "origin": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2839/.temp/goal/jobs/527f64bc-cb4b-4d23-87a8-47d528b04267.2.log",
+          "privatePath": ".temp/author-opening-review/inputs/527f64bc-cb4b-4d23-87a8-47d528b04267.2.log",
+          "hashVerified": true,
+          "resultTail": [
+            "$ /bin/sh -c task goal:type-files -- --project services/main/tsconfig.json",
+            "task: [goal:type-files] bun scripts/qa/host-admission.ts --cpu --gib 1.5 -- bun check --no-pretty --threads 8 --project services/main/tsconfig.json",
+            "CPU admitted: 4/4 heavy commands; CPU pressure some avg10 2.41%, limit 12%; waited 0.0s",
+            "Admitted; QA memory: Docker VM needs 0.00 GiB + 0.00 GiB reserve, free not needed; host needs 1.50 GiB + 8.00 GiB reserve, available 32.13 GiB",
+            "✓ No type errors in 2,726 files [9.50s]"
+          ]
+        },
+        {
+          "path": ".temp/goal/jobs/527f64bc-cb4b-4d23-87a8-47d528b04267.3.log",
+          "sha256": "bb285aa29b5be04b68dd3dd92875ce577da09e83421757dbaa15bed1ac9ad5e8",
+          "origin": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2839/.temp/goal/jobs/527f64bc-cb4b-4d23-87a8-47d528b04267.3.log",
+          "privatePath": ".temp/author-opening-review/inputs/527f64bc-cb4b-4d23-87a8-47d528b04267.3.log",
+          "hashVerified": true,
+          "resultTail": [
+            "$ /bin/sh -c task web:typecheck",
+            "task: [web:typecheck] bun ../../scripts/qa/host-admission.ts --cpu --gib 5.5 -- bun check -p tsconfig.json --no-pretty --threads 8",
+            "CPU admitted: 2/4 heavy commands; CPU pressure some avg10 3.12%, limit 12%; waited 0.0s",
+            "Admitted; QA memory: Docker VM needs 0.00 GiB + 0.00 GiB reserve, free not needed; host needs 5.50 GiB + 8.00 GiB reserve, available 33.60 GiB",
+            "✓ No type errors in 3,953 files [32.98s]"
+          ]
+        },
+        {
+          "path": ".temp/goal/jobs/527f64bc-cb4b-4d23-87a8-47d528b04267.4.log",
+          "sha256": "253383f38364c121fe568cf2feedfa30b5355741fd420417ee404d1272a17100",
+          "origin": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2839/.temp/goal/jobs/527f64bc-cb4b-4d23-87a8-47d528b04267.4.log",
+          "privatePath": ".temp/author-opening-review/inputs/527f64bc-cb4b-4d23-87a8-47d528b04267.4.log",
+          "hashVerified": true,
+          "resultTail": [
+            "$ /bin/sh -c task docs:check",
+            "task: [docs:check] bun scripts/research/storage_architecture/docs-check.ts ",
+            ".............",
+            "----------------------------------------------------------------------",
+            "Ran 13 tests in 0.090s",
+            "",
+            "OK",
+            "Documentation checks passed: 256 Markdown files; local links, fragments and design navigation. External URLs and runtime behavior not tested."
+          ]
+        }
+      ],
+      "compositionManifest": {
+        "path": ".temp/author-opening-review/composition-file-blob-manifest.json",
+        "sha256": "409222fb3d8f50d8e5964c75de5745f9de70c83fbb2e5b234477617d9ddb4d7f",
+        "source": "daebefd39e5b9ee9ba3559426a133f2056284e50",
+        "parent": "9bca164e8ca7a9b382377d518c0bf5d922ea586e",
+        "scope": "Recorded mechanical assembly dependency; only Thread caller delta independently newly reviewed."
+      },
+      "exactCurrentAssemblyComparison": {
+        "fileCount": 55,
+        "equalFileCount": 54,
+        "onlyDifference": "apps/web/features/realm/thread-view.tsx",
+        "perFile": [
+          {
+            "path": "apps/web/features/feed/author-actions.stories.tsx",
+            "assemblyBlob": "5a9e35b4ed345fc59076785f0912db2abc796574",
+            "candidateBlob": "5a9e35b4ed345fc59076785f0912db2abc796574",
+            "equal": true
+          },
+          {
+            "path": "apps/web/features/feed/author-actions.tsx",
+            "assemblyBlob": "78a09d5a17c5b008242fa623b43a90a640314740",
+            "candidateBlob": "78a09d5a17c5b008242fa623b43a90a640314740",
+            "equal": true
+          },
+          {
+            "path": "apps/web/features/feed/author-api.test.ts",
+            "assemblyBlob": "95e062a0c3f77fc4fb574ba3caadc82eaa5ab262",
+            "candidateBlob": "95e062a0c3f77fc4fb574ba3caadc82eaa5ab262",
+            "equal": true
+          },
+          {
+            "path": "apps/web/features/feed/author-api.ts",
+            "assemblyBlob": "183691a5a8fa5127188471ad477819b940e40583",
+            "candidateBlob": "183691a5a8fa5127188471ad477819b940e40583",
+            "equal": true
+          },
+          {
+            "path": "apps/web/features/feed/author-fixtures.ts",
+            "assemblyBlob": "50bfe4eb83d7797da976fe4946a12ce12898acb4",
+            "candidateBlob": "50bfe4eb83d7797da976fe4946a12ce12898acb4",
+            "equal": true
+          },
+          {
+            "path": "apps/web/features/feed/author-messages.ts",
+            "assemblyBlob": "c403fd93eb0495925ecf2fc92b83172e408d349a",
+            "candidateBlob": "c403fd93eb0495925ecf2fc92b83172e408d349a",
+            "equal": true
+          },
+          {
+            "path": "apps/web/features/feed/card.tsx",
+            "assemblyBlob": "29765de04a513e0924890b6bd42c918b00bbbf98",
+            "candidateBlob": "29765de04a513e0924890b6bd42c918b00bbbf98",
+            "equal": true
+          },
+          {
+            "path": "apps/web/features/feed/discussion-card.tsx",
+            "assemblyBlob": "86c432806464caf29f89896ffac9543e40bf50d5",
+            "candidateBlob": "86c432806464caf29f89896ffac9543e40bf50d5",
+            "equal": true
+          },
+          {
+            "path": "apps/web/features/feed/post-row.tsx",
+            "assemblyBlob": "d9a4b379c6b751d2fa95d2f955a3564bad36cc27",
+            "candidateBlob": "d9a4b379c6b751d2fa95d2f955a3564bad36cc27",
+            "equal": true
+          },
+          {
+            "path": "apps/web/features/feed/reply-tree.tsx",
+            "assemblyBlob": "98b8362b832a8cf466ea86d71c109d2d46333c4d",
+            "candidateBlob": "98b8362b832a8cf466ea86d71c109d2d46333c4d",
+            "equal": true
+          },
+          {
+            "path": "apps/web/features/feed/thread-api.ts",
+            "assemblyBlob": "239c3b7ed15deb02d9cfdf612a2b5e4ba5ce5d57",
+            "candidateBlob": "239c3b7ed15deb02d9cfdf612a2b5e4ba5ce5d57",
+            "equal": true
+          },
+          {
+            "path": "apps/web/features/realm/discussion-content.tsx",
+            "assemblyBlob": "83daf9faf5413bc14d02f7082ac8aefac464d56d",
+            "candidateBlob": "83daf9faf5413bc14d02f7082ac8aefac464d56d",
+            "equal": true
+          },
+          {
+            "path": "apps/web/features/realm/discussion-list.tsx",
+            "assemblyBlob": "089b6a52ed8938edfdaad17edf1d5cdf4f09964e",
+            "candidateBlob": "089b6a52ed8938edfdaad17edf1d5cdf4f09964e",
+            "equal": true
+          },
+          {
+            "path": "apps/web/features/realm/ranking-page.tsx",
+            "assemblyBlob": "f0bae222a7542b3603d0182b383e85a19fbf1057",
+            "candidateBlob": "f0bae222a7542b3603d0182b383e85a19fbf1057",
+            "equal": true
+          },
+          {
+            "path": "apps/web/features/realm/thread-view.tsx",
+            "assemblyBlob": "d3ed51620cde470e55752f6864da31b161c175de",
+            "candidateBlob": "ab072fcd980b8b7ea98112191df7cded98c4e284",
+            "equal": false
+          },
+          {
+            "path": "apps/web/features/studio/chapter-editor.stories.tsx",
+            "assemblyBlob": "d2d20966c1bb463052fb4e0cf8d4d3d042f78c46",
+            "candidateBlob": "d2d20966c1bb463052fb4e0cf8d4d3d042f78c46",
+            "equal": true
+          },
+          {
+            "path": "apps/web/features/studio/chapter-editor.tsx",
+            "assemblyBlob": "0d9b0db71782d45e1b867e390c95f5027ac6a125",
+            "candidateBlob": "0d9b0db71782d45e1b867e390c95f5027ac6a125",
+            "equal": true
+          },
+          {
+            "path": "apps/web/features/studio/content-api.ts",
+            "assemblyBlob": "9daf9fe547854cbe984f4e11c9f3acab778e2e51",
+            "candidateBlob": "9daf9fe547854cbe984f4e11c9f3acab778e2e51",
+            "equal": true
+          },
+          {
+            "path": "apps/web/features/studio/qualification-withdrawal.stories.tsx",
+            "assemblyBlob": "0c28e5abf3f75fd142f607c6deb5c34e96349a69",
+            "candidateBlob": "0c28e5abf3f75fd142f607c6deb5c34e96349a69",
+            "equal": true
+          },
+          {
+            "path": "apps/web/features/studio/qualification-withdrawal.test.ts",
+            "assemblyBlob": "03d7efd9e3eee21b23b435c29aed192f2d85cd75",
+            "candidateBlob": "03d7efd9e3eee21b23b435c29aed192f2d85cd75",
+            "equal": true
+          },
+          {
+            "path": "apps/web/features/studio/qualification-withdrawal.tsx",
+            "assemblyBlob": "d40076495639dc03dc13c43572094da1fa4b8aa3",
+            "candidateBlob": "d40076495639dc03dc13c43572094da1fa4b8aa3",
+            "equal": true
+          },
+          {
+            "path": "docs/development/toolchain.md",
+            "assemblyBlob": "a277c9a54246276703d1d381004a4c238c7abd71",
+            "candidateBlob": "a277c9a54246276703d1d381004a4c238c7abd71",
+            "equal": true
+          },
+          {
+            "path": "docs/goals/audit-remediation-20261019/proofs/author-lifecycle-review.json",
+            "assemblyBlob": "3fdf54cb24bcee28af00710c8a11a14ed3261c4c",
+            "candidateBlob": "3fdf54cb24bcee28af00710c8a11a14ed3261c4c",
+            "equal": true
+          },
+          {
+            "path": "generated/model/contexts/content-search-eligibility-withdrawal-v1.jsonld",
+            "assemblyBlob": "528eb7256d4859b082d99616d4b268c3d2874279",
+            "candidateBlob": "528eb7256d4859b082d99616d4b268c3d2874279",
+            "equal": true
+          },
+          {
+            "path": "generated/model/manifest.json",
+            "assemblyBlob": "ce71e7cf7a9ff14d76bedcf361d2f2a1a4bc88fa",
+            "candidateBlob": "ce71e7cf7a9ff14d76bedcf361d2f2a1a4bc88fa",
+            "equal": true
+          },
+          {
+            "path": "generated/model/shapes/content-search-eligibility-withdrawal-v1.ttl",
+            "assemblyBlob": "abcf3f143275f835d04fa7c6b1e08b7b0abcf663",
+            "candidateBlob": "abcf3f143275f835d04fa7c6b1e08b7b0abcf663",
+            "equal": true
+          },
+          {
+            "path": "generated/openapi/main/public.json",
+            "assemblyBlob": "b859a9b4f4589695d698244898f3c826de5fdf28",
+            "candidateBlob": "b859a9b4f4589695d698244898f3c826de5fdf28",
+            "equal": true
+          },
+          {
+            "path": "infra/dev/compose.yaml",
+            "assemblyBlob": "70d68927952cfcab64771c887f3aba2f39c0c0c4",
+            "candidateBlob": "70d68927952cfcab64771c887f3aba2f39c0c0c4",
+            "equal": true
+          },
+          {
+            "path": "infra/jena/command-module/src/main/java/com/rezics/jena/CommandService.java",
+            "assemblyBlob": "7b13aa43c27e6434d8cd47210464c1d651826cc2",
+            "candidateBlob": "7b13aa43c27e6434d8cd47210464c1d651826cc2",
+            "equal": true
+          },
+          {
+            "path": "infra/jena/command-module/src/main/java/com/rezics/jena/ContentSearchQualification.java",
+            "assemblyBlob": "6ec875e19b19282882885b62a5a8a7957a7f28b8",
+            "candidateBlob": "6ec875e19b19282882885b62a5a8a7957a7f28b8",
+            "equal": true
+          },
+          {
+            "path": "infra/jena/command-module/src/test/java/com/rezics/jena/ContentSearchQualificationTest.java",
+            "assemblyBlob": "7ee0badd3887ca1910ddce86e9c4b364c839ad32",
+            "candidateBlob": "7ee0badd3887ca1910ddce86e9c4b364c839ad32",
+            "equal": true
+          },
+          {
+            "path": "model/definitions/content-search-eligibility-withdrawal-v1.ts",
+            "assemblyBlob": "ac43b088a38a2eb675ce353d5204dc3e676fcc92",
+            "candidateBlob": "ac43b088a38a2eb675ce353d5204dc3e676fcc92",
+            "equal": true
+          },
+          {
+            "path": "model/definitions/content-search-eligibility-withdrawal-v1.ttl",
+            "assemblyBlob": "abcf3f143275f835d04fa7c6b1e08b7b0abcf663",
+            "candidateBlob": "abcf3f143275f835d04fa7c6b1e08b7b0abcf663",
+            "equal": true
+          },
+          {
+            "path": "packages/model/src/generated/profiles.ts",
+            "assemblyBlob": "c95697beb4de346c005b9b218cc4fd86626aac88",
+            "candidateBlob": "c95697beb4de346c005b9b218cc4fd86626aac88",
+            "equal": true
+          },
+          {
+            "path": "packages/model/src/generated/schemas.ts",
+            "assemblyBlob": "5f1a46a202f1081faa6c6da04686fc53c69e164a",
+            "candidateBlob": "5f1a46a202f1081faa6c6da04686fc53c69e164a",
+            "equal": true
+          },
+          {
+            "path": "packages/model/src/generated/vocabulary.ts",
+            "assemblyBlob": "627769786771d28829e38dd8b8ee1dab12c6de5d",
+            "candidateBlob": "627769786771d28829e38dd8b8ee1dab12c6de5d",
+            "equal": true
+          },
+          {
+            "path": "scripts/dev/release-manifest.ts",
+            "assemblyBlob": "1cf12cecb6b6abc2d66baf77fbcee0b4cb81e64f",
+            "candidateBlob": "1cf12cecb6b6abc2d66baf77fbcee0b4cb81e64f",
+            "equal": true
+          },
+          {
+            "path": "scripts/static/web-continuations.inventory.json",
+            "assemblyBlob": "81853783aa2cdb3c016dbe8dd9b369bfc4bcad07",
+            "candidateBlob": "81853783aa2cdb3c016dbe8dd9b369bfc4bcad07",
+            "equal": true
+          },
+          {
+            "path": "scripts/static/web-page-filtering.inventory.json",
+            "assemblyBlob": "09c33afb652119fa3010bbb3c1e4c47bcc38d9da",
+            "candidateBlob": "09c33afb652119fa3010bbb3c1e4c47bcc38d9da",
+            "equal": true
+          },
+          {
+            "path": "services/main/src/api-responses.ts",
+            "assemblyBlob": "b8627eb3db63bc00090d2cfec2877f78a1bfee15",
+            "candidateBlob": "b8627eb3db63bc00090d2cfec2877f78a1bfee15",
+            "equal": true
+          },
+          {
+            "path": "services/main/src/modules/content-publication/eligibility-admitted.ts",
+            "assemblyBlob": "fb3ef4ec92638f3fc1f73555e73de3dae7ef3b52",
+            "candidateBlob": "fb3ef4ec92638f3fc1f73555e73de3dae7ef3b52",
+            "equal": true
+          },
+          {
+            "path": "services/main/src/modules/content-publication/eligibility-state.ts",
+            "assemblyBlob": "7f6e4e72d2ec67bba4c6d6bd2b8d3c062cf9c8c3",
+            "candidateBlob": "7f6e4e72d2ec67bba4c6d6bd2b8d3c062cf9c8c3",
+            "equal": true
+          },
+          {
+            "path": "services/main/src/modules/content-publication/eligibility.ts",
+            "assemblyBlob": "e21d70b42c3ba87b3cf012a104d1275e430e358f",
+            "candidateBlob": "e21d70b42c3ba87b3cf012a104d1275e430e358f",
+            "equal": true
+          },
+          {
+            "path": "services/main/src/modules/content-publication/relay.ts",
+            "assemblyBlob": "9e1d2b55957c878d93e9e7d6ee3f2015717542e7",
+            "candidateBlob": "9e1d2b55957c878d93e9e7d6ee3f2015717542e7",
+            "equal": true
+          },
+          {
+            "path": "services/main/src/modules/outbox/relay.ts",
+            "assemblyBlob": "ca1e915abb1be9d7f1a710f531914248218a6430",
+            "candidateBlob": "ca1e915abb1be9d7f1a710f531914248218a6430",
+            "equal": true
+          },
+          {
+            "path": "services/main/src/modules/realm-reply/content-store.ts",
+            "assemblyBlob": "f9912794b2d75aa4572af74680d1898d264535e6",
+            "candidateBlob": "f9912794b2d75aa4572af74680d1898d264535e6",
+            "equal": true
+          },
+          {
+            "path": "services/main/src/modules/realm-reply/graph.ts",
+            "assemblyBlob": "76f614c9dc97733e3e9c486243e313953ec73ee0",
+            "candidateBlob": "76f614c9dc97733e3e9c486243e313953ec73ee0",
+            "equal": true
+          },
+          {
+            "path": "services/main/src/modules/realm-reply/store.ts",
+            "assemblyBlob": "692ed7ad75fae6da401168143082d3721af8403e",
+            "candidateBlob": "692ed7ad75fae6da401168143082d3721af8403e",
+            "equal": true
+          },
+          {
+            "path": "services/main/src/modules/realm-submission/store.ts",
+            "assemblyBlob": "cfdff868158fcefb912a56e056ab853351b3531e",
+            "candidateBlob": "cfdff868158fcefb912a56e056ab853351b3531e",
+            "equal": true
+          },
+          {
+            "path": "services/main/src/routes/content.ts",
+            "assemblyBlob": "571840e3115ead5577620aa5f35057475cb91d2c",
+            "candidateBlob": "571840e3115ead5577620aa5f35057475cb91d2c",
+            "equal": true
+          },
+          {
+            "path": "services/main/src/routes/realm-replies.ts",
+            "assemblyBlob": "4305eb1f6a8d4da5d3c08c0756877ac22c716585",
+            "candidateBlob": "4305eb1f6a8d4da5d3c08c0756877ac22c716585",
+            "equal": true
+          },
+          {
+            "path": "services/main/tests/author-lifecycle-submission.test.ts",
+            "assemblyBlob": "bcc8159fea4bbec1bc1c8ceec2b10f7b525c080e",
+            "candidateBlob": "bcc8159fea4bbec1bc1c8ceec2b10f7b525c080e",
+            "equal": true
+          },
+          {
+            "path": "services/main/tests/author-lifecycle.test.ts",
+            "assemblyBlob": "28520ea909c1724a42209356dce5b0e84ab8a8da",
+            "candidateBlob": "28520ea909c1724a42209356dce5b0e84ab8a8da",
+            "equal": true
+          },
+          {
+            "path": "services/main/tests/content-eligibility-delivery.test.ts",
+            "assemblyBlob": "099ed15adf816e824521787943d3af3606295a6f",
+            "candidateBlob": "099ed15adf816e824521787943d3af3606295a6f",
+            "equal": true
+          },
+          {
+            "path": "services/main/tests/g-903-api-contract.test.ts",
+            "assemblyBlob": "2a8272b0df1f30e8c8a6af8e5d1c803c11d6501c",
+            "candidateBlob": "2a8272b0df1f30e8c8a6af8e5d1c803c11d6501c",
+            "equal": true
+          }
+        ]
+      }
+    },
+    "retainedEvidence": {
+      "policy": "Retain exact prior source/test/runner/image pins and every historical failure. Reuse unchanged approved tests/stories after independent current byte comparison; no full-tier rerun or aggregate relabelling.",
+      "backend51": {
+        "qa": "20261019t070903-340fa0",
+        "results": "51 cases247 assertions",
+        "priorDetails": "evidenceReuse.backendFocused",
+        "currentBytes": "Lifecycle backend implementation/tests match prior approved source. Submission reservation correction stays exact cfdff868158fcefb912a56e056ab853351b3531e/bcc8159fea4bbec1bc1c8ceec2b10f7b525c080e. Access file differs only unrelated rating method parameters; authority blocks unchanged."
+      },
+      "native7": {
+        "source": "359e5fc2100d830d2e8c9df4aaf04ac9653c9cf1",
+        "image": "rezics/fuseki:6.2.0-cmd0.5.43-2bdde6636207",
+        "result": "7 prior ContentSearchQualificationTest cases passed; retained unchanged native source/test proof only",
+        "priorDetails": "evidenceReuse.nativeQualification",
+        "freshCurrentImageResult": false
+      },
+      "boundedPool10": {
+        "job": "See correctiveDeltas[1].reusedChecks (original full recorded job retained)",
+        "result": "10 tests65 assertions retained at prior exact working-source/test pin; see correctiveDeltas[1].reusedChecks for authoritative full job/pins",
+        "currentStoreBlob": "cfdff868158fcefb912a56e056ab853351b3531e",
+        "currentTestBlob": "bcc8159fea4bbec1bc1c8ceec2b10f7b525c080e",
+        "currentByteEquivalence": true
+      },
+      "ui": {
+        "original21Stories": "QA20261019t093745-297783 retained. Original unchanged story definitions and5 qualification stories remain inherited; changed StaleCorrection is superseded by corrective recovery3-case proof, never falsely called unchanged.",
+        "original9Units49Assertions": "Retained historical source pin; later16 author-adapter units plus2 unchanged reviewer cases give18/77 proof where API tests changed. No fresh current9/49 aggregate claimed.",
+        "correctiveProof": "18units77assertions ce5c09ba-1012-4a98-bfcb-3e37ecc6ff8f;3 actual recovery stories QA20261019t111340-f70ecf, all approved corrective author/studio bytes unchanged at20b. Reviewer original2 assertions remain unchanged and their red-before/green-after evidence preserved.",
+        "previousPngs": "All24 prior screenshots actually viewed in prior same-reviewer turns;25 retained safe artifacts (24PNG+unchanged2assertion source) independently SHA256 verified in this continuation.",
+        "retainedArtifactVerification": {
+          "manifestSha256": "a58899c2ec0d2d8d24c14e400f10f78b07dae26e620a4de527d1e8acb21dbb01",
+          "files": [
+            {
+              "path": ".temp/audit-remediation-20261019/proofs/author-lifecycle-G-2851/original-21-screenshots/apps-web-features-feed-author-actions.stories.tsx/CancelAndReopen.png",
+              "sha256": "d14b48cb11c222f0ad224895294c63ac0312b9d91b7c5bfebe90f8899880f42b",
+              "bytes": 44164
+            },
+            {
+              "path": ".temp/audit-remediation-20261019/proofs/author-lifecycle-G-2851/original-21-screenshots/apps-web-features-feed-author-actions.stories.tsx/Correction.png",
+              "sha256": "c34bd9a5affad18f2e45d7be3189e872a54934417545056ebe5b71a52ac1f700",
+              "bytes": 22048
+            },
+            {
+              "path": ".temp/audit-remediation-20261019/proofs/author-lifecycle-G-2851/original-21-screenshots/apps-web-features-feed-author-actions.stories.tsx/DarkWithdrawal.png",
+              "sha256": "6c8e5c634160bee6bf6bb7f5308026f074f9a27ac19c11650d7f55424b472f27",
+              "bytes": 42087
+            },
+            {
+              "path": ".temp/audit-remediation-20261019/proofs/author-lifecycle-G-2851/original-21-screenshots/apps-web-features-feed-author-actions.stories.tsx/ExpiredSession.png",
+              "sha256": "2957d13b72a7ff3d14cd7af4245829cdb9ec4361483b9f89e1b4f4f573ff11a0",
+              "bytes": 43764
+            },
+            {
+              "path": ".temp/audit-remediation-20261019/proofs/author-lifecycle-G-2851/original-21-screenshots/apps-web-features-feed-author-actions.stories.tsx/ForeignObject.png",
+              "sha256": "bb6afe5d8562bfaa74dd1ff868f50f7a3c26405f372056aa94dedc03317fe25d",
+              "bytes": 20434
+            },
+            {
+              "path": ".temp/audit-remediation-20261019/proofs/author-lifecycle-G-2851/original-21-screenshots/apps-web-features-feed-author-actions.stories.tsx/KeyboardRetry.png",
+              "sha256": "c34bd9a5affad18f2e45d7be3189e872a54934417545056ebe5b71a52ac1f700",
+              "bytes": 22048
+            },
+            {
+              "path": ".temp/audit-remediation-20261019/proofs/author-lifecycle-G-2851/original-21-screenshots/apps-web-features-feed-author-actions.stories.tsx/NestedReplyMenus.png",
+              "sha256": "4815ce6b8ee276c58e976fe2808e1d2c632744383168219792fa6d3b8a064f3c",
+              "bytes": 72184
+            },
+            {
+              "path": ".temp/audit-remediation-20261019/proofs/author-lifecycle-G-2851/original-21-screenshots/apps-web-features-feed-author-actions.stories.tsx/NormalPostMenus.png",
+              "sha256": "c26e17945e189d07356c69f5bb0cac3bd23ff195d98213834f18cbed5d1605da",
+              "bytes": 38639
+            },
+            {
+              "path": ".temp/audit-remediation-20261019/proofs/author-lifecycle-G-2851/original-21-screenshots/apps-web-features-feed-author-actions.stories.tsx/OwnedAndForeign.png",
+              "sha256": "ad4bb6e37ba689fc7d08ea4256ee99aff865ae35606a1e68124bbe5164f654c7",
+              "bytes": 20597
+            },
+            {
+              "path": ".temp/audit-remediation-20261019/proofs/author-lifecycle-G-2851/original-21-screenshots/apps-web-features-feed-author-actions.stories.tsx/PermissionRevoked.png",
+              "sha256": "64fcfa0c3298e80ff06cc874e66039fb4459d4d9bf22754b7b67e7a31f246064",
+              "bytes": 42082
+            },
+            {
+              "path": ".temp/audit-remediation-20261019/proofs/author-lifecycle-G-2851/original-21-screenshots/apps-web-features-feed-author-actions.stories.tsx/PhoneChinese.png",
+              "sha256": "2047a7f8210bad446ce88caea72e64d90a923d07ac73c065e68d77194da01075",
+              "bytes": 47139
+            },
+            {
+              "path": ".temp/audit-remediation-20261019/proofs/author-lifecycle-G-2851/original-21-screenshots/apps-web-features-feed-author-actions.stories.tsx/RetryAfterReload.png",
+              "sha256": "454b2e7db68e086e69c84fad095bea296ec8e23cfd93b0e0aa95059d213db2d1",
+              "bytes": 39944
+            },
+            {
+              "path": ".temp/audit-remediation-20261019/proofs/author-lifecycle-G-2851/original-21-screenshots/apps-web-features-feed-author-actions.stories.tsx/RetryWithdrawal.png",
+              "sha256": "4a1b5d7bafd6a040d84d04b0d144a901b74e0f4aace989e5098cfc2cc95f1e2f",
+              "bytes": 47854
+            },
+            {
+              "path": ".temp/audit-remediation-20261019/proofs/author-lifecycle-G-2851/original-21-screenshots/apps-web-features-feed-author-actions.stories.tsx/StaleCorrection.png",
+              "sha256": "ff6dd705b6d7df4440ef8b1f4db64fcaa221e9f2bd29313effd752a849a3a2f3",
+              "bytes": 44905
+            },
+            {
+              "path": ".temp/audit-remediation-20261019/proofs/author-lifecycle-G-2851/original-21-screenshots/apps-web-features-feed-author-actions.stories.tsx/Visitor.png",
+              "sha256": "bb6afe5d8562bfaa74dd1ff868f50f7a3c26405f372056aa94dedc03317fe25d",
+              "bytes": 20434
+            },
+            {
+              "path": ".temp/audit-remediation-20261019/proofs/author-lifecycle-G-2851/original-21-screenshots/apps-web-features-feed-author-actions.stories.tsx/WithdrawPlacement.png",
+              "sha256": "4007adaf8cfe097ce5ef3b1845342525a1a1b695e825bb3f759319dbe0525942",
+              "bytes": 48214
+            },
+            {
+              "path": ".temp/audit-remediation-20261019/proofs/author-lifecycle-G-2851/original-21-screenshots/apps-web-features-studio-qualification-withdrawal.stories.tsx/Cancel.png",
+              "sha256": "6559b17359fed607b0853c6031d8798381567e03549b66c53e5915f10ae50629",
+              "bytes": 59146
+            },
+            {
+              "path": ".temp/audit-remediation-20261019/proofs/author-lifecycle-G-2851/original-21-screenshots/apps-web-features-studio-qualification-withdrawal.stories.tsx/PhoneChineseDark.png",
+              "sha256": "c56f6d8b7e64096998bc2ab0aff003500353f51269915288585f5109fcd6f934",
+              "bytes": 84072
+            },
+            {
+              "path": ".temp/audit-remediation-20261019/proofs/author-lifecycle-G-2851/original-21-screenshots/apps-web-features-studio-qualification-withdrawal.stories.tsx/PhonePublished.png",
+              "sha256": "b90201b31a1b4f5c1833de420dcc8e7ac3ee95d4791bad63cc2bde12304b8d32",
+              "bytes": 50172
+            },
+            {
+              "path": ".temp/audit-remediation-20261019/proofs/author-lifecycle-G-2851/original-21-screenshots/apps-web-features-studio-qualification-withdrawal.stories.tsx/Retry.png",
+              "sha256": "87493e82fcd14c8a03c46ec4678fee599ad9c8cbd9add316b3f97cfb924a56ad",
+              "bytes": 102159
+            },
+            {
+              "path": ".temp/audit-remediation-20261019/proofs/author-lifecycle-G-2851/original-21-screenshots/apps-web-features-studio-qualification-withdrawal.stories.tsx/WithdrawAndReload.png",
+              "sha256": "13baa3c11715c0074cba75d060da6a6582ce2f93df3a619885cc023e24e70fe2",
+              "bytes": 89025
+            },
+            {
+              "path": ".temp/audit-remediation-20261019/proofs/author-lifecycle-G-2851/selected-head-correction/StaleCorrection.png",
+              "sha256": "454b2e7db68e086e69c84fad095bea296ec8e23cfd93b0e0aa95059d213db2d1",
+              "bytes": 39944
+            },
+            {
+              "path": ".temp/audit-remediation-20261019/proofs/author-lifecycle-G-2851/selected-head-correction/SelectedHeadRecovery.png",
+              "sha256": "110760b892653d89ede73c3313f5fcf9ecadfba33fac08aa3812dd69b611b1c5",
+              "bytes": 36581
+            },
+            {
+              "path": ".temp/audit-remediation-20261019/proofs/author-lifecycle-G-2851/selected-head-correction/SelectedHeadRecoveryPhone.png",
+              "sha256": "5b172ef4a52efb723aad55709f06d279f6793d93423199695506c1e2b8316926",
+              "bytes": 37825
+            },
+            {
+              "path": ".temp/audit-remediation-20261019/proofs/author-lifecycle-G-2851/author-recovery-review.test.ts",
+              "sha256": "9963238353c91b798c3b9bb16b778a64f2554b2215ffb8798d226d2610e0c474",
+              "bytes": 1756
+            }
+          ]
+        }
+      },
+      "currentGeneratedProducer": {
+        "job": "527f64bc-cb4b-4d23-87a8-47d528b04267",
+        "checks": "task gen;Main types2726files;Webtypes3953files;docs13tests256Markdown all passed. Actual four logs read/hash-verified; current generated five file blobs/SHA verified.",
+        "pinsAndLogs": "sourceEquivalence.currentGeneratedProducerPins/currentGeneratedProducerLogVerification"
+      },
+      "inferenceAndGuards": "Prior corrected inference, published Main/Web types43396, lint/AST/guards retained at recorded exact dependencies in original/corrective records. Five caller lines introduce no inference/model/backend change. Newly affected current parent types/interaction/a11y ran above. No inference/51/7/10/21/578 rerun.",
+      "historicalFullNative": "Job728682a5-e297-4462-8843-5854e526850c remains578 tests,0 failures,1 ranked traversal deadline error at realmRankTraversalIncludesEveryAdoptionAndNoGlobalFallback:344; not relabelled green."
+    },
+    "currentNativeDependency": {
+      "image": "rezics/fuseki:6.2.0-cmd0.5.43-f8607944ef4a",
+      "imageId": "sha256:a03e88467a0d9b3a4c9598e49ac109f5db163dc1e947b130f10d07ae42330a0f",
+      "imageInputsSha256": "f8607944ef4a978a18ce8b8181e8c6c2b3eb42e3d08e187bd14514999de1182a",
+      "imageInputCount": 459,
+      "sourcePinsVerified": [
+        "infra/dev/compose.yaml",
+        "scripts/dev/release-manifest.ts"
+      ],
+      "evidence": "Inherited supported producer build527f64bc logs hash-verified; no stack lifecycle performed by reviewer. Old7-native359e/2bdde proof remains at that image; neither594fa nor currentf860 is claimed as a fresh7-native pass."
+    },
+    "verdict": {
+      "source": "approved-within-reviewed-scope",
+      "reason": "Actual current opener forwards exact target coordinates into approved production action component under blocked/author guard; real parent discovery/absence/focus states, scoped types, configured a11y and viewed desktop/phone PNGs pass. No remaining blocking source or visual defect identified in this bounded delta.",
+      "canApproveExactBoundedCaller": true,
+      "unrelatedWaveReviewed": false,
+      "genuineProductAcceptanceEstablished": false,
+      "originalFindingClosed": false,
+      "mainIntegrationEstablished": false
+    }
+  },
+  "latestDecision": {
+    "reviewedAt": "2026-10-19T13:01:25.427359+00:00",
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "independentReviewsPerformed": 1,
+      "nestedAgentsUsed": false,
+      "accountFallbackUsed": false,
+      "candidateImplementationAuthored": false,
+      "productionEdits": false,
+      "existingAssertionsEdited": false,
+      "sameIndependentReviewerContinuation": true,
+      "additionalIndependentReviewers": 0
+    },
+    "source": "20b62bc8fb3103c2c5d587e612072c443377318e",
+    "parent": "9bca164e8ca7a9b382377d518c0bf5d922ea586e",
+    "sourceVerdict": "approved-within-reviewed-scope",
+    "scope": "Only5-line current Thread opener author-action caller delta; prior1d8/b840 source decisions retained,54 assembly files blob-matched. No full-wave source reapproval.",
+    "unresolvedBlockingFindingsInReviewedDelta": [],
+    "originalFinding": "D2-004",
+    "originalFindingClosed": false,
+    "genuineProductAcceptanceEstablished": false,
+    "mainIntegrationEstablished": false,
+    "independentReviewCountRemains": 1,
+    "historicalFailureAndVerdictHistoryPreserved": true
+  },
+  "latestGenuineAcceptance": {
+    "outcomesReachedInThisContinuation": [],
+    "genuineOutcomeAssertionsReached": false,
+    "genuineCheckRun": false,
+    "currentDataAbsenceAsserted": false,
+    "sourceAndStoriesDoNotCloseD2004": true,
+    "currentBackendSupportsReviewedWithdrawalUnions": {
+      "source": "20b62bc8fb3103c2c5d587e612072c443377318e",
+      "qualificationProfile": "content-search-eligibility-withdrawal-v1",
+      "placementProfile": "realm-reply-placement-withdrawal-v1",
+      "sourceEquivalence": "Request schemas,200 outputs and route producer bytes checked; source capability only, no live server claim. Historical75409ac3 lacks these operations."
+    },
+    "requiredPremise": {
+      "productPin": "20b62bc8fb3103c2c5d587e612072c443377318e",
+      "composedUiPin": "20b62bc8fb3103c2c5d587e612072c443377318e",
+      "nativeImage": "rezics/fuseki:6.2.0-cmd0.5.43-f8607944ef4a",
+      "operations": [
+        "POST /v1/content-search-eligibility with content-search-eligibility-withdrawal-v1",
+        "POST /v1/realm-reply-placements with realm-reply-placement-withdrawal-v1",
+        "existing authenticated author draft, exact revision, private variant-head and selected placement operations"
+      ],
+      "preparedData": "Existing compatible owned command-created published chapter, Post and nested-reply records with genuine controlled author, reader/search access, signed-in fixture and retained isolated backup/restore lineage. Manager coordinates admission with existing G-2825 and G-2778/G-2791 owners; no new full catalogue, original-baseline restore, manual graph/authority seed, shared refresh/reset/import, new fixture producer or fake receipt.",
+      "fixturePin": null,
+      "restorePin": null,
+      "fixtureStatus": "No compatible live genuine fixture/data owner handoff admitted or executed by this review. Existing preparation may be used by manager when exact backend/native operations are live; no assertion of data absence."
+    },
+    "remainingOriginalCriteria": [
+      "A real owned published chapter exposes normal withdrawal, confirmation and exact acknowledgement; refresh plus another reader/search reflects withdrawal while draft and ownership remain.",
+      "Real operations preserve distinct effects and authority for Work Structure removal, Content qualification withdrawal, Work publication withdrawal and owned Post/reply placement withdrawal, with content rights/disclosure/erasure, independent support and immutable history intact.",
+      "A real owned published Post and nested reply expose correction/cancel/withdraw/retry/refresh through each object own menu, keep local recovery/focus and give no foreign-author powers."
+    ],
+    "acceptanceUnchanged": "No mandatory six-persona, full-theme/full-domain, unrelated whole Studio transfer or full catalogue requirement added. A setup premise or source approval does not close D2-004."
+  },
+  "latestHandoff": {
+    "deliverable": "docs/goals/audit-remediation-20261019/proofs/author-lifecycle-review.json",
+    "ownerChanges": [],
+    "remainingSourceBlockers": [],
+    "next": "Manager may capture bounded20b caller plus current approved assembly/report through normal root integration. Separately coordinate existing genuine fixture owner handoff and original AMGT01/D2-004 outcome run at compatible reviewed operations/current native image. Source/story approval alone closes no finding.",
+    "newImplementationTaskOrContractRequested": false,
+    "reportValidation": {
+      "status": "passed",
+      "orderedCommands": [
+        "task goal -- check",
+        "task docs:check"
+      ],
+      "historicalTopLevelFieldsPreserved": true,
+      "historicalFieldCount": 24,
+      "priorReportSha256": "c0632dd6a448b4ec17d0b7765edfcdf6ad89380c3a8b5c8ac1988deeab12328d",
+      "reportOnlyDurableEdit": "docs/goals/audit-remediation-20261019/proofs/author-lifecycle-review.json",
+      "job": "52edb111-f3fd-49f8-8cc1-d766a2676916",
+      "logs": [
+        {
+          "path": ".temp/goal/jobs/52edb111-f3fd-49f8-8cc1-d766a2676916.1.log",
+          "sha256": "f8b266218bddf9e321fd9e617a1f98cee3af2ff6b06a56a3cfd9797dab0f4c15"
+        },
+        {
+          "path": ".temp/goal/jobs/52edb111-f3fd-49f8-8cc1-d766a2676916.2.log",
+          "sha256": "b5c5a2f2b552cecd8accb23f32fb836ed38d251e787b5f630e362fb97e363ab9"
+        }
+      ],
+      "workerCheck": {
+        "result": "passed",
+        "types": "not applicable: no TypeScript workspace changed in report claim",
+        "tests": "not applicable: no test files named in brief",
+        "lint": "not applicable: no source file changed in report claim",
+        "ast": "passed",
+        "guards": "1/45 selected, passed",
+        "output": ".temp/goal/check/run-wIgjsM/output.log"
+      },
+      "documentationCheck": {
+        "result": "passed",
+        "tests": 13,
+        "markdownFiles": 259,
+        "reach": "Local links, fragments and design navigation; no runtime behavior claim"
+      },
+      "finalVerification": "Report JSON parsed; all24 prior top-level values preserved exactly; git diff --check passed; only claimed report changed. Exact-source20b execution clone has no tracked product diff; private parent story/Taskfile remain untracked review artifacts."
+    }
   }
 }
