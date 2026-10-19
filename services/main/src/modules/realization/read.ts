@@ -6,6 +6,7 @@ import { parseStoredRealization, REALIZATION_COST, REALIZATION_PROFILE, type Rea
 import { readLegacyRealization, translationRealization } from './legacy.ts';
 import { readTranslationLinks } from '../work/translation-links.ts';
 import { admittedReadPosition } from '../read-basis/admitted-position.ts';
+import { releaseSourceEvidence } from '../source/release-evidence.ts';
 
 export function realizationView(record: RealizationRecord, revision: string) {
   const { expectedHead: ignoredHead, actingSubject: ignoredActor, ...facts } = record;
@@ -40,7 +41,8 @@ export async function readWorkRealization(session: WorkReadSession, work: string
   const basis = await readWorkBasis(session, work);
   const result = await readRealization(session, work, id, revision);
   await fenceWorkBasis(session, basis);
-  return result;
+  return { ...result,sourceEvidence: result.legacy ? [] : await releaseSourceEvidence(session,
+    { owner: 'realization',component: result.id,revision: result.revision }) };
 }
 
 /** UNION retained legacy identities before slicing, so no installed record is
@@ -61,8 +63,11 @@ export async function readWorkRealizations(session: WorkReadSession, work: strin
   const cursor = decodeReadCursor(session.options.cursor, binding, position);
   const selected = await session.selection(`realizations:${work}:${cursor?.after ?? ''}:${limit}`,
     probe => realizationPage(probe, work, limit, cursor?.after));
+  const items = await Promise.all(selected.items.map(async item => ({ ...item,
+    sourceEvidence: item.legacy ? [] : await releaseSourceEvidence(session,
+      { owner: 'realization',component: item.id,revision: item.revision }) })));
   await fenceWorkBasis(session, basis);
-  return { ...pageResult(session, selected.items, selected.after
+  return { ...pageResult(session, items, selected.after
     ? encodeReadCursor(binding, position, selected.after) : null), sourcePosition: position };
 }
 

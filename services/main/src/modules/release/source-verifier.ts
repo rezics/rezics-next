@@ -39,30 +39,43 @@ interface VerifiedReleaseRealization {
 
 /** Private owner verification only. Source still owns retained-coordinate/value
  * correspondence, authority/rights admission, support settlement and replay. */
+interface CorrespondenceInput {
+  principal: VerifiedPrincipal | null;
+  actingSubject?: string;
+  target: string;
+  release: ReleaseNativeCommandBasis;
+  realization: ReleaseNativeCommandBasis;
+  completeness: ReleaseNativeCompleteness;
+}
+
 export async function verifyReleaseRealizationCorrespondence(
   env: WorkActivationEnvironment,
-  input: {
-    principal: VerifiedPrincipal;
-    actingSubject: string;
-    target: string;
-    release: ReleaseNativeCommandBasis;
-    realization: ReleaseNativeCommandBasis;
-    completeness: ReleaseNativeCompleteness;
-  },
+  input: CorrespondenceInput & { principal: VerifiedPrincipal; actingSubject: string },
 ): Promise<VerifiedReleaseRealization | ReleaseSourceVerificationFailure> {
+  if (!input.principal?.issuer || !input.principal.subject || !isReleaseNativeId(input.actingSubject)) {
+    return releaseNativeFailure('unavailable', 'verified-principal-unavailable');
+  }
+  return correspondence(env, input, 'expected');
+}
+
+/** Public read verification uses the actual reader and observes current heads.
+ * It still resolves both actual receipts and the exact immutable covered pair.
+ * Historical support remains attached to that pair after either head advances. */
+export async function readReleaseRealizationCorrespondence(
+  env: WorkActivationEnvironment,
+  input: Omit<CorrespondenceInput, 'actingSubject'>,
+): Promise<VerifiedReleaseRealization | ReleaseSourceVerificationFailure> {
+  return correspondence(env, { ...input, actingSubject: undefined }, 'observed');
+}
+
+async function correspondence(env: WorkActivationEnvironment, input: CorrespondenceInput,
+  head: 'expected' | 'observed'): Promise<VerifiedReleaseRealization | ReleaseSourceVerificationFailure> {
   const basis = structuredClone({
     target: input.target,
     release: input.release,
     realization: input.realization,
     completeness: input.completeness,
   });
-  if (
-    !input.principal.issuer ||
-    !input.principal.subject ||
-    !isReleaseNativeId(input.actingSubject)
-  ) {
-    return releaseNativeFailure('unavailable', 'verified-principal-unavailable');
-  }
   if (
     !isReleaseNativeId(basis.target) ||
     !validReleaseNativeCommand(basis.release) ||
@@ -112,7 +125,7 @@ export async function verifyReleaseRealizationCorrespondence(
     ) {
       return releaseNativeFailure('target-mismatch', 'release-command-state-differs');
     }
-    if (row.head.value !== basis.release.expectedHead)
+    if (head === 'expected' && row.head.value !== basis.release.expectedHead)
       return releaseNativeFailure('head-mismatch', 'release-head-moved');
     if (
       record.profile !== 'release-v2' ||
@@ -141,7 +154,7 @@ export async function verifyReleaseRealizationCorrespondence(
     if (entry.completeness !== basis.completeness) {
       return releaseNativeFailure('value-mismatch', 'release-coverage-completeness-differs');
     }
-    const realization = await readRealizationSourceBasis(env, basis.realization);
+    const realization = await readRealizationSourceBasis(env, basis.realization, head);
     if (realization.status !== 'available') return realization;
     const text = realization.record;
     if (
@@ -204,8 +217,8 @@ export async function verifyReleaseRealizationCorrespondence(
       return releaseNativeFailure('unavailable', 'native-current-heads-unavailable');
     }
     if (
-      heads[0].releaseHead.value !== basis.release.expectedHead ||
-      heads[0].realizationHead.value !== basis.realization.expectedHead
+      heads[0].releaseHead.value !== row.head.value ||
+      heads[0].realizationHead.value !== realization.head
     ) {
       return releaseNativeFailure('head-mismatch', 'native-head-moved-during-verification');
     }
@@ -219,7 +232,7 @@ export async function verifyReleaseRealizationCorrespondence(
   }
 }
 
-function releaseProperty(
+export function releaseSourceProperty(
   basis: ReleaseSourceNativeBasis,
   record: ReleaseV2Record,
   text: RealizationSourceBasisRead['record'],
@@ -281,7 +294,7 @@ export async function verifyReleaseSourceNative(
     !releaseNativeValueMatches(
       native.property,
       selected,
-      releaseProperty(native, proof.release.record, proof.realization.record),
+      releaseSourceProperty(native, proof.release.record, proof.realization.record),
     )
   ) {
     return releaseNativeFailure(

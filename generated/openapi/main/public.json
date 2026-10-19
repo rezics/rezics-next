@@ -770012,6 +770012,72 @@
                             "maxItems": 20,
                             "type": "array"
                           },
+                          "sourceEvidence": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "datasetSnapshotDigest": {
+                                  "pattern": "^[0-9a-f]{64}$",
+                                  "type": "string"
+                                },
+                                "externalId": {
+                                  "type": "string"
+                                },
+                                "fieldLocator": {
+                                  "type": "string"
+                                },
+                                "href": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "namespace": {
+                                  "type": "string"
+                                },
+                                "observation": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                },
+                                "provider": {
+                                  "type": "string"
+                                },
+                                "record": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                },
+                                "recordDigest": {
+                                  "pattern": "^[0-9a-f]{64}$",
+                                  "type": "string"
+                                },
+                                "sourceRevision": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "provider",
+                                "namespace",
+                                "externalId",
+                                "sourceRevision",
+                                "datasetSnapshotDigest",
+                                "recordDigest",
+                                "fieldLocator",
+                                "record",
+                                "observation",
+                                "href"
+                              ],
+                              "type": "object"
+                            },
+                            "maxItems": 32,
+                            "type": "array"
+                          },
                           "status": {
                             "enum": [
                               "official",
@@ -1028656,6 +1028722,72 @@
                               }
                             ]
                           },
+                          "sourceEvidence": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "datasetSnapshotDigest": {
+                                  "pattern": "^[0-9a-f]{64}$",
+                                  "type": "string"
+                                },
+                                "externalId": {
+                                  "type": "string"
+                                },
+                                "fieldLocator": {
+                                  "type": "string"
+                                },
+                                "href": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "namespace": {
+                                  "type": "string"
+                                },
+                                "observation": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                },
+                                "provider": {
+                                  "type": "string"
+                                },
+                                "record": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                },
+                                "recordDigest": {
+                                  "pattern": "^[0-9a-f]{64}$",
+                                  "type": "string"
+                                },
+                                "sourceRevision": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "provider",
+                                "namespace",
+                                "externalId",
+                                "sourceRevision",
+                                "datasetSnapshotDigest",
+                                "recordDigest",
+                                "fieldLocator",
+                                "record",
+                                "observation",
+                                "href"
+                              ],
+                              "type": "object"
+                            },
+                            "maxItems": 32,
+                            "type": "array"
+                          },
                           "status": {
                             "enum": [
                               "official",
@@ -1029717,6 +1029849,72 @@
                           "type": "object"
                         }
                       ]
+                    },
+                    "sourceEvidence": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetSnapshotDigest": {
+                            "pattern": "^[0-9a-f]{64}$",
+                            "type": "string"
+                          },
+                          "externalId": {
+                            "type": "string"
+                          },
+                          "fieldLocator": {
+                            "type": "string"
+                          },
+                          "href": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "namespace": {
+                            "type": "string"
+                          },
+                          "observation": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "provider": {
+                            "type": "string"
+                          },
+                          "record": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "recordDigest": {
+                            "pattern": "^[0-9a-f]{64}$",
+                            "type": "string"
+                          },
+                          "sourceRevision": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "provider",
+                          "namespace",
+                          "externalId",
+                          "sourceRevision",
+                          "datasetSnapshotDigest",
+                          "recordDigest",
+                          "fieldLocator",
+                          "record",
+                          "observation",
+                          "href"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 32,
+                      "type": "array"
                     },
                     "sourcePosition": {
                       "properties": {
@@ -1032293,6 +1032491,72 @@
                             "maxItems": 20,
                             "type": "array"
                           },
+                          "sourceEvidence": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "datasetSnapshotDigest": {
+                                  "pattern": "^[0-9a-f]{64}$",
+                                  "type": "string"
+                                },
+                                "externalId": {
+                                  "type": "string"
+                                },
+                                "fieldLocator": {
+                                  "type": "string"
+                                },
+                                "href": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "namespace": {
+                                  "type": "string"
+                                },
+                                "observation": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                },
+                                "provider": {
+                                  "type": "string"
+                                },
+                                "record": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                },
+                                "recordDigest": {
+                                  "pattern": "^[0-9a-f]{64}$",
+                                  "type": "string"
+                                },
+                                "sourceRevision": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "provider",
+                                "namespace",
+                                "externalId",
+                                "sourceRevision",
+                                "datasetSnapshotDigest",
+                                "recordDigest",
+                                "fieldLocator",
+                                "record",
+                                "observation",
+                                "href"
+                              ],
+                              "type": "object"
+                            },
+                            "maxItems": 32,
+                            "type": "array"
+                          },
                           "status": {
                             "enum": [
                               "official",
@@ -1033405,6 +1033669,72 @@
                         "type": "object"
                       },
                       "maxItems": 20,
+                      "type": "array"
+                    },
+                    "sourceEvidence": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "datasetSnapshotDigest": {
+                            "pattern": "^[0-9a-f]{64}$",
+                            "type": "string"
+                          },
+                          "externalId": {
+                            "type": "string"
+                          },
+                          "fieldLocator": {
+                            "type": "string"
+                          },
+                          "href": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "namespace": {
+                            "type": "string"
+                          },
+                          "observation": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "provider": {
+                            "type": "string"
+                          },
+                          "record": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "recordDigest": {
+                            "pattern": "^[0-9a-f]{64}$",
+                            "type": "string"
+                          },
+                          "sourceRevision": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "provider",
+                          "namespace",
+                          "externalId",
+                          "sourceRevision",
+                          "datasetSnapshotDigest",
+                          "recordDigest",
+                          "fieldLocator",
+                          "record",
+                          "observation",
+                          "href"
+                        ],
+                        "type": "object"
+                      },
+                      "maxItems": 32,
                       "type": "array"
                     },
                     "sourcePosition": {

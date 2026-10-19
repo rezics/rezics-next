@@ -22,6 +22,7 @@ const admittedMeanings: Record<string, string> = {
   'facet-release-territory-v1': 'ecfc69ba05556b2e65bf1cdc686e8bc7f9f682f01ff728ff369fa33d5e211971',
   'facet-release-completeness-v1': '691aa13c51613fe66453545e2959e5a177649c7132b497b459dd39e3f6c5456d',
   'facet-release-status-v1': '541d9caf10ff71efcd74ebb9d71e4212142b586927f097f12fa9b9d9acc5f7b9',
+  'facet-release-translator-v1': '61a11baa70f9156f70a0d4e3e91cfea792956951e0d013b450aa270981ab35db',
   'facet-author-v1': '2c16a404d3c13f1161102c924763ef302e4695fca2f09965f96a2e4193d9b48b',
   'facet-concept-v1': '6a2438d45d2616af705374094389676616c09e0fbbc8eda2330754b4d325a5d5',
   'facet-contributor-v1': '93579a0f6b18f88af7560a8e0ca63bd8673cfcf0049690144b1d5e951564ea97',
@@ -87,7 +88,7 @@ test('Facets: the compiler refuses a Facet whose parts do not fit together', () 
 
 test('Facets: the admitted set covers what readers filter by today', () => {
   expect([...compiled.keys()].sort()).toEqual(['author', 'concept', 'contributor', 'language', 'length', 'publicationYear', 'rating', 'realm',
-    'relation', 'release', 'releaseCompleteness', 'releaseLanguage', 'releasePlatform', 'releaseStatus', 'releaseTerritory',
+    'relation', 'release', 'releaseCompleteness', 'releaseLanguage', 'releasePlatform', 'releaseStatus', 'releaseTerritory', 'releaseTranslator',
     'role', 'statement', 'status', 'type']);
   const rv = 'https://rezics.com/vocab/';
   expect(facet('type')).toMatchObject({ source: 'global', operators: ['any', 'all', 'none'],

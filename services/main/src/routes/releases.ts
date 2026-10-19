@@ -7,6 +7,7 @@ import { readWorkRelease, readWorkReleases, readReleasesByIdentifier } from '../
 import { InvalidRelease, ReleaseUnavailable, StaleRelease, releaseWrite, releaseV2Write } from '../modules/release/schema.ts';
 import { pageFields, pageQuery, readId, readLanguage, readPosition, readUuid } from '../modules/work/read-contract.ts';
 import { workRead } from '../modules/work/read-session.ts';
+import { releaseSourceEvidenceSchema } from '../modules/source/release-evidence-contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
@@ -33,7 +34,8 @@ const releaseView = t.Object({ profile: t.Literal('release-v2'), id: readId, rev
     completeness: t.Union([t.Literal('complete'), t.Literal('partial'), t.Literal('trial'), t.Literal('unknown')]),
     portion: t.Optional(t.String()) }), { maxItems: 64 }),
   legacyCoverage: t.Nullable(t.Object({ scope: t.String(), complete: t.Boolean() })),
-  snapshots: t.Array(snapshot, { maxItems: 20 }) });
+  // Additive on this published profile; historical answers remain valid.
+  snapshots: t.Array(snapshot, { maxItems: 20 }),sourceEvidence: t.Optional(releaseSourceEvidenceSchema) });
 const detail: { security: Record<string, string[]>[] } = { security: [{}, { bearerAuth: [] }] };
 export const openApiOperations = {
   '/v1/releases': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },

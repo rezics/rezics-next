@@ -8,6 +8,7 @@ import { InvalidRealization, StaleRealization, RealizationUnavailable, realizati
   realizationSource } from '../modules/realization/schema.ts';
 import { pageFields, pageQuery, readId, readLanguage, readPosition, readUuid } from '../modules/work/read-contract.ts';
 import { workRead } from '../modules/work/read-session.ts';
+import { releaseSourceEvidenceSchema } from '../modules/source/release-evidence-contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
@@ -16,6 +17,8 @@ const headers = { 'cache-control': 'private, no-store' };
 const native = 'https://rezics.com/id/';
 const { expectedHead: ignoredHead, actingSubject: ignoredActor, ...facts } = realizationWrite.properties;
 const view = t.Object({ ...facts, work: readId, revision: readId, source: realizationSource,
+  // Additive on this published profile; current handlers always return the array.
+  sourceEvidence: t.Optional(releaseSourceEvidenceSchema),
   legacy: t.Nullable(t.Object({ link: readId, targetWork: readId, targetMainVersion: readId,
     targetMainRevision: readId, sourceWork: readId, sourceMainVersion: readId,
     sourceMainRevision: t.Nullable(readId), sourceVersionStatus: t.String(), status: t.String(),

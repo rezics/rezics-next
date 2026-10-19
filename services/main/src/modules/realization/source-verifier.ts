@@ -10,7 +10,7 @@ import {
   type ReleaseSourceVerificationInput,
 } from '../source/release-native-verifier.ts';
 
-function realizationProperty(
+export function realizationSourceProperty(
   basis: RealizationSourceNativeBasis,
   record: RealizationRecord,
 ): SemanticValue | undefined {
@@ -58,7 +58,7 @@ export async function verifyRealizationSourceNative(
     !releaseNativeValueMatches(
       native.property,
       selected,
-      realizationProperty(native, proof.realization.record),
+      realizationSourceProperty(native, proof.realization.record),
     )
   ) {
     return releaseNativeFailure(

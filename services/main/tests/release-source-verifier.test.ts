@@ -10,7 +10,7 @@ import {
   resolvedReleaseV2,
   type AnyReleaseRecord,
 } from '../src/modules/release/schema.ts';
-import { verifyReleaseSourceNative } from '../src/modules/release/source-verifier.ts';
+import { readReleaseRealizationCorrespondence, verifyReleaseSourceNative } from '../src/modules/release/source-verifier.ts';
 import type {
   ReleaseNativeCommandBasis,
   ReleaseSourceNativeBasis,
@@ -110,6 +110,7 @@ function fixture() {
     missingState: false,
     ambiguousReceipt: false,
     visible: true,
+    reader: principal as VerifiedPrincipal | null,
     receiptComponent: release,
     receiptRevision: releaseRevision,
     digest: releaseDigest(record),
@@ -199,7 +200,7 @@ function fixture() {
   configureDisclosure(
     env,
     fixtureDisclosureReader(async (targets, viewer) => {
-      expect(namePolicyPrincipal(viewer)).toBe(principal);
+      expect(namePolicyPrincipal(viewer)).toBe(state.reader);
       disclosures.push(...targets);
       return targets.map(() => (state.visible ? 'visible' : 'hidden'));
     }),
@@ -299,6 +300,23 @@ test('release verifier resolves the actual receipt, exact selected property and 
   );
   expect(f.queries.filter((query) => query.includes('SELECT ?admission'))).toHaveLength(2);
   expect(f.queries.every((query) => query.includes('LIMIT 2'))).toBe(true);
+});
+
+test('public evidence reads preserve exact historical receipts and coverage with the actual anonymous reader', async () => {
+  const f = fixture();
+  f.state.reader = null;
+  f.state.releaseHead = id(80);
+  f.state.realizationHead = id(81);
+  const input = { principal: null,target: f.work,release: f.input.native,
+    realization: f.input.native.coverage.realization,completeness: f.input.native.coverage.completeness };
+  const result = await readReleaseRealizationCorrespondence(f.env,input);
+  expect(result).toMatchObject({ status: 'available',
+    release: { head: id(80),receipt: { receipt: f.releaseReceipt,revision: f.releaseRevision } },
+    realization: { head: id(81),receipt: { receipt: f.realizationReceipt,revision: f.realizationRevision } } });
+  expect(await verifyReleaseSourceNative(f.env,f.input)).toMatchObject({ status: 'head-mismatch' });
+  f.state.visible = false;
+  expect(await readReleaseRealizationCorrespondence(f.env,input)).toMatchObject({ status: 'unavailable' });
+  expect(f.writes()).toBe(0);
 });
 
 test('realization verifier returns its own actual receipt and exact same-release translator', async () => {

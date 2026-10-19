@@ -50,6 +50,7 @@ import type { SourceFieldWithdrawalStore } from '../modules/source/withdrawal.ts
 import type { SourceFieldAttachmentStore } from '../modules/source/support-attach.ts';
 import type { SourceFieldApplicationStore } from '../modules/source/field-application.ts';
 import type { SourceRetainedFieldSupportStore } from '../modules/source/field-support-retained.ts';
+import type { SourceReleaseEvidenceOwner } from '../modules/source/release-evidence.ts';
 import type { SourceNativeChildStore } from '../modules/source/child-native-support.ts';
 import type { ProviderIdentityStore } from '../modules/source/provider-identity.ts';
 import type { SourceScoreStore } from '../modules/source/score.ts';
@@ -253,6 +254,7 @@ export interface MainWorkDependencies {
   sourceFieldAttachments?: SourceFieldAttachmentStore;
   sourceFieldApplications?: SourceFieldApplicationStore;
   sourceRetainedFieldSupports?: SourceRetainedFieldSupportStore;
+  sourceReleaseEvidence?: Pick<SourceReleaseEvidenceOwner, 'read'>;
   sourceNativeChildren?: SourceNativeChildStore;
   sourceProviderIdentity?: ProviderIdentityStore;
   sourceScores?: SourceScoreStore;
