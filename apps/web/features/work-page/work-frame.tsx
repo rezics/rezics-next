@@ -144,8 +144,13 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
           </div>
           <div className="grid min-w-0 content-start gap-3">
             {artHeader}
-            {compactHeader}
-            {shortcuts}
+            <div className="grid min-w-0 grid-cols-[6.5rem_minmax(0,1fr)] items-start gap-4
+              sm:grid-cols-[8rem_minmax(0,1fr)] sm:gap-6 lg:grid-cols-[15rem_minmax(0,1fr)] lg:gap-12">
+              <div className="flex min-w-0 justify-center">
+                {cover ?? <WorkPageCover work={work} authors={authors} avatarQuery={avatarQuery} />}
+              </div>
+              <div className="grid min-w-0 content-start gap-3">{compactHeader}{shortcuts}</div>
+            </div>
           </div>
           {status}
         </div>
