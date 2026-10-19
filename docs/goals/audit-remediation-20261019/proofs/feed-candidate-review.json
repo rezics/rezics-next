@@ -1,4 +1,1784 @@
 {
+  "d3ReaderAuthorityVerdict": {
+    "result": "partial-d3-001-genuine-reader-authority-proof-blocked-at-browser-hydration-setup",
+    "scope": "Only the newly ready original D3-001 genuine signed-in Feed reader-authority assertions. No rerun of completed D4-016 preview148, FEED-RSC-01 frozen22, unchanged adapter/story/static suites, or whole native Feed fixture.",
+    "summary": "Pinned exact current-main frontend6cf460b2; all26readiness material blobs match and dependency inputs/install pin remain unchanged. A fresh own supported OAuth flow and Main saved-session200 proved the existing Agent eligible. No original signed-in Feed SSR/next/head/recovery assertion was reached. Latest actual browser startup failed at the virtual entry import with44ERR_NETWORK_CHANGED module failures; one screenshot was actually viewed.",
+    "newReproducedFeedProductFailures": [],
+    "classClosed": false,
+    "findingDisposition": "Original D3-001 remains open. These are browser setup failures and one corrected Account-ID/Agent-ID runner premise, not a finding that Feed violates its reader-authority contract. Root decides class closure; no registry/index/ledger changed.",
+    "unchangedCompletedProof": "All prior D4-016 preview, focus and FEED-RSC-01/AUD-005 reports, passing assertions, actual views and failed traces retained verbatim by value. No prior valid result invalidated or rerun.",
+    "next": "Land only this cumulative report. Existing startup/runtime owner should resolve actual module-request ERR_NETWORK_CHANGED and return an executable own normal Task frontend/Accounts hydration path, then dispatch this same driver and sole reviewer for the missing original D3 cells. Existing identity/fixture owner must separately supply a lawful genuine ineligible-saved-Agent state; no shared-grant mutation or fabricated receipt."
+  },
+  "d3ReaderAuthoritySemantics": "This continuation appends exact readiness/source/dependency pins, actual own OAuth/session receipts and setup failure evidence only. It does not supersede any prior passing preview/RSC/focus result, turn setup failure into a Feed finding, or close an original class. Every prior JSON field is retained unchanged by value.",
+  "d3ReaderAuthorityAttempt": {
+    "recordedAt": "2026-10-19T14:22:02.944276Z",
+    "authority": "Latest same-scope manager ready-input continuation: exact main6cf460b284cca8677a9b696f8f842fea9fac5321, own normal Task frontend/private OAuth session; only missing ORIGINAL D3-001 assertions, compatible existing Main754/data, no product source change or second source review.",
+    "reviewer": {
+      "worker": "G-2836",
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "soleIndependentReviewer": true,
+      "candidateAuthor": false,
+      "accountFallback": false,
+      "nestedAgents": false
+    },
+    "source": {
+      "head": "6cf460b284cca8677a9b696f8f842fea9fac5321",
+      "tree": "b98454fc990705e15d704031471dabab13e2ba29",
+      "cleanBeforeChecks": true,
+      "manifest": [
+        {
+          "path": "apps/web/app/[locale]/page.tsx",
+          "blob": "ab284562783d1acc98886a24ba4831e024ffbb94",
+          "sha256": "2d24914763f8f46c8a96f133dc3058bfb61daffe4266032b4e3ba26011fbe7ff"
+        },
+        {
+          "path": "apps/web/features/home/server.ts",
+          "blob": "26e748c2784fbd20c6394e72584687c4984de2cd",
+          "sha256": "98c6c013bc6fa6dc8dd872ca0897506b942d7a7cb4994999021047912358b10f"
+        },
+        {
+          "path": "apps/web/features/home/home-page.tsx",
+          "blob": "7dfbe62d13d21f523d2a4f815fc3bb71d4b3d35c",
+          "sha256": "44f8fcf5e373c26ee3b3475909ccbec23c1463a3964c0e890986b6dc080f938c"
+        },
+        {
+          "path": "apps/web/features/shell/communities-read.ts",
+          "blob": "5941a6b22062c555412701fb4030f068a4b325fb",
+          "sha256": "8af51d92346432aab0efcea6c2f60a515caeadd0039b1c4ff90a383c7327d3c9"
+        },
+        {
+          "path": "apps/web/features/auth/session.ts",
+          "blob": "07a2100944c05da93f6f44e729aadb03c082b39f",
+          "sha256": "cdcf8408d77f2803b1fb6910a1a2af7ccfa536f4f7ea497b7372edb7925bbaaf"
+        },
+        {
+          "path": "apps/web/features/auth/acting-identity.ts",
+          "blob": "9251b2dcfde8da781b6b78a664cf87cae248298f",
+          "sha256": "fdd590a5435d69e0fa9e07f21ef59166b6d7a2201a4a72164ce1e93cf8c63604"
+        },
+        {
+          "path": "apps/web/features/auth/session-state.ts",
+          "blob": "3ce4291c5b55ea65a660cd271bb7984f94f6416c",
+          "sha256": "5217d6ddd357f5fc00054a9440a59c0dbffdaefb9122256734b273176c8ad6d9"
+        },
+        {
+          "path": "apps/web/features/api/main.ts",
+          "blob": "32a5c7d149b4052d1cbb17d48d6db7972a69430e",
+          "sha256": "ef54b96effed0c784f0b8483787e27e16c7bdad554e732f5ee763268e587c170"
+        },
+        {
+          "path": "apps/web/features/api/main-read.ts",
+          "blob": "06c977f5da7f45ccd571e9424a7cb26e528013f9",
+          "sha256": "b8f19918ae9852b0234dba48a612b01c8247afdb66fec27ed99b943ff0314e1b"
+        },
+        {
+          "path": "apps/web/features/api/server-read.ts",
+          "blob": "4486ceb5072fbd9be6d455c95ad83cd6b629d2f4",
+          "sha256": "2994aaa8ba8d9be57f0d665eea9ffeda0748820ad50842d74bc3a12f5bbec115"
+        },
+        {
+          "path": "apps/web/features/api/server-fetch.ts",
+          "blob": "5dc162e45643cf34d789e24c56af204ac1d95b93",
+          "sha256": "9de290653ae8f200a6799ed1864870da2fda0ec632994d1aa402b9f60db5a8ef"
+        },
+        {
+          "path": "apps/web/features/api/browser.ts",
+          "blob": "5b8c2d862068a9152b77de410bfefb247f047112",
+          "sha256": "9dcb73313b2edb43fe8dfeddefe14301c00e5054b7fba5d1e081a546e92aac01"
+        },
+        {
+          "path": "apps/web/features/api/bff.ts",
+          "blob": "bef3b99dddb47602612d82843347339634ac215c",
+          "sha256": "75c60dbfe0209e901d321af1ff3c230c13c0f8c62116835521553c4749111b21"
+        },
+        {
+          "path": "apps/web/app/api/main/[...path]/route.ts",
+          "blob": "684df850a5d7eb82e10dae1ca3d9a3253c6329b9",
+          "sha256": "c8a29cfb1955c8deb7ffa1c0e3754ca7b5e9133fdfbde03ca22af27b4b8bb765"
+        },
+        {
+          "path": "apps/web/features/feed/api.ts",
+          "blob": "4163aa567dff214434cd9ff61353e1a20844912e",
+          "sha256": "1b0c3ef18488aabb99a60dcb03afcfeefd968627c8c405a8d4aa17924d73df4e"
+        },
+        {
+          "path": "apps/web/features/feed/read.ts",
+          "blob": "aea7075c117100da3747026eda0d5136b010f61c",
+          "sha256": "64cc444bfb07802e49758c8e4484496af84e41b07c46988e0595709dc831ef5a"
+        },
+        {
+          "path": "apps/web/features/feed/feed-list.tsx",
+          "blob": "127eddc9eabc0c1dd0ae16406bc78c1d8fdd23d6",
+          "sha256": "2202a8d2388eed9033f9fdf9851e9f273e02be950e8534761ae90d1cf93ffb28"
+        },
+        {
+          "path": "apps/web/features/feed/feed-context.tsx",
+          "blob": "e97de6dff0da2c4ee03cdf1cc13f5c4a297b2b43",
+          "sha256": "04985aac9ad6eeb4409fea94a4803d7b69d346c73e4cc171a6930142cd6901f3"
+        },
+        {
+          "path": "apps/web/features/feed/state.ts",
+          "blob": "f9968afd501ba4167f73a197b76b28955973cd95",
+          "sha256": "2a555c31c116a5550d63bc019b9c5fc0a5b4ca98ff7e8f086898de7293c74375"
+        },
+        {
+          "path": "apps/web/features/feed/projection.ts",
+          "blob": "1d1b676dbf9472be62bc76e8b51bf60c9e636da3",
+          "sha256": "d68eb6b05861e2e369dba40d415365e3d17cb1c72ad12b2e89cfcc4533a8ec94"
+        },
+        {
+          "path": "apps/web/features/feed/reader-identity.test.ts",
+          "blob": "ee9423986060349950dbf89ba1f3467ed0dba27c",
+          "sha256": "55d0bcd946719cc2d1ba536a648239e8ea8a83b89da6c0e3e73f444976141020"
+        },
+        {
+          "path": "apps/web/features/feed/reader-identity.stories.tsx",
+          "blob": "10084e056972edea9d7ea34752ddf02a966d9782",
+          "sha256": "b1d77311ee410a74fe4eef87373d6d4b7850e402cb75848956ed70ce25dc15a1"
+        },
+        {
+          "path": "apps/web/features/feed/read.test.ts",
+          "blob": "c0b5261ffee7e3f21d7064c7ff58fa17436c7291",
+          "sha256": "50b8cab447d8c3f4f3f59102699f5339c4582a0858eb9f8a5228031fa49d9a84"
+        },
+        {
+          "path": "apps/web/features/feed/refusal-read.test.ts",
+          "blob": "338e4f502f71048fffc40469ee59b362a7fe6b5a",
+          "sha256": "96236cfbf8a02fd5dc8468dd7954e5eddc553701e532e2399ea2961bb246d646"
+        },
+        {
+          "path": "tests/qa/integration/feed-home.test.ts",
+          "blob": "41c724d0c26084d9005a3be431213a7835b02f27",
+          "sha256": "a5b0318abaa5beab6c12a28eb45b9d966c579458a14d14909948de1b23a6eee9"
+        },
+        {
+          "path": "tests/qa/integration/g-1025-home-fence.test.ts",
+          "blob": "d32fdc3163fae96e54d23f0bea33be56756b926d",
+          "sha256": "056edabe61e89f990d78904fc51ab99f5b1a3a294fb7d8db969cbe36a7f5d568"
+        }
+      ],
+      "dependencyReuse": {
+        "from": "32400992a4879132812a83d9e6a0bd1cd5d996bf",
+        "dependencyInputDiff": "",
+        "stamp": "23223c2822cb3c121e46d70fff8a4d490b1e293ed078f8d2c626a1dee58d71eb",
+        "patchedModuleSha256": "496abcdede37434faa54443e4bd90d6ca8aef076e371fefe7f19cab701a14998"
+      },
+      "runner": {
+        "path": ".temp/feed-authority-live.test.ts",
+        "sha256": "4e1af8c0f3e00c2ebbd63b1600b0f544869cbdc4a3c63bb73d8162299171240e"
+      },
+      "support": [
+        {
+          "path": "apps/web/tests/account-sign-in.ts",
+          "sha256": "a52d9c42a7fb4599a4b54bf7170f8f2747772a04506bcaa29537553135c3befb"
+        },
+        {
+          "path": "apps/web/features/shell/preferences.ts",
+          "sha256": "a7c04098373951467aaf75524136a83993b4163c9fb87d2fe44d73d93b14f944"
+        }
+      ],
+      "setupCorrections": [
+        {
+          "job": "ab59bc6d-73b0-4f80-bba6-106ed79c1666",
+          "assertionsReached": false,
+          "reason": "Frontend ACCOUNT_ORIGIN was pointed at private Account service 3002, which redirected to its non-public /sign-in; supported signInAtAccounts waits for public Accounts 3004. Corrected frontend configuration to existing public Accounts origin. No source or assertion change."
+        },
+        {
+          "job": "f15fe20a-313b-46e1-b35f-c41b22e1b25f",
+          "assertionsReached": false,
+          "reason": "Actual public Accounts module import failed with net::ERR_NETWORK_CHANGED, no HTTP response. Read-only replay of exact auth-frame.tsx returned 200 JavaScript (body/hash retained). No auth helper or original assertion change; added cross-origin module and requestfailed capture."
+        },
+        {
+          "job": "58f70715-532f-4ae4-b541-464673a145bb",
+          "assertionsReached": "3 setup/premise expects; no Feed outcome assertion",
+          "reason": "Receipt proved eligible Agent IRI ending71473997..., while Account fixture member.id is a different Account identifier. Incorrect runner compared Account ID to Agent UUID. Corrected to exact selected Agent IRI and independently verify signed-in Account record equals own fixture Account ID; original D3 assertions preserved."
+        }
+      ],
+      "snapshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate",
+      "cleanAfter": true,
+      "originalReviewBase": "18e1308c6371936b629ae921490483ef486aae5c",
+      "originalReviewHead": "79a8d1b1c7c55a05525942200939200ac75c2d6b",
+      "privateAuthorityLanding": "0b8dec18d7d5ff1f2fdeafd83498e4b33ad3b448",
+      "readinessPath": ".temp/feed-authority-evidence/readiness.json",
+      "readinessSha256": "56ef1de07d19f545ebd8a670d6f9176ca8601bec08e6c830e8ad7607e66f6260",
+      "selection": "Exact approved frontend; no product-source cherry-pick, edit or arbitrary wave composition. No second source review."
+    },
+    "runtime": {
+      "frontend": {
+        "command": "task --dir .temp/feed-authority-candidate web:dev -- --port 62841",
+        "origin": "http://127.0.0.1:62841",
+        "observerOrigin": "http://127.0.0.1:62842",
+        "publicAccounts": "http://127.0.0.1:3004",
+        "mainOriginForFrontend": "http://127.0.0.1:62842",
+        "observerBehavior": "Read-only HTTP forwarding to Main3001 with safe auth-presence/actor/request-id and response metadata. No private token/cookie values logged. Intended bounded identity/Feed faults never executed because setup stopped first."
+      },
+      "backend": {
+        "origin": "http://127.0.0.1:3001",
+        "managerSuppliedSourcePin": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "qualification": "Actual own OAuth and affected session-agent reads200 with eligible saved Agent; this continuation did not reach Feed assertion body, so no new genuine signed-in Feed runtime success is claimed. No health/warmup result counts as assertion success.",
+        "currentNativeClaim": false,
+        "exactNativeDifferences": {
+          "backendSource": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+          "mainOrigin": "http://127.0.0.1:3001",
+          "member": "71473997-6e2e-4e59-9044-01627a79e839",
+          "selection": "Already-qualified compatible Web-consumer backend, not byte-equal current-main native identity/source proof. No liveness probe made here.",
+          "independentQualification": "G2825/G2831 own supported OAuth, session-agent200/eligible; G2836 preview source324009 records genuine34 Feed pages/120 retained records with this backend.",
+          "nativeDifferences": [
+            {
+              "path": "services/main/src/routes/feed.ts",
+              "retainedMain754": {
+                "blob": "31e3fb499b57102fc5847a407f281c2b628b101b",
+                "sha256": "a910beea67cad9d3c486cd8c6bd98ab1e22c671ed329c85b788845c3131a869b",
+                "bytes": 13787
+              },
+              "currentMain": {
+                "blob": "f1b13933c40a69e098439440c5321717bf19a00d",
+                "sha256": "32029ad8ede8d4a61cc118bc598b5ecffb2f3a9b91902a17a3d752065856db8c",
+                "bytes": 14642
+              }
+            },
+            {
+              "path": "services/main/src/modules/feed/contract.ts",
+              "retainedMain754": {
+                "blob": "973c97ccb8dd6bad210691c202a5f6fa01c564d6",
+                "sha256": "3dee51c6a5c51f92b55a5d30d0ad3bb0b8479564728c59599c801d68c7fac035",
+                "bytes": 11104
+              },
+              "currentMain": {
+                "blob": "d8e3eda7ef05bbfe894bd64c79d7394a5dab1b5f",
+                "sha256": "33e511f2d2d82eac7118c6cbf9ca1553c4897ba84ba605726b6fc4cbd14de2ac",
+                "bytes": 11110
+              }
+            },
+            {
+              "path": "services/main/src/modules/feed/read.ts",
+              "retainedMain754": {
+                "blob": "bd100a831dae0a4293f73fa1f1d990d6c1ad7990",
+                "sha256": "7c301dbea9e44d5ee3127038a0dbe29fbe9afead8b0ed7c7d95f359237445e6d",
+                "bytes": 57522
+              },
+              "currentMain": {
+                "blob": "885599d6be644876d46f1814a032c909ea444f8f",
+                "sha256": "afb26f96049f27b3069e6ada5270653f2858f5efcfae02401183bd54a27b740d",
+                "bytes": 57897
+              }
+            },
+            {
+              "path": "services/main/src/modules/feed/new-since.ts",
+              "retainedMain754": {
+                "blob": "70e15ab3ce31b75554fadc6f3c1d98c00ab257bd",
+                "sha256": "104fc28106aee30ea01d5bed2e978c4b301b943886df1ee2ee66b0cd149d0ba1",
+                "bytes": 5438
+              },
+              "currentMain": {
+                "blob": "dba31d9e10f95f89f543d07ea944b43ea9cfe019",
+                "sha256": "faca293675207a8c09ea63d6ececbc0ee1f3fee47ad2c9831c49849c19bf9818",
+                "bytes": 6078
+              }
+            },
+            {
+              "path": "services/main/src/routes/acting-contexts.ts",
+              "retainedMain754": {
+                "blob": "db7b2bff789b5d0944008ba9b5ecde7278bdbc2f",
+                "sha256": "2978dd1de5b16525f80a2ca494c8f15c39ad1fc4f2506bbb6baff5b266acb6ad",
+                "bytes": 10824
+              },
+              "currentMain": {
+                "blob": "42c9838b5cbfca775f8bb2f3206f4e003b041033",
+                "sha256": "d99c2c89708714c9c4d2852a69bb95a955ef38f3d58a3b5716726b2a87351874",
+                "bytes": 10722
+              }
+            },
+            {
+              "path": "services/main/src/modules/access/session-agent.ts",
+              "retainedMain754": {
+                "blob": "fbf5d97e6311137e870fb0f9a482bf242cdc99b8",
+                "sha256": "191a655cce7cd2e45e3f8357fb7e2b84f0b0dcc831f8f0476e5a5875e153e291",
+                "bytes": 9218
+              },
+              "currentMain": {
+                "blob": "fbf5d97e6311137e870fb0f9a482bf242cdc99b8",
+                "sha256": "191a655cce7cd2e45e3f8357fb7e2b84f0b0dcc831f8f0476e5a5875e153e291",
+                "bytes": 9218
+              }
+            }
+          ],
+          "differenceDisposition": "Both native route implementations retain the bearer/actingSubject pairing check. Current routes add transport-response schemas; feed read adds Realm disclosure, contract changes rating range, and new-since changes have separate meaning. Do not relabel Main754 results as current-main native behavior or current-main privacy/class acceptance. Original D3 Web authority continuity can execute at this explicitly compatible backend."
+        }
+      },
+      "ownAuth": {
+        "supportedHelper": "apps/web/tests/account-sign-in.ts",
+        "helperSha256": "a52d9c42a7fb4599a4b54bf7170f8f2747772a04506bcaa29537553135c3befb",
+        "freshBrowserContext": true,
+        "borrowedCookiesOrProfile": false,
+        "fixtureCredentialValuesPublished": false,
+        "sameAccountIdSha256": "50532835f04cc08466abe1e3d9d01e7377c7eb22dcd743402a32c7cf44cd6c41",
+        "sameAccountEvidence": "Fresh helper used only the existing member credential record; its own callback saved session and actual Main receipt matched expected Agent. Incorrect extra Account/Agent identity assertion is recorded separately. The corrected independent Account-record assertion has not yet run.",
+        "eligibleAgent": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+        "safeSessionReceipts": [
+          {
+            "index": 10,
+            "phase": "own-oauth",
+            "path": "/v1/me/session-agent",
+            "method": "GET",
+            "authorizationPresent": true,
+            "cookiePresent": false,
+            "sessionKeyPresent": true,
+            "requestId": null,
+            "responseIds": {
+              "x-request-id": null,
+              "x-correlation-id": null,
+              "x-rezics-request-id": null,
+              "traceparent": null
+            },
+            "status": 200,
+            "upstreamStatus": 200,
+            "saved": {
+              "actingSubject": null,
+              "eligible": false,
+              "revision": null,
+              "initialActingSubject": null
+            }
+          },
+          {
+            "index": 13,
+            "phase": "own-oauth",
+            "path": "/v1/me/session-agent",
+            "method": "GET",
+            "authorizationPresent": true,
+            "cookiePresent": false,
+            "sessionKeyPresent": true,
+            "requestId": null,
+            "responseIds": {
+              "x-request-id": null,
+              "x-correlation-id": null,
+              "x-rezics-request-id": null,
+              "traceparent": null
+            },
+            "status": 200,
+            "upstreamStatus": 200,
+            "saved": {
+              "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+              "eligible": true,
+              "revision": "d53c8e2b-4038-4d10-a276-96c9bb4e39b3",
+              "initialActingSubject": null
+            }
+          },
+          {
+            "index": 14,
+            "phase": "own-oauth",
+            "path": "/v1/me/session-agent",
+            "method": "GET",
+            "authorizationPresent": true,
+            "cookiePresent": false,
+            "sessionKeyPresent": true,
+            "requestId": null,
+            "responseIds": {
+              "x-request-id": null,
+              "x-correlation-id": null,
+              "x-rezics-request-id": null,
+              "traceparent": null
+            },
+            "status": 200,
+            "upstreamStatus": 200,
+            "saved": {
+              "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+              "eligible": true,
+              "revision": "d53c8e2b-4038-4d10-a276-96c9bb4e39b3",
+              "initialActingSubject": null
+            }
+          },
+          {
+            "index": 15,
+            "phase": "own-oauth",
+            "path": "/v1/me/session-agent",
+            "method": "GET",
+            "authorizationPresent": true,
+            "cookiePresent": false,
+            "sessionKeyPresent": true,
+            "requestId": null,
+            "responseIds": {
+              "x-request-id": null,
+              "x-correlation-id": null,
+              "x-rezics-request-id": null,
+              "traceparent": null
+            },
+            "status": 200,
+            "upstreamStatus": 200,
+            "saved": {
+              "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+              "eligible": true,
+              "revision": "d53c8e2b-4038-4d10-a276-96c9bb4e39b3",
+              "initialActingSubject": null
+            }
+          },
+          {
+            "index": 20,
+            "phase": "own-oauth",
+            "path": "/v1/me/session-agent",
+            "method": "GET",
+            "authorizationPresent": true,
+            "cookiePresent": false,
+            "sessionKeyPresent": true,
+            "requestId": null,
+            "responseIds": {
+              "x-request-id": null,
+              "x-correlation-id": null,
+              "x-rezics-request-id": null,
+              "traceparent": null
+            },
+            "status": 200,
+            "upstreamStatus": 200,
+            "saved": {
+              "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+              "eligible": true,
+              "revision": "d53c8e2b-4038-4d10-a276-96c9bb4e39b3",
+              "initialActingSubject": null
+            }
+          },
+          {
+            "index": 25,
+            "phase": "own-oauth",
+            "path": "/v1/me/session-agent",
+            "method": "GET",
+            "authorizationPresent": true,
+            "cookiePresent": false,
+            "sessionKeyPresent": true,
+            "requestId": null,
+            "responseIds": {
+              "x-request-id": null,
+              "x-correlation-id": null,
+              "x-rezics-request-id": null,
+              "traceparent": null
+            },
+            "status": 200,
+            "upstreamStatus": 200,
+            "saved": {
+              "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+              "eligible": true,
+              "revision": "d53c8e2b-4038-4d10-a276-96c9bb4e39b3",
+              "initialActingSubject": null
+            }
+          },
+          {
+            "index": 28,
+            "phase": "own-oauth",
+            "path": "/v1/me/session-agent",
+            "method": "GET",
+            "authorizationPresent": true,
+            "cookiePresent": false,
+            "sessionKeyPresent": true,
+            "requestId": null,
+            "responseIds": {
+              "x-request-id": null,
+              "x-correlation-id": null,
+              "x-rezics-request-id": null,
+              "traceparent": null
+            },
+            "status": 200,
+            "upstreamStatus": 200,
+            "saved": {
+              "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+              "eligible": true,
+              "revision": "d53c8e2b-4038-4d10-a276-96c9bb4e39b3",
+              "initialActingSubject": null
+            }
+          },
+          {
+            "index": 43,
+            "phase": "initial-session",
+            "path": "/v1/me/session-agent",
+            "method": "GET",
+            "authorizationPresent": true,
+            "cookiePresent": false,
+            "sessionKeyPresent": true,
+            "requestId": null,
+            "responseIds": {
+              "x-request-id": null,
+              "x-correlation-id": null,
+              "x-rezics-request-id": null,
+              "traceparent": null
+            },
+            "status": 200,
+            "upstreamStatus": 200,
+            "saved": {
+              "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+              "eligible": true,
+              "revision": "d53c8e2b-4038-4d10-a276-96c9bb4e39b3",
+              "initialActingSubject": null
+            }
+          }
+        ]
+      },
+      "mutations": {
+        "newAccounts": false,
+        "newGrantsOrEligibilityChange": false,
+        "corpusResetImportOrPreparation": false,
+        "peerLifecycle": false,
+        "readerStatusProgressOrShelfWrites": false,
+        "explicitTestSelectionExecuted": false,
+        "ownOAuthSessionInitialization": "One actual POST/v1/me/onboarding during supported OAuth callback ensureOnboarding; compatible existing Main returned the already-approved eligible Agent in subsequent own session receipts. No explicit clear/select request or borrowed Account refresh chain. This normal callback behavior is recorded, not hidden as read-only."
+      },
+      "cleanup": {
+        "ownFrontendAndObserverStopped": [
+          {
+            "port": 62841,
+            "listeningAfterCleanup": false
+          },
+          {
+            "port": 62842,
+            "listeningAfterCleanup": false
+          }
+        ],
+        "ownBrowserClosed": true,
+        "peerProcessesStopped": false,
+        "cookiesPersistedOrPublished": false,
+        "privateAccountsAndOwnRefreshChainRemainPrivate": true
+      }
+    },
+    "originalAcceptanceVerbatim": {
+      "title": "公开 Feed 的匿名降级没有传到客户端，登录但无可用 Agent 时续页请求违反认证契约",
+      "acceptanceVerbatim": [
+        "同一登录账户在未选 Agent、Agent 不合资格、acting-context 读取暂时不可用三种条件下，公开首屏、next/head 和恢复读取使用一致且明确的读者权限；不会发出“有认证、无 actingSubject”的请求。",
+        "公开列表至少连续两页并能恢复一次暂时失败，无 400、无漏项或重复；选择有效 Agent 后的个人 Feed 及匿名公开 Feed 同样覆盖。保留 Main 的认证配对校验，不能靠放宽安全契约通过。",
+        "内容真实变化/409 才显示“Feed changed”；认证、权限和服务不可用各有可解释且可恢复的状态。en/zh-Hans、1440/390、浅/深色均验收。"
+      ],
+      "regressionAssertionsVerbatim": [
+        {
+          "id": "D3-001/assertion-1",
+          "assert": "For a signed-in reader with no selected/eligible/readable Agent, anonymous SSR fallback is retained by client first/next/head/recovery requests."
+        },
+        {
+          "id": "D3-001/assertion-2",
+          "assert": "Authenticated reads always carry a matched acting subject; anonymous reads use the intended anonymous transport without relaxing the server authentication contract."
+        },
+        {
+          "id": "D3-001/assertion-3",
+          "assert": "Exercise unselected, ineligible and temporarily unavailable identity discovery and transition to a selected Agent without stale cursor reuse."
+        }
+      ],
+      "originalExistingTestFiles": [
+        "apps/web/features/feed/read.test.ts",
+        "apps/web/features/feed/refusal-read.test.ts",
+        "tests/qa/integration/feed-home.test.ts",
+        "tests/qa/integration/g-1025-home-fence.test.ts"
+      ]
+    },
+    "criterionMapping": [
+      {
+        "originalAssertion": "D3-001/assertion-1",
+        "criterion": "Same signed-in Account under genuinely unselected, ineligible or temporarily unavailable relevant identity/session discovery; public SSR first/next/head/recovery remain explicitly anonymous.",
+        "status": "missing-original-live-assertions",
+        "unselected": "Ready supported own-session clear exists but was not called. Initial fresh-session lookup returned genuine200 with actingSubject=null/eligible=false/revision=null before normal callback onboarding established its selected eligible session. No Home SSR/next/head/recovery ran while genuinely unselected, so this is only an initialization receipt, not original unselected Feed proof.",
+        "unavailable": "Exact relevant MainGET/v1/me/session-agent forwarding-fault branch prepared, never executed. No proxy-admission or page import failure is labeled SSR identity failure.",
+        "ineligible": "No lawful retained ineligible-saved-Agent receipt found in supplied readiness. Existing identity/fixture owner must supply genuine retained state; shared grant revocation/changed eligibility/fabricated200 are prohibited.",
+        "evidenceTier": "Source/adapter/story evidence retained; genuine signed-in Feed body not reached."
+      },
+      {
+        "originalAssertion": "D3-001/assertion-2",
+        "criterion": "At least two genuine public pages, bounded temporary failure and recovery, no400/omission/duplication; selected eligible Agent personal Feed and anonymous control covered without relaxing Main authentication/actingSubject pairing.",
+        "status": "missing-new-signed-in-feed-live-assertions",
+        "retainedEvidence": "Original34genuine public pages/120records and prior public focus/RSC pagination/control proof remain exactly as retained. Earlier adapter/story transport specimens remain lower-tier proof, not genuine signed-in API evidence.",
+        "newEvidence": "Only own affected session-agent200 eligible receipts; no new Feed first/next/head/recovery response assertion or transport-credential assertion reached.",
+        "pairing": "No backend security contract or product code changed."
+      },
+      {
+        "originalAssertion": "D3-001/assertion-3",
+        "criterion": "Only genuine content409 produces Feed changed; identity/auth/authority/service have explanatory recoverable distinctions; en/zh-Hans1440/390light/dark applicable cells.",
+        "status": "missing-original-live-assertions",
+        "preparedNotExecuted": "Driver preserves the original selected/unselected/unavailable conditions, real responses after one bounded Feed503 and intended existing browser head-timer acceleration; none reached. No pending/recovered Feed PNG or signed-in matrix cell exists for this run.",
+        "retainedEvidence": "Earlier original409/RSC/focus and authored failure-copy stories retained separately. No new real business409, auth denial, controlled fault or identity failure was exercised here."
+      },
+      {
+        "originalAssertion": "D3-001 transition to actual selected eligible Agent without stale anonymous cursor reuse",
+        "status": "missing-original-live-assertion",
+        "detail": "Actual existing saved Agent is eligible. Explicit own clear/select transition and fresh-generation/no-old-cursor assertions were prepared but not executed. Existing selected state is not relabeled unselected."
+      }
+    ],
+    "checks": [
+      {
+        "id": "ab59bc6d-73b0-4f80-bba6-106ed79c1666",
+        "exitCode": 1,
+        "runtimeSeconds": 200.41,
+        "assertions": 0,
+        "premise": "No original outcome assertion reached; own frontend misconfigured Account service3002 instead of public Accounts3004. signInAtAccounts waited for public /sign-in but redirect reached3002/sign-in. Retained logs and corrected only frontend ACCOUNT_ORIGIN configuration.",
+        "evidenceDirectory": ".temp/feed-authority-evidence/setup-account-origin/",
+        "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test ./.temp/feed-authority-live.test.ts",
+        "executedCommand": "bun scripts/goal/goalctl.ts test ./.temp/feed-authority-live.test.ts",
+        "jobResultClass": "assertion",
+        "reviewClassification": "setup/premise failure; no reproduced D3 Feed product failure",
+        "originalD3OutcomeAssertionsReached": false,
+        "log": ".temp/goal/jobs/ab59bc6d-73b0-4f80-bba6-106ed79c1666.log",
+        "runnerSha256": "7797eb50e7c2bf88239ae01cf8c269cae8172aa8fcbd25afc273943966e1d7a4",
+        "supportedSignInHelperSha256": "a52d9c42a7fb4599a4b54bf7170f8f2747772a04506bcaa29537553135c3befb"
+      },
+      {
+        "id": "f15fe20a-313b-46e1-b35f-c41b22e1b25f",
+        "exitCode": 1,
+        "runtimeSeconds": 97.31,
+        "assertions": 0,
+        "premise": "No original outcome assertion reached; public Accounts auth-frame.tsx dynamic import failed with net::ERR_NETWORK_CHANGED, then helper could not find Email field. Original failed import had no HTTP status/body. A separate read-only exact-module replay returned200JavaScript, not asserted as browser outcome.",
+        "evidenceDirectory": ".temp/feed-authority-evidence/setup-accounts-import/",
+        "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test ./.temp/feed-authority-live.test.ts",
+        "executedCommand": "bun scripts/goal/goalctl.ts test ./.temp/feed-authority-live.test.ts",
+        "jobResultClass": "assertion",
+        "reviewClassification": "setup/premise failure; no reproduced D3 Feed product failure",
+        "originalD3OutcomeAssertionsReached": false,
+        "log": ".temp/goal/jobs/f15fe20a-313b-46e1-b35f-c41b22e1b25f.log",
+        "runnerSha256": "3a25ec6475bd2dfb6ac97a3588fc1c6f7e25054dd579891e85330612e95a6d31",
+        "supportedSignInHelperSha256": "a52d9c42a7fb4599a4b54bf7170f8f2747772a04506bcaa29537553135c3befb"
+      },
+      {
+        "id": "58f70715-532f-4ae4-b541-464673a145bb",
+        "exitCode": 1,
+        "runtimeSeconds": 30.54,
+        "assertions": 3,
+        "premise": "Own fresh supported OAuth flow succeeded with genuine eligible saved-Agent Main200. Runner setup erroneously compared fixture Account ID to expected Agent UUID; this premise assertion failed before Feed outcome. Corrected to exact expected selected Agent IRI plus independent same-Account session record assertion. No original acceptance was weakened or skipped.",
+        "evidenceDirectory": ".temp/feed-authority-evidence/setup-account-agent-id/",
+        "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test ./.temp/feed-authority-live.test.ts",
+        "executedCommand": "bun scripts/goal/goalctl.ts test ./.temp/feed-authority-live.test.ts",
+        "jobResultClass": "assertion",
+        "reviewClassification": "setup/premise failure; no reproduced D3 Feed product failure",
+        "originalD3OutcomeAssertionsReached": false,
+        "log": ".temp/goal/jobs/58f70715-532f-4ae4-b541-464673a145bb.log",
+        "runnerSha256": "cb398a5b72e846ce317b9d92497cde06e4cb13d965236e4e27141cc08cd7074f",
+        "supportedSignInHelperSha256": "a52d9c42a7fb4599a4b54bf7170f8f2747772a04506bcaa29537553135c3befb"
+      },
+      {
+        "id": "23f39ac9-6e37-49c4-9ac5-803e435ddab7",
+        "exitCode": 1,
+        "runtimeSeconds": 140.33,
+        "assertions": 0,
+        "premise": "No original outcome assertion reached; own /auth/start remains shell-only. Actual virtual Web entry import fails after44transitive module requests fail with net::ERR_NETWORK_CHANGED. No HTTP failure response/body exists for those transport failures. Captured screenshot actually viewed; no further outcome rerun.",
+        "evidenceDirectory": ".temp/feed-authority-evidence/",
+        "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test ./.temp/feed-authority-live.test.ts",
+        "executedCommand": "bun scripts/goal/goalctl.ts test ./.temp/feed-authority-live.test.ts",
+        "jobResultClass": "assertion",
+        "reviewClassification": "setup/premise failure; no reproduced D3 Feed product failure",
+        "originalD3OutcomeAssertionsReached": false,
+        "log": ".temp/goal/jobs/23f39ac9-6e37-49c4-9ac5-803e435ddab7.log",
+        "runnerSha256": "4e1af8c0f3e00c2ebbd63b1600b0f544869cbdc4a3c63bb73d8162299171240e",
+        "supportedSignInHelperSha256": "a52d9c42a7fb4599a4b54bf7170f8f2747772a04506bcaa29537553135c3befb"
+      }
+    ],
+    "latestSetupFailure": {
+      "job": "23f39ac9-6e37-49c4-9ac5-803e435ddab7",
+      "testFile": ".temp/feed-authority-live.test.ts",
+      "case": "beforeAll / supported signInAtAccounts(page, /en/identity, own member)",
+      "outcomeAssertionReached": false,
+      "documentPath": "/auth/start",
+      "documentTitle": "REZICS",
+      "actualFailingEntryUrl": "http://127.0.0.1:62841/@id/__x00__virtual:vinext-app-browser-entry",
+      "entryError": "Failed to fetch dynamically imported module",
+      "failedModuleRequests": [
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/shims/internal/app-router-context.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/routing/route-pattern.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/client/window-next.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/shims/hash-scroll.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/shims/navigation-context-state.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/shims/navigation-errors.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/shims/default-global-error.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/client/app-nav-failure-handler.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/shims/error-boundary.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/shims/app-router-scroll-state.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/shims/app-router-scroll.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/shims/slot.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-rsc-cache-busting.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/client/instrumentation-client-state.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/client/instrumentation-client.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-history-state.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-bfcache-identity.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-action-result.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-client-reuse-manifest.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-interception-context.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-mpa-navigation.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/rsc-completion-metadata.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-rsc-redirect.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/navigation-planner.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/shims/navigation.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-stream.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-state.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-navigation-controller.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-navigation-response.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-supplemental-refresh.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-navigation-abort.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-hydration.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-history-controller.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-visited-response-cache.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-popstate.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-error.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-hydration-cache-publication.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-prefetch-response.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-optimistic-routing.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-inline-css-client.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/node_modules/.vite/deps/react-dom.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/node_modules/.vite/deps/react-dom_client.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/@vitejs/plugin-rsc/dist/browser.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@id/__x00__virtual:vinext-app-capabilities",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        }
+      ],
+      "httpFailureResponseBody": null,
+      "explanation": "Every44recorded failed module request ended net::ERR_NETWORK_CHANGED with no HTTP response/body. This is a real uncontrolled setup transport failure, not the planned controlled Feed/identity interruption and not a reproduced business failure.",
+      "browserConsoleAndPageErrors": [
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/shims/internal/app-router-context.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/routing/route-pattern.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "pageerror",
+          "message": "Failed to fetch dynamically imported module: http://127.0.0.1:62841/@id/__x00__virtual:vinext-app-browser-entry"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/client/window-next.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/shims/hash-scroll.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/shims/navigation-context-state.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/shims/navigation-errors.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/shims/default-global-error.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/client/app-nav-failure-handler.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/shims/error-boundary.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/shims/app-router-scroll-state.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/shims/app-router-scroll.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/shims/slot.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-rsc-cache-busting.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/client/instrumentation-client-state.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/client/instrumentation-client.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-history-state.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-bfcache-identity.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-action-result.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-client-reuse-manifest.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-interception-context.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-mpa-navigation.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/rsc-completion-metadata.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-rsc-redirect.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/navigation-planner.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/shims/navigation.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-stream.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-state.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-navigation-controller.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-navigation-response.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-supplemental-refresh.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-navigation-abort.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-hydration.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-history-controller.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-visited-response-cache.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-popstate.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-error.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-hydration-cache-publication.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-prefetch-response.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-optimistic-routing.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/vinext/dist/server/app-inline-css-client.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/node_modules/.vite/deps/react-dom.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/node_modules/.vite/deps/react-dom_client.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/@vitejs/plugin-rsc/dist/browser.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "requestfailed",
+          "origin": "http://127.0.0.1:62841",
+          "path": "/@id/__x00__virtual:vinext-app-capabilities",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null
+        },
+        {
+          "phase": "own-oauth",
+          "kind": "console",
+          "message": "Failed to load resource: net::ERR_NETWORK_CHANGED"
+        }
+      ],
+      "serverLog": ".temp/feed-authority-evidence/web-server.log",
+      "serverLogSha256": "ed172bfaf5f39265b69adc1ea05213c79ba858ee7d254d8257b90a4b05a6557a",
+      "serverObservation": "Own Task frontend listening; /auth/start200 rendered in13.5s, then Vite client unhandled virtual-entry dynamic-import error. HTTP200 did not establish hydration. Own process group stopped in afterAll.",
+      "firstAccountsModuleReplay": {
+        "url": "http://127.0.0.1:3004/features/shell/auth-frame.tsx",
+        "status": 200,
+        "contentType": "text/javascript",
+        "bytes": 7866,
+        "sha256": "94c97140ff776df2d18f146c3a3a2fe69809415bbef06c12f60d0fd7b3dff191",
+        "originalFailure": {
+          "httpStatus": null,
+          "body": null,
+          "error": "net::ERR_NETWORK_CHANGED; dynamic import failed in real browser"
+        }
+      }
+    },
+    "screenshotsActuallyViewed": [
+      {
+        "path": ".temp/feed-authority-evidence/setup-failure-private.png",
+        "sha256": "050849d774d8c282ac4671bdc382f1f162cd6c37bd5151c79080da43b2f2205f",
+        "viewport": [
+          1440,
+          1000
+        ],
+        "viewedWith": "view_image",
+        "observation": "Actual /auth/start shell: header/search/navigation/sign-in visible; main area blank. No sign-in form, Feed, pending-recovery group or recovered rows. Setup-only evidence; no D3 UI success claimed."
+      }
+    ],
+    "privateEvidence": {
+      "root": ".temp/feed-authority-evidence/",
+      "driver": ".temp/feed-authority-live.test.ts",
+      "driverSha256": "4e1af8c0f3e00c2ebbd63b1600b0f544869cbdc4a3c63bb73d8162299171240e",
+      "networkAndModuleEvidence": ".temp/feed-authority-evidence/observations.json",
+      "evidenceSha256": "d29eec85efb1627267847da6a1778c726f47cb4dad0565e56cbbb2cbc326e020",
+      "preservedSetupDirectories": [
+        ".temp/feed-authority-evidence/setup-account-origin/",
+        ".temp/feed-authority-evidence/setup-accounts-import/",
+        ".temp/feed-authority-evidence/setup-account-agent-id/"
+      ],
+      "noSecretsInPublishedReport": true
+    },
+    "preservedHistory": {
+      "priorReportCommit": "3b0904b94bc91a49032143b06bdf0acc48e73f2d",
+      "priorReportSha256": "9ef46f345c76711c94bdb91e019695f3f75359fe0802cc06becf405dc0e11811",
+      "everyPriorFieldUnchangedByValue": true,
+      "completedPreview148AndRsc22NotRerun": true,
+      "originalFailuresRetained": true
+    },
+    "administrativeReportChecks": {
+      "recordedJob": "971e0b7b-cd4d-4c8a-9762-6c700ee16fd8",
+      "steps": [
+        {
+          "command": "task docs:check",
+          "exitCode": 0,
+          "log": ".temp/goal/jobs/971e0b7b-cd4d-4c8a-9762-6c700ee16fd8.1.log",
+          "result": "13tests passed;250Markdown files/local links/navigation checked."
+        },
+        {
+          "command": "task goal -- check",
+          "exitCode": 0,
+          "runId": "run-UV1ZaN",
+          "log": ".temp/goal/jobs/971e0b7b-cd4d-4c8a-9762-6c700ee16fd8.2.log",
+          "result": "AST and1selected repository guard pass. Types/lint correctly skipped report-only change; brief names no tests. No product source suite rerun."
+        }
+      ]
+    },
+    "ownerChanges": [],
+    "proposedTasks": [],
+    "blockers": [
+      {
+        "kind": "actual-browser-startup-transport",
+        "owner": "existing Web/Accounts startup/runtime owner via root; no new product author",
+        "evidence": ".temp/feed-authority-evidence/observations.json; web-server.log; setup-failure-private.png",
+        "smallestReproduction": "At exact6cf frontend62841 started through normal Task, public Accounts3004 configured, run supported fresh-context signInAtAccounts(page,/en/identity,existing member). Latest run fails virtual Web entry import and44transitive module requests with ERR_NETWORK_CHANGED before redirect. Earlier run had the same transport error on Accounts/auth-frame.tsx. No source counterexample is inferred."
+      },
+      {
+        "kind": "genuine-ineligible-saved-agent-premise",
+        "owner": "existing identity/fixture owner via root",
+        "evidence": ".temp/feed-authority-evidence/readiness.json actualRemainingPremises",
+        "needed": "Lawful retained genuinely ineligible saved Agent for this Account/session lineage; no new grant, shared eligibility revocation or fabricated success."
+      }
+    ],
+    "next": "Land only this cumulative report. Existing startup/runtime owner should resolve actual module-request ERR_NETWORK_CHANGED and return an executable own normal Task frontend/Accounts hydration path, then dispatch this same driver and sole reviewer for the missing original D3 cells. Existing identity/fixture owner must separately supply a lawful genuine ineligible-saved-Agent state; no shared-grant mutation or fabricated receipt."
+  },
   "d4PreviewVerdict": {
     "result": "candidate-reviewed-and-checked-original-d4-016-ready-for-manager-closure-at-stated-tiers",
     "scope": "Only the missing five original Recipe rendered captures and genuine original mixed Book/Guide public samples at 1440/390, plus cumulative mapping to retained unchanged unit/story/source proof. No product edit, second source review or new full matrix.",
