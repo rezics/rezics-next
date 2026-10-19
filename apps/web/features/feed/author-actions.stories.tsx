@@ -3,12 +3,17 @@ import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { useState } from 'react';
 import { Button } from '@rezics/ui/button';
 import type { UiLocale } from '../../i18n/define.ts';
+import { localizedPath } from '../../i18n/locale.ts';
+import { chooseMenuItem } from '../stories/choose-option.ts';
+import { ThreadView } from '../realm/thread-view.tsx';
 import { AuthorActions } from './author-actions.tsx';
 import { authorFixture as f, authorTarget, authorTransport } from './author-fixtures.ts';
 import { authorMessages } from './author-messages.ts';
 import { DiscussionCard, type DiscussionPost } from './discussion-card.tsx';
 import { FeedProvider } from './feed-context.tsx';
 import { messages } from './messages.ts';
+import { communityHref, threadPath } from './discussion.ts';
+import { memoryThreads, storyRealm, storyThread, THREAD_NOW } from './thread-fixtures.ts';
 
 type Options = Parameters<typeof authorTransport>[0];
 interface Props { locale?: UiLocale; options?: Options; signedIn?: boolean; foreign?: boolean }
@@ -41,7 +46,7 @@ function Objects({ locale = 'en', options, signedIn = true, foreign = false }: P
 const meta = {
   title: 'Feed/Author actions', component: Objects,
   beforeEach() { localStorage.clear(); },
-  parameters: { route: { pathname: '/en/r/fiction/discussions/author-post' } },
+  parameters: { route: { pathname: localizedPath(threadPath(communityHref(f.realm), f.reply), 'en') } },
 } satisfies Meta<typeof Objects>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -49,7 +54,7 @@ type Story = StoryObj<typeof meta>;
 async function open(canvasElement: HTMLElement, action: 'edit' | 'placement' = 'edit', locale: UiLocale = 'en') {
   const t = authorMessages[locale];
   await userEvent.click(within(canvasElement).getByRole('button', { name: t.menu }));
-  await userEvent.click(await within(document.body).findByRole('menuitem', { name: t[action] }));
+  await chooseMenuItem(within(document.body), 'menuitem', t[action]);
   const dialog = within(await within(document.body).findByRole('dialog'));
   if (action === 'edit') await dialog.findByRole('textbox', { name: t.body });
   else await waitFor(() => expect(dialog.getByRole('button', { name: t.withdraw })).toBeEnabled());
@@ -79,8 +84,8 @@ export const OwnedAndForeign: Story = {
 
 export const NormalPostMenus: Story = {
   render: () => {
-    const post: DiscussionPost = { kind: 'discussion', href: '/r/fiction/discussions/author-post',
-      vote: { id: f.placement, vote: null, score: 3, revision: null, open: false },
+    const post: DiscussionPost = { kind: 'discussion', href: threadPath(communityHref(f.realm), f.reply),
+      vote: { id: f.placement, vote: 0, score: 3, revision: null, open: false },
       realm: null, author: { id: f.actor, name: 'Mei', handle: null }, authorTarget,
       time: '2026-09-28T12:00:00Z', title: 'Rain at the station', body: f.body,
       language: 'en', work: null, comments: { value: 1, kind: 'exact' } };
@@ -102,6 +107,32 @@ export const NormalPostMenus: Story = {
     await userEvent.click(trigger);
     await expect(await within(document.body).findByRole('menuitem', { name: authorMessages.en.edit })).toBeVisible();
     await expect(within(document.body).getByRole('menuitem', { name: authorMessages.en.placement })).toBeVisible();
+  },
+};
+
+export const NestedReplyMenus: Story = {
+  render: () => {
+    const actor = storyThread.items[1]!.author!.id;
+    const href = threadPath(storyRealm.path, storyThread.focus);
+    return <FeedProvider locale="en" messages={messages} now={THREAD_NOW} signedIn actingSubject={actor}
+      signInHref="/auth/start?next=%2Fen" avatarQuery="" tab="all" followedRealms={null}>
+      <main className="mx-auto max-w-3xl p-4"><ThreadView read={storyThread} realm={storyRealm}
+        sort="best" sortHrefs={{ best: href, new: `${href}?sort=new`, top: `${href}?sort=top` }}
+        replyMode="open" threadApi={memoryThreads()} /></main>
+    </FeedProvider>;
+  },
+  async play({ canvasElement }) {
+    const t = authorMessages.en;
+    const triggers = within(canvasElement).getAllByRole('button', { name: t.menu });
+    await expect(triggers).toHaveLength(2);
+    for (const trigger of triggers) await expect(trigger.closest('article')).toHaveTextContent('Daniel Chen');
+    const trigger = triggers[0]!;
+    await userEvent.click(trigger);
+    const menu = within(await within(document.body).findByRole('menu'));
+    await expect(menu.getByRole('menuitem', { name: t.edit })).toBeVisible();
+    await expect(menu.getByRole('menuitem', { name: t.placement })).toBeVisible();
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(trigger).toHaveFocus());
   },
 };
 

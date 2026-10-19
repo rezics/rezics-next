@@ -2,10 +2,11 @@ import { expect, test } from 'bun:test';
 import { browserMainApi } from '../api/browser.ts';
 import { withdrawChapterQualification, type QualificationWithdrawalIntent } from './content-api.ts';
 import { authorFixture as f } from '../feed/author-fixtures.ts';
+import { directionOf } from './types.ts';
 
 const intent: QualificationWithdrawalIntent = {
   key: 'qualification-once', target: { actingSubject: f.actor, chapter: f.reply,
-    variant: f.variant, language: 'en', direction: 'ltr' },
+    variant: f.variant, language: 'en', direction: directionOf('en') },
   current: { publication: f.placement, eligibility: f.nextPlacement },
 };
 

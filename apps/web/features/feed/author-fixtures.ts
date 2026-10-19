@@ -1,5 +1,6 @@
 import { fromPlainText } from '@rezics/document';
 import { browserMainApi } from '../api/browser.ts';
+import { directionOf } from '../studio/types.ts';
 import { mainAuthorApi, type AuthorReplyTarget } from './author-api.ts';
 
 const iri = (n: number) => `https://rezics.com/id/11111111-1111-4111-8111-${String(n).padStart(12, '0')}`;
@@ -57,7 +58,7 @@ export function authorTransport(options: { fail?: 'draft' | 'place' | 'withdraw'
     if (method === 'GET' && path.includes('/content-revisions/')) return Response.json({
       reference: { owner: 'content', resourceId: f.reply, variantId: f.variant, revisionId: f.revision,
         format: 'rezics-content-json-v1', model: 'member-reply-v1', byteDigest: 'a'.repeat(64), byteLength: 100,
-        language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', sourceRevision: null,
+        language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: directionOf('en'), sourceRevision: null,
         predecessor: null, provenance: { author: f.actor } },
       serializedJson: '{}', body: { body: f.body, document: fromPlainText(f.body, 'blocks'), spoiler: false },
     });

@@ -6,14 +6,13 @@ import { Undo2Icon } from 'lucide-react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
-import { type AuthorFailure, authorFailure } from '../feed/author-api.ts';
+import type { AuthorFailure } from '../feed/author-api.ts';
 import { authorMessages } from '../feed/author-messages.ts';
-import { browserMainApi } from '../api/browser.ts';
 import { signInPath } from '../auth/paths.ts';
 import { type ChapterPublication, type ChapterTarget, type QualificationWithdrawalIntent,
   type QualificationWithdrawalReceipt, withdrawChapterQualification } from './content-api.ts';
 import { browserStorage } from './local-draft.ts';
-import { idOf, type MainClient } from './types.ts';
+import type { MainClient } from './types.ts';
 
 export interface QualificationWithdrawalProps {
   target: ChapterTarget;
@@ -79,31 +78,13 @@ export function QualificationWithdrawal({ target, current, locale, main, onWithd
     finally { busyRef.current = false; setBusy(false); }
   }
 
-  async function readLatest() {
+  function readLatest() {
     if (busyRef.current) return;
-    busyRef.current = true;
-    setBusy(true);
-    try {
-      const client = main ?? browserMainApi();
-      let cursor: string | undefined;
-      do {
-        const found = await client.v1.works({ id: idOf(target.chapter) })['content-variants'].get({
-          query: { actingSubject: target.actingSubject, ...(cursor ? { cursor } : {}) },
-        });
-        if (!found.data) { setFailure(authorFailure(found.error)); return; }
-        if (found.data.authoringSubject !== target.actingSubject) { setFailure('denied'); return; }
-        const variant = found.data.items.find(item => item.variantId === target.variant);
-        if (variant?.publicationHead && variant.eligibilityHead) {
-          pending.current = { target, current: { publication: variant.publicationHead, eligibility: variant.eligibilityHead }, key: crypto.randomUUID() };
-          remember();
-          setFailure(null);
-          return;
-        }
-        cursor = found.data.nextCursor ?? undefined;
-      } while (cursor);
-      setFailure('missing');
-    } catch { setFailure('failed'); }
-    finally { busyRef.current = false; setBusy(false); }
+    // Only a definitive rejection offers this action. Unknown receipts keep
+    // their exact intent for retry; the existing page read owns fresh heads.
+    pending.current = null;
+    remember();
+    window.location.reload();
   }
 
   const acknowledged = receipt !== null;

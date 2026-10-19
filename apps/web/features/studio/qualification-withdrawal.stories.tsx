@@ -89,3 +89,10 @@ export const PhoneChineseDark: Story = {
     await within(document.body).findByRole('dialog');
   },
 };
+
+export const PhonePublished: Story = {
+  args: { locale: 'zh-Hans' }, globals: { locale: 'zh-Hans', viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByRole('button', { name: authorMessages['zh-Hans'].qualification })).toBeVisible();
+  },
+};
