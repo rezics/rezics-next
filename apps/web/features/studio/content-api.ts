@@ -3,6 +3,7 @@ import { editorValue } from '../document-editor/body.ts';
 import type { SaveOutcome } from './autosave.ts';
 import { chapterDraftInput, chapterNoteEditors, type ChapterNotes } from './chapter-draft.ts';
 import { directionOf, idOf, type MainClient } from './types.ts';
+import { authorFailure, type AuthorResult } from '../feed/author-api.ts';
 
 // The browser side of a Book's chapters: the Book's composition orders them,
 // each chapter is a Post, and its text is a Content draft in one
@@ -140,6 +141,43 @@ export interface ChapterPublication {
   publication: string;
   /** The public search eligibility now current; readers open a chapter only while it names `publication`. */
   eligibility: string | null;
+}
+
+export interface QualificationWithdrawalIntent {
+  target: ChapterTarget;
+  current: ChapterPublication & { eligibility: string };
+  key: string;
+}
+
+export interface QualificationWithdrawalReceipt {
+  decision: string;
+  receipt: string;
+  publication: string;
+  withdrawnEligibilityHead: string;
+}
+
+/** Ends one exact qualification; its Content publication and independent supports remain intact. */
+export async function withdrawChapterQualification(
+  intent: QualificationWithdrawalIntent,
+  main: MainClient = browserMainApi(),
+): Promise<AuthorResult<QualificationWithdrawalReceipt>> {
+  try {
+    const { target, current } = intent;
+    const answer = await main.v1['content-search-eligibility'].post({
+      profile: 'content-search-eligibility-withdrawal-v1',
+      resourceId: target.chapter, variantId: target.variant,
+      publicationDecision: current.publication, expectedEligibilityHead: current.eligibility,
+      actingSubject: target.actingSubject,
+    }, { headers: { 'idempotency-key': intent.key } });
+    if (!answer.data) return { kind: authorFailure(answer.error) };
+    const result = answer.data;
+    if (!('profile' in result) || result.profile !== 'content-search-eligibility-withdrawal-v1' || result.outcome !== 'succeeded'
+      || result.resourceId !== target.chapter || result.variantId !== target.variant
+      || result.publicationDecision !== current.publication || result.withdrawnEligibilityHead !== current.eligibility)
+      return { kind: 'failed' };
+    return { kind: 'done', value: { decision: result.decision, receipt: result.receipt,
+      publication: result.publicationDecision, withdrawnEligibilityHead: result.withdrawnEligibilityHead } };
+  } catch { return { kind: 'failed' }; }
 }
 
 /**
