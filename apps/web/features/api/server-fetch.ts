@@ -8,10 +8,20 @@ export const SERVER_READ_LIMITS = {
 export const SERVER_DEADLINE_HEADER = 'x-rezics-server-deadline';
 export type FetchSender = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
+export type TransportReason = 'cancelled' | 'deadline' | 'connection' | 'response-interrupted' | 'unavailable';
+export class ServerTransportError extends Error {
+  constructor(cause: unknown, readonly reason: TransportReason,
+    readonly phase: 'connect' | 'response-body', readonly attempts: number) {
+    super(cause instanceof Error ? cause.message : 'Upstream request failed', { cause });
+    this.name = cause instanceof Error ? cause.name : 'Error';
+  }
+}
+
 /** The upstream answered, but its body could not finish; this is not an offline reader. */
-export class UpstreamResponseError extends Error {
-  constructor(cause: unknown) {
-    super('Upstream response interrupted', { cause });
+export class UpstreamResponseError extends ServerTransportError {
+  constructor(cause: unknown, reason: TransportReason = 'response-interrupted', attempts = 1) {
+    super(cause, reason, 'response-body', attempts);
+    this.message = 'Upstream response interrupted';
     this.name = 'UpstreamResponseError';
   }
 }
@@ -28,6 +38,8 @@ export interface ServerFetchOptions {
   timeoutMs?: number;
   /** Absolute caller deadline: retries and dependent reads spend the same budget. */
   deadlineAt?: number;
+  /** Internal service hops receive the same absolute deadline, never a renewed duration. */
+  forwardDeadline?: boolean;
   /** Only explicitly classified read operations may replay a POST body. */
   idempotentRead?: boolean;
   /** Media/download bodies keep backpressure; JSON reads finish before returning. */
@@ -36,27 +48,53 @@ export interface ServerFetchOptions {
 
 /** A caller joining a shared read may run out of time before its owner does.
  * Release that caller without aborting work other requests still need. */
-export async function waitForServerRead<T>(pending: Promise<T>, deadlineAt?: number): Promise<T> {
-  if (deadlineAt === undefined) return pending;
-  const remaining = deadlineAt - Date.now();
+export async function waitForServerRead<T>(pending: Promise<T>, deadlineAt?: number, signal?: AbortSignal): Promise<T> {
+  const remaining = deadlineAt === undefined ? Infinity : deadlineAt - Date.now();
+  if (signal?.aborted) {
+    void pending.catch(() => {});
+    throw signal.reason;
+  }
+  if (remaining === Infinity && !signal) return pending;
   if (remaining <= 0) {
     void pending.catch(() => {});
     throw new DOMException('Upstream deadline exceeded', 'TimeoutError');
   }
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let abort: (() => void) | undefined;
   try {
     return await Promise.race([
       pending,
       new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(
-          () => reject(new DOMException('Upstream deadline exceeded', 'TimeoutError')),
-          remaining,
-        );
+        if (remaining !== Infinity) timer = setTimeout(
+          () => reject(new DOMException('Upstream deadline exceeded', 'TimeoutError')), remaining);
+        abort = () => reject(signal!.reason);
+        signal?.addEventListener('abort', abort, { once: true });
+        if (signal?.aborted) abort();
       }),
     ]);
   } finally {
     clearTimeout(timer);
+    if (abort) signal?.removeEventListener('abort', abort);
   }
+}
+
+/** Buffer only replayable reads; cancel a stalled upload when its caller leaves. */
+export async function serverRequestText(request: Request, deadlineAt: number, signal = request.signal): Promise<string> {
+  signal.throwIfAborted();
+  const reader = request.body?.getReader();
+  if (!reader) return '';
+  const decoder = new TextDecoder();
+  let body = '';
+  try {
+    while (true) {
+      const chunk = await waitForServerRead(reader.read(), deadlineAt, signal);
+      if (chunk.done) return body + decoder.decode();
+      body += decoder.decode(chunk.value, { stream: true });
+    }
+  } catch (error) {
+    void reader.cancel(error).catch(() => {});
+    throw error;
+  } finally { reader.releaseLock(); }
 }
 
 function connectionLost(error: unknown): boolean {
@@ -84,9 +122,10 @@ export async function serverFetch(
 ): Promise<Response> {
   const request = input instanceof Request ? input : null;
   const headers = new Headers(init.headers ?? request?.headers);
+  const operationDeadline = options.deadlineAt ?? deadlineFromHeaders(headers);
   const deadlineAt = Math.min(
     Date.now() + (options.timeoutMs ?? SERVER_READ_LIMITS.read),
-    options.deadlineAt ?? deadlineFromHeaders(headers) ?? Infinity,
+    operationDeadline ?? Infinity,
   );
   headers.delete(SERVER_DEADLINE_HEADER);
   const method = (init.method ?? request?.method ?? 'GET').toUpperCase();
@@ -96,6 +135,14 @@ export async function serverFetch(
     (options.idempotentRead === true && method === 'POST' && typeof init.body === 'string');
   const callerSignal = init.signal ?? request?.signal;
   let receivedResponse = false;
+  let attempts = 0;
+  const transportError = (error: unknown): ServerTransportError => {
+    const reason = callerSignal?.aborted ? 'cancelled' : Date.now() >= deadlineAt ||
+      error instanceof Error && error.name === 'TimeoutError' ? 'deadline' :
+      receivedResponse ? 'response-interrupted' : connectionLost(error) ? 'connection' : 'unavailable';
+    return receivedResponse && connectionLost(error) ? new UpstreamResponseError(error, reason, attempts)
+      : new ServerTransportError(error, reason, receivedResponse ? 'response-body' : 'connect', attempts);
+  };
   for (let attempt = 0; ; attempt++) {
     const controller = new AbortController();
     const signal = callerSignal
@@ -114,7 +161,7 @@ export async function serverFetch(
     const onAbort = () => {
       if (finished) return;
       rejectAbort(signal.reason);
-      streamController?.error(signal.reason);
+      streamController?.error(transportError(signal.reason));
       cancel(signal.reason);
       cleanup();
     };
@@ -137,9 +184,12 @@ export async function serverFetch(
         controller.abort(new DOMException('Upstream deadline exceeded', 'TimeoutError'));
       if (signal.aborted) throw signal.reason;
       const attemptHeaders = new Headers(headers);
+      if (options.forwardDeadline) attemptHeaders.set(SERVER_DEADLINE_HEADER,
+        String(Number.isFinite(operationDeadline) ? operationDeadline : deadlineAt));
       // The failed socket has been aborted. HTTP/1 also asks the retry to close
       // its connection; Bun's keepalive:false opts out of its pool on the retry.
       if (attempt) attemptHeaders.set('connection', 'close');
+      attempts++;
       const pending = (options.fetch ?? fetch)(input, {
         ...init,
         method,
@@ -176,7 +226,7 @@ export async function serverFetch(
                 value.close();
               } else value.enqueue(chunk.value);
             } catch (error) {
-              if (!signal.aborted) value.error(connectionLost(error) ? new UpstreamResponseError(error) : error);
+              if (!signal.aborted) value.error(transportError(error));
               cancel(error);
               cleanup();
             }
@@ -224,7 +274,7 @@ export async function serverFetch(
         Date.now() >= deadlineAt ||
         !connectionLost(error)
       )
-        throw receivedResponse && connectionLost(error) ? new UpstreamResponseError(error) : error;
+        throw transportError(error);
     }
   }
 }

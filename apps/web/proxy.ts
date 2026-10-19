@@ -30,11 +30,12 @@ import { privateDiscovery, readSpacePage, realmDiscovery } from './features/addr
 import { spaceDiscoveryHeaders } from './features/space-access/discovery.tsx';
 import { serviceOrigin } from './features/api/origins.ts';
 import { mainReadHeaders } from './features/api/main-read.ts';
-import { serverRead } from './features/api/server-read.ts';
+import { serverRead, serverDeadline, withServerRequest } from './features/api/server-read.ts';
 import { SERVER_DEADLINE_HEADER, SERVER_READ_LIMITS } from './features/api/server-fetch.ts';
 import { mainPosition, parsePosition } from './features/wiki/position.ts';
 import { WORK_MISSING_HEADER } from './features/work-page/admission.ts';
 import { SPACE_MISSING_HEADER } from './features/realm/missing.ts';
+import { addressFailureResponse } from './features/address/edge.ts';
 
 // Refreshes the session before any page, Server Action, route handler or BFF
 // call reads it, so each request refreshes at most once and nothing
@@ -71,9 +72,11 @@ async function linkedRecipeSubject(url: URL, token: string, incoming: Headers, d
 }
 
 export async function proxy(request: NextRequest): Promise<NextResponse> {
-  const transfer = request.nextUrl.pathname.startsWith('/api/main/v1/media/');
-  const deadlineAt =
-    Date.now() + (transfer ? SERVER_READ_LIMITS.transfer : SERVER_READ_LIMITS.page);
+  return withServerRequest(request, () => proxyRequest(request));
+}
+
+async function proxyRequest(request: NextRequest): Promise<NextResponse> {
+  const deadlineAt = (await serverDeadline(new Headers()))!;
   const incoming = new Headers(request.headers);
   incoming.delete(WORK_MISSING_HEADER);
   incoming.delete(SPACE_MISSING_HEADER);
@@ -122,8 +125,17 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     for (const cookie of cookies) response.cookies.set(cookie.name, cookie.value, cookie.options);
     return response;
   };
+  const fail = async (status: 400 | 404 | 409 | 410 | 422 | 429 | 503, retryAfter?: string) => {
+    const response = await addressFailureResponse(new URL(request.url), locale, status, retryAfter);
+    return finish(new NextResponse(response.body, { status: response.status, headers: response.headers }));
+  };
   const access = cookies.find((cookie) => cookie.name === ACCESS_COOKIE);
   const token = access ? access.value || undefined : request.cookies.get(ACCESS_COOKIE)?.value;
+  // A temporary refresh failure leaves the session intact. It cannot turn a
+  // signed-in private destination into an anonymous address miss.
+  if (outcome.kind === 'current' && !token && request.cookies.get(REFRESH_COOKIE)?.value &&
+    (addressPath(pathname)?.lookup.scope === 'resource' || addressPath(pathname)?.lookup.scope === 'work'))
+    return fail(503);
   let resourceViewer: { token: string; actingSubject: string } | undefined;
   const addressScope = addressPath(pathname)?.lookup.scope;
   if ((addressScope === 'resource' || addressScope === 'work') && token) {
@@ -142,26 +154,13 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
         },
         { deadlineAt, timeoutMs: SERVER_READ_LIMITS.metadata },
       );
-      if (!response.ok)
-        return finish(
-          new NextResponse(null, {
-            status: 503,
-            headers: { 'cache-control': 'no-store', 'x-robots-tag': 'noindex', 'retry-after': '5' },
-          }),
-        );
+      if (!response.ok) return fail(503);
       const state = (await response.json()) as {
         sessionAgent?: { eligible?: boolean; actingSubject?: string };
       };
       if (state.sessionAgent?.eligible && state.sessionAgent.actingSubject)
         resourceViewer = { token, actingSubject: state.sessionAgent.actingSubject };
-    } catch {
-      return finish(
-        new NextResponse(null, {
-          status: 503,
-          headers: { 'cache-control': 'no-store', 'x-robots-tag': 'noindex', 'retry-after': '5' },
-        }),
-      );
-    }
+    } catch { return fail(503); }
   }
   // A Studio recipe link names its Agent. The owner read uses that Agent, and Main refuses one this account cannot act for.
   if (token) {
@@ -180,6 +179,9 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
           undefined,
           incoming,
           lookup.scope === 'resource' || lookup.scope === 'work' ? resourceViewer : undefined,
+          // A live resolver admission may redirect to a different resource grain.
+          // A cached name alone cannot disclose a now-private destination.
+          lookup.scope === 'resource',
         );
         if (lookup.scope === 'space' && read.kind === 'resolved') spaceAddress = read.data;
         if (lookup.scope === 'resource' && read.kind === 'resolved') resourceAddress = read.data;
@@ -190,7 +192,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   const path = pageRequest ? addressPath(pathname) : null;
   // An address hit can be cached; the owner checks live reading authority before any shell or metadata streams.
   // Never call the owner after an address miss: enumeration is charged by that single resolver request.
-  if (path?.lookup.scope === 'resource' && resourceAddress && addressed.kind !== 'error') {
+  if (path?.lookup.scope === 'resource' && resourceAddress && addressed.kind === 'pass') {
     const query = new URLSearchParams(
       resourceViewer ? { actingSubject: resourceViewer.actingSubject } : {},
     );
@@ -200,8 +202,9 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     );
     if (position) query.set('position', position);
     try {
-      const response = await serverRead(
-        `${serviceOrigin('MAIN_ORIGIN')}/v1/resources/${resourceAddress.holder.slice(-36)}/page?${query}`,
+      const id = resourceAddress.holder.slice(-36);
+      const read = async (owner: string) => serverRead(
+        `${serviceOrigin('MAIN_ORIGIN')}/v1/${owner}?${query}`,
         {
           headers: await mainReadHeaders(
             {
@@ -214,6 +217,21 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
         },
         { deadlineAt, timeoutMs: SERVER_READ_LIMITS.metadata },
       );
+      let response = await read(`resources/${id}`);
+      let collection = false;
+      if (response.ok) {
+        const summary = await response.json() as { status?: string; type?: string };
+        if (summary.status !== 'available') throw new Error('Resource admission did not return a summary');
+        collection = summary.type === 'collection';
+        if (collection) {
+          query.set('limit', '20');
+          for (const key of ['after', 'parent']) {
+            const value = request.nextUrl.searchParams.get(key);
+            if (value) query.set(key, value);
+          }
+        }
+        response = await read(collection ? `collections/${id}` : `resources/${id}/page`);
+      }
       const denied = response.status === 404 || response.status === 403;
       if (denied) {
         // A formerly public cached hit may have become private. Revalidate through the charged resolver once.
@@ -235,8 +253,16 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
             : current.kind === 'retired'
               ? { kind: 'error', status: 410 }
               : { kind: 'error', status: 404 };
-      } else if (!response.ok) addressed = { kind: 'error', status: 503 };
-      else {
+      } else if (collection && (response.status === 400 || response.status === 409 ||
+        response.status === 422 || response.status === 429)) {
+        // Continuation and admission refusals have an owner status. In particular,
+        // retrying the same moved cursor cannot recover this task.
+        const status = response.status;
+        await response.body?.cancel();
+        return fail(status, response.headers.get('retry-after') ?? undefined);
+      } else if (!response.ok) addressed = { kind: 'error', status: 503,
+        ...(response.headers.get('retry-after') ? { retryAfter: response.headers.get('retry-after')! } : {}) };
+      else if (!collection) {
         const page = (await response.json()) as { summary?: { status?: string } };
         if (page.summary?.status !== 'available') addressed = { kind: 'error', status: 404 };
       }
@@ -339,24 +365,13 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
       new URL(addressed.location, request.url),
       addressed.status,
     );
-    if (addressScope === 'work' && resourceViewer)
+    if ((addressScope === 'work' || addressScope === 'resource') && resourceViewer)
       response.headers.set('cache-control', 'private, no-store');
     for (const [name, value] of Object.entries(discoveryHeaders)) response.headers.set(name, value);
     return finish(response);
   }
   if (addressed.kind === 'error')
-    return finish(
-      new NextResponse(null, {
-        status: addressed.status,
-        headers: {
-          'cache-control': 'no-store',
-          'x-robots-tag': 'noindex',
-          ...(addressed.status === 503 ? { 'retry-after': '5' } : {}),
-          ...(addressed.retryAfter ? { 'retry-after': addressed.retryAfter } : {}),
-          ...(path?.lookup.scope === 'space' ? { 'referrer-policy': 'no-referrer' } : {}),
-        },
-      }),
-    );
+    return fail(addressed.status, addressed.retryAfter);
   if (
     (isPublicPagePath(pathname) || addressPath(pathname)) &&
     !pathLocale(pathname) &&
