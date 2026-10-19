@@ -9,6 +9,7 @@ import {
   reconstructLegacyTargetRatings,
   type LegacyRatingCursor,
 } from './modules/rating/legacy-reconstruction.ts';
+import { refreshStandingRatingProjections } from './modules/rating/standing-publication.ts';
 
 const args = process.argv.slice(2);
 const take = (flag: string) => {
@@ -28,12 +29,17 @@ const restart = args.includes('--restart');
 if (restart) args.splice(args.indexOf('--restart'), 1);
 const list = args.includes('--list');
 if (list) args.splice(args.indexOf('--list'), 1);
+const standing = args.includes('--standing');
+if (standing) args.splice(args.indexOf('--standing'), 1);
+const refresh = args.includes('--refresh-standing-projections');
+if (refresh) args.splice(args.indexOf('--refresh-standing-projections'), 1);
 const afterContext = take('--after-context'),
   afterTarget = take('--after-target');
 if (
   args.length ||
   !envFile ||
-  (!list && (!context || !target)) ||
+  (!list && !refresh && (!context || !target)) ||
+  (refresh && (list || standing || target || restart || afterContext || afterTarget)) ||
   (list && (target || batches !== 1 || restart || !afterContext !== !afterTarget)) ||
   !Number.isInteger(batches) ||
   batches < 1 ||
@@ -43,8 +49,9 @@ if (
   batchSize > 100
 ) {
   throw new Error(
-    'Use --env <apps.env> --context <IRI> --target <IRI> [--batches 1..32] [--batch-size 1..100] [--restart]\n' +
-      'or --env <apps.env> --list [--context <IRI>] [--batch-size 1..100] [--after-context <IRI> --after-target <IRI>]',
+    'Use --env <apps.env> --context <IRI> --target <IRI> [--standing] [--batches 1..32] [--batch-size 1..100] [--restart]\n' +
+      'or --env <apps.env> --list [--standing] [--context <IRI>] [--batch-size 1..100] [--after-context <IRI> --after-target <IRI>]\n' +
+      'or --env <apps.env> --refresh-standing-projections [--context <IRI>] [--batches 1..32] [--batch-size 1..100]',
   );
 }
 const env = readEnv(resolve(envFile));
@@ -53,6 +60,19 @@ const requireValue = (name: string) => {
   if (!value) throw new Error(`Missing ${name} in the environment file`);
   return value;
 };
+if (refresh) {
+  const pool = new Pool({ connectionString: requireValue('ACCESS_DATABASE_URL'), max: 1,
+    connectionTimeoutMillis: 5000, statement_timeout: 5000 });
+  try {
+    let result;
+    for (let index = 0; index < batches; index++) {
+      result = await refreshStandingRatingProjections(pool, { ...(context ? { context } : {}), limit: batchSize });
+      if (result.complete) break;
+    }
+    console.log(JSON.stringify(result));
+  } finally { await pool.end(); }
+  process.exit(0);
+}
 if (list) {
   const pool = new Pool({
     connectionString: requireValue('ACCESS_DATABASE_URL'),
@@ -67,6 +87,7 @@ if (list) {
           ...(context ? { context } : {}),
           ...(afterContext && afterTarget ? { after: { context: afterContext, target: afterTarget } } : {}),
           limit: batchSize,
+          standing,
         }),
       ),
     );
@@ -76,7 +97,7 @@ if (list) {
   process.exit(0);
 }
 if (!context || !target) throw new Error('--context and --target are required');
-const identity = createHash('sha256').update(JSON.stringify({ context, target })).digest('hex');
+const identity = createHash('sha256').update(JSON.stringify({ context, target, ...(standing ? { family: 'standing' } : {}) })).digest('hex');
 const checkpoint = join(process.cwd(), '.temp/rating-reconstruction', `${identity}.json`);
 let saved: { cursor: LegacyRatingCursor | null; complete: boolean } | undefined;
 if (!restart) {
@@ -113,6 +134,7 @@ try {
       context,
       target,
       batchSize,
+      standing,
       ...(saved?.cursor ? { cursor: saved.cursor } : {}),
     });
     saved = { cursor: result.cursor, complete: result.complete };

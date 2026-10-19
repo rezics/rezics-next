@@ -14,7 +14,7 @@ import { createHash } from 'node:crypto';
 import { receiptFamilyFor } from './receipt-families.ts';
 import { Pool, type PoolClient } from 'pg';
 import { recordRatingAggregateHead, readRatingAggregateInventory,
-  checkRatingAggregateFence, readRatingContextPolicyWitness } from '../rating/aggregate-inventory.ts';
+  checkRatingAggregateFence, readRatingContextPolicyWitness, type StandingRatingCut } from '../rating/aggregate-inventory.ts';
 import { directWorkCreateProof, selectedDirectWorkProof } from './direct-principal.ts';
 import { groupWorkCreateProof, GroupUnavailable } from './groups.ts';
 import { representedWorkProof, selectedRepresentedWorkProof, saveInvitedWorkProof,
@@ -619,12 +619,12 @@ export class AccessAdmissionRegistry {
     return issueTitleAdmission(this.pool, admission, command, this.titleAdmissionKey);
   }
 
-  readRatingAggregateInventory(context: string, mainVersion: string, signal?: AbortSignal) {
-    return readRatingAggregateInventory(this.pool, context, mainVersion, signal);
+  readRatingAggregateInventory(context: string, mainVersion: string, signal?: AbortSignal, onlySlot?: string) {
+    return readRatingAggregateInventory(this.pool, context, mainVersion, signal, onlySlot);
   }
 
-  checkRatingAggregateFence(generation: string, signal?: AbortSignal) {
-    return checkRatingAggregateFence(this.pool, generation, signal);
+  checkRatingAggregateFence(generation: string, signal?: AbortSignal, cuts?: readonly StandingRatingCut[]) {
+    return checkRatingAggregateFence(this.pool, generation, signal, cuts);
   }
 
   readRatingContextPolicyWitness(context: string, signal?: AbortSignal) {
