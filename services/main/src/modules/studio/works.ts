@@ -1,12 +1,13 @@
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadLimit, WorkReadMissing, WorkReadMoved,
-  WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
+  WorkReadUnavailable, WorkReadInvalid, readDependencyToken, type WorkReadSession } from '../work/read-session.ts';
 import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
 import { workTypeEntries } from '../types/registry.ts';
 import { publishedStructuredWork } from '../work/public-patterns.ts';
 import { FALLBACK_POLICY } from '../media/summary.ts';
+import { readStudioChapterCount, STUDIO_CHAPTER_COUNT_COST } from './chapters.ts';
 
 export const STUDIO_WORK_COST = { pageSize: 20, candidateAdmissions: 200, textsPerPage: 200,
-  submissionsPerPage: 200, graphCalls: 14, accessCalls: 4 } as const;
+  submissionsPerPage: 200, inventoryBatches: 5, graphCalls: 140, accessCalls: 12 } as const;
 export const STUDIO_WORK_DETAIL_COST = { graphCalls: 4, accessCalls: 4,
   texts: 200, submissions: 200 } as const;
 const types = ['https://schema.org/Book', 'https://schema.org/DigitalDocument',
@@ -36,7 +37,37 @@ const recipeStateBindings = (work: string, main: string) => `
   BIND(EXISTS { ${publishedStructuredWork(work, main)} } AS ?recipePublished)`;
 
 export interface StudioWorkFilters { state?: 'draft' | 'published' | 'empty'; type?: WorkType;
-  view?: 'authored' | 'curated' }
+  view?: 'authored' | 'curated'; q?: string; sort?: 'recent' | 'created' | 'title' }
+
+/** One normalization for title matching, ordering and continuation identity. */
+export const studioTitleKey = (title: string) => title.normalize('NFKC').toLowerCase();
+export function studioSearchQuery(query = ''): string {
+  if ([...query].length > 200 || /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(query)) {
+    throw new WorkReadInvalid('Title query exceeds 200 Unicode scalar values');
+  }
+  return studioTitleKey(query).trim();
+}
+const scalarCompare = (left: string, right: string) => Buffer.compare(Buffer.from(left), Buffer.from(right));
+
+/**
+ * Global title order needs the complete authorized cut, never a sorted candidate
+ * window. Five indexed batches bound this owner read; an over-budget inventory
+ * is unavailable rather than silently omitting later matching titles.
+ */
+async function inventoryCut(session: WorkReadSession, agent: string) {
+  const access = session.deps.studioAccess!, principal = session.principal!;
+  const rows: Awaited<ReturnType<typeof access.studioWorks>>['rows'] = [];
+  let after = '', stamp: string | undefined;
+  for (let batch = 0; batch < STUDIO_WORK_COST.inventoryBatches; batch++) {
+    const page = await access.studioWorks(principal, agent, after, STUDIO_WORK_COST.candidateAdmissions + 1);
+    if (stamp !== undefined && stamp !== page.stamp) throw new WorkReadMoved('Studio controller changed');
+    stamp = page.stamp;
+    rows.push(...page.rows.slice(0, STUDIO_WORK_COST.candidateAdmissions));
+    if (page.rows.length <= STUDIO_WORK_COST.candidateAdmissions) return { rows, stamp };
+    after = rows.at(-1)!.work;
+  }
+  throw new WorkReadLimit('Studio inventory exceeds complete ordering budget');
+}
 
 /** Exact Agent Work, including chapters omitted from the inventory. One Work
  * graph head and at most 200 of the Agent's texts and submissions. */
@@ -82,14 +113,15 @@ export async function readStudioWork(session: WorkReadSession, agent: string, wo
   const details = await access.studioWorkDetails(principal, agent, [work]);
   const summary = await session.summaries([work]);
   const cover = summary.find(item => item.reference === work);
+  const chapterCount = typeRows.some(row => row.type?.value === types[0])
+    ? await readStudioChapterCount(session, work, head.main!.value) : null;
   const again = await access.studioWork(principal, agent, work);
   const finalDetails = await access.studioWorkDetails(principal, agent, [work]);
   if (again.stamp !== first.stamp || JSON.stringify(finalDetails) !== JSON.stringify(details)) {
     throw new WorkReadMoved('Studio Work authority or details changed');
   }
   const createdAt = first.row.created_at.toISOString();
-  const updatedAt = new Date(Math.max(first.row.created_at.valueOf(),
-    details.edits[0]?.updated_at.valueOf() ?? 0)).toISOString();
+  const updatedAt = new Date(first.row.updated_key).toISOString();
   return { item: { id: work, mainVersion: head.main.value, workRevision: head.head.value,
     mainRevision: head.mainHead.value,
     title: { value: head.title.value, language: head.title['xml:lang'] ?? 'und' },
@@ -102,7 +134,7 @@ export async function readStudioWork(session: WorkReadSession, agent: string, wo
       ? { started: head.recipeStarted?.value === 'true', published: head.recipePublished?.value === 'true' } : undefined),
     texts, submissions: details.submissions.map(item => ({ id: item.id, realm: item.realm,
       state: item.state, openedAt: item.opened_at.toISOString(), updatedAt: item.updated_at.toISOString() })),
-    createdAt, updatedAt }, sourcePosition: session.position };
+    chapterCount, createdAt, updatedAt }, sourcePosition: session.position };
 }
 
 /** Agent control is fenced before and after this bounded cross-owner read. */
@@ -115,48 +147,71 @@ export async function readStudioWorks(session: WorkReadSession, agent: string,
   }
   const limit = session.options.limit ?? 20;
   const view = filters.view ?? 'authored';
-  const first = await access.studioWorks(principal, agent,
-    '', 1);
-  const binding = ['studio-works-v2', agent, view, filters.state ?? null, filters.type ?? null, first.stamp];
-  const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
-  const after = cursor?.after ?? '';
-  const page = await access.studioWorks(principal, agent, after, STUDIO_WORK_COST.candidateAdmissions + 1);
-  if (page.stamp !== first.stamp) throw new WorkReadMoved('Studio controller changed');
-  const admissions = page.rows.slice(0, STUDIO_WORK_COST.candidateAdmissions);
-  const byAdmission = new Map(admissions.map(row => [row.id, row]));
-  const proven = admissions.filter(row => row.generation !== null);
-  const workRows = proven.length ? await session.query(`SELECT ?admission ?work ?main ?head ?mainHead ?title
-    ?disclosure ?recipeStarted ?recipePublished WHERE {
-      VALUES (?admission ?writer) { ${proven.map(row => `(${lit(row.id)} ${iri(row.writer)})`).join(' ')} }
-      GRAPH ${iri(GRAPHS.receipts)} { ?receipt a rv:OperationReceipt ; rv:admissionId ?admission ;
-        rv:outcome rv:Succeeded ; rv:work ?work ; rv:mainVersion ?main .
-      }
-      GRAPH ${iri(GRAPHS.current)} { ?work a schema:CreativeWork ; rv:head ?head ;
-        rv:mainVersion ?main ; rdfs:label ?title .
-        ?main a rv:MainVersion ; rv:head ?mainHead ; rv:work ?work .
-        OPTIONAL { ?work rv:disclosure ?disclosure }
-        FILTER NOT EXISTS { ?work rv:protectionHead ?protection }
-      }
-      FILTER ${view === 'authored' ? 'EXISTS' : 'NOT EXISTS'} {
-        ${writerCreditPattern('?work', '?writer')}
-      }
-      ${recipeStateBindings("?work", "?main")}
-    } LIMIT ${STUDIO_WORK_COST.candidateAdmissions + 1}`,
-  STUDIO_WORK_COST.candidateAdmissions + 1) : [];
-  const order = new Map(admissions.map((row, index) => [row.id, index]));
-  workRows.sort((left, right) => (order.get(left.admission?.value ?? '') ?? limit)
-    - (order.get(right.admission?.value ?? '') ?? limit));
+  // Control precedes query and cursor diagnostics, including borrowed cursors.
+  const first = await access.studioWorks(principal, agent, '', 1);
+  const q = studioSearchQuery(filters.q);
+  const sort = filters.sort ?? 'recent';
+  if (!['recent', 'created', 'title'].includes(sort)) throw new WorkReadInvalid('Studio order is invalid');
+  const cut = await inventoryCut(session, agent);
+  if (cut.stamp !== first.stamp) throw new WorkReadMoved('Studio controller changed');
+  const binding = ['studio-works-v4', agent, view, filters.state ?? null, filters.type ?? null, q, sort, limit];
+  const position = { ...session.position, dependencyToken: readDependencyToken([session.position, cut]) };
+  const cursor = decodeReadCursor(session.options.cursor, binding, position);
+  const byAdmission = new Map(cut.rows.map(row => [row.id, row]));
+  const workRows: import('../work/read-session.ts').ReadRow[] = [];
+  for (let offset = 0; offset < cut.rows.length; offset += STUDIO_WORK_COST.candidateAdmissions) {
+    const proven = cut.rows.slice(offset, offset + STUDIO_WORK_COST.candidateAdmissions)
+      .filter(row => row.generation !== null);
+    const batchRows = proven.length ? await session.query(`SELECT ?admission ?work ?main ?head ?mainHead ?title
+      ?disclosure ?recipeStarted ?recipePublished ?hasText ?hasPublication ?isRecipe WHERE {
+        VALUES (?admission ?writer) { ${proven.map(row => `(${lit(row.id)} ${iri(row.writer)})`).join(' ')} }
+        GRAPH ${iri(GRAPHS.receipts)} { ?receipt a rv:OperationReceipt ; rv:admissionId ?admission ;
+          rv:outcome rv:Succeeded ; rv:work ?work ; rv:mainVersion ?main .
+        }
+        GRAPH ${iri(GRAPHS.current)} { ?work a schema:CreativeWork ; rv:head ?head ;
+          rv:mainVersion ?main ; rdfs:label ?title .
+          ?main a rv:MainVersion ; rv:head ?mainHead ; rv:work ?work .
+          OPTIONAL { ?work rv:disclosure ?disclosure }
+          FILTER NOT EXISTS { ?work rv:protectionHead ?protection }
+        }
+        FILTER ${view === 'authored' ? 'EXISTS' : 'NOT EXISTS'} {
+          ${writerCreditPattern('?work', '?writer')}
+        }
+        ${filters.type ? `FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} { ?work a <${filters.type}> } }` : ''}
+        BIND(EXISTS { GRAPH ${iri(GRAPHS.current)} { ?ownText a rv:TextContribution ; rv:work ?work ;
+          rv:author ${iri(agent)} ; rv:draftHead ?ownDraft . } } AS ?hasText)
+        BIND(EXISTS { GRAPH ${iri(GRAPHS.current)} { ?ownText a rv:TextContribution ; rv:work ?work ;
+          rv:author ${iri(agent)} ; rv:draftHead ?ownDraft ; rv:publicationHead ?ownPublication . } } AS ?hasPublication)
+        BIND(EXISTS { GRAPH ${iri(GRAPHS.current)} { ?work a schema:Recipe } } AS ?isRecipe)
+        ${recipeStateBindings("?work", "?main")}
+      } LIMIT ${STUDIO_WORK_COST.candidateAdmissions + 1}`,
+    STUDIO_WORK_COST.candidateAdmissions + 1) : [];
+    if (batchRows.length > STUDIO_WORK_COST.candidateAdmissions) throw new WorkReadLimit('Studio candidate batch exceeded');
+    workRows.push(...batchRows);
+  }
   if (new Set(workRows.map(row => row.admission?.value)).size !== workRows.length
     || workRows.some(row => {
       const candidate = byAdmission.get(row.admission?.value ?? '');
-      return !candidate || candidate.generation === null || candidate.work !== row.work?.value;
-    })) {
-    throw new WorkReadUnavailable('Studio Work receipt is ambiguous');
-  }
-  if (workRows.length > STUDIO_WORK_COST.candidateAdmissions) {
-    throw new WorkReadLimit('Studio inventory exceeds candidate budget');
-  }
-  const selectedRows = workRows.slice(0, limit);
+      return !candidate || candidate.generation === null || candidate.work !== row.work?.value || !row.title;
+    })) throw new WorkReadUnavailable('Studio Work receipt is ambiguous');
+  const matching = workRows.filter(row => {
+    const title = studioTitleKey(row.title!.value);
+    const ownTexts = row.hasText?.value === 'true'
+      ? [{ publicationHead: row.hasPublication?.value === 'true' ? 'published' : null }] : [];
+    const state = studioWorkState(ownTexts, row.isRecipe?.value === 'true'
+      ? { started: row.recipeStarted?.value === 'true', published: row.recipePublished?.value === 'true' } : undefined);
+    return (!q || title.includes(q)) && (!filters.state || state === filters.state);
+  });
+  matching.sort((left, right) => {
+    const a = byAdmission.get(left.admission!.value)!, b = byAdmission.get(right.admission!.value)!;
+    const key = sort === 'title' ? scalarCompare(studioTitleKey(left.title!.value), studioTitleKey(right.title!.value))
+      : scalarCompare(sort === 'recent' ? b.updated_key : b.created_key,
+        sort === 'recent' ? a.updated_key : a.created_key);
+    return key || scalarCompare(a.work, b.work);
+  });
+  const start = cursor ? matching.findIndex(row => row.work?.value === cursor.after) + 1 : 0;
+  if (cursor && !start) throw new WorkReadInvalid('Studio continuation anchor is unavailable');
+  const selectedRows = matching.slice(start, start + limit);
   const workIds = selectedRows.map(row => row.work?.value).filter((value): value is string => !!value);
   const typeRows = workIds.length ? await session.query(`SELECT ?work ?type WHERE {
     VALUES ?work { ${workIds.map(iri).join(' ')} }
@@ -193,7 +248,6 @@ export async function readStudioWorks(session: WorkReadSession, agent: string,
       publicationDraft: row.selected?.value ?? null }]);
   }
   const details = await access.studioWorkDetails(principal, agent, workIds);
-  const editTimes = new Map(details.edits.map(row => [row.work, row.updated_at]));
   const summary = await session.summaries(workIds);
   const covers = new Map(summary.map(item => [item.reference, item]));
   const items = selectedRows.flatMap(row => {
@@ -204,14 +258,11 @@ export async function readStudioWorks(session: WorkReadSession, agent: string,
     const work = row.work.value;
     const ownTexts = texts.get(work) ?? [];
     const workTypes = typeMap.get(work) ?? [];
-    if (filters.type && !workTypes.includes(filters.type)) return [];
     const state = studioWorkState(ownTexts, workTypeEntries.some(entry => entry.presentation === 'recipe' && workTypes.includes(entry.type))
       ? { started: row.recipeStarted?.value === 'true', published: row.recipePublished?.value === 'true' } : undefined);
-    if (filters.state && state !== filters.state) return [];
     const cover = covers.get(work);
     const createdAt = admission.created_at.toISOString();
-    const updatedAt = new Date(Math.max(admission.created_at.valueOf(),
-      editTimes.get(work)?.valueOf() ?? 0)).toISOString();
+    const updatedAt = new Date(admission.updated_key).toISOString();
     const language = row.title['xml:lang'] ?? 'und';
     return [{ id: work, mainVersion: row.main.value, workRevision: row.head.value,
       mainRevision: row.mainHead.value, title: { value: row.title.value, language },
@@ -225,14 +276,13 @@ export async function readStudioWorks(session: WorkReadSession, agent: string,
         openedAt: item.opened_at.toISOString(), updatedAt: item.updated_at.toISOString() })),
       createdAt, updatedAt }];
   });
-  const again = await access.studioWorks(principal, agent, after,
-    STUDIO_WORK_COST.candidateAdmissions + 1);
-  if (again.stamp !== page.stamp || JSON.stringify(again.rows) !== JSON.stringify(page.rows)) {
-    throw new WorkReadMoved('Studio Work inventory changed');
-  }
-  const more = workRows.length > limit || page.rows.length > STUDIO_WORK_COST.candidateAdmissions;
-  const tail = workRows.length > limit ? byAdmission.get(selectedRows.at(-1)?.admission?.value ?? '')?.work
-    : admissions.at(-1)?.work;
-  return pageResult(session, items, more && tail
-    ? encodeReadCursor(binding, session.position, tail) : null);
+  const countBudget = { remaining: STUDIO_CHAPTER_COUNT_COST.pagesPerInventory };
+  const countedItems = [];
+  for (const item of items) countedItems.push({ ...item, chapterCount: item.types.includes(types[0])
+    ? await readStudioChapterCount(session, item.id, item.mainVersion, countBudget) : null });
+  const again = await inventoryCut(session, agent);
+  if (JSON.stringify(again) !== JSON.stringify(cut)) throw new WorkReadMoved('Studio Work inventory changed');
+  const more = start + selectedRows.length < matching.length;
+  return pageResult(session, countedItems, more
+    ? encodeReadCursor(binding, position, selectedRows.at(-1)!.work!.value) : null);
 }

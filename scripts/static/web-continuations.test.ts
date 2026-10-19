@@ -55,6 +55,20 @@ test.each([
     .toBeGreaterThan(0);
 });
 
+// Studio's renderer receives an owner page and its navigation separately.
+// These exact exceptions must stop applying when either flow changes.
+test.each([
+  ['apps/web/features/studio/read.ts', 'page: { ...page.data, items }', 'page: { ...page.data, items, nextCursor: null }'],
+  ['apps/web/features/studio/studio-home.tsx', '{moreHref ? <Link', '{false ? <Link'],
+  ['apps/web/app/[locale]/studio/[agent]/page.tsx', 'validCursor(query.cursor)', 'validCursor(query.cursor + "suffix")'],
+] as const)('Studio continuation evidence rejects dropped owner continuation or navigation: %s / %s', (path, before, after) => {
+  const original = readFileSync(join(root, path), 'utf8');
+  expect(original).toContain(before);
+  expect(changedContinuationGroups(continuationInventory([source(original, path)]), accepted.violations)).toEqual([]);
+  expect(changedContinuationGroups(continuationInventory([source(original.replace(before, after), path)]), accepted.violations).length)
+    .toBeGreaterThan(0);
+});
+
 
 test('stories stay outside production inventory', () => {
   expect(continuationInventory([source('api.get().items', 'apps/web/features/example/read.stories.tsx')])).toEqual([]);
