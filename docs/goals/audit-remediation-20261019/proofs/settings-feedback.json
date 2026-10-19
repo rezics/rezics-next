@@ -2963,5 +2963,1178 @@
       "next": "Manager can use this reviewed and checked minimal Settings slice for its bounded landing decision, copy the current retained sibling bundle under its own authority, and retain all three findings open until the exact authenticated/announcement premises are verified. No land:auto or whole-wave confirmation."
     }
   ],
-  "latestEvidenceRun": "current-61df4790bcc1"
+  "latestEvidenceRun": "authenticated-e96e4846d049",
+  "genuineJourneyRuns": [
+    {
+      "id": "authenticated-e96e4846d049",
+      "recordedAt": "2026-10-19T07:38:54.927401+00:00",
+      "authorization": "Decision 2026-10-19T06:45:05.473487+00:00 and latest manager instruction: exact minimal startup+Settings integration and supported existing isolated OAuth fixture; no obsolete baseline or whole-wave prerequisite.",
+      "result": "partial: genuine receipt/reload, retained draft, visible feedback and recoverable keyboard criteria reached; heard assistive-technology announcements remain unverified",
+      "findingsClosed": false,
+      "regressionConfirmed": false,
+      "historicalBoundary": "Appended run only. Historical 92b8a78 report and 159-entry bundle, current61df report and 159-entry bundle, prior failures, 32 original story assertions and valid reviews are preserved unchanged. Their historical missing-premise statements describe those runs, not this new run.",
+      "source": {
+        "frontendProductPin": "e96e4846d049d3958695e30ff7e67dacc1af93e9",
+        "settingsSourcePin": "61df4790bcc13e40d1ccce6358edb1d632089db8",
+        "startupSourcePin": "a27bcfc6bad849dd912cbd3f721de5defeba1c86",
+        "reportBranchHeadBeforeThisStep": "1ab9f26c8b1b859e28f6d9237eb299b203f1273b",
+        "isolatedProductCheckout": ".temp/settings-auth-product/",
+        "sourceCleanBefore": true,
+        "sourceCleanAfterEveryRun": true,
+        "settingsBytesMatch": {
+          "files": 15,
+          "allMatch": true,
+          "receipt": "integration-receipt.json"
+        },
+        "dependencies": "yarn.lock, package.json, apps/web/package.json and .yarnrc.yml blobs match both Settings61df and startupa27; task install completed with Yarn.",
+        "backend": {
+          "origin": "http://127.0.0.1:3001",
+          "processPid": 1372265,
+          "processCheckoutHead": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+          "readiness": "/health/ready returned200/ready in every run",
+          "provenanceLimit": "Live process working directory and git HEAD, not an immutable build attestation; frontend product pin is separate. Initial process scan also matched its Python helper; corrected/focused receipts restrict to actual services/main/src/index.ts or services/main/src/serve.ts arguments and identify only PID1372265."
+        }
+      },
+      "sourceReview": {
+        "independentReviewer": "Codex-1 / GPT-6.1 Sol / xhigh; no fallback or nested agents",
+        "unchangedReviewsReused": [
+          "e6cb5e65c108fb3e2fd899cf022b55d0ffd263a3 authored review retained in historical run",
+          "52018525928262b078f1adfb6f8690d73da0d961 correction review retained in current61df run"
+        ],
+        "materialIntegrationReview": "One material integration review: exact existing readChoices inventory row changes consumer/context/expression to preferences.items. No new rows, authorization exemptions or runtime integration edits. Settings source review reused; startup review/readiness remains owned by G-2747/G-2847.",
+        "diff": "integration.diff; a27bcfc6bad849dd912cbd3f721de5defeba1c86..e96e4846d049d3958695e30ff7e67dacc1af93e9 inventory-only integration, besides exact reused15Settings files",
+        "inventoryChange": "Existing row changes consumer NotificationSettings to readChoices, expression value.items to preferences.items, and its context hash. No new exemption or runtime source introduced by that integration.",
+        "startupReviewDependency": [
+          "G-2747",
+          "G-2847"
+        ],
+        "blockingIntegrationDefects": []
+      },
+      "method": {
+        "skills": [
+          "goal-worker",
+          "storybook-ui-review",
+          "local-development: local-web-auth and launch-accessibility"
+        ],
+        "runtime": "task web:dev -- --port42833 from exact isolated checkout; supported readEnv/signInAtAccounts helpers; fresh actual OAuthPKCE and eligible Main session, private browser state0600; own server stopped after every phase and port42833 verified closed.",
+        "fixture": "G-2825 public site-auth-fixture.json receipt; existing eligible member and its own person/notification preferences. Credentials reused read-only from supplied private paths; no secrets, OAuth callback URLs or storage state retained publicly.",
+        "routes": "/en/settings, /ja/settings, /de/settings; notifications first/middle/last and Reading/Profile sections. Profile rendering inspected without profile writes.",
+        "viewports": [
+          [
+            1440,
+            1000
+          ],
+          [
+            390,
+            844
+          ]
+        ],
+        "realResponses": "All200 saves, conflict409s, refresh200s and reloadGETs in passed cases are actual BFF/Main responses.409 produced by a real concurrent fixture write advancing expectedRevision/version. Busy observation holds a request, then continues it.",
+        "faultInjection": "Only explicitly tagged initial PUT503 and one refreshGET503 are synthetic browser faults, never actual API failure receipts. Static GET asset provider is reused; no internal application module is mocked.",
+        "stateRestoration": "Only authorized fixture preference values changed and were restored after every case, including failures. Versions/revisions advance: final person version17, three exercised notification rows revision14. Functional values restored, not byte-identical state. No shared refresh/import/reset, new corpus or profile edit.",
+        "keyboardLimit": "Initial target located/focused by harness, then Space/Tab/Shift+Tab/Enter use browser keyboard. This establishes local recovery, not a complete keyboard-only route from page entry or physical touch/assistive-technology operation.",
+        "announcementLimit": "MutationObserver and role=status/aria-live=polite/aria-atomic=true DOM receipts do not establish announcements heard through a screen reader."
+      },
+      "checks": [
+        {
+          "job": "a5be3fac-05d1-4c13-a425-8ff75d67f7dd",
+          "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- sh -c 'cd .temp/settings-auth-product && task install'",
+          "exit": 0,
+          "classification": "passed",
+          "result": "Yarn installation through Task in the clean isolated integration checkout.",
+          "evidence": "jobs/a5be3fac-05d1-4c13-a425-8ff75d67f7dd.log"
+        },
+        {
+          "job": "ac0aa117-bda4-4377-a0e8-d1d3427230a5",
+          "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun .temp/settings-feedback-auth-e96e4846d049/live-proof.ts inspect",
+          "exit": 0,
+          "classification": "passed",
+          "result": "Actual OAuth, eligible Main session, ready frontend/backend and 30 read-only route/locale/viewport views.",
+          "evidence": "jobs/ac0aa117-bda4-4377-a0e8-d1d3427230a5.log"
+        },
+        {
+          "job": "a205bcb3-16c2-4855-a58f-c95e5cca6ef1",
+          "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun .temp/settings-feedback-auth-e96e4846d049/live-proof.ts journeys",
+          "exit": 1,
+          "classification": "harness",
+          "result": "Harness failure retained: notification selector read only aria-label, losing real aria-labelledby names; all 18 notification cases stopped before commands. One language case passed; three reached outcomes but a helper assumed forward-only retry order. Live axe ran at both widths.",
+          "evidence": "jobs/a205bcb3-16c2-4855-a58f-c95e5cca6ef1.log"
+        },
+        {
+          "job": "fe397e5c-d833-4af4-b3a3-6a2342a34815",
+          "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun .temp/settings-feedback-auth-e96e4846d049/live-proof.ts journeys-corrected",
+          "exit": 1,
+          "classification": "harness",
+          "result": "18 notification cases and two remaining language cases passed; phone conflict plus failed refresh reached successful refresh but helper chose the wrong Tab direction after the button unmounted. The final save assertion was not reached for that one case.",
+          "evidence": "jobs/fe397e5c-d833-4af4-b3a3-6a2342a34815.log"
+        },
+        {
+          "job": "0b0ff7bd-0ef8-4a2f-953c-8fff9ba37373",
+          "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun .temp/settings-feedback-auth-e96e4846d049/live-proof.ts refresh-recovery",
+          "exit": 0,
+          "classification": "passed",
+          "result": "Only the remaining phone refresh case rerun: real409, injected refresh503, keyboard refresh/retry, real200 save, stale receipt clearing and reload persistence passed.",
+          "evidence": "jobs/0b0ff7bd-0ef8-4a2f-953c-8fff9ba37373.log"
+        }
+      ],
+      "reusedCandidateQA": {
+        "productPin": "61df4790bcc13e40d1ccce6358edb1d632089db8",
+        "qaId": "20261019t063638-162050",
+        "job": "8a721d95-fda0-4ad1-9191-d2e8cd2db938",
+        "result": "32/32 original Settings/profile/notification stories, 15 unit tests/109 assertions, affected types/inference/lint/AST/guards passed; original axe/width assertions retained. Exact byte/dependency identity permits reuse; not reported as a new e96 whole-product QA run.",
+        "captureJob": "a5296634-d51f-4a2f-a072-85835374b209",
+        "viewedPNGs": 48
+      },
+      "assertionsReached": {
+        "readOnlyViews": {
+          "count": 30,
+          "evidence": "live-inspect.json#views",
+          "locales": [
+            "en",
+            "ja",
+            "de"
+          ],
+          "widths": [
+            1440,
+            390
+          ],
+          "horizontalDocumentOverflow": false
+        },
+        "distinctPassingLiveCases": 22,
+        "notificationCases": 18,
+        "languageCases": 4,
+        "cases": [
+          {
+            "id": "languages-1440-none",
+            "kind": "genuine person preference draft/save journey",
+            "fault": "none",
+            "writeReceipt": {
+              "profile": "person-preferences-v1",
+              "profileVisibility": "public",
+              "followPolicy": "everyone",
+              "hideReadingActivity": true,
+              "contentLanguages": [
+                "en",
+                "ko",
+                "fr"
+              ],
+              "spoilerPolicy": "hide-unread",
+              "version": 1,
+              "blockedPeople": []
+            },
+            "reload": {
+              "profile": "person-preferences-v1",
+              "profileVisibility": "public",
+              "followPolicy": "everyone",
+              "hideReadingActivity": true,
+              "contentLanguages": [
+                "en",
+                "ko",
+                "fr"
+              ],
+              "spoilerPolicy": "hide-unread",
+              "version": 1,
+              "blockedPeople": []
+            },
+            "reloadPersisted": true,
+            "staleReceiptCleared": true,
+            "evidence": "live-journeys.json#cases/languages-1440-none",
+            "liveRegionMutationCount": 0
+          },
+          {
+            "id": "notification-1440-first-none",
+            "kind": "genuine Settings notification journey",
+            "fault": "none",
+            "accessibleName": "Replies · In-app",
+            "writeReceipt": {
+              "purpose": "social",
+              "topic": "reply",
+              "channel": "inbox",
+              "state": "disabled",
+              "revision": "1"
+            },
+            "reload": {
+              "persisted": true,
+              "api": {
+                "purpose": "social",
+                "topic": "reply",
+                "channel": "inbox",
+                "state": "disabled",
+                "revision": "1"
+              }
+            },
+            "evidence": "live-journeys-corrected.json#cases/notification-1440-first-none",
+            "liveRegionMutationCount": 9
+          },
+          {
+            "id": "notification-1440-first-503",
+            "kind": "genuine Settings notification journey",
+            "fault": "503",
+            "accessibleName": "Replies · In-app",
+            "writeReceipt": {
+              "purpose": "social",
+              "topic": "reply",
+              "channel": "inbox",
+              "state": "disabled",
+              "revision": "3"
+            },
+            "reload": {
+              "persisted": true,
+              "api": {
+                "purpose": "social",
+                "topic": "reply",
+                "channel": "inbox",
+                "state": "disabled",
+                "revision": "3"
+              }
+            },
+            "keyboardRecovered": true,
+            "tabs": [
+              {
+                "key": "Tab",
+                "tag": "INPUT",
+                "label": null,
+                "text": ""
+              },
+              {
+                "key": "Tab",
+                "tag": "BUTTON",
+                "label": "Turn off · Replies · In-app",
+                "text": "Turn off"
+              }
+            ],
+            "evidence": "live-journeys-corrected.json#cases/notification-1440-first-503",
+            "liveRegionMutationCount": 10
+          },
+          {
+            "id": "notification-1440-first-409",
+            "kind": "genuine Settings notification journey",
+            "fault": "409",
+            "accessibleName": "Replies · In-app",
+            "writeReceipt": {
+              "purpose": "social",
+              "topic": "reply",
+              "channel": "inbox",
+              "state": "disabled",
+              "revision": "6"
+            },
+            "reload": {
+              "persisted": true,
+              "api": {
+                "purpose": "social",
+                "topic": "reply",
+                "channel": "inbox",
+                "state": "disabled",
+                "revision": "6"
+              }
+            },
+            "keyboardRecovered": true,
+            "tabs": [
+              {
+                "key": "Tab",
+                "tag": "INPUT",
+                "label": null,
+                "text": ""
+              },
+              {
+                "key": "Tab",
+                "tag": "BUTTON",
+                "label": "Turn off · Replies · In-app",
+                "text": "Turn off"
+              }
+            ],
+            "evidence": "live-journeys-corrected.json#cases/notification-1440-first-409",
+            "liveRegionMutationCount": 12
+          },
+          {
+            "id": "notification-1440-middle-none",
+            "kind": "genuine Settings notification journey",
+            "fault": "none",
+            "accessibleName": "New reviews · Push",
+            "writeReceipt": {
+              "purpose": "social",
+              "topic": "review",
+              "channel": "push",
+              "state": "disabled",
+              "revision": "1"
+            },
+            "reload": {
+              "persisted": true,
+              "api": {
+                "purpose": "social",
+                "topic": "review",
+                "channel": "push",
+                "state": "disabled",
+                "revision": "1"
+              }
+            },
+            "evidence": "live-journeys-corrected.json#cases/notification-1440-middle-none",
+            "liveRegionMutationCount": 8
+          },
+          {
+            "id": "notification-1440-middle-503",
+            "kind": "genuine Settings notification journey",
+            "fault": "503",
+            "accessibleName": "New reviews · Push",
+            "writeReceipt": {
+              "purpose": "social",
+              "topic": "review",
+              "channel": "push",
+              "state": "disabled",
+              "revision": "3"
+            },
+            "reload": {
+              "persisted": true,
+              "api": {
+                "purpose": "social",
+                "topic": "review",
+                "channel": "push",
+                "state": "disabled",
+                "revision": "3"
+              }
+            },
+            "keyboardRecovered": true,
+            "tabs": [
+              {
+                "key": "Tab",
+                "tag": "INPUT",
+                "label": null,
+                "text": ""
+              },
+              {
+                "key": "Tab",
+                "tag": "BUTTON",
+                "label": "Turn off · New reviews · Push",
+                "text": "Turn off"
+              }
+            ],
+            "evidence": "live-journeys-corrected.json#cases/notification-1440-middle-503",
+            "liveRegionMutationCount": 10
+          },
+          {
+            "id": "notification-1440-middle-409",
+            "kind": "genuine Settings notification journey",
+            "fault": "409",
+            "accessibleName": "New reviews · Push",
+            "writeReceipt": {
+              "purpose": "social",
+              "topic": "review",
+              "channel": "push",
+              "state": "disabled",
+              "revision": "6"
+            },
+            "reload": {
+              "persisted": true,
+              "api": {
+                "purpose": "social",
+                "topic": "review",
+                "channel": "push",
+                "state": "disabled",
+                "revision": "6"
+              }
+            },
+            "keyboardRecovered": true,
+            "tabs": [
+              {
+                "key": "Tab",
+                "tag": "INPUT",
+                "label": null,
+                "text": ""
+              },
+              {
+                "key": "Tab",
+                "tag": "BUTTON",
+                "label": "Turn off · New reviews · Push",
+                "text": "Turn off"
+              }
+            ],
+            "evidence": "live-journeys-corrected.json#cases/notification-1440-middle-409",
+            "liveRegionMutationCount": 11
+          },
+          {
+            "id": "notification-1440-last-none",
+            "kind": "genuine Settings notification journey",
+            "fault": "none",
+            "accessibleName": "Correction reverted · Email digest",
+            "writeReceipt": {
+              "purpose": "governance",
+              "topic": "proposal-reverted",
+              "channel": "email",
+              "state": "enabled",
+              "revision": "1"
+            },
+            "reload": {
+              "persisted": true,
+              "api": {
+                "purpose": "governance",
+                "topic": "proposal-reverted",
+                "channel": "email",
+                "state": "enabled",
+                "revision": "1"
+              }
+            },
+            "evidence": "live-journeys-corrected.json#cases/notification-1440-last-none",
+            "liveRegionMutationCount": 8
+          },
+          {
+            "id": "notification-1440-last-503",
+            "kind": "genuine Settings notification journey",
+            "fault": "503",
+            "accessibleName": "Correction reverted · Email digest",
+            "writeReceipt": {
+              "purpose": "governance",
+              "topic": "proposal-reverted",
+              "channel": "email",
+              "state": "enabled",
+              "revision": "3"
+            },
+            "reload": {
+              "persisted": true,
+              "api": {
+                "purpose": "governance",
+                "topic": "proposal-reverted",
+                "channel": "email",
+                "state": "enabled",
+                "revision": "3"
+              }
+            },
+            "keyboardRecovered": true,
+            "tabs": [
+              {
+                "key": "Tab",
+                "tag": "INPUT",
+                "label": null,
+                "text": ""
+              },
+              {
+                "key": "Tab",
+                "tag": "BUTTON",
+                "label": "Turn on · Correction reverted · Email digest",
+                "text": "Turn on"
+              }
+            ],
+            "evidence": "live-journeys-corrected.json#cases/notification-1440-last-503",
+            "liveRegionMutationCount": 11
+          },
+          {
+            "id": "notification-1440-last-409",
+            "kind": "genuine Settings notification journey",
+            "fault": "409",
+            "accessibleName": "Correction reverted · Email digest",
+            "writeReceipt": {
+              "purpose": "governance",
+              "topic": "proposal-reverted",
+              "channel": "email",
+              "state": "enabled",
+              "revision": "6"
+            },
+            "reload": {
+              "persisted": true,
+              "api": {
+                "purpose": "governance",
+                "topic": "proposal-reverted",
+                "channel": "email",
+                "state": "enabled",
+                "revision": "6"
+              }
+            },
+            "keyboardRecovered": true,
+            "tabs": [
+              {
+                "key": "Tab",
+                "tag": "INPUT",
+                "label": null,
+                "text": ""
+              },
+              {
+                "key": "Tab",
+                "tag": "BUTTON",
+                "label": "Turn on · Correction reverted · Email digest",
+                "text": "Turn on"
+              }
+            ],
+            "evidence": "live-journeys-corrected.json#cases/notification-1440-last-409",
+            "liveRegionMutationCount": 12
+          },
+          {
+            "id": "notification-390-first-none",
+            "kind": "genuine Settings notification journey",
+            "fault": "none",
+            "accessibleName": "Replies · In-app",
+            "writeReceipt": {
+              "purpose": "social",
+              "topic": "reply",
+              "channel": "inbox",
+              "state": "disabled",
+              "revision": "8"
+            },
+            "reload": {
+              "persisted": true,
+              "api": {
+                "purpose": "social",
+                "topic": "reply",
+                "channel": "inbox",
+                "state": "disabled",
+                "revision": "8"
+              }
+            },
+            "evidence": "live-journeys-corrected.json#cases/notification-390-first-none",
+            "liveRegionMutationCount": 9
+          },
+          {
+            "id": "notification-390-first-503",
+            "kind": "genuine Settings notification journey",
+            "fault": "503",
+            "accessibleName": "Replies · In-app",
+            "writeReceipt": {
+              "purpose": "social",
+              "topic": "reply",
+              "channel": "inbox",
+              "state": "disabled",
+              "revision": "10"
+            },
+            "reload": {
+              "persisted": true,
+              "api": {
+                "purpose": "social",
+                "topic": "reply",
+                "channel": "inbox",
+                "state": "disabled",
+                "revision": "10"
+              }
+            },
+            "keyboardRecovered": true,
+            "tabs": [
+              {
+                "key": "Tab",
+                "tag": "INPUT",
+                "label": null,
+                "text": ""
+              },
+              {
+                "key": "Tab",
+                "tag": "BUTTON",
+                "label": "Turn off · Replies · In-app",
+                "text": "Turn off"
+              }
+            ],
+            "evidence": "live-journeys-corrected.json#cases/notification-390-first-503",
+            "liveRegionMutationCount": 11
+          },
+          {
+            "id": "notification-390-first-409",
+            "kind": "genuine Settings notification journey",
+            "fault": "409",
+            "accessibleName": "Replies · In-app",
+            "writeReceipt": {
+              "purpose": "social",
+              "topic": "reply",
+              "channel": "inbox",
+              "state": "disabled",
+              "revision": "13"
+            },
+            "reload": {
+              "persisted": true,
+              "api": {
+                "purpose": "social",
+                "topic": "reply",
+                "channel": "inbox",
+                "state": "disabled",
+                "revision": "13"
+              }
+            },
+            "keyboardRecovered": true,
+            "tabs": [
+              {
+                "key": "Tab",
+                "tag": "INPUT",
+                "label": null,
+                "text": ""
+              },
+              {
+                "key": "Tab",
+                "tag": "BUTTON",
+                "label": "Turn off · Replies · In-app",
+                "text": "Turn off"
+              }
+            ],
+            "evidence": "live-journeys-corrected.json#cases/notification-390-first-409",
+            "liveRegionMutationCount": 11
+          },
+          {
+            "id": "notification-390-middle-none",
+            "kind": "genuine Settings notification journey",
+            "fault": "none",
+            "accessibleName": "New reviews · Push",
+            "writeReceipt": {
+              "purpose": "social",
+              "topic": "review",
+              "channel": "push",
+              "state": "disabled",
+              "revision": "8"
+            },
+            "reload": {
+              "persisted": true,
+              "api": {
+                "purpose": "social",
+                "topic": "review",
+                "channel": "push",
+                "state": "disabled",
+                "revision": "8"
+              }
+            },
+            "evidence": "live-journeys-corrected.json#cases/notification-390-middle-none",
+            "liveRegionMutationCount": 9
+          },
+          {
+            "id": "notification-390-middle-503",
+            "kind": "genuine Settings notification journey",
+            "fault": "503",
+            "accessibleName": "New reviews · Push",
+            "writeReceipt": {
+              "purpose": "social",
+              "topic": "review",
+              "channel": "push",
+              "state": "disabled",
+              "revision": "10"
+            },
+            "reload": {
+              "persisted": true,
+              "api": {
+                "purpose": "social",
+                "topic": "review",
+                "channel": "push",
+                "state": "disabled",
+                "revision": "10"
+              }
+            },
+            "keyboardRecovered": true,
+            "tabs": [
+              {
+                "key": "Tab",
+                "tag": "INPUT",
+                "label": null,
+                "text": ""
+              },
+              {
+                "key": "Tab",
+                "tag": "BUTTON",
+                "label": "Turn off · New reviews · Push",
+                "text": "Turn off"
+              }
+            ],
+            "evidence": "live-journeys-corrected.json#cases/notification-390-middle-503",
+            "liveRegionMutationCount": 11
+          },
+          {
+            "id": "notification-390-middle-409",
+            "kind": "genuine Settings notification journey",
+            "fault": "409",
+            "accessibleName": "New reviews · Push",
+            "writeReceipt": {
+              "purpose": "social",
+              "topic": "review",
+              "channel": "push",
+              "state": "disabled",
+              "revision": "13"
+            },
+            "reload": {
+              "persisted": true,
+              "api": {
+                "purpose": "social",
+                "topic": "review",
+                "channel": "push",
+                "state": "disabled",
+                "revision": "13"
+              }
+            },
+            "keyboardRecovered": true,
+            "tabs": [
+              {
+                "key": "Tab",
+                "tag": "INPUT",
+                "label": null,
+                "text": ""
+              },
+              {
+                "key": "Tab",
+                "tag": "BUTTON",
+                "label": "Turn off · New reviews · Push",
+                "text": "Turn off"
+              }
+            ],
+            "evidence": "live-journeys-corrected.json#cases/notification-390-middle-409",
+            "liveRegionMutationCount": 12
+          },
+          {
+            "id": "notification-390-last-none",
+            "kind": "genuine Settings notification journey",
+            "fault": "none",
+            "accessibleName": "Correction reverted · Email digest",
+            "writeReceipt": {
+              "purpose": "governance",
+              "topic": "proposal-reverted",
+              "channel": "email",
+              "state": "enabled",
+              "revision": "8"
+            },
+            "reload": {
+              "persisted": true,
+              "api": {
+                "purpose": "governance",
+                "topic": "proposal-reverted",
+                "channel": "email",
+                "state": "enabled",
+                "revision": "8"
+              }
+            },
+            "evidence": "live-journeys-corrected.json#cases/notification-390-last-none",
+            "liveRegionMutationCount": 9
+          },
+          {
+            "id": "notification-390-last-503",
+            "kind": "genuine Settings notification journey",
+            "fault": "503",
+            "accessibleName": "Correction reverted · Email digest",
+            "writeReceipt": {
+              "purpose": "governance",
+              "topic": "proposal-reverted",
+              "channel": "email",
+              "state": "enabled",
+              "revision": "10"
+            },
+            "reload": {
+              "persisted": true,
+              "api": {
+                "purpose": "governance",
+                "topic": "proposal-reverted",
+                "channel": "email",
+                "state": "enabled",
+                "revision": "10"
+              }
+            },
+            "keyboardRecovered": true,
+            "tabs": [
+              {
+                "key": "Tab",
+                "tag": "INPUT",
+                "label": null,
+                "text": ""
+              },
+              {
+                "key": "Tab",
+                "tag": "BUTTON",
+                "label": "Turn on · Correction reverted · Email digest",
+                "text": "Turn on"
+              }
+            ],
+            "evidence": "live-journeys-corrected.json#cases/notification-390-last-503",
+            "liveRegionMutationCount": 11
+          },
+          {
+            "id": "notification-390-last-409",
+            "kind": "genuine Settings notification journey",
+            "fault": "409",
+            "accessibleName": "Correction reverted · Email digest",
+            "writeReceipt": {
+              "purpose": "governance",
+              "topic": "proposal-reverted",
+              "channel": "email",
+              "state": "enabled",
+              "revision": "13"
+            },
+            "reload": {
+              "persisted": true,
+              "api": {
+                "purpose": "governance",
+                "topic": "proposal-reverted",
+                "channel": "email",
+                "state": "enabled",
+                "revision": "13"
+              }
+            },
+            "keyboardRecovered": true,
+            "tabs": [
+              {
+                "key": "Tab",
+                "tag": "INPUT",
+                "label": null,
+                "text": ""
+              },
+              {
+                "key": "Tab",
+                "tag": "BUTTON",
+                "label": "Turn on · Correction reverted · Email digest",
+                "text": "Turn on"
+              }
+            ],
+            "evidence": "live-journeys-corrected.json#cases/notification-390-last-409",
+            "liveRegionMutationCount": 12
+          },
+          {
+            "id": "languages-390-503",
+            "kind": "genuine person preference draft/save journey",
+            "fault": "503",
+            "writeReceipt": {
+              "profile": "person-preferences-v1",
+              "profileVisibility": "public",
+              "followPolicy": "everyone",
+              "hideReadingActivity": true,
+              "contentLanguages": [
+                "en",
+                "ko",
+                "fr"
+              ],
+              "spoilerPolicy": "hide-unread",
+              "version": 8,
+              "blockedPeople": []
+            },
+            "reload": {
+              "profile": "person-preferences-v1",
+              "profileVisibility": "public",
+              "followPolicy": "everyone",
+              "hideReadingActivity": true,
+              "contentLanguages": [
+                "en",
+                "ko",
+                "fr"
+              ],
+              "spoilerPolicy": "hide-unread",
+              "version": 8,
+              "blockedPeople": []
+            },
+            "reloadPersisted": true,
+            "keyboardRecovered": true,
+            "tabs": [
+              {
+                "key": "Shift+Tab",
+                "tag": "BUTTON",
+                "label": "Who can follow you",
+                "text": "Everyone"
+              },
+              {
+                "key": "Shift+Tab",
+                "tag": "BUTTON",
+                "label": "Profile visibility",
+                "text": "Public"
+              },
+              {
+                "key": "Shift+Tab",
+                "tag": "BUTTON",
+                "label": null,
+                "text": "Try saving again"
+              }
+            ],
+            "staleReceiptCleared": true,
+            "evidence": "live-journeys-corrected.json#cases/languages-390-503",
+            "liveRegionMutationCount": 12
+          },
+          {
+            "id": "languages-1440-409",
+            "kind": "genuine person preference draft/save journey",
+            "fault": "409",
+            "writeReceipt": {
+              "profile": "person-preferences-v1",
+              "profileVisibility": "public",
+              "followPolicy": "nobody",
+              "hideReadingActivity": true,
+              "contentLanguages": [
+                "en",
+                "ko",
+                "fr"
+              ],
+              "spoilerPolicy": "hide-unread",
+              "version": 11,
+              "blockedPeople": []
+            },
+            "reload": {
+              "profile": "person-preferences-v1",
+              "profileVisibility": "public",
+              "followPolicy": "nobody",
+              "hideReadingActivity": true,
+              "contentLanguages": [
+                "en",
+                "ko",
+                "fr"
+              ],
+              "spoilerPolicy": "hide-unread",
+              "version": 11,
+              "blockedPeople": []
+            },
+            "reloadPersisted": true,
+            "keyboardRecovered": true,
+            "tabs": [
+              {
+                "key": "Shift+Tab",
+                "tag": "BUTTON",
+                "label": "Who can follow you",
+                "text": "Nobody new"
+              },
+              {
+                "key": "Shift+Tab",
+                "tag": "BUTTON",
+                "label": "Profile visibility",
+                "text": "Public"
+              },
+              {
+                "key": "Shift+Tab",
+                "tag": "BUTTON",
+                "label": null,
+                "text": "Try saving again"
+              }
+            ],
+            "staleReceiptCleared": true,
+            "evidence": "live-journeys-corrected.json#cases/languages-1440-409",
+            "liveRegionMutationCount": 13
+          },
+          {
+            "id": "languages-390-409-refresh503",
+            "kind": "genuine person preference draft/save journey",
+            "fault": "409-refresh503",
+            "writeReceipt": {
+              "profile": "person-preferences-v1",
+              "profileVisibility": "public",
+              "followPolicy": "nobody",
+              "hideReadingActivity": true,
+              "contentLanguages": [
+                "en",
+                "ko",
+                "fr"
+              ],
+              "spoilerPolicy": "hide-unread",
+              "version": 16,
+              "blockedPeople": []
+            },
+            "reload": {
+              "profile": "person-preferences-v1",
+              "profileVisibility": "public",
+              "followPolicy": "nobody",
+              "hideReadingActivity": true,
+              "contentLanguages": [
+                "en",
+                "ko",
+                "fr"
+              ],
+              "spoilerPolicy": "hide-unread",
+              "version": 16,
+              "blockedPeople": []
+            },
+            "reloadPersisted": true,
+            "keyboardRecovered": true,
+            "tabs": [
+              {
+                "key": "Shift+Tab",
+                "tag": "BUTTON",
+                "label": null,
+                "text": "Load latest choices"
+              },
+              {
+                "key": "Shift+Tab",
+                "stage": "after successful refresh",
+                "tag": "BUTTON",
+                "label": "Library and shelves",
+                "text": "Private"
+              },
+              {
+                "key": "Tab",
+                "tag": "BUTTON",
+                "label": null,
+                "text": "Try saving again"
+              }
+            ],
+            "staleReceiptCleared": true,
+            "evidence": "live-refresh-recovery.json#cases/languages-390-409-refresh503",
+            "liveRegionMutationCount": 14
+          }
+        ],
+        "notification": "Each first(reply/inbox), middle(review/push) and last(proposal-reverted/email) row at both widths passed normal200, synthetic503 recovery and real409 review/retry. Busy original value stays checked/unchecked and disabled until receipt; saving/error/conflict/success text, retry and active control fully in viewport and center-unoccluded. All eighteen reloads preserve actual API state; all document widths exactly390/1440.",
+        "language": "Four distinct cases cover desktop slow200, phone503, desktop real409 and phone real409 plus refresh503. Ordered en/ko/fr draft retained during an unrelated privacy save; all measured language add/remove/reorder/search/save/spoiler controls disabled while busy. Native-name action Add Deutsch German de contains displayed native label. Keyboard retry saved ordered languages with privacy change; real refresh preserves new concurrent followPolicy; new draft clears stale success. Reload GETs confirm saved order, with notification DOM also asserted after reload.",
+        "keyboard": "All twelve notification error/conflict retries reached by two natural Tabs then Enter. Language503/409 retry reached by three reverse Tabs; failed refresh recovery uses Shift+Tab to Load latest choices, Enter, Shift+Tab to Library and shelves, Tab to Try saving again, Enter. Real save and reload passed.",
+        "liveRegions": "Actual per-control polite atomic status text mutations recorded for busy, synthetic error, real conflict, retry and success. No audio or screen-reader announcement claim.",
+        "axe": {
+          "evidence": "live-journeys.json#axe",
+          "viewports": [
+            1440,
+            390
+          ],
+          "violations": 0,
+          "passedRules": 28,
+          "incompleteRules": [
+            "aria-prohibited-attr",
+            "aria-valid-attr-value",
+            "form-field-multiple-labels"
+          ],
+          "limit": "Automated DOM scan reused from same clean frontend pin; incomplete rules require manual assistive-technology assessment."
+        }
+      },
+      "concreteSourceOrRuntimeObservations": [
+        {
+          "kind": "focus observation",
+          "evidence": "live-refresh-recovery.json#cases/languages-390-409-refresh503/afterRefreshFocus",
+          "observed": "After successful Load latest choices, the disappearing button leaves activeElement BODY. Local recovery passed with Shift+Tab then Tab to Try saving again, then Enter. No automatic focus transfer to the replacement button is established.",
+          "owner": "G-2751; assess with the remaining assistive-technology journey"
+        },
+        {
+          "kind": "localized wrapping",
+          "observed": "Japanese phone email-digest label wraps with its final character on a second line; German labels and navigation wrap within bounds. No overlap or document overflow found in inspected live states."
+        },
+        {
+          "kind": "historical context boundary",
+          "observed": "The earlier current61df story capture records a desktop last-row focus-outline edge observation. The live integration viewport has visible retry focus outlines in inspected first/middle/last captures; that does not erase the prior context-specific observation."
+        }
+      ],
+      "harnessPremises": [
+        {
+          "job": "a205bcb3-16c2-4855-a58f-c95e5cca6ef1",
+          "file": "journeys-first.ts",
+          "case": "all18 notification cases",
+          "outcomeReached": false,
+          "cause": "Helper read aria-label only, but real switches use aria-labelledby. Corrected helper resolves their real labels; product names were already correct. Original assertions unchanged."
+        },
+        {
+          "job": "a205bcb3-16c2-4855-a58f-c95e5cca6ef1",
+          "file": "journeys-first.ts",
+          "case": "three language recovery cases",
+          "outcomeReached": "Busy and error/conflict/failed-refresh text and retained draft reached; retry save not reached.",
+          "cause": "Helper assumed forward-only Tab recovery though feedback precedes its privacy control. Corrected direction; retained all failures."
+        },
+        {
+          "job": "fe397e5c-d833-4af4-b3a3-6a2342a34815",
+          "file": "journeys-corrected.ts",
+          "case": "languages-390-409-refresh503",
+          "outcomeReached": "Real409, failed refresh503, retained draft and successful refresh200 reached; final save not reached.",
+          "cause": "After refresh focus becomes BODY; helper selected one Tab direction for twelve attempts. Focused continuation uses natural Shift+Tab then Tab and passes final real save/reload without replaying passed cases."
+        }
+      ],
+      "acceptance": {
+        "D2-005": {
+          "status": "genuine bounded behavior accepted; overall accessibility acceptance partial",
+          "reached": "Disabled busy controls, retained ordered draft, real successful save,503 retry, actual409 latest-state refresh, refresh-failure recovery, stale receipt clearing and reload persistence at e96.",
+          "remaining": "Complete keyboard-only entry, physical touch and assistive-technology journey; evaluate observed focus reset after refresh."
+        },
+        "D4-004": {
+          "status": "rendered and genuine channel identification accepted; full finding open",
+          "reached": "Native complete topic/channel names and visible per-row channel labels while scrolling at first/middle/last, EN/JA/DE, phone/desktop. Actual signed-in route and preference reads reached.",
+          "remaining": "Heard screen-reader order/state verification; automated names and DOM attributes are not heard announcements."
+        },
+        "D4-005": {
+          "status": "genuine feedback, retry and persistence accepted; heard feedback unverified",
+          "reached": "All18 live notification cases keep saving/error/conflict/success feedback and retry beside active control; real200/409 receipts, local keyboard recovery, reload persistence and DOM status updates reached.",
+          "remaining": "Screen reader must actually announce saving, success, failure and retry at the affected first/middle/last controls. No speech output captured or heard."
+        }
+      },
+      "screenshots": {
+        "retainedPNGCount": 180,
+        "actuallyViewedCount": 47,
+        "viewedManifest": "viewed-images.json",
+        "actuallyViewed": [
+          "images/live-inspect-en-390-reading.png",
+          "images/live-inspect-en-1440-first.png",
+          "images/live-journeys-languages-390-503-outcome.png",
+          "images/live-journeys-languages-1440-409-error.png",
+          "images/live-journeys-corrected-notification-390-last-409-outcome.png",
+          "images/live-journeys-corrected-languages-390-409-refresh503-retry-focus.png",
+          "images/live-journeys-corrected-languages-390-409-refresh503-error.png",
+          "images/live-journeys-corrected-notification-1440-first-none-busy.png",
+          "images/live-journeys-corrected-notification-1440-middle-none-busy.png",
+          "images/live-journeys-corrected-notification-1440-last-none-busy.png",
+          "images/live-journeys-corrected-notification-390-first-none-busy.png",
+          "images/live-journeys-corrected-notification-390-middle-none-busy.png",
+          "images/live-journeys-corrected-notification-390-last-none-busy.png",
+          "images/live-journeys-corrected-notification-1440-first-409-retry-focus.png",
+          "images/live-journeys-corrected-notification-1440-middle-409-retry-focus.png",
+          "images/live-journeys-corrected-notification-1440-last-409-retry-focus.png",
+          "images/live-journeys-corrected-notification-390-first-409-retry-focus.png",
+          "images/live-journeys-corrected-notification-390-middle-409-retry-focus.png",
+          "images/live-journeys-corrected-notification-390-last-409-retry-focus.png",
+          "images/live-journeys-corrected-notification-1440-first-none-saved.png",
+          "images/live-journeys-corrected-notification-1440-middle-none-saved.png",
+          "images/live-journeys-corrected-notification-1440-last-none-saved.png",
+          "images/live-journeys-corrected-notification-390-first-none-saved.png",
+          "images/live-journeys-corrected-notification-390-middle-none-saved.png",
+          "images/live-journeys-corrected-notification-390-last-none-saved.png",
+          "images/live-journeys-corrected-notification-390-first-503-outcome.png",
+          "images/live-journeys-corrected-notification-390-middle-503-outcome.png",
+          "images/live-journeys-corrected-notification-390-last-503-outcome.png",
+          "images/live-journeys-corrected-notification-1440-last-503-outcome.png",
+          "images/live-inspect-ja-390-first.png",
+          "images/live-inspect-ja-390-middle.png",
+          "images/live-inspect-ja-390-last.png",
+          "images/live-inspect-ja-1440-last.png",
+          "images/live-inspect-de-390-first.png",
+          "images/live-inspect-de-390-middle.png",
+          "images/live-inspect-de-390-last.png",
+          "images/live-inspect-de-1440-last.png",
+          "images/live-journeys-languages-1440-none-draft-busy.png",
+          "images/live-journeys-corrected-languages-390-503-draft-busy.png",
+          "images/live-journeys-corrected-languages-390-503-retry-focus.png",
+          "images/live-refresh-recovery-languages-390-409-refresh503-retry-focus.png",
+          "images/live-refresh-recovery-languages-390-409-refresh503-saved.png",
+          "images/live-refresh-recovery-languages-390-409-refresh503-reload.png",
+          "images/live-inspect-en-390-profile.png",
+          "images/live-inspect-en-1440-profile.png",
+          "images/live-refresh-recovery-languages-390-409-refresh503-new-draft.png",
+          "images/live-journeys-languages-1440-none-new-draft.png"
+        ],
+        "interpretation": "Only these47 PNGs were viewed by AI. Reload screenshots show route rendering; persisted preference claims use retained real GET receipts and notification DOM assertions, not unseen offscreen language UI.",
+        "observations": "Saving and outcome text is readable beside each active notification control, with visible keyboard focus in selected conflict captures. Japanese phone email-digest line wraps inside its channel cell; German wraps within available width. Language busy notice remains below picker without overlap. Live profile displays native/RTL existing content without horizontal document overflow. Reload PNGs capture the route top; retained actual API receipts provide offscreen language persistence evidence."
+      },
+      "retainedEvidence": {
+        "privateBundle": ".temp/settings-feedback-auth-e96e4846d049/",
+        "handoffBundle": ".temp/audit-remediation-20261019/proofs/settings-feedback-G-2829-auth-e96e4846d049/",
+        "manifest": "manifest.json",
+        "mainCopyCompleted": false,
+        "managerRequestedMainDestination": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/proofs/settings-feedback-G-2829-auth-e96e4846d049/",
+        "excluded": "Private browser state, credentials and raw Web server logs (OAuth callback queries possible) stay outside retained bundle. Recorded job logs and public API/source/readiness receipts retained.",
+        "historicalBundlesModified": false
+      },
+      "administrativeReportChecks": {
+        "scope": "Main-based report branch only; no product behavioral claim. Original candidate QA reused, not replayed.",
+        "job": "cbf03c48-6d7f-4188-b653-78d09dc7acfd",
+        "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+        "exit": 0,
+        "steps": [
+          {
+            "command": "task docs:check",
+            "exit": 0,
+            "result": "13 checker tests passed;249 Markdown files checked for local links/fragments/design navigation; external links and runtime not tested.",
+            "evidence": "jobs/cbf03c48-6d7f-4188-b653-78d09dc7acfd.1.log"
+          },
+          {
+            "command": "task goal -- check",
+            "exit": 0,
+            "checkId": "run-D7exND",
+            "result": "types ok(no TypeScript changed), tests ok(none named in brief), lint ok(no source changed), AST ok, guards ok(1/44 selected for proof path).",
+            "evidence": [
+              "jobs/cbf03c48-6d7f-4188-b653-78d09dc7acfd.2.log",
+              "administrative-check/run-D7exND/output.log"
+            ]
+          }
+        ]
+      },
+      "instructionEffects": [
+        {
+          "file": "docs/goals/worker.md",
+          "quote": "Translate a main-checkout path into your worktree before editing it.",
+          "effect": "Main remains read-only. Retain and hash-verify new sibling bundle in translated worker location; manager copies to requested main destination."
+        }
+      ],
+      "ownerChanges": [],
+      "proposedTasks": [
+        {
+          "owner": "Product existing verification owner",
+          "task": "Perform actual assistive-technology/screen-reader journey and capture heard first/middle/last saving/success/error/retry feedback; assess focus reset after successful refresh."
+        },
+        {
+          "owner": "G-2747/G-2847",
+          "task": "Retain startup source review/readiness acceptance independently; this worker established scoped live readiness, not broad startup regression."
+        },
+        {
+          "owner": "G-2751",
+          "task": "Keep separately owned two unchanged onboarding consumer selectors outside this proof; no duplicated edit or regression run."
+        }
+      ],
+      "next": "Manager can land the report and fully reviewed checked Settings slice using exact source identities; copy and verify retained new bundle. Do not close all findings or claim full regression confirmation before heard assistive-technology criteria are reached."
+    }
+  ]
 }
