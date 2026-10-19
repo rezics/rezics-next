@@ -105,6 +105,10 @@ export function DiscoverView({
     );
   const resultHeading = state.q ? chapterTextMessages[locale].resources : state.tab === 'all' ? selection.results
     : browseCategories().find(category => category.id === state.tab)?.labels[locale] ?? selection.results;
+  // A failed response supplies no section reasons; keep only the identity known from the request.
+  const sectionHeading = state.section ? {
+    popular: t.popular, communities: t.communities, sites: t.newSites,
+  }[state.section] : t.recommendations;
   return (
     <PageContainer className="grid min-w-0 gap-7">
       <header className="grid min-w-0 gap-4">
@@ -160,7 +164,10 @@ export function DiscoverView({
             </section>
           ))
         ) : (
-          <Failure read={sections} state={state} locale={locale} />
+          <section aria-label={sectionHeading} className="grid gap-4">
+            <h2 className="font-semibold text-xl">{sectionHeading}</h2>
+            <Failure read={sections} state={state} locale={locale} />
+          </section>
         )
       ) : null}
       {results ? (

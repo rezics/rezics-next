@@ -112,6 +112,23 @@ export const UnsupportedKeepsTheTask: Story = { args: { results: { ok: false, mo
     await expect(canvas.getByRole('alert')).toHaveTextContent('Remove one Condition or change how its values match.');
     await expect(canvas.getByRole('link', { name: 'Remove filter: Only Japanese text' })).toBeVisible();
     await expect(canvas.queryByText('No matches.')).toBeNull();
+    const results = within(canvas.getByRole('region', { name: 'Found in titles and names' }));
+    await expect(results.getByRole('heading', { name: 'Found in titles and names', level: 2 })).toBeVisible();
+    await expect(results.getByRole('alert')).toHaveTextContent('These Conditions cannot be combined in Search');
+    await expect(canvas.queryByRole('region', { name: 'Recommendations' })).toBeNull();
+  },
+};
+export const PreparingKeepsTheTask: Story = {
+  args: { results: { ok: false, moved: false, pending: true, status: 202 } },
+  globals: { viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const results = within(canvas.getByRole('region', { name: 'Found in titles and names' }));
+    await expect(results.getByRole('heading', { name: 'Found in titles and names', level: 2 })).toBeVisible();
+    await expect(results.getByRole('status')).toHaveAttribute('aria-busy', 'true');
+    await expect(canvas.getByRole('heading', { name: 'Results for “night library”', level: 1 })).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'Remove filter: Only Japanese text' })).toBeVisible();
+    await expect(canvas.queryByRole('region', { name: 'Recommendations' })).toBeNull();
   },
 };
 
