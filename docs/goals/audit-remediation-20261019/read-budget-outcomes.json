@@ -3011,7 +3011,7 @@
   "populationEnvironmentContinuation": {
     "authority": "Latest maintainer continuation: qualify only the two original frozen D5-006 populations on disposable migrated copies of the retained command-created corpora; G-2826 performs independent original-suite execution after qualification.",
     "scope": "Environment preparation and existing matrix metadata only. No baseline product rerun, catalogue build, production/helper/frozen-test edit, peer mutation, new producer, new fault mechanism or finding closure.",
-    "status": "partial: Zone environment qualified; rating owner reconstruction and projection refresh completed, but post-reconstruction source comparison refused before public smoke. Individual changed tables were not retained in that failed receipt; exact derived-signal witness is prepared for actual validation.",
+    "status": "partial: Zone derivative qualified. Rating reconstruction verified all100 retained heads and completed its cursor/refresh; exact environment witness identified derived principal-position and queue differences before public smoke. Individual identity/authority preservation still requires the next explicit witness.",
     "originalOutcomeAssertionReached": false,
     "canonicalFindingClosed": false,
     "fixedProductPassCertified": false,
@@ -3644,15 +3644,272 @@
           "nextWitness": "Capture changed tables and complete original-column digests before refusal; allow only one added discovery row (empty context_key/statement) and one added privacy=false also-enjoyed row, with every retained row, other original column, graph fact and object exact. Actual next execution must validate these effects.",
           "checkpoint": "Retain prior operator checkpoint and use supported --restart for the new isolated copy; execute two existing bounded pages separately to retain actual100/0 page receipts."
         }
+      },
+      {
+        "job": "fbabb558-c5c3-4931-a03a-5deed22fa27f",
+        "capability": "ratings",
+        "command": "task --taskfile .temp/read-budget-migration/Taskfile.yml qualify -- ratings",
+        "precedingSyntaxCheck": "passed in same recorded sequence",
+        "receipt": {
+          "path": ".temp/read-budget-migration/ratings-attempt3/environment-qualification.json",
+          "sha256": "5c797c7b139eada5e1a4b93c147c9164275f1062fe19ea9b141c5f56f12238ea"
+        },
+        "startedAt": "2026-10-19T12:53:23.798Z",
+        "finishedAt": "2026-10-19T12:55:37.089Z",
+        "ready": false,
+        "originalOutcomeAssertionReached": false,
+        "originalRestore": {
+          "restoreMs": 8556,
+          "volumeCopyMs": {
+            "postgres_data": 4399,
+            "fuseki_data": 1761,
+            "rustfs_data": 1646
+          },
+          "objectCopyMs": 32,
+          "startupMs": 19371,
+          "readinessMs": 846,
+          "totalMs": 28773,
+          "admissionWaitMs": 2389,
+          "collationRepairs": []
+        },
+        "appliedMigrations": [
+          "services/main/migrations/access/2045_standing_rating_components.sql",
+          "services/main/migrations/access/2077_standing_rating_publication.sql",
+          "services/main/migrations/access/2605_discovery_refresh_disposition.sql",
+          "services/main/migrations/access/2606_standing_rating_affected_cuts.sql",
+          "services/main/migrations/access/2607_standing_rating_bounded_progress.sql"
+        ],
+        "appliedContentMigrations": [
+          2603
+        ],
+        "error": "Error: Standing reconstruction changed original fixture source facts",
+        "cleanupErrors": [],
+        "run": "budget-rating-1858544549",
+        "publicSmokeReached": false,
+        "derivativeCreated": false,
+        "classification": "Environment witness stopped after actual100-record page, exhausted continuation and complete projection refresh. Exact changed tables are retained; no public smoke or frozen assertion ran.",
+        "standingReconstruction": {
+          "firstPage": {
+            "complete": false,
+            "scanned": 100,
+            "recorded": 100
+          },
+          "cursor": {
+            "standing": true,
+            "recoveryGeneration": "2",
+            "contextRevision": "https://rezics.com/id/01a150b1-109e-72b3-93ae-5125b3034ef6",
+            "checkpointSha256": "8df8d69352ee405825740fc711d337747f27a233c0a28390a52d57a5561fe740"
+          },
+          "exhaustionPage": {
+            "complete": true,
+            "scanned": 0,
+            "recorded": 0,
+            "cursor": null
+          },
+          "projectionRefresh": {
+            "refreshed": 0,
+            "complete": true,
+            "recoveryGeneration": "2"
+          },
+          "after": {
+            "heads": {
+              "heads": 100,
+              "independent_accounts": 100,
+              "known": 100,
+              "five": 100,
+              "withdrawn": 0
+            },
+            "component": {
+              "slots": 100,
+              "unvalued": 0,
+              "histogram": {
+                "5": 100
+              }
+            },
+            "publication": {
+              "generation": "d10d93a9a20df58439baa092821f91042a7f067bdd5f89661a0135e81373658d",
+              "pending": "0"
+            }
+          },
+          "preservation": {
+            "originalSourceColumnsUnchanged": false,
+            "graphUnchanged": true,
+            "objectsUnchanged": true,
+            "changed": [
+              {
+                "prior": {
+                  "owner": "access",
+                  "schema": "access",
+                  "table": "also_enjoyed_source_change",
+                  "columns": [
+                    "id",
+                    "privacy"
+                  ],
+                  "count": 26,
+                  "digest": "f33fd5551612a4847e037c89f2af892d"
+                },
+                "fresh": {
+                  "owner": "access",
+                  "schema": "access",
+                  "table": "also_enjoyed_source_change",
+                  "columns": [
+                    "id",
+                    "privacy"
+                  ],
+                  "count": 28,
+                  "digest": "6fd494b9a82fdb31bbf009e92456a6d7"
+                }
+              },
+              {
+                "prior": {
+                  "owner": "access",
+                  "schema": "access",
+                  "table": "discovery_source_change",
+                  "columns": [
+                    "id",
+                    "context_key",
+                    "statement"
+                  ],
+                  "count": 2,
+                  "digest": "7e03ee91ab948231d67130bc7c9bd35b"
+                },
+                "fresh": {
+                  "owner": "access",
+                  "schema": "access",
+                  "table": "discovery_source_change",
+                  "columns": [
+                    "id",
+                    "context_key",
+                    "statement"
+                  ],
+                  "count": 3,
+                  "digest": "5ee6e9cbc1ef8c4dd2462babd6d529d4"
+                }
+              },
+              {
+                "prior": {
+                  "owner": "access",
+                  "schema": "access",
+                  "table": "principal",
+                  "columns": [
+                    "id",
+                    "account_issuer",
+                    "account_subject",
+                    "active",
+                    "enforcement_epoch",
+                    "first_seen_at",
+                    "library_rating_version"
+                  ],
+                  "count": 110,
+                  "digest": "4b03747f6f907d2a71aa10a7f21a0329"
+                },
+                "fresh": {
+                  "owner": "access",
+                  "schema": "access",
+                  "table": "principal",
+                  "columns": [
+                    "id",
+                    "account_issuer",
+                    "account_subject",
+                    "active",
+                    "enforcement_epoch",
+                    "first_seen_at",
+                    "library_rating_version"
+                  ],
+                  "count": 110,
+                  "digest": "1e94907d88cdc97f16b7b444b975a019"
+                }
+              }
+            ],
+            "unexpected": [
+              {
+                "prior": {
+                  "owner": "access",
+                  "schema": "access",
+                  "table": "principal",
+                  "columns": [
+                    "id",
+                    "account_issuer",
+                    "account_subject",
+                    "active",
+                    "enforcement_epoch",
+                    "first_seen_at",
+                    "library_rating_version"
+                  ],
+                  "count": 110,
+                  "digest": "4b03747f6f907d2a71aa10a7f21a0329"
+                },
+                "fresh": {
+                  "owner": "access",
+                  "schema": "access",
+                  "table": "principal",
+                  "columns": [
+                    "id",
+                    "account_issuer",
+                    "account_subject",
+                    "active",
+                    "enforcement_epoch",
+                    "first_seen_at",
+                    "library_rating_version"
+                  ],
+                  "count": 110,
+                  "digest": "1e94907d88cdc97f16b7b444b975a019"
+                }
+              }
+            ],
+            "discoverySignal": {
+              "retained": true,
+              "added": [
+                {
+                  "id": "3",
+                  "context_key": "",
+                  "statement": ""
+                }
+              ],
+              "ready": true
+            },
+            "enjoyedSignal": {
+              "retained": true,
+              "added": [
+                {
+                  "id": "532",
+                  "privacy": false
+                },
+                {
+                  "id": "533",
+                  "privacy": true
+                }
+              ],
+              "ready": false
+            },
+            "unchangedMetadata": true,
+            "sourceBasis": "Existing repair-write trigger1060/1160 appends one classified discovery invalidation per transaction; trigger785/1200 appends one privacy=false also-enjoyed signal. All prior rows and every other original column remain exact."
+          }
+        },
+        "diagnosis": {
+          "actualChangedTables": [
+            "also_enjoyed_source_change",
+            "discovery_source_change",
+            "principal"
+          ],
+          "immutableGraphAndObjectsExact": true,
+          "sourceConfirmedExpectedEffects": [
+            "services/main/migrations/access/2163_library_rating_position.sql: every updated old head advances only its existing principal library_rating_version by1.",
+            "services/main/migrations/access/2604_library_rating_authority.sql: an inventory-only position change retains enforcement_epoch; every other authority change keeps the ordinary enforcement rule.",
+            "services/main/migrations/access/1200_also_enjoyed_refresh.sql: head UPDATE and derived principal UPDATE produce one privacy=false and one privacy=true invalidation in the same transaction."
+          ],
+          "limitation": "This run captured changed-table digests and exact derived rows, but not individual before/after principal fields. It cannot certify identity/authority preservation by itself.",
+          "nextWitness": "Capture every principal field. Require all110 principals and immutable identity/authority fields exact, exactly100 retained voters library_rating_version+1, other10 versions unchanged; retain every prior queue row and allow only exact1 discovery and2 classified also-enjoyed additions. Every other original column, graph fact and object remains exact."
+        }
       }
     ],
     "ratingsDisposition": {
       "ready": false,
       "assertionReached": false,
-      "reason": "Environment witness stopped after genuine standing reconstruction and complete projection refresh; no public smoke, derivative or frozen original assertion.",
+      "reason": "Environment witness stopped after actual100-record page, exhausted continuation and complete projection refresh. Exact changed tables are retained; no public smoke or frozen assertion ran.",
       "ownerFunction": "services/main/src/modules/rating/legacy-reconstruction.ts:reconstructLegacyTargetRatings(input.standing=true)",
       "missingCommandPath": null,
-      "operationRequired": "No owner operation is missing. Validate exact derived reconstruction invalidations and retained original facts, then perform public smoke/stopped-owner backup/fresh restore.",
+      "operationRequired": "No owner operation missing. Validate per-principal unchanged identity/authority and exact inventory-only increments with classified signals, then public smoke/backup/fresh restore.",
       "sourceInspectionOnly": false,
       "nativeExecutionAttempted": true,
       "originalOutcomeAssertionReached": false,
@@ -3666,8 +3923,8 @@
         "missingCommandPath": "services/main/src/rating-reconstruction.ts"
       },
       "lastAttemptReceipt": {
-        "path": ".temp/read-budget-migration/ratings-attempt2/environment-qualification.json",
-        "sha256": "53e15fb1f5cbb4180cc4fb62c581f157e0bc073aa9eb0e2d157def006c7ee056"
+        "path": ".temp/read-budget-migration/ratings-attempt3/environment-qualification.json",
+        "sha256": "5c797c7b139eada5e1a4b93c147c9164275f1062fe19ea9b141c5f56f12238ea"
       },
       "ownerCommandCompleted": true,
       "publicSmokeReached": false,
@@ -3694,10 +3951,10 @@
     },
     "nextWitness": {
       "driver": ".temp/read-budget-migration/qualify.ts",
-      "executionStatus": "Rating attempt2 owner commands completed; exact post-command derived-signal witness now authored. All prior failures retained; no public regression claimed.",
+      "executionStatus": "Rating attempt3 actual changed tables identified and retained. Capture exact principal identities/authority separately from derived library positions before certifying preservation.",
       "nextPreparationCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task --taskfile .temp/read-budget-migration/Taskfile.yml qualify -- ratings' -- task --taskfile .temp/read-budget-migration/Taskfile.yml syntax",
       "originalSuitesReservedFor": "G-2826 independent owner",
-      "preflight": ".temp/read-budget-migration/ratings-attempt3-preflight.json"
+      "preflight": ".temp/read-budget-migration/ratings-attempt4-preflight.json"
     },
     "qualifiedManifest": {
       "zones": {
