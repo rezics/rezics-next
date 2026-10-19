@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
 import { Providers } from '../shell/providers.tsx';
 import { browseCategories } from '../catalogue/registry.ts';
@@ -83,6 +83,7 @@ export const OneBrowse: Story = {
     ).toBeVisible();
     await expect(canvas.getAllByRole('link', { name: 'See all' })).toHaveLength(3);
     await expect(canvas.getByText('At least 20 results')).toBeVisible();
+    await expect(canvas.getByRole('heading', { name: 'All results', level: 2 })).toBeVisible();
   },
 };
 export const TraditionalChinese: Story = { args: props('zh-Hant') };
@@ -117,6 +118,7 @@ export const Communities: Story = {
     for (const [index, item] of page.items.entries())
       await expect(links[index]).toHaveAttribute('href', localizedPath(spaceHref(item.id, 'community'), 'en'));
     // Topic suggestions also use a list, but are outside the results region.
+    await userEvent.click(canvas.getByText('Filter by topics'));
     await expect(canvas.getByRole('region', { name: 'Conditions' }).querySelector('ul')).not.toBeNull();
   },
 };

@@ -1,0 +1,667 @@
+{
+  "review_id": "G-2835",
+  "goal": "audit-remediation-20261019",
+  "event": "task:G-2783:13",
+  "reviewer": "codex-1 / GPT-6.1 Sol / xhigh",
+  "result": "done",
+  "disposition": "source follow-up required through existing owners; no executed outcome blocker established by this review",
+  "base": "f23f126433ae1bff02446c998a3f5871bcfe0554",
+  "head": "f84fbee119888f0b880badfd7eeb351543615908",
+  "ancestry": {
+    "base_is_ancestor": true,
+    "verification": "git merge-base --is-ancestor exited 0; git log --reverse with all parent hashes confirmed four contiguous single-parent authored commits",
+    "commits": [
+      {
+        "sha": "fb6d4caa604ba5b8d73b76a3a665a60926d35468",
+        "parents": [
+          "f23f126433ae1bff02446c998a3f5871bcfe0554"
+        ],
+        "subject": "fix(discover): consume independent chapter search continuations"
+      },
+      {
+        "sha": "adecde2bd78ba7b8d6f21d97296a9b45cd39d618",
+        "parents": [
+          "fb6d4caa604ba5b8d73b76a3a665a60926d35468"
+        ],
+        "subject": "fix(discover): retain search conditions and bounded scan recovery"
+      },
+      {
+        "sha": "571d192545bda099833bef3a91dd419ced07b080",
+        "parents": [
+          "adecde2bd78ba7b8d6f21d97296a9b45cd39d618"
+        ],
+        "subject": "fix(discover): clarify refused searches and review scoped recovery"
+      },
+      {
+        "sha": "f84fbee119888f0b880badfd7eeb351543615908",
+        "parents": [
+          "571d192545bda099833bef3a91dd419ced07b080"
+        ],
+        "subject": "test(discover): use representative catalogue story content"
+      }
+    ],
+    "changed_path_count": 23
+  },
+  "read_only_scope": {
+    "method": "git show and base..head git diff against immutable objects; retained PNGs and bounded receipt reads only",
+    "worker_start_head": "5fd7fef54e02c7ab9c9f61e0139d60ad14f3a8b8",
+    "tracked_source_changes": false,
+    "commits": "none",
+    "pushes": false,
+    "tests_run": [],
+    "stacks_or_browsers_started": false,
+    "data_preparation": false,
+    "watchers": false,
+    "nested_agents": false,
+    "account_fallback": false,
+    "previous_review_reports_read": false,
+    "report_artifacts_only": [
+      ".temp/goal/discover-search-review.json",
+      ".temp/goal/handoff.md"
+    ],
+    "worker_end_head": "5fd7fef54e02c7ab9c9f61e0139d60ad14f3a8b8",
+    "final_git_status_porcelain": ""
+  },
+  "inspected_paths": [
+    {
+      "path": "apps/web/features/discover/browse-read.ts",
+      "inspection": "Read the complete pinned reader and delta: typed failure evidence, four-window bound, progression and cycle boundaries.",
+      "blob_at_head": "67c8918556f576f9b226b0af9928e13e5da71977"
+    },
+    {
+      "path": "apps/web/features/discover/browse-search-state.test.ts",
+      "inspection": "Read all cases: selector retention, Unicode/opaque URL round trips, chapter isolation, bounded sparse scans, refusal and deduplication. Missing boundary-cycle and exact-control overflow cases are identified below.",
+      "blob_at_head": "46eaaf54b765120a9eb5cb203f72e4e5558afe78"
+    },
+    {
+      "path": "apps/web/features/discover/browse-state.ts",
+      "inspection": "Read the complete pinned state owner and delta: normalization, validation, URL serialization, traversal reset, hidden GET fields and resource conditions.",
+      "blob_at_head": "b643f91f9bd594d6421a636595d3a9325c3b5a8b"
+    },
+    {
+      "path": "apps/web/features/discover/browse-tabs.tsx",
+      "inspection": "Read complete new consumer: document links, retained selection, aria-current and shared visibility owner.",
+      "blob_at_head": "b694f2ba8dab7d86c9f356b2c387edf5d4b9e946"
+    },
+    {
+      "path": "apps/web/features/discover/chapter-text-messages.ts",
+      "inspection": "Read the complete eight-locale catalog: chapter/resource headings, incomplete/exhausted counts, continuation and honest missing-excerpt explanation.",
+      "blob_at_head": "7b4e3118d205ad9d39362e303f72843ebaa6dfda"
+    },
+    {
+      "path": "apps/web/features/discover/chapter-text-read.ts",
+      "inspection": "Read the complete reader: typed SearchLoaded boundary, scope/language/types/concepts, independent first page, four-page action bound and matchUnit deduplication.",
+      "blob_at_head": "d775dcec7ac7c4d7d591a1954e912186edae6ef6"
+    },
+    {
+      "path": "apps/web/features/discover/chapter-text.stories.tsx",
+      "inspection": "Read all ten stories and fixture loaders: disclosed links, resource independence, later/final pages, sparse scans, retry, unsupported and end focus.",
+      "blob_at_head": "f575d2bd974f6a7f2b8ea51aed80d5ef37f814c7"
+    },
+    {
+      "path": "apps/web/features/discover/chapter-text.tsx",
+      "inspection": "Read the complete changed client: query identity/viewer, scan state, retry/restart, focus, disclosure, links, counts and typed failure states.",
+      "blob_at_head": "dcb0425677a4e51d61506cc0c6308ea5e61221b1"
+    },
+    {
+      "path": "apps/web/features/discover/discover-page.stories.tsx",
+      "inspection": "Read changed assertions and parent fixtures/exports: populated/empty/error/locale contexts, headings and Communities topic disclosure. Existing assertions retained.",
+      "blob_at_head": "2c6c9d3592853e1eb2295bcb8e1274ac0955069b"
+    },
+    {
+      "path": "apps/web/features/discover/discover-search.stories.tsx",
+      "inspection": "Read complete final file including representative content, filters, recovery, history fixture, keyboard interaction and horizontal destination assertion.",
+      "blob_at_head": "b3ccabf7015e8261d828b9ccf0fdc9b59ca5ebd3"
+    },
+    {
+      "path": "apps/web/features/discover/discover-view.tsx",
+      "inspection": "Read complete pinned component: task heading, filter hierarchy, result regions, incomplete/exhausted presentation, failures, suggestions and independent chapter consumer.",
+      "blob_at_head": "f737dd5aad59771c328500da2c1ff02ab73e23d0"
+    },
+    {
+      "path": "apps/web/features/discover/load.ts",
+      "inspection": "Read complete loader and delta: independent parallel reads, viewer transport, bounded resource scanning and exhaustion-gated suggestion requests.",
+      "blob_at_head": "701916dcabd07b402dddf4037a663a6afc7995e5"
+    },
+    {
+      "path": "apps/web/features/discover/resource-list.tsx",
+      "inspection": "Read complete consumer and delta: optional continuation label, owner cursor/count, first-page link and preserved resource geometry.",
+      "blob_at_head": "a8d8da88ad825c879109cc5b602ed8c2f313eb19"
+    },
+    {
+      "path": "apps/web/features/discover/search-recovery-read.test.ts",
+      "inspection": "Read all three cases: bounded prefixes, typed unavailable/unsupported and distinct disclosed title/name suggestions.",
+      "blob_at_head": "7d2f8dbeb042da2a63fb3834f411aa4b4c913a58"
+    },
+    {
+      "path": "apps/web/features/discover/search-recovery-read.ts",
+      "inspection": "Read complete reader: at most two owner typeahead requests, failure mapping and bounded alternatives; no current-condition match claim.",
+      "blob_at_head": "c5b3eedd1a42cbff27c0bc778a11ed61825f128a"
+    },
+    {
+      "path": "apps/web/features/discover/search-recovery.tsx",
+      "inspection": "Read complete consumer: separate alternative disclosure, executable work/name links, retained name-query selection and honest refusal/unavailability.",
+      "blob_at_head": "8ad28bf6062e46ada0f26913f7440f419cfce752"
+    },
+    {
+      "path": "apps/web/features/discover/selection-controls.tsx",
+      "inspection": "Read complete consumer: individually clearable selectors, language validation, type edits and quote toggle; query-length boundary finding below.",
+      "blob_at_head": "27c0c2f28db4de20be7d7696c3860c4bc4f74f19"
+    },
+    {
+      "path": "apps/web/features/discover/selection-messages.ts",
+      "inspection": "Read all eight locale entries: scoped-search labels, exact syntax, incomplete scan and alternative/refusal disclosures.",
+      "blob_at_head": "8d6d7e22d996b0dd41030b51b103e83a0df8439f"
+    },
+    {
+      "path": "apps/web/features/query/condition-bar.tsx",
+      "inspection": "Read changed wrapper and relevant existing ConditionBar owner: include/exclude/match modes, removal, retained selection, disclosed topic editor and suppressed unrelated topic suggestions during q search.",
+      "blob_at_head": "82f8fbbc03bf4ab173dcb38d52a079dc4b34432f"
+    },
+    {
+      "path": "apps/web/features/shell/search-field.stories.tsx",
+      "inspection": "Read changed assertions and existing fixture: scoped CJK/Latin GET submission, preserved selectors, cleared query and traversal reset.",
+      "blob_at_head": "d6f6b1433c189fd7b1f0a18f811824fdea97e657"
+    },
+    {
+      "path": "apps/web/features/shell/search-field.tsx",
+      "inspection": "Read changed consumer and context: pathname-scoped hidden GET selectors, query value, composition/keyboard behavior and accessible label.",
+      "blob_at_head": "8aac0484b7009644b09668872db31441d0684f93"
+    },
+    {
+      "path": "scripts/static/web-continuations.inventory.json",
+      "inspection": "Inspected every changed entry using zero-context diff: three added exact function receipts and three refreshed contexts; no blanket suppression or unrelated inventory review.",
+      "blob_at_head": "c46d540bbced108a9166b8e11a25cff17bfdafde"
+    },
+    {
+      "path": "scripts/static/web-discover-continuations.test.ts",
+      "inspection": "Read complete planted-mutation cases: request cursor, scan bound, continuation link, loader cursor and bounded suggestion projection. Exact inventories remain structural evidence, not runtime pagination proof.",
+      "blob_at_head": "e5faca37382dd578e6991fba97b4c6d8fa974ec1"
+    }
+  ],
+  "material_dependencies_read_at_head": [
+    "apps/web/features/search/query.ts",
+    "apps/web/features/search/read.ts",
+    "apps/web/features/search/state.ts",
+    "apps/web/features/search/types.ts",
+    "apps/web/features/search/suggest.ts",
+    "apps/web/features/search/search-results.tsx (relevant identity/obligation adapter)",
+    "apps/web/features/discover/api.ts (ListPage/checkedPage/resources)",
+    "apps/web/features/discover/server.ts",
+    "apps/web/features/discover/scope.ts",
+    "apps/web/features/discover/state.ts (served work types/aliases)",
+    "apps/web/features/discover/notice.tsx",
+    "apps/web/features/catalogue/registry.ts",
+    "apps/web/features/shell/localized-link.tsx",
+    "apps/web/features/shell/current-page-visibility.ts",
+    "apps/web/features/shell/providers.tsx",
+    "apps/web/features/rights-mark/rights-mark.tsx (supplied display obligation owner)",
+    "apps/web/features/discover/chapter-text-read.test.ts",
+    "services/main/src/modules/query/resource-contract.ts (bounded scan premise only)"
+  ],
+  "images_viewed": [
+    {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2783/.artifacts/qa/20261019t054123-e4bf87/story-screenshots/apps-web-features-discover-discover-search.stories.tsx/Filtered.png",
+      "relative_to_evidence_worktree": ".artifacts/qa/20261019t054123-e4bf87/story-screenshots/apps-web-features-discover-discover-search.stories.tsx/Filtered.png",
+      "qa_run": "20261019t054123-e4bf87",
+      "source_pin": "f84fbee119888f0b880badfd7eeb351543615908",
+      "source_pin_basis": "Retained job check + following story command + QA summary; final commit changes only discover-search.stories.tsx. Chapter sources/stories are identical between 571d192545 and final head.",
+      "viewed": true,
+      "sha256": "0803cbb7df024e1f0bcbf58edd4fb9eb692e9b1f1d93396158dee784bb5996fe",
+      "width": 1440,
+      "height": 1000,
+      "observation": "Desktop light/en. Task h1, selected Works, removable language/type/topic conditions, expanded editor and result h2 are distinct; focus ring visible on Edit filters."
+    },
+    {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2783/.artifacts/qa/20261019t054123-e4bf87/story-screenshots/apps-web-features-discover-discover-search.stories.tsx/SimplifiedChinesePhone.png",
+      "relative_to_evidence_worktree": ".artifacts/qa/20261019t054123-e4bf87/story-screenshots/apps-web-features-discover-discover-search.stories.tsx/SimplifiedChinesePhone.png",
+      "qa_run": "20261019t054123-e4bf87",
+      "source_pin": "f84fbee119888f0b880badfd7eeb351543615908",
+      "source_pin_basis": "Retained job check + following story command + QA summary; final commit changes only discover-search.stories.tsx. Chapter sources/stories are identical between 571d192545 and final head.",
+      "viewed": true,
+      "sha256": "eea5e7a887671552b616debc7267d253092566a984fe2cc4f48a1897d06e69a9",
+      "width": 390,
+      "height": 844,
+      "observation": "Phone dark/zh-Hans. Task title wraps, chips wrap, result heading remains visible and books use two columns; horizontal row is intentionally scrollable."
+    },
+    {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2783/.artifacts/qa/20261019t054123-e4bf87/story-screenshots/apps-web-features-discover-discover-search.stories.tsx/DirectLastDestination.png",
+      "relative_to_evidence_worktree": ".artifacts/qa/20261019t054123-e4bf87/story-screenshots/apps-web-features-discover-discover-search.stories.tsx/DirectLastDestination.png",
+      "qa_run": "20261019t054123-e4bf87",
+      "source_pin": "f84fbee119888f0b880badfd7eeb351543615908",
+      "source_pin_basis": "Retained job check + following story command + QA summary; final commit changes only discover-search.stories.tsx. Chapter sources/stories are identical between 571d192545 and final head.",
+      "viewed": true,
+      "sha256": "735075efeb6d56f5295f893683fa967fafb2b509f2072495a365f449ec098a85",
+      "width": 390,
+      "height": 844,
+      "observation": "Phone light/en. Topics is fully visible and selected at the right end of its scroll row; representative topic names appear under a Topics result heading."
+    },
+    {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2783/.artifacts/qa/20261019t053509-ab7bd3/story-screenshots/apps-web-features-discover-chapter-text.stories.tsx/ContinueToTheLastChapter.png",
+      "relative_to_evidence_worktree": ".artifacts/qa/20261019t053509-ab7bd3/story-screenshots/apps-web-features-discover-chapter-text.stories.tsx/ContinueToTheLastChapter.png",
+      "qa_run": "20261019t053509-ab7bd3",
+      "source_pin": "571d192545bda099833bef3a91dd419ced07b080",
+      "source_pin_basis": "Retained job check + following story command + QA summary; final commit changes only discover-search.stories.tsx. Chapter sources/stories are identical between 571d192545 and final head.",
+      "viewed": true,
+      "sha256": "6f7e784d4f9d6b270de4f73bfcdaaa97716d63c4eff66170680fb1677ee70df9",
+      "width": 1200,
+      "height": 900,
+      "observation": "Desktop light/en. Two chapter cards and all-two end message; visible focus outline on The last lantern."
+    },
+    {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2783/.artifacts/qa/20261019t053509-ab7bd3/story-screenshots/apps-web-features-discover-chapter-text.stories.tsx/BoundedSparseScan.png",
+      "relative_to_evidence_worktree": ".artifacts/qa/20261019t053509-ab7bd3/story-screenshots/apps-web-features-discover-chapter-text.stories.tsx/BoundedSparseScan.png",
+      "qa_run": "20261019t053509-ab7bd3",
+      "source_pin": "571d192545bda099833bef3a91dd419ced07b080",
+      "source_pin_basis": "Retained job check + following story command + QA summary; final commit changes only discover-search.stories.tsx. Chapter sources/stories are identical between 571d192545 and final head.",
+      "viewed": true,
+      "sha256": "a783a4540c49b00136b5429ec5cf3d41433667b1fc88f1934e1e294add0d6bc3",
+      "width": 390,
+      "height": 844,
+      "observation": "Phone dark/en. Final post-interaction state has one chapter, focus outline and complete message. The intermediate four-empty-window state is asserted by the story, not visible in this final image."
+    },
+    {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2783/.artifacts/qa/20261019t053509-ab7bd3/story-screenshots/apps-web-features-discover-chapter-text.stories.tsx/RetryPreservesChapters.png",
+      "relative_to_evidence_worktree": ".artifacts/qa/20261019t053509-ab7bd3/story-screenshots/apps-web-features-discover-chapter-text.stories.tsx/RetryPreservesChapters.png",
+      "qa_run": "20261019t053509-ab7bd3",
+      "source_pin": "571d192545bda099833bef3a91dd419ced07b080",
+      "source_pin_basis": "Retained job check + following story command + QA summary; final commit changes only discover-search.stories.tsx. Chapter sources/stories are identical between 571d192545 and final head.",
+      "viewed": true,
+      "sha256": "847ff6961ff7ba9252d5924099c5d0b00f8034073bbf7241f58870e48e4d7ac4",
+      "width": 1200,
+      "height": 900,
+      "observation": "Desktop light/en. Earlier and new chapters coexist after retry; no visible outline on the new chapter. This supports inspecting focus recovery but does not establish document.activeElement."
+    },
+    {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2783/.artifacts/qa/20261019t053509-ab7bd3/story-screenshots/apps-web-features-discover-chapter-text.stories.tsx/NoMatchesAfterTheLastPage.png",
+      "relative_to_evidence_worktree": ".artifacts/qa/20261019t053509-ab7bd3/story-screenshots/apps-web-features-discover-chapter-text.stories.tsx/NoMatchesAfterTheLastPage.png",
+      "qa_run": "20261019t053509-ab7bd3",
+      "source_pin": "571d192545bda099833bef3a91dd419ced07b080",
+      "source_pin_basis": "Retained job check + following story command + QA summary; final commit changes only discover-search.stories.tsx. Chapter sources/stories are identical between 571d192545 and final head.",
+      "viewed": true,
+      "sha256": "747212352f1b98d582b7be94c9f314b88917b150e249f656d78c967570bbfa2d",
+      "width": 1200,
+      "height": 900,
+      "observation": "Desktop light/en. Exhausted no-chapter message has a visible focus outline; focus scrolling leaves the heading partly above the captured viewport."
+    },
+    {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2783/.artifacts/qa/20261019t053509-ab7bd3/story-screenshots/apps-web-features-discover-chapter-text.stories.tsx/TraditionalChinesePhone.png",
+      "relative_to_evidence_worktree": ".artifacts/qa/20261019t053509-ab7bd3/story-screenshots/apps-web-features-discover-chapter-text.stories.tsx/TraditionalChinesePhone.png",
+      "qa_run": "20261019t053509-ab7bd3",
+      "source_pin": "571d192545bda099833bef3a91dd419ced07b080",
+      "source_pin_basis": "Retained job check + following story command + QA summary; final commit changes only discover-search.stories.tsx. Chapter sources/stories are identical between 571d192545 and final head.",
+      "viewed": true,
+      "sha256": "56ed271f258d93d54103c52e1e13a805c15463d7694cb61814abb9b05a80e11d",
+      "width": 390,
+      "height": 844,
+      "observation": "Phone dark/zh-Hant. Localized heading, missing-excerpt disclosure, work kind/language and end message are readable without overlap; original English titles remain content text."
+    },
+    {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2783/.artifacts/qa/20261019t054123-e4bf87/story-screenshots/apps-web-features-discover-discover-search.stories.tsx/EditExactConditionsWithKeyboard.png",
+      "relative_to_evidence_worktree": ".artifacts/qa/20261019t054123-e4bf87/story-screenshots/apps-web-features-discover-discover-search.stories.tsx/EditExactConditionsWithKeyboard.png",
+      "qa_run": "20261019t054123-e4bf87",
+      "source_pin": "f84fbee119888f0b880badfd7eeb351543615908",
+      "source_pin_basis": "Retained job check + following story command + QA summary; final commit changes only discover-search.stories.tsx. Chapter sources/stories are identical between 571d192545 and final head.",
+      "viewed": true,
+      "sha256": "17f5e9cf7738720bfc2033cca4f9a235aa4a0183011dda894f7019aece39017c",
+      "width": 1440,
+      "height": 1000,
+      "observation": "Desktop light/en final fixture state. Realm, Korean language, included Book, excluded Recipe, exact and included/excluded topics remain visible. Top is scrolled above viewport. Screenshot alone does not establish focus or browser history."
+    },
+    {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2783/.artifacts/qa/20261019t054123-e4bf87/story-screenshots/apps-web-features-discover-discover-search.stories.tsx/EmptyScanRetainsSelection.png",
+      "relative_to_evidence_worktree": ".artifacts/qa/20261019t054123-e4bf87/story-screenshots/apps-web-features-discover-discover-search.stories.tsx/EmptyScanRetainsSelection.png",
+      "qa_run": "20261019t054123-e4bf87",
+      "source_pin": "f84fbee119888f0b880badfd7eeb351543615908",
+      "source_pin_basis": "Retained job check + following story command + QA summary; final commit changes only discover-search.stories.tsx. Chapter sources/stories are identical between 571d192545 and final head.",
+      "viewed": true,
+      "sha256": "c04b2641a39eb6f6115c407dd371d1a87c35f1b832a80471a44daf2c9b3ce3e3",
+      "width": 1440,
+      "height": 1000,
+      "observation": "Desktop light/en. No matches yet and Pages checked: 4 appear with Check more results and at-least count; filters remain visible. This is an incomplete scan, not exhausted empty."
+    },
+    {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2783/.artifacts/qa/20261019t054123-e4bf87/story-screenshots/apps-web-features-discover-discover-search.stories.tsx/ActionableAlternatives.png",
+      "relative_to_evidence_worktree": ".artifacts/qa/20261019t054123-e4bf87/story-screenshots/apps-web-features-discover-discover-search.stories.tsx/ActionableAlternatives.png",
+      "qa_run": "20261019t054123-e4bf87",
+      "source_pin": "f84fbee119888f0b880badfd7eeb351543615908",
+      "source_pin_basis": "Retained job check + following story command + QA summary; final commit changes only discover-search.stories.tsx. Chapter sources/stories are identical between 571d192545 and final head.",
+      "viewed": true,
+      "sha256": "2314e62115541299a7be9de0fab283f75fa4315d30921e732dc0e5e2806e59d8",
+      "width": 390,
+      "height": 844,
+      "observation": "Phone light/en. Empty resource result precedes separate related-title/name section with explicit not-current-condition-matches disclosure and two links."
+    },
+    {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2783/.artifacts/qa/20261019t054123-e4bf87/story-screenshots/apps-web-features-discover-discover-search.stories.tsx/UnsupportedKeepsTheTask.png",
+      "relative_to_evidence_worktree": ".artifacts/qa/20261019t054123-e4bf87/story-screenshots/apps-web-features-discover-discover-search.stories.tsx/UnsupportedKeepsTheTask.png",
+      "qa_run": "20261019t054123-e4bf87",
+      "source_pin": "f84fbee119888f0b880badfd7eeb351543615908",
+      "source_pin_basis": "Retained job check + following story command + QA summary; final commit changes only discover-search.stories.tsx. Chapter sources/stories are identical between 571d192545 and final head.",
+      "viewed": true,
+      "sha256": "4e76e3072c645d70e8198291d7a896e39c720a34fe0fac22b62c9d3fd879abd1",
+      "width": 1440,
+      "height": 1000,
+      "observation": "Desktop light/en. Task and active conditions remain above a distinct unsupported condition message; no false empty result."
+    },
+    {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2783/.artifacts/qa/20261019t054123-e4bf87/story-screenshots/apps-web-features-discover-discover-search.stories.tsx/UnsupportedAlternatives.png",
+      "relative_to_evidence_worktree": ".artifacts/qa/20261019t054123-e4bf87/story-screenshots/apps-web-features-discover-discover-search.stories.tsx/UnsupportedAlternatives.png",
+      "qa_run": "20261019t054123-e4bf87",
+      "source_pin": "f84fbee119888f0b880badfd7eeb351543615908",
+      "source_pin_basis": "Retained job check + following story command + QA summary; final commit changes only discover-search.stories.tsx. Chapter sources/stories are identical between 571d192545 and final head.",
+      "viewed": true,
+      "sha256": "3389ed3af1f6afe85ac4c62012de915e6a300487c8bb9936140211f8e9ea1ca7",
+      "width": 1440,
+      "height": 1000,
+      "observation": "Desktop light/en. Exhausted resource empty is distinct from suggestions-not-supported; no manufactured alternative list."
+    },
+    {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2783/.artifacts/qa/20261019t054123-e4bf87/story-screenshots/apps-web-features-discover-discover-search.stories.tsx/QueryEditAndHistoryRestore.png",
+      "relative_to_evidence_worktree": ".artifacts/qa/20261019t054123-e4bf87/story-screenshots/apps-web-features-discover-discover-search.stories.tsx/QueryEditAndHistoryRestore.png",
+      "qa_run": "20261019t054123-e4bf87",
+      "source_pin": "f84fbee119888f0b880badfd7eeb351543615908",
+      "source_pin_basis": "Retained job check + following story command + QA summary; final commit changes only discover-search.stories.tsx. Chapter sources/stories are identical between 571d192545 and final head.",
+      "viewed": true,
+      "sha256": "7cf97f678b339bf26181b6fbc91699efec8d699a0174c4eb19a2cc7aad692766",
+      "width": 1440,
+      "height": 1000,
+      "observation": "Desktop light/en. Shell query and task title agree on lantern night, filters persist, and explicit Back in story/Forward in story controls reveal the fixture nature of history evidence."
+    }
+  ],
+  "rendered_assessment": {
+    "representative_devices": "Actual viewed retained desktop 1200/1440 and phone 390 images; dimensions recorded per file. No new rendering.",
+    "themes_and_locales": "Desktop light and phone light/dark; actual English, Simplified Chinese and Traditional Chinese evidence viewed. Eight-locale catalog source read; other locale journeys, translations and AT pronunciation not independently qualified.",
+    "hierarchy": "Task h1, active destination, removable conditions, disclosed editors and result h2 are distinguishable in sampled final images. Alternatives are separate and explicitly not current-condition matches. Chapter cards emphasize executable chapter links, with work identity and missing-excerpt explanation secondary. No new obvious clipping/overlap defect in sampled states; some interaction captures are intentionally scrolled.",
+    "keyboard_and_focus": "Source/story assertions and visible rings support ordinary continuation/end focus. Recovery focus bypass is DSR-02. EditExactConditionsWithKeyboard uses Enter for the exact toggle; other operations use userEvent click. No complete keyboard-only document journey was executed here.",
+    "accessibility_boundary": "Retained story configured accessibility assertions and fixture interactions are not an actual screen-reader journey. No screen reader or other AT was run by this review.",
+    "history_boundary": "QueryEditAndHistoryRestore is an explicit React/router fixture with Back in story and Forward in story controls, not browser Back/Forward or refresh verification.",
+    "source_pin_boundary": "Final Discover images are associated with f84fbee119 via retained job and QA receipts. Chapter images are associated with 571d192545; chapter implementation/stories are unchanged in the sole fixture-only final commit. This does not substitute for proof on a later integrated candidate."
+  },
+  "findings": [
+    {
+      "id": "DSR-01",
+      "severity": "P2",
+      "title": "Reject repeated continuations before offering another scan action",
+      "path": "apps/web/features/discover/browse-read.ts",
+      "line": 26,
+      "end_line": 33,
+      "persona": "Reader looking for a sparse late match, including keyboard and assistive-technology users",
+      "evidence_kind": "source_finding",
+      "executed_outcome_failure": false,
+      "confidence": "high for the stated returned-cursor premises; occurrence against the real owner is unverified",
+      "source_evidence": "The seen check runs only while checkedPages < 4. On the fourth page the returned nextCursor is not compared with seen before result is returned. The chapter consumer also follows pages.hasNextPage blindly; searchPagesOptions.getNextPageParam returns page.next without comparing prior pageParams. Deduplication prevents duplicate cards but does not refuse stalled traversal.",
+      "instances": [
+        {
+          "path": "apps/web/features/discover/browse-read.ts",
+          "line": 26,
+          "end_line": 33
+        },
+        {
+          "path": "apps/web/features/discover/chapter-text.tsx",
+          "line": 99,
+          "end_line": 116
+        },
+        {
+          "path": "apps/web/features/search/query.ts",
+          "line": 31,
+          "end_line": 38,
+          "relationship": "unchanged shared continuation dependency newly consumed here"
+        }
+      ],
+      "reproduction_or_required_assertion": [
+        "Resource scan: return four empty incomplete pages for inputs null, A, B, C with nextCursor A, B, C, A respectively. Every response passes checkedPage immediate-progress checks. The fourth output must be refused rather than rendering another link to already-seen A; current source returns ok:true. Also cover a cycle at the action boundary.",
+        "Chapter continuation: first page next=A; subsequent successful page returns the same opaque A and no new matchUnit. Assert refusal/restart and no further repeated requests, including a two-token cycle. Current source performs up to four duplicate requests per action and continues to offer Check more. Keep already loaded chapters."
+      ],
+      "minimum_follow_up": "Existing Discover/search continuation owner adds progression checks in its current boundary, with exact opaque-token equality and bounded behavior assertions; preserve typed refusal and existing dedup/scan tests. Do not decode or invent tokens."
+    },
+    {
+      "id": "DSR-02",
+      "severity": "P2",
+      "title": "Keep chapter focus recovery active through retry and restart",
+      "path": "apps/web/features/discover/chapter-text.tsx",
+      "line": 151,
+      "end_line": 152,
+      "persona": "Keyboard or screen-reader reader recovering a failed later chapter page",
+      "evidence_kind": "source_finding_with_retained_image_support",
+      "executed_outcome_failure": false,
+      "confidence": "high for bypassed focus path; resulting browser/AT focus requires execution",
+      "source_evidence": "Failure clears scan at lines 95-97. Try again calls fetchNextPage/refetch directly without creating another scan, and restart also clears scan before refetch. The only first-new-link/end-summary focus code is in the effect guarded by scan. When recovery succeeds the focused recovery button disappears without that focus handoff. RetryPreservesChapters asserts visibility and cursor, not focus; its retained final screenshot has no new-link focus outline.",
+      "instances": [
+        {
+          "path": "apps/web/features/discover/chapter-text.tsx",
+          "line": 93,
+          "end_line": 111
+        },
+        {
+          "path": "apps/web/features/discover/chapter-text.tsx",
+          "line": 118,
+          "end_line": 122
+        },
+        {
+          "path": "apps/web/features/discover/chapter-text.tsx",
+          "line": 151,
+          "end_line": 152
+        },
+        {
+          "path": "apps/web/features/discover/chapter-text.stories.tsx",
+          "line": 121,
+          "end_line": 133,
+          "relationship": "missing recovery-focus assertion; existing assertions must stay"
+        }
+      ],
+      "reproduction_or_required_assertion": [
+        "Use the existing RetryPreservesChapters state: keyboard-activate Show more, receive unavailable, focus and activate Try again, then return the final page with The last lantern. Assert it receives focus, the earlier chapter remains once and the identical continuation is retried. Current scan is null on success.",
+        "Cover retry returning exhausted/no-new-hits and restart after a typed restart refusal: focus must land on the resulting status or first useful chapter, rather than a removed recovery button. Keep first-page semantics on restart."
+      ],
+      "minimum_follow_up": "Existing chapter-results owner preserves an action/focus intent across retry/restart and extends recovery assertions. Validate with targeted story proof, then the named actual AT journey; a screenshot is not an AT session."
+    },
+    {
+      "id": "DSR-03",
+      "severity": "P2",
+      "title": "Render the supplied fact obligations with chapter identity facts",
+      "path": "apps/web/features/discover/chapter-text.tsx",
+      "line": 134,
+      "end_line": 148,
+      "persona": "Reader inspecting an imported work and its source/attribution disclosures",
+      "evidence_kind": "source_finding",
+      "executed_outcome_failure": false,
+      "confidence": "high when a hit supplies assessed obligations",
+      "scope_note": "Carry-forward omission in the changed chapter consumer, now also displaying credited names and kind/language; not claimed as a newly introduced base-to-head regression.",
+      "source_evidence": "SearchHit.factObligations is carried by readSearchPage from the owner, and hitWork/catalogue cards preserve and render it through RightsMark. The revised chapter card displays title, type and author facts but never consumes factObligations. All changed chapter fixtures omit that optional field, so their success does not cover this disclosed case.",
+      "instances": [
+        {
+          "path": "apps/web/features/discover/chapter-text.tsx",
+          "line": 134,
+          "end_line": 148
+        },
+        {
+          "path": "apps/web/features/search/read.ts",
+          "line": 85,
+          "end_line": 88,
+          "relationship": "typed producer preserves supplied obligations"
+        },
+        {
+          "path": "apps/web/features/search/search-results.tsx",
+          "line": 75,
+          "end_line": 79,
+          "relationship": "existing consumer preserves obligations for catalogue rendering"
+        }
+      ],
+      "reproduction_or_required_assertion": [
+        "Render an authorized chapter hit with the existing imported-rights assessed-obligation fixture (including its actual source credit/instrument/notice). Assert those supplied disclosures remain available beside the displayed identity facts on first and continued pages; do not invent licences, metadata or excerpts. Current JSX drops the field."
+      ],
+      "minimum_follow_up": "Existing Discover chapter-card owner reuses the current RightsMark owner for supplied obligations and adds a meaningful fixture assertion. Retain unassessed/unknown states; this is not a new excerpt or rights contract."
+    },
+    {
+      "id": "DSR-04",
+      "severity": "P2",
+      "title": "Validate the quoted query before Exact phrase navigation",
+      "path": "apps/web/features/discover/selection-controls.tsx",
+      "line": 92,
+      "end_line": 94,
+      "persona": "Reader refining a valid long query without losing active conditions",
+      "evidence_kind": "source_finding",
+      "executed_outcome_failure": false,
+      "confidence": "high; independent of unproved keyword/exact matching semantics",
+      "source_evidence": "The enabled Exact phrase button wraps state.q in two quotation marks and navigates without validating the resulting length. parseBrowseState rejects more than 80 Unicode code points. A valid unquoted 79- or 80-code-point query becomes 81 or 82, so the local edit leads to the bad-link surface instead of a valid scoped search.",
+      "instances": [
+        {
+          "path": "apps/web/features/discover/selection-controls.tsx",
+          "line": 91,
+          "end_line": 96
+        },
+        {
+          "path": "apps/web/features/discover/browse-state.ts",
+          "line": 104,
+          "relationship": "existing serialized-query bound"
+        }
+      ],
+      "reproduction_or_required_assertion": [
+        "Direct-load a valid 79-code-point unquoted q with realm/language/type/topic/exclusion conditions; activate Exact phrase. Require either an in-place actionable validation message preserving the task or a valid admitted destination. Current handler pushes an 81-code-point q rejected by the parser. Cover 78/79/80 code-point boundaries and Unicode without changing the approved owner query semantics."
+      ],
+      "minimum_follow_up": "Existing selection-controls owner validates the proposed q before pushing, preserving current input/conditions and explaining any bound. Extend its boundary coverage; do not claim that quote toggling proves native exact/keyword semantics."
+    }
+  ],
+  "executed_outcome_failures": [],
+  "setup_failures_in_this_review": [],
+  "worker_fix_rounds_consumed": 0,
+  "test_premise": "No tests executed, no assertion reached or failed, no setup failure, and no worker fix round consumed. Source findings require the listed assertions before treatment as confirmed runtime blockers.",
+  "preserved_contracts_and_evidence": [
+    "Chapter first/later reads use SearchLoaded/SearchResultPage.next/SearchContinuation without replacement casts in the delta; resource traversal never enters chapterSearchState.",
+    "scope/language/concepts/include/exclude and viewer/signed-in query identity are retained through the respective existing request/key owners; semantic backend application still needs real proof.",
+    "matchUnit seam deduplication, four-page bounded scans and honest incomplete/exhausted copy exist; repeated-cursor boundary gaps are DSR-01.",
+    "Supplied chapter href is used directly; title/name alternatives are bounded, distinct from current-condition matches, and executable. Real reader placement still needs prepared data proof.",
+    "Existing unit/story assertions remain in place; static inventory changes are exact function receipts with planted checks, not blanket guard weakening. No assertions or source were edited by this review."
+  ],
+  "retained_job_evidence": [
+    {
+      "job": "aa968480-fd90-40a4-9562-1052953779d9",
+      "source_pin": "f84fbee119888f0b880badfd7eeb351543615908",
+      "read_receipts": [
+        ".temp/goal/jobs/aa968480-fd90-40a4-9562-1052953779d9.1.log (check receipt)",
+        ".temp/goal/jobs/aa968480-fd90-40a4-9562-1052953779d9.2.log (story command)",
+        ".temp/goal/jobs/aa968480-fd90-40a4-9562-1052953779d9.3.log (push receipt)",
+        ".artifacts/qa/20261019t054123-e4bf87/summary.md"
+      ],
+      "observed": "Types, inference, lint, AST and selected 9/45 guards passed; accepted-command guard timeout retry retained and passed. Discover story QA summary says passed. Push receipt advances 571d192545..f84fbee119, with retained pack-refs hook warning. No repeat run."
+    },
+    {
+      "job": "60632c90-cac6-4f5a-885a-9eb375ad4992",
+      "source_pin": "571d192545bda099833bef3a91dd419ced07b080",
+      "read_receipts": [
+        ".temp/goal/jobs/60632c90-cac6-4f5a-885a-9eb375ad4992.1.log (check/rebase receipt)",
+        ".temp/goal/jobs/60632c90-cac6-4f5a-885a-9eb375ad4992.2.log (two story-file command)",
+        ".artifacts/qa/20261019t053509-ab7bd3/summary.md"
+      ],
+      "observed": "Types/inference passed at the rebased source pin; retained summary says chapter and Discover story QA passed. No repeat run."
+    }
+  ],
+  "handoff_receipts_not_reexecuted": {
+    "source": ".temp/ref/handoff.md",
+    "passing_jobs": [
+      "7184b827-78fa-4c5d-871f-13b3abae9b35",
+      "9709b620-0ab3-420b-b5fc-32aad39b2426",
+      "dedc9786-25dd-4901-a995-74c1187738c2",
+      "69070103-a1f1-47ae-bfca-f7599dc41527 steps 1-3",
+      "60632c90-cac6-4f5a-885a-9eb375ad4992",
+      "aa968480-fd90-40a4-9562-1052953779d9"
+    ],
+    "retained_failures": "The handoff retains type/catalog/inventory/AST corrections, two mutation-test premise corrections, a guard timeout retry and non-fast-forward push. Those are prior owner evidence, not new outcome failures found or independently rerun here; setup/premise failures are not assertion failures and consume no worker fix round by this review."
+  },
+  "preserved_proof_matrix": {
+    "status": "not executed by this source review; preserve for authorized targeted isolated proof after disposition",
+    "focused_stack_free_command": "bun scripts/goal/goalctl.ts test apps/web/features/discover/browse-search-state.test.ts apps/web/features/discover/search-recovery-read.test.ts apps/web/features/discover/chapter-text-read.test.ts apps/web/features/search/read.test.ts apps/web/tests/g-945-browse.test.ts apps/web/tests/search-state.test.ts scripts/static/web-continuations.test.ts scripts/static/web-discover-continuations.test.ts scripts/static/web-accepted-commands.test.ts",
+    "story_files": [
+      {
+        "path": "apps/web/features/discover/chapter-text.stories.tsx",
+        "stories": [
+          "BookAndChapter",
+          "TraditionalChinesePhone",
+          "NoChapterHitsLeaveNoTrace",
+          "AllEightLabels",
+          "IndependentOfResourceCount",
+          "ContinueToTheLastChapter",
+          "BoundedSparseScan",
+          "RetryPreservesChapters",
+          "UnsupportedSelection",
+          "NoMatchesAfterTheLastPage"
+        ]
+      },
+      {
+        "path": "apps/web/features/discover/discover-search.stories.tsx",
+        "stories": [
+          "Filtered",
+          "SimplifiedChinesePhone",
+          "DirectLastDestination",
+          "EmptyScanRetainsSelection",
+          "ExhaustedEmpty",
+          "UnsupportedKeepsTheTask",
+          "ActionableAlternatives",
+          "UnsupportedAlternatives",
+          "QueryEditAndHistoryRestore",
+          "EditExactConditionsWithKeyboard"
+        ]
+      },
+      {
+        "path": "apps/web/features/discover/discover-page.stories.tsx",
+        "scope": "existing populated/empty/error/locale parents and the Communities topic-details interaction"
+      },
+      {
+        "path": "apps/web/features/shell/search-field.stories.tsx",
+        "scope": "scoped Latin/CJK query edits and KeepsScopedConditions"
+      }
+    ],
+    "real_api_files": [
+      "tests/qa/integration/search-chapter-book.test.ts",
+      "tests/qa/integration/outcomes/books/catalogue-browse-and-search-in-its-zone.test.ts",
+      "tests/qa/integration/outcomes/realm/closure-search.test.ts",
+      "tests/qa/integration/public-search-cjk.test.ts",
+      "tests/qa/integration/public-search-unsupported.test.ts",
+      "tests/qa/integration/search-card-fields.test.ts",
+      "tests/qa/integration/search-card-rich.test.ts",
+      "tests/qa/integration/search-source-title.test.ts"
+    ],
+    "projection_precondition": "Rich/external-title projection checks follow authorized summary/excerpt contracts; extend existing independent assertions where they do not cover staged audit acceptance.",
+    "real_browser_journeys": [
+      "Multi-page first/later/final chapter results and executable reader placement",
+      "Independent resource cursor movement while retaining the chapter selection",
+      "Change q while retaining language/type/tab/realm/ci/include/exclusions and match mode",
+      "Copied/shared and direct URL loads",
+      "Refresh and actual browser Back/Forward",
+      "Late match after empty candidate windows in a genuine sparse corpus",
+      "Typed unavailable/unsupported/expired or invalid continuation/refusal states",
+      "Every horizontal destination visible on direct selection, filter change and history restore",
+      "Representative phone/desktop, light/dark, supported locales, keyboard and actual assistive-technology journeys"
+    ]
+  },
+  "unverified_premises": [
+    "No live public API/native search semantics, first/later/final actual chapter pages, independent real resource movement, direct/shared URL/refresh/Back/Forward, sparse late matches, real refusal recovery, placement execution or AT journeys were proved here.",
+    "D6-003 still needs approved query-intent and native corpus outcomes for ordinary keywords versus exact phrases, CJK/alias/name/typo behavior and ranking. text.phrase and quote controls do not establish approved keyword semantics.",
+    "D6-005 still needs authorized bounded matched excerpts and format/year/platform/context contracts. SearchHit currently supplies none of those missing facts; do not invent metadata, passages or answers. Equal-title identity acceptance remains open.",
+    "Image fixtures have synthetic representative data; they do not prove genuine native/resource records or semantic application of each selected condition.",
+    "Cycle findings are conditional source counterexamples, not evidence that the real backend emitted a repeated cursor. Focus findings require browser activeElement/AT assertions, not inference from screenshot alone.",
+    "No claim is made that all eight UI locales, RTL/mixed-script content, all failure combinations or every destination/history path were rendered in this review."
+  ],
+  "remaining_owner_dependencies": [
+    {
+      "owner": "G-2764",
+      "need": "Approved native/resource query intent, corpus outcomes and relevant summary/projection contracts; preserve current typed interfaces."
+    },
+    {
+      "owner": "G-2765",
+      "need": "Actual search readiness and genuine compatible prepared search data."
+    },
+    {
+      "owner": "G-2784",
+      "need": "Actual transport/proxy readiness for the named real API/browser paths."
+    },
+    {
+      "owner": "G-2747",
+      "need": "Actual Web readiness. This source review neither supplies it nor turns it into a prerequisite for unrelated targeted proof."
+    }
+  ],
+  "preparation_and_execution": "Use genuinely prepared owner records, one compatible consistent backup and isolated restored copies under the existing preparation budget; no data was prepared, imported, refreshed or reset here. Follow docs/goals/audit-remediation-20261019/execution-reset.md for pinned isolated targeted proof; no global all-builds-first hold.",
+  "minimum_owner_follow_up": "Manager dispositions these four source findings and routes their specific assertions/corrections through the existing Discover/search owner. G-2783 remains exited on the wave. Review changes and material dependencies only after repair; do not review prior reports or repeat unchanged checks. Execute the preserved focused/four-story/real proof matrix when its own prerequisites are ready; no new gate on unrelated slices.",
+  "closure_authority": "This review authorizes no individual landing, verified task closure, audit-class closure or land:auto. No commits/pushes/source edits. Targeted proof follows disposition under execution-reset.md."
+}
