@@ -459,7 +459,7 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "中性装饰色同时承担输入控件识别，空字段和亮色关闭开关对比不足",
-      "status": "implemented-main",
+      "status": "closed",
       "owner": "G-2756 + G-2824",
       "proof": [
         {
@@ -486,11 +486,18 @@
           "head": "6c260a353cafdee57f54004ab58aa1ae50c5a04e",
           "complete": true,
           "findings": 0
+        },
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "D4-001",
+          "source": "2f99ee87a0c037c6298bd916bf9d0e9e418c1dd4",
+          "runtimeFrontend": "e96e4846d049d3958695e30ff7e67dacc1af93e9",
+          "assessedMain": "82df58d2ba1d9d377b591126e7f4dfa42f27f02e",
+          "originalAssertionsChanged": false
         }
       ],
-      "remainingValidation": [
-        "Authenticated Settings acceptance on the repaired, correctly configured Web frontend. Full finding closure is still pending."
-      ]
+      "remainingValidation": []
     },
     {
       "id": "D4-002",
@@ -515,9 +522,20 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "手机通知偏好矩阵滚动后失去通道含义",
-      "status": "build-briefed",
+      "status": "closed",
       "owner": "G-2751",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "D4-004",
+          "source": "2f99ee87a0c037c6298bd916bf9d0e9e418c1dd4",
+          "runtimeFrontend": "e96e4846d049d3958695e30ff7e67dacc1af93e9",
+          "assessedMain": "82df58d2ba1d9d377b591126e7f4dfa42f27f02e",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     },
     {
       "id": "D4-005",

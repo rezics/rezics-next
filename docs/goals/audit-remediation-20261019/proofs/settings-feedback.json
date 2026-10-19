@@ -2963,7 +2963,7 @@
       "next": "Manager can use this reviewed and checked minimal Settings slice for its bounded landing decision, copy the current retained sibling bundle under its own authority, and retain all three findings open until the exact authenticated/announcement premises are verified. No land:auto or whole-wave confirmation."
     }
   ],
-  "latestEvidenceRun": "authenticated-e96e4846d049",
+  "latestEvidenceRun": "original-acceptance-e96e4846d049",
   "genuineJourneyRuns": [
     {
       "id": "authenticated-e96e4846d049",
@@ -4135,6 +4135,511 @@
         }
       ],
       "next": "Manager can land the report and fully reviewed checked Settings slice using exact source identities; copy and verify retained new bundle. Do not close all findings or claim full regression confirmation before heard assistive-technology criteria are reached."
+    }
+  ],
+  "originalAcceptanceRuns": [
+    {
+      "id": "original-acceptance-e96e4846d049",
+      "recordedAt": "2026-10-19T09:58:43.993246+00:00",
+      "authorization": "G-2829 Continuation 2026-10-19 and manager note at coherent main continuation5e38475f84: only missing original native Tab/Settings light contrast assertions; reuse valid unchanged evidence. Sole serialized display preference authority for this bounded proof.",
+      "result": "Original D4-004 and D4-005 acceptance satisfied; missing authenticated Settings D4-001 contrast surface supplied at both themes and widths. D2-005 draft/save/persistence assertions reached; separate refresh-success focus-to-BODY correction remains owned by G2751.",
+      "regressionConfirmed": false,
+      "historicalBoundary": "Historical92b8a78, repaired61df and genuine22-case e96 reports/bundles remain unchanged. This appended original-criteria mapping governs current acceptance. It corrects earlier language treating heard speech recording, physical hardware use or an expanded assistive-technology journey as newly required proof; none is claimed here.",
+      "source": {
+        "frontendProductPin": "e96e4846d049d3958695e30ff7e67dacc1af93e9",
+        "frontendCheckout": ".temp/settings-auth-product/",
+        "sourceCleanBeforeAndAfter": true,
+        "backend": {
+          "origin": "http://127.0.0.1:3001",
+          "health": {
+            "status": 200,
+            "body": {
+              "status": "ready",
+              "horizons": {
+                "sampledAt": "2026-10-19T09:51:55.205Z",
+                "writerVisibility": "all-sessions",
+                "notification": {
+                  "oldestPendingRowAgeSeconds": null,
+                  "oldestWriterAgeSeconds": 0.003
+                },
+                "reviewRank": {
+                  "oldestPendingRowAgeSeconds": null,
+                  "oldestPendingRowAgeBasis": "none",
+                  "oldestWriterAgeSeconds": 0.003
+                },
+                "editorial": {
+                  "oldestPendingRowAgeSeconds": null,
+                  "oldestWriterAgeSeconds": 0.003
+                }
+              }
+            }
+          },
+          "processes": [
+            {
+              "pid": "1372265",
+              "sourceDirectory": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+              "checkoutHead": "75409ac3c379a9f84212e48a8abdc6540c5c44a2"
+            }
+          ],
+          "provenanceLimit": "Process source-directory pin recorded separately; health response does not attest an immutable build revision."
+        },
+        "sourceRevisionSeparateFromReportCommit": true,
+        "comparedMain": "3b34e7cd53e8bec9d346a5a2ccecced22ea512b5",
+        "measuredSixPathsByteEqualToMain": true,
+        "comparisonEvidence": "current-source-identity.json",
+        "comparisonLimit": "Only six measured controls/styles/Settings surface paths, not all frontend source, were compared. Original dark source-identity receipt retains its earlier unequal main snapshot.",
+        "productOrOriginalAssertionsEdited": false
+      },
+      "reviewReuse": {
+        "unchangedSettingsReview": "Reuse the single authored e6cb5e65 review, correction520185 review at61df and actual material e96 integration review recorded in prior report runs. No unchanged review chain.",
+        "sharedControlReview": "Reuse G2821 docs/goals/audit-remediation-20261019/proofs/shared-controls.json, actual unchanged shared-control review and prior signup measurements; no controls re-review,59-story or signup rerun.",
+        "startupDependency": "G2747/G2847 retain startup readiness/review ownership; e96 runtime reached actual ready200. No startup source fix by G2829."
+      },
+      "method": {
+        "browser": "Repository Playwright provider, supported local-development isolated Web OAuth PKCE with genuine eligible Main session Agent200; existing dedicated fixture71473997-6e2e-4e59-9044-01627a79e839.",
+        "viewports": [
+          {
+            "width": 1440,
+            "height": 1000
+          },
+          {
+            "width": 390,
+            "height": 844
+          }
+        ],
+        "nativeTraversal": "Fresh real390 Settings page starting with BODY active; only natural keyboard Tab presses. No focus(), scrollIntoView(), locator focus, forced scroll or preference activation during traversal. Browser native focus scrolling recorded at each stop.",
+        "contrast": "Read-only browser canvas alpha compositing plus unmodified DPR1 PNG solid-color point samples, WCAG sRGB luminance. Enabled on/off resting unfocused controls; empty enabled unfocused InputGroup; all necessary cue ratios>=3:1. No CSS/root-class override, theme spoofing or response mocks.",
+        "sampling": "Unoccluded first-row switches; plain InputGroup inner adjacent pixel four CSS pixels from boundary avoids placeholder/icon ink. Actual antialiasing pixels differ slightly from computed composite values; both measured separately.",
+        "limits": [
+          "Point samples do not scan every antialiased boundary pixel.",
+          "DOM live-region changes and accessibility semantics do not establish speech heard by a screen reader; recorded speech is not an additional original D4-005 acceptance requirement.",
+          "Backend process source-directory identity plus ready health200 is not immutable build attestation.",
+          "Only seven new PNGs and four reused dark PNGs were personally viewed in this continuation."
+        ]
+      },
+      "checks": [
+        {
+          "job": "da7ef3dc-599a-45e5-b997-fffe389cd222",
+          "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'python3 .temp/settings-original-acceptance/analyze.py' -- bun .temp/settings-original-acceptance/capture.ts",
+          "exit": 0,
+          "classification": "passed",
+          "steps": [
+            {
+              "command": "bun .temp/settings-original-acceptance/capture.ts",
+              "exit": 0,
+              "result": "Ready, genuine signed-in route; four light surface views, all45 natural Tab targets/visibility, display restoration and reservation release verified; no errors; owned server stopped.",
+              "evidence": "jobs/da7ef3dc-599a-45e5-b997-fffe389cd222.1.log"
+            },
+            {
+              "command": "python3 .temp/settings-original-acceptance/analyze.py",
+              "exit": 0,
+              "result": "All eight light actual PNG contrast samples pass.",
+              "evidence": "jobs/da7ef3dc-599a-45e5-b997-fffe389cd222.2.log"
+            }
+          ],
+          "runtime": "2026-10-19T09:51:55.345Z through2026-10-19T09:53:10.472Z; frontend42833 stopped afterward."
+        }
+      ],
+      "reusedChecks": {
+        "candidateQA": "20261019t063638-162050; job8a721d95-fda0-4ad1-9191-d2e8cd2db938;32/32 original stories,15 unit tests/109 assertions, affected types/lint/AST/guards passed at61df. Not rerun.",
+        "genuineEvidenceRun": "authenticated-e96e4846d049; existing22 distinct passing genuine cases,47 previously viewed PNGs, original assertions and failures preserved; no unchanged journey rerun.",
+        "darkHelper": "Reuse dark-reused/receipt.json and all21 manifest artifacts. First wrapper201 and original pixel/occlusion sampler failures remain. Corrected analysis of already captured unoccluded first row and plain inner background; no product or image edits. Empty-group wrapper exit remains unknown, as supplied."
+      },
+      "nativeTabTraversal": {
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "switchesExpected": 45,
+        "switchesReachedInOriginalOrder": 45,
+        "states": {
+          "on": 30,
+          "off": 15
+        },
+        "allEnabled": true,
+        "completeTopicChannelNames": true,
+        "all45ControlsTopicsAndChannelsVisibleAndUnoccluded": true,
+        "all45DocumentWidths390": true,
+        "valuesUnchanged": true,
+        "failures": [],
+        "first": "Replies · In-app",
+        "middle": "Helpful votes on reviews · In-app",
+        "last": "Correction reverted · Email digest",
+        "evidence": "result.json#traversal",
+        "viewedFocusImages": [
+          "images/live-original-acceptance-tab-390-index-0.png",
+          "images/live-original-acceptance-tab-390-index-21.png",
+          "images/live-original-acceptance-tab-390-index-44.png"
+        ],
+        "stateSemantics": "Native input role=switch and checked boolean retained in traversal receipt. Names contain topic and channel; native checked property exposes state separately, rather than adding state words to name."
+      },
+      "contrast": {
+        "finding": "D4-001",
+        "surface": "Authenticated Settings only; complements existing shared-control and signup proof.",
+        "light": {
+          "samples": 8,
+          "switchSamples": 6,
+          "emptyInputGroupSamples": 2,
+          "pngSwitchMinimum": {
+            "trackRatio": 4.045678698503525,
+            "thumbRatio": 3.845661423788804
+          },
+          "compositedSwitchMinimum": {
+            "trackRatio": 3.989942298407384,
+            "thumbRatio": 3.792680616432581
+          },
+          "pngEmptyInputGroupMinimum": {
+            "outsideRatio": 3.6863747082567557,
+            "insideRatio": 3.428134987724757
+          },
+          "compositedEmptyInputGroupMinimum": {
+            "outsideRatio": 3.989942298407384,
+            "insideRatio": 3.7104369128664842
+          },
+          "allPngAndCompositeRatiosAtLeast3": true,
+          "evidence": [
+            "result.json#views",
+            "pixel-evidence.json"
+          ]
+        },
+        "dark": {
+          "reusedWithoutRecapture": true,
+          "switchSamples": 6,
+          "emptyInputGroupSamples": 2,
+          "pngSwitchMinimum": {
+            "trackRatio": 4.294156338706992,
+            "thumbRatio": 3.1856101973415862
+          },
+          "pngEmptyInputGroupMinimum": {
+            "outsideRatio": 4.05734714257983,
+            "insideRatio": 3.75637990941802
+          },
+          "compositedEmptyInputGroupMinimum": {
+            "outsideRatio": 4.353717608779681,
+            "insideRatio": 4.030766109527607
+          },
+          "evidence": [
+            "dark-reused/receipt.json",
+            "dark-reused/pixel-evidence.json",
+            "dark-reused/empty-groups/pixel-evidence.json",
+            "dark-manifest-verification.json"
+          ],
+          "originalManifestEntriesVerified": 21,
+          "allSizesAndSha256Match": true
+        },
+        "fourThemeViewportCellsReached": [
+          "light1440x1000",
+          "light390x844",
+          "dark1440x1000",
+          "dark390x844"
+        ],
+        "actualSurfaceResult": "Necessary switch track/background and thumb/track cues and empty InputGroup boundary/inner/outer backgrounds all pass>=3:1 on enabled resting unfocused actual controls."
+      },
+      "displayPreferenceSerialization": {
+        "explicitScope": "Latest user authorizes sole serialized supported Account display PUT only for bounded light contrast proof, with restoration; no other shared mutation authority inferred.",
+        "sharedReceipt": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/site-display-preference-serialization.json",
+        "acquiredAt": "2026-10-19T09:51:55.379067+00:00",
+        "releasedAt": "2026-10-19T09:53:10.529654+00:00",
+        "original": {
+          "revision": 106,
+          "displayMode": "dark",
+          "showZoneThemes": true
+        },
+        "originalSettledDOM": {
+          "class": "dark",
+          "colorScheme": "dark",
+          "width": 1440,
+          "path": "/en/settings"
+        },
+        "lightAcknowledgement": {
+          "revision": 107,
+          "displayMode": "light",
+          "showZoneThemes": true
+        },
+        "lightGETReadback": {
+          "revision": 107,
+          "displayMode": "light",
+          "showZoneThemes": true
+        },
+        "lightSettledDOM": {
+          "class": "light",
+          "colorScheme": "light",
+          "width": 1440,
+          "path": "/en/settings"
+        },
+        "restoration": {
+          "before": {
+            "revision": 107,
+            "displayMode": "light",
+            "showZoneThemes": true
+          },
+          "write": {
+            "revision": 108,
+            "displayMode": "dark",
+            "showZoneThemes": true
+          },
+          "readback": {
+            "revision": 108,
+            "displayMode": "dark",
+            "showZoneThemes": true
+          },
+          "dom": {
+            "class": "dark",
+            "colorScheme": "dark",
+            "width": 390,
+            "path": "/en/settings"
+          },
+          "verified": true
+        },
+        "released": true,
+        "operation": "Supported Web /api/preferences BFF to Account /api/account/display-preferences; PUT expectedRevision106 =>107(light,true), fresh GET107 then restoring PUT expectedRevision107 =>108(dark,true); real GET readback and settled DOM verified. Original functional values preserved; revisions advance legitimately.",
+        "noActiveReservationOverwritten": true,
+        "evidence": [
+          "result.json#displayRequests",
+          "serialization-before.json",
+          "serialization-acquire.json",
+          "serialization-release.json"
+        ]
+      },
+      "originalAcceptanceMapping": [
+        {
+          "finding": "D2-005",
+          "status": "Original draft/save/persistence assertions reached; separate refresh-success focus delta pending existing owner.",
+          "criteria": [
+            {
+              "original": "Disable related language actions with an explanation while the same preference domain saves, or preserve and serialize later accepted changes.",
+              "result": "passed",
+              "evidence": [
+                "genuineJourneyRuns/authenticated-e96e4846d049#assertionsReached",
+                "prior live-journeys.json#cases/languages-1440-none",
+                "prior live-journeys-corrected.json#cases/languages-390-503"
+              ],
+              "observed": "Native disabled language add/remove/reorder/search/save/spoiler states; visible busy explanation and retained en/ko/fr draft. Original story busy assertions preserved."
+            },
+            {
+              "original": "Slow responses,503,conflict and rapid edits acknowledge only the actually submitted version; languages/privacy/spoiler changes do not overwrite each other.",
+              "result": "passed within retained original stories and genuine bounded cases",
+              "evidence": [
+                "currentCandidateRuns/61df original32 stories",
+                "prior live-journeys-corrected.json#cases/languages-1440-409",
+                "prior live-refresh-recovery.json#cases/languages-390-409-refresh503"
+              ],
+              "observed": "Slow-save controls,503 retention/retry, actual409 refresh and browser-injected refresh503 recovery, stale receipt clearing after a new accepted draft; real saves and reload GET match order."
+            },
+            {
+              "original": "At1440 and390 keyboard/touch users can identify saving; reload order matches the last operation accepted by the interface.",
+              "result": "Saving/status/reload assertions passed; refresh focus defect separately open",
+              "evidence": [
+                "prior viewed-images.json language busy/retry/saved/reload captures",
+                "prior live-journeys.json#cases/languages-1440-none",
+                "prior live-refresh-recovery.json#cases/languages-390-409-refresh503"
+              ],
+              "observed": "Natural keyboard retry/reorder and pointer-operated phone/desktop UI reached saving status; real200 receipts and actual reload persistence. Physical touch hardware was not used and is not added as a new original acceptance premise. Successful Load latest reset focus to BODY; G2751 owns its bounded correction."
+            }
+          ]
+        },
+        {
+          "finding": "D4-004",
+          "status": "Original acceptance satisfied at tested exact pin.",
+          "criteria": [
+            {
+              "original": "At390 any notification row identifies its three channels without scrolling back or remembering order.",
+              "result": "passed",
+              "evidence": [
+                "result.json#traversal/switches",
+                "prior live-inspect.json#views",
+                "prior EN/JA/DE first/middle/last viewed images"
+              ],
+              "observed": "Every one of45 naturally focused switches has its topic and repeated channel label in the viewport and unoccluded; original localized wrapping screenshots retained."
+            },
+            {
+              "original": "Preserve complete accessible names; keyboard and screen-reader order correspond to topic,channel,current state.",
+              "result": "passed for original native semantics and traversal; no heard-output claim",
+              "evidence": [
+                "result.json#traversal",
+                "prior32 story accessible-name assertions"
+              ],
+              "observed": "Natural Tab traverses all45 native switches once in DOM topic/channel order; full names, native checked on30/off15 and enabled state recorded. No speech recording is claimed or introduced as a new acceptance gate."
+            },
+            {
+              "original": "Use actual first,middle,last screenshots; not only first row or aria-label inspection.",
+              "result": "passed",
+              "evidence": [
+                "images/live-original-acceptance-tab-390-index-0.png",
+                "images/live-original-acceptance-tab-390-index-21.png",
+                "images/live-original-acceptance-tab-390-index-44.png",
+                "prior genuine viewed-images.json EN/JA/DE rows"
+              ],
+              "observed": "Personally viewed first,middle,last phone focus PNGs in this continuation and reused actual prior localized row screenshots."
+            }
+          ]
+        },
+        {
+          "finding": "D4-005",
+          "status": "Original acceptance satisfied; retained22-case genuine report already supplies this behavior.",
+          "criteria": [
+            {
+              "original": "At390 and1440 first,middle,last controls visibly associate saving and final200/503/409 outcomes with the operated item.",
+              "result": "passed",
+              "evidence": [
+                "prior live-journeys-corrected.json#cases/notification-*",
+                "prior viewed-images.json notification busy/saved/error/retry PNGs"
+              ],
+              "observed": "All18 original genuine notification combinations passed active-control/status visibility, no matrix-end search; exact real200/409 receipts retained.503 alone is a declared browser fault."
+            },
+            {
+              "original": "Failure retains original value with explicit recovery; conflict does not imply saved.",
+              "result": "passed",
+              "evidence": [
+                "prior live-journeys-corrected.json#cases/notification-*"
+              ],
+              "observed": "Failure state retains original switch value; explicit retry, fresh/current revision handling and real subsequent save/reload are recorded for all first/middle/last rows at both widths."
+            },
+            {
+              "original": "Preserve status announcements and allow continued operation after recovery, using a browser double or dedicated audit account.",
+              "result": "passed for original status semantics and recoverable operation",
+              "evidence": [
+                "prior live-journeys-corrected.json notification live-region mutations and keyboard retry",
+                "prior genuine sourceReview and method"
+              ],
+              "observed": "Existing status/polite/atomic region and describedBy relationship preserved; local DOM status mutations beside active item recorded; natural Tab/Enter retry succeeds. Existing isolated dedicated authorized OAuth fixture used. No heard speech is claimed; original audit explicitly says role=status already exists and does not allege missing announcements."
+            }
+          ],
+          "acceptanceCorrection": "The original D4-005 summary says role=status exists. Earlier appended report language making a heard speech recording a remaining acceptance requirement exceeded the original audit and is superseded by this mapping; historical receipts remain intact."
+        },
+        {
+          "finding": "D4-001",
+          "status": "Missing authenticated Settings contrast surface satisfied; complements G2821 existing shared-control/signup proof.",
+          "criteria": [
+            {
+              "original": "Both themes and widths: enabled unfocused empty fields have>=3:1 necessary identification against adjacent effective composite colors.",
+              "result": "passed for original missing Settings InputGroup surface",
+              "evidence": [
+                "result.json#views",
+                "pixel-evidence.json",
+                "dark-reused/empty-groups/result.json",
+                "dark-reused/empty-groups/pixel-evidence.json"
+              ],
+              "observed": "Real empty Reading language InputGroup at light/dark1440/390, actual effective compositing and PNG boundary/inner/outer pixels all>=3:1; no placeholder-text or focus-ring substitution."
+            },
+            {
+              "original": "On/off position and outline identifiable in light/dark; necessary state cues>=3:1 on enabled resting controls.",
+              "result": "passed for original missing Settings switch surface",
+              "evidence": [
+                "result.json#views",
+                "pixel-evidence.json",
+                "dark-reused/result.json",
+                "dark-reused/pixel-evidence.json"
+              ],
+              "observed": "Actual first-row enabled on/on/off track/background and thumb/track contrast>=3:1 in all four cells, unfocused; read-only measured computed compositing and unmodified PNG pixels agree on passing."
+            },
+            {
+              "original": "Keep brand red out of text and fix semantic control colors; not every decorative separator must meet3:1.",
+              "result": "Valid unchanged G2821 source/shared-control review reused",
+              "evidence": [
+                "docs/goals/audit-remediation-20261019/proofs/shared-controls.json",
+                "current-source-identity.json"
+              ],
+              "observed": "No source edits, CSS overrides or expanded decorative-border requirement. Six measured source paths match pinned e96 and current main3b34e7cd53e8bec9d346a5a2ccecced22ea512b5; unchanged semantic-control review not repeated."
+            }
+          ]
+        }
+      ],
+      "screenshots": {
+        "newPersonallyViewed": 7,
+        "reusedDarkPersonallyViewed": 4,
+        "totalPersonallyViewed": 11,
+        "viewedManifest": "viewed-images.json",
+        "actuallyViewed": [
+          "images/live-original-acceptance-light-1440-notification-rest.png",
+          "images/live-original-acceptance-light-390-notification-rest.png",
+          "images/live-original-acceptance-light-1440-empty-group.png",
+          "images/live-original-acceptance-light-390-empty-group.png",
+          "images/live-original-acceptance-tab-390-index-0.png",
+          "images/live-original-acceptance-tab-390-index-21.png",
+          "images/live-original-acceptance-tab-390-index-44.png",
+          "dark-reused/images/dark-1440-notification-rest.png",
+          "dark-reused/images/dark-390-notification-rest.png",
+          "dark-reused/empty-groups/images/dark-1440-empty-group-0.png",
+          "dark-reused/empty-groups/images/dark-390-empty-group-0.png"
+        ],
+        "notViewed": "New readiness PNG and retained original dark failed PNG are retained but not claimed as personally viewed in this continuation."
+      },
+      "observationsAndRemainingWork": [
+        {
+          "owner": "G2751",
+          "status": "Separate bounded correction awaited",
+          "observation": "Retained genuine e96 PersonSettings refresh success unmounts the focused recovery button and leaves BODY active. Prior natural ShiftTab/Tab/Enter completes recovery. Confirm only affected delta once exact repaired candidate is supplied; does not hold notification/contrast acceptance."
+        },
+        {
+          "owner": "Manager / existing navigation owner",
+          "status": "Historical incidental dark sampler premise preserved",
+          "observation": "Initial viewport lower row can be behind fixed bottom navigation; first-row contrast samples exclude it. New full native Tab traversal shows all45 controls/topics/channels become visible through native focus scrolling; no claim of unreachable controls."
+        }
+      ],
+      "retainedEvidence": {
+        "privateBundle": ".temp/settings-original-acceptance/",
+        "handoffBundle": ".temp/audit-remediation-20261019/proofs/settings-feedback-G-2829-original-acceptance-e96e4846d049/",
+        "manifest": "manifest.json",
+        "mainCopyCompleted": false,
+        "managerRequestedMainDestination": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/proofs/settings-feedback-G-2829-original-acceptance-e96e4846d049/",
+        "excluded": "Private credentials/browser state and raw OAuth server logs excluded. Supported fixture used without copying secrets. Historical159/159/211-entry bundles unchanged."
+      },
+      "administrativeReportChecks": {
+        "scope": "Report-only administrative checks on this main-based report branch; pinned product checks and existing32 stories/22 genuine cases were reused, not replayed.",
+        "job": "0377ee0a-49c1-4bd8-a750-4c753abe11f0",
+        "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+        "exit": 0,
+        "steps": [
+          {
+            "command": "task docs:check",
+            "exit": 0,
+            "result": "13 documentation checker tests passed;249 Markdown files checked for local links/fragments/design navigation. No runtime or external link claim.",
+            "evidence": "jobs/0377ee0a-49c1-4bd8-a750-4c753abe11f0.1.log"
+          },
+          {
+            "command": "task goal -- check",
+            "exit": 0,
+            "checkId": "run-toTmCU",
+            "result": "types ok(no TypeScript workspace changed); tests ok(none named in brief); lint ok(no source changed); AST ok; guards ok(1/44 selected for report path).",
+            "evidence": [
+              "jobs/0377ee0a-49c1-4bd8-a750-4c753abe11f0.2.log",
+              "administrative-check/run-toTmCU/output.log"
+            ]
+          }
+        ],
+        "harnessNotice": "Command reports harness2 commits behind main; every selected check passed. No source update or repeated passing test justified."
+      },
+      "instructionEffects": [
+        {
+          "file": "docs/goals/worker.md",
+          "quote": "Translate a main-checkout path into your worktree before editing it.",
+          "effect": "New retained evidence bundle destination is translated into this worker. Manager copies the bundle into main; the sole main-write exception is latest explicit user authority for existing display serialization receipt."
+        },
+        {
+          "source": "Latest user continuation and manager note",
+          "effect": "Narrow supported Account display preference authority exercised under serialization and verified restoration; existing shared serialization receipt updated for acquire/release only. Original acceptance mapping governs instead of new heard-speech requirements."
+        }
+      ],
+      "ownerChanges": [
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/site-display-preference-serialization.json",
+          "kind": "Explicitly authorized shared bookkeeping exception",
+          "change": "Preserve history and record G2829 sole reservation acquire/release, verified GET/DOM restoration. No other main/source/wave mutation."
+        }
+      ],
+      "proposedTasks": [],
+      "next": "Manager can accept original notification classes and missing Settings contrast surface using this mapping plus retained evidence, copy verified bundle to main, and independently return G2751 exact focus candidate for only its affected delta. No unchanged regression or heard-speech gate introduced.",
+      "reusedEvidenceLocations": {
+        "referenceConvention": "Mapping entries prefixed prior refer to files/fragments within the genuine e96 bundle listed here. Named case fragments are semantic case-id selectors in its cases array. Prior32 stories refer to the existing current-61df run and its retained QA receipt.",
+        "genuineReportRun": "genuineJourneyRuns[id=authenticated-e96e4846d049]",
+        "genuinePrivateBundle": ".temp/settings-feedback-auth-e96e4846d049/",
+        "genuineHandoffBundle": ".temp/audit-remediation-20261019/proofs/settings-feedback-G-2829-auth-e96e4846d049/",
+        "candidateReportRun": "currentCandidateRuns[id=current-61df4790bcc1]",
+        "candidateHandoffBundle": ".temp/audit-remediation-20261019/proofs/settings-feedback-G-2829-current-61df4790bcc1/",
+        "sharedControlReport": "docs/goals/audit-remediation-20261019/proofs/shared-controls.json",
+        "historicalIntegrityEvidence": "prior-evidence-integrity.json"
+      }
     }
   ]
 }

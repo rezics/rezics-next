@@ -1,8 +1,8 @@
 {
-  "recordedAt": "2026-10-19T09:50:23.022826+00:00",
+  "recordedAt": "2026-10-19T10:12:05.984284+00:00",
   "manager": "site",
   "goal": "audit-remediation-20261019",
-  "assessedMain": "3b34e7cd53e8bec9d346a5a2ccecced22ea512b5",
+  "assessedMain": "82df58d2ba1d9d377b591126e7f4dfa42f27f02e",
   "basis": "Original applicable acceptance and assertions, without adding unrelated classes or full-domain journeys. Product-audit class tracing applied; unchanged exact proof reused.",
   "findings": [
     {
@@ -168,6 +168,1063 @@
       },
       "retainedEvidence": ".temp/audit-remediation-20261019/proofs/settings-feedback-G-2829-auth-e96e4846d049/",
       "scopeTrace": "All row positions and success/error/conflict share local feedback owner. D2-005 PersonSettings BODY focus and D4-004 full45-switch traversal remain independent open findings. No heard-speech completion is claimed."
+    },
+    {
+      "id": "D4-001",
+      "status": "closed",
+      "assessedAt": "2026-10-19T10:12:05.984284+00:00",
+      "assessedMain": "82df58d2ba1d9d377b591126e7f4dfa42f27f02e",
+      "originalAcceptanceVerbatim": [
+        "在两种主题和两个视口，启用且未聚焦的空字段有相对邻接颜色至少3:1的必要识别线索；如用边界，实测有效合成色，不只检查原始token。",
+        "开关开/关的位置与轮廓在亮色和暗色均可辨认；必要状态线索至少3:1。用未禁用状态验收，不能用聚焦环替代静止状态。",
+        "保持品牌红不用于文字；修复控件语义色，不要求所有装饰性分隔线达到3:1。"
+      ],
+      "originalRegressionAssertionsVerbatim": [
+        {
+          "id": "D4-001/assertion-1",
+          "assert": "Enabled unfocused inputs and switch state indicators have effective boundary/state contrast >=3:1 against adjacent colors in light/dark themes."
+        },
+        {
+          "id": "D4-001/assertion-2",
+          "assert": "Focus, selected, error and disabled states stay identifiable with keyboard operation; do not require every decorative divider to meet the control-boundary rule."
+        },
+        {
+          "id": "D4-001/assertion-3",
+          "assert": "Validate signup and settings controls through actual screenshots and composite color measurements at desktop/mobile."
+        }
+      ],
+      "canonicalSource": "docs/goals/audit-remediation-20261019/site-plan.json#D4-001",
+      "originalAssertionsChanged": false,
+      "productCommits": [
+        "64736e0f29c56b7355fd1d8bfaaf2336f1e4db6d",
+        "deeea871ea682525d52820a4102f4bb80809ba67"
+      ],
+      "actualIndependentReview": {
+        "requestedEngine": "Codex-1 / GPT-6.1 Sol / xhigh",
+        "fallbackUsed": false,
+        "nestedAgentsUsed": false,
+        "independence": "Independent review and rendered verification of G-2751; no product fixes or changes to original assertions."
+      },
+      "proofSourceCommit": "2f99ee87a0c037c6298bd916bf9d0e9e418c1dd4",
+      "proof": "docs/goals/audit-remediation-20261019/proofs/settings-feedback.json#originalAcceptanceRuns",
+      "runtimeFrontend": "e96e4846d049d3958695e30ff7e67dacc1af93e9",
+      "genuineBackendObserved": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "sourceEquivalence": {
+        "testedFrontendProduct": "e96e4846d049d3958695e30ff7e67dacc1af93e9",
+        "landedSettingsProduct": "deeea871ea",
+        "actualMain": "82df58d2ba1d9d377b591126e7f4dfa42f27f02e",
+        "measuredSixPaths": [
+          {
+            "path": "packages/ui/src/components/input.tsx",
+            "actualMainBlob": "9e43bdd3d21feaab808b5e27184462227c8b029a",
+            "testedE96Blob": "9e43bdd3d21feaab808b5e27184462227c8b029a",
+            "byteEqual": true
+          },
+          {
+            "path": "packages/ui/src/components/input-group.tsx",
+            "actualMainBlob": "303ff0590a4c40c5582da1251a1aca94a8412fef",
+            "testedE96Blob": "303ff0590a4c40c5582da1251a1aca94a8412fef",
+            "byteEqual": true
+          },
+          {
+            "path": "packages/ui/src/components/switch.tsx",
+            "actualMainBlob": "33a87fd0d1678836f480fcb9b6df3fbb0568532e",
+            "testedE96Blob": "33a87fd0d1678836f480fcb9b6df3fbb0568532e",
+            "byteEqual": true
+          },
+          {
+            "path": "packages/ui/src/styles.css",
+            "actualMainBlob": "692d5d3f4fdd8e24b8f332cab2f35e096b24c663",
+            "testedE96Blob": "692d5d3f4fdd8e24b8f332cab2f35e096b24c663",
+            "byteEqual": true
+          },
+          {
+            "path": "apps/web/features/settings/notification-settings.tsx",
+            "actualMainBlob": "f55d9d785ae15d06dea370d402fb33a8e16aba60",
+            "testedE96Blob": "f55d9d785ae15d06dea370d402fb33a8e16aba60",
+            "byteEqual": true
+          },
+          {
+            "path": "apps/web/features/settings/settings-sections.tsx",
+            "actualMainBlob": "0b23de0b27cc999936e7c49e463ecb9436e67b29",
+            "testedE96Blob": "0b23de0b27cc999936e7c49e463ecb9436e67b29",
+            "byteEqual": true
+          }
+        ],
+        "currentTreeEquivalence": [
+          {
+            "path": "apps/web/features/settings",
+            "mainTree": "35bd89c39d0c110ff5b9ffa8eb9cfa74eed8783b",
+            "testedE96Tree": "35bd89c39d0c110ff5b9ffa8eb9cfa74eed8783b",
+            "shared92bTree": "855384d8d40051f41899f0aa3fe21e3cec0e1516",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": false
+          },
+          {
+            "path": "packages/ui",
+            "mainTree": "39063111db17c3c84dc0ee801d11c6c682482f3d",
+            "testedE96Tree": "39063111db17c3c84dc0ee801d11c6c682482f3d",
+            "shared92bTree": "e7d9c4f0865e0fc700ba7e216a897c0a2673c237",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": false
+          },
+          {
+            "path": "apps/accounts",
+            "mainTree": "eb3ccb4a7ddaea7e043df9fdbfc02cd894daa57c",
+            "testedE96Tree": "eb3ccb4a7ddaea7e043df9fdbfc02cd894daa57c",
+            "shared92bTree": "eb3ccb4a7ddaea7e043df9fdbfc02cd894daa57c",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "apps/web/i18n",
+            "mainTree": "d8798b864c82de3f559a799d82facdc741541cc3",
+            "testedE96Tree": "d8798b864c82de3f559a799d82facdc741541cc3",
+            "shared92bTree": "d8798b864c82de3f559a799d82facdc741541cc3",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          }
+        ],
+        "directControlAndRuntimeDependencies": [
+          {
+            "path": "packages/ui/src/components/input.tsx",
+            "mainBlob": "9e43bdd3d21feaab808b5e27184462227c8b029a",
+            "testedE96Blob": "9e43bdd3d21feaab808b5e27184462227c8b029a",
+            "sharedControl92bBlob": "9e43bdd3d21feaab808b5e27184462227c8b029a",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "packages/ui/src/components/input-group.tsx",
+            "mainBlob": "303ff0590a4c40c5582da1251a1aca94a8412fef",
+            "testedE96Blob": "303ff0590a4c40c5582da1251a1aca94a8412fef",
+            "sharedControl92bBlob": "303ff0590a4c40c5582da1251a1aca94a8412fef",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "packages/ui/src/components/textarea.tsx",
+            "mainBlob": "9ca71735c53c3526462fe1d2e6d84d53cfd84713",
+            "testedE96Blob": "9ca71735c53c3526462fe1d2e6d84d53cfd84713",
+            "sharedControl92bBlob": "9ca71735c53c3526462fe1d2e6d84d53cfd84713",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "packages/ui/src/components/switch.tsx",
+            "mainBlob": "33a87fd0d1678836f480fcb9b6df3fbb0568532e",
+            "testedE96Blob": "33a87fd0d1678836f480fcb9b6df3fbb0568532e",
+            "sharedControl92bBlob": "33a87fd0d1678836f480fcb9b6df3fbb0568532e",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "packages/ui/src/styles.css",
+            "mainBlob": "692d5d3f4fdd8e24b8f332cab2f35e096b24c663",
+            "testedE96Blob": "692d5d3f4fdd8e24b8f332cab2f35e096b24c663",
+            "sharedControl92bBlob": "692d5d3f4fdd8e24b8f332cab2f35e096b24c663",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "packages/ui/src/utils.ts",
+            "mainBlob": "7639ba19138d1b3aaf26be8c64f07354199021d9",
+            "testedE96Blob": "7639ba19138d1b3aaf26be8c64f07354199021d9",
+            "sharedControl92bBlob": "7639ba19138d1b3aaf26be8c64f07354199021d9",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "packages/ui/src/components/button.tsx",
+            "mainBlob": "b7045c0b4c05c46c49c31cfdcc0a473fac9c478f",
+            "testedE96Blob": "b7045c0b4c05c46c49c31cfdcc0a473fac9c478f",
+            "sharedControl92bBlob": "b7045c0b4c05c46c49c31cfdcc0a473fac9c478f",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "packages/ui/src/components/card.tsx",
+            "mainBlob": "a2a21786fe52a0f1b0027ec62b7100d88189fcd8",
+            "testedE96Blob": "a2a21786fe52a0f1b0027ec62b7100d88189fcd8",
+            "sharedControl92bBlob": "a2a21786fe52a0f1b0027ec62b7100d88189fcd8",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "packages/ui/src/components/field.tsx",
+            "mainBlob": "866cf238036f554f39cd344fa81a6aebd0121a7f",
+            "testedE96Blob": "866cf238036f554f39cd344fa81a6aebd0121a7f",
+            "sharedControl92bBlob": "866cf238036f554f39cd344fa81a6aebd0121a7f",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "packages/ui/src/components/select.tsx",
+            "mainBlob": "6597d5c584121956fb0836ea87508b7dfb0ad77e",
+            "testedE96Blob": "6597d5c584121956fb0836ea87508b7dfb0ad77e",
+            "sharedControl92bBlob": "6597d5c584121956fb0836ea87508b7dfb0ad77e",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "packages/ui/src/hitbox.css",
+            "mainBlob": "14648614ac3146fcb10f146b88f80647ddfd50a3",
+            "testedE96Blob": "14648614ac3146fcb10f146b88f80647ddfd50a3",
+            "sharedControl92bBlob": "14648614ac3146fcb10f146b88f80647ddfd50a3",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "packages/ui/src/prose.css",
+            "mainBlob": "1dd1b2d79f7ed2f42fa15e6a23e03af7ee1d03c7",
+            "testedE96Blob": "1dd1b2d79f7ed2f42fa15e6a23e03af7ee1d03c7",
+            "sharedControl92bBlob": "1dd1b2d79f7ed2f42fa15e6a23e03af7ee1d03c7",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "packages/ui/package.json",
+            "mainBlob": "008cd8a1e103f167b4f69117d7c455b83a251f30",
+            "testedE96Blob": "008cd8a1e103f167b4f69117d7c455b83a251f30",
+            "sharedControl92bBlob": "008cd8a1e103f167b4f69117d7c455b83a251f30",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "apps/web/package.json",
+            "mainBlob": "788bd74341217c9fb7f655e00ccd902d64210f5b",
+            "testedE96Blob": "788bd74341217c9fb7f655e00ccd902d64210f5b",
+            "sharedControl92bBlob": "788bd74341217c9fb7f655e00ccd902d64210f5b",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "package.json",
+            "mainBlob": "5b83cc84bb8984bbb72f1056d2ecc9463973fde3",
+            "testedE96Blob": "5b83cc84bb8984bbb72f1056d2ecc9463973fde3",
+            "sharedControl92bBlob": "5b83cc84bb8984bbb72f1056d2ecc9463973fde3",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "yarn.lock",
+            "mainBlob": "239124b3f025a9beeb23d08d75adfbdbcc18c366",
+            "testedE96Blob": "239124b3f025a9beeb23d08d75adfbdbcc18c366",
+            "sharedControl92bBlob": "239124b3f025a9beeb23d08d75adfbdbcc18c366",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "apps/web/features/onboarding/language-picker.tsx",
+            "mainBlob": "8f2fa8cd33cdb0473dad0b5ad5275c2ded2cfac9",
+            "testedE96Blob": "8f2fa8cd33cdb0473dad0b5ad5275c2ded2cfac9",
+            "sharedControl92bBlob": "1ffbd66da734188be939e477372a0620e8be5af6",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": false
+          },
+          {
+            "path": "apps/web/features/shell/shell-provider.tsx",
+            "mainBlob": "bc23ae0b00cfd1ff4b522776e95f6ce5cc82ec23",
+            "testedE96Blob": "bc23ae0b00cfd1ff4b522776e95f6ce5cc82ec23",
+            "sharedControl92bBlob": "bc23ae0b00cfd1ff4b522776e95f6ce5cc82ec23",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "apps/web/features/shell/app-shell.tsx",
+            "mainBlob": "50cb99542b2f01bbee00810fd0114e979635b1f5",
+            "testedE96Blob": "50cb99542b2f01bbee00810fd0114e979635b1f5",
+            "sharedControl92bBlob": "50cb99542b2f01bbee00810fd0114e979635b1f5",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          }
+        ],
+        "wholeFrontendIdentityClaimed": false,
+        "materialParentDifferenceBoundary": "AppShell geometry and ShellProvider are byte equal e96/main. BottomNav differs only accessible-name markup (new aria-label, removed sr-only count); geometry unchanged. LocalizedLink current-page visibility observer exists only in e96 and concerns aria-current anchors, not Settings native switch traversal or control contrast. No whole-Shell or whole-frontend identity claim.",
+        "sharedControlAndSignupProof": {
+          "reportPath": "docs/goals/audit-remediation-20261019/proofs/shared-controls.json",
+          "actualReportCommit": "4b334d2ce170ecb02eb131bf58b906477de9f774",
+          "reportSha256": "ef118ef7557bca41863f1d9b91d93cf232626395478869429cd9698734e53165",
+          "testedProduct": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "uiMeasuredComponentsStylesAndDependenciesByteEqualCurrentMain": true,
+          "entireAccountsTreeByteEqualCurrentMain": true,
+          "retainedRoot": ".temp/audit-remediation-20261019/proofs/shared-controls-g2821",
+          "retentionSha256": "b9a3d993924b4048ba300fd95e7b3c705c299569d24dc9a0d273b67fd126ca86",
+          "evidenceManifestSha256": "52c6d37724cbc0c521a3a21784427a0ce90bb2f2f4e6ef77bdfbde92b53da334",
+          "originalManifestEntries": 299,
+          "priorRetentionAllDigestsVerified": true
+        }
+      },
+      "assertionResults": [
+        {
+          "number": 1,
+          "originalVerbatim": "在两种主题和两个视口，启用且未聚焦的空字段有相对邻接颜色至少3:1的必要识别线索；如用边界，实测有效合成色，不只检查原始token。",
+          "status": "satisfied; ready for manager closure",
+          "evidence": [
+            "shared-controls.json#measurements/accountsEnabledFieldBoundary",
+            "shared-controls-g2821/artifacts/apps/results.json",
+            "original-acceptance result.json#views + pixel-evidence.json",
+            "dark-reused/empty-groups/result.json + pixel-evidence.json"
+          ],
+          "observed": "Original actual Accounts signup empty enabled fields pass both themes/1440+390: light minimum boundary outside3.5413/inside3.2883; dark4.0618/3.7605. New genuine Settings empty Reading language InputGroup supplies the previously missing parent surface: light PNG outside3.6864/inside3.4281; dark4.0573/3.7564. Effective compositing also>=3:1, enabled/unfocused/resting, no focus-ring or placeholder substitution.",
+          "scope": "Shared Input/InputGroup/Textarea plus original signup and Settings controls, not decorative separators.",
+          "result": "pass"
+        },
+        {
+          "number": 2,
+          "originalVerbatim": "开关开/关的位置与轮廓在亮色和暗色均可辨认；必要状态线索至少3:1。用未禁用状态验收，不能用聚焦环替代静止状态。",
+          "status": "satisfied; ready for manager closure",
+          "evidence": [
+            "shared-controls.json#assertions + measurements/byTheme",
+            "original-acceptance result.json#views + pixel-evidence.json",
+            "dark-reused/result.json + pixel-evidence.json"
+          ],
+          "observed": "Existing shared-control on/off sizes/surfaces48 PNG samples and native Tab/Space state assertions pass unchanged. Genuine Settings enabled on/on/off resting first-row samples in all four theme/width cells pass: light PNG minimum track4.0457/thumb3.8457; dark4.2942/thumb3.1856. Position/outline remain distinguishable; no disabled or focused threshold substitution.",
+          "result": "pass"
+        },
+        {
+          "number": 3,
+          "originalVerbatim": "保持品牌红不用于文字；修复控件语义色，不要求所有装饰性分隔线达到3:1。",
+          "status": "satisfied; existing unchanged source review reused",
+          "evidence": [
+            "shared-controls.json#source + assertions",
+            "current-source-identity.json",
+            "this receipt sourceEquivalence/shared92b"
+          ],
+          "observed": "Semantic control colors and reviewed shared component blobs remain unchanged from G2821 actual92b8 source; package manifests/lockfile identical. Brand-red/decorative-line boundary preserved; no new decorative-line3:1 condition introduced.",
+          "result": "pass"
+        }
+      ],
+      "retainedEvidence": ".temp/audit-remediation-20261019/proofs/settings-feedback-G-2829-original-acceptance-e96e4846d049",
+      "manifestSha256": "3845eebc44ff688c30569a7df5327ad9fbef2ca1bfa9737024903b096fe70fc6",
+      "retainedChecks": {
+        "newBoundedJob": "da7ef3dc-599a-45e5-b997-fffe389cd222",
+        "newBoundedJobExit": 0,
+        "all45NativeTab": {
+          "viewport": {
+            "width": 390,
+            "height": 844
+          },
+          "switchesExpected": 45,
+          "switchesReachedInOriginalOrder": 45,
+          "states": {
+            "on": 30,
+            "off": 15
+          },
+          "allEnabled": true,
+          "completeTopicChannelNames": true,
+          "all45ControlsTopicsAndChannelsVisibleAndUnoccluded": true,
+          "all45DocumentWidths390": true,
+          "valuesUnchanged": true,
+          "failures": [],
+          "first": "Replies · In-app",
+          "middle": "Helpful votes on reviews · In-app",
+          "last": "Correction reverted · Email digest",
+          "evidence": "result.json#traversal",
+          "viewedFocusImages": [
+            "images/live-original-acceptance-tab-390-index-0.png",
+            "images/live-original-acceptance-tab-390-index-21.png",
+            "images/live-original-acceptance-tab-390-index-44.png"
+          ],
+          "stateSemantics": "Native input role=switch and checked boolean retained in traversal receipt. Names contain topic and channel; native checked property exposes state separately, rather than adding state words to name."
+        },
+        "contrast": {
+          "finding": "D4-001",
+          "surface": "Authenticated Settings only; complements existing shared-control and signup proof.",
+          "light": {
+            "samples": 8,
+            "switchSamples": 6,
+            "emptyInputGroupSamples": 2,
+            "pngSwitchMinimum": {
+              "trackRatio": 4.045678698503525,
+              "thumbRatio": 3.845661423788804
+            },
+            "compositedSwitchMinimum": {
+              "trackRatio": 3.989942298407384,
+              "thumbRatio": 3.792680616432581
+            },
+            "pngEmptyInputGroupMinimum": {
+              "outsideRatio": 3.6863747082567557,
+              "insideRatio": 3.428134987724757
+            },
+            "compositedEmptyInputGroupMinimum": {
+              "outsideRatio": 3.989942298407384,
+              "insideRatio": 3.7104369128664842
+            },
+            "allPngAndCompositeRatiosAtLeast3": true,
+            "evidence": [
+              "result.json#views",
+              "pixel-evidence.json"
+            ]
+          },
+          "dark": {
+            "reusedWithoutRecapture": true,
+            "switchSamples": 6,
+            "emptyInputGroupSamples": 2,
+            "pngSwitchMinimum": {
+              "trackRatio": 4.294156338706992,
+              "thumbRatio": 3.1856101973415862
+            },
+            "pngEmptyInputGroupMinimum": {
+              "outsideRatio": 4.05734714257983,
+              "insideRatio": 3.75637990941802
+            },
+            "compositedEmptyInputGroupMinimum": {
+              "outsideRatio": 4.353717608779681,
+              "insideRatio": 4.030766109527607
+            },
+            "evidence": [
+              "dark-reused/receipt.json",
+              "dark-reused/pixel-evidence.json",
+              "dark-reused/empty-groups/pixel-evidence.json",
+              "dark-manifest-verification.json"
+            ],
+            "originalManifestEntriesVerified": 21,
+            "allSizesAndSha256Match": true
+          },
+          "fourThemeViewportCellsReached": [
+            "light1440x1000",
+            "light390x844",
+            "dark1440x1000",
+            "dark390x844"
+          ],
+          "actualSurfaceResult": "Necessary switch track/background and thumb/track cues and empty InputGroup boundary/inner/outer backgrounds all pass>=3:1 on enabled resting unfocused actual controls."
+        },
+        "screenshotsActuallyViewedByG2829": {
+          "newPersonallyViewed": 7,
+          "reusedDarkPersonallyViewed": 4,
+          "totalPersonallyViewed": 11,
+          "viewedManifest": "viewed-images.json",
+          "actuallyViewed": [
+            "images/live-original-acceptance-light-1440-notification-rest.png",
+            "images/live-original-acceptance-light-390-notification-rest.png",
+            "images/live-original-acceptance-light-1440-empty-group.png",
+            "images/live-original-acceptance-light-390-empty-group.png",
+            "images/live-original-acceptance-tab-390-index-0.png",
+            "images/live-original-acceptance-tab-390-index-21.png",
+            "images/live-original-acceptance-tab-390-index-44.png",
+            "dark-reused/images/dark-1440-notification-rest.png",
+            "dark-reused/images/dark-390-notification-rest.png",
+            "dark-reused/empty-groups/images/dark-1440-empty-group-0.png",
+            "dark-reused/empty-groups/images/dark-390-empty-group-0.png"
+          ],
+          "notViewed": "New readiness PNG and retained original dark failed PNG are retained but not claimed as personally viewed in this continuation."
+        },
+        "unchangedReuse": {
+          "candidateQA": "20261019t063638-162050; job8a721d95-fda0-4ad1-9191-d2e8cd2db938;32/32 original stories,15 unit tests/109 assertions, affected types/lint/AST/guards passed at61df. Not rerun.",
+          "genuineEvidenceRun": "authenticated-e96e4846d049; existing22 distinct passing genuine cases,47 previously viewed PNGs, original assertions and failures preserved; no unchanged journey rerun.",
+          "darkHelper": "Reuse dark-reused/receipt.json and all21 manifest artifacts. First wrapper201 and original pixel/occlusion sampler failures remain. Corrected analysis of already captured unoccluded first row and plain inner background; no product or image edits. Empty-group wrapper exit remains unknown, as supplied."
+        },
+        "reportAdministrativeChecks": {
+          "scope": "Report-only administrative checks on this main-based report branch; pinned product checks and existing32 stories/22 genuine cases were reused, not replayed.",
+          "job": "0377ee0a-49c1-4bd8-a750-4c753abe11f0",
+          "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+          "exit": 0,
+          "steps": [
+            {
+              "command": "task docs:check",
+              "exit": 0,
+              "result": "13 documentation checker tests passed;249 Markdown files checked for local links/fragments/design navigation. No runtime or external link claim.",
+              "evidence": "jobs/0377ee0a-49c1-4bd8-a750-4c753abe11f0.1.log"
+            },
+            {
+              "command": "task goal -- check",
+              "exit": 0,
+              "checkId": "run-toTmCU",
+              "result": "types ok(no TypeScript workspace changed); tests ok(none named in brief); lint ok(no source changed); AST ok; guards ok(1/44 selected for report path).",
+              "evidence": [
+                "jobs/0377ee0a-49c1-4bd8-a750-4c753abe11f0.2.log",
+                "administrative-check/run-toTmCU/output.log"
+              ]
+            }
+          ],
+          "harnessNotice": "Command reports harness2 commits behind main; every selected check passed. No source update or repeated passing test justified."
+        }
+      },
+      "scopeTrace": "Product-audit assessment traces the original shared-control contrast or matrix context/order invariant across all original applicable surfaces. Unchanged passing proof and exact dependency blobs reused. D2-005 focus, nonzero notifications and other site classes are separate. No heard speech or physical-device claim.",
+      "limits": {
+        "frontend": "e96e4846d049d3958695e30ff7e67dacc1af93e9",
+        "backend": {
+          "origin": "http://127.0.0.1:3001",
+          "health": {
+            "status": 200,
+            "body": {
+              "status": "ready",
+              "horizons": {
+                "sampledAt": "2026-10-19T09:51:55.205Z",
+                "writerVisibility": "all-sessions",
+                "notification": {
+                  "oldestPendingRowAgeSeconds": null,
+                  "oldestWriterAgeSeconds": 0.003
+                },
+                "reviewRank": {
+                  "oldestPendingRowAgeSeconds": null,
+                  "oldestPendingRowAgeBasis": "none",
+                  "oldestWriterAgeSeconds": 0.003
+                },
+                "editorial": {
+                  "oldestPendingRowAgeSeconds": null,
+                  "oldestWriterAgeSeconds": 0.003
+                }
+              }
+            }
+          },
+          "processes": [
+            {
+              "pid": "1372265",
+              "sourceDirectory": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+              "checkoutHead": "75409ac3c379a9f84212e48a8abdc6540c5c44a2"
+            }
+          ],
+          "provenanceLimit": "Process source-directory pin recorded separately; health response does not attest an immutable build revision."
+        },
+        "contrast": [
+          "Point samples do not scan every antialiased boundary pixel.",
+          "DOM live-region changes and accessibility semantics do not establish speech heard by a screen reader; recorded speech is not an additional original D4-005 acceptance requirement.",
+          "Backend process source-directory identity plus ready health200 is not immutable build attestation.",
+          "Only seven new PNGs and four reused dark PNGs were personally viewed in this continuation."
+        ],
+        "displayPreferenceRestored": true,
+        "displayReservationReleased": true,
+        "newLiveRunsByThisWorker": false,
+        "newReviewByThisWorker": false,
+        "originalAssertionsMutated": false,
+        "rootSourceOrIndexEdits": false,
+        "classStatusEdits": false,
+        "classesNotHeldOn": [
+          "G2751 D2-005 refresh-success focus repair",
+          "Nonzero notification semantics",
+          "Other complete Settings journeys or full-domain personas",
+          "New screen-reader heard-speech recording requirement"
+        ]
+      }
+    },
+    {
+      "id": "D4-004",
+      "status": "closed",
+      "assessedAt": "2026-10-19T10:12:05.984284+00:00",
+      "assessedMain": "82df58d2ba1d9d377b591126e7f4dfa42f27f02e",
+      "originalAcceptanceVerbatim": [
+        "390宽在任意一行停下时，三个开关对应的通道无需回滚或记忆即可从当前视图辨认。",
+        "保留完整可访问名称，键盘和读屏顺序仍对应通知类型、通道及当前状态。",
+        "用顶部、中部和末行的实际截图验收；不能只验首行或只查aria-label。"
+      ],
+      "originalRegressionAssertionsVerbatim": [
+        {
+          "id": "D4-004/assertion-1",
+          "assert": "Every notification preference row at top/middle/end visibly associates its 3 switches with Email/In-app/Push at 390px and desktop."
+        },
+        {
+          "id": "D4-004/assertion-2",
+          "assert": "A sticky heading or row-local labels remain visible without covering focused controls; do not remove the already-correct switch accessible names."
+        },
+        {
+          "id": "D4-004/assertion-3",
+          "assert": "Keyboard focus and row/channel context remain understandable through the full 15-row/45-switch matrix."
+        }
+      ],
+      "canonicalSource": "docs/goals/audit-remediation-20261019/site-plan.json#D4-004",
+      "originalAssertionsChanged": false,
+      "productCommits": [
+        "64736e0f29c56b7355fd1d8bfaaf2336f1e4db6d",
+        "deeea871ea682525d52820a4102f4bb80809ba67"
+      ],
+      "actualIndependentReview": {
+        "requestedEngine": "Codex-1 / GPT-6.1 Sol / xhigh",
+        "fallbackUsed": false,
+        "nestedAgentsUsed": false,
+        "independence": "Independent review and rendered verification of G-2751; no product fixes or changes to original assertions."
+      },
+      "proofSourceCommit": "2f99ee87a0c037c6298bd916bf9d0e9e418c1dd4",
+      "proof": "docs/goals/audit-remediation-20261019/proofs/settings-feedback.json#originalAcceptanceRuns",
+      "runtimeFrontend": "e96e4846d049d3958695e30ff7e67dacc1af93e9",
+      "genuineBackendObserved": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "sourceEquivalence": {
+        "testedFrontendProduct": "e96e4846d049d3958695e30ff7e67dacc1af93e9",
+        "landedSettingsProduct": "deeea871ea",
+        "actualMain": "82df58d2ba1d9d377b591126e7f4dfa42f27f02e",
+        "measuredSixPaths": [
+          {
+            "path": "packages/ui/src/components/input.tsx",
+            "actualMainBlob": "9e43bdd3d21feaab808b5e27184462227c8b029a",
+            "testedE96Blob": "9e43bdd3d21feaab808b5e27184462227c8b029a",
+            "byteEqual": true
+          },
+          {
+            "path": "packages/ui/src/components/input-group.tsx",
+            "actualMainBlob": "303ff0590a4c40c5582da1251a1aca94a8412fef",
+            "testedE96Blob": "303ff0590a4c40c5582da1251a1aca94a8412fef",
+            "byteEqual": true
+          },
+          {
+            "path": "packages/ui/src/components/switch.tsx",
+            "actualMainBlob": "33a87fd0d1678836f480fcb9b6df3fbb0568532e",
+            "testedE96Blob": "33a87fd0d1678836f480fcb9b6df3fbb0568532e",
+            "byteEqual": true
+          },
+          {
+            "path": "packages/ui/src/styles.css",
+            "actualMainBlob": "692d5d3f4fdd8e24b8f332cab2f35e096b24c663",
+            "testedE96Blob": "692d5d3f4fdd8e24b8f332cab2f35e096b24c663",
+            "byteEqual": true
+          },
+          {
+            "path": "apps/web/features/settings/notification-settings.tsx",
+            "actualMainBlob": "f55d9d785ae15d06dea370d402fb33a8e16aba60",
+            "testedE96Blob": "f55d9d785ae15d06dea370d402fb33a8e16aba60",
+            "byteEqual": true
+          },
+          {
+            "path": "apps/web/features/settings/settings-sections.tsx",
+            "actualMainBlob": "0b23de0b27cc999936e7c49e463ecb9436e67b29",
+            "testedE96Blob": "0b23de0b27cc999936e7c49e463ecb9436e67b29",
+            "byteEqual": true
+          }
+        ],
+        "currentTreeEquivalence": [
+          {
+            "path": "apps/web/features/settings",
+            "mainTree": "35bd89c39d0c110ff5b9ffa8eb9cfa74eed8783b",
+            "testedE96Tree": "35bd89c39d0c110ff5b9ffa8eb9cfa74eed8783b",
+            "shared92bTree": "855384d8d40051f41899f0aa3fe21e3cec0e1516",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": false
+          },
+          {
+            "path": "packages/ui",
+            "mainTree": "39063111db17c3c84dc0ee801d11c6c682482f3d",
+            "testedE96Tree": "39063111db17c3c84dc0ee801d11c6c682482f3d",
+            "shared92bTree": "e7d9c4f0865e0fc700ba7e216a897c0a2673c237",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": false
+          },
+          {
+            "path": "apps/accounts",
+            "mainTree": "eb3ccb4a7ddaea7e043df9fdbfc02cd894daa57c",
+            "testedE96Tree": "eb3ccb4a7ddaea7e043df9fdbfc02cd894daa57c",
+            "shared92bTree": "eb3ccb4a7ddaea7e043df9fdbfc02cd894daa57c",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "apps/web/i18n",
+            "mainTree": "d8798b864c82de3f559a799d82facdc741541cc3",
+            "testedE96Tree": "d8798b864c82de3f559a799d82facdc741541cc3",
+            "shared92bTree": "d8798b864c82de3f559a799d82facdc741541cc3",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          }
+        ],
+        "directControlAndRuntimeDependencies": [
+          {
+            "path": "packages/ui/src/components/input.tsx",
+            "mainBlob": "9e43bdd3d21feaab808b5e27184462227c8b029a",
+            "testedE96Blob": "9e43bdd3d21feaab808b5e27184462227c8b029a",
+            "sharedControl92bBlob": "9e43bdd3d21feaab808b5e27184462227c8b029a",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "packages/ui/src/components/input-group.tsx",
+            "mainBlob": "303ff0590a4c40c5582da1251a1aca94a8412fef",
+            "testedE96Blob": "303ff0590a4c40c5582da1251a1aca94a8412fef",
+            "sharedControl92bBlob": "303ff0590a4c40c5582da1251a1aca94a8412fef",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "packages/ui/src/components/textarea.tsx",
+            "mainBlob": "9ca71735c53c3526462fe1d2e6d84d53cfd84713",
+            "testedE96Blob": "9ca71735c53c3526462fe1d2e6d84d53cfd84713",
+            "sharedControl92bBlob": "9ca71735c53c3526462fe1d2e6d84d53cfd84713",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "packages/ui/src/components/switch.tsx",
+            "mainBlob": "33a87fd0d1678836f480fcb9b6df3fbb0568532e",
+            "testedE96Blob": "33a87fd0d1678836f480fcb9b6df3fbb0568532e",
+            "sharedControl92bBlob": "33a87fd0d1678836f480fcb9b6df3fbb0568532e",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "packages/ui/src/styles.css",
+            "mainBlob": "692d5d3f4fdd8e24b8f332cab2f35e096b24c663",
+            "testedE96Blob": "692d5d3f4fdd8e24b8f332cab2f35e096b24c663",
+            "sharedControl92bBlob": "692d5d3f4fdd8e24b8f332cab2f35e096b24c663",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "packages/ui/src/utils.ts",
+            "mainBlob": "7639ba19138d1b3aaf26be8c64f07354199021d9",
+            "testedE96Blob": "7639ba19138d1b3aaf26be8c64f07354199021d9",
+            "sharedControl92bBlob": "7639ba19138d1b3aaf26be8c64f07354199021d9",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "packages/ui/src/components/button.tsx",
+            "mainBlob": "b7045c0b4c05c46c49c31cfdcc0a473fac9c478f",
+            "testedE96Blob": "b7045c0b4c05c46c49c31cfdcc0a473fac9c478f",
+            "sharedControl92bBlob": "b7045c0b4c05c46c49c31cfdcc0a473fac9c478f",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "packages/ui/src/components/card.tsx",
+            "mainBlob": "a2a21786fe52a0f1b0027ec62b7100d88189fcd8",
+            "testedE96Blob": "a2a21786fe52a0f1b0027ec62b7100d88189fcd8",
+            "sharedControl92bBlob": "a2a21786fe52a0f1b0027ec62b7100d88189fcd8",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "packages/ui/src/components/field.tsx",
+            "mainBlob": "866cf238036f554f39cd344fa81a6aebd0121a7f",
+            "testedE96Blob": "866cf238036f554f39cd344fa81a6aebd0121a7f",
+            "sharedControl92bBlob": "866cf238036f554f39cd344fa81a6aebd0121a7f",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "packages/ui/src/components/select.tsx",
+            "mainBlob": "6597d5c584121956fb0836ea87508b7dfb0ad77e",
+            "testedE96Blob": "6597d5c584121956fb0836ea87508b7dfb0ad77e",
+            "sharedControl92bBlob": "6597d5c584121956fb0836ea87508b7dfb0ad77e",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "packages/ui/src/hitbox.css",
+            "mainBlob": "14648614ac3146fcb10f146b88f80647ddfd50a3",
+            "testedE96Blob": "14648614ac3146fcb10f146b88f80647ddfd50a3",
+            "sharedControl92bBlob": "14648614ac3146fcb10f146b88f80647ddfd50a3",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "packages/ui/src/prose.css",
+            "mainBlob": "1dd1b2d79f7ed2f42fa15e6a23e03af7ee1d03c7",
+            "testedE96Blob": "1dd1b2d79f7ed2f42fa15e6a23e03af7ee1d03c7",
+            "sharedControl92bBlob": "1dd1b2d79f7ed2f42fa15e6a23e03af7ee1d03c7",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "packages/ui/package.json",
+            "mainBlob": "008cd8a1e103f167b4f69117d7c455b83a251f30",
+            "testedE96Blob": "008cd8a1e103f167b4f69117d7c455b83a251f30",
+            "sharedControl92bBlob": "008cd8a1e103f167b4f69117d7c455b83a251f30",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "apps/web/package.json",
+            "mainBlob": "788bd74341217c9fb7f655e00ccd902d64210f5b",
+            "testedE96Blob": "788bd74341217c9fb7f655e00ccd902d64210f5b",
+            "sharedControl92bBlob": "788bd74341217c9fb7f655e00ccd902d64210f5b",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "package.json",
+            "mainBlob": "5b83cc84bb8984bbb72f1056d2ecc9463973fde3",
+            "testedE96Blob": "5b83cc84bb8984bbb72f1056d2ecc9463973fde3",
+            "sharedControl92bBlob": "5b83cc84bb8984bbb72f1056d2ecc9463973fde3",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "yarn.lock",
+            "mainBlob": "239124b3f025a9beeb23d08d75adfbdbcc18c366",
+            "testedE96Blob": "239124b3f025a9beeb23d08d75adfbdbcc18c366",
+            "sharedControl92bBlob": "239124b3f025a9beeb23d08d75adfbdbcc18c366",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "apps/web/features/onboarding/language-picker.tsx",
+            "mainBlob": "8f2fa8cd33cdb0473dad0b5ad5275c2ded2cfac9",
+            "testedE96Blob": "8f2fa8cd33cdb0473dad0b5ad5275c2ded2cfac9",
+            "sharedControl92bBlob": "1ffbd66da734188be939e477372a0620e8be5af6",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": false
+          },
+          {
+            "path": "apps/web/features/shell/shell-provider.tsx",
+            "mainBlob": "bc23ae0b00cfd1ff4b522776e95f6ce5cc82ec23",
+            "testedE96Blob": "bc23ae0b00cfd1ff4b522776e95f6ce5cc82ec23",
+            "sharedControl92bBlob": "bc23ae0b00cfd1ff4b522776e95f6ce5cc82ec23",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          },
+          {
+            "path": "apps/web/features/shell/app-shell.tsx",
+            "mainBlob": "50cb99542b2f01bbee00810fd0114e979635b1f5",
+            "testedE96Blob": "50cb99542b2f01bbee00810fd0114e979635b1f5",
+            "sharedControl92bBlob": "50cb99542b2f01bbee00810fd0114e979635b1f5",
+            "mainEqualsTestedE96": true,
+            "mainEqualsShared92b": true
+          }
+        ],
+        "wholeFrontendIdentityClaimed": false,
+        "materialParentDifferenceBoundary": "AppShell geometry and ShellProvider are byte equal e96/main. BottomNav differs only accessible-name markup (new aria-label, removed sr-only count); geometry unchanged. LocalizedLink current-page visibility observer exists only in e96 and concerns aria-current anchors, not Settings native switch traversal or control contrast. No whole-Shell or whole-frontend identity claim.",
+        "sharedControlAndSignupProof": {
+          "reportPath": "docs/goals/audit-remediation-20261019/proofs/shared-controls.json",
+          "actualReportCommit": "4b334d2ce170ecb02eb131bf58b906477de9f774",
+          "reportSha256": "ef118ef7557bca41863f1d9b91d93cf232626395478869429cd9698734e53165",
+          "testedProduct": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "uiMeasuredComponentsStylesAndDependenciesByteEqualCurrentMain": true,
+          "entireAccountsTreeByteEqualCurrentMain": true,
+          "retainedRoot": ".temp/audit-remediation-20261019/proofs/shared-controls-g2821",
+          "retentionSha256": "b9a3d993924b4048ba300fd95e7b3c705c299569d24dc9a0d273b67fd126ca86",
+          "evidenceManifestSha256": "52c6d37724cbc0c521a3a21784427a0ce90bb2f2f4e6ef77bdfbde92b53da334",
+          "originalManifestEntries": 299,
+          "priorRetentionAllDigestsVerified": true
+        }
+      },
+      "assertionResults": [
+        {
+          "number": 1,
+          "originalVerbatim": "390宽在任意一行停下时，三个开关对应的通道无需回滚或记忆即可从当前视图辨认。",
+          "status": "satisfied; ready for manager closure",
+          "evidence": [
+            "original-acceptance result.json#traversal/switches",
+            "prior genuine authenticated-e96 bundle live-inspect.json#views and EN/JA/DE first/middle/last images"
+          ],
+          "observed": "At390 all45 natural Tab destinations show the currently focused switch, its topic and repeated visible channel label in viewport and unoccluded, all document widths390; native browser scrolling only. Existing localized actual screenshot checks cover wrapping; no return to header or remembered column order required.",
+          "result": "pass"
+        },
+        {
+          "number": 2,
+          "originalVerbatim": "保留完整可访问名称，键盘和读屏顺序仍对应通知类型、通道及当前状态。",
+          "status": "satisfied for original native semantics/order; no heard-speech claim",
+          "evidence": [
+            "original-acceptance result.json#traversal",
+            "prior32 original story accessible-name assertions"
+          ],
+          "observed": "Starting BODY,57 ordinary Tab presses reach all45 switches once in original DOM topic/channel order. Every name equals topic + channel; native INPUT role=switch exposes checked state separately (30on,15off), all enabled; preferences remain unchanged. Original acceptance does not add recorded speech or physical-device proof.",
+          "result": "pass"
+        },
+        {
+          "number": 3,
+          "originalVerbatim": "用顶部、中部和末行的实际截图验收；不能只验首行或只查aria-label。",
+          "status": "satisfied; actual first/middle/last images retained and reviewer viewed",
+          "evidence": [
+            "images/live-original-acceptance-tab-390-index-0.png",
+            "images/live-original-acceptance-tab-390-index-21.png",
+            "images/live-original-acceptance-tab-390-index-44.png",
+            "prior genuine viewed-images.json localized first/middle/last rows"
+          ],
+          "observed": "G2829 personally viewed first Replies/In-app, middle Helpful votes on reviews/In-app and last Correction reverted/Email digest phone PNGs, plus retained actual localized views; acceptance not inferred solely from aria-label or first row.",
+          "result": "pass"
+        }
+      ],
+      "retainedEvidence": ".temp/audit-remediation-20261019/proofs/settings-feedback-G-2829-original-acceptance-e96e4846d049",
+      "manifestSha256": "3845eebc44ff688c30569a7df5327ad9fbef2ca1bfa9737024903b096fe70fc6",
+      "retainedChecks": {
+        "newBoundedJob": "da7ef3dc-599a-45e5-b997-fffe389cd222",
+        "newBoundedJobExit": 0,
+        "all45NativeTab": {
+          "viewport": {
+            "width": 390,
+            "height": 844
+          },
+          "switchesExpected": 45,
+          "switchesReachedInOriginalOrder": 45,
+          "states": {
+            "on": 30,
+            "off": 15
+          },
+          "allEnabled": true,
+          "completeTopicChannelNames": true,
+          "all45ControlsTopicsAndChannelsVisibleAndUnoccluded": true,
+          "all45DocumentWidths390": true,
+          "valuesUnchanged": true,
+          "failures": [],
+          "first": "Replies · In-app",
+          "middle": "Helpful votes on reviews · In-app",
+          "last": "Correction reverted · Email digest",
+          "evidence": "result.json#traversal",
+          "viewedFocusImages": [
+            "images/live-original-acceptance-tab-390-index-0.png",
+            "images/live-original-acceptance-tab-390-index-21.png",
+            "images/live-original-acceptance-tab-390-index-44.png"
+          ],
+          "stateSemantics": "Native input role=switch and checked boolean retained in traversal receipt. Names contain topic and channel; native checked property exposes state separately, rather than adding state words to name."
+        },
+        "contrast": {
+          "finding": "D4-001",
+          "surface": "Authenticated Settings only; complements existing shared-control and signup proof.",
+          "light": {
+            "samples": 8,
+            "switchSamples": 6,
+            "emptyInputGroupSamples": 2,
+            "pngSwitchMinimum": {
+              "trackRatio": 4.045678698503525,
+              "thumbRatio": 3.845661423788804
+            },
+            "compositedSwitchMinimum": {
+              "trackRatio": 3.989942298407384,
+              "thumbRatio": 3.792680616432581
+            },
+            "pngEmptyInputGroupMinimum": {
+              "outsideRatio": 3.6863747082567557,
+              "insideRatio": 3.428134987724757
+            },
+            "compositedEmptyInputGroupMinimum": {
+              "outsideRatio": 3.989942298407384,
+              "insideRatio": 3.7104369128664842
+            },
+            "allPngAndCompositeRatiosAtLeast3": true,
+            "evidence": [
+              "result.json#views",
+              "pixel-evidence.json"
+            ]
+          },
+          "dark": {
+            "reusedWithoutRecapture": true,
+            "switchSamples": 6,
+            "emptyInputGroupSamples": 2,
+            "pngSwitchMinimum": {
+              "trackRatio": 4.294156338706992,
+              "thumbRatio": 3.1856101973415862
+            },
+            "pngEmptyInputGroupMinimum": {
+              "outsideRatio": 4.05734714257983,
+              "insideRatio": 3.75637990941802
+            },
+            "compositedEmptyInputGroupMinimum": {
+              "outsideRatio": 4.353717608779681,
+              "insideRatio": 4.030766109527607
+            },
+            "evidence": [
+              "dark-reused/receipt.json",
+              "dark-reused/pixel-evidence.json",
+              "dark-reused/empty-groups/pixel-evidence.json",
+              "dark-manifest-verification.json"
+            ],
+            "originalManifestEntriesVerified": 21,
+            "allSizesAndSha256Match": true
+          },
+          "fourThemeViewportCellsReached": [
+            "light1440x1000",
+            "light390x844",
+            "dark1440x1000",
+            "dark390x844"
+          ],
+          "actualSurfaceResult": "Necessary switch track/background and thumb/track cues and empty InputGroup boundary/inner/outer backgrounds all pass>=3:1 on enabled resting unfocused actual controls."
+        },
+        "screenshotsActuallyViewedByG2829": {
+          "newPersonallyViewed": 7,
+          "reusedDarkPersonallyViewed": 4,
+          "totalPersonallyViewed": 11,
+          "viewedManifest": "viewed-images.json",
+          "actuallyViewed": [
+            "images/live-original-acceptance-light-1440-notification-rest.png",
+            "images/live-original-acceptance-light-390-notification-rest.png",
+            "images/live-original-acceptance-light-1440-empty-group.png",
+            "images/live-original-acceptance-light-390-empty-group.png",
+            "images/live-original-acceptance-tab-390-index-0.png",
+            "images/live-original-acceptance-tab-390-index-21.png",
+            "images/live-original-acceptance-tab-390-index-44.png",
+            "dark-reused/images/dark-1440-notification-rest.png",
+            "dark-reused/images/dark-390-notification-rest.png",
+            "dark-reused/empty-groups/images/dark-1440-empty-group-0.png",
+            "dark-reused/empty-groups/images/dark-390-empty-group-0.png"
+          ],
+          "notViewed": "New readiness PNG and retained original dark failed PNG are retained but not claimed as personally viewed in this continuation."
+        },
+        "unchangedReuse": {
+          "candidateQA": "20261019t063638-162050; job8a721d95-fda0-4ad1-9191-d2e8cd2db938;32/32 original stories,15 unit tests/109 assertions, affected types/lint/AST/guards passed at61df. Not rerun.",
+          "genuineEvidenceRun": "authenticated-e96e4846d049; existing22 distinct passing genuine cases,47 previously viewed PNGs, original assertions and failures preserved; no unchanged journey rerun.",
+          "darkHelper": "Reuse dark-reused/receipt.json and all21 manifest artifacts. First wrapper201 and original pixel/occlusion sampler failures remain. Corrected analysis of already captured unoccluded first row and plain inner background; no product or image edits. Empty-group wrapper exit remains unknown, as supplied."
+        },
+        "reportAdministrativeChecks": {
+          "scope": "Report-only administrative checks on this main-based report branch; pinned product checks and existing32 stories/22 genuine cases were reused, not replayed.",
+          "job": "0377ee0a-49c1-4bd8-a750-4c753abe11f0",
+          "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+          "exit": 0,
+          "steps": [
+            {
+              "command": "task docs:check",
+              "exit": 0,
+              "result": "13 documentation checker tests passed;249 Markdown files checked for local links/fragments/design navigation. No runtime or external link claim.",
+              "evidence": "jobs/0377ee0a-49c1-4bd8-a750-4c753abe11f0.1.log"
+            },
+            {
+              "command": "task goal -- check",
+              "exit": 0,
+              "checkId": "run-toTmCU",
+              "result": "types ok(no TypeScript workspace changed); tests ok(none named in brief); lint ok(no source changed); AST ok; guards ok(1/44 selected for report path).",
+              "evidence": [
+                "jobs/0377ee0a-49c1-4bd8-a750-4c753abe11f0.2.log",
+                "administrative-check/run-toTmCU/output.log"
+              ]
+            }
+          ],
+          "harnessNotice": "Command reports harness2 commits behind main; every selected check passed. No source update or repeated passing test justified."
+        }
+      },
+      "scopeTrace": "Product-audit assessment traces the original shared-control contrast or matrix context/order invariant across all original applicable surfaces. Unchanged passing proof and exact dependency blobs reused. D2-005 focus, nonzero notifications and other site classes are separate. No heard speech or physical-device claim.",
+      "limits": {
+        "frontend": "e96e4846d049d3958695e30ff7e67dacc1af93e9",
+        "backend": {
+          "origin": "http://127.0.0.1:3001",
+          "health": {
+            "status": 200,
+            "body": {
+              "status": "ready",
+              "horizons": {
+                "sampledAt": "2026-10-19T09:51:55.205Z",
+                "writerVisibility": "all-sessions",
+                "notification": {
+                  "oldestPendingRowAgeSeconds": null,
+                  "oldestWriterAgeSeconds": 0.003
+                },
+                "reviewRank": {
+                  "oldestPendingRowAgeSeconds": null,
+                  "oldestPendingRowAgeBasis": "none",
+                  "oldestWriterAgeSeconds": 0.003
+                },
+                "editorial": {
+                  "oldestPendingRowAgeSeconds": null,
+                  "oldestWriterAgeSeconds": 0.003
+                }
+              }
+            }
+          },
+          "processes": [
+            {
+              "pid": "1372265",
+              "sourceDirectory": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+              "checkoutHead": "75409ac3c379a9f84212e48a8abdc6540c5c44a2"
+            }
+          ],
+          "provenanceLimit": "Process source-directory pin recorded separately; health response does not attest an immutable build revision."
+        },
+        "contrast": [
+          "Point samples do not scan every antialiased boundary pixel.",
+          "DOM live-region changes and accessibility semantics do not establish speech heard by a screen reader; recorded speech is not an additional original D4-005 acceptance requirement.",
+          "Backend process source-directory identity plus ready health200 is not immutable build attestation.",
+          "Only seven new PNGs and four reused dark PNGs were personally viewed in this continuation."
+        ],
+        "displayPreferenceRestored": true,
+        "displayReservationReleased": true,
+        "newLiveRunsByThisWorker": false,
+        "newReviewByThisWorker": false,
+        "originalAssertionsMutated": false,
+        "rootSourceOrIndexEdits": false,
+        "classStatusEdits": false,
+        "classesNotHeldOn": [
+          "G2751 D2-005 refresh-success focus repair",
+          "Nonzero notification semantics",
+          "Other complete Settings journeys or full-domain personas",
+          "New screen-reader heard-speech recording requirement"
+        ]
+      }
     }
   ]
 }
