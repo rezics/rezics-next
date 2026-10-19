@@ -8,7 +8,7 @@ import { releaseLanguageFacet } from '../definitions/facet-release-language-v1.t
 const releaseFacets = authoredFacets.filter(facet => facet.name.startsWith('release'));
 
 test('G851: related-node release facets pin their path, child placement, meaning and eight labels', () => {
-  expect(releaseFacets).toHaveLength(6);
+  expect(releaseFacets).toHaveLength(7);
   for (const facet of releaseFacets) {
     const compiled = compileFacet(facet);
     expect(facetRegistry[`https://rezics.com/definition/${facetId(facet)}` as keyof typeof facetRegistry].digest).toBe(compiled.digest);
