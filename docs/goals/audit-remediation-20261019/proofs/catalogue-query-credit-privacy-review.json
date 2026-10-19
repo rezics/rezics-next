@@ -19,7 +19,6 @@
     "base": "2811e7dfa99d5dd56f72e55828413f2f116d1eaa",
     "sourceCandidate": "19f79493fe4da28ec3a39017e82e8f2041eb87d9",
     "sourceCandidateParent": "2811e7dfa99d5dd56f72e55828413f2f116d1eaa",
-    "sourceCandidateTree": "801a58788381440564caaec799dcac4184a21835d2d0f0e3081ff071392e69e9",
     "sourceFileCount": 21,
     "queryFileCount": 15,
     "creditReaderFileCount": 3,
@@ -31,7 +30,8 @@
       "sha256": "7539f4a592939cee6aac1ceb62035fc1336dfb673aa278a1fd6623d31967f80a",
       "gitBlob": "5bb7b759ab85c787e0ce8cfd1b1a824db89af943"
     },
-    "reviewWorkerBase": "2811e7dfa99d5dd56f72e55828413f2f116d1eaa"
+    "reviewWorkerBase": "2811e7dfa99d5dd56f72e55828413f2f116d1eaa",
+    "sourceFingerprintSha256": "801a58788381440564caaec799dcac4184a21835d2d0f0e3081ff071392e69e9"
   },
   "receipt": {
     "stagedPath": ".temp/ref/native-query-credit-privacy-candidate.json",
@@ -630,13 +630,20 @@
     {
       "id": "report-docs",
       "command": "task docs:check",
-      "status": "pending"
+      "status": "pass",
+      "jobId": "1fadc96a-3c47-4684-b858-c31915de8c30",
+      "log": ".temp/goal/jobs/1fadc96a-3c47-4684-b858-c31915de8c30.1.log",
+      "details": "13 documentation tests passed; 249 Markdown files, local links/fragments/navigation. JSON report was separately parsed. No runtime behavior tested."
     },
     {
       "id": "report-worker-gate",
       "command": "task goal -- check",
-      "status": "pending",
-      "scope": "Report-only worker branch; this does not gate the candidate implementation."
+      "status": "pass",
+      "scope": "Report-only worker branch; this does not gate the candidate implementation.",
+      "jobId": "1fadc96a-3c47-4684-b858-c31915de8c30",
+      "log": ".temp/goal/jobs/1fadc96a-3c47-4684-b858-c31915de8c30.2.log",
+      "gateLog": ".temp/goal/check/run-1QQkwG/output.log",
+      "details": "types/tests/lint: no relevant source or named tests; ast passed; guards passed (1 of 44 guards selected for the changed report path). No candidate implementation gate implied."
     }
   ],
   "affectedChecksNotRun": [
@@ -694,7 +701,20 @@
     "Use the verified generated artifact follow-up for the two intended operations."
   ],
   "reportValidation": {
-    "status": "pending",
-    "scope": "task docs:check and recorded report-only worker gate"
-  }
+    "status": "pass",
+    "completedAtUtc": "2026-10-19T07:54:04.668967+00:00",
+    "jobId": "1fadc96a-3c47-4684-b858-c31915de8c30",
+    "scope": "task docs:check and recorded report-only worker gate",
+    "sourcePinPreservation": "Report validation ran with a staged documentation update, so prepareCheckTree left the worker base unchanged. No rebase or merge was performed.",
+    "checkpointCommit": "08e5a7f8f7",
+    "trackedChanges": "Only the claimed review JSON report."
+  },
+  "recordedJobRunner": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- <command...>, invoked from this worker worktree; QA used bun scripts/goal/goalctl.ts test.",
+  "instructionEffects": [
+    {
+      "file": ".agents/skills/goal-worker/SKILL.md",
+      "quote": "End that turn immediately with RESULT: parked",
+      "effect": "The initial recorded diagnostic job parked; the worker ended that turn as instructed and resumed on its completion wake. The filter-selection failure was classified as setup, not an outcome or fix round."
+    }
+  ]
 }
