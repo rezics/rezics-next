@@ -457,9 +457,38 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "中性装饰色同时承担输入控件识别，空字段和亮色关闭开关对比不足",
-      "status": "build-briefed",
-      "owner": "G-2756",
-      "proof": []
+      "status": "implemented-main",
+      "owner": "G-2756 + G-2824",
+      "proof": [
+        {
+          "kind": "main-integration",
+          "commit": "64736e0f29c56b7355fd1d8bfaaf2336f1e4db6d",
+          "candidate": "6c260a353cafdee57f54004ab58aa1ae50c5a04e"
+        },
+        {
+          "kind": "candidate-storybook",
+          "run": "20261019t041819-a11bf9",
+          "testsPassed": 59,
+          "imagesViewed": 19
+        },
+        {
+          "kind": "independent-rendered-proof",
+          "report": "docs/goals/audit-remediation-20261019/proofs/shared-controls.json",
+          "source": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "invalidFocusStates": 32,
+          "imagesViewed": 44
+        },
+        {
+          "kind": "independent-source-review",
+          "reviewer": "codex-1/xhigh",
+          "head": "6c260a353cafdee57f54004ab58aa1ae50c5a04e",
+          "complete": true,
+          "findings": 0
+        }
+      ],
+      "remainingValidation": [
+        "Authenticated Settings acceptance on the repaired, correctly configured Web frontend. Full finding closure is still pending."
+      ]
     },
     {
       "id": "D4-002",
