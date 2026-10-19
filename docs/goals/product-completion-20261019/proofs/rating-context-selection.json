@@ -122,5 +122,188 @@
     "disposition": "Baseline and fixed-wave finite assertions both pass with identical frozen bytes. Existing-read measurements supply no new API operation case. Prior failed premises remain valid historical results. No superiority, audit-finding closure, proved-row registration, production implementation, full acceptance qualification or landing; independent codex-1/xhigh review remains required.",
     "validation": {"docs": {"job": "e8c03c0a-236a-4db7-a418-ba4116a935ce", "step": 1, "command": "task docs:check", "exitCode": 0, "result": "pass; 13 tests and 249 Markdown files", "log": ".temp/goal/jobs/e8c03c0a-236a-4db7-a418-ba4116a935ce.1.log"}, "workerCheck": {"job": "e8c03c0a-236a-4db7-a418-ba4116a935ce", "step": 2, "command": "task goal -- check", "exitCode": 0, "result": "pass; type scope unchanged; oxlint, ast-grep and 10 selected guard files (74 tests) passed. No tests named in brief; explicit frozen integration QA supplies the product outcome result.", "log": ".temp/goal/jobs/e8c03c0a-236a-4db7-a418-ba4116a935ce.2.log", "output": ".temp/goal/check/run-tonpyG/output.log", "sourceCurrency": "Tool reported one commit behind main; no source refresh occurred; actual immutable product pin remains f84fbee119888f0b880badfd7eeb351543615908"}, "preservation": "All prior report fields except current status/next compare equal to committed 46ac965b63e52bd701d7664187411bd71d0d2eac. Original backup, derivative and frozen assertions retain their recorded SHA-256 digests.", "pauseProtocol": {"file": ".agents/skills/goal-worker/SKILL.md", "instruction": "End that turn immediately with RESULT: parked", "effect": "Recorded jobs paused this session until normal completion wakes; each continuation preserved the same jobs and evidence."}}
   },
-  "next": "Independent codex-1/xhigh review of unchanged assertions and both immutable-pin receipts, including the original over-budget failure and explicit native-graph/rights preservation limits. No new rating API is justified; manager retains disposition, landing and audit-row authority."
+  "next": "Independent codex-1/xhigh review of unchanged assertions and both immutable-pin receipts, including the original over-budget failure and explicit native-graph/rights preservation limits. No new rating API is justified; manager retains disposition, landing and audit-row authority.",
+  "nativePublicationPreservationComparison": {
+    "status": "blocked-post-smoke-proof-harness-read; preservation prerequisite remains unproved",
+    "authority": "Final preservation-cut decision 0966e352af supersedes supplemental tests and landing. D5-006 closure at 05c9534e958f and the original-boundary report are not reopened. One finite comparison attempt; no retry or repeated outcome suite.",
+    "priorReportSha256": "470091846cd86379601b57083343fac96d64e881a05d327d0b98a758e2c2dca0",
+    "scope": "Original context-selection fixture only; no Zone/rating producer fixture substitution, new corpus/account/grant, history experiment, source/tooling repair or production edit.",
+    "sourcePins": {
+      "worker": "8238fc32be03ebc940f544c26038fa595b8369ca",
+      "baselineBackend": "759244e365ad64bcb97fac0ea7d7b9caebe144b2",
+      "fixedWaveBackend": "f84fbee119888f0b880badfd7eeb351543615908",
+      "frontend": "Not started or exercised",
+      "historyTooling": "b0b3a5e7cbf47f03eda24f53ee7ca3a492436aff",
+      "fixtureSourceSha256": "18e0fcc6e5a1ed614ae037b458407eb726e512475453f1667376de78380a6df9",
+      "frozenAssertionsSha256": "bd8192f401cdeac28b1f603c1d1730eaf8fa94ce239b7ebdbaa43fe151795213",
+      "originalBoundaryReportSha256": "a418cf496aba04ada16dd425ee14e4cd6c385954099e607a6c98ebdfec77b1dd"
+    },
+    "backupLineage": {
+      "original": {
+        "path": ".temp/rating-context-execution/baseline/.temp/rating-context-source/owners/backup.json",
+        "sha256": "d7059aeceef904aa9ccba02dfabb87f8a41f10756ccd4f56567841097d328a8c",
+        "project": "rezics-catalogue-corpus-ratings-8eda5a21-ca4d-4fdc-rating-context-selection-79c3488519b38ec7",
+        "runId": "ratings-8eda5a21-ca4d-4fdc",
+        "compatibilityDigest": "79c3488519b38ec7f919d85713c4027c4226fc582f4afb19f1f4a7d2f1b1b056",
+        "storageFiles": 525,
+        "obsoleteMetadataOnlyBackupVolumesRemoved": true
+      },
+      "derivativeManifest": ".temp/rating-context-execution/history-adoption/source/.temp/rating-context-wave-source/owners/backup.json",
+      "derivativeSha256": "368be40518a494069d051e0dd4755fa41f444351884d6cbd92290331f1d04233",
+      "parentSha256": "d7059aeceef904aa9ccba02dfabb87f8a41f10756ccd4f56567841097d328a8c",
+      "bothManifestsUnchanged": true,
+      "waveCompatibilityDigest": "b3a5ee39e6e9d217726dbceb99c858821a1be2897eb029d8c58d662edffb8400",
+      "baselineFuseki": {
+        "rezics/fuseki:6.2.0-cmd0.5.43-dd0efff19707": "sha256:91951474891b4a7b2e4b9bedd44115450c18933e4afa68c7a1cdc60e12c3545b"
+      },
+      "derivativeEngines": {
+        "fuseki": {
+          "image": "rezics/fuseki:6.2.0-cmd0.5.43-a1128cfe65e5",
+          "id": "sha256:c429f562e6166bea40c450800bacaa9594e5cd30eb0afeb1db701812d64a2b60"
+        },
+        "postgres": {
+          "image": "postgres:18.6-trixie@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722",
+          "id": "sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722"
+        },
+        "rustfs": {
+          "image": "rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff",
+          "id": "sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff"
+        }
+      },
+      "engineLimit": "Both existing Fuseki images verified before restore; baseline uses its original engine, not the wave image. PostgreSQL and RustFS pins are shared. No rebuild or backup rewrite."
+    },
+    "job": {
+      "id": "bb80485f-16b6-4e9d-a860-ead87e4eca83",
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --taskfile .temp/context-preservation/Taskfile.yml read",
+      "task": "task goal -- slot -- bun .temp/context-preservation/execute.ts",
+      "runId": "pres-b-37b6ac72-40ac-40ee",
+      "exitCode": 201,
+      "resultClass": "harness",
+      "admission": "Existing ordinary Goal slot and isolated QA startup/memory admission; original audit priority retained. No suite QA ID was created by this owner/public reader.",
+      "phaseMs": 142284
+    },
+    "preparation": {
+      "preparation": {
+        "restoreMs": 16140,
+        "volumeCopyMs": {
+          "postgres_data": 8046,
+          "fuseki_data": 4405,
+          "rustfs_data": 2244
+        },
+        "objectCopyMs": 476,
+        "startupMs": 84482,
+        "readinessMs": 2556,
+        "totalMs": 103178
+      },
+      "admissionWaitMs": 29985,
+      "throughSmokeMs": 117793,
+      "ceilingMs": 600000,
+      "qualified": true,
+      "publicSmoke": "GET readiness, original global context and published Work: all 200",
+      "includingReadsAndCleanupMs": 140109,
+      "historicalBudgetFailures": "Unchanged; this separately timed restore does not qualify any earlier failed or over-budget preparation."
+    },
+    "baselineObservations": {
+      "publicGets": 27,
+      "publicResponseBytes": 25295,
+      "maximumPublicRequestMs": 1507,
+      "requestAndBodyReadTimeoutMsEach": 30000,
+      "contextDetails": "14 readable exact fixture identities/revisions and declared native scales, with French presentation preference; baseline only.",
+      "privateContext": "Visitor, revoked member and private owner each receive 404 from the declared public-context operation; owner bearer does not override its public-disclosure requirement. Native private facts are retained in bound owner graphs.",
+      "followItemsByPersona": {
+        "owner": 1,
+        "member": 10,
+        "stranger": 0,
+        "moderator": 3,
+        "operator": 0
+      },
+      "personaApplicability": "Visitor uses public reads; owner/member/stranger/moderator/operator each use retained-identity follow reads; revoked member and private owner additionally probe private detail. No new persona outcome suite.",
+      "nativeContributionInventories": 2,
+      "ownerGraphQueries": 24,
+      "ownerQueryRowsIncludingRepeatedDiscovery": 4175,
+      "uniqueTriplesByNamedGraph": {
+        "urn:rezics:graph:current": 613,
+        "urn:rezics:graph:revisions": 682,
+        "urn:rezics:graph:receipts": 637
+      },
+      "ownerReadBounds": "Fixed current/revisions/receipts graphs, fixture-bound subjects, at most 512 subjects and two expansion rounds; each query capped at 12000 rows, 4 MiB and 30 seconds.",
+      "publicationDecisions": 2,
+      "publicationSelections": 2,
+      "observations": 2,
+      "questionPresentations": 3,
+      "publicationRights": "Two nonempty native PublicationDecision records each contain OriginalContribution rightsBasis and Public disclosure; two authorized contribution inventories expose original draft/publication heads. This is baseline RDF metadata, not a cross-source payload/byte comparison.",
+      "verifiedComponentStates": 0,
+      "newSqlComparisons": 0
+    },
+    "failure": {
+      "phase": "First immutable component read, after successful restore/readiness/smoke and nonempty public/owner graph reads",
+      "message": "committed revision bytes are unavailable",
+      "sqlCode": null,
+      "revision": "https://rezics.com/id/01a1529b-3e65-71c5-acdd-3d573ddaeede",
+      "component": "https://rezics.com/id/01a15292-8bc3-767d-8077-522f77ab0d9e",
+      "modelRevision": "https://rezics.com/definition/work-metadata-v1",
+      "manifest": "urn:rezics:sha256:084a22e14ac68aeac60e3694545ad0b7ef1cc54ef0cee24f7720773030cb8a16",
+      "cause": "The temporary reader selected the local-only reader for an S3-capable Work revision. S3 bytes were not read; absence from local objects proves neither absent retained S3 bytes nor a missing product operation.",
+      "supportedExistingOperation": "readWorkComponentState({objectDirectory, workObjects}, manifest, component, profile, budget)",
+      "supportedSource": ".temp/rating-context-execution/baseline/services/main/src/modules/work/history.ts",
+      "supportedSourceSha256": "8eb45c300ffbef312fc437daae283699027e44cd797d1c10c7e4328767bff1dd",
+      "missingEvidence": "No S3-backed Work manifest/payload bytes were read. The phase stopped before local native revision payload verification and SQL authority/revocation comparisons; the compatible derivative was not restored/read. Full identity/revision, scale/step, observation, follow, authority/revocation, publication-decision/rights-metadata and retained-byte equivalence remains unproved.",
+      "owner": "G-2826 temporary proof reader; no production repair identified",
+      "productFailureEstablished": false,
+      "missingProductOperationEstablished": false,
+      "outcomeSuitesExecuted": false,
+      "outcomeAssertionsReached": false,
+      "crossSourcePreservationComparisonReached": false,
+      "retry": "None; return this exact failure once for manager disposition under the final preservation cut."
+    },
+    "cleanup": [
+      {
+        "kind": "persona-lifecycle",
+        "ok": true
+      },
+      {
+        "kind": "isolated-restore",
+        "ok": true
+      }
+    ],
+    "artifacts": {
+      ".temp/context-preservation/receipt.json": "de864ccd5ce9b65a4d296ac01559a7a29be909da407ef81aabb6dfe10dd70407",
+      ".temp/context-preservation/baseline.json": "aa76de31f60749acd475f53c02950b968c2e397ddafe9742aba9bde0402175c6",
+      ".temp/context-preservation/baseline.log": "6cfa18bd5f433b3bb016b705d14de662c94507948f9bb8f6c36bc7d0b4ac649d",
+      ".temp/context-preservation/diagnosis.json": "4d8d8c8b4796999607e0fd6ae5ba2c4d1a698e8582cab123440234749e0e09c6",
+      ".temp/context-preservation/phase.ts": "c077c88b3cd90833f4454b3dfbd586d9bd282778ad17a42641a464cd94a648d8",
+      ".temp/context-preservation/execute.ts": "b4c81dba5ae8aee2056af67f339ea4ee3dae48a94d33085846c9b880531458f8",
+      ".temp/context-preservation/Taskfile.yml": "12eb56bdd6147e7154412c09ca8de6e73969da29b778df3da7c3bf73f1031a09",
+      ".temp/goal/jobs/bb80485f-16b6-4e9d-a860-ead87e4eca83.log": "a762ca912011fdc3547b04f17519dd87853ea6702dcf6d92671fa4b1a817027c"
+    },
+    "artifactLimits": "Ignored private artifacts retain exact query text, bindings, native states reached, response bodies/digests and timing. No fixture credentials are published here. Empty graph hashes, unchanged directory files and prior passing outcome suites do not satisfy preservation.",
+    "validation": {
+      "temporaryReaderCompile": "task --taskfile .temp/context-preservation/Taskfile.yml compile: pass before execution; compile alone did not validate storage-reader selection",
+      "job": "7e122da6-9bb9-4388-bc1a-1f2e493f1f06",
+      "record": {
+        "command": "task --taskfile .temp/context-preservation/Taskfile.yml record",
+        "exitCode": 0,
+        "log": ".temp/goal/jobs/7e122da6-9bb9-4388-bc1a-1f2e493f1f06.1.log",
+        "sha256": "189342566c93844a36846a464059e4b484cd0af7846360f61fd27ebbfe0e2463"
+      },
+      "docs": {
+        "command": "task docs:check",
+        "exitCode": 0,
+        "result": "13 tests passed; 259 Markdown files checked",
+        "log": ".temp/goal/jobs/7e122da6-9bb9-4388-bc1a-1f2e493f1f06.2.log",
+        "sha256": "772ce99ea0197991a5e6853931bcb35cf8582c582f110a4205845961d7bbad93"
+      },
+      "workerCheck": {
+        "command": "task goal -- check",
+        "exitCode": 0,
+        "result": "Types unchanged; no tests named in brief; lint, ast and 10 selected guard files passed. No runtime suite repeated.",
+        "log": ".temp/goal/jobs/7e122da6-9bb9-4388-bc1a-1f2e493f1f06.3.log",
+        "sha256": "15f197c34f91f60f0e1fd2903bfc5722221884a13345da20ef9598ad3d4279da",
+        "output": ".temp/goal/check/run-ttG5CR/output.log",
+        "outputSha256": "de5d0756acc45ca2b3346a2a6b1b397c80de6e6c9d5df2d3bbb7fa9de4d6b81e"
+      },
+      "receiptAppend": "Completed check receipts appended after the recorded checks; no observation, assertion or historical field changed."
+    },
+    "disposition": "Preservation blocked by temporary reader selection, not a demonstrated product/history failure or new API need. No migration-derived differences evaluated. All prior sections and frozen files preserved; no landing, finding closure or proved-row registration. Manager retains the next comparison decision."
+  }
 }
