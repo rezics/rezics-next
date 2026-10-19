@@ -3,6 +3,7 @@ import type { DatasetNativeField } from '../../../../../scripts/datasets/native/
 import type { SourceRetainedRecordStore } from './retained-record.ts';
 import { canonicalDigest } from './retained-record-normalization.ts';
 import { suppliedLanguage } from './field-control-language.ts';
+import type { NativeBasisVerificationInput } from '../semantic/native-basis.ts';
 import { coordinateInvalid, mappingUnverified, supportChanged, type RetainedSupportRequest,
   supportUnavailable, type RetainedFieldCoordinate, type RetainedSupportAdmission } from './field-support-contract.ts';
 
@@ -11,6 +12,7 @@ export interface VerifiedRetainedField {
   candidate: DatasetNativeField;
   correspondence: RetainedSupportAdmission['correspondence'];
   value: unknown;
+  selected: NativeBasisVerificationInput['selected'];
 }
 
 /** Strict RFC 6901. Missing object members are observations; malformed paths,
@@ -76,7 +78,9 @@ export async function verifyRetainedField(input: RetainedSupportRequest,
   const component = input.native.kind === 'component-property'
     && (input.native.owner === 'release' || input.native.owner === 'realization') ? input.native.component : null;
   if (input.sourceOccurrence !== null) return coordinateInvalid();
-  if (input.occurrence !== component) return supportChanged('native-target');
+  const occurrence = input.native.kind === 'statement' && input.native.coverage
+    && input.native.coverage.kind !== 'subject-global' ? input.native.coverage.occurrence : component;
+  if (input.occurrence !== occurrence) return supportChanged('native-target');
   const plan = evidence.fieldPlan;
   if (!plan) return supportUnavailable();
   const candidates = plan.fields.filter(candidate => candidate.evidence.some(item =>
@@ -107,7 +111,10 @@ export async function verifyRetainedField(input: RetainedSupportRequest,
     if (input.native.kind !== 'component-property' || input.native.owner !== 'work-editorial') return mappingUnverified();
     if (!same(input.native.language,suppliedLanguage(candidate.evidence[0]!))) return supportChanged('native-value');
   }
-  const expected = input.native.kind === 'statement' ? candidate.native.statementValue : candidate.native.property?.value;
+  // Authored V2 coverage selects the native SemanticValue shape. Its absence
+  // retains the exact legacy StatementValue contract, without inferred coverage.
+  const expected = input.native.kind === 'statement' && !input.native.coverage
+    ? candidate.native.statementValue : candidate.native.property?.value;
   const actual = input.native.kind === 'statement' ? input.native.value : input.native.property.value;
   if (expected === undefined || !same(expected, actual)) return supportChanged('native-value');
   const pointers = payloadPointers(evidence, field.pointer);
@@ -115,7 +122,7 @@ export async function verifyRetainedField(input: RetainedSupportRequest,
     const value = retainedValueAt(evidence.payload, pointer);
     if (!value.present || canonicalDigest(value.value) !== digest) return supportChanged('evidence-binding');
   }
-  return { candidate, value: selected.value, correspondence: {
+  return { candidate, value: selected.value, selected: { value: selected.value, language: suppliedLanguage(field) }, correspondence: {
     normalizationRevision: binding.normalizationRevision, rule: evidence.rule,
     payloadPointers: pointers, selectedValueDigest: digest } };
 }

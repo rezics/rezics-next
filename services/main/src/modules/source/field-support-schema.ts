@@ -1,5 +1,6 @@
 import { t } from 'elysia';
 import { associationValue } from '../query/association-contract.ts';
+import { statementCoverageSchema, statementQualificationSchema } from '../statement/contract.ts';
 import { SYNOPSIS_TEXT_LIMIT } from './field-control-language.ts';
 import type { RetainedSupportRequest } from './field-support-contract.ts';
 import { EXPORT_BASIS_KINDS, EXPORT_OBLIGATIONS, EXPORT_USE_SCOPES } from '../export/schema.ts';
@@ -27,6 +28,9 @@ const editorialValue = t.Union([
 const command = { component: id, revision: id, receipt, expectedHead: id };
 const completeness = t.Union((['complete','partial','trial','unknown'] as const).map(value => t.Literal(value)));
 const releaseBasis = t.Object(command,closed);
+const statementBasis = { kind: t.Literal('statement'), owner: t.Literal('statement'), target: id, revision: id, receipt,
+  statement: id, relationDefinition: term, predicate: term, context: t.String({ minLength: 1, maxLength: 2048 }),
+  acceptance: t.Nullable(t.Object({ context: t.String(), decision: id, source: t.String() },closed)) };
 const native = t.Union([
   t.Object({ kind: t.Literal('component-property'), owner: t.Literal('semantic'), target: id,
     component: id, revision: id, receipt, property: t.Object({ predicate: term, value: associationValue },closed) },closed),
@@ -40,8 +44,7 @@ const native = t.Union([
   t.Object({ kind: t.Literal('component-property'), owner: t.Literal('realization'), target: id, ...command,
     property: t.Object({ predicate: term, value: associationValue },closed),
     release: releaseBasis, completeness },closed),
-  t.Object({ kind: t.Literal('statement'), owner: t.Literal('statement'), target: id, revision: id, receipt,
-    statement: id, relationDefinition: term, predicate: term, context: t.String({ minLength: 1, maxLength: 2048 }),
+  t.Object({ ...statementBasis,
     value: t.Union([
       t.Object({ kind: t.Literal('resource'), iri: term },closed),
       t.Object({ kind: t.Literal('literal'), lexical: t.String({ maxLength: 8000 }), datatype: term,
@@ -50,7 +53,11 @@ const native = t.Union([
     ]), qualifiers: t.Object({ applicability: t.Array(term,{ maxItems: 64 }),
       interpretationDefinitions: t.Array(term,{ maxItems: 64 }),
       qualification: t.Optional(t.Record(t.String(),t.Unknown())) },closed),
-    acceptance: t.Nullable(t.Object({ context: t.String(), decision: id, source: t.String() },closed)) },closed),
+  },closed),
+  t.Object({ ...statementBasis, value: associationValue, coverage: statementCoverageSchema,
+    qualifiers: t.Object({ applicability: t.Array(term,{ maxItems: 64 }),
+      interpretationDefinitions: t.Array(term,{ maxItems: 64 }),
+      qualification: t.Optional(statementQualificationSchema) },closed) },closed),
 ]);
 export const retainedSupportRequest = t.Unsafe<RetainedSupportRequest>(t.Object({
   profile: t.Literal('source-field-support-attachment-v2'), target: id,

@@ -1,18 +1,20 @@
 import { canonicalJson } from '../../../../../scripts/lib/canonical-json.ts';
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
-import { readSemanticTerminal, familyReceiptIri } from '../semantic/command.ts';
-import { readCurrentComponent } from '../semantic/change.ts';
 import { readNativeFieldControl, readNativeFieldReceipt, synopsisSlot } from './field-control-native.ts';
 import { synopsisPropertyValue } from './field-control-language.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
+import type { NativeBasisVerificationInput } from '../semantic/native-basis.ts';
 import { verifyReleaseSourceNative } from '../release/source-verifier.ts';
 import { verifyRealizationSourceNative } from '../realization/source-verifier.ts';
 import { mappingUnverified, supportChanged, supportUnavailable, SourceFieldProblem,
   type RetainedSupportRequest, type VerifiedNativeAcknowledgement } from './field-support-contract.ts';
 
+export interface SourceNativeVerificationContext {
+  principal: VerifiedPrincipal; selected: NativeBasisVerificationInput['selected'];
+}
 export type NativeSupportVerifier = (input: RetainedSupportRequest,
-  requireCurrent: boolean, context?: { principal: VerifiedPrincipal }) => Promise<VerifiedNativeAcknowledgement>;
-export interface SourceNativeVerifiers { statement?: NativeSupportVerifier }
+  requireCurrent: boolean, context?: SourceNativeVerificationContext) => Promise<VerifiedNativeAcknowledgement>;
+export interface SourceNativeVerifiers { semantic?: NativeSupportVerifier; statement?: NativeSupportVerifier }
 const equal = (left: unknown, right: unknown) => canonicalJson(left) === canonicalJson(right);
 const RECEIPT = /^urn:rezics:receipt:[0-9a-f]{64}$/;
 
@@ -21,17 +23,18 @@ const RECEIPT = /^urn:rezics:receipt:[0-9a-f]{64}$/;
  * provide an atomic transaction across the native graph and Source database. */
 export async function verifySourceNative(env: WorkActivationEnvironment, input: RetainedSupportRequest,
   owners: SourceNativeVerifiers = {}, requireCurrent = true,
-  context?: { principal: VerifiedPrincipal }): Promise<VerifiedNativeAcknowledgement> {
+  context?: SourceNativeVerificationContext): Promise<VerifiedNativeAcknowledgement> {
   try { return await resolveSourceNative(env,input,owners,requireCurrent,context); }
   catch (error) { if (error instanceof SourceFieldProblem) throw error; return supportUnavailable(); }
 }
 async function resolveSourceNative(env: WorkActivationEnvironment, input: RetainedSupportRequest,
   owners: SourceNativeVerifiers, requireCurrent: boolean,
-  context?: { principal: VerifiedPrincipal }): Promise<VerifiedNativeAcknowledgement> {
+  context?: SourceNativeVerificationContext): Promise<VerifiedNativeAcknowledgement> {
   const native = input.native;
   if (native.target !== input.target) return supportChanged('native-target');
   if (native.revision !== input.expectedHead || !RECEIPT.test(native.receipt)) return supportChanged('native-head');
   if (native.kind === 'statement') {
+    if (input.context !== native.context || input.slot !== 'statement-v1#value') return supportChanged('native-target');
     if (!owners.statement) return supportUnavailable();
     return owners.statement(input, requireCurrent, context);
   }
@@ -56,25 +59,8 @@ async function resolveSourceNative(env: WorkActivationEnvironment, input: Retain
   if (native.owner === 'semantic') {
     if (native.component !== native.target) return supportChanged('native-target');
     if (input.context !== 'global' || input.slot !== `component-property-v1#${native.property.predicate}`) return mappingUnverified();
-    const receipt = await readSemanticTerminal(env, native.receipt);
-    if (!receipt || receipt.outcome !== 'succeeded' || receipt.receipt !== native.receipt
-      || familyReceiptIri(receipt.admissionId, 'semantic-change') !== native.receipt
-      || receipt.component !== native.component || receipt.revision !== native.revision) return supportChanged('native-head');
-    const state = await readCurrentComponent(env, native.component, 'resource');
-    if (!state) return supportUnavailable();
-    if (requireCurrent && state.head !== native.revision) return supportChanged('native-head');
-    // Historical private certificate reads resolve their immutable revision;
-    // they never present that older revision as current public evidence.
-    const current = requireCurrent ? state.state : (await import('../semantic/read.ts'))
-      .readSemanticRevision(env, native.component, native.revision,
-        async refs => new Set(refs)).then(value => value?.state);
-    const value = await current;
-    if (!value || value.component !== 'resource' || value.lifecycle !== 'active'
-      || !value.properties.some(property => property.predicate === native.property.predicate
-        && equal(property.value, native.property.value))) return supportChanged('native-value');
-    return { receipt: receipt.receipt, admissionId: receipt.admissionId, dataEpoch: receipt.dataEpoch,
-      sequence: receipt.sequence, scope: `semantic:edit:${native.target}`, action: 'semantic.change',
-      component: native.component, revision: native.revision };
+    if (!owners.semantic) return supportUnavailable();
+    return owners.semantic(input,requireCurrent,context);
   }
   if (native.owner !== 'work-editorial' || native.field !== 'synopsis'
     || input.context !== 'global' || input.slot !== 'work-editorial-field-v1#synopsis') return mappingUnverified();

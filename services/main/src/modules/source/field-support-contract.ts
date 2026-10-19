@@ -1,6 +1,6 @@
 import type { DatasetRecord } from '../../../../../scripts/datasets/types.ts';
 import type { SemanticProperty } from '../semantic/change.ts';
-import type { StatementValue } from '../statement/schema.ts';
+import type { AcknowledgedSemanticBasis, VerifiedSemanticBasis } from '../semantic/native-basis.ts';
 import type { ReleaseSourceNativeBasis, RealizationSourceNativeBasis } from './release-native-verifier.ts';
 
 /** Private Source refusals. Check evidence custody and reuse before disclosing a basis. */
@@ -47,16 +47,8 @@ export interface RetainedFieldCoordinate {
   presence: 'value' | 'omitted' | 'null' | 'empty-string' | 'empty-array' | 'empty-object';
   valueDigest?: string; language?: string | null; ordinal?: number;
 }
-export type AcknowledgedNativeBasis = ReleaseSourceNativeBasis | RealizationSourceNativeBasis | {
-  kind: 'component-property'; owner: 'semantic'; target: string; component: string;
-  revision: string; receipt: string; property: SemanticProperty;
-} | {
-  kind: 'statement'; owner: 'statement'; target: string; revision: string; receipt: string;
-  statement: string; relationDefinition: string; predicate: string; value: StatementValue;
-  context: string; qualifiers: { applicability: string[]; interpretationDefinitions: string[];
-    qualification?: Record<string, unknown> };
-  acceptance: { context: string; decision: string; source: string } | null;
-} | {
+export type AcknowledgedNativeBasis = ReleaseSourceNativeBasis | RealizationSourceNativeBasis
+  | AcknowledgedSemanticBasis | {
   kind: 'component-property'; owner: 'work-editorial'; target: string; component: string;
   revision: string; receipt: string; field: 'synopsis'; property: SemanticProperty;
   language: SuppliedLanguage;
@@ -85,6 +77,7 @@ export interface VerifiedNativeAcknowledgement {
   receipt: string; admissionId: string; dataEpoch: string; sequence: string;
   scope: string; action: 'semantic.change' | 'statement.record' | 'work.edit';
   component: string; revision: string;
+  semantic?: Pick<VerifiedSemanticBasis, 'operation' | 'manifest' | 'modelGeneration' | 'headGuarantee'>;
   editorial?: { workHead: string; controlHead: string; controlEpoch: string; protectionHead: string | null };
   release?: { currentHeads: { release: string; realization: string };
     correspondence: { work: string; release: ReleaseSourceNativeBasis['coverage']['realization'];

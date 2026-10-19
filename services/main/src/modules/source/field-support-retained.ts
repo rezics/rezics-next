@@ -169,7 +169,7 @@ export class SourceRetainedFieldSupportStore {
       return { support: saved.support, replayed: true, step: sourceIri(prior.step_id) };
     }
     await assertGraphAdmissionOpen(this.env.fuseki, this.env.lineage);
-    const native = await verifySourceNative(this.env, input, this.owners,true,{ principal });
+    const native = await verifySourceNative(this.env, input, this.owners,true,{ principal,selected: field.selected });
     const requestDigest = retainedAttachmentDigest(principalId,input,admission,native);
     return this.access.withOwnerAuthority({ principal, actingSubject: input.actingSubject,
       scope: native.scope, action: native.action }, async () => {
@@ -252,7 +252,8 @@ export class SourceRetainedFieldSupportStore {
     let publicEvidence: RetainedPublicEvidence | null = null;
     if (!row.withdrawal_id) {
       try {
-        const current = await verifySourceNative(this.env,input,this.owners,true,principal ? { principal } : undefined);
+        const current = await verifySourceNative(this.env,input,this.owners,true,
+          principal ? { principal,selected: field.selected } : undefined);
         if (canonicalJson(current) === canonicalJson(row.native_acknowledgement)) {
           if (!this.owners.publicEvidence) return supportUnavailable();
           publicEvidence = await this.owners.publicEvidence(evidence,field,input,{ principal: principal ?? null });
