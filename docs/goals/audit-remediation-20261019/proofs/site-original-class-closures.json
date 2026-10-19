@@ -1,17 +1,17 @@
 {
-  "recordedAt": "2026-10-19T13:38:32.424376+00:00",
+  "recordedAt": "2026-10-19T13:58:31.080581+00:00",
   "manager": "site",
   "goal": "audit-remediation-20261019",
-  "assessedMain": "8d5a550fc6ca47f756a347165bb61f89156ac18a",
+  "assessedMain": "7538d1970f49ae3e11f0d462e9d2295a26b1d4ab",
   "basis": "Original applicable acceptance and assertions, without adding unrelated classes or full-domain journeys. Product-audit class tracing applied; unchanged exact proof reused.",
   "findings": [
     {
       "id": "D3-002",
       "status": "closed",
       "originalAcceptanceVerbatim": [
-        "\u9ed8\u8ba4\u3001?view=mine\u3001?view=review-requested \u4ee5\u53ca\u672a\u77e5 view \u7684\u7ea6\u5b9a\u56de\u9000\u5747\u663e\u793a\u5217\u8868\u6216\u660e\u786e\u7684\u767b\u5f55/\u8eab\u4efd/\u7a7a/\u6682\u65f6\u4e0d\u53ef\u7528\u72b6\u6001\uff1b\u533f\u540d\u548c\u767b\u5f55\u8d26\u6237\u5747\u65e0\u8be5\u5f02\u5e38\u3001\u5f00\u53d1\u906e\u7f69\u6216\u670d\u52a1\u7aef\u6e32\u67d3\u5931\u8d25\u540e\u7684\u5ba2\u6237\u7aef\u56de\u9000\u3002",
-        "\u7eaf\u67e5\u8be2\u89e3\u6790\u4e0e\u94fe\u63a5\u6784\u9020\u7531\u670d\u52a1\u7aef\u548c\u5ba2\u6237\u7aef\u90fd\u80fd\u5f15\u7528\u7684\u7eaf\u6a21\u5757\u62e5\u6709\uff1b\u6d88\u9664\u4e24\u5904\u8d8a\u754c\u8c03\u7528\uff0c\u4e0d\u80fd\u53ea\u5173\u95ed\u5f00\u53d1\u906e\u7f69\u6216\u628a\u5f02\u5e38\u541e\u6389\u3002",
-        "\u5728\u5f00\u53d1\u548c\u751f\u4ea7\u6784\u5efa\u5404\u9a8c\u6536 en/zh-Hans\u30011440/390\u3001\u6d45/\u6df1\u8272\uff0c\u5e76\u8bbe\u7f6e\u80fd\u963b\u6b62\u666e\u901a\u51fd\u6570\u8de8 use client \u8fb9\u754c\u8c03\u7528\u7684\u56de\u5f52\u68c0\u67e5\u3002"
+        "默认、?view=mine、?view=review-requested 以及未知 view 的约定回退均显示列表或明确的登录/身份/空/暂时不可用状态；匿名和登录账户均无该异常、开发遮罩或服务端渲染失败后的客户端回退。",
+        "纯查询解析与链接构造由服务端和客户端都能引用的纯模块拥有；消除两处越界调用，不能只关闭开发遮罩或把异常吞掉。",
+        "在开发和生产构建各验收 en/zh-Hans、1440/390、浅/深色，并设置能阻止普通函数跨 use client 边界调用的回归检查。"
       ],
       "originalRegressionAssertionsVerbatim": [
         {
@@ -93,7 +93,7 @@
         {
           "id": "D3-002/assertion-2",
           "result": "pass",
-          "evidence": "Development and production each64 effective combinations: fourviews \u00d7twoidentity \u00d7twolocale \u00d7twowidth \u00d7twoeffective-theme. Retained genuine preference correction/recovery and original failures."
+          "evidence": "Development and production each64 effective combinations: fourviews ×twoidentity ×twolocale ×twowidth ×twoeffective-theme. Retained genuine preference correction/recovery and original failures."
         },
         {
           "id": "D3-002/assertion-3",
@@ -116,9 +116,9 @@
       "id": "D4-005",
       "status": "closed",
       "originalAcceptanceVerbatim": [
-        "\u5728390\u4e0e1440\uff0c\u9876\u90e8/\u4e2d\u90e8/\u672b\u884c\u64cd\u4f5c\u5206\u522b\u5728\u6210\u529f\u3001503\u548c409\u65f6\uff0c\u628a\u4fdd\u5b58\u4e2d\u4e0e\u6700\u7ec8\u7ed3\u679c\u53ef\u89c6\u5730\u5173\u8054\u5230\u88ab\u64cd\u4f5c\u9879\uff0c\u4e0d\u9700\u627e\u77e9\u9635\u672b\u7aef\u3002",
-        "\u5931\u8d25\u4fdd\u7559\u539f\u503c\u5e76\u7ed9\u51fa\u660e\u786e\u7684\u6062\u590d\u65b9\u5f0f\uff1b\u5e76\u53d1\u51b2\u7a81\u7684\u5904\u7406\u4e0d\u6697\u793a\u5df2\u4fdd\u5b58\u3002",
-        "\u4fdd\u7559status\u8bfb\u5c4f\u516c\u544a\uff0c\u6062\u590d\u540e\u80fd\u7ee7\u7eed\u64cd\u4f5c\uff1b\u7528\u6d4f\u89c8\u5668\u5185\u66ff\u8eab\u6216\u4e13\u7528\u5ba1\u8ba1\u8d26\u53f7\u9a8c\u8bc1\uff0c\u4e0d\u4fee\u6539\u65e2\u6709\u8d26\u6237\u3002"
+        "在390与1440，顶部/中部/末行操作分别在成功、503和409时，把保存中与最终结果可视地关联到被操作项，不需找矩阵末端。",
+        "失败保留原值并给出明确的恢复方式；并发冲突的处理不暗示已保存。",
+        "保留status读屏公告，恢复后能继续操作；用浏览器内替身或专用审计账号验证，不修改既有账户。"
       ],
       "originalRegressionAssertionsVerbatim": [
         {
@@ -147,7 +147,7 @@
         {
           "id": "D4-005/assertion-1",
           "result": "pass",
-          "evidence": "18 actual first/middle/last \u00d71440/390 \u00d7success/503/409 cases: pending and final local feedback in inspected PNGs; polite atomic status DOM mutations preserved. Original acceptance concerns visible feedback and existing status semantics, not captured speech."
+          "evidence": "18 actual first/middle/last ×1440/390 ×success/503/409 cases: pending and final local feedback in inspected PNGs; polite atomic status DOM mutations preserved. Original acceptance concerns visible feedback and existing status semantics, not captured speech."
         },
         {
           "id": "D4-005/assertion-2",
@@ -175,9 +175,9 @@
       "assessedAt": "2026-10-19T10:12:05.984284+00:00",
       "assessedMain": "82df58d2ba1d9d377b591126e7f4dfa42f27f02e",
       "originalAcceptanceVerbatim": [
-        "\u5728\u4e24\u79cd\u4e3b\u9898\u548c\u4e24\u4e2a\u89c6\u53e3\uff0c\u542f\u7528\u4e14\u672a\u805a\u7126\u7684\u7a7a\u5b57\u6bb5\u6709\u76f8\u5bf9\u90bb\u63a5\u989c\u8272\u81f3\u5c113:1\u7684\u5fc5\u8981\u8bc6\u522b\u7ebf\u7d22\uff1b\u5982\u7528\u8fb9\u754c\uff0c\u5b9e\u6d4b\u6709\u6548\u5408\u6210\u8272\uff0c\u4e0d\u53ea\u68c0\u67e5\u539f\u59cbtoken\u3002",
-        "\u5f00\u5173\u5f00/\u5173\u7684\u4f4d\u7f6e\u4e0e\u8f6e\u5ed3\u5728\u4eae\u8272\u548c\u6697\u8272\u5747\u53ef\u8fa8\u8ba4\uff1b\u5fc5\u8981\u72b6\u6001\u7ebf\u7d22\u81f3\u5c113:1\u3002\u7528\u672a\u7981\u7528\u72b6\u6001\u9a8c\u6536\uff0c\u4e0d\u80fd\u7528\u805a\u7126\u73af\u66ff\u4ee3\u9759\u6b62\u72b6\u6001\u3002",
-        "\u4fdd\u6301\u54c1\u724c\u7ea2\u4e0d\u7528\u4e8e\u6587\u5b57\uff1b\u4fee\u590d\u63a7\u4ef6\u8bed\u4e49\u8272\uff0c\u4e0d\u8981\u6c42\u6240\u6709\u88c5\u9970\u6027\u5206\u9694\u7ebf\u8fbe\u52303:1\u3002"
+        "在两种主题和两个视口，启用且未聚焦的空字段有相对邻接颜色至少3:1的必要识别线索；如用边界，实测有效合成色，不只检查原始token。",
+        "开关开/关的位置与轮廓在亮色和暗色均可辨认；必要状态线索至少3:1。用未禁用状态验收，不能用聚焦环替代静止状态。",
+        "保持品牌红不用于文字；修复控件语义色，不要求所有装饰性分隔线达到3:1。"
       ],
       "originalRegressionAssertionsVerbatim": [
         {
@@ -458,7 +458,7 @@
       "assertionResults": [
         {
           "number": 1,
-          "originalVerbatim": "\u5728\u4e24\u79cd\u4e3b\u9898\u548c\u4e24\u4e2a\u89c6\u53e3\uff0c\u542f\u7528\u4e14\u672a\u805a\u7126\u7684\u7a7a\u5b57\u6bb5\u6709\u76f8\u5bf9\u90bb\u63a5\u989c\u8272\u81f3\u5c113:1\u7684\u5fc5\u8981\u8bc6\u522b\u7ebf\u7d22\uff1b\u5982\u7528\u8fb9\u754c\uff0c\u5b9e\u6d4b\u6709\u6548\u5408\u6210\u8272\uff0c\u4e0d\u53ea\u68c0\u67e5\u539f\u59cbtoken\u3002",
+          "originalVerbatim": "在两种主题和两个视口，启用且未聚焦的空字段有相对邻接颜色至少3:1的必要识别线索；如用边界，实测有效合成色，不只检查原始token。",
           "status": "satisfied; ready for manager closure",
           "evidence": [
             "shared-controls.json#measurements/accountsEnabledFieldBoundary",
@@ -472,7 +472,7 @@
         },
         {
           "number": 2,
-          "originalVerbatim": "\u5f00\u5173\u5f00/\u5173\u7684\u4f4d\u7f6e\u4e0e\u8f6e\u5ed3\u5728\u4eae\u8272\u548c\u6697\u8272\u5747\u53ef\u8fa8\u8ba4\uff1b\u5fc5\u8981\u72b6\u6001\u7ebf\u7d22\u81f3\u5c113:1\u3002\u7528\u672a\u7981\u7528\u72b6\u6001\u9a8c\u6536\uff0c\u4e0d\u80fd\u7528\u805a\u7126\u73af\u66ff\u4ee3\u9759\u6b62\u72b6\u6001\u3002",
+          "originalVerbatim": "开关开/关的位置与轮廓在亮色和暗色均可辨认；必要状态线索至少3:1。用未禁用状态验收，不能用聚焦环替代静止状态。",
           "status": "satisfied; ready for manager closure",
           "evidence": [
             "shared-controls.json#assertions + measurements/byTheme",
@@ -484,7 +484,7 @@
         },
         {
           "number": 3,
-          "originalVerbatim": "\u4fdd\u6301\u54c1\u724c\u7ea2\u4e0d\u7528\u4e8e\u6587\u5b57\uff1b\u4fee\u590d\u63a7\u4ef6\u8bed\u4e49\u8272\uff0c\u4e0d\u8981\u6c42\u6240\u6709\u88c5\u9970\u6027\u5206\u9694\u7ebf\u8fbe\u52303:1\u3002",
+          "originalVerbatim": "保持品牌红不用于文字；修复控件语义色，不要求所有装饰性分隔线达到3:1。",
           "status": "satisfied; existing unchanged source review reused",
           "evidence": [
             "shared-controls.json#source + assertions",
@@ -517,9 +517,9 @@
           "all45DocumentWidths390": true,
           "valuesUnchanged": true,
           "failures": [],
-          "first": "Replies \u00b7 In-app",
-          "middle": "Helpful votes on reviews \u00b7 In-app",
-          "last": "Correction reverted \u00b7 Email digest",
+          "first": "Replies · In-app",
+          "middle": "Helpful votes on reviews · In-app",
+          "last": "Correction reverted · Email digest",
           "evidence": "result.json#traversal",
           "viewedFocusImages": [
             "images/live-original-acceptance-tab-390-index-0.png",
@@ -705,9 +705,9 @@
       "assessedAt": "2026-10-19T10:12:05.984284+00:00",
       "assessedMain": "82df58d2ba1d9d377b591126e7f4dfa42f27f02e",
       "originalAcceptanceVerbatim": [
-        "390\u5bbd\u5728\u4efb\u610f\u4e00\u884c\u505c\u4e0b\u65f6\uff0c\u4e09\u4e2a\u5f00\u5173\u5bf9\u5e94\u7684\u901a\u9053\u65e0\u9700\u56de\u6eda\u6216\u8bb0\u5fc6\u5373\u53ef\u4ece\u5f53\u524d\u89c6\u56fe\u8fa8\u8ba4\u3002",
-        "\u4fdd\u7559\u5b8c\u6574\u53ef\u8bbf\u95ee\u540d\u79f0\uff0c\u952e\u76d8\u548c\u8bfb\u5c4f\u987a\u5e8f\u4ecd\u5bf9\u5e94\u901a\u77e5\u7c7b\u578b\u3001\u901a\u9053\u53ca\u5f53\u524d\u72b6\u6001\u3002",
-        "\u7528\u9876\u90e8\u3001\u4e2d\u90e8\u548c\u672b\u884c\u7684\u5b9e\u9645\u622a\u56fe\u9a8c\u6536\uff1b\u4e0d\u80fd\u53ea\u9a8c\u9996\u884c\u6216\u53ea\u67e5aria-label\u3002"
+        "390宽在任意一行停下时，三个开关对应的通道无需回滚或记忆即可从当前视图辨认。",
+        "保留完整可访问名称，键盘和读屏顺序仍对应通知类型、通道及当前状态。",
+        "用顶部、中部和末行的实际截图验收；不能只验首行或只查aria-label。"
       ],
       "originalRegressionAssertionsVerbatim": [
         {
@@ -988,7 +988,7 @@
       "assertionResults": [
         {
           "number": 1,
-          "originalVerbatim": "390\u5bbd\u5728\u4efb\u610f\u4e00\u884c\u505c\u4e0b\u65f6\uff0c\u4e09\u4e2a\u5f00\u5173\u5bf9\u5e94\u7684\u901a\u9053\u65e0\u9700\u56de\u6eda\u6216\u8bb0\u5fc6\u5373\u53ef\u4ece\u5f53\u524d\u89c6\u56fe\u8fa8\u8ba4\u3002",
+          "originalVerbatim": "390宽在任意一行停下时，三个开关对应的通道无需回滚或记忆即可从当前视图辨认。",
           "status": "satisfied; ready for manager closure",
           "evidence": [
             "original-acceptance result.json#traversal/switches",
@@ -999,7 +999,7 @@
         },
         {
           "number": 2,
-          "originalVerbatim": "\u4fdd\u7559\u5b8c\u6574\u53ef\u8bbf\u95ee\u540d\u79f0\uff0c\u952e\u76d8\u548c\u8bfb\u5c4f\u987a\u5e8f\u4ecd\u5bf9\u5e94\u901a\u77e5\u7c7b\u578b\u3001\u901a\u9053\u53ca\u5f53\u524d\u72b6\u6001\u3002",
+          "originalVerbatim": "保留完整可访问名称，键盘和读屏顺序仍对应通知类型、通道及当前状态。",
           "status": "satisfied for original native semantics/order; no heard-speech claim",
           "evidence": [
             "original-acceptance result.json#traversal",
@@ -1010,7 +1010,7 @@
         },
         {
           "number": 3,
-          "originalVerbatim": "\u7528\u9876\u90e8\u3001\u4e2d\u90e8\u548c\u672b\u884c\u7684\u5b9e\u9645\u622a\u56fe\u9a8c\u6536\uff1b\u4e0d\u80fd\u53ea\u9a8c\u9996\u884c\u6216\u53ea\u67e5aria-label\u3002",
+          "originalVerbatim": "用顶部、中部和末行的实际截图验收；不能只验首行或只查aria-label。",
           "status": "satisfied; actual first/middle/last images retained and reviewer viewed",
           "evidence": [
             "images/live-original-acceptance-tab-390-index-0.png",
@@ -1044,9 +1044,9 @@
           "all45DocumentWidths390": true,
           "valuesUnchanged": true,
           "failures": [],
-          "first": "Replies \u00b7 In-app",
-          "middle": "Helpful votes on reviews \u00b7 In-app",
-          "last": "Correction reverted \u00b7 Email digest",
+          "first": "Replies · In-app",
+          "middle": "Helpful votes on reviews · In-app",
+          "last": "Correction reverted · Email digest",
           "evidence": "result.json#traversal",
           "viewedFocusImages": [
             "images/live-original-acceptance-tab-390-index-0.png",
@@ -1234,12 +1234,12 @@
       "main": "87c7c6c8f94aa04dc822864fcfc7ae656254dcdb",
       "productCommit": "ef5aa531bc144b5db45514acea377819d929e438",
       "originalAcceptanceVerbatim": [
-        "\u533f\u540d\u9996\u9875\u2192Discover\u2192\u641c\u7d22\u5f80\u8fd4\u53ca\u591a\u65ad\u70b9\u91cd\u590d\u5bfc\u822a\u65e0\u540c\u7c7bSSR hook\u5f02\u5e38\u3001client-render fallback\u6216\u5f00\u53d1\u906e\u7f69\uff1b\u5f00\u53d1\u6001\u548c\u751f\u4ea7\u6784\u5efa\u5206\u522b\u68c0\u67e5\u3002\u4ec5\u5173\u95ed\u906e\u7f69\u4e0d\u901a\u8fc7\u3002"
+        "匿名首页→Discover→搜索往返及多断点重复导航无同类SSR hook异常、client-render fallback或开发遮罩；开发态和生产构建分别检查。仅关闭遮罩不通过。"
       ],
       "skill": {
         "skill": ".agents/skills/product-audit/SKILL.md",
         "activity": "Read-only invariant-level closure assessment of original anonymous runtime journeys; no new job, review, source edit or ledger change.",
-        "job": "Anonymous visitor repeatedly navigates Home\u2192Discover\u2192search and returns across breakpoints, in independent development and production runs.",
+        "job": "Anonymous visitor repeatedly navigates Home→Discover→search and returns across breakpoints, in independent development and production runs.",
         "invariant": "No same-class SSR hook exception, client-render fallback or covering development overlay; product errors remain visible."
       },
       "originalAssertionsChanged": false,
@@ -1292,9 +1292,9 @@
       },
       "assertionResults": [
         {
-          "original": "Anonymous Home\u2192Discover\u2192search round trip and repeated breakpoints",
+          "original": "Anonymous Home→Discover→search round trip and repeated breakpoints",
           "result": "PASS",
-          "evidence": "Each mode:16 actual five-step journeys,2 widths\u00d72 locales\u00d72 actual themes\u00d72 repeats; expected and visited URLs match."
+          "evidence": "Each mode:16 actual five-step journeys,2 widths×2 locales×2 actual themes×2 repeats; expected and visited URLs match."
         },
         {
           "original": "No same SSR hook exception/client-render fallback/development overlay",
@@ -1417,7 +1417,7 @@
             "assert": "Do not pass by suppressing the overlay or swallowing the underlying render exception."
           }
         ],
-        "Books": "The16 follow-up cycles execute Home\u2192Discover\u2192search\u2192back Discover\u2192back Home. No Books URL appears in retained initial/follow-up visits, so do not describe them as a Home\u2192Discover\u2192search\u2192Books run. Books was added in site-plan regression wording, not the verbatim canonical acceptance; it is not used as an unrelated hold on original runtime closure.",
+        "Books": "The16 follow-up cycles execute Home→Discover→search→back Discover→back Home. No Books URL appears in retained initial/follow-up visits, so do not describe them as a Home→Discover→search→Books run. Books was added in site-plan regression wording, not the verbatim canonical acceptance; it is not used as an unrelated hold on original runtime closure.",
         "parentNode": "No pageerror, parentNode or same hook/fallback event appears in these runs. Existing historical parentNode observation remains distinct; no shared-root-cause claim is made."
       },
       "missingOriginalAssertions": [],
@@ -1439,9 +1439,9 @@
       "main": "e9bff8c44b5317168b38c954b405938b458bd1e1",
       "productCommit": "d3650f3e2c0e5e98ff6d5f8e3984ccc4f0ee5e41",
       "originalAcceptanceVerbatim": [
-        "\u533f\u540d390\u00d7844\u4fdd\u7559\u5fc5\u8981\u5bfc\u822a\u540e\uff0c\u9996\u5c4f\u80fd\u5b8c\u6574\u626b\u8bfb\u81f3\u5c11\u4e24\u6761\u6709\u6807\u9898\u53ca\u6709\u6548\u9884\u89c8\u7684\u5185\u5bb9\uff0c\u518d\u51b3\u5b9a\u5173\u6ce8/\u6ce8\u518c\uff1bWelcome\u53ef\u538b\u7f29\u3001\u653e\u540e\u6216\u6309\u7528\u6237\u9009\u62e9\u5c55\u5f00\u3002",
-        "1440\u4e0b\u65e0\u53ef\u63a8\u8350rail\u4e0d\u4fdd\u6301\u5927\u7247\u7a7a\u914d\u989d\uff1b\u4e3b\u5217\u4fdd\u6301\u9002\u5b9c\u884c\u957f\u5e76\u589e\u52a0\u6709\u7528\u5185\u5bb9\u6216\u6e05\u695a\u7684\u5185\u5bb9\u5206\u7ec4\u3002",
-        "\u5168\u5c40\u52a0\u5165\u4e0e\u9010\u884c\u5173\u6ce8\u6709\u6e05\u695a\u4e3b\u6b21\uff0c\u5173\u952e\u5185\u5bb9\u4e0d\u9760\u5173\u95ed\u63d0\u793a\u624d\u80fd\u51fa\u73b0\u3002"
+        "匿名390×844保留必要导航后，首屏能完整扫读至少两条有标题及有效预览的内容，再决定关注/注册；Welcome可压缩、放后或按用户选择展开。",
+        "1440下无可推荐rail不保持大片空配额；主列保持适宜行长并增加有用内容或清楚的内容分组。",
+        "全局加入与逐行关注有清楚主次，关键内容不靠关闭提示才能出现。"
       ],
       "originalAssertionsChanged": false,
       "skill": ".agents/skills/product-audit/SKILL.md",
@@ -1465,7 +1465,7 @@
         "originalCriterionWitnesses": [
           {
             "criterion": 1,
-            "originalVerbatim": "\u533f\u540d390\u00d7844\u4fdd\u7559\u5fc5\u8981\u5bfc\u822a\u540e\uff0c\u9996\u5c4f\u80fd\u5b8c\u6574\u626b\u8bfb\u81f3\u5c11\u4e24\u6761\u6709\u6807\u9898\u53ca\u6709\u6548\u9884\u89c8\u7684\u5185\u5bb9\uff0c\u518d\u51b3\u5b9a\u5173\u6ce8/\u6ce8\u518c\uff1bWelcome\u53ef\u538b\u7f29\u3001\u653e\u540e\u6216\u6309\u7528\u6237\u9009\u62e9\u5c55\u5f00\u3002",
+            "originalVerbatim": "匿名390×844保留必要导航后，首屏能完整扫读至少两条有标题及有效预览的内容，再决定关注/注册；Welcome可压缩、放后或按用户选择展开。",
             "status": "PASS with original applicable evidence and exact landed Home source",
             "witness": "Original unchanged independent anonymous Home390 test at rendered.spec.ts:105 checks both titles and both previews fully between actual header and phone navigation. Genuine anonymous GET200 returns4actualarticles at source11923; retained phonePNG personally viewed again at this manager reconciliation shows first2complete titled previews without dismissal. Welcome follows the feed.",
             "evidenceRefs": [
@@ -1479,7 +1479,7 @@
           },
           {
             "criterion": 2,
-            "originalVerbatim": "1440\u4e0b\u65e0\u53ef\u63a8\u8350rail\u4e0d\u4fdd\u6301\u5927\u7247\u7a7a\u914d\u989d\uff1b\u4e3b\u5217\u4fdd\u6301\u9002\u5b9c\u884c\u957f\u5e76\u589e\u52a0\u6709\u7528\u5185\u5bb9\u6216\u6e05\u695a\u7684\u5185\u5bb9\u5206\u7ec4\u3002",
+            "originalVerbatim": "1440下无可推荐rail不保持大片空配额；主列保持适宜行长并增加有用内容或清楚的内容分组。",
             "status": "PASS with original applicable evidence and exact landed Home source",
             "witness": "Original unchanged independent1440 Home test proves railContent=false, a single grid column and Posts width<=736px. Actual desktopPNG has useful API-backed main content with no reserved empty recommended rail. HomePage data marker uses presence of useful Rail content; exact source is on main.",
             "evidenceRefs": [
@@ -1493,7 +1493,7 @@
           },
           {
             "criterion": 3,
-            "originalVerbatim": "\u5168\u5c40\u52a0\u5165\u4e0e\u9010\u884c\u5173\u6ce8\u6709\u6e05\u695a\u4e3b\u6b21\uff0c\u5173\u952e\u5185\u5bb9\u4e0d\u9760\u5173\u95ed\u63d0\u793a\u624d\u80fd\u51fa\u73b0\u3002",
+            "originalVerbatim": "全局加入与逐行关注有清楚主次，关键内容不靠关闭提示才能出现。",
             "status": "PASS with original applicable evidence and exact landed Home source",
             "witness": "Exact reviewed HomePage renders posts before Welcome; compact Welcome global join/sign-in actions are secondary. Two useful previews already fit without closing a notice; per-row Follow remains adjacent to its community. Original Home composition units and supplied Home story assertions pass; retained actual phone/desktop images show content first and necessary nav sign-in retained.",
             "evidenceRefs": [
@@ -1531,9 +1531,9 @@
       "main": "e9bff8c44b5317168b38c954b405938b458bd1e1",
       "productCommit": "e9bff8c44b5317168b38c954b405938b458bd1e1",
       "originalAcceptanceVerbatim": [
-        "\u5728\u9996\u4e2a\u670d\u52a1\u7aef\u53d8\u66f4\u524d\u7684\u4efb\u4f55\u8bfb\u53d6\u5931\u8d25\u540e\uff0c\u5168\u90e8\u8349\u7a3f\u5b57\u6bb5\u4ecd\u53ef\u7f16\u8f91\uff0c\u4e14\u53ef\u4ee5\u53d6\u6d88\u6216\u91cd\u65b0\u9009\u62e9\u76ee\u6807\uff1b\u4e0d\u8981\u6c42\u6e05\u9664\u6d4f\u89c8\u5668\u5b58\u50a8\u3002",
-        "\u5df2\u6709\u53d8\u66f4\u65f6\u6309\u786e\u5207\u56de\u6267/\u9636\u6bb5\u9650\u5236\u53ef\u4fee\u6539\u5b57\u6bb5\uff0c\u5e76\u63d0\u4f9b\u4fdd\u7559\u6587\u5b57\u7684\u53d6\u6d88\u6216\u5b89\u5168\u7eed\u505a\uff1b\u540c\u952e\u91cd\u8bd5\u4e0d\u91cd\u590d\u8d34\u6587\u3002",
-        "\u5931\u8d25\u540e\u5237\u65b0\u5e76\u6062\u590d\u8eab\u4efd\u65f6\u80fd\u7ee7\u7eed\u7f16\u8f91\u6216\u660e\u786e\u53d6\u6d88\uff1b1440 \u4e0e 390 \u5e03\u5c40\u5747\u53ef\u952e\u76d8/\u89e6\u63a7\u5b8c\u6210\u3002"
+        "在首个服务端变更前的任何读取失败后，全部草稿字段仍可编辑，且可以取消或重新选择目标；不要求清除浏览器存储。",
+        "已有变更时按确切回执/阶段限制可修改字段，并提供保留文字的取消或安全续做；同键重试不重复贴文。",
+        "失败后刷新并恢复身份时能继续编辑或明确取消；1440 与 390 布局均可键盘/触控完成。"
       ],
       "originalAssertionsChanged": false,
       "skill": ".agents/skills/product-audit/SKILL.md",
@@ -1557,7 +1557,7 @@
           {
             "number": 1,
             "id": "D2-002/assertion-1",
-            "originalAcceptance": "\u5728\u9996\u4e2a\u670d\u52a1\u7aef\u53d8\u66f4\u524d\u7684\u4efb\u4f55\u8bfb\u53d6\u5931\u8d25\u540e\uff0c\u5168\u90e8\u8349\u7a3f\u5b57\u6bb5\u4ecd\u53ef\u7f16\u8f91\uff0c\u4e14\u53ef\u4ee5\u53d6\u6d88\u6216\u91cd\u65b0\u9009\u62e9\u76ee\u6807\uff1b\u4e0d\u8981\u6c42\u6e05\u9664\u6d4f\u89c8\u5668\u5b58\u50a8\u3002",
+            "originalAcceptance": "在首个服务端变更前的任何读取失败后，全部草稿字段仍可编辑，且可以取消或重新选择目标；不要求清除浏览器存储。",
             "originalRegressionAssertion": "Before the first mutation, any prerequisite read failure leaves title, body, language, spoiler, community and Work editable and allows cancel/retarget.",
             "status": "pass at frozen frontend/backend pins",
             "evidence": [
@@ -1570,7 +1570,7 @@
           {
             "number": 2,
             "id": "D2-002/assertion-2",
-            "originalAcceptance": "\u5df2\u6709\u53d8\u66f4\u65f6\u6309\u786e\u5207\u56de\u6267/\u9636\u6bb5\u9650\u5236\u53ef\u4fee\u6539\u5b57\u6bb5\uff0c\u5e76\u63d0\u4f9b\u4fdd\u7559\u6587\u5b57\u7684\u53d6\u6d88\u6216\u5b89\u5168\u7eed\u505a\uff1b\u540c\u952e\u91cd\u8bd5\u4e0d\u91cd\u590d\u8d34\u6587\u3002",
+            "originalAcceptance": "已有变更时按确切回执/阶段限制可修改字段，并提供保留文字的取消或安全续做；同键重试不重复贴文。",
             "originalRegressionAssertion": "After a mutation receipt, restrictions and resume use the exact completed stage; safe exit retains the draft and retries reuse the same intent/key.",
             "status": "pass at frozen frontend/backend pins",
             "evidence": [
@@ -1584,7 +1584,7 @@
           {
             "number": 3,
             "id": "D2-002/assertion-3",
-            "originalAcceptance": "\u5931\u8d25\u540e\u5237\u65b0\u5e76\u6062\u590d\u8eab\u4efd\u65f6\u80fd\u7ee7\u7eed\u7f16\u8f91\u6216\u660e\u786e\u53d6\u6d88\uff1b1440 \u4e0e 390 \u5e03\u5c40\u5747\u53ef\u952e\u76d8/\u89e6\u63a7\u5b8c\u6210\u3002",
+            "originalAcceptance": "失败后刷新并恢复身份时能继续编辑或明确取消；1440 与 390 布局均可键盘/触控完成。",
             "originalRegressionAssertion": "Reload and desktop/mobile keyboard/touch recovery need no localStorage surgery, including restored pre-write failed intent.",
             "status": "pass at frozen frontend/backend pins",
             "evidence": [
@@ -1649,10 +1649,10 @@
         "5dc95a3db3d9cb9273332bbd78223f0fdeff010d"
       ],
       "originalAcceptanceVerbatim": [
-        "\u952e\u76d8 Enter/Space\u3001\u89e6\u6478\u70b9\u51fb\u5747\u53ef\u6253\u5f00\uff0cEscape \u5173\u95ed\u5e76\u628a\u7126\u70b9\u8fd8\u7ed9\u89e6\u53d1\u6309\u94ae\uff1b\u5916\u70b9\u5173\u95ed\uff0c\u5173\u95ed\u540e\u6b63\u6587\u53ef\u64cd\u4f5c\u3002",
-        "\u70b9\u51fb\u4efb\u4e00\u5bfc\u822a\u9879\u3001\u5207\u6362 Work \u5b50\u89c6\u56fe\u6216\u6d4f\u89c8\u5668\u524d\u8fdb\u540e\u9000\u540e\uff0c\u6d6e\u5c42\u72b6\u6001\u4e0e\u5f53\u524d\u9875\u9762\u4e00\u81f4\u3002",
-        "\u91c7\u7528\u5bfc\u822a disclosure \u6216\u5b8c\u6574\u83dc\u5355\u6a21\u5f0f\u4e2d\u7684\u4e00\u79cd\u5e76\u5b8c\u6574\u5b9e\u73b0\u5176\u8bed\u4e49\uff1b\u4e0d\u8981\u6c42\u666e\u901a\u5bfc\u822a\u94fe\u63a5\u5192\u5145 menuitem\uff0c\u4e5f\u4e0d\u65e0\u6761\u4ef6\u628a\u7126\u70b9\u9501\u5728\u6d6e\u5c42\u3002",
-        "1440/1024/768 \u7684\u53ef\u89c1\u5bfc\u822a\u4e0e 390 \u7684\u6298\u53e0\u5bfc\u822a\u63d0\u4f9b\u7b49\u4ef7\u53bb\u5411\uff0c\u7126\u70b9\u53ef\u89c1\u4e14\u4e0d\u88ab\u5e95\u680f\u8986\u76d6\u3002"
+        "键盘 Enter/Space、触摸点击均可打开，Escape 关闭并把焦点还给触发按钮；外点关闭，关闭后正文可操作。",
+        "点击任一导航项、切换 Work 子视图或浏览器前进后退后，浮层状态与当前页面一致。",
+        "采用导航 disclosure 或完整菜单模式中的一种并完整实现其语义；不要求普通导航链接冒充 menuitem，也不无条件把焦点锁在浮层。",
+        "1440/1024/768 的可见导航与 390 的折叠导航提供等价去向，焦点可见且不被底栏覆盖。"
       ],
       "originalAssertionsChanged": false,
       "skill": ".agents/skills/product-audit/SKILL.md",
@@ -1682,7 +1682,7 @@
         "originalCriterionWitnesses": [
           {
             "criterion": 1,
-            "canonicalVerbatim": "\u952e\u76d8 Enter/Space\u3001\u89e6\u6478\u70b9\u51fb\u5747\u53ef\u6253\u5f00\uff0cEscape \u5173\u95ed\u5e76\u628a\u7126\u70b9\u8fd8\u7ed9\u89e6\u53d1\u6309\u94ae\uff1b\u5916\u70b9\u5173\u95ed\uff0c\u5173\u95ed\u540e\u6b63\u6587\u53ef\u64cd\u4f5c\u3002",
+            "canonicalVerbatim": "键盘 Enter/Space、触摸点击均可打开，Escape 关闭并把焦点还给触发按钮；外点关闭，关闭后正文可操作。",
             "assessmentStatus": "satisfied at native navigation pin; owning implementation byte-identical on pinned main",
             "sourcePaths": [
               "apps/web/features/work-page/work-nav.tsx",
@@ -1703,7 +1703,7 @@
           },
           {
             "criterion": 2,
-            "canonicalVerbatim": "\u70b9\u51fb\u4efb\u4e00\u5bfc\u822a\u9879\u3001\u5207\u6362 Work \u5b50\u89c6\u56fe\u6216\u6d4f\u89c8\u5668\u524d\u8fdb\u540e\u9000\u540e\uff0c\u6d6e\u5c42\u72b6\u6001\u4e0e\u5f53\u524d\u9875\u9762\u4e00\u81f4\u3002",
+            "canonicalVerbatim": "点击任一导航项、切换 Work 子视图或浏览器前进后退后，浮层状态与当前页面一致。",
             "assessmentStatus": "satisfied by native route/history assertions plus shared dismiss implementation",
             "sourcePaths": [
               "apps/web/features/work-page/work-nav.tsx",
@@ -1723,7 +1723,7 @@
           },
           {
             "criterion": 3,
-            "canonicalVerbatim": "\u91c7\u7528\u5bfc\u822a disclosure \u6216\u5b8c\u6574\u83dc\u5355\u6a21\u5f0f\u4e2d\u7684\u4e00\u79cd\u5e76\u5b8c\u6574\u5b9e\u73b0\u5176\u8bed\u4e49\uff1b\u4e0d\u8981\u6c42\u666e\u901a\u5bfc\u822a\u94fe\u63a5\u5192\u5145 menuitem\uff0c\u4e5f\u4e0d\u65e0\u6761\u4ef6\u628a\u7126\u70b9\u9501\u5728\u6d6e\u5c42\u3002",
+            "canonicalVerbatim": "采用导航 disclosure 或完整菜单模式中的一种并完整实现其语义；不要求普通导航链接冒充 menuitem，也不无条件把焦点锁在浮层。",
             "assessmentStatus": "satisfied navigation-disclosure semantics",
             "sourcePaths": [
               "apps/web/features/work-page/work-nav.tsx",
@@ -1742,7 +1742,7 @@
           },
           {
             "criterion": 4,
-            "canonicalVerbatim": "1440/1024/768 \u7684\u53ef\u89c1\u5bfc\u822a\u4e0e 390 \u7684\u6298\u53e0\u5bfc\u822a\u63d0\u4f9b\u7b49\u4ef7\u53bb\u5411\uff0c\u7126\u70b9\u53ef\u89c1\u4e14\u4e0d\u88ab\u5e95\u680f\u8986\u76d6\u3002",
+            "canonicalVerbatim": "1440/1024/768 的可见导航与 390 的折叠导航提供等价去向，焦点可见且不被底栏覆盖。",
             "assessmentStatus": "satisfied at all four original widths",
             "sourcePaths": [
               "apps/web/features/work-page/work-nav.tsx",
@@ -1922,10 +1922,10 @@
         "5dc95a3db3d9cb9273332bbd78223f0fdeff010d"
       ],
       "originalAcceptanceVerbatim": [
-        "\u6563\u6587\u9605\u8bfb\u680f\u6709\u660e\u786e\u6700\u5927\u884c\u5bbd\uff1b\u53ef\u91c7\u7528 60\u201380ch \u4f5c\u4e3a\u6b64\u82f1\u6587\u6307\u5357\u7684\u5019\u9009\u5e76\u4ee5\u771f\u5b9e\u4e2d\u82f1\u6587\u957f\u6bb5\u843d\u9a8c\u8bc1\uff0c\u4e0d\u80fd\u76f4\u63a5\u7528\u6574\u4e2a 1072px \u4e3b\u533a\u3002",
-        "\u76ee\u5f55\u548c\u4e8b\u5b9e\u53ef\u5728\u5bbd\u5c4f\u65c1\u5217\uff1b\u7a84\u5c4f\u6298\u53e0\u4e3a\u53ef\u8bbf\u95ee\u7684\u76ee\u5f55\u5165\u53e3\u3001\u4e8b\u5b9e\u62ab\u9732\uff0c\u6b63\u6587\u987a\u5e8f\u4e0d\u53d8\u4e14\u6ca1\u6709\u6a2a\u5411\u6ea2\u51fa\u3002",
-        "\u53ea\u6709\u4e00\u4e2a\u7ae0\u8282\u4e14\u6807\u9898\u4e0e\u9875\u9762\u76f8\u540c\u7684\u77ed\u6307\u5357\u4e0d\u5806\u53e0\u5197\u4f59\u76ee\u5f55\u548c\u91cd\u590d\u9898\u540d\uff1b\u4fdd\u7559\u771f\u5b9e\u5c42\u7ea7\uff0c\u4e0d\u6539\u53d8\u4f5c\u8005\u6b63\u6587\u3002",
-        "\u8868\u683c\u3001\u4ee3\u7801\u3001\u56fe\u7247\u3001\u914d\u65b9\u64cd\u4f5c\u533a\u53ef\u4f7f\u7528\u9002\u5408\u5b83\u4eec\u7684\u5bbd\u5ea6\uff0c\u4e0d\u80fd\u4e3a\u4fee\u6b63\u6587\u884c\u5bbd\u800c\u4e00\u5f8b\u6536\u7a84\u5168\u90e8\u975e\u4e66\u7c4d\u5185\u5bb9\u3002"
+        "散文阅读栏有明确最大行宽；可采用 60–80ch 作为此英文指南的候选并以真实中英文长段落验证，不能直接用整个 1072px 主区。",
+        "目录和事实可在宽屏旁列；窄屏折叠为可访问的目录入口、事实披露，正文顺序不变且没有横向溢出。",
+        "只有一个章节且标题与页面相同的短指南不堆叠冗余目录和重复题名；保留真实层级，不改变作者正文。",
+        "表格、代码、图片、配方操作区可使用适合它们的宽度，不能为修正文行宽而一律收窄全部非书籍内容。"
       ],
       "originalAssertionsChanged": false,
       "skill": ".agents/skills/product-audit/SKILL.md",
@@ -1955,7 +1955,7 @@
         "originalCriterionWitnesses": [
           {
             "criterion": 1,
-            "canonicalVerbatim": "\u6563\u6587\u9605\u8bfb\u680f\u6709\u660e\u786e\u6700\u5927\u884c\u5bbd\uff1b\u53ef\u91c7\u7528 60\u201380ch \u4f5c\u4e3a\u6b64\u82f1\u6587\u6307\u5357\u7684\u5019\u9009\u5e76\u4ee5\u771f\u5b9e\u4e2d\u82f1\u6587\u957f\u6bb5\u843d\u9a8c\u8bc1\uff0c\u4e0d\u80fd\u76f4\u63a5\u7528\u6574\u4e2a 1072px \u4e3b\u533a\u3002",
+            "canonicalVerbatim": "散文阅读栏有明确最大行宽；可采用 60–80ch 作为此英文指南的候选并以真实中英文长段落验证，不能直接用整个 1072px 主区。",
             "assessmentStatus": "satisfied rendered long-prose layout; native short body corroboration",
             "sourcePaths": [
               "apps/web/features/work-page/types/guide.tsx",
@@ -1989,7 +1989,7 @@
           },
           {
             "criterion": 2,
-            "canonicalVerbatim": "\u76ee\u5f55\u548c\u4e8b\u5b9e\u53ef\u5728\u5bbd\u5c4f\u65c1\u5217\uff1b\u7a84\u5c4f\u6298\u53e0\u4e3a\u53ef\u8bbf\u95ee\u7684\u76ee\u5f55\u5165\u53e3\u3001\u4e8b\u5b9e\u62ab\u9732\uff0c\u6b63\u6587\u987a\u5e8f\u4e0d\u53d8\u4e14\u6ca1\u6709\u6a2a\u5411\u6ea2\u51fa\u3002",
+            "canonicalVerbatim": "目录和事实可在宽屏旁列；窄屏折叠为可访问的目录入口、事实披露，正文顺序不变且没有横向溢出。",
             "assessmentStatus": "satisfied scoped layout/disclosure assertions; native long-content journey not claimed",
             "sourcePaths": [
               "apps/web/features/work-page/types/guide.tsx",
@@ -2016,7 +2016,7 @@
           },
           {
             "criterion": 3,
-            "canonicalVerbatim": "\u53ea\u6709\u4e00\u4e2a\u7ae0\u8282\u4e14\u6807\u9898\u4e0e\u9875\u9762\u76f8\u540c\u7684\u77ed\u6307\u5357\u4e0d\u5806\u53e0\u5197\u4f59\u76ee\u5f55\u548c\u91cd\u590d\u9898\u540d\uff1b\u4fdd\u7559\u771f\u5b9e\u5c42\u7ea7\uff0c\u4e0d\u6539\u53d8\u4f5c\u8005\u6b63\u6587\u3002",
+            "canonicalVerbatim": "只有一个章节且标题与页面相同的短指南不堆叠冗余目录和重复题名；保留真实层级，不改变作者正文。",
             "assessmentStatus": "satisfied same-title short Guide source/Storybook plus native screenshot",
             "sourcePaths": [
               "apps/web/features/work-page/types/guide.tsx",
@@ -2043,7 +2043,7 @@
           },
           {
             "criterion": 4,
-            "canonicalVerbatim": "\u8868\u683c\u3001\u4ee3\u7801\u3001\u56fe\u7247\u3001\u914d\u65b9\u64cd\u4f5c\u533a\u53ef\u4f7f\u7528\u9002\u5408\u5b83\u4eec\u7684\u5bbd\u5ea6\uff0c\u4e0d\u80fd\u4e3a\u4fee\u6b63\u6587\u884c\u5bbd\u800c\u4e00\u5f8b\u6536\u7a84\u5168\u90e8\u975e\u4e66\u7c4d\u5185\u5bb9\u3002",
+            "canonicalVerbatim": "表格、代码、图片、配方操作区可使用适合它们的宽度，不能为修正文行宽而一律收窄全部非书籍内容。",
             "assessmentStatus": "satisfied source restriction plus existing independent Recipe layout proof",
             "sourcePaths": [
               "apps/web/features/work-page/types/guide.tsx",
@@ -2284,7 +2284,7 @@
       "closureBookkeepingPending": false,
       "main": "8a40424aa15eb5387183a1fa15fa3f24758b45c9",
       "originalAcceptanceVerbatim": [
-        "\u8986\u76d6767/768/769\u4e0e1023/1024/1025\u53ca\u4fa7\u680f\u5f00\u5173\uff1b\u5217\u6570\u4f9d\u636e\u53ef\u7528\u5bb9\u5668\u5bbd\u5ea6\uff0c\u589e\u5bbd1px\u4e0d\u4f7f\u5355\u5361\u9aa4\u51cf\u4e00\u534a\uff0c\u6807\u9898\u548c\u4f5c\u8005\u4fdd\u6709\u5408\u7406\u53ef\u8bfb\u5bbd\u5ea6\uff0c\u91cd\u6392\u540e\u7126\u70b9/\u6eda\u52a8\u4f4d\u7f6e\u4fdd\u6301\u3002"
+        "覆盖767/768/769与1023/1024/1025及侧栏开关；列数依据可用容器宽度，增宽1px不使单卡骤减一半，标题和作者保有合理可读宽度，重排后焦点/滚动位置保持。"
       ],
       "originalRegressionAssertionsVerbatim": [
         {
@@ -2441,9 +2441,9 @@
       "closureBookkeepingPending": false,
       "main": "8a40424aa15eb5387183a1fa15fa3f24758b45c9",
       "originalAcceptanceVerbatim": [
-        "\u5728\u540c\u4e00\u504f\u597d\u57df\u4fdd\u5b58\u671f\u95f4\uff0c\u76f8\u5173\u8bed\u8a00\u6309\u94ae\u660e\u786e\u7981\u7528\u5e76\u8bf4\u660e\u7b49\u5f85\uff0c\u6216\u5b8c\u6574\u4fdd\u7559\u5e76\u987a\u5e8f\u63d0\u4ea4\u540e\u6765\u7684\u7528\u6237\u66f4\u6539\uff1b\u4e0d\u53ef\u541e\u6389\u5df2\u63a5\u53d7\u7684\u70b9\u51fb\u3002",
-        "\u5bf9\u6162\u54cd\u5e94\u3001503\u3001\u51b2\u7a81\u548c\u5feb\u901f\u8fde\u7eed\u4fee\u6539\uff0c\u56de\u6267\u53ea\u786e\u8ba4\u5b9e\u9645\u63d0\u4ea4\u7684\u7248\u672c\uff0c\u8bed\u8a00\u65b0\u589e/\u79fb\u9664/\u6392\u5e8f\u4e0e\u5267\u900f\u3001\u9690\u79c1\u4fee\u6539\u5747\u4e0d\u76f8\u4e92\u8986\u76d6\u3002",
-        "1440 \u4e0e 390 \u7684\u952e\u76d8/\u89e6\u63a7\u5747\u80fd\u8fa8\u8ba4\u4fdd\u5b58\u72b6\u6001\uff1b\u5237\u65b0\u540e\u987a\u5e8f\u4e0e\u6700\u540e\u4e00\u6b21\u88ab\u754c\u9762\u63a5\u53d7\u7684\u64cd\u4f5c\u4e00\u81f4\u3002"
+        "在同一偏好域保存期间，相关语言按钮明确禁用并说明等待，或完整保留并顺序提交后来的用户更改；不可吞掉已接受的点击。",
+        "对慢响应、503、冲突和快速连续修改，回执只确认实际提交的版本，语言新增/移除/排序与剧透、隐私修改均不相互覆盖。",
+        "1440 与 390 的键盘/触控均能辨认保存状态；刷新后顺序与最后一次被界面接受的操作一致。"
       ],
       "originalRegressionAssertionsVerbatim": [
         {
@@ -2515,7 +2515,7 @@
         {
           "id": "D2-005/assertion-1",
           "status": "satisfied",
-          "originalAcceptance": "\u5728\u540c\u4e00\u504f\u597d\u57df\u4fdd\u5b58\u671f\u95f4\uff0c\u76f8\u5173\u8bed\u8a00\u6309\u94ae\u660e\u786e\u7981\u7528\u5e76\u8bf4\u660e\u7b49\u5f85\uff0c\u6216\u5b8c\u6574\u4fdd\u7559\u5e76\u987a\u5e8f\u63d0\u4ea4\u540e\u6765\u7684\u7528\u6237\u66f4\u6539\uff1b\u4e0d\u53ef\u541e\u6389\u5df2\u63a5\u53d7\u7684\u70b9\u51fb\u3002",
+          "originalAcceptance": "在同一偏好域保存期间，相关语言按钮明确禁用并说明等待，或完整保留并顺序提交后来的用户更改；不可吞掉已接受的点击。",
           "evidence": [
             "settings-feedback.json#currentCandidateRuns/current-61df4790bcc1/assertionsReached/officialStories",
             "settings-feedback.json#genuineJourneyRuns/authenticated-e96e4846d049/assertionsReached/language"
@@ -2525,7 +2525,7 @@
         {
           "id": "D2-005/assertion-2",
           "status": "satisfied",
-          "originalAcceptance": "\u5bf9\u6162\u54cd\u5e94\u3001503\u3001\u51b2\u7a81\u548c\u5feb\u901f\u8fde\u7eed\u4fee\u6539\uff0c\u56de\u6267\u53ea\u786e\u8ba4\u5b9e\u9645\u63d0\u4ea4\u7684\u7248\u672c\uff0c\u8bed\u8a00\u65b0\u589e/\u79fb\u9664/\u6392\u5e8f\u4e0e\u5267\u900f\u3001\u9690\u79c1\u4fee\u6539\u5747\u4e0d\u76f8\u4e92\u8986\u76d6\u3002",
+          "originalAcceptance": "对慢响应、503、冲突和快速连续修改，回执只确认实际提交的版本，语言新增/移除/排序与剧透、隐私修改均不相互覆盖。",
           "evidence": [
             "currentCandidateRuns/current-61df4790bcc1 original six Person stories",
             "genuineJourneyRuns/authenticated-e96e4846d049 actual four language cases",
@@ -2537,7 +2537,7 @@
         {
           "id": "D2-005/assertion-3",
           "status": "satisfied",
-          "originalAcceptance": "1440 \u4e0e 390 \u7684\u952e\u76d8/\u89e6\u63a7\u5747\u80fd\u8fa8\u8ba4\u4fdd\u5b58\u72b6\u6001\uff1b\u5237\u65b0\u540e\u987a\u5e8f\u4e0e\u6700\u540e\u4e00\u6b21\u88ab\u754c\u9762\u63a5\u53d7\u7684\u64cd\u4f5c\u4e00\u81f4\u3002",
+          "originalAcceptance": "1440 与 390 的键盘/触控均能辨认保存状态；刷新后顺序与最后一次被界面接受的操作一致。",
           "evidence": [
             "genuineJourneyRuns/authenticated-e96e4846d049 four actual language cases and viewed phone/desktop images",
             "focusCorrectionRuns/focus-correction-d9ebbd3b0f8a/cases"
@@ -2748,8 +2748,8 @@
       "main": "ef9ae2b4db4d2a37f8644de322dc06724eeb08aa",
       "mainMayAdvanceAfterReceipt": true,
       "originalAcceptanceVerbatim": [
-        "\u6240\u6709\u5f71\u54cd\u7ed3\u679c\u7684\u6761\u4ef6\u90fd\u53ef\u7406\u89e3\u3001\u67e5\u770b\u3001\u7f16\u8f91\u548c\u6e05\u9664\uff1b\u5206\u4eab\u3001Back/Forward \u6062\u590d\u540c\u4e49\u72b6\u6001\uff1b\u5f53\u524d\u8303\u56f4\u5185\u6539\u8bcd\u4fdd\u7559\u6761\u4ef6\u3002",
-        "\u82e5\u5168\u5c40\u641c\u7d22\u6709\u610f\u91cd\u7f6e\uff0c\u4e8b\u524d\u660e\u786e\u8303\u56f4\u5e76\u63d0\u4f9b\u5f53\u524d\u6761\u4ef6\u5185\u7684\u6539\u8bcd\u5165\u53e3\uff1b\u8bed\u8a00\u4e0e\u7c7b\u578b\u542b\u4e49\u7528 API/UI \u540c\u4e00\u5e8f\u5217\u8bc1\u660e\u3002"
+        "所有影响结果的条件都可理解、查看、编辑和清除；分享、Back/Forward 恢复同义状态；当前范围内改词保留条件。",
+        "若全局搜索有意重置，事前明确范围并提供当前条件内的改词入口；语言与类型含义用 API/UI 同一序列证明。"
       ],
       "originalRegressionAssertionsVerbatim": [
         {
@@ -3566,7 +3566,7 @@
       "originalCriterionResults": [
         {
           "number": 1,
-          "text": "\u6240\u6709\u5f71\u54cd\u7ed3\u679c\u7684\u6761\u4ef6\u90fd\u53ef\u7406\u89e3\u3001\u67e5\u770b\u3001\u7f16\u8f91\u548c\u6e05\u9664\uff1b\u5206\u4eab\u3001Back/Forward \u6062\u590d\u540c\u4e49\u72b6\u6001\uff1b\u5f53\u524d\u8303\u56f4\u5185\u6539\u8bcd\u4fdd\u7559\u6761\u4ef6\u3002",
+          "text": "所有影响结果的条件都可理解、查看、编辑和清除；分享、Back/Forward 恢复同义状态；当前范围内改词保留条件。",
           "status": "confirmed for the original scoped URL/history behavior",
           "genuine_evidence": [
             "9344f5be-72ef-44c7-9d39-c17ae5c97786: 1440 direct Fate/Works/Japanese/Game; local edit to CLANNAD retains tab/language/type; actual Back and Forward restore corresponding URL and search input; copied URL in a fresh anonymous dark 390 context and refresh retain conditions; individual language removal preserves query/type.",
@@ -3582,7 +3582,7 @@
         },
         {
           "number": 2,
-          "text": "\u82e5\u5168\u5c40\u641c\u7d22\u6709\u610f\u91cd\u7f6e\uff0c\u4e8b\u524d\u660e\u786e\u8303\u56f4\u5e76\u63d0\u4f9b\u5f53\u524d\u6761\u4ef6\u5185\u7684\u6539\u8bcd\u5165\u53e3\uff1b\u8bed\u8a00\u4e0e\u7c7b\u578b\u542b\u4e49\u7528 API/UI \u540c\u4e00\u5e8f\u5217\u8bc1\u660e\u3002",
+          "text": "若全局搜索有意重置，事前明确范围并提供当前条件内的改词入口；语言与类型含义用 API/UI 同一序列证明。",
           "status": "confirmed for the exercised original Discover API/UI sequence",
           "genuine_evidence": [
             "Captured resource-list-v1 POST /v1/query requests from real UI and replayed each unchanged against the same genuine backend: Fate/ja/Game -> CLANNAD/ja/Game -> CLANNAD/Game; statuses 200, result counts 16/1/1.",
@@ -3603,7 +3603,7 @@
           "evidence": [
             "9344f5be-72ef-44c7-9d39-c17ae5c97786: localCLANNAD edit and language removal",
             "7e80683e-83bb-494a-8c08-ff8f8b985d13: mobile realm/topic/People preservation",
-            "c706fefd-ff7e-486a-9bc2-026dbafb8ac1: ja\u2192en content language and individual Game removal",
+            "c706fefd-ff7e-486a-9bc2-026dbafb8ac1: ja→en content language and individual Game removal",
             "G-2835 unchanged URL/exact/include/exclude fixtures plus G-2853 corrected10path proof"
           ],
           "limits": "Visible label is Include Game. Probe expected Include VideoGame; historical failed assertion retained and reviewer inspected actual DOM/screenshot. No false assertion pass recorded."
@@ -3626,7 +3626,7 @@
             "Visible Search within these conditions local edit",
             "Genuine UI request replay matches API ordered identities in five states"
           ],
-          "limits": "No intentional global reset occurs on this Discover surface. No success inferred for another surface\u2019s reset disclosure."
+          "limits": "No intentional global reset occurs on this Discover surface. No success inferred for another surface’s reset disclosure."
         }
       ],
       "apiUiSequence": [
@@ -3913,7 +3913,7 @@
             {
               "id": "https://rezics.com/id/01a0fd3c-cf41-7438-8af1-3fbe4f96067f",
               "name": {
-                "value": "\u5973\u4f53\u3081\u304f\u308a Fate\u7de8",
+                "value": "女体めくり Fate編",
                 "language": "ja",
                 "direction": "ltr",
                 "basis": "fallback"
@@ -4509,7 +4509,7 @@
             {
               "id": "https://rezics.com/id/01a10a63-96be-727d-8075-c68494d49feb",
               "name": {
-                "value": "Fate/Zero \u2014 Episode 24",
+                "value": "Fate/Zero — Episode 24",
                 "language": "en",
                 "direction": "ltr",
                 "basis": "requested"
@@ -4522,7 +4522,7 @@
             {
               "id": "https://rezics.com/id/01a10a63-9999-7039-855d-39ac24fb6940",
               "name": {
-                "value": "Fate/stay night \u2014 Heaven's Feel route",
+                "value": "Fate/stay night — Heaven's Feel route",
                 "language": "en",
                 "direction": "ltr",
                 "basis": "requested"
@@ -4750,19 +4750,19 @@
             {
               "id": "AUD-009 default visible named sections zh-Hans/1440",
               "status": "fail",
-              "error": "Error: expect(received).toContain(expected)\n\nExpected to contain: \"\u65b0\u7ad9\u70b9\"\nReceived: [ \"\u5b98\u65b9\u4e13\u533a\", \"\u5168\u90e8\u7ed3\u679c\" ]\n",
+              "error": "Error: expect(received).toContain(expected)\n\nExpected to contain: \"新站点\"\nReceived: [ \"官方专区\", \"全部结果\" ]\n",
               "phase": "genuine UI"
             },
             {
               "id": "AUD-009 default visible named sections zh-Hans/768",
               "status": "fail",
-              "error": "Error: expect(received).toContain(expected)\n\nExpected to contain: \"\u65b0\u7ad9\u70b9\"\nReceived: [ \"\u5b98\u65b9\u4e13\u533a\", \"\u5168\u90e8\u7ed3\u679c\" ]\n",
+              "error": "Error: expect(received).toContain(expected)\n\nExpected to contain: \"新站点\"\nReceived: [ \"官方专区\", \"全部结果\" ]\n",
               "phase": "genuine UI"
             },
             {
               "id": "AUD-009 default visible named sections zh-Hans/390",
               "status": "fail",
-              "error": "Error: expect(received).toContain(expected)\n\nExpected to contain: \"\u65b0\u7ad9\u70b9\"\nReceived: [ \"\u5b98\u65b9\u4e13\u533a\", \"\u5168\u90e8\u7ed3\u679c\" ]\n",
+              "error": "Error: expect(received).toContain(expected)\n\nExpected to contain: \"新站点\"\nReceived: [ \"官方专区\", \"全部结果\" ]\n",
               "phase": "genuine UI"
             },
             {
@@ -4805,7 +4805,7 @@
             {
               "id": "D6-004 language edit and type removal use matching real API/UI sequence",
               "status": "fail",
-              "error": "Error: fill: Error: strict mode violation: getByLabel('Language', { exact: true }) resolved to 3 elements:\n    1) <form method=\"post\" data-locale-js=\"true\" aria-label=\"Language\" action=\"/locale/select\">\u2026</form> aka getByRole('form', { name: 'Language' })\n    2) <button dir=\"ltr\" type=\"button\" role=\"combobox\" data-state=\"closed\" data-scope=\"select\" data-part=\"trigger\" aria-invalid=\"false\" aria-expanded=\"false\" aria-required=\"false\" aria-label=\"Language\" aria-haspopup=\"listbox\" data-slot=\"select-trigger\" id=\"select:_R_4mri_:trigger\" aria-controls=\"select:_R_4mri_:content\" aria-labelledby=\"select:_R_4mri_:label\" class=\"peer min-w-0 bg-primary/5 text-foreground md:text-sm rounded-xl border border-control shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)] hover:border-mut\u2026>\u2026</button> aka getByRole('combobox', { name: 'Language' })\n    3) <input value=\"ja\" type=\"text\" name=\"lang\" data-size=\"md\" maxlength=\"35\" data-slot=\"input\" placeholder=\"Any language\" class=\"peer w-full min-w-0 bg-primary/5 text-foreground text-base md:text-sm rounded-xl border border-control shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)] hover:border-muted-foreground placeholder:text-muted-foreground file:inline-flex file:h-7 file:items-center file:border-0 file:font-medium file:text-foreground file:text-sm transition-[color,box-shadow] outline-none focus-visible:outlin\u2026/> aka getByRole('textbox', { name: 'Language' })\n\nCall log:\n\u001b[2m  - waiting for getByLabel('Language', { exact: true })\u001b[22m\n",
+              "error": "Error: fill: Error: strict mode violation: getByLabel('Language', { exact: true }) resolved to 3 elements:\n    1) <form method=\"post\" data-locale-js=\"true\" aria-label=\"Language\" action=\"/locale/select\">…</form> aka getByRole('form', { name: 'Language' })\n    2) <button dir=\"ltr\" type=\"button\" role=\"combobox\" data-state=\"closed\" data-scope=\"select\" data-part=\"trigger\" aria-invalid=\"false\" aria-expanded=\"false\" aria-required=\"false\" aria-label=\"Language\" aria-haspopup=\"listbox\" data-slot=\"select-trigger\" id=\"select:_R_4mri_:trigger\" aria-controls=\"select:_R_4mri_:content\" aria-labelledby=\"select:_R_4mri_:label\" class=\"peer min-w-0 bg-primary/5 text-foreground md:text-sm rounded-xl border border-control shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)] hover:border-mut…>…</button> aka getByRole('combobox', { name: 'Language' })\n    3) <input value=\"ja\" type=\"text\" name=\"lang\" data-size=\"md\" maxlength=\"35\" data-slot=\"input\" placeholder=\"Any language\" class=\"peer w-full min-w-0 bg-primary/5 text-foreground text-base md:text-sm rounded-xl border border-control shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)] hover:border-muted-foreground placeholder:text-muted-foreground file:inline-flex file:h-7 file:items-center file:border-0 file:font-medium file:text-foreground file:text-sm transition-[color,box-shadow] outline-none focus-visible:outlin…/> aka getByRole('textbox', { name: 'Language' })\n\nCall log:\n\u001b[2m  - waiting for getByLabel('Language', { exact: true })\u001b[22m\n",
               "phase": "missing realm/topic conditions"
             }
           ]
@@ -4953,7 +4953,7 @@
       "schemaVersion": 1,
       "recordedAtUTC": "2026-10-19T12:27:11.599201+00:00",
       "id": "D4-015",
-      "title": "\u901a\u77e5\u628a\u6bcf\u6761\u4e24\u679a\u5206\u62e3\u6309\u94ae\u653e\u5728\u4e8b\u4ef6\u4e0e\u65f6\u95f4\u4e4b\u95f4\uff0c\u6b63\u6587\u5bf9\u8c61\u6ca1\u6709\u7a33\u5b9a\u89c6\u89c9\u7126\u70b9",
+      "title": "通知把每条两枚分拣按钮放在事件与时间之间，正文对象没有稳定视觉焦点",
       "candidateOnly": false,
       "proposedDisposition": "accepted",
       "recommendation": "Close original D4-015. All three original acceptance criteria and applicable retained regressions are satisfied by the independently approved exact landed source and actual rendered component evidence.",
@@ -4963,9 +4963,9 @@
       "originalContract": {
         "path": ".temp/site-audit-2026-10-18/round-3/all-findings.json",
         "acceptanceVerbatim": [
-          "1440/390\u9996\u5c4f\u53ef\u5feb\u901f\u533a\u5206\u76ee\u6807\u5bf9\u8c61\u3001\u4e8b\u4ef6\u3001\u6765\u6e90\u548c\u65f6\u95f4\uff0c\u4e0d\u9700\u5b8c\u6574\u8bfb\u6bcf\u53e5\u624d\u80fd\u627e\u5bf9\u8c61\uff1b\u957f\u4f5c\u54c1\u540d\u3001\u6df7\u5408CJK\u4e0e\u7cfb\u7edf\u901a\u77e5\u5747\u6709\u5c42\u7ea7\u3002",
-          "\u6b21\u8981Save/Done\u5206\u62e3\u4ecd\u53ef\u53d1\u73b0\u4e14\u53ef\u952e\u76d8\u64cd\u4f5c\uff0c\u4f46\u4e0d\u5728\u6bcf\u884c\u538b\u8fc7\u5bf9\u8c61\uff1b\u6253\u5f00\u901a\u77e5\u4e0e\u5206\u62e3\u76ee\u6807\u4e0d\u4f1a\u4e92\u76f8\u8bef\u89e6\u3002",
-          "\u4fdd\u7559\u660e\u786e\u5df2\u8bfb/\u672a\u8bfb\u3001\u4fdd\u5b58/\u5b8c\u6210\u3001\u8fdb\u884c/\u5931\u8d25\u53ca\u5c31\u5730\u53cd\u9988\uff1b\u9080\u8bf7\u7684Accept/Decline\u7b49\u5fc5\u8981\u4e1a\u52a1\u884c\u52a8\u4ecd\u4fdd\u6301\u7a81\u51fa\uff0c\u4e0d\u80fd\u673a\u68b0\u5730\u5168\u90e8\u85cf\u5165\u83dc\u5355\u3002"
+          "1440/390首屏可快速区分目标对象、事件、来源和时间，不需完整读每句才能找对象；长作品名、混合CJK与系统通知均有层级。",
+          "次要Save/Done分拣仍可发现且可键盘操作，但不在每行压过对象；打开通知与分拣目标不会互相误触。",
+          "保留明确已读/未读、保存/完成、进行/失败及就地反馈；邀请的Accept/Decline等必要业务行动仍保持突出，不能机械地全部藏入菜单。"
         ],
         "rootCause": {
           "level": "row information and action hierarchy",
@@ -4973,7 +4973,7 @@
             "NotificationItem",
             "notification sentence composition"
           ],
-          "cause": "\u5bf9\u8c61/\u4e8b\u4ef6\u88ab\u5c55\u5e73\u6210\u4e00\u6bb5\u540c\u6743\u53e5\u5b50\uff0c\u901a\u7528triage\u6309\u94ae\u9010\u884c\u5e38\u9a7b\uff0c\u65f6\u95f4\u53ca\u6765\u6e90\u7f6e\u540e\uff1b\u6ca1\u6709\u6309\u9605\u8bfb\u3001\u5feb\u901f\u5224\u65ad\u4e0e\u5206\u62e3\u7684\u4efb\u52a1\u987a\u5e8f\u5206\u5c42\u3002"
+          "cause": "对象/事件被展平成一段同权句子，通用triage按钮逐行常驻，时间及来源置后；没有按阅读、快速判断与分拣的任务顺序分层。"
         },
         "scope": "Notification row information and action hierarchy, object/event/source/time separation, subordinate keyboard triage, preserved row/invitation states.",
         "noAdditionalPrerequisites": [
@@ -5021,7 +5021,7 @@
       "originalCriteria": [
         {
           "number": 1,
-          "textVerbatim": "1440/390\u9996\u5c4f\u53ef\u5feb\u901f\u533a\u5206\u76ee\u6807\u5bf9\u8c61\u3001\u4e8b\u4ef6\u3001\u6765\u6e90\u548c\u65f6\u95f4\uff0c\u4e0d\u9700\u5b8c\u6574\u8bfb\u6bcf\u53e5\u624d\u80fd\u627e\u5bf9\u8c61\uff1b\u957f\u4f5c\u54c1\u540d\u3001\u6df7\u5408CJK\u4e0e\u7cfb\u7edf\u901a\u77e5\u5747\u6709\u5c42\u7ea7\u3002",
+          "textVerbatim": "1440/390首屏可快速区分目标对象、事件、来源和时间，不需完整读每句才能找对象；长作品名、混合CJK与系统通知均有层级。",
           "verdict": "pass-source-and-retained-component-evidence",
           "reason": "Target heading/event/source/time are distinct in personally viewed Ready/ReadyPhone at 1440/390 and both dark variants. ChinesePhone retains long Latin title and CJK hierarchy; MixedPhone handles proposal/system fallback; Reviews and NewWorksDark preserve target/source identity. Unavailable rows expose no stale private target. Ready assertions preserve six rows, three unread, source/time and no horizontal overflow.",
           "candidateLocations": [
@@ -5047,7 +5047,7 @@
         },
         {
           "number": 2,
-          "textVerbatim": "\u6b21\u8981Save/Done\u5206\u62e3\u4ecd\u53ef\u53d1\u73b0\u4e14\u53ef\u952e\u76d8\u64cd\u4f5c\uff0c\u4f46\u4e0d\u5728\u6bcf\u884c\u538b\u8fc7\u5bf9\u8c61\uff1b\u6253\u5f00\u901a\u77e5\u4e0e\u5206\u62e3\u76ee\u6807\u4e0d\u4f1a\u4e92\u76f8\u8bef\u89e6\u3002",
+          "textVerbatim": "次要Save/Done分拣仍可发现且可键盘操作，但不在每行压过对象；打开通知与分拣目标不会互相误触。",
           "verdict": "pass-source-and-retained-component-evidence",
           "reason": "A visible small localized Actions disclosure replaces two permanent triage buttons. Save/Done stay keyboard reachable and show pressed state. KeyboardTriage asserts link-to-Actions-to-Save-to-Done order, preserved unread/no read call and neighbor focus. OpenWithoutTriage asserts read/count with disclosure closed. SavedOnly/DoneUndo assert neighbor/empty-region focus after removal. Separate title link has no stretched overlay over controls.",
           "candidateLocations": [
@@ -5070,7 +5070,7 @@
         },
         {
           "number": 3,
-          "textVerbatim": "\u4fdd\u7559\u660e\u786e\u5df2\u8bfb/\u672a\u8bfb\u3001\u4fdd\u5b58/\u5b8c\u6210\u3001\u8fdb\u884c/\u5931\u8d25\u53ca\u5c31\u5730\u53cd\u9988\uff1b\u9080\u8bf7\u7684Accept/Decline\u7b49\u5fc5\u8981\u4e1a\u52a1\u884c\u52a8\u4ecd\u4fdd\u6301\u7a81\u51fa\uff0c\u4e0d\u80fd\u673a\u68b0\u5730\u5168\u90e8\u85cf\u5165\u83dc\u5355\u3002",
+          "textVerbatim": "保留明确已读/未读、保存/完成、进行/失败及就地反馈；邀请的Accept/Decline等必要业务行动仍保持突出，不能机械地全部藏入菜单。",
           "verdict": "pass-source-and-retained-component-evidence",
           "reason": "Read/unread text/dot/weight, saved/done badges, busy/disabled status, local failure/Retry and success feedback remain explicit. TriageFailureRecovery tests busy, 503, retry, saved state and stable unread row. Phone error captures show local alert/retry. Join/Decline remain prominent outside closed Actions in phone light/dark; accept and keyboard-decline cases assert completion and focus. Existing conflict/generation behavior is preserved in source and retained traversal cases.",
           "candidateLocations": [
@@ -5357,9 +5357,9 @@
       "assessedMain": "32400992a4879132812a83d9e6a0bd1cd5d996bf",
       "closureBookkeepingPending": false,
       "originalAcceptanceVerbatim": [
-        "1440/390\u9996\u5c4f\u53ef\u5feb\u901f\u533a\u5206\u76ee\u6807\u5bf9\u8c61\u3001\u4e8b\u4ef6\u3001\u6765\u6e90\u548c\u65f6\u95f4\uff0c\u4e0d\u9700\u5b8c\u6574\u8bfb\u6bcf\u53e5\u624d\u80fd\u627e\u5bf9\u8c61\uff1b\u957f\u4f5c\u54c1\u540d\u3001\u6df7\u5408CJK\u4e0e\u7cfb\u7edf\u901a\u77e5\u5747\u6709\u5c42\u7ea7\u3002",
-        "\u6b21\u8981Save/Done\u5206\u62e3\u4ecd\u53ef\u53d1\u73b0\u4e14\u53ef\u952e\u76d8\u64cd\u4f5c\uff0c\u4f46\u4e0d\u5728\u6bcf\u884c\u538b\u8fc7\u5bf9\u8c61\uff1b\u6253\u5f00\u901a\u77e5\u4e0e\u5206\u62e3\u76ee\u6807\u4e0d\u4f1a\u4e92\u76f8\u8bef\u89e6\u3002",
-        "\u4fdd\u7559\u660e\u786e\u5df2\u8bfb/\u672a\u8bfb\u3001\u4fdd\u5b58/\u5b8c\u6210\u3001\u8fdb\u884c/\u5931\u8d25\u53ca\u5c31\u5730\u53cd\u9988\uff1b\u9080\u8bf7\u7684Accept/Decline\u7b49\u5fc5\u8981\u4e1a\u52a1\u884c\u52a8\u4ecd\u4fdd\u6301\u7a81\u51fa\uff0c\u4e0d\u80fd\u673a\u68b0\u5730\u5168\u90e8\u85cf\u5165\u83dc\u5355\u3002"
+        "1440/390首屏可快速区分目标对象、事件、来源和时间，不需完整读每句才能找对象；长作品名、混合CJK与系统通知均有层级。",
+        "次要Save/Done分拣仍可发现且可键盘操作，但不在每行压过对象；打开通知与分拣目标不会互相误触。",
+        "保留明确已读/未读、保存/完成、进行/失败及就地反馈；邀请的Accept/Decline等必要业务行动仍保持突出，不能机械地全部藏入菜单。"
       ],
       "originalRegressionAssertionsVerbatim": [
         {
@@ -5395,9 +5395,9 @@
       "skill": ".agents/skills/product-audit/SKILL.md",
       "productAuditMethod": "Returning reader job: find the existing resumable Work and act from default Library; model/own-status command/read/client traced. Preserve genuine empty and unavailable fixtures as adverse states; reuse exact passing two-Work/native proof. Only original applicable class criteria are assessed. No new whole-domain or all-persona gate.",
       "originalAcceptanceVerbatim": [
-        "\u5728\u5df2\u6709\u53ef\u7ee7\u7eed\u4f5c\u54c1\u7684\u9ed8\u8ba4Library\uff0c1440\u00d71000\u4e0e390\u00d7844\u7684\u5e94\u7528\u5b9e\u9645\u53ef\u7528\u9996\u5c4f\u5185\u51fa\u73b0\u81f3\u5c11\u4e00\u4e2a\u6b63\u5728\u8bfb\u4f5c\u54c1\u53caOpen/Continue\u884c\u52a8\uff1b\u8ba1\u7b97\u56fa\u5b9a\u9876\u680f\u4e0e\u5e95\u680f\u5360\u7528\u3002",
-        "\u76ee\u6807\u3001\u7edf\u8ba1\u3001\u5bfc\u5165\u5bfc\u51fa\u4fdd\u6301\u53ef\u8fbe\u5e76\u5f62\u6210\u6b21\u7ea7\u5c42\u7ea7\uff0c\u96f6\u6708\u7edf\u8ba1\u4e0d\u518d\u628a\u4e3b\u4efb\u52a1\u6574\u4f53\u63a8\u51fa\u9996\u5c4f\u3002",
-        "\u5f55\u5236\u6545\u4e8b\u548c\u5b9e\u9645\u6210\u529fAPI\u72b6\u6001\u90fd\u9a8c\u6536\uff1b\u7a7a\u5e93\u4e0e\u5df2\u586b\u5145\u5e93\u5206\u522b\u6309\u4e3b\u8981\u4efb\u52a1\u7ec4\u7ec7\u3002"
+        "在已有可继续作品的默认Library，1440×1000与390×844的应用实际可用首屏内出现至少一个正在读作品及Open/Continue行动；计算固定顶栏与底栏占用。",
+        "目标、统计、导入导出保持可达并形成次级层级，零月统计不再把主任务整体推出首屏。",
+        "录制故事和实际成功API状态都验收；空库与已填充库分别按主要任务组织。"
       ],
       "originalRegressionAssertionsVerbatim": [
         {
@@ -5417,7 +5417,7 @@
       "originalCriterionWitnesses": [
         {
           "number": 1,
-          "originalVerbatim": "\u5728\u5df2\u6709\u53ef\u7ee7\u7eed\u4f5c\u54c1\u7684\u9ed8\u8ba4Library\uff0c1440\u00d71000\u4e0e390\u00d7844\u7684\u5e94\u7528\u5b9e\u9645\u53ef\u7528\u9996\u5c4f\u5185\u51fa\u73b0\u81f3\u5c11\u4e00\u4e2a\u6b63\u5728\u8bfb\u4f5c\u54c1\u53caOpen/Continue\u884c\u52a8\uff1b\u8ba1\u7b97\u56fa\u5b9a\u9876\u680f\u4e0e\u5e95\u680f\u5360\u7528\u3002",
+          "originalVerbatim": "在已有可继续作品的默认Library，1440×1000与390×844的应用实际可用首屏内出现至少一个正在读作品及Open/Continue行动；计算固定顶栏与底栏占用。",
           "status": "PASS",
           "witness": "Genuine eligible own-member Library at exact53f/BE754 returns actual one-item reading shelf200 and Work/continuation200; actual rendered Book UUID and Continue destination match those replies. At1440x1000 action y325..357 fits shell65..1000; at390x844 action y469..501 fits105..779, scrollY0 and no document overflow. Prior two-Work fixture proves the original multi-card premise without presenting it as genuine two-Work data.",
           "evidence": [
@@ -5432,7 +5432,7 @@
         },
         {
           "number": 2,
-          "originalVerbatim": "\u76ee\u6807\u3001\u7edf\u8ba1\u3001\u5bfc\u5165\u5bfc\u51fa\u4fdd\u6301\u53ef\u8fbe\u5e76\u5f62\u6210\u6b21\u7ea7\u5c42\u7ea7\uff0c\u96f6\u6708\u7edf\u8ba1\u4e0d\u518d\u628a\u4e3b\u4efb\u52a1\u6574\u4f53\u63a8\u51fa\u9996\u5c4f\u3002",
+          "originalVerbatim": "目标、统计、导入导出保持可达并形成次级层级，零月统计不再把主任务整体推出首屏。",
           "status": "PASS",
           "witness": "Actual reading content and Continue precede collapsed Goals/stats/import/export in DOM and viewport. Natural Tab reaches Continue before secondary disclosure; Enter opens and Space closes it at both widths. Retained original fixtures additionally exercise Edit goal, import input and export/download reachability; zero-month statistics do not push the main task out.",
           "evidence": [
@@ -5446,7 +5446,7 @@
         },
         {
           "number": 3,
-          "originalVerbatim": "\u5f55\u5236\u6545\u4e8b\u548c\u5b9e\u9645\u6210\u529fAPI\u72b6\u6001\u90fd\u9a8c\u6536\uff1b\u7a7a\u5e93\u4e0e\u5df2\u586b\u5145\u5e93\u5206\u522b\u6309\u4e3b\u8981\u4efb\u52a1\u7ec4\u7ec7\u3002",
+          "originalVerbatim": "录制故事和实际成功API状态都验收；空库与已填充库分别按主要任务组织。",
           "status": "PASS",
           "witness": "Retained116stories/17units and10 independent original rendered cases cover two-Work populated, empty and unavailable states. Genuine successful empty Library1440/390 at53f/BE754 is retained in0787; new7355 actual successful populated state proves card/continuation identity, primary organization, natural keyboard and route reload at both sizes. No synthetic successful API or invented reader progress is used.",
           "evidence": [
@@ -5580,7 +5580,7 @@
       "skill": ".agents/skills/product-audit/SKILL.md",
       "productAuditMethod": "Trace original Feed recovery invariant through generation/query owner, API409 recovery, pending UI, fresh cursor continuation, stale suppression and true-end guard. Reuse exact independently passing proof and compare current-main material blobs; scope includes slow/interrupted RSC, excludes separate auth/preview original classes. Static equivalence is compatibility, not new human-success evidence.",
       "originalAcceptanceVerbatim": [
-        "\u4fdd\u6301 query\u3001projection.sequence \u5747\u76f8\u540c\uff0c\u4ec5\u9996\u6b21\u7eed\u9875\u8fd4\u56de 409\uff1b\u968f\u540e\u670d\u52a1\u5668\u53ef\u6b63\u5e38\u8bfb\u53d6\u3002\u70b9\u51fb\u4e00\u6b21 Refresh \u5e94\u6e05\u9664\u65e7\u5931\u8d25\u5e76\u5f00\u59cb\u4e00\u6761\u65b0\u7684\u53ef\u7ee7\u7eed\u6e38\u6807\u94fe\uff0c\u8bed\u8a00\u7b5b\u9009\u4e0e URL \u4fdd\u7559\uff0c\u663e\u793a\u53ef\u611f\u77e5\u7684\u8fdb\u884c\u4e2d\u72b6\u6001\u3002\u5206\u522b\u8986\u76d6\u540c sequence \u4e0b reviewSequence \u6216\u4e2a\u4eba\u6761\u4ef6\u53d8\u5316\uff0c\u4ee5\u53ca\u6162/\u4e2d\u65ad RSC\uff0c\u7981\u6b62\u4f9d\u8d56\u6d4f\u89c8\u5668\u6574\u9875\u5237\u65b0\u3002"
+        "保持 query、projection.sequence 均相同，仅首次续页返回 409；随后服务器可正常读取。点击一次 Refresh 应清除旧失败并开始一条新的可继续游标链，语言筛选与 URL 保留，显示可感知的进行中状态。分别覆盖同 sequence 下 reviewSequence 或个人条件变化，以及慢/中断 RSC，禁止依赖浏览器整页刷新。"
       ],
       "originalRegressionAssertionsVerbatim": [
         {
@@ -5610,7 +5610,7 @@
         },
         {
           "assertion": "Retain URL and language filter and display observable pending state.",
-          "evidence": "The same /en?lang=en URL, document language and contentLanguages=en query survive. The pending screenshot visibly shows Refreshing posts\u2026 and retained rows; the named Posts group has aria-busy=true. Recovered focus stays on that exact group with aria-busy=false.",
+          "evidence": "The same /en?lang=en URL, document language and contentLanguages=en query survive. The pending screenshot visibly shows Refreshing posts… and retained rows; the named Posts group has aria-busy=true. Recovered focus stays on that exact group with aria-busy=false.",
           "tier": "actual DOM and both actually viewed screenshots"
         },
         {
@@ -5753,9 +5753,9 @@
       "skill": ".agents/skills/product-audit/SKILL.md",
       "productAuditMethod": "Trace the original inventory management job through authorized full inventory, normalized title/order before pagination, title-led row hierarchy and URL/Back/reload restoration. Inspect original long CJK/Latin, lifecycle/mixed-state and coverless variations. Reuse independent source, controlled algorithm, recorded rendering and genuine two-Work wiring at their stated tiers; no new whole-domain or AUD-011 topology requirement.",
       "originalAcceptanceVerbatim": [
-        "\u5728\u8db3\u591f\u591a\u7684\u5e93\u5b58\uff08\u5efa\u8bae100\u9879\u4e14\u8de8\u9875\uff09\u4e0b\uff0c\u53ef\u4ee5\u6309\u540d\u5b57\u5b9a\u4f4d\u5e76\u6309\u6700\u8fd1\u7f16\u8f91\u7b49\u660e\u786e\u987a\u5e8f\u67e5\u627e\uff1b\u6761\u4ef6\u5728\u8fd4\u56de\u540e\u4fdd\u7559\uff0c\u4e0d\u80fd\u53ea\u5728\u5df2\u52a0\u8f7d\u4e09\u9879\u91cc\u5047\u7b5b\u9009\u3002",
-        "1440/390\u4e2d\u6807\u9898\u662f\u884c\u7684\u4e3b\u951a\u70b9\uff0c\u6838\u5fc3\u72b6\u6001\u3001\u6700\u8fd1\u66f4\u65b0\u65f6\u95f4\u548c\u7ee7\u7eed/\u7ae0\u8282\u5165\u53e3\u5f62\u6210\u53ef\u91cd\u590d\u626b\u8bfb\u4f4d\u7f6e\uff1b\u6b21\u8981\u7c7b\u578b\u3001\u8bed\u8a00\u3001\u5ba1\u6838\u8bf4\u660e\u9010\u7ea7\u5c55\u5f00\u3002",
-        "\u591a\u72b6\u6001\u3001\u957fCJK/Latin\u6807\u9898\u4e0e\u65e0\u5c01\u9762\u6837\u672c\u4fdd\u6301\u53ef\u8bfb\uff0c\u4e0d\u8981\u6c42\u4ece\u6700\u524d\u9762\u6eda\u5b8c\u6574\u4e2a\u5e93\u5b58\u627e\u56de\u4f5c\u54c1\u3002"
+        "在足够多的库存（建议100项且跨页）下，可以按名字定位并按最近编辑等明确顺序查找；条件在返回后保留，不能只在已加载三项里假筛选。",
+        "1440/390中标题是行的主锚点，核心状态、最近更新时间和继续/章节入口形成可重复扫读位置；次要类型、语言、审核说明逐级展开。",
+        "多状态、长CJK/Latin标题与无封面样本保持可读，不要求从最前面滚完整个库存找回作品。"
       ],
       "originalRegressionAssertionsVerbatim": [
         {
@@ -5775,7 +5775,7 @@
       "originalCriterionWitnesses": [
         {
           "ordinal": 1,
-          "originalVerbatim": "\u5728\u8db3\u591f\u591a\u7684\u5e93\u5b58\uff08\u5efa\u8bae100\u9879\u4e14\u8de8\u9875\uff09\u4e0b\uff0c\u53ef\u4ee5\u6309\u540d\u5b57\u5b9a\u4f4d\u5e76\u6309\u6700\u8fd1\u7f16\u8f91\u7b49\u660e\u786e\u987a\u5e8f\u67e5\u627e\uff1b\u6761\u4ef6\u5728\u8fd4\u56de\u540e\u4fdd\u7559\uff0c\u4e0d\u80fd\u53ea\u5728\u5df2\u52a0\u8f7d\u4e09\u9879\u91cc\u5047\u7b5b\u9009\u3002",
+          "originalVerbatim": "在足够多的库存（建议100项且跨页）下，可以按名字定位并按最近编辑等明确顺序查找；条件在返回后保留，不能只在已加载三项里假筛选。",
           "status": "proved by composed original evidence",
           "basis": [
             "Independent 227-candidate/23-match full authorized-cut normalization/filter-before-pagination/all-three-order test, including targets beyond candidate204 and full Work IRI ties; previously executed job9e260eb3, 119 combined Web/Main assertions.",
@@ -5786,7 +5786,7 @@
         },
         {
           "ordinal": 2,
-          "originalVerbatim": "1440/390\u4e2d\u6807\u9898\u662f\u884c\u7684\u4e3b\u951a\u70b9\uff0c\u6838\u5fc3\u72b6\u6001\u3001\u6700\u8fd1\u66f4\u65b0\u65f6\u95f4\u548c\u7ee7\u7eed/\u7ae0\u8282\u5165\u53e3\u5f62\u6210\u53ef\u91cd\u590d\u626b\u8bfb\u4f4d\u7f6e\uff1b\u6b21\u8981\u7c7b\u578b\u3001\u8bed\u8a00\u3001\u5ba1\u6838\u8bf4\u660e\u9010\u7ea7\u5c55\u5f00\u3002",
+          "originalVerbatim": "1440/390中标题是行的主锚点，核心状态、最近更新时间和继续/章节入口形成可重复扫读位置；次要类型、语言、审核说明逐级展开。",
           "status": "proved by composed original evidence",
           "basis": [
             "Previously independently viewed title-led rows, repeated state/time/action placement and progressive secondary Details across all recorded home states at 390/1440.",
@@ -5796,7 +5796,7 @@
         },
         {
           "ordinal": 3,
-          "originalVerbatim": "\u591a\u72b6\u6001\u3001\u957fCJK/Latin\u6807\u9898\u4e0e\u65e0\u5c01\u9762\u6837\u672c\u4fdd\u6301\u53ef\u8bfb\uff0c\u4e0d\u8981\u6c42\u4ece\u6700\u524d\u9762\u6eda\u5b8c\u6574\u4e2a\u5e93\u5b58\u627e\u56de\u4f5c\u54c1\u3002",
+          "originalVerbatim": "多状态、长CJK/Latin标题与无封面样本保持可读，不要求从最前面滚完整个库存找回作品。",
           "status": "proved by composed original evidence",
           "basis": [
             "Previously independently viewed lifecycle/mixed-state, long CJK/Latin, Chinese, coverless and located/continuation states at both widths and selected light/dark themes.",
@@ -6363,7 +6363,7 @@
         "Controlled227candidate algorithm proves full inventory search/order before slices; not genuine227nativeWorks.",
         "105PostgreSQLboundary uses graphReaderdouble; exact one-lineUUIDcast approved and normalgatepassed, but individual105testresult remains UNQUALIFIED and is not closurepremise.",
         "Recorded 105Work/20row authored states and retained independentvisual/storyproof coverlargeinventory and longCJKLatin/mixedstate/coverless semantics.",
-        "Genuine2retainedWorks plus5ROOTplacements demonstrate actualAPI200 title normalization/recent-created-title nativeone-itemcursorwiring and actualUI Work\u2192Back/reload q/sort/view/selectedWork1440/390. Not genuine100Works."
+        "Genuine2retainedWorks plus5ROOTplacements demonstrate actualAPI200 title normalization/recent-created-title nativeone-itemcursorwiring and actualUI Work→Back/reload q/sort/view/selectedWork1440/390. Not genuine100Works."
       ],
       "reportHistory": {
         "historicalFailuresPreserved": true,
@@ -6407,11 +6407,11 @@
       "originalRegistry": ".temp/site-audit-2026-10-18/round-3/all-findings.json",
       "originalRegistrySha256": "e2721c44e74305c694b02e81e757e4476c3a19de414d25b0689617316c5ebc3f",
       "skill": ".agents/skills/product-audit/SKILL.md",
-      "productAuditMethod": "Original previewinformationinvariant through suppliedsourceexcerpt\u2192feedExcerpt\u2192Card/PostRow\u2192actualvisibleclipping. Check allsixoriginalRecipeinstances plus mixedBookGuideoriginalrows, honestfallback/omission/meaningfulsame-nameprose atownedunit/storytiers. Compareexactmainblobs and retainedhashes. Reusepassingunchangedproof; do notaddD3001identity/fullRecipejourney/AUD013densitygates.",
+      "productAuditMethod": "Original previewinformationinvariant through suppliedsourceexcerpt→feedExcerpt→Card/PostRow→actualvisibleclipping. Check allsixoriginalRecipeinstances plus mixedBookGuideoriginalrows, honestfallback/omission/meaningfulsame-nameprose atownedunit/storytiers. Compareexactmainblobs and retainedhashes. Reusepassingunchangedproof; do notaddD3001identity/fullRecipejourney/AUD013densitygates.",
       "originalAcceptanceVerbatim": [
-        "\u5bf9\u516d\u4e2a\u73b0\u6709recipe\u6837\u672c\u53cabook/guide\u6df7\u5408\u6837\u672c\uff0c\u6807\u9898\u540e\u7684\u9884\u89c8\u63d0\u4f9b\u65b0\u589e\u4e14\u771f\u5b9e\u7684\u5185\u5bb9\u7ebf\u7d22\uff1b\u91cd\u590d\u5f00\u5934\u4e0d\u518d\u6b21\u8017\u5c3d\u6709\u9650\u9884\u89c8\u884c\u6570\u3002",
-        "\u65e0\u65b0\u589e\u6b63\u6587\u65f6\u4f7f\u7528\u771f\u5b9e\u7c7b\u578b\u76f8\u5173\u4fe1\u606f\u6216\u7701\u7565\u65e0\u6548\u9884\u89c8\uff0c\u4e0d\u7f16\u9020\u7b80\u4ecb\u3001\u4e0d\u8bef\u5220\u6b63\u6587\u4e2d\u6709\u610f\u4e49\u7684\u540c\u540d\u53e5\u5b50\u3002",
-        "1440/390\u4e2d\u4ec5\u9760\u5f53\u524d\u884c\u5373\u53ef\u5224\u65ad\u662f\u5426\u503c\u5f97\u6253\u5f00\uff0c\u4fee\u590d\u4e0d\u4f9d\u8d56\u62c9\u9ad8\u6240\u6709\u5361\u7247\u3002"
+        "对六个现有recipe样本及book/guide混合样本，标题后的预览提供新增且真实的内容线索；重复开头不再次耗尽有限预览行数。",
+        "无新增正文时使用真实类型相关信息或省略无效预览，不编造简介、不误删正文中有意义的同名句子。",
+        "1440/390中仅靠当前行即可判断是否值得打开，修复不依赖拉高所有卡片。"
       ],
       "originalRegressionAssertionsVerbatim": [
         {
@@ -6430,21 +6430,21 @@
       "originalAssertionsChanged": false,
       "originalCriterionWitnesses": [
         {
-          "criterion": "\u5bf9\u516d\u4e2a\u73b0\u6709recipe\u6837\u672c\u53cabook/guide\u6df7\u5408\u6837\u672c\uff0c\u6807\u9898\u540e\u7684\u9884\u89c8\u63d0\u4f9b\u65b0\u589e\u4e14\u771f\u5b9e\u7684\u5185\u5bb9\u7ebf\u7d22\uff1b\u91cd\u590d\u5f00\u5934\u4e0d\u518d\u6b21\u8017\u5c3d\u6709\u9650\u9884\u89c8\u884c\u6570\u3002",
+          "criterion": "对六个现有recipe样本及book/guide混合样本，标题后的预览提供新增且真实的内容线索；重复开头不再次耗尽有限预览行数。",
           "status": "verified-at-stated-tiers",
           "genuineApiTier": "Six original retained Recipe IDs/titles/excerpts are unchanged. Previously captured Recipe25 plus this five-Recipe run cover all six. Genuine original Home Book/Guide discussion samples retain their original item/target/work UUIDs, post titles, excerpts and actual types.",
           "actualBrowserTier": "14 newly viewed 1440/390 screenshots show useful Recipe body clues and real Book/Guide post-body previews. No title echo or structural Ingredients opening consumes the visible lines.",
           "componentUnitTier": "Unchanged 4 preview unit cases and UsefulWorkPreviews stories additionally cover ordinary Book/Guide work-body preview composition."
         },
         {
-          "criterion": "\u65e0\u65b0\u589e\u6b63\u6587\u65f6\u4f7f\u7528\u771f\u5b9e\u7c7b\u578b\u76f8\u5173\u4fe1\u606f\u6216\u7701\u7565\u65e0\u6548\u9884\u89c8\uff0c\u4e0d\u7f16\u9020\u7b80\u4ecb\u3001\u4e0d\u8bef\u5220\u6b63\u6587\u4e2d\u6709\u610f\u4e49\u7684\u540c\u540d\u53e5\u5b50\u3002",
+          "criterion": "无新增正文时使用真实类型相关信息或省略无效预览，不编造简介、不误删正文中有意义的同名句子。",
           "status": "verified-by-retained-unit-and-rendered-component-proof",
           "unitTier": "Empty/null/title-only/Ingredients-only excerpts return null, without an invented summary; genuine same-name sentences such as Middlemarch explores provincial life, recipe-title is served in broth, and Ingredients are measured by weight are retained. Book/Guide heading-only prefixes and Chinese heading/body cases are tested explicitly.",
           "componentTier": "Previously viewed UsefulWorkPreviews and phone story cover Recipe/Book/Guide/facts-only rows using real type-related facts or omission. Card/PostRow and preview test blobs/consumers remain unchanged.",
           "genuineApiTier": "Newly rendered bodies equal real retained source text. This does not claim the corpus naturally supplied every empty/fallback/same-name edge case."
         },
         {
-          "criterion": "1440/390\u4e2d\u4ec5\u9760\u5f53\u524d\u884c\u5373\u53ef\u5224\u65ad\u662f\u5426\u503c\u5f97\u6253\u5f00\uff0c\u4fee\u590d\u4e0d\u4f9d\u8d56\u62c9\u9ad8\u6240\u6709\u5361\u7247\u3002",
+          "criterion": "1440/390中仅靠当前行即可判断是否值得打开，修复不依赖拉高所有卡片。",
           "status": "verified-in-genuine-public-ui-at-both-widths",
           "actualBrowserTier": "Each of seven selected rows is fully visible, its first real body clue is visible, and the document has no horizontal overflow. Recipe body is capped at three actual visible lines. Desktop Recipe rows are 221px; phone rows are 221px or 245px where the title wraps. No card-height/style implementation changed. Book/Guide discussion body is two lines at desktop and three at phone, with actual attached-work context.",
           "visualJudgment": "Viewed all 14 captures: title/content hierarchy, compact covers, body clues and actions remain readable with no selected-row overlap. Ingredient quantities, the Austen reader question and mod backup/recovery account each add a reason to open the row."
@@ -6800,9 +6800,9 @@
       "skill": ".agents/skills/product-audit/SKILL.md",
       "productAuditMethod": "Trace the three original Discover destinations through direct/reload/history/filter, seven actual keyboard destinations, and shared Studio/Site/Library current-item visibility. Retain genuine browser and recorded Site-component tiers distinctly; no whole-domain journey, aliases or new class.",
       "originalAcceptanceVerbatim": [
-        "\u5728390\u4e0e1440\uff0c\u76f4\u63a5\u94fe\u63a5\u3001\u5237\u65b0\u3001\u524d\u8fdb\u540e\u9000\u548c\u66f4\u6362\u7b5b\u9009\u540e\uff0c\u5f53\u524d\u76ee\u7684\u5730\u6807\u7b7e\u53ca\u9009\u4e2d\u6807\u8bb0\u65e0\u9700\u624b\u52a8\u6a2a\u6ed1\u5373\u53ef\u5b8c\u6574\u770b\u89c1\u3002",
-        "\u6240\u67097\u4e2a\u76ee\u7684\u5730\u6709\u53ef\u53d1\u73b0\u7684\u8bbf\u95ee\u65b9\u5f0f\uff1b\u952e\u76d8\u7126\u70b9\u3001\u9009\u4e2d\u9879\u548c\u5185\u5bb9\u7c7b\u578b\u4fdd\u6301\u4e00\u81f4\u3002",
-        "\u5bf9\u540c\u6837\u91c7\u7528\u6a2a\u5411\u9875\u9762\u5bfc\u822a\u7684Studio\u3001Site\u548cLibrary\u505a\u540c\u7c7b\u9a8c\u6536\uff1b\u672c\u9879\u53ea\u8ba1\u5df2\u786e\u8ba4\u7684Discover\u4e09\u5b9e\u4f8b\u3002"
+        "在390与1440，直接链接、刷新、前进后退和更换筛选后，当前目的地标签及选中标记无需手动横滑即可完整看见。",
+        "所有7个目的地有可发现的访问方式；键盘焦点、选中项和内容类型保持一致。",
+        "对同样采用横向页面导航的Studio、Site和Library做同类验收；本项只计已确认的Discover三实例。"
       ],
       "originalRegressionAssertionsVerbatim": [
         {
@@ -6822,9 +6822,9 @@
       "originalCriterionWitnesses": [
         {
           "ordinal": 1,
-          "originalVerbatim": "\u5728390\u4e0e1440\uff0c\u76f4\u63a5\u94fe\u63a5\u3001\u5237\u65b0\u3001\u524d\u8fdb\u540e\u9000\u548c\u66f4\u6362\u7b5b\u9009\u540e\uff0c\u5f53\u524d\u76ee\u7684\u5730\u6807\u7b7e\u53ca\u9009\u4e2d\u6807\u8bb0\u65e0\u9700\u624b\u52a8\u6a2a\u6ed1\u5373\u53ef\u5b8c\u6574\u770b\u89c1\u3002",
+          "originalVerbatim": "在390与1440，直接链接、刷新、前进后退和更换筛选后，当前目的地标签及选中标记无需手动横滑即可完整看见。",
           "status": "PASS",
-          "basis": "G2825 genuine production30 Topics/Lists/People \u00d7390/1440\u00d7direct/reload/back/forward/filter; all settled selected labels/markers visible and focus rings inside. Six targeted development Back/Forward checks pass; historical early settling failures remain retained.",
+          "basis": "G2825 genuine production30 Topics/Lists/People ×390/1440×direct/reload/back/forward/filter; all settled selected labels/markers visible and focus rings inside. Six targeted development Back/Forward checks pass; historical early settling failures remain retained.",
           "artifact": ".temp/audit-remediation-20261019/proofs/site-boundaries-navigation-G-2825-final-aae78d75/production/result.json",
           "sha256": "bd4fdec6edc52b5d49dcdc655d7557039fdc06fd48862a4d2c4ff3082ecf56d9",
           "targetedDevelopmentArtifact": ".temp/audit-remediation-20261019/proofs/site-boundaries-navigation-G-2825-final-aae78d75/development-followup/result.json",
@@ -6832,13 +6832,13 @@
         },
         {
           "ordinal": 2,
-          "originalVerbatim": "\u6240\u67097\u4e2a\u76ee\u7684\u5730\u6709\u53ef\u53d1\u73b0\u7684\u8bbf\u95ee\u65b9\u5f0f\uff1b\u952e\u76d8\u7126\u70b9\u3001\u9009\u4e2d\u9879\u548c\u5185\u5bb9\u7c7b\u578b\u4fdd\u6301\u4e00\u81f4\u3002",
+          "originalVerbatim": "所有7个目的地有可发现的访问方式；键盘焦点、选中项和内容类型保持一致。",
           "status": "PASS",
           "basis": "Seven actual keyboard Enter destinations at both widths/builds; original14 production destination records agree on label, href and content heading, and all30 original measured navigation states have genuine focused current links and unclipped rings."
         },
         {
           "ordinal": 3,
-          "originalVerbatim": "\u5bf9\u540c\u6837\u91c7\u7528\u6a2a\u5411\u9875\u9762\u5bfc\u822a\u7684Studio\u3001Site\u548cLibrary\u505a\u540c\u7c7b\u9a8c\u6536\uff1b\u672c\u9879\u53ea\u8ba1\u5df2\u786e\u8ba4\u7684Discover\u4e09\u5b9e\u4f8b\u3002",
+          "originalVerbatim": "对同样采用横向页面导航的Studio、Site和Library做同类验收；本项只计已确认的Discover三实例。",
           "status": "PASS at stated inspection tiers",
           "basis": {
             "Studio": "Retained genuine signed-in All works390/1440 in both builds from271b plus independently viewed Curated390 direct/reload/back/forward and corrected Details390/1440 from G2848/a1af782b. Current StudioHome and its stories exactly match testedc43/acaf bytes.",
@@ -7215,9 +7215,9 @@
       "skill": ".agents/skills/product-audit/SKILL.md",
       "productAuditMethod": "Trace actual classified-source MediaInvalid through native summary hydration, stable fenced quarantine, bounded shared probes and transient recovery; combine independent unchanged C01 core HTTP delivery overlap with new C02 genuine invalid-media repair. Background workload contract only; no unrelated persona/native-load gate.",
       "originalAcceptanceVerbatim": [
-        "\u6301\u7eed\u975e\u6cd5\u8f93\u5165\u7ec8\u6b62/\u9694\u79bb\u4e14\u539f\u56e0\u53ef\u8bca\u65ad\uff0c\u65e0source\u53d8\u5316\u4e0d\u91cd\u505a\u540c\u4e00\u5b8c\u6574\u5de5\u4f5c\u3002",
-        "\u6682\u6001\u6545\u969c\u9000\u907f\u5e76\u5728\u6062\u590d\u540e\u63a8\u8fdbcheckpoint\uff0c\u7ef4\u62a4\u603b\u5de5\u4f5c\u548cscope\u516c\u5e73\u6027\u6709\u9884\u7b97\u3002",
-        "\u9694\u79bbfixture\u9a8c\u8bc1invalid media\u91cd\u8bd5\u4e0a\u754c\u3001\u4fee\u590d\u540e\u6062\u590d\u53ca\u4e0e\u6838\u5fc3\u8bfb\u53d6\u5e76\u884c\u53ef\u7528\u3002"
+        "持续非法输入终止/隔离且原因可诊断，无source变化不重做同一完整工作。",
+        "暂态故障退避并在恢复后推进checkpoint，维护总工作和scope公平性有预算。",
+        "隔离fixture验证invalid media重试上界、修复后恢复及与核心读取并行可用。"
       ],
       "originalRegressionAssertionsVerbatim": [
         {
@@ -7237,7 +7237,7 @@
       "originalCriterionWitnesses": [
         {
           "index": 1,
-          "acceptance": "\u6301\u7eed\u975e\u6cd5\u8f93\u5165\u7ec8\u6b62/\u9694\u79bb\u4e14\u539f\u56e0\u53ef\u8bca\u65ad\uff0c\u65e0source\u53d8\u5316\u4e0d\u91cd\u505a\u540c\u4e00\u5b8c\u6574\u5de5\u4f5c\u3002",
+          "acceptance": "持续非法输入终止/隔离且原因可诊断，无source变化不重做同一完整工作。",
           "status": "SUPPORTED original isolated fixture scope",
           "evidence": [
             "C01 genuine malformed-source finite basis-invalid quarantine: one full claim/population read; no unchanged population reread; checkpoint/generation retained",
@@ -7252,7 +7252,7 @@
         },
         {
           "index": 2,
-          "acceptance": "\u6682\u6001\u6545\u969c\u9000\u907f\u5e76\u5728\u6062\u590d\u540e\u63a8\u8fdbcheckpoint\uff0c\u7ef4\u62a4\u603b\u5de5\u4f5c\u548cscope\u516c\u5e73\u6027\u6709\u9884\u7b97\u3002",
+          "acceptance": "暂态故障退避并在恢复后推进checkpoint，维护总工作和scope公平性有预算。",
           "status": "SUPPORTED original bounded owner fixture",
           "evidence": [
             "C01 real graph/Access/projection/lease owners with injected queue clock: 30/60s transient backoff, no early lease, recovery advances retained generation/checkpoint and includes appended Work",
@@ -7267,10 +7267,10 @@
         },
         {
           "index": 3,
-          "acceptance": "\u9694\u79bbfixture\u9a8c\u8bc1invalid media\u91cd\u8bd5\u4e0a\u754c\u3001\u4fee\u590d\u540e\u6062\u590d\u53ca\u4e0e\u6838\u5fc3\u8bfb\u53d6\u5e76\u884c\u53ef\u7528\u3002",
+          "acceptance": "隔离fixture验证invalid media重试上界、修复后恢复及与核心读取并行可用。",
           "status": "SUPPORTED complementary original isolated fixture cases",
           "evidence": [
-            "C02 actual accepted classification\u2192Projection corrupt native frame\u2192genuine MediaInvalid: one full attempt,3 unchanged probes/0 population rereads, repair of stored frame activates retained generation and actual classification becomes available",
+            "C02 actual accepted classification→Projection corrupt native frame→genuine MediaInvalid: one full attempt,3 unchanged probes/0 population rereads, repair of stored frame activates retained generation and actual classification becomes available",
             "C01 simultaneous actual in-process Main public200/exact Work id and private404/no private id responses complete387.0033ms inside original10000ms bound while actual native response delivery is held and refresh unsettled"
           ],
           "proofRefs": [
@@ -7384,6 +7384,170 @@
         "C01 current Main40 assertions and selector must be preserved; whole older ea0 integration blob must not replace it."
       ],
       "remainingValidation": []
+    },
+    {
+      "id": "D5-006",
+      "status": "closed",
+      "assessedAt": "2026-10-19T13:58:31.080581+00:00",
+      "main": "7538d1970f49ae3e11f0d462e9d2295a26b1d4ab",
+      "canonicalSource": "docs/goals/audit-remediation-20261019/site-plan.json#D5-006",
+      "canonicalSourceSha256": "4ab008ae2a5144eb71f887daa737f1c5eb1a75b443e084b0f67fa67a0cbec3bc",
+      "originalRegistry": ".temp/site-audit-2026-10-18/round-3/all-findings.json",
+      "originalRegistrySha256": "e2721c44e74305c694b02e81e757e4476c3a19de414d25b0689617316c5ebc3f",
+      "skill": ".agents/skills/product-audit/SKILL.md",
+      "productAuditMethod": "Trace business-population growth through Official Zone listing/suggestions and maintained standing aggregates; combine genuine public 8/9/10 and100/101/102 outcomes with unchanged bounded continuation/disclosure and retained owner/native empty/private cases. Do not treat a per-request bound as total population or require unrelated frontend journeys.",
+      "originalAcceptanceVerbatim": [
+        "8/9/更多Official Zone及100/101/更多Work评级均得到正确契约化结果。",
+        "采用分页/增量聚合/明确lower-bound表达读取边界，不以合法第9/101个对象导致整体失败。"
+      ],
+      "originalRegressionAssertionsVerbatim": [
+        {
+          "id": "D5-006/assertion-1",
+          "assert": "Suggested follows remains usable with 8/9/more official zones and preserves continuation/disclosure instead of failing the whole request on the ninth item."
+        },
+        {
+          "id": "D5-006/assertion-2",
+          "assert": "At 100/101/more standing rating heads, aggregation is correct through continuation/incremental state or explicitly typed as at least, never a false exact total."
+        },
+        {
+          "id": "D5-006/assertion-3",
+          "assert": "Boundary and empty/private cases fit bounded request work without scanning an unlimited population."
+        }
+      ],
+      "originalAssertionsChanged": false,
+      "originalCriterionWitnesses": [
+        {
+          "number": 1,
+          "originalVerbatim": "8/9/更多Official Zone及100/101/更多Work评级均得到正确契约化结果。",
+          "status": "PASS — new independent genuine public API outcomes",
+          "witness": "All six personas retain HTTP200/nonempty suggestions at8/9/10 real Official Zones; all six retain HTTP200 exact complete count/population100/101/102,withdrawnCount0,mean5 under original frozen assertions. This directly fills the original public boundary gap.",
+          "evidence": [
+            "supportedCustodyContinuation.results.zones",
+            "supportedCustodyContinuation.results.ratings"
+          ],
+          "cases": 18,
+          "assertions": 294
+        },
+        {
+          "number": 2,
+          "originalVerbatim": "采用分页/增量聚合/明确lower-bound表达读取边界，不以合法第9/101个对象导致整体失败。",
+          "status": "PASS — reviewed landed source mechanism + original affected public outcomes",
+          "witness": "Suggestion overflow no longer rejects the whole request; official listing ordered limit+1/after continuation is unchanged from the original independently observed five 200/next responses. Standing component/histogram and bounded witness inventory maintain exact aggregates incrementally without a101 business ceiling. G2858 inspected new nine-path/two-cast/current-main composition, earlier exact reviews reused; no checks/thresholds relaxed.",
+          "evidence": [
+            "reviewed main-equivalent32paths",
+            "original official-eight5responses",
+            "new18/294",
+            "retained native3/750"
+          ]
+        }
+      ],
+      "originalRegressionWitnesses": [
+        {
+          "id": "D5-006/assertion-1",
+          "originalVerbatim": "Suggested follows remains usable with 8/9/more official zones and preserves continuation/disclosure instead of failing the whole request on the ninth item.",
+          "status": "PASS by composed evidence; newest frozen file alone does not cover all clauses",
+          "witness": "18 measured suggestion outcomes across6personas at8/9/10:200,threeitems,67graphcalls,<90KB,<=4527ms,no private Realm identifier. Original five200 eight-item official listings withnext are passing unchanged proof; complete listOfficialZones function is byte-identical original754→currentmain. Public/listed/protection filtering remains inside that unchanged bounded function. No new suggestion cursor or exhaustive traversal requirement is introduced.",
+          "limits": "No claim to an actual fresh traversal of all listing pages or a suppressed-first-eight refill scenario; those are not new closure requirements."
+        },
+        {
+          "id": "D5-006/assertion-2",
+          "originalVerbatim": "At 100/101/more standing rating heads, aggregation is correct through continuation/incremental state or explicitly typed as at least, never a false exact total.",
+          "status": "PASS",
+          "witness": "Independent frozen18ratingresponses:100/101/102 exactcomplete totals, onegraphcall,<=213669bytes,<=384ms, no voter identifiers. Reviewed maintained contribution/component histogram and native100/101/102/512/2048 proof retain explicit bounded incremental state."
+        },
+        {
+          "id": "D5-006/assertion-3",
+          "originalVerbatim": "Boundary and empty/private cases fit bounded request work without scanning an unlimited population.",
+          "status": "PASS at original applicable existing tiers; no new six-persona empty/private runtime claimed",
+          "witness": "Newboundary requests obey all original call/byte/deadline bounds. Retained exact owner-source tests (QA102848,23/346) explicitly execute empty/100/101/large bounded aggregates, nineSQLstatement composed bounds and private/damaged denial. Retained native3/750 includes genuine emptyGlobal population0/partial semantics and reader/fence tests; retained6persona438context proof separately preserves private/revoked absent-equivalence and zero-vote/no-borrowed-population. Static bounded official listing retains limit+1 and disclosure filters.",
+          "limits": "G2826 new frozen suites did not create distinct empty/private populations or measure them; retained controlled/native/public context proof is identified separately and no source/runtime tier upgraded."
+        }
+      ],
+      "evidence": {
+        "independentProof": {
+          "owner": "G-2826",
+          "engine": "codex-1",
+          "model": "gpt-6.1-sol",
+          "effort": "xhigh",
+          "accountFallback": false,
+          "published": "0dc9018ed52c2638348478bc447a5d8db8253856",
+          "path": "docs/goals/product-completion-20261019/proofs/original-zone-rating-boundaries.json",
+          "sha256": "a418cf496aba04ada16dd425ee14e4cd6c385954099e607a6c98ebdfec77b1dd",
+          "job": "d38cd379-400e-4b28-b53c-9a7cbd90d0d4",
+          "qa": "20261019t133610-820841",
+          "cases": 18,
+          "assertions": 294,
+          "reportOriginalLimitsPreserved": [
+            "The original continuation/disclosure and distinct empty/private assertion gaps in frozenAssertionScope remain unproved; no whole D5-006 acceptance or closure.",
+            "No replacement assertion, API, grant, producer, corpus, standing reconstruction, migration, native review, context/history rerun, frontend or landing.",
+            "Prior setup failures and separate context-selection evidence are unchanged; this run does not substitute for publication/rights preservation."
+          ]
+        },
+        "retainedOwnerProof": {
+          "job": "effacd3e-ade4-4e87-a5fc-c2a5f5f64207",
+          "qa": "20261019t102848-e84a5d",
+          "cases": 23,
+          "assertions": 346,
+          "executedSource": "d82713ca0504284899929e8044aad6439a7844fc",
+          "selectedExistingCases": [
+            {
+              "name": "composed synthesis retains nine SQL statements including controls at 100/101/large and empty boundaries",
+              "file": "services/main/tests/rating-population-boundaries.test.ts",
+              "line": "165",
+              "assertions": 40,
+              "status": "PASS"
+            },
+            {
+              "name": "standing aggregates are exact at empty, 100, 101 and large populations within the original request budget",
+              "file": "services/main/tests/rating-population-boundaries.test.ts",
+              "line": "254",
+              "assertions": 36,
+              "status": "PASS"
+            },
+            {
+              "name": "unvalued, inconsistent, private or damaged evidence never becomes a truncated exact result",
+              "file": "services/main/tests/rating-population-boundaries.test.ts",
+              "line": "299",
+              "assertions": 7,
+              "status": "PASS"
+            }
+          ],
+          "tier": "controlled owner tests, not public HTTP requests"
+        },
+        "retainedNativeProof": {
+          "qa": "20261019t102912-4a6524",
+          "cases": 3,
+          "assertions": 750,
+          "executedSource": "d82713ca0504284899929e8044aad6439a7844fc",
+          "tier": "genuine native databases/Account and Main app.handle contract integration; no frontend claim"
+        },
+        "sourceEquivalence": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-D5-006-original-qualification/source-equivalence.json",
+          "bytes": 19362,
+          "sha256": "a9739f9d0c3f2d1955501a91a4fe8399ced02e755f40e90c9888727336db43bb"
+        },
+        "artifactManifest": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-D5-006-original-qualification/artifact-manifest.json",
+          "bytes": 9946,
+          "sha256": "956b608978dbb9155ebd800d062258bd3a58a1a9b003647b1047df979818f890"
+        }
+      },
+      "rootVerification": {
+        "rawArtifactFiles": 29,
+        "currentMainMaterialSourceAndDependencies": 34,
+        "officialListingFunctionByteExactOriginalToMain": true,
+        "openApiOnlyFourUnrelatedPeerOperations": true,
+        "twoSourceMigrationFilenameOnlyDifferencesVerified": true,
+        "originalTwoAcceptanceAndThreeRegressionAssertionsUnchanged": true,
+        "reviewerExplicitSuiteOnlyLimitsPreserved": true,
+        "noAdditionalRuntimeOrRereviewRequired": true
+      },
+      "closureIntentProvenance": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-D5-006-accepted-closure.json",
+        "sha256": "d3e847b72490da19fa6fd01b7daa6c45307d1d8f5d34d7e9522ea0b8660d1801"
+      },
+      "remainingOriginalAssertions": [],
+      "qualification": "The new independent report proves its two frozen suites only. Root accepts the original class from composed, separately identified unchanged source/owner/native/public evidence, preserving every report limitation; no new suggestion-cursor/refill/full-history/frontend/whole-catalogue requirement."
     }
   ]
 }
