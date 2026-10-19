@@ -511,3 +511,32 @@ export const AnonymousReadingLanguages: Story = {
     await expect(anonymousRequest?.headers.get('x-rezics-display-languages')).toBe(anonymousBasis);
   },
 };
+
+
+export const NativeHeader: Story = {
+  async play({ canvasElement }) {
+    const opening = storyThread.items.find(item => item.reply === storyThread.focus)!;
+    const header = canvasElement.querySelector<HTMLElement>('[data-subject-header]')!;
+    const top = within(header);
+    await expect(header).toHaveAttribute('data-resource', opening.reply);
+    await expect(header).toHaveAttribute('data-content-model', 'member-reply-v1');
+    const primary = top.getByRole('group', { name: 'Primary actions' });
+    const reactions = top.getByRole('group', { name: 'Reactions' });
+    const more = top.getByRole('button', { name: `More actions for ${opening.title}` });
+    await expect(within(primary).getByRole('link', { name: '11 comments' })).toHaveAttribute('href', '#comments');
+    await expect(primary.compareDocumentPosition(reactions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await expect(more.getBoundingClientRect().left).toBeGreaterThanOrEqual(reactions.getBoundingClientRect().right - 1);
+    await expect(Math.abs(more.getBoundingClientRect().top - reactions.getBoundingClientRect().top)).toBeLessThan(16);
+    await expect(canvasElement.querySelector('[data-primary-content]')).toHaveTextContent(opening.body);
+    more.focus();
+    await userEvent.keyboard('{Enter}');
+    const report = await within(document.body).findByRole('menuitem', { name: 'Report this post' });
+    const query = new URL(report.getAttribute('href')!, window.location.origin).searchParams;
+    await expect(Object.fromEntries(query)).toEqual({ target: opening.reply, realm: storyThread.realm,
+      component: 'body', revision: `urn:rezics:content:revision:${opening.revisionId}` });
+    await userEvent.keyboard('{Escape}');
+    await expect(more).toHaveFocus();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+export const NativeHeaderPhone: Story = { ...NativeHeader, globals: { viewport: { value: 'phone' } } };

@@ -40,6 +40,10 @@ import { iriOf } from '../work-page/route.ts';
 import { RATINGS_REGION, TargetRatingsRegion } from '../work-page/ratings.tsx';
 import { inSentence } from './messages.ts';
 
+function UsefulContent({ enabled, children }: { enabled: boolean; children: ReactNode }) {
+  return enabled ? <div data-primary-content className="grid min-w-0 gap-10">{children}</div> : children;
+}
+
 function Unavailable({ t, messages, frame }: { t: Copy; messages: WorkPageMessages; frame: boolean }) {
   const body = <EmptyState icon={TriangleAlertIcon} tone="destructive" role="alert" headingLevel={1}
     title={t.pageUnavailableTitle} description={t.pageUnavailableBody}>
@@ -133,28 +137,15 @@ export async function EntityPage({ resource, locale, hrefFor, frame = true, curs
     kind={page.summary.base === 'work' ? 'work' : ['realm', 'space', 'collection', 'concept'].includes(page.summary.type)
       ? page.summary.type : page.registry.type} name={page.summary.name.value} locale={locale}
     signedIn={signedIn} actingSubject={actingSubject} signInHref={signInPath(localizedPath(here, locale))}
+    reactionsLabel={t.reactions} moreAccessibleLabel={t.moreActions({ name: ownName })}
     reports={[{ target: page.target.resource, kind: 'page' }]} />;
   const primary = draw.some(section => section.id === 'relations')
     ? <Link href="#relations" className={buttonVariants({ variant: 'outline', size: 'sm' })}>{t.relations}</Link>
+    : draw.some(section => section.id === 'statements')
+      ? <Link href="#statements" className={buttonVariants({ variant: 'outline', size: 'sm' })}>{t.statements}</Link>
     : draw.some(section => section.id === 'discussion')
       ? <Link href="#discussion" className={buttonVariants({ variant: 'outline', size: 'sm' })}>{t.discussion}</Link> : null;
-  const body: ReactNode = <div className="grid min-w-0 gap-10">
-    {header ? scoped
-      ? <SubjectHeader identity={<ProjectionHeader summary={placeSummary} level={1} page locale={locale} messages={scoped} />}
-        primary={primary} actions={actions} />
-      : <EntityHeader summary={page.summary} registry={page.registry} avatarQuery={avatarQuery} locale={locale} t={t}
-        primary={primary} actions={actions} /> : null}
-    {continuitySwitch && page.target.base === 'resource'
-      ? <Suspense fallback={null}><ContinuityBar id={id} position={position} here={here} current={continuity} locale={locale} /></Suspense> : null}
-    {identitySections && page.target.base === 'resource' ? <Suspense fallback={
-      <RegionSkeleton id="identity-loading" title={t.relations} label={messages.loadingRegion} lines={3} />}>
-      <IdentitySections page={page} cursors={cursors} ratingScope={ratingScope} position={position}
-        frame={frames[0]} here={here} actingSubject={actingSubject ?? null}
-        avatarQuery={avatarQuery} {...common} /></Suspense> : null}
-    {page.target.base === 'resource' && page.registry.frameDimension === 'event'
-      ? <Suspense fallback={null}><EventRankingSection page={page} ratingScope={ratingScope} position={position}
-        locale={locale} actingSubject={actingSubject ?? null} /></Suspense> : null}
-    {draw.map(section => {
+  const renderSection = (section: EntitySection) => {
       switch (section.id) {
         case 'statements': return <Suspense key={section.id} fallback={loading(section, t.statements)}>
           <StatementsSection section={section} cursor={cursors.statements} position={position} frame={frames}
@@ -178,7 +169,29 @@ export async function EntityPage({ resource, locale, hrefFor, frame = true, curs
             registry={page.registry} signedIn={signedIn} noun={noun} {...common} /></Suspense>;
         default: return null;
       }
-    })}
+  };
+  const body: ReactNode = <div className="grid min-w-0 gap-10">
+    {header ? scoped
+      ? <SubjectHeader locale={locale} resource={page.target.resource} semanticType={page.registry.type} identity={<ProjectionHeader summary={placeSummary} level={1} page locale={locale} messages={scoped} />}
+        primary={primary} actions={actions} />
+      : <EntityHeader summary={page.summary} registry={page.registry} avatarQuery={avatarQuery} locale={locale} t={t}
+        primary={primary} actions={actions} /> : null}
+    <UsefulContent enabled={header}>
+    {continuitySwitch && page.target.base === 'resource'
+      ? <Suspense fallback={null}><ContinuityBar id={id} position={position} here={here} current={continuity} locale={locale} /></Suspense> : null}
+    {identitySections && page.target.base === 'resource' ? <Suspense fallback={
+      <RegionSkeleton id="identity-loading" title={t.relations} label={messages.loadingRegion} lines={3} />}>
+      <IdentitySections page={page} cursors={cursors} ratingScope={ratingScope} position={position}
+        frame={frames[0]} here={here} actingSubject={actingSubject ?? null}
+        avatarQuery={avatarQuery} {...common} /></Suspense> : null}
+    {page.target.base === 'resource' && page.registry.frameDimension === 'event'
+      ? <Suspense fallback={null}><EventRankingSection page={page} ratingScope={ratingScope} position={position}
+        locale={locale} actingSubject={actingSubject ?? null} /></Suspense> : null}
+    {draw.filter(section => !header || section.id !== 'discussion' && section.id !== 'reviews').map(renderSection)}
+    </UsefulContent>
+    {header ? <div data-community-content className="grid min-w-0 gap-10">
+      {draw.filter(section => section.id === 'reviews' || section.id === 'discussion').map(renderSection)}
+    </div> : null}
     {draw.filter(section => section.id === 'statements').map(section => <Suspense key={`${section.id}-sources`} fallback={null}>
       <StatementsSection section={section} cursor={cursors.statements} position={position} frame={frames}
         ownName={ownName} sourcesOnly {...common} />

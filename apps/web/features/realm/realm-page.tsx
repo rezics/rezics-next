@@ -1,3 +1,5 @@
+import { buttonVariants } from '@rezics/ui/button';
+import { copyOf as detailCopy } from '../entity-page/messages.ts';
 import type { ZoneContext, ZonePackage, ZoneTokens } from '@rezics/zone-sdk';
 import { materializeData } from 'native-i18n';
 import { cookies, headers } from 'next/headers';
@@ -490,12 +492,15 @@ export async function RealmFrame({
     ? await readingSelection(data, realm.zone.id, search)
     : { state: null, reading: null };
   // Join or Follow first, as every community page offers; the page style stays beside it.
+  const detail = detailCopy(locale);
   const relationshipFetch = client ? replayFetch(client) : undefined;
   const actions = (
     <>
       <RealmMembership
         realm={realm.header.id}
         realmName={frameZone.name.value}
+        reactionsLabel={detail.reactions} moreAccessibleLabel={detail.moreActions({ name: frameZone.name.value })}
+        reports={[{ target: realm.header.id, kind: 'page', realm: realm.header.id }]}
         initial={view.membership}
         signedIn={view.reader.signedIn}
         actingSubject={view.reader.actingSubject}
@@ -548,7 +553,9 @@ export async function RealmFrame({
         members={members}
         masthead={compactCommunity ? <CommunityContext name={frameZone.name}
           href={realmHref(locale, realm.ref, 'discussions')} actions={actions} />
-          : <ZoneMasthead zone={frameZone} members={members} actions={actions} />}
+          : <ZoneMasthead zone={frameZone} members={members} actions={actions}
+            subject={{ locale, primary: <LocalizedLink href={realmHref(locale, realm.ref, 'discussions')}
+              className={buttonVariants({ variant: 'outline', size: 'sm' })}>{messages.discussions}</LocalizedLink> }} />}
         tabs={
           site || compactCommunity ? null : (
             <RealmTabs
@@ -607,7 +614,7 @@ export async function RealmFrame({
           actingSubject={view.reader.actingSubject}
           signInHref={signInPath(here)}
         >
-          {children}
+          {compactCommunity ? children : <div data-primary-content>{children}</div>}
         </ReaderActionsProvider>
       </ZoneFrame>
     </>

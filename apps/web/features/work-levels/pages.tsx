@@ -1,3 +1,4 @@
+import { readingAgent } from '../work-page/read.ts';
 import type { WorkAt } from '../work-page/route.ts';
 import { readAnimeRelationsConnections } from '../work-page/anime-relations-recorded-page.ts';
 import { AnimeRelationsSections } from '../work-page/anime-relations-recorded-page.tsx';
@@ -132,6 +133,7 @@ export async function ReleasePage({
   return (
     <ReleaseView
       release={release.data}
+      reader={await readingAgent()}
       realizations={realizations}
       sources={sources}
       sourceReads={sourceReads}

@@ -2,6 +2,9 @@ import { insert } from 'native-i18n';
 import type { EntityPageMessages } from '../messages.ts';
 
 export default {
+  primaryActions: "主要操作",
+  reactions: "互動",
+  moreActions: insert("{{name}}的更多操作", { name: String }),
   noFurtherDetails: "尚未列出其他詳情。",
   showMore: "展開",
   showLess: "收起",

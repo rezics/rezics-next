@@ -101,7 +101,8 @@ function AuthorHeader({ author, follow, reader, followActions, locale, messages 
   const name = authorName(author, t);
   const years = lifespan(author.facts, locale, messages);
   const state = follow.ok ? follow.data : null;
-  return <SubjectHeader identity={<div className="flex min-w-0 items-center gap-3 sm:gap-5">
+  const detail = detailCopy(locale);
+  return <SubjectHeader locale={locale} identity={<div className="flex min-w-0 items-center gap-3 sm:gap-5">
     <Portrait name={name} />
     <div className="min-w-0 space-y-1.5">
       <p className="font-medium text-muted-foreground text-sm">{t.author}</p>
@@ -113,7 +114,8 @@ function AuthorHeader({ author, follow, reader, followActions, locale, messages 
         following={state?.following ?? null} revision={state?.revision ?? null} followers={state?.followers ?? null}
         signedIn={reader.signedIn} actingSubject={reader.actingSubject}
         signInHref={signInPath(localizedPath(openLibraryAuthorHref(author.key), locale))} actions={followActions}
-        locale={locale} messages={messages} className="justify-end gap-x-2" />}
+        locale={locale} messages={messages} reactionsLabel={detail.reactions}
+        moreAccessibleLabel={detail.moreActions({ name })} className="justify-end gap-x-2" />}
     primary={<Link href="#author-works" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
       {t.worksHeading({ name })}</Link>} />;
 }
@@ -262,7 +264,7 @@ export function AuthorPage({ author, follow, reader, alsoEnjoyed, readerActions,
       <AuthorRecord author={author} locale={locale} messages={messages} />
       <div className="grid gap-12">
         <div className="grid min-w-0 content-start gap-12">
-          <section aria-labelledby="author-works" className="grid gap-4">
+          <section data-primary-content aria-labelledby="author-works" className="grid gap-4">
             <header className="flex items-end justify-between gap-4 border-border/70 border-b pb-4">
               <h2 id="author-works" className="text-balance font-semibold text-2xl tracking-tight">
                 {t.worksHeading({ name })}</h2>

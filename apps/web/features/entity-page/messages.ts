@@ -12,6 +12,9 @@ import zhHant from './messages/zh-Hant.ts';
 // from the type registry, and relation labels from Main's lexicon; neither is
 // written here.
 const en = {
+  primaryActions: "Primary actions",
+  reactions: "Reactions",
+  moreActions: insert("More actions for {{name}}", { name: String }),
   noFurtherDetails: "No further details are listed.",
   showMore: "Show more",
   showLess: "Show less",

@@ -1,3 +1,4 @@
+import { iri } from '@rezics/model';
 import { Button, buttonVariants } from '@rezics/ui/button';
 import { Input } from '@rezics/ui/input';
 import { cn } from '@rezics/ui/utils';
@@ -146,7 +147,7 @@ export function ConceptPage({ concept, facet, state, realms, works, follow, read
   const values: BarValue[] = works.ok ? works.data.values : [];
   const page: BarValue = { id: concept.id, name: concept.name };
   return <PageContainer className="grid gap-8 sm:gap-10">
-    <SubjectHeader identity={<div className="grid gap-2">
+    <SubjectHeader locale={locale} resource={concept.id} semanticType={iri['skos:Concept']} identity={<div className="grid gap-2">
         {facet || concept.realm ? <p className="flex flex-wrap items-center gap-x-3 gap-y-1 font-medium
           text-muted-foreground text-sm">
           {facet ? <span>{facet}</span> : null}
@@ -177,7 +178,7 @@ export function ConceptPage({ concept, facet, state, realms, works, follow, read
         actingSubject={reader.actingSubject ?? undefined}
         messages={messages} />
     </div>
-    <div id="concept-content" className="scroll-mt-20"><ConceptWorks state={state} name={name} initial={works} avatarQuery={reader.avatarQuery}
+    <div data-primary-content id="concept-content" className="scroll-mt-20"><ConceptWorks state={state} name={name} initial={works} avatarQuery={reader.avatarQuery}
       signedIn={reader.signedIn} load={loadWorks}
       locale={locale} messages={messages} /></div>
   </PageContainer>;

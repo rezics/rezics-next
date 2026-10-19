@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
 import { realizations as fixtureRealizations, releases as fixtureReleases, names as fixtureNames, summary } from '../work-levels/fixtures.ts';
 import { copyOf as editionCopy } from '../work-levels/messages.ts';
 import { ReleaseView } from '../work-levels/release-page.tsx';
@@ -166,3 +166,28 @@ export const EditionsEvidenceReferences: Story = {
       'https://example.test/source/revision/1');
   },
 };
+
+
+export const NativeHeader: Story = {
+  async play({ canvasElement }) {
+    const header = canvasElement.querySelector<HTMLElement>('[data-subject-header]')!;
+    const top = within(header);
+    await expect(header).toHaveAttribute('data-resource', release.id);
+    await expect(header).toHaveAttribute('data-semantic-type', 'https://rezics.com/vocab/Release');
+    const primary = top.getByRole('group', { name: 'Primary actions' });
+    const reactions = top.getByRole('group', { name: 'Reactions' });
+    const more = top.getByRole('button', { name: `More actions for ${release.title.value}` });
+    await expect(within(primary).getByRole('link', { name: editionCopy('en').coversHeading })).toHaveAttribute('href', '#covers');
+    await expect(primary.compareDocumentPosition(reactions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await expect(more.getBoundingClientRect().left).toBeGreaterThanOrEqual(reactions.getBoundingClientRect().right - 1);
+    await expect(canvasElement.querySelector('[data-primary-content]')).toHaveTextContent('The selected Work');
+    more.focus();
+    await userEvent.keyboard('{Enter}');
+    const item = await within(document.body).findByRole('menuitem', { name: 'Report this page' });
+    await expect(new URL(item.getAttribute('href')!, window.location.origin).searchParams.get('target')).toBe(release.id);
+    await userEvent.keyboard('{Escape}');
+    await expect(more).toHaveFocus();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+export const NativeHeaderPhone: Story = { ...NativeHeader, globals: { viewport: { value: 'phone' } } };

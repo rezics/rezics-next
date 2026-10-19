@@ -2,6 +2,9 @@ import { insert } from 'native-i18n';
 import type { EntityPageMessages } from '../messages.ts';
 
 export default {
+  primaryActions: "주요 작업",
+  reactions: "반응",
+  moreActions: insert("{{name}}의 추가 작업", { name: String }),
   noFurtherDetails: "등록된 추가 정보가 없습니다.",
   showMore: "더 보기",
   showLess: "접기",

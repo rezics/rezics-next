@@ -1,3 +1,6 @@
+import { buttonVariants } from '@rezics/ui/button';
+import { copyOf as detailCopy } from '../entity-page/messages.ts';
+import LocalizedLink from '../shell/localized-link.tsx';
 import { direction } from '@rezics/main/language';
 import type { ZoneBrowseEntry, ZoneContext, ZonePackage } from '@rezics/zone-sdk';
 import { LibraryBigIcon } from 'lucide-react';
@@ -47,19 +50,24 @@ export function RealmPageStory({ zone, modules = [], pkg = null, execution = { m
 }) {
   const zoneMessages = zoneMessagesFor(locale);
   const messages = realmMessagesFor(locale);
+  const detail = detailCopy(locale);
   const theme = zoneTheme(zone.tokens, { reader, enabled: look });
   const ref = realmRef ?? zone.slug ?? 'classics';
   const actions = <>
     {zone.realm ? <RealmMembership realm={zone.realm} realmName={zone.name.value} initial={membership}
       signedIn={membershipActions.kind !== 'signed-out'} signInHref="/auth/start" rulesHref={zone.links.about}
-      actions={membershipActions} locale={locale} messages={messages} /> : null}
+      actions={membershipActions} locale={locale} messages={messages}
+      reactionsLabel={detail.reactions} moreAccessibleLabel={detail.moreActions({ name: zone.name.value })}
+      reports={[{ target: zone.realm, kind: 'page', realm: zone.realm }]} /> : null}
     <LookMenu enabled={look} labels={{ menu: zoneMessages.lookLabel, zone: zoneMessages.lookZone,
       standard: zoneMessages.lookStandard, help: zoneMessages.lookHelp,
       saveFailed: zoneMessages.lookSaveFailed }} />
   </>;
   return <ZoneFrame zone={zone} dataZone={zone.slug ?? 'classics'} theme={theme} pkg={compactCommunity ? null : pkg} actions={actions}
     members={members} masthead={compactCommunity ? <CommunityContext name={zone.name} href={zone.links.discussions ?? zone.links.home} actions={actions} />
-      : <ZoneMasthead zone={zone} members={members} actions={actions} />}
+      : <ZoneMasthead zone={zone} members={members} actions={actions} subject={{ locale,
+        primary: <LocalizedLink href={zone.links.discussions ?? zone.links.home}
+          className={buttonVariants({ variant: 'outline', size: 'sm' })}>{messages.discussions}</LocalizedLink> }} />}
     tabs={site || compactCommunity ? null : <RealmTabs locale={locale} realmRef={ref} label={messages.sections} navigation={navigation}
       labels={{ home: messages.home, browse: zoneMessages.browseTab, works: messages.works,
         discussions: messages.discussions,

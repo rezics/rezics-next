@@ -2,6 +2,9 @@ import { insert } from 'native-i18n';
 import type { EntityPageMessages } from '../messages.ts';
 
 export default {
+  primaryActions: "Hauptaktionen",
+  reactions: "Reaktionen",
+  moreActions: insert("Weitere Aktionen für {{name}}", { name: String }),
   noFurtherDetails: "Weitere Angaben sind nicht aufgeführt.",
   showMore: "Mehr anzeigen",
   showLess: "Weniger anzeigen",

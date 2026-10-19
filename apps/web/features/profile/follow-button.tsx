@@ -46,11 +46,11 @@ export function FollowControl(props: Parameters<typeof FollowControlState>[0]) {
 }
 
 function FollowControlState({ target, kind = 'agent', name, following, revision, followers, signedIn, actingSubject,
-  signInHref, actions, locale, messages, className, reports }: {
+  signInHref, actions, locale, messages, className, reports, moreAccessibleLabel, reactionsLabel }: {
   target: string; kind?: string; name: string; following: boolean | null; revision: string | null;
   followers: FollowerCount | null; signedIn: boolean; actingSubject?: string | null; signInHref: string;
   actions?: FollowActions; locale: UiLocale; messages: FollowMessages; className?: string;
-  reports?: readonly ReportMenuTarget[];
+  reports?: readonly ReportMenuTarget[]; moreAccessibleLabel?: string; reactionsLabel?: string;
 }) {
   const [count, setCount] = useState(followers);
   const [before, setBefore] = useState(following);
@@ -64,6 +64,7 @@ function FollowControlState({ target, kind = 'agent', name, following, revision,
     <RelationshipControl target={target} kind={kind} name={name} locale={locale} signedIn={signedIn}
       actingSubject={actions?.kind === 'unavailable' ? null : actingSubject}
       signInHref={actions?.kind === 'signed-out' ? actions.signInHref : signInHref} initial={initial} api={api} reports={reports}
+      moreAccessibleLabel={moreAccessibleLabel} reactionsLabel={reactionsLabel}
       onChange={state => {
         if (count?.kind === 'exact' && before !== null && before !== state.following)
           setCount({ ...count, value: Math.max(0, count.value + (state.following ? 1 : -1)) });

@@ -28,13 +28,13 @@ export function ReportMenuItems({ targets, locale }: { targets: readonly ReportM
 }
 
 /** For objects with no relationship actions. Objects that have them reuse that menu instead. */
-export function ReportMenu({ targets, name, locale }: {
-  targets: readonly ReportMenuTarget[]; name: string; locale: UiLocale;
+export function ReportMenu({ targets, name, locale, moreAccessibleLabel }: {
+  targets: readonly ReportMenuTarget[]; name: string; locale: UiLocale; moreAccessibleLabel?: string;
 }) {
   if (!targets.length) return null;
   return <Menu>
     <MenuTrigger asChild><Button type="button" variant="ghost" size="icon-sm"
-      aria-label={`${relationshipMessages[locale].options} · ${name}`}><EllipsisIcon aria-hidden="true" /></Button></MenuTrigger>
+      aria-label={moreAccessibleLabel ?? `${relationshipMessages[locale].options} · ${name}`}><EllipsisIcon aria-hidden="true" /></Button></MenuTrigger>
     <MenuContent className="max-w-[calc(100vw-2rem)]"><ReportMenuItems targets={targets} locale={locale} /></MenuContent>
   </Menu>;
 }

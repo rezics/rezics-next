@@ -1,3 +1,5 @@
+import { RealmPageStory } from '../realm/story-page.tsx';
+import { communityZone } from '../zones/fixtures.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -31,16 +33,35 @@ function Detail({ locale = 'en', long = false, unavailable = false, claims }: {
       registry={subject.registry} locale={locale} t={t}
       primary={<Link href="#related" className="rounded-sm text-primary underline underline-offset-4">{t.relations}</Link>}
       actions={<RelationshipControl target={target} kind="organization" name="Example Studio" locale={locale}
-        signedIn={false} signInHref="/auth/start" reports={[{ target, kind: 'page' }]} />} />
+        signedIn={false} signInHref="/auth/start" reactionsLabel={t.reactions}
+        moreAccessibleLabel={t.moreActions({ name: 'Example Studio' })} reports={[{ target, kind: 'page' }]} />} />
     {long ? <SubjectDescription locale={locale}><p lang="en">{'The studio makes stories for readers around the world. '.repeat(90)}</p></SubjectDescription> : null}
-    <StatementsView page={unavailable ? { ok: false, failure: 'unavailable' } : { ok: true, data: page }}
+    <div data-primary-content className="grid min-w-0 gap-7"><StatementsView page={unavailable ? { ok: false, failure: 'unavailable' } : { ok: true, data: page }}
       names={names} ownName="Example Studio" labels={predicateLabels} cursor={undefined}
       hrefFor={hrefFor} locale={locale} t={t} messages={workMessages[locale]} pageEndSources />
     <section id="related" className="grid gap-2"><h2 className="font-semibold">{t.relations}</h2><p>Example series</p></section>
-    <section id="discussion" className="grid gap-2"><h2 className="font-semibold">{t.discussion}</h2><p>{workMessages[locale].noDiscussionGlobal}</p></section>
+    </div>
+    <section data-community-content id="discussion" className="grid gap-2"><h2 className="font-semibold">{t.discussion}</h2><p>{workMessages[locale].noDiscussionGlobal}</p></section>
     <StatementSourcesView page={unavailable ? { ok: false, failure: 'unavailable' } : { ok: true, data: page }}
       labels={predicateLabels} names={names} hrefFor={hrefFor} locale={locale} t={t} />
   </div>;
+}
+
+async function headerContract(canvasElement: HTMLElement, locale: UiLocale = 'en') {
+  const header = canvasElement.querySelector<HTMLElement>('[data-subject-header]')!;
+  const t = copyOf(locale);
+  const top = within(header);
+  await expect(header).toHaveAttribute('data-resource', target);
+  await expect(header).toHaveAttribute('data-semantic-type', subject.registry.type);
+  const primary = top.getByRole('group', { name: t.primaryActions });
+  const reactions = top.getByRole('group', { name: t.reactions });
+  const more = top.getByRole('button', { name: t.moreActions({ name: 'Example Studio' }) });
+  await expect(within(primary).getByRole('link', { name: t.relations })).toBeVisible();
+  await expect(reactions).toBeVisible();
+  await expect(primary.compareDocumentPosition(reactions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  await expect(more.getBoundingClientRect().left).toBeGreaterThanOrEqual(reactions.getBoundingClientRect().right - 1);
+  await expect(Math.abs(more.getBoundingClientRect().top - reactions.getBoundingClientRect().top)).toBeLessThan(16);
+  await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
 }
 
 const meta = { title: 'Entity page/Complete detail', component: Detail } satisfies Meta<typeof Detail>;
@@ -63,9 +84,10 @@ export const SourcesAtPageEnd: Story = {
 
 export const MenuKeyboard: Story = {
   async play({ canvasElement }) {
+    await headerContract(canvasElement);
     const canvas = within(canvasElement);
     await expect(canvas.queryByRole('link', { name: 'Report this page' })).toBeNull();
-    const trigger = canvas.getByRole('button', { name: 'More actions · Example Studio' });
+    const trigger = canvas.getByRole('button', { name: 'More actions for Example Studio' });
     trigger.focus();
     await userEvent.keyboard('{Enter}');
     const item = await within(document.body).findByRole('menuitem', { name: 'Report this page' });
@@ -81,7 +103,8 @@ export const LongDescriptionPhone: Story = {
   args: { long: true }, globals: { viewport: { value: 'phone' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByRole('button', { name: 'More actions · Example Studio' })).toBeVisible();
+    await headerContract(canvasElement);
+    await expect(canvas.getByRole('button', { name: 'More actions for Example Studio' })).toBeVisible();
     await expect(canvas.getByRole('button', { name: 'Show more' })).toBeVisible();
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
@@ -138,3 +161,48 @@ export const WithheldQuotation: Story = {
     await expect(within(sources).getByText('Source fingerprint (SHA-256)')).toBeVisible();
   },
 };
+
+export const JapaneseHeaderPhone: Story = {
+  args: { locale: 'ja' }, globals: { viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    await headerContract(canvasElement, 'ja');
+    const name = copyOf('ja').moreActions({ name: 'Example Studio' });
+    const trigger = within(canvasElement).getByRole('button', { name });
+    trigger.focus();
+    await userEvent.keyboard('{Enter}');
+    const item = await within(document.body).findByRole('menuitem', { name: 'このページを報告' });
+    await expect(new URL(item.getAttribute('href')!, window.location.origin).searchParams.get('target')).toBe(target);
+    await userEvent.keyboard('{Escape}');
+    await expect(trigger).toHaveFocus();
+  },
+};
+
+
+export const NativeRealmHeader: Story = {
+  render: () => <RealmPageStory zone={communityZone('en')} locale="en" members="10 members">
+    <div data-primary-content className="mx-auto max-w-4xl px-4 py-6"><h2>Weekly reading list</h2></div>
+  </RealmPageStory>,
+  async play({ canvasElement }) {
+    const zone = communityZone('en');
+    const header = canvasElement.querySelector<HTMLElement>('[data-subject-header]')!;
+    const top = within(header);
+    await expect(header).toHaveAttribute('data-resource', zone.realm);
+    await expect(header).toHaveAttribute('data-semantic-type', 'https://rezics.com/vocab/Realm');
+    const primary = top.getByRole('group', { name: 'Primary actions' });
+    const reactions = top.getByRole('group', { name: 'Reactions' });
+    const more = top.getByRole('button', { name: `More actions for ${zone.name.value}` });
+    await expect(within(primary).getByRole('link', { name: 'Discussions' })).toHaveAttribute('href', `/en${zone.links.discussions}`);
+    await expect(primary.compareDocumentPosition(reactions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await expect(more.getBoundingClientRect().left).toBeGreaterThanOrEqual(reactions.getBoundingClientRect().right - 1);
+    more.focus();
+    await userEvent.keyboard('{Enter}');
+    const report = await within(document.body).findByRole('menuitem', { name: 'Report this page' });
+    const query = new URL(report.getAttribute('href')!, window.location.origin).searchParams;
+    await expect(query.get('target')).toBe(zone.realm);
+    await expect(query.get('realm')).toBe(zone.realm);
+    await userEvent.keyboard('{Escape}');
+    await expect(more).toHaveFocus();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+export const NativeRealmHeaderPhone: Story = { ...NativeRealmHeader, globals: { viewport: { value: 'phone' } } };

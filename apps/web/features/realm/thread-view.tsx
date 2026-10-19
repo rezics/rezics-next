@@ -20,6 +20,7 @@ import { resourceHref } from '../address/path.ts';
 import { markedSpoiler, threadPath } from '../feed/discussion.ts';
 import { useFeed } from '../feed/feed-context.tsx';
 import { SubjectHeader } from '../entity-page/header.tsx';
+import { copyOf as detailCopy } from '../entity-page/messages.ts';
 import { SubjectSources } from '../entity-page/sources.tsx';
 import { ReportMenu } from '../safety/report-action.tsx';
 import { ReplyComposer, type ReplyMode, type ReplyTarget } from '../feed/reply-composer.tsx';
@@ -147,6 +148,7 @@ function OpeningPost({
   const title = post.blocked ? t.blockedUser : (post.title ?? ''),
     body = post.body;
   const href = threadPath(realm.path, post.reply);
+  const detail = detailCopy(locale);
   const words = body ? (
     <ReplyBody
       reply={{ ...post, body }}
@@ -156,7 +158,7 @@ function OpeningPost({
   ) : null;
   return (
     <article aria-labelledby="thread-title" className="grid gap-3">
-      <SubjectHeader identity={<div className="grid min-w-0 gap-3">
+      <SubjectHeader locale={locale} resource={post.reply} contentModel="member-reply-v1" identity={<div className="grid min-w-0 gap-3">
       <div className="flex min-w-0 items-center gap-2">
         <CommunityIcon
           icon={null}
@@ -177,14 +179,17 @@ function OpeningPost({
       </div>} actions={<>
         {!post.blocked && post.author ? <ReplyAuthorActions target={{ reply: post.reply,
           realm: read.realm, author: post.author.id, revisionId: post.revisionId, placement: post.placement }} /> : null}
-        {post.blocked ? null : <VoteControl target={{ id: post.placement, vote: post.vote.value,
-          score: post.vote.score, revision: post.vote.revision, open: post.vote.open }} />}
-        <ReportMenu targets={[{ target: post.reply, kind: 'post', realm: read.realm }]}
-          name={title || t.untitled} locale={locale} />
+        {post.blocked ? null : <div role="group" aria-label={detail.reactions} className="flex items-center gap-1.5">
+          <VoteControl target={{ id: post.placement, vote: post.vote.value,
+            score: post.vote.score, revision: post.vote.revision, open: post.vote.open }} /></div>}
+        <ReportMenu targets={[{ target: post.reply, kind: 'post', realm: read.realm,
+          ...(post.revisionId ? { selection: { component: 'body' as const, revision: `urn:rezics:content:revision:${post.revisionId}`, locator: null } } : {}) }]}
+          name={title || t.untitled} locale={locale} moreAccessibleLabel={detail.moreActions({ name: title || t.untitled })} />
       </>} primary={<a href="#comments"
         className="inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 font-medium text-muted-foreground text-sm outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring">
         <MessageCircleIcon aria-hidden="true" className="size-4" />{t.comments(count)}{read.complete ? '' : '+'}
       </a>} />
+      <div data-primary-content className="grid min-w-0 gap-3">
       {post.blocked ? null : markedSpoiler(post.spoiler) ? (
         <>
           <span
@@ -199,6 +204,7 @@ function OpeningPost({
         words
       )}
       <AboutWork work={read.work} />
+      </div>
       <fieldset className="-ms-1 flex flex-wrap items-center gap-1.5">
         <legend className="sr-only">{t.actions}</legend>
         <ShareButton href={href} title={title} />

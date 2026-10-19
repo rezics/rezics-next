@@ -1,6 +1,7 @@
 'use client';
 
 import type { UiLocale } from '../../i18n/define.ts';
+import { copyOf } from '../entity-page/messages.ts';
 import { browserMainApi } from '../api/browser.ts';
 import type { MainClient } from '../discover/types.ts';
 import { type FollowActions, FollowControl } from '../profile/follow-button.tsx';
@@ -26,7 +27,8 @@ export function ConceptFollow({ concept, name, following, revision, followers, s
   actions?: FollowActions;
   locale: UiLocale; messages: ConceptMessages;
 }) {
+  const detail = copyOf(locale);
   return <FollowControl target={concept} name={name} following={following} revision={revision} followers={followers}
     kind="concept" signedIn={signedIn} actingSubject={actingSubject} signInHref={signInHref} actions={actions} locale={locale}
-    messages={messages} reports={[{ target: concept, kind: 'page', realm: null }]} className="justify-end gap-x-2" />;
+    messages={messages} moreAccessibleLabel={detail.moreActions({ name })} reactionsLabel={detail.reactions} reports={[{ target: concept, kind: 'page', realm: null }]} className="justify-end gap-x-2" />;
 }

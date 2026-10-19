@@ -15,16 +15,21 @@ import type { EntityProjection } from './types.ts';
 type Summary = Extract<EntityProjection['summary'], { status: 'available' }>;
 
 /** Identity and actions stay together even when a subject has a long biography or definition. */
-export function SubjectHeader({ identity, primary, actions, children, className }: {
+export function SubjectHeader({ identity, primary, actions, children, className, locale = 'en', resource, semanticType, contentModel }: {
   identity: ReactNode; primary?: ReactNode; actions?: ReactNode; children?: ReactNode; className?: string;
+  locale?: UiLocale; resource?: string; semanticType?: string; contentModel?: string;
 }) {
-  return <header data-subject-header className={cn('grid min-w-0 gap-4', className)}>
-    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-4">
+  const t = copyOf(locale);
+  return <header data-subject-header data-resource={resource} data-semantic-type={semanticType} data-content-model={contentModel}
+    className={cn('grid min-w-0 gap-4', className)}>
+    <div className="grid min-w-0 gap-4">
       <div data-subject-identity className="min-w-0">{identity}</div>
-      {actions ? <div data-subject-actions className="flex max-w-48 flex-wrap items-center justify-end gap-1.5">
-        {actions}</div> : null}
-      {primary ? <div data-subject-primary className="col-span-2 flex min-w-0 flex-wrap items-center gap-3">
-        {primary}</div> : null}
+      {primary || actions ? <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        {primary ? <div data-subject-primary role="group" aria-label={t.primaryActions}
+          className="flex min-w-0 flex-wrap items-center gap-3">{primary}</div> : null}
+        {actions ? <div data-subject-actions className="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-1.5">
+          {actions}</div> : null}
+      </div> : null}
     </div>
     {children}
   </header>;
@@ -63,7 +68,8 @@ export function EntityHeader({ summary, registry, avatarQuery, locale, t, action
   summary: Summary; registry: EntityProjection['registry']; avatarQuery?: string; locale: UiLocale; t: Copy;
   actions?: ReactNode; primary?: ReactNode;
 }) {
-  return <SubjectHeader actions={actions} primary={primary} className="border-border/60 border-b pb-6"
+  return <SubjectHeader locale={locale} resource={summary.reference} semanticType={registry.type}
+    actions={actions} primary={primary} className="border-border/60 border-b pb-6"
     identity={<div className="flex min-w-0 items-center gap-3 sm:gap-4">
     <EntityAvatar revealable summary={summary} avatarQuery={avatarQuery} />
     <div className="grid min-w-0 gap-1.5">

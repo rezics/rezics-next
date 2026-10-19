@@ -73,7 +73,7 @@ export const LongDefinitionMenuPhone: Story = {
   globals: { viewport: { value: 'phone' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    const more = canvas.getByRole('button', { name: 'More actions · Fantasy' });
+    const more = canvas.getByRole('button', { name: 'More actions for Fantasy' });
     const expand = await canvas.findByRole('button', { name: 'Show more' });
     await expect(more.compareDocumentPosition(expand) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await expect(canvas.getByRole('link', { name: /^Works$/ })).toHaveAttribute('href', '#concept-content');
@@ -466,3 +466,23 @@ export const Unavailable: Story = {
     );
   },
 };
+
+
+export const NativeHeader: Story = {
+  async play({ canvasElement }) {
+    const header = canvasElement.querySelector<HTMLElement>('[data-subject-header]')!;
+    const top = within(header);
+    await expect(header).toHaveAttribute('data-resource', fantasy.id);
+    await expect(header).toHaveAttribute('data-semantic-type', 'http://www.w3.org/2004/02/skos/core#Concept');
+    const primary = top.getByRole('group', { name: 'Primary actions' });
+    const reactions = top.getByRole('group', { name: 'Reactions' });
+    const more = top.getByRole('button', { name: 'More actions for Fantasy' });
+    await expect(within(primary).getByRole('link', { name: 'Works' })).toHaveAttribute('href', '#concept-content');
+    await expect(primary.compareDocumentPosition(reactions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await expect(more.getBoundingClientRect().left).toBeGreaterThanOrEqual(reactions.getBoundingClientRect().right - 1);
+    await expect(Math.abs(more.getBoundingClientRect().top - reactions.getBoundingClientRect().top)).toBeLessThan(16);
+    await expect(canvasElement.querySelector('[data-primary-content]')).toHaveTextContent(works[0]!.title.value);
+    await noOverflow();
+  },
+};
+export const NativeHeaderPhone: Story = { ...NativeHeader, globals: { viewport: { value: 'phone' } } };

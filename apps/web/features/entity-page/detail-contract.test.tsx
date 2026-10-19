@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { PathnameContext } from 'next/dist/shared/lib/hooks-client-context.shared-runtime.js';
+import { Providers } from '../shell/providers.tsx';
+import { seedServedTypes } from '../catalogue/type-fixtures.ts';
 import { AppRouterContext, type AppRouterInstance } from 'next/dist/shared/lib/app-router-context.shared-runtime.js';
 import { MediaImageProvider, mediaImageKey, type CoverCredit, type MediaImageMetadata } from '@rezics/ui/media-image';
 import { FeedProvider } from '../feed/feed-context.tsx';
@@ -22,12 +25,24 @@ import { AuthorPage } from '../author/author-page.tsx';
 import { authorFollow, prolificAuthor } from '../author/fixtures.ts';
 import { messages as authorMessages } from '../author/messages.ts';
 import { citationNames, citedStatements, importedSourceStatements, predicateLabels } from './fixtures.ts';
-import { SubjectDescription, SubjectHeader } from './header.tsx';
+import { RelationshipControl } from '../relationships/control.tsx';
+import { ProfilePage } from '../profile/profile-page.tsx';
+import { storyProfile, noWorks, followState } from '../profile/fixtures.ts';
+import { messages as profileMessages } from '../profile/messages.ts';
+import { ConceptPage } from '../concept/concept-page.tsx';
+import * as concepts from '../concept/fixtures.ts';
+import { messages as conceptMessages } from '../concept/messages.ts';
+import { RealmPageStory } from '../realm/story-page.tsx';
+import { communityZone } from '../zones/fixtures.ts';
+import { projectionFor } from './fixtures.ts';
+import { EntityHeader, SubjectDescription, SubjectHeader } from './header.tsx';
 import { copyOf } from './messages.ts';
 import { sourceHref, StatementSourcesView } from './sources.tsx';
 import { standaloneHrefFor } from './route.ts';
 import { splitStatementSources } from './statement-groups.ts';
 import { StatementsView } from './views.tsx';
+
+seedServedTypes();
 
 const router: AppRouterInstance = { bfcacheId: '', refresh() {}, push() {}, replace() {}, back() {}, forward() {}, prefetch() {} };
 const render = (element: ReactElement) => renderToStaticMarkup(createElement(AppRouterContext.Provider, { value: router }, element));
@@ -343,5 +358,89 @@ describe('subject identity and reporting', () => {
     const href = reportHref(target, target, { component: 'media_use', revision, locator });
     const params = new URL(href, 'https://example.test').searchParams;
     expect(Object.fromEntries(params)).toEqual({ target, realm: target, component: 'media_use', revision, locator });
+  });
+});
+
+
+describe('native subject header contract', () => {
+  test('native Person and Organization keep their actual registry type and task before reactions and the title menu', () => {
+    for (const type of ['https://schema.org/Person', 'https://schema.org/Organization']) {
+      const page = projectionFor({ base: 'resource', types: [type], name: 'Selected subject' });
+      if (page.summary.status !== 'available') throw new Error('Expected available fixture');
+      const html = render(<EntityHeader summary={page.summary} registry={page.registry} locale="en" t={t}
+        primary={<a href="#relations">Relations</a>} actions={<RelationshipControl target={page.target.resource}
+          kind={type} name="Selected subject" locale="en" signedIn={false} signInHref="/auth/start"
+          reactionsLabel={t.reactions} moreAccessibleLabel={t.moreActions({ name: 'Selected subject' })}
+          reports={[{ target: page.target.resource, kind: 'page' }]} />} />);
+      expect(html).toContain(`data-resource="${page.target.resource}"`);
+      expect(html).toContain(`data-semantic-type="${page.registry.type}"`);
+      expect(html.indexOf('aria-label="Primary actions"')).toBeLessThan(html.indexOf('aria-label="Reactions"'));
+      expect(html.indexOf('aria-label="Reactions"')).toBeLessThan(html.indexOf('aria-label="More actions for Selected subject"'));
+      expect(html).not.toContain('>Report this page<');
+    }
+  });
+
+  test('every UI locale names the task and title menu without exposing a report at rest', () => {
+    for (const locale of ['en', 'de', 'es', 'fr', 'ja', 'ko', 'zh-Hans', 'zh-Hant'] as const) {
+      const copy = copyOf(locale);
+      const html = render(<SubjectHeader locale={locale} resource={target} semanticType="https://schema.org/Person"
+        identity={<h1>Mei</h1>} primary={<a href="#works">Works</a>}
+        actions={<RelationshipControl target={target} kind="agent" name="Mei" locale={locale} signedIn={false}
+          signInHref="/auth/start" reactionsLabel={copy.reactions} moreAccessibleLabel={copy.moreActions({ name: 'Mei' })}
+          reports={[{ target, kind: 'profile' }]} />} />);
+      expect(html).toContain(`aria-label="${copy.primaryActions}"`);
+      expect(html).toContain(`aria-label="${copy.reactions}"`);
+      expect(html).toContain(`aria-label="${copy.moreActions({ name: 'Mei' })}"`);
+      expect(html.indexOf(`aria-label="${copy.primaryActions}"`)).toBeLessThan(html.indexOf(`aria-label="${copy.reactions}"`));
+      expect(html).not.toContain('data-report-action');
+    }
+  });
+
+  test('a sparse public profile has a real overview task while a failed Works read retains its retry', () => {
+    const profile = storyProfile();
+    const base = { profile, works: { ok: true as const, data: noWorks }, follow: { ok: true as const, data: followState(0) },
+      library: null, reader: { signedIn: false }, locale: 'en' as const, messages: profileMessages };
+    const html = render(<ProfilePage {...base} />);
+    expect(html).toContain(`data-resource="${profile.id}"`);
+    expect(html).toContain('data-semantic-type="https://rezics.com/vocab/Agent"');
+    expect(html).toContain('href="#profile-content"');
+    expect(html).toContain('>Overview</a>');
+    expect(html).toContain('id="profile-content" data-primary-content');
+    expect(html).not.toContain('id="profile-works"');
+    const failed = render(<ProfilePage {...base} works={{ ok: false, failure: 'unavailable' }} />);
+    expect(failed).toContain('Couldn’t load works');
+    expect(failed).toContain('>Retry</a>');
+  });
+
+  test('Concept and Release use their existing native identity and expose useful content before verification', () => {
+    const concept = render(<Providers><ConceptPage concept={concepts.fantasy} facet="Genre" state={concepts.state()} realms={{}}
+      works={concepts.ok(concepts.worksPage(concepts.state(), []))} follow={concepts.ok(concepts.follow(0))}
+      reader={{ signedIn: false }} loadWorks={concepts.worksLoader([])} searchConcepts={concepts.memorySearch}
+      locale="en" messages={conceptMessages} /></Providers>);
+    expect(concept).toContain(`data-resource="${concepts.fantasy.id}"`);
+    expect(concept).toContain('data-semantic-type="http://www.w3.org/2004/02/skos/core#Concept"');
+    expect(concept).toContain('aria-label="More actions for Fantasy"');
+    expect(concept).toContain('data-primary-content');
+    if (!editions.releases.ok) throw new Error('Expected release fixtures');
+    const release = editions.releases.data.items[0]!;
+    const html = render(<ReleaseView release={release} realizations={new Map()} sources={[]} names={editions.names}
+      locale="en" t={editionsCopy('en')} />);
+    expect(html).toContain(`data-resource="${release.id}"`);
+    expect(html).toContain('data-semantic-type="https://rezics.com/vocab/Release"');
+    expect(html).toContain('aria-label="Reactions"');
+    expect(html.indexOf('data-primary-content')).toBeLessThan(html.indexOf('data-subject-sources'));
+  });
+
+  test('a native Realm reuses the subject header without losing its title, membership or navigation', () => {
+    const zone = communityZone('en');
+    const html = render(<PathnameContext.Provider value={zone.links.home}><RealmPageStory zone={zone} locale="en" members="10 members"><p>Community reading list</p></RealmPageStory></PathnameContext.Provider>);
+    expect(html).toContain(`data-resource="${zone.realm}"`);
+    expect(html).toContain('data-semantic-type="https://rezics.com/vocab/Realm"');
+    expect(html.match(/data-subject-header/g)).toHaveLength(1);
+    expect(html).toContain('aria-label="Primary actions"');
+    expect(html).toContain('aria-label="Reactions"');
+    expect(html).toContain(`aria-label="More actions for ${zone.name.value}"`);
+    expect(html).toContain('>Discussions</a>');
+    expect(html).toContain('Community reading list');
   });
 });
