@@ -73,7 +73,8 @@ The preserved G-2805 source review is
 `identity-reader-review.json`, reviewed at
 `eeac26d5c755839d451351a29e9c753f41742d60`. The continuation began at
 `f14fae6aa6ab96344a444f73ff0f104204540371`; its reader corrections are committed
-as `bb4ca4e176` (before rebasing onto the current wave).
+as `c19435ff0c9659fe7a8d5027cc6d41787c9cfedd` after the first wave rebase
+(previously `bb4ca4e176`).
 
 | Finding | Reached owner regression and causal correction |
 | --- | --- |
@@ -100,6 +101,14 @@ fences, exact Recipe failures and a full page of twenty derived titles. That
 page hydrates bodies in five batches, shares one native metadata probe and two
 Rights probes, and reloads no body during the enclosing dependency close.
 These are stack-free owner proofs, not the independent persona outcomes.
+
+Final targeted QA `20261019t070558-0e4f04` at
+`926090c1d6bbab594c39514abf8511cf31db683c` passed all 145 tests across the seven
+selected identity, contents, session-fence, Recipe, optional-authentication and
+rate-limit owner files. Recorded job `5229458d-f320-40f1-9892-52e403922707`
+also passed types, inference, lint, AST and repository guards. Its documentation
+step found this handoff missing from the documentation index; a separate
+documentation correction adds that link.
 
 The availability/digest transition regressions exercise the actual native read
 owner at its storage boundary. They do not claim a public command can erase a
