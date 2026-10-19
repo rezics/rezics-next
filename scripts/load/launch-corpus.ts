@@ -18,7 +18,7 @@ import { compatibleLoadStorage, loadCompatibility, type LoadCompatibility } from
 import { createCorpusBackupDriver, type CorpusRestoreSmokeInput } from './corpus-backup-driver.ts';
 import { restoreCatalogueBackup } from './catalogue-backup.ts';
 import { pollUntilDeadline } from '../qa/readiness.ts';
-import { workProfileCorpusApi, type CorpusApi, type CorpusBackupDriver } from './work-profile-corpus.ts';
+import { CorpusCommandError, workProfileCorpusApi, type CorpusApi, type CorpusBackupDriver } from './work-profile-corpus.ts';
 import type { MediaStack } from '../../tests/qa/integration/media-support.ts';
 import { importedRightsAssessments } from '../../services/main/src/modules/rights/import-policy.ts';
 import type { LaunchBookEdition, LaunchBooksCorpus, LaunchRecipeRecord, LaunchRecipesCorpus } from './launch-corpus-types.ts';
@@ -67,7 +67,8 @@ export function launchBookSources() {
 /** Writes only public Main commands. Authority setup belongs to the caller's
  * existing seed helper; no catalogue data bypasses the APIs. */
 async function buildBooks(api: CorpusApi, actor: string, key: string,
-  authorize: (work: string) => Promise<void>, authorizeRights: () => Promise<void>, signal: AbortSignal) {
+  authorize: (work: string) => Promise<void>, authorizeRights: () => Promise<void>, signal: AbortSignal,
+  nativeCatalogue = false) {
   const sources = launchBookSources();
   const observations = new Map<string, string>();
   for (const { entry, record, bytes, externalId } of sources) {
@@ -84,15 +85,29 @@ async function buildBooks(api: CorpusApi, actor: string, key: string,
     observations.set(externalId, result.observation.observation);
   }
   const source = sources[0]!;
-  const [created] = await seedCatalogueProfileWorks(api, actor, [{ key: `${key}:OL66554W`, input: {
+  const catalogueInput: Parameters<typeof seedCatalogueProfileWorks>[2][number]['input'] = {
     profile: 'work-catalogue-import-v1', expectedWorkHead: null,
     title: source.record.title, language: 'en', aliases: [], semanticTypes: ['https://schema.org/Book'],
     credits: [], classifications: [],
     evidence: `${source.entry.requestUrl} sha256:${source.entry.sha256} observation:${observations.get('OL66554W')}`,
-  } }], signal);
+  };
+  const created = nativeCatalogue ? await (async () => {
+    const candidate = await api.command<{ candidateReceipt: string }>(`${key}:candidate`, { method: 'POST',
+      path: '/v1/catalogue/candidates', body: { profile: 'catalogue-candidates-v1',
+        originalTitle: { value: source.record.title, language: 'en' }, aliases: [], romanizations: [],
+        creators: ['Jane Austen'], dates: [], identifiers: [] } }, signal);
+    return api.command<{ work: string; mainVersion: string; workRevision: string; mainRevision: string }>(`${key}:work`, {
+      method: 'POST', path: '/v1/works', body: { profile: 'metadata-only-v1', authoring: 'catalogue', grain: 'new-creative-scope',
+        candidateReceipt: candidate.candidateReceipt, title: source.record.title, language: 'en',
+        semanticTypes: ['https://schema.org/Book'], actingSubject: actor } }, signal);
+  })() : (await seedCatalogueProfileWorks(api, actor, [{ key: `${key}:OL66554W`, input: catalogueInput }], signal))[0];
   if (!created) throw new Error('Books catalogue import returned no Work');
   await authorize(created.work);
   await authorizeRights();
+  if (nativeCatalogue) await api.command(`${key}:verification`, { method: 'POST',
+    path: `/v1/works/${short(created.work)}/catalogue-verifications`, body: {
+      expectedHead: created.workRevision, actingSubject: actor, evidence: catalogueInput.evidence,
+    } }, signal);
   for (const [index, assessment] of importedRightsAssessments({ provider: 'open-library',
     url: 'https://openlibrary.org/works/OL66554W' }, created.work).entries()) {
     const assessmentKey = `${key}:rights:${index}`;
@@ -643,7 +658,7 @@ async function buildRecipesApiBackup(withBook = false) {
     const { grantRecordedPlatformUse } = await import('../../tests/qa/fixtures/platform-grant.ts');
     await grantRecordedPlatformUse(source.accessPool, importer.principalId, ['catalogue-import']);
     await initializeRelayCheckpoint(relay, sourceEnvironment.MAIN_RELAY_CONSUMER!, source.env.lineage.dataEpoch);
-    const api = workProfileCorpusApi('http://main.local', importer.token, {
+    let api = workProfileCorpusApi('http://main.local', importer.token, {
       fetch: (async (request, init) => {
         for (let attempt = 0; ; attempt++) {
           init?.signal?.throwIfAborted();
@@ -677,33 +692,90 @@ async function buildRecipesApiBackup(withBook = false) {
         return async () => copy.stop();
       },
     });
+    let actor = importer.actor;
+    let authorize = (scope: string, action: string) => grantLaunchRecipeAuthority(source!.accessPool,
+      importer.principalId, actor, scope, action);
     if (withBook) {
-      const authorize = async (scope: string, action: string) => {
-        await grantLaunchRecipeAuthority(source!.accessPool, importer.principalId, importer.actor, scope, action);
-        record({ fixtureAuthority: { principalId: importer.principalId, actor: importer.actor, scope, action } });
+      const { personaSessions, retainPersonaRealm } = await import('../../tests/qa/support/personas.ts');
+      let people: Awaited<ReturnType<typeof personaSessions>> | undefined;
+      people = await personaSessions('public', { observeMain: async answer => {
+        record({ persona: answer.caller.actingSubject, request: answer.request, response: answer.response,
+          requestStartedAt: answer.requestStartedAt, answeredAt: answer.answeredAt });
+        if (people && answer.request.method === 'POST' && answer.request.key) {
+          const id = createHash('sha256').update(answer.request.key).digest('hex');
+          const receipts = join(evidence, 'receipts');
+          mkdirSync(receipts, { recursive: true, mode: 0o700 });
+          const persona = (['owner', 'stranger', 'member', 'moderator', 'operator'] as const)
+            .find(name => people![name].actingSubject === answer.caller.actingSubject);
+          let observed: unknown;
+          try { observed = JSON.parse(answer.response.body); } catch { observed = answer.response.body; }
+          writeFileSync(join(receipts, `${id}.json`), JSON.stringify({ id, phase: 'prepare',
+            method: answer.request.method, path: answer.request.path, key: answer.request.key,
+            body: answer.request.body, status: answer.response.status, answer: observed,
+            startedAt: answer.requestStartedAt, finishedAt: answer.answeredAt,
+            caller: { realm: people.realm, persona, accountId: answer.caller.accountId,
+              actingSubject: answer.caller.actingSubject } }, null, 2) + '\n', { mode: 0o600 });
+        }
+      } });
+      const owner = people.owner;
+      actor = owner.actingSubject!;
+      closePersonas = people.close;
+      writeFileSync(join(evidence, 'personas.json'), JSON.stringify(retainPersonaRealm(people), null, 2) + '\n', { mode: 0o600 });
+      const principal = await source.accessPool.query<{ id: string }>('SELECT id FROM access.principal WHERE account_subject=$1', [owner.accountId]);
+      if (principal.rows.length !== 1) throw new Error('Book/Recipe owner needs its actual provisioned principal');
+      await grantRecordedPlatformUse(source.accessPool, principal.rows[0]!.id, ['catalogue-import']);
+      const platform = await source.accessPool.query(`SELECT g.id, g.issuer_subject, g.principal_id, g.scope_id,
+        g.action, g.generation, g.active, g.valid_until, e.receipt FROM access.principal_permission_grant g
+        JOIN access.platform_grant_episode e ON e.principal_grant_id=g.id
+        WHERE g.principal_id=$1 AND g.scope_id='platform:access' AND g.action='platform:use:catalogue-import'`,
+      [principal.rows[0]!.id]);
+      record({ fixturePlatformUse: platform.rows, accountId: owner.accountId, actingSubject: actor });
+      authorize = async (scope, action) => {
+        const client = await source!.accessPool.connect();
+        try {
+          await client.query('BEGIN');
+          const result = await grantFixtureAuthority(client, { scope, requireDispatch: true,
+            representations: [{ principalId: principal.rows[0]!.id, actor, action, lifetime: '8 hours' }],
+            grant: { actor, action, lifetime: '8 hours', requireSelfIssuer: true } });
+          await client.query('COMMIT');
+          record({ fixtureAuthority: { realm: people!.realm, persona: 'owner', accountId: owner.accountId,
+            actingSubject: actor, scope, action, lifetime: '8 hours', result } });
+        } catch (error) { await client.query('ROLLBACK'); throw error; }
+        finally { client.release(); }
+      };
+      api = {
+        async command<T>(commandKey: string, command: Parameters<CorpusApi['command']>[1], signal?: AbortSignal) {
+          signal?.throwIfAborted();
+          const response = await owner.main(command.method, command.path, command.body, commandKey);
+          const raw = await response.text();
+          if (![200, 201, 204].includes(response.status))
+            throw new CorpusCommandError(commandKey, `${command.method} ${command.path}`, command.stage, response.status, raw);
+          signal?.throwIfAborted();
+          return response.status === 204 ? undefined as T : JSON.parse(raw) as T;
+        },
+        async read<T>(path: `/v1/${string}`, signal?: AbortSignal) {
+          signal?.throwIfAborted();
+          const response = await owner.main('GET', path), raw = await response.text();
+          if (!response.ok) throw new Error(`Book/Recipe read ${path} returned HTTP ${response.status}: ${raw}`);
+          signal?.throwIfAborted();
+          return JSON.parse(raw) as T;
+        },
       };
       for (const scope of ['work:create:root', 'work:create:catalogue-import']) await authorize(scope, 'work.create');
+      await authorize('catalogue:verify:root', 'catalogue.verify');
       const remaining = Math.floor(budgetMs - (performance.now() - preparationStartedAt));
       if (remaining <= 0) throw new Error('Book/Recipe preparation exhausted its budget during startup');
       const signal = AbortSignal.timeout(remaining);
-      const book = await buildBooks(api, importer.actor, `book-recipes:${sourceRunId}`, async work => {
+      const book = await buildBooks(api, actor, `book-recipes:${sourceRunId}`, async work => {
         await authorize(`work:edit:${work}`, 'work.edit');
         await authorize(`work:read:${work}`, 'work.read');
-      }, () => authorize('rights:assess', 'rights.assess'), signal);
+      }, () => authorize('rights:assess', 'rights.assess'), signal, true);
       const { prepareLaunchBookReading } = await import('./launch-book-reading.ts');
-      const reading = await prepareLaunchBookReading({ api, actor: importer.actor, token: importer.token, book, authorize, signal });
+      const reading = await prepareLaunchBookReading({ api, actor, token: '', book, authorize, signal });
       writeFileSync(join(evidence, 'book.json'), JSON.stringify({ ...book, ...reading }, null, 2) + '\n', { mode: 0o600 });
-      const { personaSessions, retainPersonaRealm } = await import('../../tests/qa/support/personas.ts');
-      const people = await personaSessions('public', { observeMain: async answer => {
-        record({ persona: answer.caller.actingSubject, request: answer.request, response: answer.response,
-          requestStartedAt: answer.requestStartedAt, answeredAt: answer.answeredAt });
-      } });
-      closePersonas = people.close;
-      writeFileSync(join(evidence, 'personas.json'), JSON.stringify(retainPersonaRealm(people), null, 2) + '\n', { mode: 0o600 });
     }
-    corpus = await prepareLaunchRecipesCorpus({ api, actor: importer.actor, backups: driver,
-      directory, preparationStartedAt, authorize: (scope, action) => grantLaunchRecipeAuthority(source!.accessPool,
-        importer.principalId, importer.actor, scope, action),
+    corpus = await prepareLaunchRecipesCorpus({ api, actor, backups: driver,
+      directory, preparationStartedAt, authorize,
       importFile: async (key, actor, composition, file, signal) => {
         const sourceUrl = String(file.url);
         const retained = await api.command<{ observation: { observation: string } }>(`${key}:source`, {
