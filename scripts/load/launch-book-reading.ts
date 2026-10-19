@@ -32,9 +32,12 @@ export async function prepareLaunchBookReading(input: {
   if (descriptionDigest !== 'dd0fa391ab9fe17e0c22fdc272215be29a815eeadc9bba709b1e88c2ae56469b')
     throw new Error('Open Library description source changed');
   const record = JSON.parse(bytes.toString('utf8')) as { description: string | { value: string }; authors: unknown[] };
-  const description = typeof record.description === 'string' ? record.description : record.description?.value;
-  if (!description || !JSON.stringify(record.authors).includes('/authors/OL21594A') || !description.includes('Jane Austen'))
+  const sourceDescription = typeof record.description === 'string' ? record.description : record.description?.value;
+  if (!sourceDescription || !JSON.stringify(record.authors).includes('/authors/OL21594A') || !sourceDescription.includes('Jane Austen'))
     throw new Error('The locked Book description or author correspondence is missing');
+  // Header descriptions are plain text fields. Keep the frozen paragraph bytes
+  // in their source file and record the whitespace-only presentation transform.
+  const description = sourceDescription.replace(/\s+/g, ' ').trim();
   for (const [index, assessment] of importedRightsAssessments({ provider: 'open-library',
     url: 'https://openlibrary.org/works/OL66554W' }, book.work, true)
     .filter(assessment => assessment.material.component === 'synopsis').entries()) {
@@ -93,7 +96,8 @@ export async function prepareLaunchBookReading(input: {
     } });
   const header = await api.read(`/v1/works/${short(book.work)}?language=en`, signal);
   const contents = await api.read(`/v1/works/${short(book.work)}/contents?language=en&limit=20`, signal);
-  return { description: { value: description, file: descriptionFile, sha256: descriptionDigest }, author,
+  return { description: { value: description, sourceValue: sourceDescription,
+    transformation: 'collapse-whitespace', file: descriptionFile, sha256: descriptionDigest }, author,
     mainText: { introduction, draft, publication, selection }, source, fixture: { file: entry.seed, sha256: entry.sha256 },
     chapters, header, contents };
 }
