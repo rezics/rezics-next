@@ -4,6 +4,11 @@ import { expect, userEvent, within } from 'storybook/test';
 import { AgentPicker } from './agent-picker.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import { messages } from './messages.ts';
+import { useState } from 'react';
+import { Button } from '@rezics/ui/button';
+import type { AgentPickerProps } from './agent-picker.tsx';
+import { AgentPickerLoading } from './agent-picker-loading.tsx';
+import { StoryRouteContext } from '../../.storybook/next-navigation.ts';
 
 const ada = 'https://rezics.com/id/b8df6385-cec9-4fa0-8b89-71def5fa82b5';
 const pen = 'https://rezics.com/id/1e1489d5-6994-402c-99f2-50547eeaef4d';
@@ -160,6 +165,69 @@ export const NoAgents: Story = {
 
 export const Unavailable: Story = {
   args: { options: null, notice: { kind: 'unavailable' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('alert')).toHaveTextContent(messages.en.agentsUnavailable);
+    await expect(canvas.getByRole('button', { name: 'Retry' })).toBeVisible();
+    await expect(canvas.queryByText(messages.en.noAgents)).toBeNull();
+    await expect(canvas.queryByRole('link', { name: messages.en.setUpProfile })).toBeNull();
+  },
+};
+
+function RecoveryVisit(args: AgentPickerProps) {
+  const [failed, setFailed] = useState(false);
+  return <div className="grid gap-4">
+    <Button variant="outline" onClick={() => setFailed(value => !value)}>
+      {failed ? 'Restore identity discovery' : 'Interrupt identity discovery'}
+    </Button>
+    <StoryRouteContext value={{ pathname: '/en/identity', search: `?next=${encodeURIComponent(args.next)}`,
+      onRefresh: () => setFailed(false) }}>
+      <AgentPicker {...args} options={failed ? null : args.options}
+        notice={failed ? { kind: 'unavailable' } : args.notice} />
+    </StoryRouteContext>
+  </div>;
+}
+
+export const DraftSurvivesDiscoveryFailure: Story = {
+  render: args => <RecoveryVisit {...args} />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('radio', { name: /Aster @aster/ }));
+    await userEvent.click(canvas.getByRole('checkbox', { name: /Make this my default/ }));
+    await userEvent.click(canvas.getByRole('button', { name: 'Interrupt identity discovery' }));
+    await expect(canvas.getByRole('radio', { name: /Aster @aster/ })).toBeChecked();
+    await expect(canvas.getByRole('button', { name: 'Use this Agent' })).toBeDisabled();
+    await expect(canvasElement.querySelector('input[name="next"]')).toHaveValue('/en/studio');
+    await expect(canvas.getByRole('checkbox', { name: /Make this my default/ })).toBeChecked();
+    await userEvent.click(canvas.getByRole('button', { name: 'Retry' }));
+    await expect(canvas.getByRole('radio', { name: /Aster @aster/ })).toBeChecked();
+    await expect(canvas.getByRole('checkbox', { name: /Make this my default/ })).toBeChecked();
+    await expect(canvas.getByRole('button', { name: 'Use this Agent' })).toBeEnabled();
+    await expect(canvas.getByRole('button', { name: 'Retry' })).toHaveFocus();
+    await expect(canvas.getByRole('status')).toHaveTextContent(messages.en.agentsLegend);
+  },
+};
+
+export const LoadingDiscovery: Story = {
+  render: () => <AgentPickerLoading heading={messages.en.chooseAgentHeading} label="Loading…" />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('status')).toHaveAttribute('aria-busy', 'true');
+    await expect(canvas.queryByRole('alert')).toBeNull();
+    await expect(canvas.queryByText(messages.en.noAgents)).toBeNull();
+  },
+};
+
+export const UnavailablePhoneChineseDark: Story = {
+  ...Unavailable,
+  args: { options: null, notice: { kind: 'unavailable' }, messages: messages['zh-Hans'], locale: 'zh-Hans' },
+  globals: { locale: 'zh-Hans', viewport: { value: 'phone' }, theme: 'dark' },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('alert')).toHaveTextContent(messages['zh-Hans'].agentsUnavailable);
+    await expect(canvas.getByRole('button', { name: '重试' })).toBeVisible();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
 };
 
 export const Chinese: Story = {

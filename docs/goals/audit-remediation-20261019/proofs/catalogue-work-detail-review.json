@@ -9990,5 +9990,446 @@
       "productWrites": [],
       "peerChanges": []
     }
+  },
+  "identityAgentPickerFourPathFirstReview": {
+    "observedAt": "2026-10-19T15:47:23.093204+00:00",
+    "reviewer": {
+      "account": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independent": true,
+      "fallback": false,
+      "delegation": false
+    },
+    "authority": "First source review of only four original AgentPicker/loading consumer paths within the current same-claim identity/catalogue continuation. Existing producer/seam/72-source/seven-consumer dispositions are reused, not reviewed again. No implementation, source landing or runtime launch.",
+    "priorReport": {
+      "commit": "6135cf183850637e3301299ab378096d9df0f3cf",
+      "preservedFields": [
+        "format",
+        "goal",
+        "worker",
+        "observedAt",
+        "reviewer",
+        "disposition",
+        "acceptance",
+        "pins",
+        "scope",
+        "acceptanceReference",
+        "findings",
+        "sourceReviewObservations",
+        "checksActuallyExecuted",
+        "proofReuse",
+        "limitations",
+        "managerNext",
+        "originalReviewCheckpoint",
+        "finalCandidateCheckpoint",
+        "finalCandidateResolutionCheckpoint",
+        "boundedActionGroupCheckpoint",
+        "boundedSourceFooterCheckpoint",
+        "boundedCreditsCookCheckpoint",
+        "boundedBookCoverCheckpoint",
+        "boundedBookRetryCorrectionCheckpoint",
+        "boundedD1003NavigationCorrectionCheckpoint",
+        "boundedD1003BackQueryAssertionCheckpoint",
+        "boundedNonWorkReleaseFirstSourceCheckpoint",
+        "storyRefreshSeamFirstReview",
+        "readerMetadataFirstReview",
+        "boundedIdentityNameConsumerFirstReview"
+      ],
+      "allPriorValuesUnchanged": true
+    },
+    "frozenMainReportPreservation": {
+      "pin": "464ee111d0c0d9b24e726231d59096c62dcde8e7",
+      "copiedAdditivePeerKeys": [
+        "managerCallerCorrection",
+        "managerBookIntegration"
+      ],
+      "differingHistoricalTopLevelValues": {
+        "disposition": "bounded-2cc223-credits-cook-review-complete-one-reproduced-typecheck-finding",
+        "acceptance": "Immutable2cc2233811e03867ad11567ece53a5e97bba4b90 versus80265f871e601ce870c5eaeadea7095fc122a726 reviewed across22paths. Credits and Cook source/progression inspected with exact regression receipts; WORK-REVIEW-07 reproduces two existing entry test callers missing newly required resource. Prior findings and all historical failures/dispositions preserved. Genuine C27 remains independently due; C21 and Performer owner gaps are not closed."
+      },
+      "policy": "Retain every worker value and checkpoint, copy the two missing manager-only keys exactly, and preserve frozen Main historical summary text here rather than overwrite either history. No new manager acceptance is inferred."
+    },
+    "readinessReceipt": {
+      "originalPath": ".temp/audit-remediation-20261019/two-hour-sprint/site-G2785-four-source-readiness-20261019T154204Z/receipt.json",
+      "path": ".temp/goal/discussion-agent-first-review/receipt.json",
+      "bytes": 82160,
+      "sha256": "131a935bf19d355042839d5ab041b30a3d4e559631e40e9d66a9a89c459c9812"
+    },
+    "pins": {
+      "frozenMain": "464ee111d0c0d9b24e726231d59096c62dcde8e7",
+      "authoredSource": "f4d0226f39526147eaeb86f99a4e0502b9ca8379",
+      "historicallyChecked": "26d876124c4c3c26f17cd6535f2e5d781e8f2187",
+      "historicalComposition": "22ff8d9442c103e08c412cdba5b24ced10c4a3c6",
+      "sevenConsumerReport": "6135cf183850637e3301299ab378096d9df0f3cf",
+      "seamReport": "d2c64515f7cbdcbfcea47fd8de8db9f89569028a"
+    },
+    "selectedSources": [
+      {
+        "path": "apps/web/app/[locale]/identity/loading.tsx",
+        "currentMain": null,
+        "authored": {
+          "blob": "884fdbcaf12792900c7bcc3b789ce650390f8ae0",
+          "sha256": "6cbd9120aa5a99d5a381dbb948429c23ae0eaf8b830404476acb84115214b21a",
+          "bytes": 677
+        },
+        "oldComposition": {
+          "blob": "884fdbcaf12792900c7bcc3b789ce650390f8ae0",
+          "sha256": "6cbd9120aa5a99d5a381dbb948429c23ae0eaf8b830404476acb84115214b21a",
+          "bytes": 677
+        },
+        "historicallyChecked": {
+          "blob": "884fdbcaf12792900c7bcc3b789ce650390f8ae0",
+          "sha256": "6cbd9120aa5a99d5a381dbb948429c23ae0eaf8b830404476acb84115214b21a",
+          "bytes": 677
+        },
+        "targetEqualsOriginalAndOldComposition": true,
+        "targetEqualsHistoricallyChecked": true,
+        "independentFirstReview": "MISSING for this exact consumer source; producer/seam approvals do not substitute"
+      },
+      {
+        "path": "apps/web/features/auth/agent-picker-loading.tsx",
+        "currentMain": null,
+        "authored": {
+          "blob": "f67473023ed87063dd36f6e75ddc1690ecb5d15c",
+          "sha256": "b9c75da84d845c8ebdd620a2cdb6dd32606e2bc3fd9807b410251dd66598ae1a",
+          "bytes": 435
+        },
+        "oldComposition": {
+          "blob": "f67473023ed87063dd36f6e75ddc1690ecb5d15c",
+          "sha256": "b9c75da84d845c8ebdd620a2cdb6dd32606e2bc3fd9807b410251dd66598ae1a",
+          "bytes": 435
+        },
+        "historicallyChecked": {
+          "blob": "f67473023ed87063dd36f6e75ddc1690ecb5d15c",
+          "sha256": "b9c75da84d845c8ebdd620a2cdb6dd32606e2bc3fd9807b410251dd66598ae1a",
+          "bytes": 435
+        },
+        "targetEqualsOriginalAndOldComposition": true,
+        "targetEqualsHistoricallyChecked": true,
+        "independentFirstReview": "MISSING for this exact consumer source; producer/seam approvals do not substitute"
+      },
+      {
+        "path": "apps/web/features/auth/agent-picker.stories.tsx",
+        "currentMain": {
+          "blob": "ba7534e3c6fc9bf54c8444a6a54524fc0416ae2e",
+          "sha256": "669821a5a658a4c1275749ecb6f691fdd9b3a20f9fe939fcb552e5b0088bae82",
+          "bytes": 8504
+        },
+        "authored": {
+          "blob": "78b1648c968131211d229b806c79868b098ffc6d",
+          "sha256": "27da06927f84cd903735dd86ac5befc549dd74ccca7cfae8550b91b1d276a7f1",
+          "bytes": 12214
+        },
+        "oldComposition": {
+          "blob": "78b1648c968131211d229b806c79868b098ffc6d",
+          "sha256": "27da06927f84cd903735dd86ac5befc549dd74ccca7cfae8550b91b1d276a7f1",
+          "bytes": 12214
+        },
+        "historicallyChecked": {
+          "blob": "78b1648c968131211d229b806c79868b098ffc6d",
+          "sha256": "27da06927f84cd903735dd86ac5befc549dd74ccca7cfae8550b91b1d276a7f1",
+          "bytes": 12214
+        },
+        "targetEqualsOriginalAndOldComposition": true,
+        "targetEqualsHistoricallyChecked": true,
+        "independentFirstReview": "MISSING for this exact consumer source; producer/seam approvals do not substitute"
+      },
+      {
+        "path": "apps/web/features/auth/agent-picker.tsx",
+        "currentMain": {
+          "blob": "3d792dbc8cd5a24576f122322576c21becbd90b7",
+          "sha256": "21a893f6677904619fcc6940d2742fd3c725dc318e8a7e560f218a360afa45b5",
+          "bytes": 6278
+        },
+        "authored": {
+          "blob": "17760ca342312510ba3f2536900daba348006c0e",
+          "sha256": "440188199b94a4af7ac38b6b928b1cd19b9ec15324369460b4c8a83eef6dad0b",
+          "bytes": 8085
+        },
+        "oldComposition": {
+          "blob": "17760ca342312510ba3f2536900daba348006c0e",
+          "sha256": "440188199b94a4af7ac38b6b928b1cd19b9ec15324369460b4c8a83eef6dad0b",
+          "bytes": 8085
+        },
+        "historicallyChecked": {
+          "blob": "17760ca342312510ba3f2536900daba348006c0e",
+          "sha256": "440188199b94a4af7ac38b6b928b1cd19b9ec15324369460b4c8a83eef6dad0b",
+          "bytes": 8085
+        },
+        "targetEqualsOriginalAndOldComposition": true,
+        "targetEqualsHistoricallyChecked": true,
+        "independentFirstReview": "MISSING for this exact consumer source; producer/seam approvals do not substitute"
+      }
+    ],
+    "pathClarification": "The exact manifest and Git source select apps/web/app/[locale]/identity/loading.tsx, the Next route loading boundary, rather than the abbreviated features/identity/loading.tsx prose path. The four manifest paths are the only selected source paths.",
+    "patch": {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/site-G2785-four-source-readiness-20261019T154204Z/four-source-proposed.patch",
+      "bytes": 12584,
+      "sha256": "3e646b9fd8f181adb99088c367e912ae5f19c9c7068f8d91ccd625cc8ce36d1d",
+      "onlyPaths": [
+        "apps/web/app/[locale]/identity/loading.tsx",
+        "apps/web/features/auth/agent-picker-loading.tsx",
+        "apps/web/features/auth/agent-picker.stories.tsx",
+        "apps/web/features/auth/agent-picker.tsx"
+      ],
+      "approved": false,
+      "notes": "Mechanical review input; source requires first independent review. Not applied anywhere."
+    },
+    "inspectedDependencies": [
+      {
+        "path": "apps/web/.storybook/next-navigation.ts",
+        "main": {
+          "blob": "f2d56ad4c2d45b12782c1b281a4a87f674bd5e03",
+          "sha256": "60ca1058a126226e07d1e0fc2e1839d1e53c1b9f9e73537c7e1cef0030c749e5",
+          "bytes": 1402
+        },
+        "selection": "read-only existing current-main dependency; no replacement"
+      },
+      {
+        "path": "apps/web/features/auth/acting-identity.ts",
+        "main": {
+          "blob": "9251b2dcfde8da781b6b78a664cf87cae248298f",
+          "sha256": "fdd590a5435d69e0fa9e07f21ef59166b6d7a2201a4a72164ce1e93cf8c63604",
+          "bytes": 4800
+        },
+        "selection": "read-only existing current-main dependency; no replacement"
+      },
+      {
+        "path": "apps/web/features/auth/session.ts",
+        "main": {
+          "blob": "07a2100944c05da93f6f44e729aadb03c082b39f",
+          "sha256": "cdcf8408d77f2803b1fb6910a1a2af7ccfa536f4f7ea497b7372edb7925bbaaf",
+          "bytes": 6478
+        },
+        "selection": "read-only existing current-main dependency; no replacement"
+      },
+      {
+        "path": "apps/web/features/auth/session-recovery.test.ts",
+        "main": {
+          "blob": "711c89bfa00fef5fd5004db3628a18c0f2fda6d1",
+          "sha256": "00bc5bb30f85ef81a8ddb9b3957ec7c7ec5f758edeaf0b8cb4774b702e5dbc1d",
+          "bytes": 3496
+        },
+        "selection": "read-only existing current-main dependency; no replacement"
+      },
+      {
+        "path": "apps/web/app/[locale]/identity/page.tsx",
+        "main": {
+          "blob": "7ea06065488840f586239ba248db9a7603c3621d",
+          "sha256": "3c29a097648db88f01709de445ac7e9f11af8bb31ab8f3faa750da736164a6af",
+          "bytes": 2311
+        },
+        "selection": "read-only existing current-main dependency; no replacement"
+      },
+      {
+        "path": "apps/web/features/auth/messages.ts",
+        "main": {
+          "blob": "639a76722f46bcc386e222e967ff63f5694d0b71",
+          "sha256": "3ffafd82c24b08aca89a5ddc2bbd4f00dd4c85d0776989963e236238f31e7908",
+          "bytes": 4982
+        },
+        "selection": "read-only existing current-main dependency; no replacement"
+      },
+      {
+        "path": "apps/web/features/auth/paths.ts",
+        "main": {
+          "blob": "8730d85d6ee9e6031595a5aa91afe352b650934f",
+          "sha256": "ca5db03642d12e83c3294c8c80522c7657ae9038dcea35e631602dca13509fea",
+          "bytes": 1152
+        },
+        "selection": "read-only existing current-main dependency; no replacement"
+      },
+      {
+        "path": "apps/web/features/work-page/messages.ts",
+        "main": {
+          "blob": "9b44d2a1470777744624765c165d311b040914f1",
+          "sha256": "2d570f9ec4eefa5eb6ffd033b0bca103e12e0ad17ae3f699984f8d1999dcb507",
+          "bytes": 23892
+        },
+        "selection": "read-only existing current-main dependency; no replacement"
+      },
+      {
+        "path": "apps/web/i18n/server.ts",
+        "main": {
+          "blob": "17a2e82595b13095ba070ae4a91d136f69fe6f6a",
+          "sha256": "e9ef5bcdbda5dea5fcb460d4f419d7244abbbcaddcd3d6ecddecfef26bf8f56f",
+          "bytes": 1498
+        },
+        "selection": "read-only existing current-main dependency; no replacement"
+      },
+      {
+        "path": "packages/ui/src/components/button.tsx",
+        "main": {
+          "blob": "b7045c0b4c05c46c49c31cfdcc0a473fac9c478f",
+          "sha256": "c770475618ca148f6e28b29df51199c71b69f197df3045c139253bb1e52da948",
+          "bytes": 5008
+        },
+        "selection": "read-only existing current-main dependency; no replacement"
+      },
+      {
+        "path": "packages/ui/src/components/skeleton.tsx",
+        "main": {
+          "blob": "08033ec03ccd038815a41ee2841923b2cf5682c8",
+          "sha256": "7020fe8a02b5abf5fd6d693da49c70cafb91760f199e330deafb817d7111562b",
+          "bytes": 1671
+        },
+        "selection": "read-only existing current-main dependency; no replacement"
+      }
+    ],
+    "sourceObservations": [
+      {
+        "surface": "Identity route loading and AgentPickerLoading",
+        "disposition": "APPROVE",
+        "reason": "The actual route boundary resolves the request locale and existing auth/workPage messages, renders the existing page/card owner, a real choose-Agent heading and a named busy status with skeletons. It makes no signed-out, empty-discovery or denied assertion and performs no identity/data write."
+      },
+      {
+        "surface": "AgentPicker null/empty/pending and recovery",
+        "disposition": "APPROVE",
+        "reason": "Null discovery is unavailable; completed [] alone offers onboarding. The last successful list keeps the form mounted on a transient null read, while radios and submit are disabled during unavailable/pending states. Retry invokes the existing router.refresh inside a transition and announces pending/restored state; it neither selects an Agent nor reports a saved session/default."
+      },
+      {
+        "surface": "Selection/default draft and current revision/next authority",
+        "disposition": "APPROVE",
+        "reason": "Controlled radio state updates its server-derived basis while preserving a distinct edited draft. The mounted default checkbox survives null/recovery. Submission requires a selection present in the current successful options; stale cached options alone cannot enable it. The existing POST /identity/select, next, locale, sessionRevision and preferenceRevision fields stay supplied by the unchanged page. No new CAS, permission inference or account write is added."
+      },
+      {
+        "surface": "Actual page/session/Agent source integration",
+        "disposition": "APPROVE",
+        "reason": "Current Main IdentityPage still applies safeReturnPath, signed-out redirect, the existing eligible session/default state and null when either discovery/state is unavailable. Existing session producer preserves signed-in/unverified/denied meanings and command authority. The new client only consumes serializable Agent options/messages; acting-identity helper is data/functions and introduces no server token import. Existing per-label language/direction, native IRIs, every Agent kind, badges and authority-path display remain intact."
+      },
+      {
+        "surface": "Authored StoryRoute interactions",
+        "disposition": "APPROVE",
+        "reason": "Existing assertions are retained. Added unavailable and loading cases distinguish failures from onboarding/empty; the controlled RecoveryVisit changes only its supplied options/notice and uses the already approved optional onRefresh seam. DraftSurvivesDiscoveryFailure checks radio/default/next preservation, disabled submission while unavailable, successful recovery and retained Retry focus. The phone Chinese fixture checks localized warning/Retry and width. These are render fixtures, not actual HTTP/session persistence."
+      }
+    ],
+    "disposition": {
+      "verdict": "APPROVE",
+      "kind": "bounded SOURCE approval of exactly four consumer/loading/test paths",
+      "newActionableFindings": [],
+      "canonicalClosure": false,
+      "integration": "Independently ready for normal four-path capture on the frozen/current Main dependencies. No old38/22ff whole-file, locale, Collection, Release, inventory or auth-producer replacement is approved."
+    },
+    "reusedEvidence": {
+      "recorded": {
+        "path": ".temp/worktrees/g-2785/.temp/identity-reader-compose-00173a35/retained-evidence.json",
+        "historicalSource": "26d876124c4c3c26f17cd6535f2e5d781e8f2187",
+        "storyJob": "e268bd10-bdf0-404a-be6e-7139ebf6f51c",
+        "storyQA": "20261019t070219-391c5f",
+        "historicalTotal": "22 stories in2files PASS; AgentPicker target story blob exactly matches checked pin. No new composition runtime/type pass inferred.",
+        "screenshots": [
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.artifacts/qa/20261019t070219-391c5f/story-screenshots/apps-web-features-auth-agent-picker.stories.tsx/UnavailablePhoneChineseDark.png",
+            "sha256": "cc74a81a6cf4d45c2f525846d7f3b6376ebb55aad37d4b602f4749fb90099252",
+            "hashVerifiedNow": true
+          },
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.artifacts/qa/20261019t070219-391c5f/story-screenshots/apps-web-features-auth-agent-picker.stories.tsx/DraftSurvivesDiscoveryFailure.png",
+            "sha256": "be29ad0b7c7989a45f692dc8104272270463e116367954f77bbb6bbf684ed3f5",
+            "hashVerifiedNow": true
+          },
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.artifacts/qa/20261019t070219-391c5f/story-screenshots/apps-web-features-auth-agent-picker.stories.tsx/LoadingDiscovery.png",
+            "sha256": "3ea09040ef9d792bf3ad3b73d104dafebb9f9ae5010c674f60720b18635bd0dc",
+            "hashVerifiedNow": true
+          }
+        ],
+        "originalFinalTypecheckJob": "d34098fd-7175-47c7-8576-c297c5bd4572",
+        "originalFinalTypecheck": "4004files PASS atf4; not relabelled current-main composition check"
+      },
+      "retainedEvidenceManifest": {
+        "path": ".temp/worktrees/g-2785/.temp/identity-reader-compose-00173a35/retained-evidence.json",
+        "sha256": "231ec37f0f99ee7571344da15ce37680eb72a48e99a31816dda217a31cb1447d"
+      },
+      "sourceEquality": "Independently verified all four target blobs against original f4d and historically checked26d876, all current Main preimages/absence and eleven dependency hashes. The current frozen dependencies differ from the historical complete runtime; this is exact consumer evidence reuse, not a new composition pass.",
+      "actualImagesViewed": [
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.artifacts/qa/20261019t070219-391c5f/story-screenshots/apps-web-features-auth-agent-picker.stories.tsx/UnavailablePhoneChineseDark.png",
+          "sha256": "cc74a81a6cf4d45c2f525846d7f3b6376ebb55aad37d4b602f4749fb90099252",
+          "hashVerifiedNow": true
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.artifacts/qa/20261019t070219-391c5f/story-screenshots/apps-web-features-auth-agent-picker.stories.tsx/DraftSurvivesDiscoveryFailure.png",
+          "sha256": "be29ad0b7c7989a45f692dc8104272270463e116367954f77bbb6bbf684ed3f5",
+          "hashVerifiedNow": true
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.artifacts/qa/20261019t070219-391c5f/story-screenshots/apps-web-features-auth-agent-picker.stories.tsx/LoadingDiscovery.png",
+          "sha256": "3ea09040ef9d792bf3ad3b73d104dafebb9f9ae5010c674f60720b18635bd0dc",
+          "hashVerifiedNow": true
+        }
+      ],
+      "visualObservations": [
+        "390 Chinese dark unavailable capture shows a localized failure and visible Retry without false no-Agent/onboarding content or horizontal spill.",
+        "Desktop restored-draft capture shows Aster selected, default checked, enabled submit and focus ring on Retry.",
+        "Loading capture shows the heading/skeleton state without empty/error text; the top of its card is clipped in the retained image, limiting any conclusion about full route placement."
+      ],
+      "logsInspected": [
+        {
+          "path": ".temp/worktrees/g-2785/.temp/goal/jobs/e268bd10-bdf0-404a-be6e-7139ebf6f51c.1.log",
+          "sha256": "42662fc91b0ee60097d6bd40c75bd80ebfee858134ee2b563e1d9c0d516c0f6b",
+          "result": "22 stories in two files PASS at the recorded historical source; affected AgentPicker story bytes match."
+        },
+        {
+          "path": ".temp/worktrees/g-2785/.temp/goal/jobs/e268bd10-bdf0-404a-be6e-7139ebf6f51c.2.log",
+          "sha256": "2c4c237ae7e6d010a46f79ee23f89bdd1ed89d9535a3114f7ac8a419a732aa51",
+          "result": "Historical Goal guards/types/inference/lint/AST PASS; retained at historical pins only."
+        },
+        {
+          "path": ".temp/worktrees/g-2785/.temp/goal/jobs/d34098fd-7175-47c7-8576-c297c5bd4572.log",
+          "sha256": "69e667c07eb6e7f9ffefa2d58e0814b462bcefe3713dd4a2642e5e5399c9d12d",
+          "result": "Historical final f4d Web typecheck 4004 files PASS; not a new composition typecheck."
+        }
+      ],
+      "executedHere": false
+    },
+    "evidenceClassification": {
+      "sourceInference": "Independent complete four-source/diff and material unchanged page/session/label/locale/seam inspection. Historical counts did not determine the source verdict.",
+      "reproducedAssertionFailure": null,
+      "newSetupFailure": null,
+      "historicalFailures": "Every prior report finding/setup failure remains verbatim. Historical assembly noCoverage TS2551 and missing onRefresh TS2353 are not changed to passes by this four-path verdict."
+    },
+    "checksActuallyExecuted": [
+      "SHA256-verified the retained receipt, exact four-path patch, all four source blobs, eleven frozen Main dependency blobs and three selected PNGs.",
+      "Verified original f4d and checked26d876 exact target blobs and current Main preimages/absence using Git objects; read the relevant unchanged page/session/Agent interfaces.",
+      "Read complete changed consumers/stories and historical story/Goal/type logs, and actually viewed all three selected AgentPicker PNGs. No product check, browser, HTTP request or service was run."
+    ],
+    "integrityReceipt": {
+      "path": ".temp/goal/discussion-agent-first-review/agent-integrity.json",
+      "bytes": 1499,
+      "sha256": "5a4d9a61aee7f3ae3c3e02eac35d54568702fac61700df88fcc0029ce7569841"
+    },
+    "limitations": [
+      "Source approval and matching controlled Storybook evidence do not prove original AUD002/D4-007 or actual browser RSC refresh, session/default CAS, real 503 recovery, signed-out redirect or native authority. Applicable original assertions remain due.",
+      "The original signed-in current/default/next protocol is consumed unchanged; the initial Notification GET is separately owned and is not a prerequisite or a success claim here.",
+      "No composed current Main typecheck/story/native run is claimed. Root retains normal affected capture/proof coordination; unchanged stories need not rerun merely for this source review.",
+      "All previous reviewer fields are preserved and the frozen Main manager-only entries are retained; no prior failure or canonical class is closed."
+    ],
+    "reportValidation": {
+      "status": "PASS",
+      "job": "job:b9ec32d9-0f1c-4c31-b7f6-f32421d357e2",
+      "commands": [
+        {
+          "command": "task docs:check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/b9ec32d9-0f1c-4c31-b7f6-f32421d357e2.1.log",
+          "sha256": "8f2c5063298513a96bfa9e76952920793b3282555083e040f037fd289fc6851b"
+        },
+        {
+          "command": "task goal -- check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/b9ec32d9-0f1c-4c31-b7f6-f32421d357e2.2.log",
+          "sha256": "2c192cf4f183ea2c903c4001a25265e7db1ae563e6f4ee4aba30a210e59ac7a9"
+        }
+      ],
+      "limits": "Report-only documentation and worker AST/selected guard checks. Product types/lint/tests are skipped for the JSON report path; no new composition success is inferred."
+    },
+    "resources": {
+      "started": [],
+      "stopped": [],
+      "productWrites": [],
+      "peerChanges": []
+    }
   }
 }
