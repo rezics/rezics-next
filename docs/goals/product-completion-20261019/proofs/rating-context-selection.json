@@ -4,9 +4,10 @@
   "status": "baseline-pass; pinned-wave-premise-blocked",
   "contract": "Finite manager-admitted inventory/selection slice in journey-research.json. Reuse existing public schemas and owners; URL/display ordering remains client-owned.",
   "auditLimit": "Additional current-main baseline only. The original audit baseline remains 69eac3ceea; no 61-finding closure, superiority, full acceptance qualification or new proved-row registration is claimed.",
-  "assertions": {"path": "tests/qa/integration/outcomes/ratings/context-selection.test.ts", "commit": "779a30d02292c9758e1090d0947620329799515d", "sha256": "ac61ccc1dee9e42b733ff729b6b0b8887b7c987d9e11b07e21a5fc11c6417906", "baselineWaveBytesIdentical": true},
+  "assertions": {"path": "tests/qa/integration/outcomes/ratings/context-selection.test.ts", "commit": "66b675e3f12cfbbb6afe94f963ece917e8c8e2d5", "sha256": "bd8192f401cdeac28b1f603c1d1730eaf8fa94ce239b7ebdbaa43fe151795213", "baselineWaveBytesIdentical": true},
   "sourcePins": {"additionalBaselineMain": "759244e365ad64bcb97fac0ea7d7b9caebe144b2", "wave/audit-20261019": "92b8a78f1cb06fb4a02703f2b471b80d1d069199", "workerStart": "2aaa73634e2ff1d1cbfa1378b906145122af9ba1"},
   "execution": {"recordedFrom": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2826", "jobPrefix": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --", "drivers": ["bun .temp/rating-context-execution/run.ts baseline", "bun .temp/rating-context-execution/run.ts wave"], "driverCommand": "bun scripts/goal/goalctl.ts test tests/qa/integration/outcomes/ratings/context-selection.test.ts", "environment": {"REZICS_QA_STACK_MODE": "scale"}, "admission": "Existing QA lifetime/startup admission; ordinary 480s test budget; isolated persistent source/copies"},
+  "previousBytesRuns": {"assertionSha256": "ac61ccc1dee9e42b733ff729b6b0b8887b7c987d9e11b07e21a5fc11c6417906", "baseline": {"job": "857958b6-88a7-4d64-b778-945ccbe782ab", "qa": "20261019t051932-f5eb6b", "passed": 6, "failed": 0, "expectCalls": 438, "requests": ".temp/rating-context-execution/results-baseline-857958b6.json"}, "wave": {"job": "553eb797-3ee5-4f01-aff0-a0bf89a6192a", "qa": "20261019t052529-267397", "outcomeAssertionsReached": false, "error": "Same bootstrap 42804"}, "change": "Removed two forbidden product-source constant imports; fixture scopes/actions retain their declared values and outcome assertions are unchanged. Final bytes were rerun on both pins."},
   "fixture": {
     "sourceRevision": "759244e365ad64bcb97fac0ea7d7b9caebe144b2",
     "initialPreparation": {"job": "67e58d9f-4ed6-4412-b4b2-5641c9c03373", "qa": "20261019t051010-790369", "nativePreparationAndCutMs": 98288},
@@ -25,13 +26,13 @@
     ]
   },
   "baseline": {
-    "job": "857958b6-88a7-4d64-b778-945ccbe782ab",
-    "qa": "20261019t051932-f5eb6b",
-    "sourceFingerprint": "72a23c351aef",
+    "job": "a717662a-5a1a-4be8-a505-092b9d2263a5", "jobStep": 2,
+    "qa": "20261019t053606-82f2a7",
+    "sourceFingerprint": "f46eb6c3f83d",
     "sourceStable": true,
-    "result": {"passed": 6, "failed": 0, "expectCalls": 438, "integrationMs": 168100, "assertionsReached": true},
-    "restore": {"includingStartupMigrationsReadinessSmokeMs": 36209, "admissionWaitExcluded": true, "budgetMs": 600000, "details": {"restoreMs": 13809, "volumeCopyMs": {"postgres_data": 8141, "fuseki_data": 2392, "rustfs_data": 2415}, "objectCopyMs": 12, "startupMs": 18485, "readinessMs": 2497, "totalMs": 34791}},
-    "evidence": {"summary": ".temp/rating-context-execution/baseline/.artifacts/qa/20261019t051932-f5eb6b/summary.md", "log": ".temp/rating-context-execution/baseline/.artifacts/qa/20261019t051932-f5eb6b/logs/integration-1.log", "requests": ".temp/rating-context-execution/baseline/.temp/rating-context-results.json", "requestEvidenceSha256": "61e29e20302ad2794d08305c6baf0f12df94da95e1540b30f6635aacf6c22dca"},
+    "result": {"passed": 6, "failed": 0, "expectCalls": 438, "integrationMs": 103000, "assertionsReached": true, "publicReads": 196},
+    "restore": {"includingStartupMigrationsReadinessSmokeMs": 27117, "admissionWaitExcluded": true, "budgetMs": 600000, "details": {"restoreMs": 10354, "volumeCopyMs": {"postgres_data": 4468, "fuseki_data": 2722, "rustfs_data": 2289}, "objectCopyMs": 10, "startupMs": 14003, "readinessMs": 1501, "totalMs": 25858}},
+    "evidence": {"summary": ".temp/rating-context-execution/baseline/.artifacts/qa/20261019t053606-82f2a7/summary.md", "log": ".temp/rating-context-execution/baseline/.artifacts/qa/20261019t053606-82f2a7/logs/integration-1.log", "requests": ".temp/rating-context-execution/baseline/.temp/rating-context-results.json", "requestEvidenceSha256": "0f78cd3ae8b045f0724b87aa31b36dc4240eb9e70002dc52dddad16ad9cae166"},
     "personas": [
       {"persona": "visitor", "result": "pass", "assertionGroupsReached": 4, "requests": 22, "failures": []},
       {"persona": "stranger", "result": "pass", "assertionGroupsReached": 4, "requests": 22, "failures": []},
@@ -51,19 +52,26 @@
   "missingOperationOrField": null,
   "apiDisposition": "No additional inventory/selection read operation is justified by this bounded baseline measurement. Wave behavior remains unmeasured; no production implementation or contract correction is proposed from setup failures.",
   "wave": {
-    "job": "553eb797-3ee5-4f01-aff0-a0bf89a6192a",
-    "qa": "20261019t052529-267397",
-    "sourceFingerprint": "ae1e85176d55",
+    "job": "a717662a-5a1a-4be8-a505-092b9d2263a5", "jobStep": 3,
+    "qa": "20261019t053842-931f89",
+    "sourceFingerprint": "60ca1bbc19e2",
     "sourceStable": true,
     "result": "environment failure at shared bootstrap; 0 test bodies and 0 outcome assertions executed",
     "observedError": {"code": "42804", "message": "column \"value\" is of type numeric but expression is of type text", "sqlPosition": "2903"},
     "candidateSource": "services/main/migrations/access/2045_standing_rating_components.sql:49-60 inserts untyped NULL values through UNION ALL into numeric value. Attribution is from source inspection, not an additional isolated SQL replay.",
-    "evidence": {"summary": ".temp/rating-context-execution/wave/.artifacts/qa/20261019t052529-267397/summary.md", "bootstrapLog": ".temp/rating-context-execution/wave/.artifacts/qa/20261019t052529-267397/logs/integration-1-bootstrap.log"},
+    "evidence": {"summary": ".temp/rating-context-execution/wave/.artifacts/qa/20261019t053842-931f89/summary.md", "bootstrapLog": ".temp/rating-context-execution/wave/.artifacts/qa/20261019t053842-931f89/logs/integration-1-bootstrap.log"},
     "restorePrerequisite": {"status": "Not reached at runtime; exact compatibility comparison also fails", "helper": "scripts/load/catalogue-backup.ts:263-272", "baselineFuseki": "rezics/fuseki:6.2.0-cmd0.5.43-dd0efff19707", "waveFuseki": "rezics/fuseki:6.2.0-cmd0.5.43-5cd64c623442", "waveOnlyMigrations": ["2045_standing_rating_components.sql", "2077_standing_rating_publication.sql", "2605_discovery_refresh_disposition.sql"], "action": "Manager/owners must provide a bootstrap-valid wave and an approved compatible restore route. No manifest rewrite, guard bypass, second corpus or main/wave production edit was made."}
   },
   "premiseHistory": [{"job": "e78a04c6-8913-41ae-874d-45b465bd7e5f", "qa": "20261019t042918-7944fb", "outcomeAssertionReached": false, "reason": "Generated Space handle exceeded public schema length"}, {"job": "d85aba41-7a8c-41db-9d1b-8e2fb99f33ca", "qa": "20261019t044032-5ae3f6", "outcomeAssertionReached": false, "reason": "Fixture creator exceeded native Space quota"}, {"job": "9aa5efbf-8387-4439-ba17-59500e5b25b5", "qa": "20261019t045046-2f4dde", "outcomeAssertionReached": false, "reason": "A Space create grant does not replace native quota"}, {"job": "e47f1522-ee8e-467c-bc14-d6116174d4c1", "qa": "20261019t045453-26ed11", "outcomeAssertionReached": false, "reason": "Persona Zone Space also consumes native quota"}, {"job": "589d05f9-5645-493b-849b-f0addef78583", "qa": "20261019t045920-438b67", "outcomeAssertionReached": false, "reason": "Standing-context creation requires a public Realm; corrected via public-to-private settings"}, {"job": "a0daeeab-4775-45d8-b0e3-c5f073c7716e", "qa": "20261019t050348-f34d38", "outcomeAssertionReached": false, "reason": "Backup lifecycle omitted saved raw-update mode; no usable backup retained"}],
   "firstBodyRun": {"job": "67e58d9f-4ed6-4412-b4b2-5641c9c03373", "qa": "20261019t051010-790369", "outcomeAssertionReached": true, "passed": 0, "failed": 6, "classification": "Test/premise errors, not product defects: missing actingSubject on authenticated Work reads, metadata-only Works not publicly selected, and presentation receipt compared beyond the read schema. Corrected together; retained native source reused."},
-  "checks": {"status": "Final task docs:check, affected stack-free selection and recorded task goal -- check pending", "earlierTypesLint": {"job": "3fd58f0f-fd0c-4770-81b3-b416e7d8e107", "result": "pass; types selected no changed TypeScript workspace; oxlint and ast-grep passed"}, "earlierExplicitTypeFiles": {"job": "cde80090-2ae5-4a28-9fc5-f14a1b895466", "result": "failed: 25 diagnostics in 18 imported files; none in the new test. Standalone test typing has existing DOM/undici/Bun boundary errors; not a product outcome result."}},
+  "checks": {
+    "affectedSelection": {"job": "78b74c74-bc48-4fd5-8301-2024ff9a513c", "jobStep": 1, "command": "bun scripts/goal/goalctl.ts test --affected 2aaa73634e2ff1d1cbfa1378b906145122af9ba1 --list", "result": "pass; ten stack-free guard files and this one integration file; no other product tests selected"},
+    "workerCheck": {"job": "a717662a-5a1a-4be8-a505-092b9d2263a5", "jobStep": 1, "command": "task goal -- check", "result": "pass; oxlint, ast-grep and all ten selected repository guard files (74 tests) passed. Types selected no changed TypeScript workspace; brief names no automatic test files, so the explicit integration runs above provide the outcome result.", "output": ".temp/goal/check/run-MGroW5/output.log", "toolManagedWorktreeRefresh": "2926655f41346f481a208eda7ac2c67e43c78d13 -> 66b675e3f12cfbbb6afe94f963ece917e8c8e2d5; source pins and test bytes unchanged"},
+    "docs": {"job": "78b74c74-bc48-4fd5-8301-2024ff9a513c", "jobStep": 2, "command": "task docs:check", "result": "pass; 13 tests and 232 Markdown files", "finalProofRecheck": "pending"},
+    "initialBoundaryFailure": {"job": "78b74c74-bc48-4fd5-8301-2024ff9a513c", "jobStep": 3, "result": "One repository guard failed for two product-source constant imports. Removed imports and used the identical declared fixture scope/action strings; final worker check passed."},
+    "earlierTypesLint": {"job": "3fd58f0f-fd0c-4770-81b3-b416e7d8e107", "result": "pass; types selected no changed TypeScript workspace; oxlint and ast-grep passed"},
+    "earlierExplicitTypeFiles": {"job": "cde80090-2ae5-4a28-9fc5-f14a1b895466", "result": "failed: 25 diagnostics in 18 imported files; none in the new test. Standalone test typing has existing DOM/undici/Bun boundary errors; not a product outcome result."}
+  },
   "limits": ["No browser/UI preference persistence, own save/clear or summary redesign tested", "Standing population/period semantics only; no combined score or inferred distinct-person union", "Six synthetic native personas and ten communities are a finite composition check, not a faithful-catalogue workload or full regression", "Current-main passing cases are additional evidence; wave results cannot be compared while bootstrap/restore prerequisites fail", "No original-audit row was edited, registered or marked proved; G-2786/G-2770/G-2775/G-2791/G-2778 ownership remains unchanged"],
   "next": "Manager dispositions the wave bootstrap/compatibility prerequisites with their owners, then reruns these immutable assertions from equivalent isolated copies; independent review remains codex-1/xhigh."
 }
