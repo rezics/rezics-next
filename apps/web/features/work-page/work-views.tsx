@@ -55,7 +55,7 @@ import { AboutFacts, Availability, DiscussionHub, Parts, PrimaryAction, readWork
 import type { DisplayObligations } from '../rights-mark/rights-mark.tsx';
 import { type HubSection, hubLabels, hubPlan } from './hub.ts';
 import { WikiSection, WikiShortcut } from './wiki-server.tsx';
-import { readEntityProjection } from '../entity-page/read.ts';
+import { readCurrentWorkProjection } from './current-projection.ts';
 import { showsEditionStatus, type WorkExperience, workExperience } from '../entity-page/experience.ts';
 import { shelfWords } from './shelf-words.ts';
 import { WorkKindActions } from './types/actions.tsx';
@@ -191,7 +191,7 @@ async function RatingLineSlot({ id, experience, locale, messages, client }: Comm
  * type section is left out.
  */
 export const readExperience = async (id: string, types: readonly string[], client?: WorkPageClient): Promise<WorkExperience> => {
-  const page = await readEntityProjection(id, undefined, client);
+  const page = await readCurrentWorkProjection(id, client);
   return workExperience(page.ok ? page.data : null, types);
 };
 
@@ -214,7 +214,7 @@ async function ReadSlot({ workRef, id, work, experience, locale, messages, clien
 
 /** The hub sections the Work's projection binds, in the documented order. */
 export const readHubPlan = async (id: string, client?: WorkPageClient): Promise<readonly HubSection[]> => {
-  const page = await readEntityProjection(id, undefined, client);
+  const page = await readCurrentWorkProjection(id, client);
   return hubPlan(page.ok ? page.data : null);
 };
 
@@ -232,8 +232,10 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, lead,
     return recipeWorkFrame({ host: await recipePageHost(), workRef, id, work, locale, messages, children, sources,
       factObligations, readerActions, relationships });
   }
-  const [{ signedIn, actingSubject }, { avatarQuery }, seed, ratings, plan, art, showcaseMessages] = await Promise.all([
-    readingAgent(client), (client ?? browseReader()), animeReaderState(id, client), readRatings(id, EVERYONE, undefined, client),
+  const agent = readingAgent(client);
+  const [{ signedIn, actingSubject }, { avatarQuery }, seed, ratings, plan, art, showcaseMessages, facts] = await Promise.all([
+    agent, (client ?? browseReader()), animeReaderState(id, client),
+    agent.then(viewer => viewer.signedIn ? readRatings(id, EVERYONE, undefined, client) : null),
     readHubPlan(id, client),
     // One batch for the page, so the art costs one round trip however many layers it has, and one for
     // the header's images, so they are drawn (or masked) in the server's HTML.
@@ -241,12 +243,11 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, lead,
       const item = art.get(work.id);
       return { item, images: item ? await readShowcaseImages(item.images.flatMap(image =>
         image.role === 'cutout' ? [] : [image.url])) : {} };
-    }), getMessages('showcase', locale)]);
+    }), getMessages('showcase', locale), readWorkFacts(id, locale, client)]);
   // The stars answer everyone's first rating question for the Main Version shown, as the summary above them does.
-  const context = ratings.ok ? ratings.data.context : null;
+  const context = ratings?.ok ? ratings.data.context : null;
   const ratingTarget = context ? { work: work.id, context: context.context, mainVersion: work.mainVersion,
     max: context.scale.max } : null;
-  const facts = await readWorkFacts(id, locale, client);
   return <WorkFrame workRef={workRef} work={work} experience={experience} locale={locale} messages={messages} signedIn={signedIn}
     statementSources={facts.page} sourceLabels={facts.labels} factObligations={factObligations}
     showcase={workShowcaseHeader(art.item, showcaseMessages, art.images)}
@@ -411,7 +412,7 @@ export async function TypeExperience({ id, work, experience, locale, messages, c
   if (experience.kind === 'prompt' || experience.kind === 'skill') {
     if (!section) {
       if (!operationOpen('getV1HubWorksById', await readPlatformAccess(client))) return null;
-      const projection = await readEntityProjection(id, undefined, client);
+      const projection = await readCurrentWorkProjection(id, client);
       return <RegionFailure title={messages.hubUnavailable} failure={projection.ok ? 'unavailable' : projection.failure}
         messages={messages} />;
     }

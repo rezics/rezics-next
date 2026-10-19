@@ -4451,5 +4451,849 @@
     "preservation": "All actual-main preexisting keys and values, including Cook caller correction and historical dispositions, remain unchanged. Appended independent Book/cover checkpoint and exact retry correction copied from actual reviewer report.",
     "productAcceptance": false,
     "classClosed": false
+  },
+  "boundedD1003NavigationCorrectionCheckpoint": {
+    "observedAt": "2026-10-19T13:17:46.530433Z",
+    "reviewer": {
+      "account": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independent": true,
+      "delegation": false,
+      "fallback": false
+    },
+    "authority": "Same G-2841 claimed report and original D1-003 acceptance; latest maintainer continuation selects only the seven-path 222d57ae..2f533175 correction and the material five-product-file native overlay. No delegation, fallback, implementation, services, corpus preparation, main landing, new task or review of accepted prior blobs.",
+    "priorReport": {
+      "commit": "cd6b4951cd7fb0adb1682031f8761744d4ef65ce",
+      "sha256": "ba201dbcd3c0cb653cf1e792cb6b8cf5946b25dc1de1678c5b179a6b4a4513c1",
+      "disposition": "bounded-book-retry-correction-reviewed-WORK-REVIEW-08-addressed-no-new-actionable-delta-finding",
+      "acceptance": "Exact41ec2c5374b1bbc992119490d6b662ded725e6a3 versusf05b655c04b26f75673e4ecf2059f083aee11f0d addresses WORK-REVIEW-08 in source and matching component-fixture evidence. Failed opening and scroll saves can retry the captured position without changing completion or identity; denial and second conflict remain failed. No new actionable correction finding. Historical findings and receipts are preserved. Genuine original C28/A11 acceptance and durability before hard document teardown remain unproved.",
+      "preservation": "Every pre-existing JSON key/value except top-level disposition and acceptance is preserved exactly; their previous values are archived here. All earlier findings, failures, accepted checkpoints and independent assertions, including boundedBookCoverCheckpoint and boundedBookRetryCorrectionCheckpoint, remain unchanged."
+    },
+    "disposition": "APPROVE bounded D1-003 source correction; no actionable delta finding",
+    "acceptance": "Independent source approval of 2f53317556f68b209bc82987093478e2b2e5ab71 versus its direct parent 222d57ae9bb8886db39f42d7d76e7e3ea58aac7c and the inspected native five-file overlay. Eight genuine selected native navigation cases pass at 390/1440 on the recorded e9bff baseline plus overlay. This approves bounded correction hunks and their provenance, not whole worker blobs, a current-main browser run, all page bodies, broader catalogue classes or a canonical registry status change.",
+    "pins": {
+      "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+      "base": "222d57ae9bb8886db39f42d7d76e7e3ea58aac7c",
+      "directParentVerified": true,
+      "changedPathCount": 7,
+      "productPathCount": 5,
+      "authoredDiffSha256": "7fe1a9fc76b046b50440e9e4d6d0e7424a927ebbbc87c0144af616b1b97fd6e0",
+      "mainReferenceOnly": "27c4c7fd97d7df00fd8e5a587955d4baa2a572d5",
+      "reviewReportBase": "cd6b4951cd7fb0adb1682031f8761744d4ef65ce",
+      "nativeRuntimeBase": "e9bff8c44b5317168b38c954b405938b458bd1e1",
+      "nativeBackend": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "nativePatch": {
+        "path": ".temp/worktrees/g-2757/.temp/goal/d1-zone/final-native-correction.patch",
+        "bytes": 12710,
+        "sha256": "2c8a2e4edd3bb50a51b653d34d96c7cc82e1c32b07cce840b616d8ddea43f26d"
+      },
+      "manifest": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-D1-003-correction-review-manifest.json",
+        "sha256": "f628fbd48317bffd88fb19f246a9f65a763ba7f9062df2a3a0cdc2f5a51c8c2d"
+      },
+      "qualification": "The authored correction and recorded native overlay are distinct. Frozen Main is an integration reference only. No mutable branch tip or unrelated wave implementation is approved."
+    },
+    "originalAcceptance": {
+      "record": "docs/goals/audit-remediation-20261019/site-plan.json#D1-003",
+      "recordPin": "27c4c7fd97d7df00fd8e5a587955d4baa2a572d5",
+      "canonicalStatusObserved": "open",
+      "criteria": [
+        "为每个公开 Work 子视图定义真实的当前页；/connections、/editions 不得声称 Overview 是当前页面。可使用二级面包屑或所归属视图明确的父子关系。",
+        "桌面和手机都可直接去 Overview，视图导航与页内锚点分组明确；只有对应项目具有当前页标记。",
+        "各视图切换保留 scope/realm 和已支持的阅读位置；在全局 Work 及 Zone 挂载路径上验收。"
+      ],
+      "regressionAssertions": [
+        {
+          "id": "D1-003/assertion-1",
+          "assert": "Every routed Work view, including Connections and Editions, has exactly the correct current tab and aria-current state."
+        },
+        {
+          "id": "D1-003/assertion-2",
+          "assert": "Desktop and mobile expose the same available views, including Overview, in global and mounted Zone contexts."
+        },
+        {
+          "id": "D1-003/assertion-3",
+          "assert": "Direct links, Back and query changes preserve destination/current-state agreement."
+        }
+      ],
+      "criteriaVerbatimMatchManifest": true,
+      "assessment": [
+        {
+          "criterion": 1,
+          "result": "Supported for the bounded correction by the existing seven-view WorkTabs/tabOf model, new real-component SSR regression and eight native current-marker cases. Connections/Editions have the actual current marker and Overview does not until navigation completes."
+        },
+        {
+          "criterion": 2,
+          "result": "Native 390/1440 cases expose Overview and reach the final Overview current assertion; phone activation closes the menu and reopening exposes the current marker. Existing view/anchor grouping is unchanged. Phone PNGs alone do not show every belowfold Work-section link; actual DOM assertions establish those markers."
+        },
+        {
+          "criterion": 3,
+          "result": "Four unchanged mounted Zone cells retain global scope plus supported language/open choices. Four explicit Realm cells retain Books Realm, scope, language and open choices on global and mounted paths through Overview. New SSR regression covers both routes and Connections/Editions with global/explicit Realm choices. No fresh Back, keyboard/focus or arbitrary query-mutation interaction is claimed."
+        }
+      ],
+      "closure": "No canonical status or class closure is authored. Existing accepted keyboard/focus and earlier Work/navigation evidence remains historical. This checkpoint resolves the selected navigation correction only."
+    },
+    "inspectedChangedPaths": [
+      {
+        "path": "apps/web/features/work-page/current-projection.ts",
+        "authoredBeforeBlob": null,
+        "authoredAfterBlob": "62a07570834faa90dabf640e0579b6eefb8e611b",
+        "sourceSha256": "777083298d5591cf509553d1ff025de800b133b3deb703b7c6b5d340cc3b1194",
+        "currentMainBlob": null,
+        "nativeOverlayBlob": null,
+        "verified": true,
+        "authoredBeforeSha256": null,
+        "currentMainSha256": null
+      },
+      {
+        "path": "apps/web/features/work-page/hub-sections.tsx",
+        "authoredBeforeBlob": "612fa8741573c67acfcc7de2c1c4f0e5b66e7b2f",
+        "authoredAfterBlob": "0c93b92e6fd58d35d70e8d9c8b9f9f2b10645ba0",
+        "sourceSha256": "5c6df65f69a4feb0f353e898108ac8084b49337b83a3df619f0f7820f4b449da",
+        "currentMainBlob": "ab3862789d9b41ea884985f553245a45ae8c98d6",
+        "nativeOverlayBlob": "a299320b7b2ac258f53a300daddca807c586921f",
+        "verified": true,
+        "authoredBeforeSha256": "46899ca6be5dab7c6bb9b3a1f96a55e6e5ddf1bf14d360eb2658250427f2c8b4",
+        "currentMainSha256": "8cbc75220b6280cf2f2976160ae18f0e4ebcdc84874e261bc9680b98bdfdece7"
+      },
+      {
+        "path": "apps/web/features/work-page/work-detail-contract.test.tsx",
+        "authoredBeforeBlob": "65c8c596fde46305b299cac5e4ce8a0018d76814",
+        "authoredAfterBlob": "66fdcfc973b708cedf242a4e1fe881882c717724",
+        "sourceSha256": "c6119f75116801d3383350b1cf4e6ff0524170021bf77a748711388c5ce5ac7c",
+        "currentMainBlob": "7ce2d5be25cb37a39f7b8133d16bd42b2597d448",
+        "nativeOverlayBlob": null,
+        "verified": true,
+        "authoredBeforeSha256": "272da0dd020caa9db75d23ef556dc86bd7d57703e8e320743b872a91a9839a98",
+        "currentMainSha256": "c0c0c1dd4d0dba8ae20725d645f3751b4264f47180ee32fa11ccab12e1b95fda"
+      },
+      {
+        "path": "apps/web/features/work-page/work-frame-reading.test.tsx",
+        "authoredBeforeBlob": null,
+        "authoredAfterBlob": "b5948fa188bc2d7cda97391eb3b9d31a64b6a2b8",
+        "sourceSha256": "a9f0bceffc91888146f7a42e37b12cdb9c9b88b021c4c027d54dfaab0f9275da",
+        "currentMainBlob": null,
+        "nativeOverlayBlob": null,
+        "verified": true,
+        "authoredBeforeSha256": null,
+        "currentMainSha256": null
+      },
+      {
+        "path": "apps/web/features/work-page/work-views.tsx",
+        "authoredBeforeBlob": "fdbd6bedf03026960b9cb9a2b2d1632ec815f141",
+        "authoredAfterBlob": "bd7f48605c8bd560d250bbb37d6a872cb8e07625",
+        "sourceSha256": "13df560f6b55bef39509d22b9c41a55d0763e7dd49d922f29cc3a2674d67af35",
+        "currentMainBlob": "d3ef8f5d11f4eb6262a573b6738b4d170853ed22",
+        "nativeOverlayBlob": "cd1e3094b6f005ed54daf30857e7068e50c693fd",
+        "verified": true,
+        "authoredBeforeSha256": "b0b4dac9d1338ec142757a84206250ee375728c7fcaf1c3f1f652e73e04ac3c5",
+        "currentMainSha256": "973f63a6fe8bac141f161e256581723d589354ef5dc1da1ce791e6c9a12257f0"
+      },
+      {
+        "path": "apps/web/features/zones/catalogue-facts.ts",
+        "authoredBeforeBlob": "e6a91577a14991bd31ff58ebcdf7a3d229bc2bb0",
+        "authoredAfterBlob": "cdecd8edd908829316cfca9c6576a5d074716f65",
+        "sourceSha256": "7126788f4fcddb7fdc67a1814dd583a932934ebb12ae99836d0b5ad718dcec58",
+        "currentMainBlob": "e6a91577a14991bd31ff58ebcdf7a3d229bc2bb0",
+        "nativeOverlayBlob": "cdecd8edd908829316cfca9c6576a5d074716f65",
+        "verified": true,
+        "authoredBeforeSha256": "fd8fd13beeecad0aea7091b8c0115980d5392b12c7f696198cff87730ac1f35c",
+        "currentMainSha256": "fd8fd13beeecad0aea7091b8c0115980d5392b12c7f696198cff87730ac1f35c"
+      },
+      {
+        "path": "apps/web/features/zones/site-work.tsx",
+        "authoredBeforeBlob": "3984f404bfc31ebdc3028c38de21de6eba83aa9f",
+        "authoredAfterBlob": "e50442fb6c3d67ea48216fbb9ec556a236e5d1d6",
+        "sourceSha256": "03595c8678ca6620fc11b2c969dfba91ae2d73605a8a4328a2a9b9730b0db488",
+        "currentMainBlob": "3984f404bfc31ebdc3028c38de21de6eba83aa9f",
+        "nativeOverlayBlob": "e50442fb6c3d67ea48216fbb9ec556a236e5d1d6",
+        "verified": true,
+        "authoredBeforeSha256": "1e1304cc0d713c441c5556acb2e8ca20508031a05f03b6db1240fcfde80bda2b",
+        "currentMainSha256": "1e1304cc0d713c441c5556acb2e8ca20508031a05f03b6db1240fcfde80bda2b"
+      }
+    ],
+    "inspectedMaterialCallChains": [
+      {
+        "path": "apps/web/features/entity-page/read.ts",
+        "symbols": [
+          "readEntityProjection"
+        ],
+        "reason": "React cache key includes supplied argument count and injected client identity. The owner retains actual projection, access and failure behavior."
+      },
+      {
+        "path": "apps/web/features/work-page/current-projection.ts",
+        "symbols": [
+          "readCurrentWorkProjection"
+        ],
+        "reason": "Omitted client consistently calls the same two-argument current projection; explicit clients remain the same third argument. No position, authority, schema or business-policy substitution."
+      },
+      {
+        "path": "apps/web/features/work-page/hub-sections.tsx",
+        "symbols": [
+          "readWorkFacts",
+          "Availability",
+          "DiscussionHub"
+        ],
+        "reason": "All changed shared current-projection consumers use the helper. Native peer cursor/selection context remains intact; no wholesale worker-file restore."
+      },
+      {
+        "path": "apps/web/features/work-page/work-views.tsx",
+        "symbols": [
+          "readExperience",
+          "readHubPlan",
+          "WorkFrameView",
+          "RatingLineSlot",
+          "TypeExperience"
+        ],
+        "reason": "Inspect concurrent frame facts, independent anonymous frame versus public summary, signed-in rating target and the native-only Prompt/Skill unavailable-fallback normalization."
+      },
+      {
+        "path": "apps/web/features/work-page/work-frame.tsx",
+        "symbols": [
+          "WorkFrame"
+        ],
+        "reason": "Public rating summary remains its own streamed slot, while editor rating target is consumed only by existing reader actions. No fabricated capability or hidden signed-in target."
+      },
+      {
+        "path": "apps/web/features/zones/catalogue-facts.ts",
+        "symbols": [
+          "statementPages"
+        ],
+        "reason": "Two-argument current projection shares omitted-client cache key without changing statements/evidence mapping."
+      },
+      {
+        "path": "apps/web/features/zones/site-work.tsx",
+        "symbols": [
+          "ZoneWorkPage"
+        ],
+        "reason": "Discussion attachment starts only for Overview/Discussion and streams independently from the navigation frame. Other routed views do not wait for an unused attachment."
+      },
+      {
+        "path": "apps/web/features/zones/about-discussion-entry.tsx",
+        "symbols": [
+          "ZoneAboutDiscussion"
+        ],
+        "reason": "Actual owner/access/session binding, current projection callback and truthful unavailable behavior remain consumed. No new discussion policy or endpoint."
+      },
+      {
+        "path": "apps/web/features/work-page/work-tabs.tsx",
+        "symbols": [
+          "WorkTabs",
+          "WorkTaskLink"
+        ],
+        "reason": "Actual seven-view current marker, same-Overview task anchor and retained scope/realm/reading-choice hrefs are exercised by the added regression."
+      },
+      {
+        "path": "apps/web/features/work-page/work-nav.tsx",
+        "symbols": [
+          "OnThisPage"
+        ],
+        "reason": "Retained mobile view/anchor grouping and dismissal on activation; no new keyboard/focus behavior."
+      },
+      {
+        "path": "apps/web/features/work-page/route.ts",
+        "symbols": [
+          "tabOf",
+          "scopeAt",
+          "workNavigationQuery",
+          "workTaskHref"
+        ],
+        "reason": "Material existing route model supplies actual destination/current agreement and supported choices. Definitions were not changed by this correction."
+      }
+    ],
+    "sourceReviewObservations": [
+      {
+        "classification": "source inference",
+        "surface": "current projection / injected clients",
+        "observation": "Normalizing omitted-client arity lets existing two-argument Zone discussion/facts reads share the request-scoped current projection with Work experience, hub, availability and facts. The helper preserves the supplied injected client and current position. It does not introduce a global cache, read historical revisions, fabricate routes or change backend authority."
+      },
+      {
+        "classification": "source inference",
+        "surface": "WorkFrameView / anonymous and signed-in rating behavior",
+        "observation": "Facts join the independent frame Promise.all instead of starting after its other reads finish. Anonymous frames do not await optional editor rating context. Public RatingLineSlot remains streamed under its own boundary; signed-in frames retain actual Work/context/Main-Version/scale target. New pending-context tests cover both branches through an injected public API fixture. Recipe delegation is unchanged."
+      },
+      {
+        "classification": "source inference",
+        "surface": "ZoneWorkPage / all current routed consumers",
+        "observation": "The live attachment starts only for Overview or Discussion, before other frame work, and is rendered under a dedicated Suspense fallback. Connections, Editions, Contents, Versions and History no longer launch or await a hidden discussion read. The existing attachment owner still determines access/unavailable output; Work-unavailable handling and scope parsing remain unchanged."
+      },
+      {
+        "classification": "source inference",
+        "surface": "shared projections / truthful failures",
+        "observation": "Changed Work facts, availability, discussion, hub-plan and experience callers retain their existing typed denied/unavailable paths and owner projections. Native Prompt/Skill fallback uses the same normalized read without inventing a usable hub section. Source/evidence data, media, reporting, Book/Recipe actions and their accepted earlier implementations are not replaced by this delta."
+      },
+      {
+        "classification": "source inference",
+        "surface": "navigation regression scope",
+        "observation": "The added real WorkTabs/WorkTaskLink SSR regression checks actual global/mounted Connections/Editions routes, global/Realm scopes, one current marker, seven view destinations and retained language/open choices. Existing contract-test assertions are additions-only and retain their previous bytes; the new frame test preserves public/editor authority distinctions."
+      }
+    ],
+    "newActionableFindings": [],
+    "nativeProofProvenance": {
+      "runtimeIdentity": {
+        "frontendBase": "e9bff8c44b5317168b38c954b405938b458bd1e1",
+        "backend": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "patchSha256": "2c8a2e4edd3bb50a51b653d34d96c7cc82e1c32b07cce840b616d8ddea43f26d",
+        "jobId": "d0b8b0de-884a-4ae3-aff1-36a201eb9f1e"
+      },
+      "verification": "All seven authored before/after blobs and source hashes, frozen Main reference blobs, the exact parent and authored patch bytes were verified. The five native product files were independently reconstructed from the retained runtime base plus actual patch, and their resulting Git blob IDs matched the recorded source manifest. All seven artifacts and sixteen screenshot hashes matched. Runtime sourcePatch and sourcePatchAfter equal the exact final-native-correction.patch bytes.",
+      "fiveProductFileEquivalence": [
+        {
+          "path": "apps/web/features/work-page/current-projection.ts",
+          "nativeBaseBlob": null,
+          "nativeAfterBlob": "62a07570834faa90dabf640e0579b6eefb8e611b",
+          "nativeAfterSha256": "777083298d5591cf509553d1ff025de800b133b3deb703b7c6b5d340cc3b1194",
+          "authoredAfterBlob": "62a07570834faa90dabf640e0579b6eefb8e611b",
+          "authoredAfterEqualsNativeAfter": true,
+          "addedRemovedSequenceMatchesAuthoredDelta": true
+        },
+        {
+          "path": "apps/web/features/work-page/hub-sections.tsx",
+          "nativeBaseBlob": "ab3862789d9b41ea884985f553245a45ae8c98d6",
+          "nativeAfterBlob": "a299320b7b2ac258f53a300daddca807c586921f",
+          "nativeAfterSha256": "1bfff34b3138892b164abffeb5176b1b66678491738041b070fdf4162964cc84",
+          "authoredAfterBlob": "0c93b92e6fd58d35d70e8d9c8b9f9f2b10645ba0",
+          "authoredAfterEqualsNativeAfter": false,
+          "addedRemovedSequenceMatchesAuthoredDelta": true
+        },
+        {
+          "path": "apps/web/features/work-page/work-views.tsx",
+          "nativeBaseBlob": "d3ef8f5d11f4eb6262a573b6738b4d170853ed22",
+          "nativeAfterBlob": "cd1e3094b6f005ed54daf30857e7068e50c693fd",
+          "nativeAfterSha256": "1e65dd739a5247d8961824c262aa0fd880d8839d0323982afeb5da3c50481092",
+          "authoredAfterBlob": "bd7f48605c8bd560d250bbb37d6a872cb8e07625",
+          "authoredAfterEqualsNativeAfter": false,
+          "addedRemovedSequenceMatchesAuthoredDelta": false
+        },
+        {
+          "path": "apps/web/features/zones/catalogue-facts.ts",
+          "nativeBaseBlob": "e6a91577a14991bd31ff58ebcdf7a3d229bc2bb0",
+          "nativeAfterBlob": "cdecd8edd908829316cfca9c6576a5d074716f65",
+          "nativeAfterSha256": "7126788f4fcddb7fdc67a1814dd583a932934ebb12ae99836d0b5ad718dcec58",
+          "authoredAfterBlob": "cdecd8edd908829316cfca9c6576a5d074716f65",
+          "authoredAfterEqualsNativeAfter": true,
+          "addedRemovedSequenceMatchesAuthoredDelta": true
+        },
+        {
+          "path": "apps/web/features/zones/site-work.tsx",
+          "nativeBaseBlob": "3984f404bfc31ebdc3028c38de21de6eba83aa9f",
+          "nativeAfterBlob": "e50442fb6c3d67ea48216fbb9ec556a236e5d1d6",
+          "nativeAfterSha256": "03595c8678ca6620fc11b2c969dfba91ae2d73605a8a4328a2a9b9730b0db488",
+          "authoredAfterBlob": "e50442fb6c3d67ea48216fbb9ec556a236e5d1d6",
+          "authoredAfterEqualsNativeAfter": true,
+          "addedRemovedSequenceMatchesAuthoredDelta": true
+        }
+      ],
+      "additionalNativeCall": {
+        "enclosingFunction": "TypeExperience",
+        "removed": "      const projection = await readEntityProjection(id, undefined, client);",
+        "added": "      const projection = await readCurrentWorkProjection(id, client);",
+        "qualification": "Both authored and native diffs already normalize readHubPlan; the native-only call is the Prompt/Skill TypeExperience unavailable fallback."
+      },
+      "manifestWordingReconciliation": {
+        "classification": "provenance wording correction; no actionable product delta defect",
+        "reported": "Manifest/nativeRuntime.equivalence and manager handoff name readHubPlan as the native-only extra call.",
+        "observed": "Both exact authored and native diffs already normalize readHubPlan. The actual extra native work-views call is inside TypeExperience for the Prompt/Skill unavailable fallback. The enclosing function and removed/added lines were inspected in the reconstructed native source.",
+        "disposition": "Review uses actual immutable source and native patch, with this discrepancy explicitly retained. No report-of-report task or unrelated blocker."
+      },
+      "integrationBoundary": "Four of five native product deltas have identical added/removed sequences to authored source. Hub-sections/work-views whole blobs differ because of retained peer source; do not transplant the broader worker files. Apply bounded hunks preserving frozen Main peer changes/dependencies and include the inspected native TypeExperience normalization where that call exists. The runtime baseline contains accepted earlier source but is not itself an earlier explicit approval of this correction.",
+      "dependencyBoundary": "Candidate uses the recorded e9 pin and own installed dependencies, not a whole-wave import. Current main adds the vinext refresh-retain-document dependency patch (refresh-error-only branch) and the non-book cover layout; neither was imported into this candidate. These eight cases click links on a Book, not refresh. This is proof of the pinned candidate, not an unrecorded current-main browser run.",
+      "productApiMocks": false,
+      "sharedDataPreparation": false,
+      "backendLifecycle": false,
+      "ownedFrontendStopped": true
+    },
+    "proofReuse": {
+      "classification": "actual retained owner execution, independently inspected this review; no new browser run",
+      "jobId": "d0b8b0de-884a-4ae3-aff1-36a201eb9f1e",
+      "receipt": {
+        "path": ".temp/worktrees/g-2757/.temp/goal/d1-zone/run-1792413836044/receipt.json",
+        "bytes": 34573,
+        "sha256": "8f8f214b2f1833b677eff83cfd37a1a2365727e2a4388963188e759589f475cc"
+      },
+      "result": {
+        "path": ".temp/worktrees/g-2757/.temp/goal/d1-zone/run-1792413836044/result.json",
+        "sha256": "0f4964bafb9c0e2e90262c0ac88f4003a48431d80c25e2f2992c58b0b637f584",
+        "stats": {
+          "startTime": "2026-10-19T12:45:42.779Z",
+          "duration": 160379.437,
+          "expected": 8,
+          "skipped": 0,
+          "unexpected": 0,
+          "flaky": 0
+        },
+        "topLevelErrors": []
+      },
+      "cases": [
+        {
+          "title": "D1-003 original zone-connections at 390: actual current view Overview scope and reading choices",
+          "status": "passed",
+          "durationMs": 16811,
+          "source": "navigation.e2e.ts",
+          "line": 87
+        },
+        {
+          "title": "D1-003 original zone-connections at 1440: actual current view Overview scope and reading choices",
+          "status": "passed",
+          "durationMs": 22099,
+          "source": "navigation.e2e.ts",
+          "line": 87
+        },
+        {
+          "title": "D1-003 original zone-editions at 390: actual current view Overview scope and reading choices",
+          "status": "passed",
+          "durationMs": 23292,
+          "source": "navigation.e2e.ts",
+          "line": 87
+        },
+        {
+          "title": "D1-003 original zone-editions at 1440: actual current view Overview scope and reading choices",
+          "status": "passed",
+          "durationMs": 26741,
+          "source": "navigation.e2e.ts",
+          "line": 87
+        },
+        {
+          "title": "D1-003 original Realm global at 390: actual current view Overview scope and reading choices",
+          "status": "passed",
+          "durationMs": 8158,
+          "source": "realm-scope.e2e.ts",
+          "line": 14
+        },
+        {
+          "title": "D1-003 original Realm global at 1440: actual current view Overview scope and reading choices",
+          "status": "passed",
+          "durationMs": 7287,
+          "source": "realm-scope.e2e.ts",
+          "line": 14
+        },
+        {
+          "title": "D1-003 original Realm zone at 390: actual current view Overview scope and reading choices",
+          "status": "passed",
+          "durationMs": 26495,
+          "source": "realm-scope.e2e.ts",
+          "line": 14
+        },
+        {
+          "title": "D1-003 original Realm zone at 1440: actual current view Overview scope and reading choices",
+          "status": "passed",
+          "durationMs": 27422,
+          "source": "realm-scope.e2e.ts",
+          "line": 14
+        }
+      ],
+      "assertions": "All eight cases reach final Overview aria-current assertion. Original four mounted Zone assertion file is unchanged SHA256 465cd7a9f775c0643b06be1519f156f53c6c550ccfc16d5eb6a4aac134dd09d1; explicit Realm assertion source SHA256 dcf7a280455e76b10cdf8c528123a4b970d2b4c9db377b2dadb618e7e8de5d2e. Inspected actual assertion bodies and result records: zero skipped, unexpected or flaky cases. No timeout/assertion weakening.",
+      "supportingArtifacts": [
+        {
+          "path": ".temp/worktrees/g-2757/.temp/goal/d1-zone/handoff.md",
+          "bytes": 6400,
+          "sha256": "c454aac2666d1a4791715ebe38c08b535d213ee44bbef0201722a0165d7b7b6c"
+        },
+        {
+          "path": ".temp/worktrees/g-2757/.temp/goal/d1-zone/proof-summary.json",
+          "bytes": 23010,
+          "sha256": "4f889bb586d424ab03b9164ed2c4caaf8c8c54d9da00f2508407cf919c8759b7"
+        },
+        {
+          "path": ".temp/worktrees/g-2757/.temp/goal/d1-zone/final-native-correction.patch",
+          "bytes": 12710,
+          "sha256": "2c8a2e4edd3bb50a51b653d34d96c7cc82e1c32b07cce840b616d8ddea43f26d"
+        },
+        {
+          "path": ".temp/worktrees/g-2757/.temp/goal/d1-zone/worker-correction-final.patch",
+          "bytes": 19035,
+          "sha256": "7fe1a9fc76b046b50440e9e4d6d0e7424a927ebbbc87c0144af616b1b97fd6e0"
+        },
+        {
+          "path": ".temp/worktrees/g-2757/.temp/goal/d1-zone/navigation.e2e.ts",
+          "bytes": 7729,
+          "sha256": "465cd7a9f775c0643b06be1519f156f53c6c550ccfc16d5eb6a4aac134dd09d1"
+        },
+        {
+          "path": ".temp/worktrees/g-2757/.temp/goal/d1-zone/realm-scope.e2e.ts",
+          "bytes": 3429,
+          "sha256": "dcf7a280455e76b10cdf8c528123a4b970d2b4c9db377b2dadb618e7e8de5d2e"
+        }
+      ],
+      "retainedChecks": [
+        {
+          "job": "5ce35192-41dc-4809-88a5-55efa67a6220",
+          "step": 1,
+          "result": "30 tests, 440 expectations passed; frame, navigation contract, catalogue facts"
+        },
+        {
+          "job": "ddf9c9aa-fe21-4214-9154-96511468c605",
+          "step": 1,
+          "result": "types/inference/lint/AST/selected guards passed; accepted-command guard timeout retry passed"
+        },
+        {
+          "job": "a055ee65-72fa-4855-ada1-3b82b4434995",
+          "step": 1,
+          "result": "post-rebase targeted tests: 30 passed, 440 expectations"
+        },
+        {
+          "job": "a055ee65-72fa-4855-ada1-3b82b4434995",
+          "step": 2,
+          "result": "post-rebase types and inference passed"
+        },
+        {
+          "job": "95cbb07f-acf9-4ac2-9bdf-18d93eb472d7",
+          "step": 1,
+          "result": "admitted types for all seven changed files and imports passed after retry rebase"
+        }
+      ],
+      "retainedCheckLogsInspected": [
+        {
+          "job": "5ce35192-41dc-4809-88a5-55efa67a6220",
+          "step": 1,
+          "path": ".temp/worktrees/g-2757/.temp/goal/jobs/5ce35192-41dc-4809-88a5-55efa67a6220.1.log",
+          "sha256": "05f13230fefd2cfca1d2381b80f63c3043e56b25224b67dd733985d08e2bff3d",
+          "bytes": 300,
+          "classification": "reused-owner-check-result; log inspected this review; not rerun"
+        },
+        {
+          "job": "ddf9c9aa-fe21-4214-9154-96511468c605",
+          "step": 1,
+          "path": ".temp/worktrees/g-2757/.temp/goal/jobs/ddf9c9aa-fe21-4214-9154-96511468c605.1.log",
+          "sha256": "3cd8e3f866792a7392f339e568b7ff0ef4e487dc8a2238b502a2822859a6cd35",
+          "bytes": 813,
+          "classification": "reused-owner-check-result; log inspected this review; not rerun"
+        },
+        {
+          "job": "a055ee65-72fa-4855-ada1-3b82b4434995",
+          "step": 1,
+          "path": ".temp/worktrees/g-2757/.temp/goal/jobs/a055ee65-72fa-4855-ada1-3b82b4434995.1.log",
+          "sha256": "6adf28814a4b198c896732166b9cc2657d6b7e051ec2c47fd8f11f8e48f81c02",
+          "bytes": 300,
+          "classification": "reused-owner-check-result; log inspected this review; not rerun"
+        },
+        {
+          "job": "a055ee65-72fa-4855-ada1-3b82b4434995",
+          "step": 2,
+          "path": ".temp/worktrees/g-2757/.temp/goal/jobs/a055ee65-72fa-4855-ada1-3b82b4434995.2.log",
+          "sha256": "e3bddcf01a186ba517e021420e6bce8fc1276b5a99862032e12f27b50f5ff6b2",
+          "bytes": 357,
+          "classification": "reused-owner-check-result; log inspected this review; not rerun"
+        },
+        {
+          "job": "95cbb07f-acf9-4ac2-9bdf-18d93eb472d7",
+          "step": 1,
+          "path": ".temp/worktrees/g-2757/.temp/goal/jobs/95cbb07f-acf9-4ac2-9bdf-18d93eb472d7.1.log",
+          "sha256": "283bb4a4b2afa615bf7052f37aabdca0eb5fbde0a2979da2f7b112669d0fb038",
+          "bytes": 1232,
+          "classification": "reused-owner-check-result; log inspected this review; not rerun"
+        }
+      ],
+      "screenshots": {
+        "count": 16,
+        "actuallyViewedByThisReviewer": 16,
+        "artifacts": [
+          {
+            "path": ".temp/worktrees/g-2757/.temp/goal/d1-zone/run-1792413836044/results/navigation.e2e.ts-D1-003-o-c5109-w-scope-and-reading-choices/zone-connections-390-current.png",
+            "bytes": 51659,
+            "sha256": "a9055caacc3a134d420b33771c0b4f29e0771799c560a7448187a8108cfc207f",
+            "expectedSha256": "a9055caacc3a134d420b33771c0b4f29e0771799c560a7448187a8108cfc207f",
+            "matchesOwnerManifest": true
+          },
+          {
+            "path": ".temp/worktrees/g-2757/.temp/goal/d1-zone/run-1792413836044/results/navigation.e2e.ts-D1-003-o-c5109-w-scope-and-reading-choices/test-finished-1.png",
+            "bytes": 52355,
+            "sha256": "1c41ba3a16165d2a1548d51296e4814d4880ecd413d0f26079bd9b5fa8ef0ee7",
+            "expectedSha256": "1c41ba3a16165d2a1548d51296e4814d4880ecd413d0f26079bd9b5fa8ef0ee7",
+            "matchesOwnerManifest": true
+          },
+          {
+            "path": ".temp/worktrees/g-2757/.temp/goal/d1-zone/run-1792413836044/results/navigation.e2e.ts-D1-003-o-6d748-w-scope-and-reading-choices/zone-connections-1440-current.png",
+            "bytes": 133854,
+            "sha256": "074cc397e3d3744aef5cb2efe5e78c4cf8bec0501ddb8bf71d593538bee027f9",
+            "expectedSha256": "074cc397e3d3744aef5cb2efe5e78c4cf8bec0501ddb8bf71d593538bee027f9",
+            "matchesOwnerManifest": true
+          },
+          {
+            "path": ".temp/worktrees/g-2757/.temp/goal/d1-zone/run-1792413836044/results/navigation.e2e.ts-D1-003-o-6d748-w-scope-and-reading-choices/test-finished-1.png",
+            "bytes": 106516,
+            "sha256": "18d5d5295301037ebbbfc32a14fd151a846fe2a8e005547c3ee39a046166bfbe",
+            "expectedSha256": "18d5d5295301037ebbbfc32a14fd151a846fe2a8e005547c3ee39a046166bfbe",
+            "matchesOwnerManifest": true
+          },
+          {
+            "path": ".temp/worktrees/g-2757/.temp/goal/d1-zone/run-1792413836044/results/navigation.e2e.ts-D1-003-o-6df3e-w-scope-and-reading-choices/zone-editions-390-current.png",
+            "bytes": 51659,
+            "sha256": "d8fa7e173b7c2499b0b425b4fb9e89a63e0caf3b70cc9cb0b76a78e22630689c",
+            "expectedSha256": "d8fa7e173b7c2499b0b425b4fb9e89a63e0caf3b70cc9cb0b76a78e22630689c",
+            "matchesOwnerManifest": true
+          },
+          {
+            "path": ".temp/worktrees/g-2757/.temp/goal/d1-zone/run-1792413836044/results/navigation.e2e.ts-D1-003-o-6df3e-w-scope-and-reading-choices/test-finished-1.png",
+            "bytes": 52296,
+            "sha256": "1947c993a3537a9d6dd5eac018cde9c5e7767449067c1b5e4fbd5f5bc1461a02",
+            "expectedSha256": "1947c993a3537a9d6dd5eac018cde9c5e7767449067c1b5e4fbd5f5bc1461a02",
+            "matchesOwnerManifest": true
+          },
+          {
+            "path": ".temp/worktrees/g-2757/.temp/goal/d1-zone/run-1792413836044/results/navigation.e2e.ts-D1-003-o-93908-w-scope-and-reading-choices/zone-editions-1440-current.png",
+            "bytes": 126763,
+            "sha256": "b5cd6bee25af87cacd658cb3bf478a94a289284baa245a7e3922d2fe09144afa",
+            "expectedSha256": "b5cd6bee25af87cacd658cb3bf478a94a289284baa245a7e3922d2fe09144afa",
+            "matchesOwnerManifest": true
+          },
+          {
+            "path": ".temp/worktrees/g-2757/.temp/goal/d1-zone/run-1792413836044/results/navigation.e2e.ts-D1-003-o-93908-w-scope-and-reading-choices/test-finished-1.png",
+            "bytes": 117369,
+            "sha256": "d6d89842309f317c61f4ddda6903a0704baa64a55851ddeaab594a9f11caae03",
+            "expectedSha256": "d6d89842309f317c61f4ddda6903a0704baa64a55851ddeaab594a9f11caae03",
+            "matchesOwnerManifest": true
+          },
+          {
+            "path": ".temp/worktrees/g-2757/.temp/goal/d1-zone/run-1792413836044/results/realm-scope.e2e.ts-D1-003--2efe1-w-scope-and-reading-choices/realm-global-390-current.png",
+            "bytes": 52552,
+            "sha256": "65484553376c998d5c38b032faa65f69be2c62cde9af8ff4ea4620fd5fb5425f",
+            "expectedSha256": "65484553376c998d5c38b032faa65f69be2c62cde9af8ff4ea4620fd5fb5425f",
+            "matchesOwnerManifest": true
+          },
+          {
+            "path": ".temp/worktrees/g-2757/.temp/goal/d1-zone/run-1792413836044/results/realm-scope.e2e.ts-D1-003--2efe1-w-scope-and-reading-choices/realm-global-390-overview.png",
+            "bytes": 52306,
+            "sha256": "4bc7b322578efd2c8b2ae397f6d94410cf92c9c76f803d3a98389a06f127a2fc",
+            "expectedSha256": "4bc7b322578efd2c8b2ae397f6d94410cf92c9c76f803d3a98389a06f127a2fc",
+            "matchesOwnerManifest": true
+          },
+          {
+            "path": ".temp/worktrees/g-2757/.temp/goal/d1-zone/run-1792413836044/results/realm-scope.e2e.ts-D1-003--ca7a5-w-scope-and-reading-choices/realm-global-1440-current.png",
+            "bytes": 117986,
+            "sha256": "a200b3088770e246a9f77c5548ef6db448de9bc28adf2894236021049deb7da2",
+            "expectedSha256": "a200b3088770e246a9f77c5548ef6db448de9bc28adf2894236021049deb7da2",
+            "matchesOwnerManifest": true
+          },
+          {
+            "path": ".temp/worktrees/g-2757/.temp/goal/d1-zone/run-1792413836044/results/realm-scope.e2e.ts-D1-003--ca7a5-w-scope-and-reading-choices/realm-global-1440-overview.png",
+            "bytes": 100171,
+            "sha256": "37eb6921f7e7667396a6b10b5a68b5a8015fba63828566331e3c09ef80ae3a79",
+            "expectedSha256": "37eb6921f7e7667396a6b10b5a68b5a8015fba63828566331e3c09ef80ae3a79",
+            "matchesOwnerManifest": true
+          },
+          {
+            "path": ".temp/worktrees/g-2757/.temp/goal/d1-zone/run-1792413836044/results/realm-scope.e2e.ts-D1-003--4559e-w-scope-and-reading-choices/realm-zone-390-current.png",
+            "bytes": 51654,
+            "sha256": "8244c7a9b61685f1d38a9b789af27779dcc8d3c280f5b9f0a125f976553a85fe",
+            "expectedSha256": "8244c7a9b61685f1d38a9b789af27779dcc8d3c280f5b9f0a125f976553a85fe",
+            "matchesOwnerManifest": true
+          },
+          {
+            "path": ".temp/worktrees/g-2757/.temp/goal/d1-zone/run-1792413836044/results/realm-scope.e2e.ts-D1-003--4559e-w-scope-and-reading-choices/realm-zone-390-overview.png",
+            "bytes": 52296,
+            "sha256": "93bde0a3a6e241aebf0e5d155190128c65d5982955c557b75d1c2be0b8572a11",
+            "expectedSha256": "93bde0a3a6e241aebf0e5d155190128c65d5982955c557b75d1c2be0b8572a11",
+            "matchesOwnerManifest": true
+          },
+          {
+            "path": ".temp/worktrees/g-2757/.temp/goal/d1-zone/run-1792413836044/results/realm-scope.e2e.ts-D1-003--a3b1b-w-scope-and-reading-choices/realm-zone-1440-current.png",
+            "bytes": 127225,
+            "sha256": "5ed0bce580dfd371493445add9d9b3e35e54a291214827a049304e8b2afe541d",
+            "expectedSha256": "5ed0bce580dfd371493445add9d9b3e35e54a291214827a049304e8b2afe541d",
+            "matchesOwnerManifest": true
+          },
+          {
+            "path": ".temp/worktrees/g-2757/.temp/goal/d1-zone/run-1792413836044/results/realm-scope.e2e.ts-D1-003--a3b1b-w-scope-and-reading-choices/realm-zone-1440-overview.png",
+            "bytes": 106639,
+            "sha256": "c8c024d1269588d8476e3bc8946c31e105e220adeb6d20a20cf5b2128d0a1e2c",
+            "expectedSha256": "c8c024d1269588d8476e3bc8946c31e105e220adeb6d20a20cf5b2128d0a1e2c",
+            "matchesOwnerManifest": true
+          }
+        ],
+        "observation": "Desktop Connections/Editions and final Overview markers are visible. Phone expanded menu groups anchors and views, but some view links/current markers are below the captured fold; DOM assertions supply that evidence. Contents unavailable/Retry and Parts unavailable remain truthful. Overview may still be streaming skeletons. Images do not prove every body loaded, query values, keyboard focus or controls outside the viewport."
+      }
+    },
+    "historicalFailuresPreserved": {
+      "nativeRuns": [
+        {
+          "run": "run-1792408336757",
+          "sha256": "16ec8abafdce78a4d3b4a654d1557d573eddd748f8010ffe878e1f121da84003",
+          "stats": {
+            "startTime": "2026-10-19T11:13:40.557Z",
+            "duration": 191583.775,
+            "expected": 3,
+            "skipped": 0,
+            "unexpected": 5,
+            "flaky": 0
+          },
+          "errors": [],
+          "failureExamples": [
+            {
+              "status": "failed",
+              "errors": [
+                "Error: expect(locator).toHaveAttribute(expected) failed\n\nLocator: getByRole('button', { name: 'On this page', exact: true })\nExpected: \"false\"\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toHaveAttribute\" getByRole('button', { name: 'On this page', exact: true }) with timeout 5000ms\n  - waiting for getByRole('button', { name: 'On this page', exact: true })\n\n\n  100 |   await nav.getByRole('link',{name:'Overview',exact:true}).click();\n  101 |   await expect(page).not.toHaveURL(/\\/(?:connections|editions)(?:\\?|$)/,{timeout:30000});\n> 102 |  "
+              ]
+            },
+            {
+              "status": "failed",
+              "errors": [
+                "Error: expect(locator).toHaveAttribute(expected) failed\n\nLocator: getByRole('navigation', { name: 'Work sections', exact: true }).getByRole('link', { name: 'Overview', exact: true })\nExpected: \"page\"\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toHaveAttribute\" getByRole('navigation', { name: 'Work sections', exact: true }).getByRole('link', { name: 'Overview', exact: true }) with timeout 5000ms\n  - waiting for getByRole('navigation', { name: 'Work sections', exact: true }).getByRole('link', { name: 'Overview', exact: true })\n\n\n  102 |   "
+              ]
+            }
+          ],
+          "path": ".temp/worktrees/g-2757/.temp/goal/d1-zone/run-1792408336757/result.json",
+          "classification": "historical native failure, preserved; not a fresh reviewer reproduction"
+        },
+        {
+          "run": "run-1792408802050",
+          "sha256": "8dc06732fb10ed01ae14287a30feca33054c8b768199b6c9a01a0ea084cbec11",
+          "stats": {
+            "startTime": "2026-10-19T11:21:46.708Z",
+            "duration": 218841.183,
+            "expected": 2,
+            "skipped": 0,
+            "unexpected": 6,
+            "flaky": 0
+          },
+          "errors": [],
+          "failureExamples": [
+            {
+              "status": "failed",
+              "errors": [
+                "Error: expect(locator).toHaveCount(expected) failed\n\nLocator:  getByRole('navigation', { name: 'On this page', exact: true }).locator('[aria-current=\"page\"]')\nExpected: 1\nReceived: 0\nTimeout:  5000ms\n\nCall log:\n  - Expect \"toHaveCount\" getByRole('navigation', { name: 'On this page', exact: true }).locator('[aria-current=\"page\"]') with timeout 5000ms\n  - waiting for getByRole('navigation', { name: 'On this page', exact: true }).locator('[aria-current=\"page\"]')\n    12 × locator resolved to 0 elements\n       - unexpected value \"0\"\n\n\n  "
+              ]
+            },
+            {
+              "status": "failed",
+              "errors": [
+                "Error: expect(locator).toHaveAttribute(expected) failed\n\nLocator: getByRole('navigation', { name: 'Work sections', exact: true }).getByRole('link', { name: 'Overview', exact: true })\nExpected: \"page\"\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toHaveAttribute\" getByRole('navigation', { name: 'Work sections', exact: true }).getByRole('link', { name: 'Overview', exact: true }) with timeout 5000ms\n  - waiting for getByRole('navigation', { name: 'Work sections', exact: true }).getByRole('link', { name: 'Overview', exact: true })\n\n\n  102 |   "
+              ]
+            }
+          ],
+          "path": ".temp/worktrees/g-2757/.temp/goal/d1-zone/run-1792408802050/result.json",
+          "classification": "historical native failure, preserved; not a fresh reviewer reproduction"
+        },
+        {
+          "run": "run-1792410511108",
+          "sha256": "f23359912706f7759946f0ef16c629d17b270a84b415d1ea1f9f9d0d070fb025",
+          "stats": {
+            "startTime": "2026-10-19T11:50:40.586Z",
+            "duration": 207179.08599999998,
+            "expected": 2,
+            "skipped": 0,
+            "unexpected": 6,
+            "flaky": 0
+          },
+          "errors": [],
+          "failureExamples": [
+            {
+              "status": "failed",
+              "errors": [
+                "Error: expect(locator).toHaveAttribute(expected) failed\n\nLocator: getByRole('button', { name: 'On this page', exact: true })\nExpected: \"false\"\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toHaveAttribute\" getByRole('button', { name: 'On this page', exact: true }) with timeout 5000ms\n  - waiting for getByRole('button', { name: 'On this page', exact: true })\n\n\n  100 |   await nav.getByRole('link',{name:'Overview',exact:true}).click();\n  101 |   await expect(page).not.toHaveURL(/\\/(?:connections|editions)(?:\\?|$)/,{timeout:30000});\n> 102 |  "
+              ]
+            },
+            {
+              "status": "failed",
+              "errors": [
+                "Error: expect(locator).toHaveAttribute(expected) failed\n\nLocator: getByRole('navigation', { name: 'Work sections', exact: true }).getByRole('link', { name: 'Overview', exact: true })\nExpected: \"page\"\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toHaveAttribute\" getByRole('navigation', { name: 'Work sections', exact: true }).getByRole('link', { name: 'Overview', exact: true }) with timeout 5000ms\n  - waiting for getByRole('navigation', { name: 'Work sections', exact: true }).getByRole('link', { name: 'Overview', exact: true })\n\n\n  102 |   "
+              ]
+            }
+          ],
+          "path": ".temp/worktrees/g-2757/.temp/goal/d1-zone/run-1792410511108/result.json",
+          "classification": "historical native failure, preserved; not a fresh reviewer reproduction"
+        },
+        {
+          "run": "run-1792411552423",
+          "sha256": "1bad7b473083055d486bd536d0c6d8aa8ed9e9200b3a35bd3780c95e0a9be8c0",
+          "stats": {
+            "startTime": "2026-10-19T12:07:54.653Z",
+            "duration": 290220.23400000005,
+            "expected": 3,
+            "skipped": 0,
+            "unexpected": 5,
+            "flaky": 0
+          },
+          "errors": [],
+          "failureExamples": [
+            {
+              "status": "timedOut",
+              "errors": [
+                "Test timeout of 60000ms exceeded.",
+                "Error: locator.click: Test timeout of 60000ms exceeded.\nCall log:\n  - waiting for getByRole('button', { name: 'On this page', exact: true })\n\n\n  17 | }\n  18 | async function navigation(page:Page,width:number){\n> 19 |   if(width===390){await trigger(page).click();return page.getByRole('navigation',{name:'On this page',exact:true});}\n     |                                       ^\n  20 |   return page.getByRole('navigation',{name:'Work sections',exact:true});\n  21 | }\n  22 | async function viewLinks(page:Page,width:number){\n    at navigation (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2757/.temp/goal/d1-zone/navigation.e2e"
+              ]
+            },
+            {
+              "status": "timedOut",
+              "errors": [
+                "Test timeout of 60000ms exceeded.",
+                "Error: locator.click: Test timeout of 60000ms exceeded.\nCall log:\n  - waiting for getByRole('button', { name: 'On this page', exact: true })\n\n\n  17 | }\n  18 | async function navigation(page:Page,width:number){\n> 19 |   if(width===390){await trigger(page).click();return page.getByRole('navigation',{name:'On this page',exact:true});}\n     |                                       ^\n  20 |   return page.getByRole('navigation',{name:'Work sections',exact:true});\n  21 | }\n  22 | async function viewLinks(page:Page,width:number){\n    at navigation (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2757/.temp/goal/d1-zone/navigation.e2e"
+              ]
+            }
+          ],
+          "path": ".temp/worktrees/g-2757/.temp/goal/d1-zone/run-1792411552423/result.json",
+          "classification": "historical native failure, preserved; not a fresh reviewer reproduction"
+        }
+      ],
+      "setupFailure": {
+        "classification": "setup failure, not a passed or reproduced product assertion",
+        "jobId": "ddf9c9aa-fe21-4214-9154-96511468c605",
+        "step": 2,
+        "run": "run-1792413686908",
+        "log": ".temp/worktrees/g-2757/.temp/goal/jobs/ddf9c9aa-fe21-4214-9154-96511468c605.2.log",
+        "result": "Owned frontend not listening in 90 seconds; owner reports port collision/fallback. No browser assertions ran. Retained later strict-port native run passed."
+      },
+      "qualification": "Earlier failed assertion/current-marker/Overview and timed-out phone-navigation evidence remains historical, with original result hashes and counts retained. This reviewer did not execute fresh failing browser assertions or recategorize initial setup/helper timeouts as confirmed new product defects. Existing earlier report failures remain unchanged."
+    },
+    "checksActuallyExecuted": [
+      {
+        "check": "Read exact authored seven-path Git diff, direct parent, changed source and material call chains; read original canonical D1-003 at frozen Main and exact native assertion sources.",
+        "result": "APPROVE bounded correction; no actionable delta finding."
+      },
+      {
+        "check": "Independent local immutable blob/artifact verification and native patch reconstruction; compare changed-line sequences and before/after runtime patch; inspect actual result JSON and selected retained check logs.",
+        "artifact": ".temp/catalogue-work-review/d1-003-final/verification.json",
+        "result": "PASS seven authored paths, five native products, seven artifacts, sixteen screenshot hashes, eight passed native cases and exact canonical criteria. TypeExperience/readHubPlan provenance wording distinction recorded."
+      },
+      {
+        "check": "View sixteen supplied exact-runtime PNGs through image viewer.",
+        "result": "All sixteen actually inspected. Visible UI and belowfold/streaming/failure limits recorded."
+      },
+      {
+        "check": "Product tests / native browser matrix rerun",
+        "result": "Not rerun. Reuse the exact retained genuine native proof and targeted owner checks as instructed; this reviewer started no product services or corpus preparation."
+      }
+    ],
+    "evidenceClassification": {
+      "sourceInference": "Independent inspection supports bounded source APPROVE; the review does not promote source reasoning into newly executed product assertions.",
+      "reusedActualAssertionPass": "Eight retained genuine native DOM cases, zero skipped/unexpected/flaky, distinct from 30 unit tests / 440 expectations and type/lint/guard receipts.",
+      "reproducedAssertionFailure": "No fresh reviewer reproduction. Four historical native failure runs retain actual result hashes/stats/examples separately.",
+      "setupFailure": "Retained frontend port/startup-only failure is separate from browser outcome assertions. No new setup attempted.",
+      "canonicalAcceptance": "Only original applicable selected navigation assertions inform this bounded result. No broad catalogue/D1-002/D1-005/31-case/seven-domain or class closure inferred."
+    },
+    "reportValidation": {
+      "status": "passed",
+      "jobId": "9c265f17-dead-4878-9f0e-e881040567d0",
+      "commands": [
+        {
+          "command": "task docs:check",
+          "exitCode": 0,
+          "result": "Passed13self-tests and249Markdown files; local links, fragments and design navigation. External URLs and runtime behavior not tested.",
+          "log": ".temp/goal/jobs/9c265f17-dead-4878-9f0e-e881040567d0.1.log",
+          "sha256": "5f1518372ae6fbddaba45b610a305c747c89683e313f72c6b6da0f3081fe75fb"
+        },
+        {
+          "command": "task goal -- check",
+          "exitCode": 0,
+          "result": "Report-only diff: AST and1/44selected repository guards passed; no changed TypeScript workspace, no source lint targets and no tests named in brief.",
+          "log": ".temp/goal/jobs/9c265f17-dead-4878-9f0e-e881040567d0.2.log",
+          "sha256": "9a96f3003b5fdb4cee1a46e2603cf679905bf50a71818b2cf15c9494a379e4e0"
+        }
+      ],
+      "goalCheckArtifact": ".temp/goal/check/run-41vJm5/output.log",
+      "harnessNotice": "Check reports harness4commits behind main. All selected report checks passed; no rebase or main mutation performed.",
+      "subsequentEdits": "Only this validation metadata; JSON parsing, prior JSON-value preservation, tracked scope and whitespace checked before commit.",
+      "qualification": "Report checks validate this review artifact, not current-main product execution, catalogue/class closure or all page bodies."
+    },
+    "limitations": [
+      "Native execution is e9bff8c44b5317168b38c954b405938b458bd1e1 plus the exact five-product-file overlay and backend75409ac3c379a9f84212e48a8abdc6540c5c44a2, not full worker2f533175 or frozen Main27c4c7fd runtime. Whole worker blobs and unrelated peer changes are outside approval.",
+      "Contents503/Parts404, some connection facts failures and streamed Overview bodies remain disclosed. Eight cells prove navigation/current/Overview/selected query behavior, not all page contents loaded.",
+      "Actual phone screenshots may place Work-section links below the viewport. DOM assertions, rather than PNG visibility, establish those current markers and destinations.",
+      "New runtime cells cover anonymous navigation, not a newly executed signed-in/editor journey. The targeted pending-rating fixture regression preserves the existing signed-in target in source.",
+      "No new Back, Escape/outside dismissal, focus restoration, arbitrary query mutation or all-view/all-domain runtime claim. Existing earlier keyboard/focus evidence remains historical.",
+      "No implementation, API/schema/converter, source/citation architecture, import/lifecycle, dependency mutation or original assertion change. All prior catalogue/Book/Cook/footer findings and their gaps stay preserved."
+    ],
+    "managerNext": "Use this bounded source APPROVE for the normal manager integration of the seven-path correction and inspected five-product-file native overlay, preserving current Main peer changes and dependencies rather than replacing whole older worker blobs. Retain exact native-runtime/manifest wording qualifications and original failures; no canonical class closure is authorized by this report."
   }
 }
