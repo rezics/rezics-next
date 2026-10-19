@@ -14,6 +14,7 @@ import { browserMainApi } from '../api/browser.ts';
 import { CatalogueCover, CatalogueCoverCredit } from '../catalogue/cover.tsx';
 import { coverKindOf } from '../catalogue/work.ts';
 import { ShareButton, VoteControl } from '../feed/actions.tsx';
+import { ReplyAuthorActions } from '../feed/author-actions.tsx';
 import { LinkMenu } from '../feed/controls.tsx';
 import { resourceHref } from '../address/path.ts';
 import { markedSpoiler, threadPath } from '../feed/discussion.ts';
@@ -174,6 +175,8 @@ function OpeningPost({
         {title || t.untitled}
       </h1>
       </div>} actions={<>
+        {!post.blocked && post.author ? <ReplyAuthorActions target={{ reply: post.reply,
+          realm: read.realm, author: post.author.id, revisionId: post.revisionId, placement: post.placement }} /> : null}
         {post.blocked ? null : <VoteControl target={{ id: post.placement, vote: post.vote.value,
           score: post.vote.score, revision: post.vote.revision, open: post.vote.open }} />}
         <ReportMenu targets={[{ target: post.reply, kind: 'post', realm: read.realm }]}

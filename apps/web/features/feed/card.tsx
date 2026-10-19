@@ -258,6 +258,7 @@ function discussionPost(item: FeedItem & { realm: NonNullable<FeedItem['realm']>
     href: threadPath(community, target.id),
     vote: { id: item.id, vote: item.vote, score: item.score, revision: item.voteRevision },
     realm: item.realm, lead: metaLead(item), author: item.actor, time: item.time,
+    ...(item.actor ? { authorTarget: { reply: target.id, realm: item.realm.id, author: item.actor.id } } : {}),
     title: item.post.title, body: item.post.excerpt ?? '', language: item.post.language,
     ...(item.post.spoiler !== undefined ? { spoiler: item.post.spoiler } : {}),
     showSpoilers: item.viewerState.status === 'available' && item.viewerState.spoiler.policy === 'show',
