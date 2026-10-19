@@ -12,6 +12,19 @@ import { browseHref, emptyBrowse, parseBrowseState, type BrowseState } from './b
 import { DiscoverView, type DiscoverPageProps } from './discover-view.tsx';
 import { workHref } from './scope.ts';
 
+const workSamples = browseResources.filter(item => item.kind === 'work');
+const workResults = ['雨夜の図書館 · The Library on a Rainy Night', '星降る書庫 · The Starlit Archive',
+  '月明かりの司書 · The Moonlit Librarian', '夜の本棚 · Shelves After Dark',
+  '星を読む部屋 · Reading the Stars', '最後の夜行図書館 · The Last Night Library'].map((value, index) => ({
+  ...workSamples[index]!, types: ['https://schema.org/Book'],
+  name: { ...workSamples[index]!.name, value, language: 'ja', direction: direction('ja', value) },
+}));
+const topicSamples = browseResources.filter(item => item.kind === 'concept');
+const topicResults = ['Space and astronomy', 'Libraries and archives', 'Japanese literature',
+  'Illustration and comics', 'Games and interactive fiction', 'Film and animation'].map((value, index) => ({
+  ...topicSamples[index]!, name: { ...topicSamples[index]!.name, value, language: 'en', direction: direction('en', value) },
+}));
+
 const state: BrowseState = { ...emptyBrowse, q: 'night library', tab: 'works', language: 'ja',
   includeTypes: ['https://schema.org/Book'], conditions: { include: [browseConcepts[0]!.id.slice(-36)],
     exclude: [], match: 'all' } };
@@ -19,7 +32,7 @@ const topicLoad = fixtureTopicLoader();
 const meta = {
   title: 'Discover/Search task', component: DiscoverView,
   args: { state, locale: 'en', topics: browseConcepts.slice(0, 2), sections: null,
-    results: { ok: true, data: fixturePage(browseResources.filter(item => item.kind === 'work'), 0, 6) },
+    results: { ok: true, data: fixturePage(workResults) },
     topicLoad },
   decorators: [Story => <Providers><Story /></Providers>],
   globals: { viewport: { value: 'desktop1440' } },
@@ -54,7 +67,7 @@ export const SimplifiedChinesePhone: Story = { args: { locale: 'zh-Hans' },
 };
 
 export const DirectLastDestination: Story = { args: { state: { ...emptyBrowse, tab: 'topics' },
-  results: { ok: true, data: fixturePage(browseResources.filter(item => item.kind === 'concept'), 0, 6) } },
+  results: { ok: true, data: fixturePage(topicResults) } },
   globals: { viewport: { value: 'phone' } },
   async play({ canvasElement }) {
     const nav = within(canvasElement).getByRole('navigation', { name: 'Type' });
