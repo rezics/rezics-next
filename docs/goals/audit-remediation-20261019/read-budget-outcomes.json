@@ -3011,7 +3011,7 @@
   "populationEnvironmentContinuation": {
     "authority": "Latest maintainer continuation: qualify only the two original frozen D5-006 populations on disposable migrated copies of the retained command-created corpora; G-2826 performs independent original-suite execution after qualification.",
     "scope": "Environment preparation and existing matrix metadata only. No baseline product rerun, catalogue build, production/helper/frozen-test edit, peer mutation, new producer, new fault mechanism or finding closure.",
-    "status": "partial: Zone derivative qualified. Rating reconstruction verified all100 retained heads and completed its cursor/refresh; exact environment witness identified derived principal-position and queue differences before public smoke. Individual identity/authority preservation still requires the next explicit witness.",
+    "status": "partial: Zone derivative qualified. Rating migration/reconstruction preserved all110 principal identities and authority, exactly100 inventory-position increments, immutable graph/objects and original source columns apart from exact classified signals. Public readiness passed, but a Zone-specific environment smoke premise stopped before the rating aggregate; correction remains to execute.",
     "originalOutcomeAssertionReached": false,
     "canonicalFindingClosed": false,
     "fixedProductPassCertified": false,
@@ -3901,15 +3901,233 @@
           "limitation": "This run captured changed-table digests and exact derived rows, but not individual before/after principal fields. It cannot certify identity/authority preservation by itself.",
           "nextWitness": "Capture every principal field. Require all110 principals and immutable identity/authority fields exact, exactly100 retained voters library_rating_version+1, other10 versions unchanged; retain every prior queue row and allow only exact1 discovery and2 classified also-enjoyed additions. Every other original column, graph fact and object remains exact."
         }
+      },
+      {
+        "job": "fe7a3b07-5a76-46ec-b943-4f677b04cc51",
+        "capability": "ratings",
+        "command": "task --taskfile .temp/read-budget-migration/Taskfile.yml qualify -- ratings",
+        "precedingSyntaxCheck": "passed in same recorded sequence",
+        "receipt": {
+          "path": ".temp/read-budget-migration/ratings-attempt4/environment-qualification.json",
+          "sha256": "a99667c36e7cdb63c8fc9a1a64153361e53befc915f1449f55afd60a756e02c5"
+        },
+        "startedAt": "2026-10-19T12:58:07.770Z",
+        "finishedAt": "2026-10-19T13:02:56.538Z",
+        "ready": false,
+        "originalOutcomeAssertionReached": false,
+        "originalRestore": {
+          "restoreMs": 38465,
+          "volumeCopyMs": {
+            "postgres_data": 29297,
+            "fuseki_data": 5983,
+            "rustfs_data": 2130
+          },
+          "objectCopyMs": 26,
+          "startupMs": 17071,
+          "readinessMs": 1543,
+          "totalMs": 57079,
+          "admissionWaitMs": 2369,
+          "collationRepairs": []
+        },
+        "appliedMigrations": [
+          "services/main/migrations/access/2045_standing_rating_components.sql",
+          "services/main/migrations/access/2077_standing_rating_publication.sql",
+          "services/main/migrations/access/2605_discovery_refresh_disposition.sql",
+          "services/main/migrations/access/2606_standing_rating_affected_cuts.sql",
+          "services/main/migrations/access/2607_standing_rating_bounded_progress.sql"
+        ],
+        "appliedContentMigrations": [
+          2603
+        ],
+        "cleanupErrors": [],
+        "run": "budget-rating-fb467f4e97",
+        "publicSmokeReached": true,
+        "initialRatingPublicReadReached": false,
+        "derivativeCreated": false,
+        "classification": "Identity/authority and immutable-source preservation passed after genuine reconstruction. Environment smoke readiness200 and suggested-follows200 reached; inherited Zone positive-suggestion premise refused before rating read.",
+        "preservation": {
+          "originalSourceColumnsUnchanged": true,
+          "graphUnchanged": true,
+          "objectsUnchanged": true,
+          "changed": [
+            {
+              "prior": {
+                "owner": "access",
+                "schema": "access",
+                "table": "also_enjoyed_source_change",
+                "columns": [
+                  "id",
+                  "privacy"
+                ],
+                "count": 26,
+                "digest": "f33fd5551612a4847e037c89f2af892d"
+              },
+              "fresh": {
+                "owner": "access",
+                "schema": "access",
+                "table": "also_enjoyed_source_change",
+                "columns": [
+                  "id",
+                  "privacy"
+                ],
+                "count": 28,
+                "digest": "6fd494b9a82fdb31bbf009e92456a6d7"
+              }
+            },
+            {
+              "prior": {
+                "owner": "access",
+                "schema": "access",
+                "table": "discovery_source_change",
+                "columns": [
+                  "id",
+                  "context_key",
+                  "statement"
+                ],
+                "count": 2,
+                "digest": "7e03ee91ab948231d67130bc7c9bd35b"
+              },
+              "fresh": {
+                "owner": "access",
+                "schema": "access",
+                "table": "discovery_source_change",
+                "columns": [
+                  "id",
+                  "context_key",
+                  "statement"
+                ],
+                "count": 3,
+                "digest": "5ee6e9cbc1ef8c4dd2462babd6d529d4"
+              }
+            },
+            {
+              "prior": {
+                "owner": "access",
+                "schema": "access",
+                "table": "principal",
+                "columns": [
+                  "id",
+                  "account_issuer",
+                  "account_subject",
+                  "active",
+                  "enforcement_epoch",
+                  "first_seen_at",
+                  "library_rating_version"
+                ],
+                "count": 110,
+                "digest": "4b03747f6f907d2a71aa10a7f21a0329"
+              },
+              "fresh": {
+                "owner": "access",
+                "schema": "access",
+                "table": "principal",
+                "columns": [
+                  "id",
+                  "account_issuer",
+                  "account_subject",
+                  "active",
+                  "enforcement_epoch",
+                  "first_seen_at",
+                  "library_rating_version"
+                ],
+                "count": 110,
+                "digest": "1e94907d88cdc97f16b7b444b975a019"
+              }
+            }
+          ],
+          "unexpected": [],
+          "discoverySignal": {
+            "retained": true,
+            "added": [
+              {
+                "id": "3",
+                "context_key": "",
+                "statement": ""
+              }
+            ],
+            "ready": true
+          },
+          "enjoyedSignal": {
+            "retained": true,
+            "added": [
+              {
+                "id": "532",
+                "privacy": false
+              },
+              {
+                "id": "533",
+                "privacy": true
+              }
+            ],
+            "ready": true
+          },
+          "unchangedMetadata": true,
+          "principalPosition": {
+            "principals": 110,
+            "retainedVoters": 100,
+            "principalIdentityUnchanged": true,
+            "inventoryVersionsValid": true
+          },
+          "sourceBasis": "Existing trigger2163 advances only each updated voter library_rating_version;2604 preserves enforcement_epoch for that inventory-only change. Head/principal triggers1060/1160 and785/1200 append exactly one discovery invalidation and one each privacy=false/true also-enjoyed signal per transaction. All identities/authority and remaining original columns must remain exact."
+        },
+        "verifiedInitialValues": {
+          "heads": {
+            "heads": 100,
+            "independent_accounts": 100,
+            "known": 100,
+            "five": 100,
+            "withdrawn": 0
+          },
+          "component": {
+            "slots": 100,
+            "unvalued": 0,
+            "histogram": {
+              "5": 100
+            }
+          },
+          "publication": {
+            "generation": "d10d93a9a20df58439baa092821f91042a7f067bdd5f89661a0135e81373658d",
+            "pending": "0"
+          }
+        },
+        "publicSmoke": {
+          "path": ".temp/read-budget-migration/ratings-attempt4/migrated-smoke.json",
+          "sha256": "fbed4058e926e11d598070c6cc4ea2907f2c5bd433386391ae8b939fb91b8651",
+          "result": {
+            "kind": "retained-identity-environment-smoke",
+            "capability": "ratings",
+            "originalOutcomeAssertionReached": false,
+            "recreatedIdentities": false,
+            "publicChecks": [
+              {
+                "path": "/health/ready",
+                "status": 200
+              },
+              {
+                "path": "/v1/onboarding/suggested-follows?languages=en",
+                "status": 200
+              }
+            ],
+            "ready": false,
+            "error": "Error: Suggestion smoke is empty or discloses the private Realm",
+            "elapsedMs": 14667
+          }
+        },
+        "diagnosis": {
+          "ratingCorpusOfficialZones": 0,
+          "limitation": "The failed combined suggestion guard did not retain the response item count or separate its empty-array/private-Realm branches. Neither branch is certified from this failed smoke.",
+          "sourceEvidence": "tests/qa/support/bounded-read-corpus.ts builds official Zones only for capability zones; the retained ratings corpus zones array is empty.",
+          "correction": "Environment smoke must capture item-array/count/private-Realm status before checking it, retain privacy refusal for every corpus, and require nonempty Zone suggestions only for the actual Zone corpus. The ratings positive smoke is its real100-vote public aggregate. No frozen assertion or helper changes."
+        }
       }
     ],
     "ratingsDisposition": {
       "ready": false,
       "assertionReached": false,
-      "reason": "Environment witness stopped after actual100-record page, exhausted continuation and complete projection refresh. Exact changed tables are retained; no public smoke or frozen assertion ran.",
+      "reason": "Identity/authority and immutable-source preservation passed after genuine reconstruction. Environment smoke readiness200 and suggested-follows200 reached; inherited Zone positive-suggestion premise refused before rating read.",
       "ownerFunction": "services/main/src/modules/rating/legacy-reconstruction.ts:reconstructLegacyTargetRatings(input.standing=true)",
       "missingCommandPath": null,
-      "operationRequired": "No owner operation missing. Validate per-principal unchanged identity/authority and exact inventory-only increments with classified signals, then public smoke/backup/fresh restore.",
+      "operationRequired": "No owner operation missing. Execute capability-correct public rating smoke and privacy guard, stopped-owner backup and fresh restore.",
       "sourceInspectionOnly": false,
       "nativeExecutionAttempted": true,
       "originalOutcomeAssertionReached": false,
@@ -3923,11 +4141,11 @@
         "missingCommandPath": "services/main/src/rating-reconstruction.ts"
       },
       "lastAttemptReceipt": {
-        "path": ".temp/read-budget-migration/ratings-attempt3/environment-qualification.json",
-        "sha256": "5c797c7b139eada5e1a4b93c147c9164275f1062fe19ea9b141c5f56f12238ea"
+        "path": ".temp/read-budget-migration/ratings-attempt4/environment-qualification.json",
+        "sha256": "a99667c36e7cdb63c8fc9a1a64153361e53befc915f1449f55afd60a756e02c5"
       },
       "ownerCommandCompleted": true,
-      "publicSmokeReached": false,
+      "publicSmokeReached": true,
       "verifiedInitialValues": {
         "heads": {
           "heads": 100,
@@ -3947,14 +4165,16 @@
           "generation": "d10d93a9a20df58439baa092821f91042a7f067bdd5f89661a0135e81373658d",
           "pending": "0"
         }
-      }
+      },
+      "identityAndAuthorityPreservationVerified": true,
+      "initialRatingPublicReadReached": false
     },
     "nextWitness": {
       "driver": ".temp/read-budget-migration/qualify.ts",
-      "executionStatus": "Rating attempt3 actual changed tables identified and retained. Capture exact principal identities/authority separately from derived library positions before certifying preservation.",
+      "executionStatus": "Rating attempt4 genuine preservation passed. Capability-correct public smoke now authored; prior combined-guard failure remains unchanged.",
       "nextPreparationCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task --taskfile .temp/read-budget-migration/Taskfile.yml qualify -- ratings' -- task --taskfile .temp/read-budget-migration/Taskfile.yml syntax",
       "originalSuitesReservedFor": "G-2826 independent owner",
-      "preflight": ".temp/read-budget-migration/ratings-attempt4-preflight.json"
+      "preflight": ".temp/read-budget-migration/ratings-attempt5-preflight.json"
     },
     "qualifiedManifest": {
       "zones": {
