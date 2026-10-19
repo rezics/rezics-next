@@ -3011,7 +3011,7 @@
   "populationEnvironmentContinuation": {
     "authority": "Latest maintainer continuation: qualify only the two original frozen D5-006 populations on disposable migrated copies of the retained command-created corpora; G-2826 performs independent original-suite execution after qualification.",
     "scope": "Environment preparation and existing matrix metadata only. No baseline product rerun, catalogue build, production/helper/frozen-test edit, peer mutation, new producer, new fault mechanism or finding closure.",
-    "status": "partial: Zone derivative qualified by genuine migration, public smoke, clean stopped-owner backup and fresh restore; rating environment qualification remains next. Independent original suites have not run.",
+    "status": "partial: Zone derivative qualified; rating original copy restored and migrated, then stopped at an inherited empty-queue harness premise. Exact retained-row diagnosis and one narrow temporary witness correction recorded; original assertions remain unexecuted.",
     "originalOutcomeAssertionReached": false,
     "canonicalFindingClosed": false,
     "fixedProductPassCertified": false,
@@ -3426,17 +3426,108 @@
           }
         },
         "contentLedgerLimitation": "Ordinary dev:prepare completed Content migration; this attempt collected only Access migration names. Content source/archive facts were covered by original-column preservation."
+      },
+      {
+        "job": "76035fea-98d1-492b-b7a9-440e1b0d2a37",
+        "capability": "ratings",
+        "command": "task --taskfile .temp/read-budget-migration/Taskfile.yml qualify -- ratings",
+        "precedingSyntaxCheck": "passed in the same recorded sequence",
+        "receipt": {
+          "path": ".temp/read-budget-migration/ratings-attempt1/environment-qualification.json",
+          "sha256": "5f409ca46ae657d7caf357cee853e5dda044e9e696d53fdac90cd00a8d8e3e86"
+        },
+        "classification": "Environment-only harness witness premise refused the retained nonempty queue. No reconstruction, public smoke, derivative backup or original product assertion ran.",
+        "startedAt": "2026-10-19T12:42:05.863Z",
+        "finishedAt": "2026-10-19T12:44:45.071Z",
+        "ready": false,
+        "originalOutcomeAssertionReached": false,
+        "originalRestore": {
+          "restoreMs": 27832,
+          "volumeCopyMs": {
+            "postgres_data": 18974,
+            "fuseki_data": 4107,
+            "rustfs_data": 3419
+          },
+          "objectCopyMs": 48,
+          "startupMs": 20305,
+          "readinessMs": 1743,
+          "totalMs": 49880,
+          "admissionWaitMs": 2313,
+          "collationRepairs": []
+        },
+        "appliedMigrations": [
+          "services/main/migrations/access/2045_standing_rating_components.sql",
+          "services/main/migrations/access/2077_standing_rating_publication.sql",
+          "services/main/migrations/access/2605_discovery_refresh_disposition.sql",
+          "services/main/migrations/access/2606_standing_rating_affected_cuts.sql",
+          "services/main/migrations/access/2607_standing_rating_bounded_progress.sql"
+        ],
+        "appliedContentMigrations": [
+          2603
+        ],
+        "error": "Error: Preservation witness refused: {\"originalSqlTableCount\":714,\"changedDerivedTables\":[\"alias_graph_import\",\"also_enjoyed_source_change\",\"discovery_source_change\",\"recovery_fence\"],\"unexpectedSql\":[],\"recoveryValid\":true,\"aliasValid\":true,\"discoveryValid\":true,\"enjoyedValid\":false,\"graphRemoved\":0,\"graphAdded\":27,\"exactUpgradeReceipts\":[\"urn:rezics:name-migration:statement-upgrade:acquire:0e74f9c675e84db07bdef2e7fc9734007f74a9e72feb78a537a0928d59d1de4c\",\"urn:rezics:name-migration:statement-upgrade:complete:ca186d927d70ef710e9f18a36b93c04dd148bfd8f6a11a0f3a001917e5724e40\",\"urn:rezics:name-migration:statement-upgrade:release:4b602d67f2feca648b231d10d0267bed9ab4cfa82c222d0620a2b6e34b87e13a\"],\"onlyExactUpgradeReceipts\":true,\"immutableGraphFactsUnchanged\":true,\"objectsUnchanged\":true,\"originalCorpusUnchanged\":true,\"originalBackupUnchanged\":true,\"ready\":false}",
+        "cleanupErrors": [],
+        "run": "budget-rating-b60a27d2ff",
+        "preservation": {
+          "originalSqlTableCount": 714,
+          "changedDerivedTables": [
+            "alias_graph_import",
+            "also_enjoyed_source_change",
+            "discovery_source_change",
+            "recovery_fence"
+          ],
+          "unexpectedSql": [],
+          "recoveryValid": true,
+          "aliasValid": true,
+          "discoveryValid": true,
+          "enjoyedValid": false,
+          "exactUpgradeReceipts": [
+            "urn:rezics:name-migration:statement-upgrade:acquire:0e74f9c675e84db07bdef2e7fc9734007f74a9e72feb78a537a0928d59d1de4c",
+            "urn:rezics:name-migration:statement-upgrade:complete:ca186d927d70ef710e9f18a36b93c04dd148bfd8f6a11a0f3a001917e5724e40",
+            "urn:rezics:name-migration:statement-upgrade:release:4b602d67f2feca648b231d10d0267bed9ab4cfa82c222d0620a2b6e34b87e13a"
+          ],
+          "onlyExactUpgradeReceipts": true,
+          "immutableGraphFactsUnchanged": true,
+          "objectsUnchanged": true,
+          "originalCorpusUnchanged": true,
+          "originalBackupUnchanged": true,
+          "ready": false
+        },
+        "graphDelta": {
+          "removed": 0,
+          "added": 27
+        },
+        "diagnosis": {
+          "originalQueueRows": 24,
+          "migratedQueueRows": 26,
+          "allOriginalColumnsAndRowsRetained": true,
+          "addedRows": [
+            {
+              "id": "530",
+              "privacy": true
+            },
+            {
+              "id": "531",
+              "privacy": true
+            }
+          ],
+          "source": "services/main/migrations/access/1200_also_enjoyed_refresh.sql: record_also_enjoyed_source_change; recovery acquisition/release append two privacy invalidations.",
+          "correction": "Keep every existing queue row exact and require exactly two added privacy=true rows, instead of assuming the empty Zone queue. Every other immutable-source and exact migration-receipt check remains."
+        },
+        "publicSmokeReached": false,
+        "derivativeCreated": false,
+        "standingReconstructionReached": false
       }
     ],
     "ratingsDisposition": {
       "ready": false,
       "assertionReached": false,
-      "reason": "Existing candidate Task CLI supports bounded standing listing/reconstruction and projection refresh. Qualification still requires genuine restored-copy execution; no rating copy has been restored in this continuation.",
+      "reason": "Genuine compatible restore/history adoption/owner migration completed. Environment witness assumed an empty derived queue; all24 original rows were exact and migration added two privacy invalidations. Correct only this author premise before the next isolated attempt.",
       "ownerFunction": "services/main/src/modules/rating/legacy-reconstruction.ts:reconstructLegacyTargetRatings(input.standing=true)",
       "missingCommandPath": null,
       "operationRequired": "Execute the existing --standing reconstruction and --refresh-standing-projections on the disposable migrated retained copy, using the genuine corpus context and target.",
-      "sourceInspectionOnly": true,
-      "nativeExecutionAttempted": false,
+      "sourceInspectionOnly": false,
+      "nativeExecutionAttempted": true,
       "originalOutcomeAssertionReached": false,
       "producerOrRawSeedingRequired": false,
       "smallestMissingOperation": null,
@@ -3446,13 +3537,18 @@
         "smallestMissingOperation": "Existing services/main/src/rating-reconstruction.ts Task CLI needs the already-owned standing reconstruction selection/listing/checkpoint mode, through the existing bounded owner. No shared API, new producer or direct value writes selected here.",
         "operationRequired": "supported standing selection, listing and checkpoint kind for the existing reconstruction owner; no raw value writes",
         "missingCommandPath": "services/main/src/rating-reconstruction.ts"
+      },
+      "lastAttemptReceipt": {
+        "path": ".temp/read-budget-migration/ratings-attempt1/environment-qualification.json",
+        "sha256": "5f409ca46ae657d7caf357cee853e5dda044e9e696d53fdac90cd00a8d8e3e86"
       }
     },
     "nextWitness": {
       "driver": ".temp/read-budget-migration/qualify.ts",
-      "executionStatus": "Zone attempt3 passed; retain it without rerun. Adapt temporary preparation for the existing supported rating standing reconstruction and projection refresh.",
-      "nextPreparationCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --taskfile .temp/read-budget-migration/Taskfile.yml qualify -- ratings",
-      "originalSuitesReservedFor": "G-2826 independent owner"
+      "executionStatus": "Rating attempt1 reached owner migration; correct exact retained queue witness, then use existing standing reconstruction on a new disposable copy.",
+      "nextPreparationCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task --taskfile .temp/read-budget-migration/Taskfile.yml qualify -- ratings' -- task --taskfile .temp/read-budget-migration/Taskfile.yml syntax",
+      "originalSuitesReservedFor": "G-2826 independent owner",
+      "preflight": ".temp/read-budget-migration/ratings-attempt2-preflight.json"
     },
     "qualifiedManifest": {
       "zones": {
