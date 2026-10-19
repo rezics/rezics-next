@@ -219,7 +219,7 @@ interface QueueState {
   checkpoint: string | null;
 }
 
-test('refresh owners quarantine malformed source once, bound fleet probes, recover transient work and rearm repaired input', async () => {
+test('D5004C01: refresh owners quarantine malformed source once, bound fleet probes, recover transient work and rearm repaired input', async () => {
   const artifacts = Bun.env.REZICS_QA_ARTIFACT_DIR;
   if (!artifacts) throw new Error('QA artifact directory is unavailable');
   const basis: OwnedDiscoveryBasis = { scope: 'global', realm: null, context: null, owner: null };
