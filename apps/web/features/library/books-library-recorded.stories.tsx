@@ -12,6 +12,7 @@ import { messages as shell } from '../shell/messages.ts';
 import { BooksLibraryRecorded, RecordedLibraryImport } from './books-library-recorded-page.tsx';
 import { memoryImportShelf } from './import-store.ts';
 import { messages } from './messages.ts';
+import { expectReadingFocusClearsShell } from './reading-focus.test-utils.ts';
 
 const collection = collectionRecord as AnswerRecord;
 const imported = importRecord as AnswerRecord;
@@ -163,6 +164,11 @@ export const OwnerReadingFirst: Story = {
   },
 };
 export const OwnerReadingFirstPhone: Story = { ...OwnerReadingFirst, ...phone };
+
+export const OwnerShortWindowFocus: Story = {
+  ...OwnerReadingFirst,
+  async play({ canvasElement }) { await expectReadingFocusClearsShell(canvasElement); },
+};
 
 /** The shelf read is held unanswered, so the page stays at its loading status. */
 export const OwnerLoading: Story = {

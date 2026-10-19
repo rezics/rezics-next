@@ -5,6 +5,7 @@ import { messages as shell } from '../shell/messages.ts';
 import { libraryState, memoryLibraryApi, readingRows, storyNow, storyOverview, storyReaderActions, storyView } from './fixtures.ts';
 import { LibraryPage } from './library-page.tsx';
 import { messages } from './messages.ts';
+import { expectReadingFocusClearsShell } from './reading-focus.test-utils.ts';
 
 const state = libraryState();
 const rows = readingRows.slice(0, 2);
@@ -60,6 +61,10 @@ async function expectReadingInFirstScreen(canvasElement: HTMLElement) {
 
 export const InProgress: Story = { async play({ canvasElement }) { await expectReadingInFirstScreen(canvasElement); } };
 export const InProgressPhone: Story = { ...InProgress, globals: { viewport: { value: 'phone' } } };
+
+export const ShortWindowFocus: Story = {
+  async play({ canvasElement }) { await expectReadingFocusClearsShell(canvasElement); },
+};
 
 export const ToolsByKeyboard: Story = {
   async play({ canvasElement }) {
