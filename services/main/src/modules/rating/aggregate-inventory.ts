@@ -299,7 +299,7 @@ function inventorySql(release: boolean | 'target', reconstruction = false): stri
   LEFT JOIN LATERAL (${release === false ? `SELECT * FROM (
     (SELECT h.*,NULL::text AS effective_work,NULL::text AS effective_main_version FROM access.rating_aggregate_head h
       WHERE context=c.context AND main_version=$2 AND target_release IS NULL ORDER BY slot LIMIT 101)
-    UNION ALL SELECT h.*,s.work AS effective_work,s.main_version AS effective_main_version
+    UNION ALL (SELECT h.*,s.work AS effective_work,s.main_version AS effective_main_version
       FROM (SELECT * FROM access.rating_merge_selection
         WHERE context=c.context AND main_version=$2 ORDER BY principal_id LIMIT 101) s
       LEFT JOIN LATERAL (SELECT 1 AS present FROM access.rating_aggregate_head native
@@ -309,7 +309,7 @@ function inventorySql(release: boolean | 'target', reconstruction = false): stri
         WHERE origin.context=s.context AND origin.main_version=s.origin_main_version
           AND origin.slot=s.origin_slot AND origin.principal_id=s.principal_id
           AND origin.target_release IS NULL LIMIT 1) h ON native.present IS NULL
-      WHERE native.present IS NULL
+      WHERE native.present IS NULL ORDER BY h.slot)
     ) selected ORDER BY slot LIMIT 101`
       : `SELECT * FROM access.${release === 'target' ? 'target_rating_head' : 'rating_aggregate_head'}
     WHERE context=c.context AND ${release === 'target' ? 'target=$2' : 'target_release=$2'} ${reconstruction ? 'AND NOT value_known AND slot > $3' : ''} ORDER BY slot LIMIT ${reconstruction ? '$4' : '101'}`

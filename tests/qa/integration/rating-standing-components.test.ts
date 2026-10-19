@@ -140,10 +140,11 @@ test('standing components retain exact effective slots through 100/101/large, me
       const readiness = await measure('SELECT * FROM access.rating_standing_publication($1,$2)',[context,originMain]);
       const read = await measure(STANDING_RATING_INVENTORY_SQL,[context,originMain]);
       const fence = await measure(STANDING_RATING_FENCE_SQL,[JSON.stringify(cuts)]);
+      workMeasurements.push({ population, readiness, read, fence });
+      await Bun.write(`${import.meta.dir}/../../../.temp/goal/standing-native-work.json`,JSON.stringify(workMeasurements));
       expect(readiness.examined).toBeLessThan(64);
       expect(read.examined).toBeLessThan(2000);
       expect(fence.examined).toBeLessThan(128);
-      workMeasurements.push({ population, readiness, read, fence });
       await pool.query('DELETE FROM access.rating_merge_selection WHERE context=$1 AND main_version=ANY($2::text[])',[context,currentTargets.map(target => target.main)]);
       while (!(await refreshStandingRatingProjections(pool,{ context,limit:100 })).complete) { /* one bounded origin page */ }
     }

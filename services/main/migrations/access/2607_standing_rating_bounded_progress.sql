@@ -207,6 +207,14 @@ BEGIN
           refreshed:=refreshed+1;
           UPDATE access.rating_standing_walk SET phase='cleanup',after_key=r.main_version,after_person=r.principal_id
             WHERE (task_key,context,lineage)=(t,node.context,node.lineage);
+          -- One indexed lookahead retires a just-exhausted node in this same
+          -- mutation unit. An empty node still costs its own bounded unit.
+          IF NOT EXISTS(SELECT 1 FROM access.rating_merge_selection
+            WHERE context=node.context AND standing_lineage=node.lineage
+              AND (main_version,principal_id)>(r.main_version,r.principal_id)
+            ORDER BY main_version,principal_id LIMIT 1) THEN
+            DELETE FROM access.rating_standing_walk WHERE (task_key,context,lineage)=(t,node.context,node.lineage);
+          END IF;
         ELSE DELETE FROM access.rating_standing_walk WHERE (task_key,context,lineage)=(t,node.context,node.lineage); END IF;
       END IF;
     ELSE
