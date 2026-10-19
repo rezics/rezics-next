@@ -12,6 +12,7 @@ import { checkedComponentState } from '../../services/main/src/modules/semantic/
 import { importedRightsAssessments } from '../../services/main/src/modules/rights/import-policy.ts';
 import { acquireDatasetImportLock } from './lock.ts';
 import { verifyCoverSourceCapture } from './snapshot.ts';
+import { selectDatasetRoots, type DatasetSelectionManifest, type DatasetSelectionOptions } from './selection.ts';
 import type { DatasetEdge, DatasetRecord, DatasetSnapshot } from './types.ts';
 import { BANGUMI_USER_POST_FIELDS } from './bangumi.ts';
 
@@ -202,6 +203,9 @@ export interface DatasetImportOptions extends Partial<DatasetSession> {
   nativeBatchItems?: number;
   locale?: string;
   progress?: (message: string) => void;
+  /** Offline root closure, admitted in full before any public API command. */
+  selection?: DatasetSelectionOptions;
+  /** Legacy prefix limit when no root selection is requested. */
   maxRecords?: number;
   /** Project elected Work-to-Work graph evidence; every relationship is retained separately. */
   relationships?: boolean;
@@ -214,11 +218,20 @@ export interface DatasetImportResult {
   nativeRecords: number;
   urlsFile: string;
   receiptFile: string;
+  selectionFile?: string;
+  selection?: DatasetSelectionManifest;
   limitations: string[];
   completed: boolean;
   nativeRelationships: number;
   /** Bounded outcomes for each elected cover; record is a stable hash, not a source URL. */
   coverResults: DatasetCoverImportResult[];
+}
+
+export class DatasetSelectionRefusedError extends Error {
+  constructor(readonly manifest: DatasetSelectionManifest, readonly selectionFile: string) {
+    super('Dataset root selection refused before public API commands');
+    this.name = 'DatasetSelectionRefusedError';
+  }
 }
 
 export type DatasetCoverImportStep =
@@ -528,16 +541,30 @@ export async function importDataset(
   snapshot: DatasetSnapshot,
   options: DatasetImportOptions = {},
 ): Promise<DatasetImportResult> {
+  const parentRecords = snapshot.sources.flatMap((source) => source.records);
+  assertNoImportedUserPosts(parentRecords);
+  // A selection is a view, not a replacement snapshot. Refuse before session
+  // lookup or even the catalogue read used to discover the product epoch.
+  const selectionResult = options.selection ? selectDatasetRoots(snapshot, options.selection) : undefined;
+  const selection = selectionResult?.manifest;
+  const selectionFile = selection
+    ? join(root, 'imports', 'selections', `${sha256(canonical(selection))}.json`) : undefined;
+  if (selectionFile) atomicJson(selectionFile, selection);
+  if (selectionResult?.status === 'refused')
+    throw new DatasetSelectionRefusedError(selectionResult.manifest, selectionFile!);
+  const view = selectionResult?.selection;
+  const sources = view?.sources ?? snapshot.sources;
+  const records = sources.flatMap((source) => source.records);
   const session =
     options.api && options.mainOrigin && options.webOrigin && options.actingSubject
       ? (options as DatasetSession)
       : await localDatasetSession();
   const { api, mainOrigin, actingSubject } = session;
   const locale = options.locale ?? 'zh-Hant';
-  const records = snapshot.sources.flatMap((source) => source.records);
-  assertNoImportedUserPosts(records);
-  const allEdges = snapshot.sources.flatMap((source) => source.edges);
-  const byKey = new Map(records.map((record) => [record.key, record]));
+  const allEdges = sources.flatMap((source) => source.edges);
+  // Parent identities and envelopes keep their existing journal intent even
+  // when a later call selects another view of the same frozen snapshot.
+  const byKey = new Map(parentRecords.map((record) => [record.key, record]));
   const imagesByRecord = new Map<string, DatasetSnapshot['images']>();
   for (const image of snapshot.images) {
     const listed = imagesByRecord.get(image.record) ?? [];
@@ -546,10 +573,11 @@ export async function importDataset(
   }
   const outgoing = new Map<string, DatasetEdge[]>(),
     neighbors = new Map<string, string[]>();
+  for (const edge of snapshot.sources.flatMap((source) => source.edges))
+    outgoing.set(edge.from, [...(outgoing.get(edge.from) ?? []), edge]);
   for (const edge of allEdges) {
     if (!byKey.has(edge.from) || !byKey.has(edge.to))
       throw new Error(`Dataset has a missing relationship endpoint: ${edge.from} -> ${edge.to}`);
-    outgoing.set(edge.from, [...(outgoing.get(edge.from) ?? []), edge]);
     neighbors.set(edge.from, [...(neighbors.get(edge.from) ?? []), edge.to]);
     neighbors.set(edge.to, [...(neighbors.get(edge.to) ?? []), edge.from]);
   }
@@ -879,7 +907,7 @@ export async function importDataset(
       }
     };
     const selected =
-      options.maxRecords === undefined ? records : records.slice(0, options.maxRecords);
+      selection || options.maxRecords === undefined ? records : records.slice(0, options.maxRecords);
     const urlsFile = join(root, 'urls.md');
     const coverResults = new Map<string, DatasetCoverImportResult>();
     try {
@@ -1230,7 +1258,7 @@ export async function importDataset(
         );
       }
       const selectedKeys = new Set(selected.map(record => record.key));
-      for (const image of snapshot.images) {
+      for (const image of view?.images ?? snapshot.images) {
         if (image.captureRole !== 'cover') continue;
         const record = byKey.get(image.record);
         if (!record || !selectedKeys.has(image.record)) continue;
@@ -1509,6 +1537,7 @@ export async function importDataset(
       ).length,
       urlsFile,
       receiptFile,
+      ...(selectionFile ? { selectionFile, selection } : {}),
       limitations: journal.limitations,
       completed: journal.completed,
       coverResults: [...coverResults.values()],

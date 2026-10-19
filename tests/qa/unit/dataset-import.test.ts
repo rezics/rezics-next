@@ -9,12 +9,14 @@ import {
   projectionLanguage,
   nativeBatchSize,
   assertNoImportedUserPosts,
+  DatasetSelectionRefusedError,
 } from '../../../scripts/datasets/import.ts';
 import { localDatasetSession, type DatasetApi } from '../../../scripts/datasets/auth.ts';
 import { putBlob, repository, sha256 } from '../../../scripts/datasets/store.ts';
 import { datasetStackMarker } from '../../../scripts/datasets/bootstrap.ts';
 import { acquireDatasetImportLock, datasetImportLockPath } from '../../../scripts/datasets/lock.ts';
-import type { DatasetCoverEvidence, DatasetRecord, DatasetSnapshot, StoredImage } from '../../../scripts/datasets/types.ts';
+import type { DatasetCoverEvidence, DatasetEdge, DatasetRecord, DatasetSnapshot, StoredImage } from '../../../scripts/datasets/types.ts';
+import type { DatasetSelectionOptions } from '../../../scripts/datasets/selection.ts';
 
 const roots: string[] = [];
 const root = () => {
@@ -279,6 +281,174 @@ const options = (api: DatasetApi) => ({
   actingSubject: iri(9000),
   mainOrigin: 'http://127.0.0.1:3001',
   webOrigin: 'http://127.0.0.1:3000',
+});
+
+describe('root selection through the public-API importer', () => {
+  const selection = (key: string): DatasetSelectionOptions => ({
+    roots: [key],
+    budget: { maxInputItems: 100, maxRecords: 20, maxEdges: 20, maxImages: 20,
+      maxJsonBytes: 100_000, maxMediaBytes: 100_000 },
+  });
+  function parent() {
+    const records = [record('vndb:vn:v99', 'work'), record('vndb:staff:s99', 'person'),
+      record('vndb:vn:v11', 'work'), record('vndb:character:c1', 'character'),
+      record('vndb:trait:i1', 'concept'), record('vndb:vn:v12', 'work'),
+      record('vndb:staff:s12', 'person')];
+    for (const item of records) {
+      const [, kind, externalId] = item.key.split(':');
+      item.kind = kind!;
+      item.externalId = externalId!;
+    }
+    const value = snapshot(records), source = value.sources[0]!;
+    source.roots = [records[0]!.key, records[2]!.key];
+    source.edges = [
+      { from: records[0]!.key, to: records[1]!.key, kind: 'staff:scenario', data: { order: 0 } },
+      { from: records[3]!.key, to: records[2]!.key, kind: 'appearance', data: { order: 7, spoiler: 2 } },
+      { from: records[3]!.key, to: records[2]!.key, kind: 'appearance', data: { order: 7, spoiler: 2 } },
+      { from: records[3]!.key, to: records[4]!.key, kind: 'trait', data: { spoiler: 1 } },
+      { from: records[2]!.key, to: records[5]!.key, kind: 'vn:prequel', data: { official: true } },
+      { from: records[5]!.key, to: records[6]!.key, kind: 'staff:scenario', data: { order: 9 } },
+      { from: records[3]!.key, to: records[0]!.key, kind: 'appearance', data: { otherWork: true } },
+    ];
+    const image = (record: string, role: string, url: string): StoredImage => ({
+      record, role, url, captureRole: 'other', capture: null, missing: true,
+    });
+    value.images = [image(records[0]!.key, 'cover', 'https://images.example.test/other.png'),
+      image(records[2]!.key, 'gallery', 'https://images.example.test/gallery.png'),
+      image(records[2]!.key, 'cover', 'https://images.example.test/cover.png'),
+      image(records[2]!.key, 'cover', 'https://images.example.test/cover.png')];
+    source.images = [...value.images, { record: records[2]!.key, role: 'candidate',
+      url: 'https://images.example.test/never-acquired.png' }];
+    return value;
+  }
+  function recordIntakes(fixture: ReturnType<typeof apiFixture>) {
+    return fixture.requests.filter(call => call.path === '/v1/sources/intakes').map(call => {
+      const body = call.body as { rawBytesBase64: string; sourceRevision: string };
+      const envelope = JSON.parse(Buffer.from(body.rawBytesBase64, 'base64').toString()) as {
+        format: string; snapshot: string; digest: string; record: DatasetRecord;
+        edges: DatasetEdge[]; images: StoredImage[];
+      };
+      return { ...call, body, envelope };
+    }).filter(call => call.envelope.format === 'rezics-dataset-record-v1');
+  }
+
+  for (const reason of ['budget-exceeded', 'missing-root'] as const) {
+    test(`${reason} refuses the entire selection before catalogue reads or writes`, async () => {
+      const directory = root(), fixture = apiFixture(), source = parent();
+      const requested = selection(source.sources[0]!.records[2]!.key);
+      if (reason === 'budget-exceeded') requested.budget.maxRecords = 1;
+      else requested.roots = ['vndb:vn:missing'];
+      let failure: unknown;
+      try {
+        await importDataset(directory, source, { ...options(fixture.api), selection: requested });
+      } catch (error) { failure = error; }
+      expect(failure).toBeInstanceOf(DatasetSelectionRefusedError);
+      if (!(failure instanceof DatasetSelectionRefusedError)) throw failure;
+      expect(failure.manifest.limitations.some(limit => limit.code === reason)).toBe(true);
+      expect(failure.manifest.parent).toEqual({ id: source.id, digest: source.digest });
+      expect(JSON.parse(readFileSync(failure.selectionFile, 'utf8'))).toEqual(failure.manifest);
+      expect(fixture.requests).toEqual([]);
+      expect(fixture.transfers).toEqual([]);
+      expect(existsSync(join(directory, 'import-latest.json'))).toBe(false);
+      expect(readdirSync(join(directory, 'imports'))).toEqual(['selections']);
+    });
+  }
+
+  test('retains the full accepted closure without recapping, including original occurrence coordinates', async () => {
+    const directory = root(), fixture = apiFixture(), source = parent();
+    const bytes = JSON.stringify(source), frozenFile = join(directory, 'frozen-parent.json');
+    writeFileSync(frozenFile, bytes);
+    const freeze = (value: unknown): void => {
+      if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+        for (const child of Object.values(value)) freeze(child);
+        Object.freeze(value);
+      }
+    };
+    freeze(source);
+    const result = await importDataset(directory, source, { ...options(fixture.api), native: false,
+      maxRecords: 1, selection: selection(source.sources[0]!.records[2]!.key) });
+    const sourceRecords = source.sources[0]!.records;
+    expect(result.records).toBe(4);
+    expect(result.completed).toBe(true);
+    const intakes = recordIntakes(fixture);
+    expect(intakes.map(call => call.envelope.record.key)).toEqual(sourceRecords.slice(2, 6).map(record => record.key));
+    for (const { envelope, body } of intakes) {
+      expect(envelope).toEqual({ format: 'rezics-dataset-record-v1', snapshot: source.id,
+        digest: source.digest, record: sourceRecords.find(record => record.key === envelope.record.key),
+        edges: source.sources[0]!.edges.filter(edge => edge.from === envelope.record.key),
+        images: source.images.filter(image => image.record === envelope.record.key) });
+      expect(body.sourceRevision).toBe(source.digest);
+    }
+    expect(result.selection?.sources[0]).toMatchObject({ source: 0, scope: source.sources[0]!.scope,
+      records: [2, 3, 4, 5], edges: [1, 2, 3, 4], images: [1, 2, 3, 4] });
+    expect(result.selection?.storedImages).toEqual([1, 2, 3]);
+    expect(result.selection?.parent).toEqual({ id: source.id, digest: source.digest });
+    expect(result.selection?.coverage).toEqual({ knowledge: 'complete', media: 'incomplete' });
+    expect(JSON.parse(readFileSync(result.selectionFile!, 'utf8'))).toEqual(result.selection);
+    expect(JSON.parse(readFileSync(join(directory, 'import-latest.json'), 'utf8')).selectionFile).toBe(result.selectionFile);
+    expect(JSON.stringify(source)).toBe(bytes);
+    expect(readFileSync(frozenFile, 'utf8')).toBe(bytes);
+    expect(fixture.transfers).toEqual([]);
+    expect(result.coverResults).toEqual([]);
+  });
+
+  test('preserves prior native bindings and receipts across selection, replay and related Work expansion', async () => {
+    const directory = root(), fixture = apiFixture(), source = parent();
+    const prior = await importDataset(directory, source, { ...options(fixture.api), maxRecords: 1 });
+    const original = JSON.parse(readFileSync(prior.receiptFile, 'utf8'));
+    const requested = selection(source.sources[0]!.records[2]!.key);
+    const accepted = await importDataset(directory, source, { ...options(fixture.api),
+      selection: requested, maxRecords: 1 });
+    const journal = JSON.parse(readFileSync(accepted.receiptFile, 'utf8'));
+    expect(accepted.receiptFile).toBe(prior.receiptFile);
+    expect(accepted.records).toBe(4);
+    expect(accepted.nativeRecords).toBe(5);
+    for (const [key, native] of Object.entries(original.native)) expect(journal.native[key]).toEqual(native);
+    for (const [key, entry] of Object.entries(original.entries)) expect(journal.entries[key]).toEqual(entry);
+    const character = source.sources[0]!.records[3]!;
+    const characterState = fixture.requests.filter(call => call.path === '/v1/semantic/changes/bulk')
+      .flatMap(call => (call.body as { items: { properties: { predicate: string; value: unknown }[] }[] }).items)
+      .find(item => item.properties.some(property => property.predicate === 'https://schema.org/name'
+        && (property.value as { lexical?: string }).lexical === character.title.replace('\n', ' ')))!;
+    expect(characterState.properties.filter(property => property.predicate === 'https://rezics.com/vocab/semanticWork'))
+      .toEqual([{ predicate: 'https://rezics.com/vocab/semanticWork',
+        value: { kind: 'resource', ref: journal.native[requested.roots[0]!].id } }]);
+    const writes = fixture.requests.filter(call => call.key).length;
+    const replay = await importDataset(directory, source, { ...options(fixture.api),
+      selection: requested, maxRecords: 0 });
+    expect(fixture.requests.filter(call => call.key)).toHaveLength(writes);
+    expect(JSON.parse(readFileSync(replay.receiptFile, 'utf8')).native).toEqual(journal.native);
+    expect(replay.selectionFile).toBe(accepted.selectionFile);
+    const expanded = await importDataset(directory, source, { ...options(fixture.api),
+      selection: { ...requested, relatedWorkDepth: 1 }, maxRecords: 1 });
+    expect(expanded.records).toBe(5);
+    expect(expanded.nativeRecords).toBe(6);
+    const expandedJournal = JSON.parse(readFileSync(expanded.receiptFile, 'utf8'));
+    for (const [key, native] of Object.entries(journal.native)) expect(expandedJournal.native[key]).toEqual(native);
+    for (const [key, entry] of Object.entries(journal.entries)) expect(expandedJournal.entries[key]).toEqual(entry);
+    expect(expanded.selectionFile).not.toBe(accepted.selectionFile);
+    expect(JSON.parse(readFileSync(accepted.selectionFile!, 'utf8'))).toEqual(accepted.selection);
+  });
+
+  test('keeps the legacy prefix, exact intake intent and replay when selection is omitted', async () => {
+    const directory = root(), fixture = apiFixture(), source = parent();
+    const result = await importDataset(directory, source, { ...options(fixture.api), native: false, maxRecords: 1 });
+    expect(result.records).toBe(1);
+    expect(result.completed).toBe(false);
+    expect(result).not.toHaveProperty('selection');
+    expect(result).not.toHaveProperty('selectionFile');
+    expect(existsSync(join(directory, 'imports', 'selections'))).toBe(false);
+    const retained = recordIntakes(fixture);
+    expect(retained).toHaveLength(1);
+    expect(retained[0]!.envelope).toEqual({ format: 'rezics-dataset-record-v1',
+      snapshot: source.id, digest: source.digest, record: source.sources[0]!.records[0],
+      edges: [source.sources[0]!.edges[0]], images: [source.images[0]] });
+    const saved = readFileSync(result.receiptFile, 'utf8'), writes = fixture.requests.filter(call => call.key).length;
+    const replay = await importDataset(directory, source, { ...options(fixture.api), native: false, maxRecords: 1 });
+    expect(replay.receiptFile).toBe(result.receiptFile);
+    expect(readFileSync(result.receiptFile, 'utf8')).toBe(saved);
+    expect(fixture.requests.filter(call => call.key)).toHaveLength(writes);
+  });
 });
 
 describe('independent public-API dataset import', () => {
