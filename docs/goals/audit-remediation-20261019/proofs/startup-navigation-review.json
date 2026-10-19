@@ -1,0 +1,1683 @@
+{
+  "schema_version": 1,
+  "review_id": "G-2847",
+  "goal": "audit-remediation-20261019",
+  "manager_session": "goal-audit-remediation-20261019",
+  "reviewer": {
+    "engine": "codex-1",
+    "model": "gpt-6.1-sol",
+    "effort": "xhigh",
+    "independent_source_review": true,
+    "nested_agents": false,
+    "fallback_reviewer": false
+  },
+  "reviewed_at_utc": "2026-10-19T07:19:00.043948+00:00",
+  "result": "partial",
+  "verdict": {
+    "source_review": "complete for the actual selective candidate; no new confirmed startup/navigation source defect found",
+    "executed_history_review": "incomplete: six settled navigation observations have true outcome predicates; the recorded test failed in Lists reload setup, so no passing complete history run exists",
+    "dependency_review": "G-2804 valid common Web review reused; all five G-2784 findings remain open",
+    "acceptance_granted": false,
+    "landing_constraint": "Do not use stories, bounded anonymous readiness, six observations or this source verdict to close the original site findings. Resolve or explicitly disposition the five owner dependencies and obtain the remaining genuine acceptance on the actual final pin."
+  },
+  "revisions": {
+    "candidate_base": "8c0e0853e2284b035c2bb00611486919f508415b",
+    "candidate_head": "a27bcfc6bad849dd912cbd3f721de5defeba1c86",
+    "integration_parent": "f5f76ca780c5ff06652a3da81539f6db47547a6b",
+    "candidate_branch": "candidate/site-ready-20261019",
+    "candidate_reference_tree": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-ready-candidate",
+    "review_snapshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/source",
+    "snapshot_detached": true,
+    "snapshot_clean_before_and_after": true,
+    "report_branch": "goal/g-2847",
+    "report_base": "564a368cd4e8fbfb8dde69c06b4ea4d1cb68cafe",
+    "report_base_has_candidate_base_as_ancestor": true,
+    "historical_runtime_pin": "196a6f4a98413857dbf3e178d05ef65415035f29",
+    "historical_report_commit": "b79c8be7c46b39e3345ef781cd5cd376a7ac1b5b",
+    "historical_initial_report_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199"
+  },
+  "scope_and_provenance": {
+    "original_acceptance_read": [
+      "docs/goals/audit-remediation-20261019/tasks/G-2747.md",
+      "original-shell-acceptance.json",
+      "original-G-2825-report.json"
+    ],
+    "current_dependency_owner_read": "docs/goals/audit-remediation-20261019/tasks/G-2784.md",
+    "original_provenance_receipt": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/candidate-integration-provenance.json",
+    "owner_exact_candidate_receipt": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/candidate-owner-handoff.json",
+    "selected_commit_provenance": [
+      {
+        "source": "ab100b34706bbecd361239d3cfb6529e31b3f32f",
+        "candidate": "4be822a3749a003c3d3e45b715bec86fabc29edf",
+        "reason": "original G-2747 server/client and navigation repair"
+      },
+      {
+        "source": "4fa4cbd1692bd7a701e6bdf993d56fdb43175635",
+        "candidate": "d301d2a6bbc30e24626ab911346f55061b8415a0",
+        "reason": "React environment dependency optimization"
+      },
+      {
+        "source": "e2c6eba364774fbec97224920757ec5ae4f8b87c",
+        "candidate": "d2b44be5adae10d94e3697c74d78c9c8ad66cbc6",
+        "reason": "common Web request boundary prerequisite for G-2784"
+      },
+      {
+        "source": "7b2c1e5d201ebc58a41f53b28244c9896d920a97",
+        "candidate": "41dd8afa4eac0f99c09417e085674ab3a0337062",
+        "reason": "G-2784 coherent Collection/address owner prerequisite for startup repair"
+      },
+      {
+        "source": "d2fddf941af31d3bd84df1a8a8b1660828b17b24",
+        "candidate": "a1d3459b9179ad0bb47bae27934c4dd61e1eea7d",
+        "reason": "React-free pre-shell recovery"
+      },
+      {
+        "source": "24722ffed02620c4fb1cc292843c36c3dbc6fc31",
+        "candidate": "3636066589d50cc49f5d0bb78ce97cae06e93ad1",
+        "reason": "address recovery fixture correction"
+      },
+      {
+        "source": "6ccb40e6750a09264f655468da0336a17a3a5c18",
+        "candidate": "f5f76ca780c5ff06652a3da81539f6db47547a6b",
+        "reason": "preserved startup evidence documentation"
+      }
+    ],
+    "final_focus_integration": "a27bcfc6bad849dd912cbd3f721de5defeba1c86",
+    "all_changed_paths": [
+      "apps/web/app/[locale]/e/[ref]/page.tsx",
+      "apps/web/app/[locale]/proposals/page.tsx",
+      "apps/web/app/api/main/[...path]/route.ts",
+      "apps/web/features/address/client.ts",
+      "apps/web/features/address/edge.ts",
+      "apps/web/features/api/bff.ts",
+      "apps/web/features/api/server-fetch.ts",
+      "apps/web/features/api/server-read.ts",
+      "apps/web/features/auth/account.ts",
+      "apps/web/features/catalogue/types-read.ts",
+      "apps/web/features/discover/discover-view.tsx",
+      "apps/web/features/entity-page/read.ts",
+      "apps/web/features/library/library-page.tsx",
+      "apps/web/features/library/loans/bring-into-row.tsx",
+      "apps/web/features/proposals/list-state.test.ts",
+      "apps/web/features/proposals/list-state.ts",
+      "apps/web/features/proposals/proposal-list.tsx",
+      "apps/web/features/shell/app-shell.stories.tsx",
+      "apps/web/features/shell/bottom-nav.stories.tsx",
+      "apps/web/features/shell/bottom-nav.test.tsx",
+      "apps/web/features/shell/bottom-nav.tsx",
+      "apps/web/features/shell/boundary-navigation-verification.md",
+      "apps/web/features/shell/current-page-visibility.stories.tsx",
+      "apps/web/features/shell/current-page-visibility.test.ts",
+      "apps/web/features/shell/current-page-visibility.ts",
+      "apps/web/features/shell/localized-link.tsx",
+      "apps/web/features/shell/navigation-focus.stories.tsx",
+      "apps/web/features/shell/navigation-focus.test-utils.ts",
+      "apps/web/features/shell/navigation.ts",
+      "apps/web/features/shell/providers.test.tsx",
+      "apps/web/features/studio/studio-home.tsx",
+      "apps/web/features/studio/studio-work.tsx",
+      "apps/web/features/work-levels/connections.stories.tsx",
+      "apps/web/features/work-levels/connections.tsx",
+      "apps/web/features/work-levels/read.test.ts",
+      "apps/web/features/work-levels/read.ts",
+      "apps/web/features/work-page/anime-relations-recorded-page.ts",
+      "apps/web/proxy.ts",
+      "apps/web/tests/dependency-environments.test.ts",
+      "apps/web/tests/g-1028-server-reads.test.ts",
+      "apps/web/tests/g-943-address.test.ts",
+      "apps/web/tests/g-998-address.test.ts",
+      "apps/web/tests/server-client-boundary.test.ts",
+      "apps/web/vite.config.ts",
+      "apps/web/worker/index.ts",
+      "scripts/qa/repository-guards.ts",
+      "scripts/static/web-continuations.inventory.json",
+      "scripts/static/web-page-filtering.inventory.json",
+      "services/main/src/routes/resources.ts",
+      "services/main/tests/resource-summary-session-fences.test.ts"
+    ],
+    "independent_startup_navigation_changed_paths": [
+      "apps/web/app/[locale]/proposals/page.tsx",
+      "apps/web/features/discover/discover-view.tsx",
+      "apps/web/features/library/library-page.tsx",
+      "apps/web/features/library/loans/bring-into-row.tsx",
+      "apps/web/features/proposals/list-state.test.ts",
+      "apps/web/features/proposals/list-state.ts",
+      "apps/web/features/proposals/proposal-list.tsx",
+      "apps/web/features/shell/app-shell.stories.tsx",
+      "apps/web/features/shell/bottom-nav.stories.tsx",
+      "apps/web/features/shell/bottom-nav.test.tsx",
+      "apps/web/features/shell/bottom-nav.tsx",
+      "apps/web/features/shell/boundary-navigation-verification.md",
+      "apps/web/features/shell/current-page-visibility.stories.tsx",
+      "apps/web/features/shell/current-page-visibility.test.ts",
+      "apps/web/features/shell/current-page-visibility.ts",
+      "apps/web/features/shell/localized-link.tsx",
+      "apps/web/features/shell/navigation-focus.stories.tsx",
+      "apps/web/features/shell/navigation-focus.test-utils.ts",
+      "apps/web/features/shell/navigation.ts",
+      "apps/web/features/shell/providers.test.tsx",
+      "apps/web/features/studio/studio-home.tsx",
+      "apps/web/features/studio/studio-work.tsx",
+      "apps/web/tests/dependency-environments.test.ts",
+      "apps/web/tests/server-client-boundary.test.ts",
+      "apps/web/vite.config.ts",
+      "scripts/qa/repository-guards.ts",
+      "scripts/static/web-continuations.inventory.json"
+    ],
+    "source_blob_manifest": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/source-review-manifest.json",
+    "whole_wave_discover_imported": false,
+    "discover_delta": "Inline candidate navigation retained. Candidate vs base Discover change is row padding only; the existing accepted continuation expression is unchanged. Two enclosing-function inventory hashes reflect Discover/Studio padding without adding exceptions.",
+    "product_or_repository_tests_modified": false,
+    "external_messages_sent": false,
+    "private_artifacts_root": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847",
+    "private_copy_provenance": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/copied-artifacts.json",
+    "artifact_manifest": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/artifact-manifest.json",
+    "recorded_jobs_entry": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- <command...> from this worker worktree",
+    "qa_entry": "bun scripts/goal/goalctl.ts test <explicit files>"
+  },
+  "common_web_review_reuse": {
+    "review_id": "G-2804",
+    "reviewed_pin": "7b2c1e5d201ebc58a41f53b28244c9896d920a97",
+    "artifact": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/common-web-review-G-2804.json",
+    "exact_owner_dependency": "G-2784 continuation: WEB-PREREAD-REFUSAL, WEB-COLLECTION-CURSOR, WEB-COLLECTION-STATUS, WEB-PRIVATE-IDENTITY, WEB-REFRESH-CANCEL; docs/goals/audit-remediation-20261019/tasks/G-2784.md decision consumes .temp/goal-orchestration/runs/G-2804/outputs/web-boundaries-review.json",
+    "candidate_dependency_commits": {
+      "e2c6eba364774fbec97224920757ec5ae4f8b87c": "d2b44be5adae10d94e3697c74d78c9c8ad66cbc6",
+      "7b2c1e5d201ebc58a41f53b28244c9896d920a97": "41dd8afa4eac0f99c09417e085674ab3a0337062"
+    },
+    "compared_changed_files": 23,
+    "identical_blobs": 19,
+    "comparison": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/common-boundary-reuse-comparison.json",
+    "four_differences_independently_inspected": [
+      {
+        "path": "apps/web/features/address/edge.ts",
+        "assessment": "Actual new startup boundary reviewed: replaces eager react-dom/server.browser with escaped native HTML. No finding closed by this rewrite."
+      },
+      {
+        "path": "apps/web/features/entity-page/read.ts",
+        "assessment": "Main-based cache-wrapper removal differs from the wave, but entry still obtains reader identity the same way; WEB-PRIVATE-IDENTITY remains applicable."
+      },
+      {
+        "path": "apps/web/features/work-levels/connections.tsx",
+        "assessment": "WorkAt branded parameter types differ to string in main; shared Collection runtime flow and relevant failure paths retained."
+      },
+      {
+        "path": "scripts/static/web-page-filtering.inventory.json",
+        "assessment": "Unrelated realm completeModuleCards wave entry absent on main; new exact readPublicCollectionPage entry retained."
+      }
+    ],
+    "unchanged_review_rerun": false,
+    "dependency_findings_fixed_by_candidate": false
+  },
+  "new_confirmed_findings": [],
+  "reused_open_dependency_findings": [
+    {
+      "id": "WEB-PREREAD-REFUSAL",
+      "severity": "P2",
+      "title": "Preserve actionable pre-read refusals instead of relabelling them as temporary Main failure",
+      "location": {
+        "path": "apps/web/features/api/bff.ts",
+        "line": 343,
+        "end_line": 360
+      },
+      "related_locations": [
+        {
+          "path": "apps/web/features/api/bff.ts",
+          "line": 177
+        },
+        {
+          "path": "apps/web/features/api/bff.ts",
+          "line": 190
+        },
+        {
+          "path": "services/main/src/routes/acting-contexts.ts",
+          "line": 130,
+          "end_line": 137
+        },
+        {
+          "path": "apps/web/features/feed/types.ts",
+          "line": 96,
+          "end_line": 104
+        }
+      ],
+      "relevant_commit": "e2c6eba364774fbec97224920757ec5ae4f8b87c",
+      "personas": [
+        "signed-in member",
+        "owner",
+        "moderator",
+        "operator"
+      ],
+      "source_evidence": "Both language prerequisites throw refusedPreread for every non-2xx response. The catch retains the owner status only inside upstream, but always emits HTTP 503, web_unavailable and retry=safe when the target was not dispatched. A revoked/invalid bearer refused with 401, forbidden prerequisite or rate-limited prerequisite is consequently presented as a transient target outage. Consumers classify sign-in/denial/budget/retry from the outer HTTP status.",
+      "impact": "The requested operation is correctly not sent, but the browser is directed to repeat an authorization failure and cannot use its normal sign-in/denial/rate-limit recovery. Retry-After preservation alone does not preserve the refusal contract.",
+      "reproduction_or_required_public_api_assertions": [
+        "Through the actual Web /api/main route, issue a signed-in GET and an idempotency-key-bearing write with a unique token that misses the language cache. Make GET /v1/me/session-agent return a real 401; repeat with person-preferences 403 and 429.",
+        "Assert that zero target operations are dispatched, writes report receipt=not-sent, and the outward status/code retain an actionable identity/permission/rate-limit result with appropriate recovery and owner Retry-After. A genuine prerequisite 503 must remain a typed 503 with phase and exact task intent.",
+        "Include cached-language and uncached-language requests so cache presence does not silently change how the same revoked session is classified."
+      ],
+      "suggested_action": "Separate received prerequisite HTTP refusals from transport failures; preserve their actionable public status and safe owner problem fields while keeping phase and truthful not-sent receipts.",
+      "confidence": "high for source control flow; runtime not reproduced",
+      "executed_reproduction": false,
+      "unverified_premises": [
+        "Exact downstream browser recovery depends on the particular operation consumer; the reported transport status erasure is explicit in source.",
+        "Production Account credential refusal and rate-limit responses were not exercised."
+      ],
+      "owner": "G-2784",
+      "disposition": "open dependency; reused independent source finding, not a newly executed failure or a claimed fix",
+      "original_review": "G-2804 at 7b2c1e5d201ebc58a41f53b28244c9896d920a97",
+      "candidate_pin": "a27bcfc6bad849dd912cbd3f721de5defeba1c86",
+      "candidate_location_verified": true,
+      "candidate_blob": "04ede0a99010ca1f89ba4ec96a1e02fa7ce89438"
+    },
+    {
+      "id": "WEB-COLLECTION-CURSOR",
+      "severity": "P2",
+      "title": "Let stale or invalid Collection continuations reach a restart action",
+      "location": {
+        "path": "apps/web/proxy.ts",
+        "line": 256,
+        "end_line": 257
+      },
+      "related_locations": [
+        {
+          "path": "apps/web/proxy.ts",
+          "line": 226,
+          "end_line": 233
+        },
+        {
+          "path": "services/main/src/modules/collection/visible-page.ts",
+          "line": 33,
+          "end_line": 58
+        },
+        {
+          "path": "services/main/src/modules/work/read-session.ts",
+          "line": 92,
+          "end_line": 120
+        },
+        {
+          "path": "apps/web/features/work-levels/connections.tsx",
+          "line": 44,
+          "end_line": 48
+        },
+        {
+          "path": "apps/web/features/work-page/region.tsx",
+          "line": 45,
+          "end_line": 58
+        }
+      ],
+      "relevant_commit": "7b2c1e5d201ebc58a41f53b28244c9896d920a97",
+      "personas": [
+        "visitor",
+        "stranger",
+        "signed-in member",
+        "private Collection owner"
+      ],
+      "source_evidence": "The newly added Collection preflight forwards after/parent to the membership owner. Except for 403/404 it converts every non-ok response to 503 before the page component can render. Main rejects malformed/binding-invalid cursors and returns an expired/moved result for changed selected Collection contents. PublicCollectionPage already supplies a first-page restart to RegionFailure for invalid/moved failures, but this branch prevents it from being reached. addressFailureResponse instead retries the identical path and query.",
+      "impact": "An ordinary previously valid continuation after a Collection change, or an invalid cursor, gets an outage page whose retry repeats a permanently invalid cursor. Owner budget/rate-limit distinctions are also lost at this branch.",
+      "reproduction_or_required_public_api_assertions": [
+        "Create an admitted public Collection with more than 20 disclosed members. Follow its actual emitted cursor, then change a selected membership dependency and revisit the old Web continuation; separately request after=not-a-valid-cursor and a cursor from another Collection/group.",
+        "Verify the Main status/problem first, then require Web to offer a localized first-page/restart action that removes the invalid continuation while retaining locale and unrelated task query parameters. Preserve a valid group context when the intended recovery is within that group.",
+        "Require that pressing retry/restart reaches useful actual members, not the same perpetual 503; preserve genuine temporary 503 recovery and undisclosed/missing 404 behavior. Include 422/429 classification rather than representing every refusal as an outage."
+      ],
+      "suggested_action": "Classify the Collection owner result at admission and route invalid/expired continuation to a real restart state; retain distinct public refusal semantics instead of the blanket non-ok to 503 conversion.",
+      "confidence": "high for source control flow; runtime not reproduced",
+      "executed_reproduction": false,
+      "unverified_premises": [
+        "The exact live owner status/code and changed-membership cursor are required integration assertions; no seeded Collection or runtime cursor was used."
+      ],
+      "owner": "G-2784",
+      "disposition": "open dependency; reused independent source finding, not a newly executed failure or a claimed fix",
+      "original_review": "G-2804 at 7b2c1e5d201ebc58a41f53b28244c9896d920a97",
+      "candidate_pin": "a27bcfc6bad849dd912cbd3f721de5defeba1c86",
+      "candidate_location_verified": true,
+      "candidate_blob": "b799068613488076a6c405ad9cf7ac6202c0ea15"
+    },
+    {
+      "id": "WEB-COLLECTION-STATUS",
+      "severity": "P2",
+      "title": "Failures in the new Collection render reads can escape as successful documents",
+      "location": {
+        "path": "apps/web/app/[locale]/e/[ref]/page.tsx",
+        "line": 63,
+        "end_line": 72
+      },
+      "related_locations": [
+        {
+          "path": "apps/web/app/[locale]/e/[ref]/page.tsx",
+          "line": 50,
+          "end_line": 57
+        },
+        {
+          "path": "apps/web/features/work-levels/read.ts",
+          "line": 25,
+          "end_line": 29
+        },
+        {
+          "path": "apps/web/features/work-levels/connections.tsx",
+          "line": 45,
+          "end_line": 48
+        },
+        {
+          "path": "apps/web/proxy.ts",
+          "line": 220,
+          "end_line": 233
+        }
+      ],
+      "relevant_commit": "7b2c1e5d201ebc58a41f53b28244c9896d920a97",
+      "personas": [
+        "visitor",
+        "stranger",
+        "signed-in member",
+        "private Collection owner"
+      ],
+      "source_evidence": "Proxy admission reads one summary and the membership owner, then rendering independently reads the summary, members and a member-name summary batch. If the later entry read fails, EntityRoute returns ordinary failure JSX; if members or member-name hydration fails, it returns PublicCollectionPage with a RegionFailure. These paths set no 503 response status. Member-name hydration is not covered by the preflight at all, so it can fail even when every admission read succeeded.",
+      "impact": "The required nonempty localized recovery view exists, but the source-level route returns it as a normal page instead of a truthful temporary-unavailability response. A successful admission does not prove later owner reads succeed.",
+      "reproduction_or_required_public_api_assertions": [
+        "Request a real localized Collection Web URL with after, parent and unrelated task parameters. Allow address resolution, proxy summary and membership reads to succeed; fail only the SSR member-name summary POST with 503. Also fail only the second entry-summary read after successful admission.",
+        "Assert the final document has HTTP 503, no-store and a nonempty localized recovery body, with exact task retry context; restore Main and require retry to return actual members without restarting the Web process.",
+        "Exercise the actual Worker/Vinext HTTP response. Rendering EntityRoute to static markup or asserting role=alert alone cannot establish the response status."
+      ],
+      "suggested_action": "Ensure the entire initial Collection read can produce a typed response status before streaming, or pass an admitted read result through a truthful owner/status boundary; preserve subsequent authority fences.",
+      "confidence": "high for missing status handling in source; actual framework HTTP status is unverified",
+      "executed_reproduction": false,
+      "unverified_premises": [
+        "Default successful document status is inferred from the ordinary Server Component return path. The pinned production Worker/Vinext response was not observed.",
+        "Do not address this by reusing stale authority results or removing disclosure revalidation."
+      ],
+      "owner": "G-2784",
+      "disposition": "open dependency; reused independent source finding, not a newly executed failure or a claimed fix",
+      "original_review": "G-2804 at 7b2c1e5d201ebc58a41f53b28244c9896d920a97",
+      "candidate_pin": "a27bcfc6bad849dd912cbd3f721de5defeba1c86",
+      "candidate_location_verified": true,
+      "candidate_blob": "b6f34c14517e7e3db805603795bae63f74941085"
+    },
+    {
+      "id": "WEB-PRIVATE-IDENTITY",
+      "severity": "P2",
+      "title": "Do not classify an identity read outage as a missing private Collection",
+      "location": {
+        "path": "apps/web/features/entity-page/read.ts",
+        "line": 17,
+        "end_line": 24
+      },
+      "related_locations": [
+        {
+          "path": "apps/web/features/work-page/read.ts",
+          "line": 46,
+          "end_line": 50
+        },
+        {
+          "path": "apps/web/features/auth/session.ts",
+          "line": 69,
+          "end_line": 83
+        },
+        {
+          "path": "apps/web/app/[locale]/e/[ref]/page.tsx",
+          "line": 50,
+          "end_line": 52
+        }
+      ],
+      "relevant_commit": "7b2c1e5d201ebc58a41f53b28244c9896d920a97",
+      "origin": "Existing shared reader fallback exposed by the new Collection entry/destination caller; the reader fallback itself was not introduced in these commits.",
+      "personas": [
+        "authorized member of a private Collection",
+        "private Collection owner"
+      ],
+      "source_evidence": "The new entry read calls reader(). Its sessionAgentState lookup returns null on any transport/owner error. reader() then drops both the bearer and actingSubject, and readEntityEntry interprets an unavailable anonymous summary as missing; EntityRoute calls notFound(). A private Collection that just passed proxy admission can therefore become a false 404 when the independent SSR identity read has a transient failure.",
+      "impact": "Private access remains closed, but an identity-unavailable state is presented as proven missing/undisclosed and loses the requested authorized recovery path. This is distinct from genuine anonymous or denied 404s.",
+      "reproduction_or_required_public_api_assertions": [
+        "Use a real signed-in principal and eligible session Agent with lawful access to a private Collection. Let proxy identity, resolver and membership admission succeed, then make only the SSR session-Agent read unavailable.",
+        "Assert that the Web destination returns localized identity-pending/unavailable recovery with HTTP 503 and the original URL, rather than falling back to an anonymous read and returning 404. Restore the identity owner and verify the same destination opens the authorized members.",
+        "Independently retain anonymous, wrong-Agent, revoked-grant and genuinely missing destinations as non-disclosing 404s. Do not obtain recovery by widening grants or trusting a browser-supplied actingSubject."
+      ],
+      "suggested_action": "Preserve a tri-state reader outcome for authenticated/anonymous/identity-unavailable and make the new destination distinguish unavailable identity from lawful anonymous disclosure.",
+      "confidence": "high for source control flow; runtime timing not reproduced",
+      "executed_reproduction": false,
+      "unverified_premises": [
+        "Requires a lawful private Collection fixture and a failure between admission and SSR; no such live fixture was executed."
+      ],
+      "owner": "G-2784",
+      "disposition": "open dependency; reused independent source finding, not a newly executed failure or a claimed fix",
+      "original_review": "G-2804 at 7b2c1e5d201ebc58a41f53b28244c9896d920a97",
+      "candidate_pin": "a27bcfc6bad849dd912cbd3f721de5defeba1c86",
+      "candidate_location_verified": true,
+      "candidate_blob": "1d81d043a228bea90af68384a98ccafda4cf88e6"
+    },
+    {
+      "id": "WEB-REFRESH-CANCEL",
+      "severity": "P2",
+      "title": "Check request cancellation before starting a new detached token rotation",
+      "location": {
+        "path": "apps/web/features/auth/account.ts",
+        "line": 147,
+        "end_line": 158
+      },
+      "related_locations": [
+        {
+          "path": "apps/web/features/auth/account.ts",
+          "line": 112,
+          "end_line": 120
+        },
+        {
+          "path": "apps/web/features/api/server-read.ts",
+          "line": 19
+        },
+        {
+          "path": "apps/web/tests/g-1028-server-reads.test.ts",
+          "line": 196,
+          "end_line": 215
+        }
+      ],
+      "relevant_commit": "e2c6eba364774fbec97224920757ec5ae4f8b87c",
+      "personas": [
+        "signed-in reader whose access token expired and request was cancelled"
+      ],
+      "source_evidence": "refreshTokens checks for an existing rotation, then immediately invokes tokenRequest inside withoutServerRequest. That removes the caller signal before serverRead. Only afterward does waitForRefresh observe that the caller was already aborted. With a fresh refresh-token key and a future deadline, an already-cancelled request therefore starts a new Account POST. The added regression cancels a waiter after dispatch and correctly preserves an existing shared rotation; it does not cover cancellation before a new rotation starts.",
+      "impact": "Account work and a token-rotation write can start after the sole initiating reader has left. Preserving an already-dispatched shared rotation is appropriate for token-reuse safety, but does not require starting one for a pre-aborted caller.",
+      "reproduction_or_required_public_api_assertions": [
+        "Enter withServerRequest using an already-aborted Request signal and a future deadline, then call refreshTokens with a unique uncached refresh token and a counted Account endpoint. Require zero token POSTs and an unavailable/cancelled caller result.",
+        "At the actual Web boundary, abort before proxy reaches a missing-access-token refresh path and require no new Account child request. Include cancellation during preceding admission work.",
+        "Retain the existing two-waiter case: once a rotation has been dispatched, cancelling one waiter must release it promptly without replaying/aborting the shared rotation needed by the other waiter."
+      ],
+      "suggested_action": "Check the initiating request signal before creating a new detached rotation. Keep existing in-flight rotation ownership and token-reuse protections intact.",
+      "confidence": "high for source control flow; runtime not reproduced",
+      "executed_reproduction": false,
+      "unverified_premises": [
+        "Actual Worker cancellation delivery timing and Account token rotation were not measured.",
+        "A serverFetch transport deadline still bounds this detached exchange; this is post-cancellation scheduling, not a claim of unbounded lifetime."
+      ],
+      "owner": "G-2784",
+      "disposition": "open dependency; reused independent source finding, not a newly executed failure or a claimed fix",
+      "original_review": "G-2804 at 7b2c1e5d201ebc58a41f53b28244c9896d920a97",
+      "candidate_pin": "a27bcfc6bad849dd912cbd3f721de5defeba1c86",
+      "candidate_location_verified": true,
+      "candidate_blob": "bdb23edd48d7540ffbd8853cf30dfdde6a459d86"
+    }
+  ],
+  "product_audit": {
+    "skill": ".agents/skills/product-audit/SKILL.md",
+    "method": "Bounded class audit across every affected candidate consumer; source behavior, executed evidence and genuine acceptance reported separately. No product changes authorized for this independent review.",
+    "classes": [
+      {
+        "id": "server-client-and-startup-boundaries",
+        "principle": "Server entry imports must remain valid in the Worker/RSC environment, and routes may render client components without calling their exports as ordinary functions.",
+        "surfaces": [
+          "Proposals route and list selector",
+          "all locale server route imports and their barrel/side-effect/lazy import closure",
+          "Worker entry and proxy",
+          "pre-shell address recovery",
+          "client/rsc/ssr optimizer configuration",
+          "Providers SSR request-local cache"
+        ],
+        "source_locations": [
+          "apps/web/app/[locale]/proposals/page.tsx:8",
+          "apps/web/features/proposals/list-state.ts:1",
+          "apps/web/features/proposals/proposal-list.tsx:14",
+          "apps/web/features/address/edge.ts:17",
+          "apps/web/worker/index.ts:6",
+          "apps/web/vite.config.ts:72"
+        ],
+        "assessment": "Pure proposal selector shared between route/client; native escaped recovery avoids the eager server renderer at Worker startup; browser dependencies scoped to client and pure localization/style dependencies prebundled in both server environments. Providers product source unchanged; repeated isolated SSR test cannot identify the original intermittent cause.",
+        "guards": [
+          "apps/web/tests/server-client-boundary.test.ts",
+          "apps/web/tests/dependency-environments.test.ts",
+          "scripts/qa/repository-guards.ts"
+        ],
+        "executed_evidence": "Reused exact a27 candidate units, types/lint/guards and independent isolated development/production readiness; no duplicate expensive checks.",
+        "remaining": "Original AUD-006 repeated cold/warm/HMR development and production matrix, and genuine signed-in D3-002 remain open."
+      },
+      {
+        "id": "visible-localized-name",
+        "principle": "Accessible names must include the visible localized bottom caption and preserve unread semantics.",
+        "surfaces": [
+          "all five phone bottom destinations",
+          "all eight locales",
+          "signed-out and synthetic signed-in identity",
+          "zero/ordinary/overflow unread counts",
+          "existing app-shell story expectation"
+        ],
+        "source_locations": [
+          "apps/web/features/shell/bottom-nav.tsx:1",
+          "apps/web/features/shell/navigation.ts:32",
+          "apps/web/features/shell/bottom-nav.test.tsx:1",
+          "apps/web/features/shell/bottom-nav.stories.tsx:1"
+        ],
+        "assessment": "Visible caption supplies link name; sr-only localized unread text augments Alerts. Updated shell expectation reflects the actual visible Alerts label.",
+        "executed_evidence": "Owner exact candidate unit and nine bottom-nav story cases reused. Do not equate fixture identity with a genuine signed-in account.",
+        "remaining": "Actual voice/screen-reader activation and genuine runtime locale/unread checks remain with browser acceptance; an axe rule with zero applicable nodes remains unexercised."
+      },
+      {
+        "id": "visible-selected-destination-and-painted-focus",
+        "principle": "Selection must be visible before nav focus; keyboard targets and actual painted rings must fit every clipping row edge without vertical page movement.",
+        "surfaces": [
+          "Discover inline seven destinations",
+          "Studio views",
+          "Studio work tabs",
+          "public Site navigation",
+          "Library shelves/custom shelves",
+          "Library Loans"
+        ],
+        "source_locations": [
+          "apps/web/features/shell/current-page-visibility.ts:4",
+          "apps/web/features/shell/current-page-visibility.ts:19",
+          "apps/web/features/shell/current-page-visibility.ts:31",
+          "apps/web/features/shell/localized-link.tsx:28",
+          "apps/web/features/discover/discover-view.tsx",
+          "apps/web/features/studio/studio-home.tsx",
+          "apps/web/features/studio/studio-work.tsx",
+          "apps/web/features/library/library-page.tsx",
+          "apps/web/features/zones/site-navigation.tsx"
+        ],
+        "assessment": "One current-link observer reveals horizontal overflow ancestors with 4px gutter, observes link/ancestor resize, listens for pageshow and focusin, and prefers an already focused nav control during restoration/resize. Four rows add padding. Removing the Loans-only scrollIntoView avoids vertical scroll side effects. Existing Site row already reserves a gutter.",
+        "guard": "Independent story helper computes actual outline/shadow extents and clipping-ancestor/viewport bounds; selected-name/current/destination-count assertions precede Tab and Shift+Tab. Resize test retains focused All while Topics stays selected.",
+        "executed_evidence": "All 25 candidate navigation-focus screenshots independently viewed and 40 selected owner story cases reused. Six anonymous development history observations at candidate reached outcome comparisons with no failed predicate; whole test failed during later setup.",
+        "remaining": "Lists reload plus Lists/People remaining actual transitions, route/content activation across all seven links, production history, BFCache, desktop and genuine signed-in cross-surface matrix remain unverified at this candidate."
+      },
+      {
+        "id": "truthful-localized-recovery",
+        "principle": "Failure status, safe retry context, locale and disclosure must survive pre-shell recovery and downstream owner reads.",
+        "surfaces": [
+          "404/410/429/503 address recovery",
+          "repeated/encoded query parameters",
+          "eight UI locales",
+          "BFF prerequisites",
+          "public/private Collection admission and render reads",
+          "Account rotation cancellation"
+        ],
+        "source_locations": [
+          "apps/web/features/address/edge.ts:26",
+          "apps/web/features/address/edge.ts:47",
+          "apps/web/proxy.ts:256",
+          "apps/web/features/api/bff.ts:343",
+          "apps/web/features/entity-page/read.ts:17",
+          "apps/web/features/auth/account.ts:147"
+        ],
+        "assessment": "New recovery escapes labels/attributes, keeps exact retry pathname/query, localized search/Home, no-store/noindex/referrer protections and Retry-After. Candidate recovery implementation does not repair the five retained boundary defects.",
+        "executed_evidence": "Exact candidate eight-locale status/escaping regressions reused; actual Japanese missing-resource 404 and screenshots inspected in both modes.",
+        "remaining": "Real upstream refusal/cursor/private-identity/later-read/cancellation assertions are G-2784 dependencies, not verified public failures in this report."
+      }
+    ]
+  },
+  "reused_candidate_checks": {
+    "units": {
+      "checkedPin": "a27bcfc6bad849dd912cbd3f721de5defeba1c86",
+      "job": "92548dbd-7890-40e7-bf09-3c5c5553cc66",
+      "step": 2,
+      "command": "bun scripts/goal/goalctl.ts test apps/web/tests/dependency-environments.test.ts apps/web/tests/server-client-boundary.test.ts apps/web/tests/g-1028-server-reads.test.ts apps/web/tests/g-943-address.test.ts apps/web/tests/g-998-address.test.ts apps/web/features/address/g-1008.test.ts apps/web/features/proposals/list-state.test.ts apps/web/features/shell/providers.test.tsx apps/web/features/shell/bottom-nav.test.tsx apps/web/features/shell/current-page-visibility.test.ts apps/web/tests/g-1030-links.test.tsx apps/web/features/work-levels/read.test.ts scripts/static/web-continuations.test.ts",
+      "cwd": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-ready-candidate",
+      "unitCases": 200,
+      "ownerCases": 45,
+      "assertions": 2304,
+      "qaRun": "20261019t062352-8e39ab",
+      "passed": true,
+      "evidence_origin": "G-2747 recorded candidate check; reused, not rerun by reviewer",
+      "raw_logs_copied_to": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/reused-check-logs"
+    },
+    "stories": {
+      "checkedPin": "a27bcfc6bad849dd912cbd3f721de5defeba1c86",
+      "job": "6854134d-ceae-408c-b446-ce578b8fb0bf",
+      "step": 1,
+      "command": "bun scripts/goal/goalctl.ts test apps/web/features/shell/navigation-focus.stories.tsx apps/web/features/shell/current-page-visibility.stories.tsx apps/web/features/shell/bottom-nav.stories.tsx",
+      "cwd": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-ready-candidate",
+      "cases": 40,
+      "qaRun": "20261019t062651-cb7e5b",
+      "passed": true,
+      "warning": "Storybook react-dom-shim optimizeDeps include resolution warning retained; all 40 assertions cases passed",
+      "evidence_origin": "G-2747 recorded candidate check; reused, not rerun by reviewer",
+      "raw_logs_copied_to": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/reused-check-logs"
+    },
+    "docs": {
+      "checkedPin": "a27bcfc6bad849dd912cbd3f721de5defeba1c86",
+      "job": "6854134d-ceae-408c-b446-ce578b8fb0bf",
+      "step": 2,
+      "command": "task docs:check",
+      "cwd": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-ready-candidate",
+      "tests": 13,
+      "markdownFiles": 237,
+      "passed": true,
+      "evidence_origin": "G-2747 recorded candidate check; reused, not rerun by reviewer",
+      "raw_logs_copied_to": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/reused-check-logs"
+    },
+    "gate": {
+      "checkedPin": "a27bcfc6bad849dd912cbd3f721de5defeba1c86",
+      "job": "6854134d-ceae-408c-b446-ce578b8fb0bf",
+      "step": 3,
+      "command": "env GOAL_CHECK_PREPARED_TREE=/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-ready-candidate task goal -- check --only types,lint,guards",
+      "cwd": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-ready-candidate",
+      "output": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-ready-candidate/.temp/goal/check/run-Fg9mEU/output.log",
+      "passed": [
+        "types",
+        "inference",
+        "lint",
+        "ast",
+        "guards"
+      ],
+      "guardsSelected": 45,
+      "timeoutRetriesRetainedInLog": true,
+      "evidence_origin": "G-2747 recorded candidate check; reused, not rerun by reviewer",
+      "raw_logs_copied_to": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/reused-check-logs"
+    },
+    "readiness": {
+      "checkedPin": "a27bcfc6bad849dd912cbd3f721de5defeba1c86",
+      "job": "192e2d98-5a37-4e58-9588-55f154467eaf",
+      "steps": [
+        "bun .temp/site-candidate/prepare-isolated.ts",
+        "env STARTUP_MODE=production PLAYWRIGHT_BROWSERS_PATH=/home/edge/.cache/ms-playwright bun scripts/goal/goalctl.ts test ./.temp/site-candidate/isolated.test.ts",
+        "env STARTUP_MODE=development PLAYWRIGHT_BROWSERS_PATH=/home/edge/.cache/ms-playwright bun scripts/goal/goalctl.ts test ./.temp/site-candidate/isolated.test.ts"
+      ],
+      "commandCwd": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2747",
+      "preparation": "task install in isolated detached clone with independent node_modules/cache and immutable lockfile",
+      "passed": true,
+      "evidence_origin": "G-2747 recorded candidate check; reused, not rerun by reviewer",
+      "raw_logs_copied_to": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/reused-check-logs"
+    }
+  },
+  "reused_runtime_readiness": {
+    "pin": "a27bcfc6bad849dd912cbd3f721de5defeba1c86",
+    "owner": "G-2747",
+    "job": "192e2d98-5a37-4e58-9588-55f154467eaf",
+    "isolation": "Detached source, immutable lockfile, independent node_modules/cache. Both processes stopped. Shared development environment with matching existing OAuth client fixture; no credentials retained, backend refresh, new records, account fabrication or mocked API responses.",
+    "development": {
+      "artifact": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/development-readiness.json",
+      "task_command": "task web:dev -- --port 37451",
+      "listening": true,
+      "startup_exit_at_listening": null,
+      "stopped": true,
+      "errors": [],
+      "qa_test_exit": 0,
+      "assertions": 55
+    },
+    "production": {
+      "artifact": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/production-readiness.json",
+      "task_command": "task web:build",
+      "build_exit": 0,
+      "preview_command": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2747/.temp/site-candidate/isolated-a27bcfc6bad8/source/node_modules/.bin/wrangler dev --config dist/server/wrangler.json --ip 127.0.0.1 --port 37452 --inspector-port 0",
+      "listening": true,
+      "startup_exit_at_listening": null,
+      "stopped": true,
+      "errors": [],
+      "qa_test_exit": 0,
+      "assertions": 55
+    },
+    "documents": {
+      "identity": "anonymous",
+      "locale": "en",
+      "viewports": [
+        "1415x950",
+        "390x950"
+      ],
+      "routes": [
+        "/en",
+        "/en/discover",
+        "/en/discover?q=book",
+        "/en/proposals",
+        "/en/proposals?view=review-requested"
+      ],
+      "ten_documents_each_mode": 200
+    },
+    "localized_recovery": {
+      "url": "/ja/e/0199a0fe-ffff-7000-8000-ffffffffffff/?type=lists&after=opaque%2Bcursor&tag=a&tag=b",
+      "status": 404,
+      "both_modes": true,
+      "actual_screenshots_viewed": true
+    },
+    "preserved_nonpassing_content_evidence": {
+      "mode": "production",
+      "url": "/api/main/v1/discovery/concepts?q=&limit=20",
+      "status": 503,
+      "body": "{\"error\":\"Main is unavailable\",\"code\":\"web_deadline\",\"phase\":\"main\",\"transportPhase\":\"connect\",\"attempts\":1,\"retry\":\"safe\",\"receipt\":\"not-applicable\"}",
+      "disposition": "Bounded startup/doc headings passed; Topics data readiness was not an assertion and is not granted."
+    },
+    "asset_transport": "Existing serveStoryAsset fetched unchanged real GET assets from the actual frontend to avoid host interface-change errors; documents/APIs retained ordinary browser transport and HTTP errors.",
+    "does_not_close": [
+      "AUD-006",
+      "D3-002",
+      "AUD-012",
+      "D4-002"
+    ]
+  },
+  "independent_candidate_history_check": {
+    "file": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/history.test.ts",
+    "case": "candidate mobile Discover selection and painted focus survive actual direct, reload, back, forward and filter documents",
+    "command": "env PLAYWRIGHT_BROWSERS_PATH=/home/edge/.cache/ms-playwright bun scripts/goal/goalctl.ts test ./.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/history.test.ts",
+    "pin": "a27bcfc6bad849dd912cbd3f721de5defeba1c86",
+    "mode": "development",
+    "identity": "anonymous",
+    "viewport": "390x844",
+    "theme": "light",
+    "server_command": [
+      "task",
+      "web:dev",
+      "--",
+      "--port",
+      "39487"
+    ],
+    "normal_recorded_qa_admission": true,
+    "shared_backend_refresh": false,
+    "new_records_or_accounts": false,
+    "mocked_api_responses": false,
+    "attempts": [
+      {
+        "job": "f8501734-4e61-4ab1-a2bd-df5c98756590",
+        "exit": 1,
+        "duration_ms": 123923.19,
+        "classification": "test setup; recorded job result class assertion is not an outcome assertion",
+        "evidence": [
+          ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/history-attempt1.test.ts",
+          ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/history-attempt1/result.json",
+          ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/history-attempt1/web.server.log",
+          ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/own-check-logs/f8501734-4e61-4ab1-a2bd-df5c98756590.log"
+        ],
+        "failure": "Cold first Topics document exceeded 60s; reload aborted; later navigation interrupted by about:blank during cleanup. No selected-link/ring outcome comparison reached.",
+        "outcome_assertion_reached": false
+      },
+      {
+        "job": "6f2ab14d-15d9-4989-a59c-75373064984e",
+        "exit": 1,
+        "duration_ms": 108484.0,
+        "classification": "test setup at Lists reload; not a confirmed product navigation defect",
+        "evidence": [
+          ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/history/result.json",
+          ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/history/web.server.log",
+          ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/own-check-logs/6f2ab14d-15d9-4989-a59c-75373064984e.log"
+        ],
+        "one_setup_correction": "Initial Home warmup permits cold Vite compilation; abort immediately on setup failure. Navigation outcome comparisons unchanged.",
+        "failure": "history.test.ts:98 waits for the real shell / shortcut to focus input[type=search]; Lists reload timed out after 20000ms. Throw at line 127, call at line 133.",
+        "failing_transition_outcome_assertion_reached": false,
+        "six_prior_outcome_comparisons_reached": true,
+        "final_aggregate_expect_reached": false,
+        "overall_test_passed": false
+      }
+    ],
+    "measurement_method": "Preserve immediate DOM-ready pre-nav-focus geometry; demonstrate shell hydration with an outside-row search shortcut; collect 200ms geometry samples until five consecutive equal signatures; capture selected link before nav focus; then use keyboard modality and focus the selected link, wait 800ms and measure actual painted ring. Raw samples, computed style, pageshow events and both screenshots retained.",
+    "outcome_predicates": [
+      "selectedLabel",
+      "selectedVisible",
+      "sevenDestinations",
+      "focusActive",
+      "focusVisible",
+      "paintedRing",
+      "ringInside",
+      "viewport"
+    ],
+    "observations": [
+      {
+        "id": "topics-direct",
+        "expected": "Topics",
+        "status": 200,
+        "url": "http://127.0.0.1:39487/en/discover?tab=topics",
+        "assertionReached": true,
+        "initialBeforeFocus": {
+          "row": [
+            16,
+            321,
+            374,
+            365
+          ],
+          "selected": [
+            297,
+            325,
+            370,
+            361
+          ],
+          "scrollLeft": 185,
+          "label": "Topics",
+          "visible": true,
+          "active": false,
+          "focusVisible": false,
+          "ring": {
+            "left": 0,
+            "right": 0,
+            "top": 0,
+            "bottom": 0
+          },
+          "ringInside": true,
+          "viewport": true,
+          "events": [
+            {
+              "type": "pageshow",
+              "persisted": false,
+              "at": 4810.29999999702,
+              "scrollLeft": 0,
+              "active": "BODY"
+            }
+          ]
+        },
+        "beforeFocus": {
+          "row": [
+            16,
+            321,
+            374,
+            365
+          ],
+          "selected": [
+            297,
+            325,
+            370,
+            361
+          ],
+          "scrollLeft": 185,
+          "label": "Topics",
+          "visible": true,
+          "active": false,
+          "focusVisible": false,
+          "ring": {
+            "left": 0,
+            "right": 0,
+            "top": 0,
+            "bottom": 0
+          },
+          "ringInside": true,
+          "viewport": true,
+          "events": [
+            {
+              "type": "pageshow",
+              "persisted": false,
+              "at": 4810.29999999702,
+              "scrollLeft": 0,
+              "active": "BODY"
+            }
+          ]
+        },
+        "focus": {
+          "row": [
+            16,
+            321,
+            374,
+            365
+          ],
+          "selected": [
+            297,
+            325,
+            370,
+            361
+          ],
+          "scrollLeft": 185,
+          "label": "Topics",
+          "visible": true,
+          "active": true,
+          "focusVisible": true,
+          "ring": {
+            "left": 2,
+            "right": 2,
+            "top": 2,
+            "bottom": 2
+          },
+          "ringInside": true,
+          "viewport": true,
+          "events": [
+            {
+              "type": "pageshow",
+              "persisted": false,
+              "at": 4810.29999999702,
+              "scrollLeft": 0,
+              "active": "BODY"
+            }
+          ]
+        },
+        "recorded_predicates": "all eight navigation outcome predicates true; final aggregate expect was not reached because a later setup failed",
+        "settled_sample_count": 5,
+        "screenshots": [
+          ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/history/topics-direct-before-focus.png",
+          ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/history/topics-direct-focus.png"
+        ]
+      },
+      {
+        "id": "topics-reload",
+        "expected": "Topics",
+        "status": 200,
+        "url": "http://127.0.0.1:39487/en/discover?tab=topics",
+        "assertionReached": true,
+        "initialBeforeFocus": {
+          "row": [
+            16,
+            321,
+            374,
+            365
+          ],
+          "selected": [
+            297,
+            325,
+            370,
+            361
+          ],
+          "scrollLeft": 185,
+          "label": "Topics",
+          "visible": true,
+          "active": false,
+          "focusVisible": false,
+          "ring": {
+            "left": 0,
+            "right": 0,
+            "top": 0,
+            "bottom": 0
+          },
+          "ringInside": true,
+          "viewport": true,
+          "events": [
+            {
+              "type": "pageshow",
+              "persisted": false,
+              "at": 3283.9000000059605,
+              "active": "BODY"
+            }
+          ]
+        },
+        "beforeFocus": {
+          "row": [
+            16,
+            321,
+            374,
+            365
+          ],
+          "selected": [
+            297,
+            325,
+            370,
+            361
+          ],
+          "scrollLeft": 185,
+          "label": "Topics",
+          "visible": true,
+          "active": false,
+          "focusVisible": false,
+          "ring": {
+            "left": 0,
+            "right": 0,
+            "top": 0,
+            "bottom": 0
+          },
+          "ringInside": true,
+          "viewport": true,
+          "events": [
+            {
+              "type": "pageshow",
+              "persisted": false,
+              "at": 3283.9000000059605,
+              "active": "BODY"
+            }
+          ]
+        },
+        "focus": {
+          "row": [
+            16,
+            321,
+            374,
+            365
+          ],
+          "selected": [
+            297,
+            325,
+            370,
+            361
+          ],
+          "scrollLeft": 185,
+          "label": "Topics",
+          "visible": true,
+          "active": true,
+          "focusVisible": true,
+          "ring": {
+            "left": 2,
+            "right": 2,
+            "top": 2,
+            "bottom": 2
+          },
+          "ringInside": true,
+          "viewport": true,
+          "events": [
+            {
+              "type": "pageshow",
+              "persisted": false,
+              "at": 3283.9000000059605,
+              "active": "BODY"
+            }
+          ]
+        },
+        "recorded_predicates": "all eight navigation outcome predicates true; final aggregate expect was not reached because a later setup failed",
+        "settled_sample_count": 5,
+        "screenshots": [
+          ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/history/topics-reload-before-focus.png",
+          ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/history/topics-reload-focus.png"
+        ]
+      },
+      {
+        "id": "topics-back",
+        "expected": "Topics",
+        "status": 200,
+        "url": "http://127.0.0.1:39487/en/discover?tab=topics",
+        "assertionReached": true,
+        "initialBeforeFocus": {
+          "row": [
+            16,
+            321,
+            374,
+            365
+          ],
+          "selected": [
+            482,
+            325,
+            555,
+            361
+          ],
+          "scrollLeft": 0,
+          "label": "Topics",
+          "visible": false,
+          "active": false,
+          "focusVisible": false,
+          "ring": {
+            "left": 0,
+            "right": 0,
+            "top": 0,
+            "bottom": 0
+          },
+          "ringInside": false,
+          "viewport": false,
+          "events": [
+            {
+              "type": "pageshow",
+              "persisted": false,
+              "at": 2661,
+              "active": "BODY"
+            }
+          ]
+        },
+        "beforeFocus": {
+          "row": [
+            16,
+            321,
+            374,
+            365
+          ],
+          "selected": [
+            297,
+            325,
+            370,
+            361
+          ],
+          "scrollLeft": 185,
+          "label": "Topics",
+          "visible": true,
+          "active": false,
+          "focusVisible": false,
+          "ring": {
+            "left": 0,
+            "right": 0,
+            "top": 0,
+            "bottom": 0
+          },
+          "ringInside": true,
+          "viewport": true,
+          "events": [
+            {
+              "type": "pageshow",
+              "persisted": false,
+              "at": 2661,
+              "active": "BODY"
+            }
+          ]
+        },
+        "focus": {
+          "row": [
+            16,
+            321,
+            374,
+            365
+          ],
+          "selected": [
+            297,
+            325,
+            370,
+            361
+          ],
+          "scrollLeft": 185,
+          "label": "Topics",
+          "visible": true,
+          "active": true,
+          "focusVisible": true,
+          "ring": {
+            "left": 2,
+            "right": 2,
+            "top": 2,
+            "bottom": 2
+          },
+          "ringInside": true,
+          "viewport": true,
+          "events": [
+            {
+              "type": "pageshow",
+              "persisted": false,
+              "at": 2661,
+              "active": "BODY"
+            }
+          ]
+        },
+        "recorded_predicates": "all eight navigation outcome predicates true; final aggregate expect was not reached because a later setup failed",
+        "settled_sample_count": 5,
+        "screenshots": [
+          ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/history/topics-back-before-focus.png",
+          ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/history/topics-back-focus.png"
+        ]
+      },
+      {
+        "id": "topics-forward",
+        "expected": "Topics",
+        "status": 200,
+        "url": "http://127.0.0.1:39487/en/discover?tab=topics",
+        "assertionReached": true,
+        "initialBeforeFocus": {
+          "row": [
+            16,
+            321,
+            374,
+            365
+          ],
+          "selected": [
+            482,
+            325,
+            555,
+            361
+          ],
+          "scrollLeft": 0,
+          "label": "Topics",
+          "visible": false,
+          "active": false,
+          "focusVisible": false,
+          "ring": {
+            "left": 0,
+            "right": 0,
+            "top": 0,
+            "bottom": 0
+          },
+          "ringInside": false,
+          "viewport": false,
+          "events": [
+            {
+              "type": "pageshow",
+              "persisted": false,
+              "at": 1467.3999999910593,
+              "scrollLeft": 0,
+              "active": "BODY"
+            }
+          ]
+        },
+        "beforeFocus": {
+          "row": [
+            16,
+            321,
+            374,
+            365
+          ],
+          "selected": [
+            297,
+            325,
+            370,
+            361
+          ],
+          "scrollLeft": 185,
+          "label": "Topics",
+          "visible": true,
+          "active": false,
+          "focusVisible": false,
+          "ring": {
+            "left": 0,
+            "right": 0,
+            "top": 0,
+            "bottom": 0
+          },
+          "ringInside": true,
+          "viewport": true,
+          "events": [
+            {
+              "type": "pageshow",
+              "persisted": false,
+              "at": 1467.3999999910593,
+              "scrollLeft": 0,
+              "active": "BODY"
+            }
+          ]
+        },
+        "focus": {
+          "row": [
+            16,
+            321,
+            374,
+            365
+          ],
+          "selected": [
+            297,
+            325,
+            370,
+            361
+          ],
+          "scrollLeft": 185,
+          "label": "Topics",
+          "visible": true,
+          "active": true,
+          "focusVisible": true,
+          "ring": {
+            "left": 2,
+            "right": 2,
+            "top": 2,
+            "bottom": 2
+          },
+          "ringInside": true,
+          "viewport": true,
+          "events": [
+            {
+              "type": "pageshow",
+              "persisted": false,
+              "at": 1467.3999999910593,
+              "scrollLeft": 0,
+              "active": "BODY"
+            }
+          ]
+        },
+        "recorded_predicates": "all eight navigation outcome predicates true; final aggregate expect was not reached because a later setup failed",
+        "settled_sample_count": 5,
+        "screenshots": [
+          ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/history/topics-forward-before-focus.png",
+          ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/history/topics-forward-focus.png"
+        ]
+      },
+      {
+        "id": "topics-filter",
+        "expected": "Topics",
+        "status": 200,
+        "url": "http://127.0.0.1:39487/en/discover?tab=topics&q=book",
+        "assertionReached": true,
+        "initialBeforeFocus": {
+          "row": [
+            16,
+            321,
+            374,
+            365
+          ],
+          "selected": [
+            297,
+            325,
+            370,
+            361
+          ],
+          "scrollLeft": 185,
+          "label": "Topics",
+          "visible": true,
+          "active": false,
+          "focusVisible": false,
+          "ring": {
+            "left": 0,
+            "right": 0,
+            "top": 0,
+            "bottom": 0
+          },
+          "ringInside": true,
+          "viewport": true,
+          "events": [
+            {
+              "type": "pageshow",
+              "persisted": false,
+              "at": 1947.7000000029802,
+              "active": "BODY"
+            }
+          ]
+        },
+        "beforeFocus": {
+          "row": [
+            16,
+            321,
+            374,
+            365
+          ],
+          "selected": [
+            297,
+            325,
+            370,
+            361
+          ],
+          "scrollLeft": 185,
+          "label": "Topics",
+          "visible": true,
+          "active": false,
+          "focusVisible": false,
+          "ring": {
+            "left": 0,
+            "right": 0,
+            "top": 0,
+            "bottom": 0
+          },
+          "ringInside": true,
+          "viewport": true,
+          "events": [
+            {
+              "type": "pageshow",
+              "persisted": false,
+              "at": 1947.7000000029802,
+              "active": "BODY"
+            }
+          ]
+        },
+        "focus": {
+          "row": [
+            16,
+            321,
+            374,
+            365
+          ],
+          "selected": [
+            297,
+            325,
+            370,
+            361
+          ],
+          "scrollLeft": 185,
+          "label": "Topics",
+          "visible": true,
+          "active": true,
+          "focusVisible": true,
+          "ring": {
+            "left": 2,
+            "right": 2,
+            "top": 2,
+            "bottom": 2
+          },
+          "ringInside": true,
+          "viewport": true,
+          "events": [
+            {
+              "type": "pageshow",
+              "persisted": false,
+              "at": 1947.7000000029802,
+              "active": "BODY"
+            }
+          ]
+        },
+        "recorded_predicates": "all eight navigation outcome predicates true; final aggregate expect was not reached because a later setup failed",
+        "settled_sample_count": 5,
+        "screenshots": [
+          ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/history/topics-filter-before-focus.png",
+          ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/history/topics-filter-focus.png"
+        ]
+      },
+      {
+        "id": "lists-direct",
+        "expected": "Lists",
+        "status": 200,
+        "url": "http://127.0.0.1:39487/en/discover?tab=lists",
+        "assertionReached": true,
+        "initialBeforeFocus": {
+          "row": [
+            16,
+            321,
+            374,
+            365
+          ],
+          "selected": [
+            416,
+            325,
+            478,
+            361
+          ],
+          "scrollLeft": 0,
+          "label": "Lists",
+          "visible": false,
+          "active": false,
+          "focusVisible": false,
+          "ring": {
+            "left": 0,
+            "right": 0,
+            "top": 0,
+            "bottom": 0
+          },
+          "ringInside": false,
+          "viewport": false,
+          "events": [
+            {
+              "type": "pageshow",
+              "persisted": false,
+              "at": 1678.7999999970198,
+              "scrollLeft": 0,
+              "active": "BODY"
+            }
+          ]
+        },
+        "beforeFocus": {
+          "row": [
+            16,
+            321,
+            374,
+            365
+          ],
+          "selected": [
+            308,
+            325,
+            370,
+            361
+          ],
+          "scrollLeft": 108,
+          "label": "Lists",
+          "visible": true,
+          "active": false,
+          "focusVisible": false,
+          "ring": {
+            "left": 0,
+            "right": 0,
+            "top": 0,
+            "bottom": 0
+          },
+          "ringInside": true,
+          "viewport": true,
+          "events": [
+            {
+              "type": "pageshow",
+              "persisted": false,
+              "at": 1678.7999999970198,
+              "scrollLeft": 0,
+              "active": "BODY"
+            }
+          ]
+        },
+        "focus": {
+          "row": [
+            16,
+            321,
+            374,
+            365
+          ],
+          "selected": [
+            308,
+            325,
+            370,
+            361
+          ],
+          "scrollLeft": 108,
+          "label": "Lists",
+          "visible": true,
+          "active": true,
+          "focusVisible": true,
+          "ring": {
+            "left": 2,
+            "right": 2,
+            "top": 2,
+            "bottom": 2
+          },
+          "ringInside": true,
+          "viewport": true,
+          "events": [
+            {
+              "type": "pageshow",
+              "persisted": false,
+              "at": 1678.7999999970198,
+              "scrollLeft": 0,
+              "active": "BODY"
+            }
+          ]
+        },
+        "recorded_predicates": "all eight navigation outcome predicates true; final aggregate expect was not reached because a later setup failed",
+        "settled_sample_count": 5,
+        "screenshots": [
+          ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/history/lists-direct-before-focus.png",
+          ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/history/lists-direct-focus.png"
+        ]
+      },
+      {
+        "id": "lists-reload",
+        "expected": "Lists",
+        "status": 200,
+        "assertionReached": false,
+        "setupError": "waitForFunction: Timeout 20000ms exceeded.",
+        "initialBeforeFocus": {
+          "row": [
+            16,
+            321,
+            374,
+            365
+          ],
+          "selected": [
+            416,
+            325,
+            478,
+            361
+          ],
+          "scrollLeft": 0,
+          "label": "Lists",
+          "visible": false,
+          "active": false,
+          "focusVisible": false,
+          "ring": {
+            "left": 0,
+            "right": 0,
+            "top": 0,
+            "bottom": 0
+          },
+          "ringInside": false,
+          "viewport": false,
+          "events": [
+            {
+              "type": "pageshow",
+              "persisted": false,
+              "at": 1632.3999999910593,
+              "scrollLeft": 0,
+              "active": "BODY"
+            }
+          ]
+        }
+      }
+    ],
+    "recorded_outcome_predicate_failures": [],
+    "browser_pageerrors": [],
+    "recorded_browser_http_errors": [],
+    "browser_available": true,
+    "bfcache_observed": false,
+    "pre_focus_observation_caveat": "Topics back/forward and Lists direct were initially offscreen at scrollLeft=0, then became visible before nav focus. Initial records retained. Lists reload only has its initial hidden record; hydration/stable geometry/focus checks were not reached, so neither sustained failure nor successful repair is established.",
+    "unexecuted_or_incomplete": [
+      "lists-reload settled/focus",
+      "lists-back",
+      "lists-forward",
+      "lists-filter",
+      "people-direct",
+      "people-reload",
+      "people-back",
+      "people-forward",
+      "people-filter"
+    ],
+    "screenshot_content_limit": "Topics filter screenshot displays Couldn’t load this list in Found in chapter text; this is retained content evidence, not content acceptance or a navigation assertion failure.",
+    "source_clean_after": true,
+    "frontend_stopped": true,
+    "protocol_disposition": {
+      "document": "docs/goals/worker.md#after-a-review",
+      "quote": "A finding that still cannot reach its assertion goes to program as unconfirmed and uses no worker fix round.",
+      "effect": "One setup correction used; preserve failed attempts and hand off unfinished history premise. No product fix round or assertion relaxation."
+    }
+  },
+  "historical_counterexamples": {
+    "pin": "196a6f4a98413857dbf3e178d05ef65415035f29",
+    "artifact": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/history-counterexamples-196a6f4a9841.json",
+    "original_failures": [
+      {
+        "id": "390-lists-forward",
+        "kind": "navigation-geometry",
+        "evidence": "nav-390-lists-forward.png"
+      },
+      {
+        "id": "390-people-forward",
+        "kind": "navigation-geometry",
+        "evidence": "nav-390-people-forward.png"
+      }
+    ],
+    "preserved_observations": [
+      "390 Lists forward: before-focus selected x416..478 outside row x16..374, scrollLeft0",
+      "390 People forward: reported focused link x336..412 outside row x16..374 and ring clipped"
+    ],
+    "old_screenshots_inspected": true,
+    "interpretation": "Real failures remain evidence at their original full-wave pin. Later focused screenshots and earlier rectangles describe different observation times; neither is discarded. Do not transfer these failures or a later settling assertion to the selective candidate. Candidate Lists/People forward remains unverified."
+  },
+  "screenshot_inspection": {
+    "manifest": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/inspected-screenshots.json",
+    "candidate_focus_originals": 25,
+    "candidate_recovery_originals": 2,
+    "historical_originals": 2,
+    "independent_candidate_history_originals": 12,
+    "derived_contact_sheets": 6,
+    "coverage": "Six actual navigation consumers at phone/desktop in light/dark plus resize; both real Japanese recovery pages; original historical failures; six independent actual candidate navigation observations before/after nav focus.",
+    "result": "Visible selected labels and painted focus rings fit completed measured cases. Story snapshots finish after keyboard traversal, so the separate pre-focus assertions and runtime pre-focus screenshots remain distinct evidence.",
+    "retained_out_of_scope_observation": "Studio phone cover/title/description overlap is visible in both themes and already recorded in G-2747 handoff; minimal navigation integration changes only row padding. Retain with the Studio owner rather than claiming the page fully accepted."
+  },
+  "remaining_genuine_acceptance": [
+    {
+      "finding": "D3-002",
+      "owner": "G-2825",
+      "required": "At final pin, real signed-in and signed-out Proposals default/mine/review-requested/unknown, en/zh-Hans, phone/desktop, light/dark, development/production; localized sign-in return address, real list/empty state, no pre-auth server/client error. Current anonymous five-route readiness is only a subset."
+    },
+    {
+      "finding": "AUD-006",
+      "owner": "G-2825 with G-2747 on recurrence",
+      "required": "Repeated cold/warm/HMR Home→Discover→search→return plus original profile/Work samples in development and production, en/zh-Hans, themes and 390/1415/1440 widths; retain server/browser/optimizer/module evidence. Original intermittent Providers cause remains unestablished."
+    },
+    {
+      "finding": "AUD-012",
+      "owner": "G-2825",
+      "required": "Genuine runtime locale/identity/unread cases and actual voice/screen-reader activation by visible labels, peer Library/Settings/Following and continue-reading semantics. Preserve zero-applicable axe rule as unexercised."
+    },
+    {
+      "finding": "D4-002",
+      "owner": "G-2825; G-2747 for a confirmed counterexample",
+      "required": "Complete actual direct/reload/back/forward/filter for Topics/Lists/People at 390/1440; all seven destinations keyboard activation and URL/content agreement; Studio views/work, Site and Library shelves/custom shelves/Loans same transitions, light/dark and genuine identities as required. Preserve pre-focus and settled observations, actual ring, vertical-scroll invariant and original failures."
+    },
+    {
+      "finding": "five common Web source findings",
+      "owner": "G-2784",
+      "required": "Exact copied reproduction assertions in reused_open_dependency_findings; owner must execute appropriate real boundary cases without bypassing authority or fabricating accounts/data. G-2785 session owner overlap and G-2762 budget dependency remain per current G-2784 decision."
+    }
+  ],
+  "report_validation": {
+    "artifact_consistency": "JSON parses; exact 50-path candidate diff; 23 reused common blobs compared; 19 equal; five cited primary locations verified at candidate; screenshots SHA-256 verified; private snapshot clean after server stopped.",
+    "documentation_check": {
+      "status": "passed",
+      "command": "task docs:check",
+      "job": "f124442e-fa15-4767-9886-af7a9b6ba2bd",
+      "step": 1,
+      "tests": 13,
+      "markdown_files": 249,
+      "log": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/own-check-logs/f124442e-fa15-4767-9886-af7a9b6ba2bd.1.log"
+    },
+    "worker_check": {
+      "status": "passed",
+      "command": "task goal -- check",
+      "job": "f124442e-fa15-4767-9886-af7a9b6ba2bd",
+      "step": 2,
+      "checks": {
+        "types": "ok; no TypeScript workspace changed",
+        "tests": "ok; no test files named in brief",
+        "lint": "ok; no source file changed",
+        "ast": "ok",
+        "guards": "ok; 1/44 selected for report-only change"
+      },
+      "log": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/own-check-logs/report-worker-gate-output.log",
+      "scope": "report-only branch; candidate product checks reused above"
+    },
+    "only_committed_path": "docs/goals/audit-remediation-20261019/proofs/startup-navigation-review.json"
+  },
+  "manager_next": [
+    "Retain this partial execution report and immutable candidate/source pins; do not close any original finding on it.",
+    "Give G-2747 the exact unfinished Lists/People candidate-history premise and both failed logs; no confirmed new source counterexample or fix round is claimed.",
+    "Keep the five exact copied source findings with G-2784. Any corrected candidate needs its changed delta checked at its own pin.",
+    "G-2825 completes genuine signed-in/browser acceptance and remaining actual navigation history on the final isolated candidate using existing admitted data. No shared refresh/reset/import or assertion repair."
+  ]
+}
