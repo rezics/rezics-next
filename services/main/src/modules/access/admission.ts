@@ -14,7 +14,7 @@ import { createHash } from 'node:crypto';
 import { receiptFamilyFor } from './receipt-families.ts';
 import { Pool, type PoolClient } from 'pg';
 import { recordRatingAggregateHead, readRatingAggregateInventory,
-  checkRatingAggregateFence, readRatingContextPolicyWitness } from '../rating/aggregate-inventory.ts';
+  checkRatingAggregateFence, readRatingContextPolicyWitness, type StandingRatingCut } from '../rating/aggregate-inventory.ts';
 import { directWorkCreateProof, selectedDirectWorkProof } from './direct-principal.ts';
 import { groupWorkCreateProof, GroupUnavailable } from './groups.ts';
 import { representedWorkProof, selectedRepresentedWorkProof, saveInvitedWorkProof,
@@ -623,8 +623,8 @@ export class AccessAdmissionRegistry {
     return readRatingAggregateInventory(this.pool, context, mainVersion, signal, onlySlot);
   }
 
-  checkRatingAggregateFence(generation: string, signal?: AbortSignal, standingGeneration?: string) {
-    return checkRatingAggregateFence(this.pool, generation, signal, standingGeneration);
+  checkRatingAggregateFence(generation: string, signal?: AbortSignal, cuts?: readonly StandingRatingCut[]) {
+    return checkRatingAggregateFence(this.pool, generation, signal, cuts);
   }
 
   readRatingContextPolicyWitness(context: string, signal?: AbortSignal) {

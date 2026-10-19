@@ -8,12 +8,24 @@ const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
  * Remaining projections use this independent, explicitly bounded owner page. */
 export const STANDING_PUBLICATION_COST = { projections: 100, slotRefreshesPerHead: 2, deadlineMs: 10_000 } as const;
 
+export interface StandingTransitionCut {
+  sourceWork: string;
+  sourceMainVersion: string;
+  survivorWork: string;
+  survivorMainVersion: string;
+  originalKey: string | null;
+}
+
 /** Commit BEFORE any graph identity effect. Never borrow an outer transaction:
  * a graph command can survive its caller's native rollback. Only the existing
- * journal's final completion removes this durable, conservative fence. */
-export async function fenceStandingRatingTransition(pool: Pool, taskKey: string,
-  signal = AbortSignal.timeout(STANDING_PUBLICATION_COST.deadlineMs)): Promise<void> {
-  if (!/^editorial:[0-9a-f-]{36}:[1-9][0-9]*$/.test(taskKey)) throw new RatingInventoryConflict('invalid merge task');
+ * journal's final completion settles this durable, conservative fence. A settled
+ * fence may verify a replayed receipt, but cannot authorize a new graph effect. */
+export async function fenceStandingRatingTransition(pool: Pool, taskKey: string, cut: StandingTransitionCut,
+  signal = AbortSignal.timeout(STANDING_PUBLICATION_COST.deadlineMs)): Promise<'pending' | 'finished'> {
+  const taskId = /^editorial:[0-9a-f-]{36}:[1-9][0-9]*$/;
+  if (!taskId.test(taskKey) || ![cut.sourceWork,cut.sourceMainVersion,cut.survivorWork,cut.survivorMainVersion].every(value => nativeId.test(value))
+    || cut.sourceWork === cut.survivorWork || cut.sourceMainVersion === cut.survivorMainVersion
+    || cut.originalKey !== null && (!taskId.test(cut.originalKey) || cut.originalKey === taskKey)) throw new RatingInventoryConflict('invalid merge cut');
   return withInventoryClient(pool, signal, async client => { try {
     await client.query('BEGIN');
     await client.query("SET LOCAL lock_timeout = '2s'");
@@ -21,11 +33,22 @@ export async function fenceStandingRatingTransition(pool: Pool, taskKey: string,
     const fence = (await client.query('SELECT open FROM access.recovery_fence WHERE id FOR SHARE')).rows[0];
     if (fence?.open !== true) throw new RatingInventoryConflict('Recovery fence changed');
     signal.throwIfAborted();
-    await client.query(`INSERT INTO access.rating_standing_transition(task_key)
-      SELECT $1 WHERE NOT EXISTS (SELECT 1 FROM access.identity_merge_completion WHERE task_key=$1)
-      ON CONFLICT DO NOTHING`, [taskKey]);
+    const bound = await client.query(`INSERT INTO access.rating_standing_transition
+      (task_key,source_work,source_main_version,survivor_work,survivor_main_version,original_key,finished)
+      VALUES($1,$2,$3,$4,$5,$6,EXISTS (SELECT 1 FROM access.identity_merge_completion WHERE task_key=$1))
+      ON CONFLICT (task_key) DO UPDATE SET source_work=EXCLUDED.source_work,source_main_version=EXCLUDED.source_main_version,
+        survivor_work=EXCLUDED.survivor_work,survivor_main_version=EXCLUDED.survivor_main_version,original_key=EXCLUDED.original_key
+      WHERE (rating_standing_transition.source_work IS NULL OR rating_standing_transition.source_work=EXCLUDED.source_work)
+        AND (rating_standing_transition.survivor_work IS NULL OR rating_standing_transition.survivor_work=EXCLUDED.survivor_work)
+        AND (rating_standing_transition.source_main_version IS NULL OR rating_standing_transition.source_main_version=EXCLUDED.source_main_version)
+        AND (rating_standing_transition.survivor_main_version IS NULL OR rating_standing_transition.survivor_main_version=EXCLUDED.survivor_main_version)
+        AND rating_standing_transition.original_key IS NOT DISTINCT FROM EXCLUDED.original_key
+      RETURNING task_key,finished`, [taskKey,cut.sourceWork,cut.sourceMainVersion,cut.survivorWork,cut.survivorMainVersion,cut.originalKey]);
+    if (bound.rows.length !== 1) throw new RatingInventoryConflict('Merge publication cut changed');
     signal.throwIfAborted();
     await client.query('COMMIT');
+    signal.throwIfAborted();
+    return bound.rows[0].finished === true ? 'finished' : 'pending';
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* preserve failure */ }
     throw error;
@@ -36,8 +59,9 @@ export async function fenceStandingRatingTransition(pool: Pool, taskKey: string,
  * as in admission/reconstruction, so a new source seal resets the cursor only
  * before or after this whole page. Selections added behind the cursor already
  * refresh their own slot; removals likewise subtract their own contribution.
- * Pending pages and interrupted identity tasks keep ALL standing reads held,
- * rather than publishing an exact-looking mixture from any affected component. */
+ * Only components with stale effective contributions wait for an origin job.
+ * Completed unmerges also remove revoked inherited selections in bounded pages;
+ * their retained ancestry prevents an unrelated witness from attesting them. */
 export async function refreshStandingRatingProjections(pool: Pool,
   input: { context?: string; limit?: number } = {},
   signal = AbortSignal.timeout(STANDING_PUBLICATION_COST.deadlineMs)) {
@@ -85,21 +109,24 @@ export async function refreshStandingRatingProjections(pool: Pool,
         }
       }
     }
-    signal.throwIfAborted();
-    await client.query('SELECT access.prune_rating_standing_changes()');
+    if (!job) {
+      signal.throwIfAborted();
+      const cleanup = (await client.query('SELECT access.cleanup_rating_standing_projections($1,$2) AS refreshed',
+        [input.context ?? null,limit])).rows[0];
+      refreshed = Number(cleanup?.refreshed ?? 0);
+    }
     signal.throwIfAborted();
     await client.query('COMMIT');
     signal.throwIfAborted();
-    // An AFTER trigger appended this transaction's publication change. Its xid
-    // can settle only after COMMIT; inspect readiness in a fresh snapshot.
-    const state = (await client.query(`SELECT p.pending,p.generation,f.generation AS recovery_generation,
+    // Report continuation exhaustion, not a global availability policy. Reads
+    // independently recheck their own component, identity cut and revocation.
+    const state = (await client.query(`SELECT f.generation AS recovery_generation,
       NOT EXISTS (SELECT 1 FROM access.rating_standing_refresh ${input.context === undefined ? '' : 'WHERE context=$1'}
-        LIMIT 1) AS complete FROM access.rating_standing_publication() p CROSS JOIN access.recovery_fence f WHERE f.id AND f.open`,
-    input.context === undefined ? [] : [input.context])).rows[0];
+        LIMIT 1) AND NOT EXISTS (SELECT 1 FROM access.rating_standing_revoked_selections($1) LIMIT 1) AS complete
+      FROM access.recovery_fence f WHERE f.id AND f.open`, [input.context ?? null])).rows[0];
     if (!state || state.recovery_generation !== fence.generation) throw new RatingInventoryConflict('Standing publication fence is unavailable');
     signal.throwIfAborted();
-    return { refreshed, complete: state.complete === true, publicationReady: String(state.pending) === '0',
-      recoveryGeneration: String(fence.generation), publicationGeneration: String(state.generation) };
+    return { refreshed, complete: state.complete === true, recoveryGeneration: String(fence.generation) };
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* preserve failure */ }
     throw error;

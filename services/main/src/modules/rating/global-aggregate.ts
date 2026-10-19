@@ -260,8 +260,7 @@ async function snapshot(env: WorkActivationEnvironment, access: InventoryAccess,
     evidenceHeads(inventory);
     inventories.push(inventory);
   }
-  if (inventories.some(inventory => inventory.recoveryGeneration !== inventories[0]!.recoveryGeneration
-    || inventory.standingGeneration !== inventories[0]!.standingGeneration)) unavailable();
+  if (inventories.some(inventory => inventory.recoveryGeneration !== inventories[0]!.recoveryGeneration)) unavailable();
   signal.throwIfAborted();
   const result = await env.fuseki.query(standingComponentsQuery(env, components, target, inventories),
     GLOBAL_AGGREGATE_BUDGET.graphBytes);
@@ -278,7 +277,9 @@ async function snapshot(env: WorkActivationEnvironment, access: InventoryAccess,
       own.filter(row => row.kind?.value === 'observation'), budget, onlySlot);
   });
   if (rows.some(row => !components.some(({ kind }) => kind === row.component?.value))) unavailable();
-  if (!await access.checkRatingAggregateFence(inventories[0]!.recoveryGeneration, signal, inventories[0]!.standingGeneration)) unavailable();
+  if (!await access.checkRatingAggregateFence(inventories[0]!.recoveryGeneration, signal,
+    components.flatMap(({ context },index) => inventories[index]!.standingGeneration === undefined ? []
+      : [{ context,mainVersion: target.mainVersion,generation: inventories[index]!.standingGeneration! }]))) unavailable();
   signal.throwIfAborted();
   return { components: verified,
     sourcePosition: { datasetId: 'product' as const, dataEpoch: root.epoch.value, sequence: root.sequence!.value } };
@@ -379,8 +380,7 @@ export async function queryWorkStandingRatings(env: WorkActivationEnvironment, a
     }
     if (!selected.length) return values;
     const inventories = selected.map(item => item.inventory);
-    if (inventories.some(inventory => inventory.recoveryGeneration !== inventories[0]!.recoveryGeneration
-      || inventory.standingGeneration !== inventories[0]!.standingGeneration)) unavailable();
+    if (inventories.some(inventory => inventory.recoveryGeneration !== inventories[0]!.recoveryGeneration)) unavailable();
     const branches = selected.map(({ target, inventory }) => `{ {
       ${standingComponentsSelect(env, [{ kind: input.kind, context: input.context }], target, [inventory])}
     } BIND(${iri(target.work)} AS ?targetWork) }`);
@@ -414,7 +414,9 @@ export async function queryWorkStandingRatings(env: WorkActivationEnvironment, a
           || error instanceof RevisionReadBudgetExceeded) throw error;
       }
     }
-    if (!await access.checkRatingAggregateFence(inventories[0]!.recoveryGeneration, signal, inventories[0]!.standingGeneration)) unavailable();
+    if (!await access.checkRatingAggregateFence(inventories[0]!.recoveryGeneration, signal,
+      selected.flatMap(({ target,inventory }) => inventory.standingGeneration === undefined ? []
+        : [{ context: input.context,mainVersion: target.mainVersion,generation: inventory.standingGeneration }]))) unavailable();
     signal.throwIfAborted();
     return values;
   });

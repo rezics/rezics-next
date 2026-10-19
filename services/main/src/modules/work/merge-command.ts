@@ -1,7 +1,7 @@
 import type { Pool } from 'pg';
 import { profileValidations } from '../../infrastructure/profile.ts';
 import { controlTransaction } from '../access/topology-control.ts';
-import { fenceStandingRatingTransition } from '../rating/standing-publication.ts';
+import { fenceStandingRatingTransition, type StandingTransitionCut } from '../rating/standing-publication.ts';
 import { checkMergeAuthority } from '../identity-merge/authority.ts';
 import { mergeDisclosureGuard, mergePublicAuthorityGuard, requireMergeDisclosure } from '../identity-merge/pair-authority.ts';
 import { itemCommandKey, mergeDigest, MergeConflict, MergeUnavailable, type MergeTask } from '../identity-merge/contract.ts';
@@ -26,14 +26,28 @@ export async function commandWorkMerge(env: WorkActivationEnvironment, pool: Poo
   if (Date.now() >= deadline) throw new MergeUnavailable('Merge delivery deadline exceeded');
   const signal = AbortSignal.timeout(Math.max(1, deadline - Date.now()));
   signal.throwIfAborted();
+  const mains = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?work ?main WHERE {
+    VALUES ?work { ${iri(task.plan.source.resource)} ${iri(task.plan.survivor.resource)} }
+    GRAPH ${iri(GRAPHS.current)} { ?work rv:mainVersion ?main }
+  } LIMIT 3`,4096)).results?.bindings ?? [];
+  const source = mains.filter(row => row.work?.value === task.plan.source.resource);
+  const survivor = mains.filter(row => row.work?.value === task.plan.survivor.resource);
+  if (mains.length !== 2 || source.length !== 1 || survivor.length !== 1 || !source[0]?.main || !survivor[0]?.main) {
+    throw new MergeUnavailable('Identity publication Main Versions are ambiguous');
+  }
+  const cut: StandingTransitionCut = { sourceWork: task.plan.source.resource,sourceMainVersion: source[0].main.value,
+    survivorWork: task.plan.survivor.resource,survivorMainVersion: survivor[0].main.value,
+    originalKey: task.plan.operation === 'unmerge' ? task.plan.original : null };
+  signal.throwIfAborted();
   const existing = await readMergeIdentityReceipt(env,task);
   if (existing) {
-    await fenceStandingRatingTransition(publicationPool,task.key,signal);
+    await fenceStandingRatingTransition(publicationPool,task.key,cut,signal);
     return existing;
   }
   return controlTransaction(pool,async client => {
     const publicWorks = await checkMergeAuthority(client,task,env.fuseki,'identity-merge');
-    await fenceStandingRatingTransition(publicationPool,task.key,signal);
+    const publication = await fenceStandingRatingTransition(publicationPool,task.key,cut,signal);
+    if (publication === 'finished') throw new MergeUnavailable('Completed identity receipt is unavailable');
     const { source,survivor,operation } = task.plan, receipt = mergeIdentityReceiptIri(task), digest = mergeDigest(task);
     const batch = `urn:rezics:outbox:${hash(receipt)}`,event = `urn:rezics:event:${hash(receipt)}`;
     const validations = await profileValidations(env.fuseki,'work-metadata-v1',[
@@ -56,8 +70,8 @@ export async function commandWorkMerge(env: WorkActivationEnvironment, pool: Poo
       WHERE { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(task.dataEpoch)} ;
         rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
         GRAPH ${iri(GRAPHS.current)} {
-          ${iri(source.resource)} a schema:CreativeWork ; rv:head ${iri(source.revision)} ; rv:mainVersion ?sourceMain .
-          ${iri(survivor.resource)} a schema:CreativeWork ; rv:head ${iri(survivor.revision)} ; rv:mainVersion ?survivorMain .
+          ${iri(source.resource)} a schema:CreativeWork ; rv:head ${iri(source.revision)} ; rv:mainVersion ${iri(cut.sourceMainVersion)} .
+          ${iri(survivor.resource)} a schema:CreativeWork ; rv:head ${iri(survivor.revision)} ; rv:mainVersion ${iri(cut.survivorMainVersion)} .
           ${operation === 'merge' ? `FILTER NOT EXISTS { ${iri(source.resource)} rv:mergedInto ?old }
             FILTER NOT EXISTS { ${iri(survivor.resource)} rv:mergedInto ?nextIdentity }
             FILTER NOT EXISTS { ${iri(survivor.resource)} rv:mergedInto+ ${iri(source.resource)} }`

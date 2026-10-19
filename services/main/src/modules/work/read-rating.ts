@@ -82,7 +82,7 @@ export async function readWorkRating(session: WorkReadSession, work: string, sel
   if (scope.kind === 'mine' && !principal) throw new WorkReadMissing('Reader is unavailable');
   const readAggregate = () => queryWorkStandingRating(session.deps.environment, {
     readRatingAggregateInventory: (ctx, main, signal, slot) => access.readRatingAggregateInventory!(ctx, main, signal, slot),
-    checkRatingAggregateFence: (generation, signal) => access.checkRatingAggregateFence!(generation, signal),
+    checkRatingAggregateFence: (generation, signal, cuts) => access.checkRatingAggregateFence!(generation, signal, cuts),
   }, { kind: scope.kind === 'realm' ? 'realm' : 'global', context, work: basis.work, mainVersion: basis.mainVersion,
     ...(principal ? { onlySlot: standingRatingSlotIri(principal, context, basis.mainVersion) } : {}) });
   const result = await readAggregate();

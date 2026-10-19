@@ -570,7 +570,7 @@ export const STANDING_RATING_INVENTORY_SQL = `WITH publication AS MATERIALIZED (
             AND member.origin_main_version=h.main_version AND member.origin_slot=h.slot
             AND member.admission_id=h.admission_id AND member.value_known)
       LIMIT 2) w) AS witnesses
-  FROM access.rating_standing_publication() p
+  FROM access.rating_standing_publication($1,$2) p
   LEFT JOIN access.rating_standing_component k ON k.context=$1 AND k.main_version=$2
 )
 SELECT inventory.*,publication.standing_generation,publication.pending,
@@ -580,7 +580,7 @@ SELECT inventory.*,publication.standing_generation,publication.pending,
 FROM (${RATING_INVENTORY_SQL}) inventory CROSS JOIN publication`;
 
 const STANDING_READER_SLOT_SQL = `SELECT c.*,own.*,p.generation AS standing_generation,p.pending
-  FROM (${COMPONENT_CONTEXT_SQL}) c CROSS JOIN access.rating_standing_publication() p
+  FROM (${COMPONENT_CONTEXT_SQL}) c CROSS JOIN access.rating_standing_publication($1,$2) p
   LEFT JOIN LATERAL (${STANDING_SLOT_SQL}) own ON true`;
 
 /** The same private effective slots as a normal read, in a bounded seek page.
@@ -707,14 +707,25 @@ async function readInventory(pool: Pool, context: string, target: string,
   } });
 }
 
+export interface StandingRatingCut { context: string; mainVersion: string; generation: string }
+
 export async function checkRatingAggregateFence(pool: Pool, generation: string,
-  signal = AbortSignal.timeout(10_000), standingGeneration?: string): Promise<boolean> {
+  signal = AbortSignal.timeout(10_000), cuts: readonly StandingRatingCut[] = []): Promise<boolean> {
+  if (cuts.length > MAX_RATING_AGGREGATE_SLOTS || cuts.some(cut => !nativeId.test(cut.context)
+    || !nativeId.test(cut.mainVersion) || !/^[0-9a-f]{64}$/.test(cut.generation))) throw new RatingInventoryConflict('invalid standing cut');
   return withInventoryClient(pool, signal, async client => {
-    const result = await client.query(`SELECT f.open,f.generation,p.generation AS standing_generation,p.pending
-      FROM access.recovery_fence f CROSS JOIN access.rating_standing_publication() p WHERE f.id`);
+    // All selected cuts share this one fresh snapshot and statement. Two
+    // components retain 2*(BEGIN,SET,SELECT,COMMIT)+one fence = nine statements.
+    const result = cuts.length === 0 ? await client.query('SELECT open,generation FROM access.recovery_fence WHERE id')
+      : await client.query(`SELECT f.open,f.generation,NOT EXISTS (
+      SELECT 1 FROM jsonb_to_recordset($1::jsonb) cut(context text,main_version text,generation text)
+      CROSS JOIN LATERAL access.rating_standing_publication(cut.context,cut.main_version) p
+      WHERE p.pending<>0 OR p.generation<>cut.generation) AS standing_current
+      FROM access.recovery_fence f WHERE f.id`,
+    [JSON.stringify(cuts.map(cut => ({ context: cut.context,main_version: cut.mainVersion,generation: cut.generation })))]);
     const row = result.rows[0];
-    return row?.open === true && row.generation === generation && (standingGeneration === undefined
-      || row.standing_generation === standingGeneration && String(row.pending) === '0');
+    signal.throwIfAborted();
+    return row?.open === true && row.generation === generation && (cuts.length === 0 || row.standing_current === true);
   });
 }
 

@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import type { Pool } from 'pg';
 import { AccessAdmissionRegistry } from '../src/modules/access/admission.ts';
 import { fusekiReadBudget, FusekiReadBudgetExceeded, type SparqlResult } from '../src/infrastructure/fuseki.ts';
-import { STANDING_RATING_INVENTORY_SQL, type RatingAggregateInventory, type RatingInventoryHead } from '../src/modules/rating/aggregate-inventory.ts';
+import { checkRatingAggregateFence, STANDING_RATING_INVENTORY_SQL, type RatingAggregateInventory, type RatingInventoryHead } from '../src/modules/rating/aggregate-inventory.ts';
 import { RatingAggregateUnavailable } from '../src/modules/rating/aggregate.ts';
 import { RATING_ACCOUNT_POPULATION, RATING_LATEST_MEAN_POLICY, RATING_STANDING_CADENCE,
   REALM_STANDING_RATING_CONTEXT_PROFILE } from '../src/modules/rating/context.ts';
@@ -127,7 +127,10 @@ function fixture(population: number, realmPopulation = 2) {
  * Counts include transaction/control statements, as the retained native test
  * does. This verifies adapter work, not PostgreSQL execution or trigger work. */
 function inventoryTransport(f: ReturnType<typeof fixture>) {
-  const state = { generation: '0'.repeat(64), pending: '0', statements: [] as string[], differentCut: false };
+  const state = { generation: '0'.repeat(64), pending: '0', statements: [] as string[], differentCut: false,
+    cuts: new Map<string, { generation: string; pending: string }>() };
+  const current = (context: string, main: string) => state.cuts.get(`${context}|${main}`)
+    ?? { pending: state.pending, generation: state.differentCut && context === globalContext ? '1'.repeat(64) : state.generation };
   const headRow = (head: RatingInventoryHead, index: number) => ({ slot: head.slot, work: head.work,
     main_version: head.mainVersion, target_release: null, observation: head.observation, revision: head.revision,
     principal_id: `019d0000-0000-7000-8000-${String(index).padStart(12, '0')}`,
@@ -143,18 +146,20 @@ function inventoryTransport(f: ReturnType<typeof fixture>) {
       const metadata = { realm: source.realm, context_revision: source.contextRevision, policy_revision: source.policyRevision,
         open: true, generation: source.recoveryGeneration, context_state: 'sealed', context_outcome: 'succeeded',
         context_receipt: source.contextReceipt, context_epoch: source.contextDataEpoch, context_sequence: source.contextSequence,
-        pending: state.pending, standing_generation: state.differentCut && values[0] === globalContext ? '1'.repeat(64) : state.generation };
+        pending: current(values[0]!, values[1]!).pending, standing_generation: current(values[0]!, values[1]!).generation };
       return { rows: (source.heads.length ? source.heads : [null]).map((head, index) => ({ ...metadata,
         ...(head ? headRow(head, index) : {}), ...(index ? {} : { standing_component: { ...component,
           witnesses: component.witness ? [headRow(component.witness, 100)] : null } }) })) };
     }
-    if (sql.includes('FROM access.recovery_fence f CROSS JOIN access.rating_standing_publication()')) {
-      return { rows: [{ open: true, generation: '7', standing_generation: state.generation, pending: state.pending }] };
+    if (sql.includes('AS standing_current')) {
+      const cuts = JSON.parse(values[0]!) as { context: string; main_version: string; generation: string }[];
+      return { rows: [{ open: true, generation: '7', standing_current: cuts.every(cut =>
+        current(cut.context, cut.main_version).pending === '0' && cut.generation === current(cut.context, cut.main_version).generation) }] };
     }
     throw new Error(`Unexpected inventory statement: ${sql}`);
   } };
   const pool = { async connect() { return client; } } as unknown as Pool;
-  return { state, access: new AccessAdmissionRegistry(pool) };
+  return { state, pool, access: new AccessAdmissionRegistry(pool) };
 }
 
 test('composed synthesis retains nine SQL statements including controls at 100/101/large and empty boundaries', async () => {
@@ -204,12 +209,11 @@ test('search batches also reject a publication transition completed during their
   expect(transport.state.statements).toHaveLength(5);
 });
 
-test('standing publication is held across a pending transition, mixed cuts and a transition completed during the graph read', async () => {
-  for (const condition of ['pending', 'mixed', 'completed-during-read'] as const) {
+test('standing publication is held across an affected pending transition and a transition completed during the graph read', async () => {
+  for (const condition of ['pending', 'completed-during-read'] as const) {
     const f = fixture(101), transport = inventoryTransport(f);
     f.graph.rows = [...f.realmRows, ...f.graph.rows];
     if (condition === 'pending') transport.state.pending = '1';
-    if (condition === 'mixed') transport.state.differentCut = true;
     if (condition === 'completed-during-read') {
       const query = f.graph.query.bind(f.graph);
       f.graph.query = async sql => { const result = await query(sql); transport.state.generation = '2'.repeat(64); return result; };
@@ -218,6 +222,33 @@ test('standing publication is held across a pending transition, mixed cuts and a
       .rejects.toBeInstanceOf(RatingAggregateUnavailable);
     expect(f.graph.calls).toBe(condition === 'completed-during-read' ? 1 : 0);
   }
+});
+
+
+test('independent Realm and Global publication cuts are checked together without requiring equality', async () => {
+  const f = fixture(101, 102), transport = inventoryTransport(f);
+  f.graph.rows = [...f.realmRows, ...f.graph.rows];
+  transport.state.differentCut = true;
+  const result = await queryRealmGlobalSynthesis(f.env, transport.access, { realmContext, globalContext, work, mainVersion });
+  expect(result.components.realm.count).toBe(102);
+  expect(result.components.global.count).toBe(101);
+  expect(transport.state.statements).toHaveLength(9);
+});
+
+test('registry composition fences only the selected Work/Context cut and rejects an old cut after affected recovery', async () => {
+  const f = fixture(102), transport = inventoryTransport(f);
+  transport.state.cuts.set(`${realmContext}|${mainVersion}`, { generation: 'a'.repeat(64), pending: '1' });
+  transport.state.cuts.set(`${globalContext}|${originMain}`, { generation: 'b'.repeat(64), pending: '1' });
+  const read = () => queryGlobalRatingAggregate(f.env, transport.access, { context: globalContext, work, mainVersion });
+  expect(await read()).toMatchObject({ complete: true, population: 102, count: 102, mean: 5 });
+  expect(transport.state.statements).toHaveLength(5);
+  const selected = { context: globalContext, mainVersion, generation: transport.state.generation };
+  transport.state.cuts.set(`${globalContext}|${mainVersion}`, { generation: 'c'.repeat(64), pending: '1' });
+  await expect(read()).rejects.toBeInstanceOf(RatingAggregateUnavailable);
+  expect(f.graph.calls).toBe(1); // pending is rejected before graph work
+  transport.state.cuts.set(`${globalContext}|${mainVersion}`, { generation: 'd'.repeat(64), pending: '0' });
+  expect(await checkRatingAggregateFence(transport.pool, '7', undefined, [selected])).toBe(false);
+  expect(await read()).toMatchObject({ complete: true, population: 102, count: 102, mean: 5 });
 });
 
 test('standing aggregates are exact at empty, 100, 101 and large populations within the original request budget', async () => {

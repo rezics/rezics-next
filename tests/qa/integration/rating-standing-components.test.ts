@@ -90,7 +90,7 @@ test('standing components retain exact effective slots through 100/101/large, me
     expect((await pool.query('SELECT access.rating_standing_slot($1,$2,$3) AS slot',
       [people[0], context, originMain])).rows[0].slot).toBe(items[0]!.slot);
     let previous = 0;
-    for (const population of [100, 101, 512, 2048]) {
+    for (const population of [100, 101, 102, 512, 2048]) {
       await heads(items.slice(previous, population), originMain, originWork);
       previous = population;
       expect(await expectExact(originMain)).toEqual({ slots: population, unvalued: 0, histogram: { '5': population } });
@@ -151,17 +151,21 @@ test('standing components retain exact effective slots through 100/101/large, me
     [JSON.stringify(retained), context, source.principal, originMain, source.slot, task]);
     const countValue = async (value: number) => Number((await pool.query(`SELECT count(*) AS n FROM access.rating_standing_contribution
       WHERE context=$1 AND main_version=ANY($2::text[]) AND value=$3`, [context, retained.map(target => target.main), value])).rows[0].n);
-    const oldCut = await readRatingAggregateInventory(pool, context, originMain);
+    const oldCut = await readRatingAggregateInventory(pool, context, retained.at(-1)!.main);
     await pool.query('UPDATE access.rating_aggregate_head SET value=4 WHERE context=$1 AND main_version=$2 AND slot=$3',
       [context, originMain, source.slot]);
     expect(await countValue(4)).toBe(1);
-    expect((await pool.query('SELECT pending FROM access.rating_standing_publication()')).rows[0].pending).toBe('1');
-    for (const target of [originMain, retained[0]!.main, retained.at(-1)!.main]) {
-      await expect(readRatingAggregateInventory(pool, context, target)).rejects.toThrow('publication is incomplete');
-    }
-    expect(await checkRatingAggregateFence(pool, oldCut.recoveryGeneration, undefined, oldCut.standingGeneration)).toBe(false);
-    expect(await refreshStandingRatingProjections(pool, { context, limit: 32 })).toMatchObject({ refreshed: 32, complete: false, publicationReady: false });
+    expect((await pool.query('SELECT pending FROM access.rating_standing_publication($1,$2)', [context, originMain])).rows[0].pending).toBe('0');
+    expect((await readRatingAggregateInventory(pool, context, originMain)).standing!.slots).toBe(2048);
+    expect((await readRatingAggregateInventory(pool, context, retained[0]!.main)).standing!.histogram).toEqual({ '4': 1 });
+    expect((await readRatingAggregateInventory(pool, context, deletionMain)).standing!.slots).toBe(100);
+    await expect(readRatingAggregateInventory(pool, context, retained.at(-1)!.main)).rejects.toThrow('publication is incomplete');
+    expect(await checkRatingAggregateFence(pool, oldCut.recoveryGeneration, undefined, [{ context, mainVersion: retained.at(-1)!.main, generation: oldCut.standingGeneration! }])).toBe(false);
+    expect(await refreshStandingRatingProjections(pool, { context, limit: 32 })).toMatchObject({ refreshed: 32, complete: false });
     expect(await countValue(4)).toBe(33);
+    expect((await readRatingAggregateInventory(pool, context, retained[32]!.main)).standing!.histogram).toEqual({ '4': 1 });
+    await expect(readRatingAggregateInventory(pool, context, retained[33]!.main)).rejects.toThrow('publication is incomplete');
+    expect((await readRatingAggregateInventory(pool, context, deletionMain)).standing!.slots).toBe(100);
 
     // A newer source seal rewinds the persisted frontier. Lost local cursors
     // cannot skip the earlier targets now carrying that previous value.
@@ -169,7 +173,7 @@ test('standing components retain exact effective slots through 100/101/large, me
       [context, originMain, source.slot]);
     expect(await countValue(3)).toBe(1);
     expect(await refreshStandingRatingProjections(pool, { context, limit: 100 })).toMatchObject({ refreshed: 100, complete: false });
-    expect(await refreshStandingRatingProjections(pool, { context, limit: 100 })).toMatchObject({ refreshed: 36, complete: true, publicationReady: true });
+    expect(await refreshStandingRatingProjections(pool, { context, limit: 100 })).toMatchObject({ refreshed: 36, complete: true });
     expect(await countValue(3)).toBe(137);
     for (const target of retained) await expectExact(target.main);
 
@@ -177,8 +181,11 @@ test('standing components retain exact effective slots through 100/101/large, me
     // instead of dropping their selected slots or publishing truncated figures.
     await pool.query('DELETE FROM access.rating_aggregate_head WHERE context=$1 AND main_version=$2 AND slot=$3',
       [context, originMain, source.slot]);
+    expect(await refreshStandingRatingProjections(pool, { context, limit: 32 })).toMatchObject({ refreshed: 32, complete: false });
+    await expect(readRatingAggregateInventory(pool, context, retained.at(-1)!.main)).rejects.toThrow('publication is incomplete');
+    expect((await readRatingAggregateInventory(pool, context, deletionMain)).standing!.slots).toBe(100);
     expect(await refreshStandingRatingProjections(pool, { context })).toMatchObject({ refreshed: 100, complete: false });
-    expect(await refreshStandingRatingProjections(pool, { context })).toMatchObject({ refreshed: 36, complete: true, publicationReady: true });
+    expect(await refreshStandingRatingProjections(pool, { context })).toMatchObject({ refreshed: 4, complete: true });
     expect(await expectExact(originMain)).toMatchObject({ slots: 2047, unvalued: 0 });
     for (const target of retained) expect(await expectExact(target.main)).toEqual({ slots: 1, unvalued: 1, histogram: {} });
 
@@ -193,7 +200,7 @@ test('standing components retain exact effective slots through 100/101/large, me
       [{ mainVersion: originMain, slot: reconstructed.slot, revision: reconstructed.revision, value: 5 }])).toBe(1);
     expect(await countValue(5)).toBe(1);
     expect(await refreshStandingRatingProjections(pool, { context })).toMatchObject({ refreshed: 100, complete: false });
-    expect(await refreshStandingRatingProjections(pool, { context })).toMatchObject({ refreshed: 36, complete: true, publicationReady: true });
+    expect(await refreshStandingRatingProjections(pool, { context })).toMatchObject({ refreshed: 36, complete: true });
     expect(await countValue(5)).toBe(137);
     await pool.query('DELETE FROM access.rating_merge_selection WHERE context=$1 AND main_version=ANY($2::text[])',
       [context, retained.map(target => target.main)]);
@@ -206,28 +213,26 @@ test('standing components retain exact effective slots through 100/101/large, me
     try {
       await oldest.query('BEGIN');
       await oldest.query('SELECT pg_current_xact_id()'); // pin xmin before the identity transition
-      await fenceStandingRatingTransition(pool, task);
-      await fenceStandingRatingTransition(pool, task);
-      expect((await pool.query('SELECT pending FROM access.rating_standing_publication()')).rows[0].pending).toBe('1');
-      for (const target of [originMain, deletionMain]) {
-        await expect(readRatingAggregateInventory(pool, context, target)).rejects.toThrow('publication is incomplete');
-      }
+      await fenceStandingRatingTransition(pool, task, { sourceWork: originWork, sourceMainVersion: originMain, survivorWork: work, survivorMainVersion: main, originalKey: null });
+      await fenceStandingRatingTransition(pool, task, { sourceWork: originWork, sourceMainVersion: originMain, survivorWork: work, survivorMainVersion: main, originalKey: null });
+      expect((await pool.query('SELECT pending FROM access.rating_standing_publication($1,$2)', [context, originMain])).rows[0].pending).toBe('1');
+      await expect(readRatingAggregateInventory(pool, context, originMain)).rejects.toThrow('publication is incomplete');
+      expect((await readRatingAggregateInventory(pool, context, deletionMain)).standing!.slots).toBe(100);
       const completion = () => pool.query(`INSERT INTO access.identity_merge_completion(task_key,receipt,command_key,result)
         VALUES ($1,'urn:standing-owner-fixture:complete',$2,'null')`, [task, itemCommandKey(task, 'identity-merge', '$finalize')]);
       await expect(completion()).rejects.toThrow('merge reconciliation is incomplete');
-      expect((await pool.query('SELECT pending FROM access.rating_standing_publication()')).rows[0].pending).toBe('1');
+      expect((await pool.query('SELECT pending FROM access.rating_standing_publication($1,$2)', [context, originMain])).rows[0].pending).toBe('1');
       await pool.query(`INSERT INTO access.identity_merge_page(task_key,owner,page,exhausted)
         VALUES ($1,'rating',1,true)`, [task]);
       await completion();
-      await fenceStandingRatingTransition(pool, task); // completed replay must not create a new pending marker
-      // Even with no pending task, a late lower-xid commit must not hide behind
-      // a newer equality head. The indexed horizon probe holds until older work drains.
-      expect((await pool.query('SELECT pending FROM access.rating_standing_publication()')).rows[0].pending).toBe('1');
-      await expect(readRatingAggregateInventory(pool, context, originMain)).rejects.toThrow('publication is incomplete');
+      await fenceStandingRatingTransition(pool, task, { sourceWork: originWork, sourceMainVersion: originMain, survivorWork: work, survivorMainVersion: main, originalKey: null }); // completed replay must not create a new pending marker
+      // An unrelated older transaction must not hold a now-consistent cut.
+      expect((await pool.query('SELECT pending FROM access.rating_standing_publication($1,$2)', [context, originMain])).rows[0].pending).toBe('0');
+      expect((await readRatingAggregateInventory(pool, context, originMain)).standing!.slots).toBe(2048);
       await oldest.query('COMMIT');
     } finally { await oldest.query('ROLLBACK'); oldest.release(); }
-    expect((await pool.query('SELECT pending FROM access.rating_standing_publication()')).rows[0].pending).toBe('0');
-    expect(await checkRatingAggregateFence(pool, beforeTransition.recoveryGeneration, undefined, beforeTransition.standingGeneration)).toBe(false);
+    expect((await pool.query('SELECT pending FROM access.rating_standing_publication($1,$2)', [context, originMain])).rows[0].pending).toBe('0');
+    expect(await checkRatingAggregateFence(pool, beforeTransition.recoveryGeneration, undefined, [{ context, mainVersion: originMain, generation: beforeTransition.standingGeneration! }])).toBe(false);
     expect((await readRatingAggregateInventory(pool, context, originMain)).standing!.slots).toBe(2048);
 
     const legacy = items.slice(0, 201).map(item => ({ ...item, admission: randomUUID(), observation: id(), revision: id(),

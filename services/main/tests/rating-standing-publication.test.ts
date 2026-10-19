@@ -12,6 +12,7 @@ import type { OwnerTable } from '../src/modules/work/pg-recovery-frontier.ts';
 const id = (n: number) => `https://rezics.com/id/019d0000-0000-7000-8000-${String(n).padStart(12, '0')}`;
 const context = id(1), origin = id(2), principal = '019d0000-0000-7000-8000-000000000003';
 const task = 'editorial:019d0000-0000-7000-8000-000000000004:1';
+const cut = { sourceWork: id(5), sourceMainVersion: origin, survivorWork: id(6), survivorMainVersion: id(7), originalKey: null };
 
 /** External SQL transport for the publication protocol. Native trigger effects
  * and graph identity composition have separate, retained integration coverage;
@@ -19,7 +20,7 @@ const task = 'editorial:019d0000-0000-7000-8000-000000000004:1';
 function transport(population: number) {
   const selections = Array.from({ length: population }, (_, index) => ({ main_version: id(100 + index), principal_id: principal }));
   const state = { after: selections[0]?.main_version ?? '', job: population > 1, transition: false,
-    generation: 1, open: true, unsettled: false, loseCommit: false, checkouts: 0, refreshed: [] as string[], calls: [] as string[],
+    generation: 1, open: true, finished: false, unsettled: false, loseCommit: false, checkouts: 0, refreshed: [] as string[], calls: [] as string[],
     candidateSizes: [] as number[], abortAfter: 0, cancellation: new AbortController(), releases: [] as boolean[] };
   let before: { after: string; job: boolean; transition: boolean; generation: number; refreshed: string[] } | null = null;
   const client = { release(destroy = false) { state.releases.push(destroy); }, async query(sql: string, values: unknown[] = []) {
@@ -32,8 +33,9 @@ function transport(population: number) {
       if (state.loseCommit) { state.loseCommit = false; throw new Error('lost response after commit'); }
     } else if (sql === 'ROLLBACK') { if (before) Object.assign(state, before); before = null; }
     else if (sql.startsWith('SET LOCAL')) { /* transaction control is counted */ }
+    else if (sql.includes('AS complete')) rows = [{ recovery_generation: '7', complete: !state.job }];
     else if (sql.includes('FROM access.recovery_fence')) rows = [{ open: state.open, generation: '7' }];
-    else if (sql.startsWith('INSERT INTO access.rating_standing_transition')) { state.transition = true; state.generation++; }
+    else if (sql.startsWith('INSERT INTO access.rating_standing_transition')) { state.transition = true; state.generation++; rows = [{ task_key: task, finished: state.finished }]; }
     else if (sql.includes('FROM access.rating_standing_refresh') && sql.includes('ORDER BY context')) {
       rows = state.job ? [{ context, origin_main_version: origin, origin_slot: 'urn:rezics:rating-slot:origin' }] : [];
     } else if (sql.includes('FROM access.scope_gate') || sql.includes('access.rating_observation_gate')) { /* gates */ }
@@ -47,9 +49,7 @@ function transport(population: number) {
       if (state.abortAfter && state.refreshed.length === state.abortAfter) state.cancellation.abort();
     } else if (sql.startsWith('UPDATE access.rating_standing_refresh')) state.after = String(values[3]);
     else if (sql.startsWith('DELETE FROM access.rating_standing_refresh')) { state.job = false; state.generation++; }
-    else if (sql === 'SELECT access.prune_rating_standing_changes()') { /* bounded maintenance, counted */ }
-    else if (sql.includes('FROM access.rating_standing_publication() p')) rows = [{ pending: state.job || state.transition || state.unsettled ? '1' : '0',
-      generation: String(state.generation), recovery_generation: '7', complete: !state.job }];
+    else if (sql.startsWith('SELECT access.cleanup_rating_standing_projections')) rows = [{ refreshed: 0 }];
     else throw new Error(`Unexpected publication statement: ${sql}`);
     return { rows, rowCount: rows.length };
   } };
@@ -66,7 +66,6 @@ test('retained projection publication exhausts bounded pages without a populatio
       result = await refreshStandingRatingProjections(f.pool, { context, limit: 100 });
       expect(result.refreshed).toBeLessThanOrEqual(100);
       expect(f.state.calls.length - start).toBeLessThanOrEqual(114); // includes BEGIN, SET, COMMIT, gates and bounded pruning
-      expect(result.publicationReady).toBe(result.complete);
     } while (!result.complete);
     expect(f.state.candidateSizes.every(size => size <= 101)).toBe(true);
     expect(f.state.refreshed).toEqual(f.selections.slice(1).map(row => row.main_version));
@@ -85,19 +84,36 @@ test('lost responses resume committed progress and a newer source seal can rewin
   // seals a newer value; replay must honor that frontier rather than a local one.
   f.state.after = f.selections[0]!.main_version;
   const offset = f.state.refreshed.length;
-  expect(await refreshStandingRatingProjections(f.pool, { limit: 100 })).toMatchObject({ complete: true, publicationReady: true });
+  expect(await refreshStandingRatingProjections(f.pool, { limit: 100 })).toMatchObject({ complete: true });
   expect(f.state.refreshed.slice(offset)).toEqual(f.selections.slice(1).map(row => row.main_version));
 });
 
 test('an identity fence commits independently of a borrowed transaction and outlives projection completion', async () => {
   const f = transport(3);
   const borrowed = { query() { throw new Error('must not borrow the journal transaction'); } } as unknown as PoolClient;
-  await withAccessClient(f.pool, () => fenceStandingRatingTransition(f.pool, task), borrowed);
+  await withAccessClient(f.pool, () => fenceStandingRatingTransition(f.pool, task, cut), borrowed);
   expect(f.state.checkouts).toBe(1);
   expect(f.state.calls.at(-1)).toBe('COMMIT');
   expect(f.state.transition).toBe(true);
-  expect(await refreshStandingRatingProjections(f.pool)).toMatchObject({ complete: true, publicationReady: false });
+  expect(await refreshStandingRatingProjections(f.pool)).toMatchObject({ complete: true });
   expect(f.state.transition).toBe(true);
+});
+
+test('invalid identity cut bindings fail before borrowing a fence connection', async () => {
+  for (const binding of [{ ...cut, sourceMainVersion: cut.survivorMainVersion }, { ...cut, sourceWork: 'foreign' },
+    { ...cut, originalKey: task }]) {
+    const f = transport(0);
+    await expect(fenceStandingRatingTransition(f.pool, task, binding)).rejects.toThrow('invalid merge cut');
+    expect(f.state.checkouts).toBe(0);
+  }
+});
+
+test('a settled fence distinguishes receipt replay from permission to deliver a new identity effect', async () => {
+  const f = transport(0);
+  expect(await fenceStandingRatingTransition(f.pool, task, cut)).toBe('pending');
+  f.state.finished = true;
+  expect(await fenceStandingRatingTransition(f.pool, task, cut)).toBe('finished');
+  expect(f.state.calls.at(-1)).toBe('COMMIT');
 });
 
 test('publication fencing reserves existing capacity, keeps the real nesting guard and closes with Access', async () => {
@@ -122,7 +138,7 @@ test('publication fencing reserves existing capacity, keeps the real nesting gua
     held = await parent.connect();
     await withAccessClient(guarded, async () => {
       await expect(parent.connect()).rejects.toBeInstanceOf(NestedPoolCheckoutError);
-      await fenceStandingRatingTransition(lane, task);
+      await fenceStandingRatingTransition(lane, task, cut);
     }, held);
     expect(drivers.get(lane)?.state).toMatchObject({ transition: true, checkouts: 1 });
     expect(drivers.get(parent)?.state.calls).toEqual([]);
@@ -153,14 +169,14 @@ test('an undersized or already saturated pool cannot silently increase the fence
   } finally { await full.end(); }
 });
 
-test('finishing a page commits before inspecting publication, and an unsettled horizon keeps exact reads held', async () => {
+test('continuation exhaustion is inspected after commit and is independent of unrelated transactions', async () => {
   const f = transport(3);
   f.state.unsettled = true;
-  expect(await refreshStandingRatingProjections(f.pool)).toMatchObject({ complete: true, publicationReady: false });
+  expect(await refreshStandingRatingProjections(f.pool)).toMatchObject({ complete: true });
   const commit = f.state.calls.indexOf('COMMIT');
-  expect(f.state.calls.findIndex(sql => sql.includes('FROM access.rating_standing_publication() p'))).toBeGreaterThan(commit);
+  expect(f.state.calls.findIndex(sql => sql.includes('AS complete'))).toBeGreaterThan(commit);
   f.state.unsettled = false;
-  expect(await refreshStandingRatingProjections(f.pool)).toMatchObject({ refreshed: 0, complete: true, publicationReady: true });
+  expect(await refreshStandingRatingProjections(f.pool)).toMatchObject({ refreshed: 0, complete: true });
 });
 
 test('invalid, held and cancelled pages cannot advance publication or dispatch late refreshes', async () => {
@@ -182,14 +198,14 @@ test('invalid, held and cancelled pages cannot advance publication or dispatch l
   expect(interrupted.state.after).toBe(interrupted.selections[0]!.main_version);
   expect(interrupted.state.job).toBe(true);
   expect(interrupted.state.refreshed).toEqual([]);
-  expect(await refreshStandingRatingProjections(interrupted.pool)).toMatchObject({ complete: true, publicationReady: true });
+  expect(await refreshStandingRatingProjections(interrupted.pool)).toMatchObject({ complete: true });
 });
 
 test('all standing relations declare custody and reconstruction while unknown relations remain conservative and fail the catalog guard', () => {
-  const sources = ['2045_standing_rating_components.sql', '2077_standing_rating_publication.sql']
+  const sources = ['2045_standing_rating_components.sql', '2077_standing_rating_publication.sql', '2606_standing_rating_affected_cuts.sql']
     .map(name => readFileSync(new URL(`../migrations/access/${name}`, import.meta.url), 'utf8'));
   const names = sources.flatMap(sql => [...sql.matchAll(/CREATE TABLE (access\.rating_standing_\w+)/g)].map(match => match[1]!));
-  expect(names).toHaveLength(5);
+  expect(names).toHaveLength(8);
   const tables: OwnerTable[] = names.map(name => ({ name, schema: 'access', table: name.slice(7), key: [], keyTypes: [], columns: [] }));
   assertAccessRecoveryClassification({ tables, excluded: {}, digest: 'fixture' });
   for (const table of tables) {
