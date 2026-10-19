@@ -186,7 +186,7 @@ async function readList(page: Page, list: CatalogueList) {
       ids.push(...data.items.map(item => item.id));
       cursor = data.nextCursor ?? undefined;
     } else {
-      const data = await apiData(api.v1.resources({ resource: id }).relations.get({ query: { cursor } }), list.kind);
+      const data = await apiData(api.v1.resources({ resource: id }).relations.get({ query: { after: cursor } }), list.kind);
       ids.push(...data.items.flatMap(item => item.counterparts.map(counterpart => counterpart.reference)));
       cursor = data.next ?? undefined;
     }

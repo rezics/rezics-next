@@ -325,7 +325,7 @@ export function catalogueApi(page: Page) {
       headers: Object.fromEntries(request.headers),
       ...(request.method !== 'GET' && request.method !== 'HEAD' ? { data: Buffer.from(await request.arrayBuffer()) } : {}),
     });
-    return new Response(await response.body(), { status: response.status(), headers: response.headers() });
+    return new Response(Uint8Array.from(await response.body()).buffer, { status: response.status(), headers: response.headers() });
   }, { preconnect: fetch.preconnect });
   return browserMainApi(new URL(page.url()).origin, { cache: 'no-store', fetcher });
 }
