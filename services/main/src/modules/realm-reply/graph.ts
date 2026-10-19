@@ -4,8 +4,8 @@ import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import { CommandRejected } from '../../infrastructure/fuseki.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit,
   type WorkActivationEnvironment } from '../work/activate.ts';
-import { RealmReplyStale, RealmReplyUnavailable,
-  type PlacementPreparation } from './content-store.ts';
+import { RealmReplyDenied, RealmReplyStale, RealmReplyUnavailable,
+  type PlacementPreparation, type PlacementWithdrawalInput } from './content-store.ts';
 import { receiptFamilies } from './receipt-family.ts';
 import { unerased } from '../work/public-patterns.ts';
 import { readReplyBoards, replyBoardsGuard, type ReplyBoards } from './boards.ts';
@@ -393,4 +393,101 @@ export async function placeReply(env: WorkActivationEnvironment,
     throw new RealmReplyUnavailable('placement receipt targets another intent');
   }
   return terminal;
+}
+
+/** A withdrawal is a retained Revoked placement of the same bytes and identity.
+ * The publisher and author must both match; Realm administration cannot supply either. */
+export async function assertPlacementWithdrawalOwner(env: WorkActivationEnvironment,
+  actor: string, input: PlacementWithdrawalInput): Promise<void> {
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+    GRAPH ${iri(GRAPHS.revisions)} {
+      ${iri(input.expectedHead)} a rv:RealmReplyPlacement ; rv:realm ${iri(input.realm)} ;
+        rv:reply ${iri(input.reply)} ; rv:author ${iri(actor)} ; rv:decidedBy ${iri(actor)} ;
+        rv:placementOutcome rv:Accepted . }
+  }`);
+  if (result.boolean !== true) throw new RealmReplyDenied('direct author placement ownership is required');
+}
+
+export async function withdrawReplyPlacement(env: WorkActivationEnvironment,
+  admission: RegisteredAdmission, input: PlacementWithdrawalInput): Promise<ReplyGraphReceipt> {
+  const prior = await readReplyGraphReceipt(env, admission);
+  if (prior) return checked(prior, admission);
+  if (admission.action !== 'reply.place' || admission.scope !== `reply:place:${input.realm}`
+    || admission.state !== 'claimed' || !admission.dispatchEligible
+    || !Number.isFinite(Date.parse(admission.expiresAt)) || Date.parse(admission.expiresAt) <= Date.now()) {
+    throw new RealmReplyStale('placement withdrawal admission is fenced');
+  }
+  const current = await readPlacementHead(env, input.realm, input.reply);
+  if (current?.placement !== input.expectedHead || current.revisionId !== input.expectedRevisionId) {
+    return cancelPlacement(env, admission);
+  }
+  const slot = replySlotIri(input.realm, input.reply);
+  const withdrawal = ID + admission.id;
+  const receipt = replyReceiptIri(admission);
+  const batch = `urn:rezics:outbox:${hash(receipt)}`;
+  const profile = 'https://rezics.com/definition/realm-reply-placement-v1';
+  const validations = await profileValidations(env.fuseki, 'realm-reply-placement-v1', [
+    { shape: `${profile}/slot-shape`, focus: [slot], graphs: [GRAPHS.current] },
+    { shape: `${profile}/placement-shape`, focus: [withdrawal], graphs: [GRAPHS.current, GRAPHS.revisions] },
+  ], { slot, placement: withdrawal, realm: input.realm, reply: input.reply,
+    root: current.rootTarget, revision: CONTENT_REVISION + input.expectedRevisionId,
+    review: current.reviewDecisionId, author: admission.actingSubject, actor: admission.actingSubject,
+    receipt, scope: admission.scope, epoch: admission.authorityEpoch });
+  // Copy only immutable payload/provenance from the selected placement. Its
+  // decision metadata and outcome belong to this new, exact-head transition.
+  const retained = ['rootTarget', 'rootRevision', 'author', 'parentReply', 'parentRevision', 'contextRevision',
+    'concept', 'primaryConcept', 'contentRevision', 'contentDigest', 'byteDigest', 'contentPreparation',
+    'ownerDataEpoch', 'ownerSequence', 'reviewDecision', 'reviewDigest'];
+  let status: string | undefined;
+  try {
+    const result = await validatedCommand(env, { receipt, digest: admission.requestDigest,
+      validations, deadlineMs: 10_000, update: `PREFIX rv: <${RV}>
+      DELETE {
+        GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
+        GRAPH ${iri(GRAPHS.current)} { ${iri(slot)} rv:replyPlacementHead ${iri(input.expectedHead)} }
+      } INSERT {
+        GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
+        GRAPH ${iri(GRAPHS.current)} { ${iri(slot)} rv:replyPlacementHead ${iri(withdrawal)} }
+        GRAPH ${iri(GRAPHS.revisions)} {
+          ${iri(withdrawal)} ?payloadPredicate ?payloadValue ; a rv:RealmReplyPlacement ;
+            rv:component ${iri(slot)} ; rv:realm ${iri(input.realm)} ; rv:reply ${iri(input.reply)} ;
+            rv:placementOutcome rv:Revoked ; rv:previousPlacement ${iri(input.expectedHead)} ;
+            rv:decidedBy ${iri(admission.actingSubject)} ; rv:modelRevision ${iri(profile)} ;
+            rv:shapeRevision ${iri(profile)} ; rv:datasetId ${iri(DATASET)} ;
+            rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
+        }
+        GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
+          rv:requestDigest ${lit(admission.requestDigest)} ; rv:admissionId ${lit(admission.id)} ;
+          rv:authorityEpoch ${lit(admission.authorityEpoch)} ; rv:admittedScope ${lit(admission.scope)} ;
+          rv:outcome rv:Succeeded ; rv:placement ${iri(withdrawal)} ;
+          rv:expectedHead ${iri(input.expectedHead)} ;
+          rv:contentRevision ${iri(CONTENT_REVISION + input.expectedRevisionId)} ;
+          rv:realm ${iri(input.realm)} ; rv:reply ${iri(input.reply)} ;
+          rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
+        GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ;
+          rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next ; rv:eventCount 0 . }
+      } WHERE {
+        GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+          rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
+        GRAPH ${iri(GRAPHS.current)} { ${iri(slot)} rv:realm ${iri(input.realm)} ; rv:reply ${iri(input.reply)} ;
+          rv:replyPlacementHead ${iri(input.expectedHead)} . }
+        GRAPH ${iri(GRAPHS.revisions)} { ${iri(input.expectedHead)} a rv:RealmReplyPlacement ;
+          rv:realm ${iri(input.realm)} ; rv:reply ${iri(input.reply)} ; rv:placementOutcome rv:Accepted ;
+          rv:contentRevision ${iri(CONTENT_REVISION + input.expectedRevisionId)} ;
+          rv:author ${iri(admission.actingSubject)} ; rv:decidedBy ${iri(admission.actingSubject)} ;
+          ?payloadPredicate ?payloadValue .
+          VALUES ?payloadPredicate { ${retained.map(field => `rv:${field}`).join(' ')} } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
+        BIND(?n + 1 AS ?next)
+      }` }, admission);
+    status = result.status;
+  } catch (error) { if (error instanceof CommandRejected) throw error; }
+  if (status === 'invalid' || status === 'unknown-profile' || status === 'conflict') {
+    throw new CommandRejected({ status });
+  }
+  const terminal = await readReplyGraphReceipt(env, admission);
+  if (terminal) return checked(terminal, admission);
+  if (status === 'guard-unmatched') return cancelPlacement(env, admission);
+  throw new RealmReplyUnavailable('placement withdrawal graph outcome is unknown');
 }

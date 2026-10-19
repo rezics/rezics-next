@@ -18,6 +18,7 @@ import { type ReplyNode, THREAD_DEPTH, type ThreadReply } from './thread.ts';
 import { absoluteTime, relativeTime } from './time.ts';
 import { MarkdownBody } from '../post-composer/markdown.tsx';
 import { WebRatedContent } from '../document-editor/rated-content.tsx';
+import { ReplyAuthorActions } from './author-actions.tsx';
 
 /** Replies scored this low start folded, as Reddit folds them; one tap opens them. */
 const FOLD_SCORE = -5;
@@ -250,6 +251,9 @@ function Reply({ node, context }: { node: ReplyNode; context: ThreadContext }) {
               </button>
             )}
             <CopyLink href={context.replyHref(reply.reply)} />
+            {!reply.blocked && reply.author ? <ReplyAuthorActions target={{ reply: reply.reply,
+              realm: context.target.realm, author: reply.author.id, revisionId: reply.revisionId,
+              placement: reply.placement }} /> : null}
             <ReportAction
               target={reply.reply}
               kind="reply"

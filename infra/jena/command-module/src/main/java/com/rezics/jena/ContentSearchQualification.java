@@ -50,7 +50,7 @@ final class ContentSearchQualification {
             || data.contains(CURRENT, subject, RDF.type.asNode(), p("ContentVariant"));
         if (REVISIONS.equals(graph)) {
             if (predicate.equals(RDF.type.asNode()) && object.equals(p("ErasedRevision"))) return true;
-            for (String type : List.of("ContentPublicationDecision", "ContentWithdrawalDecision", "ContentSearchEligibilityDecision", "ContentProjection"))
+            for (String type : List.of("ContentPublicationDecision", "ContentWithdrawalDecision", "ContentSearchEligibilityDecision", "ContentSearchEligibilityWithdrawalDecision", "ContentProjection"))
                 if (predicate.equals(RDF.type.asNode()) && object.equals(p(type))
                     || data.contains(REVISIONS, subject, RDF.type.asNode(), p(type))) return true;
         }
@@ -95,7 +95,7 @@ final class ContentSearchQualification {
                 ownerSequence = ownerSequence.max(prior.ownerSequence());
                 BigInteger decisionSequence = eligibility(data, eligibility, variant, resource, epoch, sequence);
                 require(decisionSequence.compareTo(prior.sequence()) > 0);
-                open = approved.equals(current);
+                open = approved.equals(current) && !data.contains(REVISIONS, eligibility, RDF.type.asNode(), p("ContentSearchEligibilityWithdrawalDecision"));
                 if (!approved.equals(current)) require(prior.sequence().compareTo(publication.sequence()) < 0
                     && decisionSequence.compareTo(publication.sequence()) < 0);
                 if (open && p("PublicDomain").equals(value(data, REVISIONS, eligibility, "rightsBasis"))) publicDomain = true;
@@ -156,6 +156,31 @@ final class ContentSearchQualification {
 
     private static BigInteger eligibility(DatasetGraph data, Node decision, Node variant, Node resource,
                                            String epoch, BigInteger sequence) {
+        if (data.contains(REVISIONS, decision, RDF.type.asNode(), p("ContentSearchEligibilityWithdrawalDecision"))) {
+            require(CommandService.contentEligibilityLinks(data, receipt(data, decision, "eligibilityDecision").getURI(),
+                decision.getURI(), false) == null);
+            type(data, REVISIONS, decision, "RevisionAnchor");
+            expect(data, REVISIONS, decision, "datasetId", PRODUCT);
+            require(text(data, REVISIONS, decision, "dataEpoch").equals(epoch));
+            String admission = text(data, REVISIONS, decision, "admissionId");
+            require(admission.matches(UUID) && decision.getURI().equals("https://rezics.com/id/" + admission));
+            Node receipt = receipt(data, decision, "eligibilityDecision");
+            require(receipt.getURI().equals("urn:rezics:receipt:" + hash(admission + "\0content-search-eligibility")));
+            for (String field : List.of("variant", "resource", "publicationDecision", "withdrawnEligibilityHead",
+                "admissionId", "authorityEpoch", "admittedScope", "actingSubject", "datasetId", "dataEpoch", "sequence"))
+                same(data, decision, receipt, field);
+            expect(data, RECEIPTS, receipt, "expectedHead", iri(data, REVISIONS, decision, "withdrawnEligibilityHead"));
+            Map<String, String> fields = new LinkedHashMap<>();
+            fields.put("family", "content-search-eligibility-withdrawal-v1");
+            fields.put("resourceId", resource.getURI()); fields.put("variantId", variant.getURI());
+            fields.put("publicationDecision", iri(data, REVISIONS, decision, "publicationDecision").getURI());
+            fields.put("expectedEligibilityHead", iri(data, REVISIONS, decision, "withdrawnEligibilityHead").getURI());
+            fields.put("actingSubject", iri(data, REVISIONS, decision, "actingSubject").getURI());
+            String json = fields.entrySet().stream().map(entry -> quote(entry.getKey()) + ":" + quote(entry.getValue()))
+                .collect(java.util.stream.Collectors.joining(",", "{", "}"));
+            require(hash(json).equals(text(data, RECEIPTS, receipt, "requestDigest")));
+            return positive(data, REVISIONS, decision, "sequence", sequence);
+        }
         type(data, REVISIONS, decision, "ContentSearchEligibilityDecision");
         type(data, REVISIONS, decision, "RevisionAnchor");
         expect(data, REVISIONS, decision, "component", variant);
