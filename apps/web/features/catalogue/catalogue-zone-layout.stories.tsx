@@ -47,7 +47,8 @@ async function assertPreviews(list: HTMLElement, works: readonly ZoneWork[]) {
       expect(title.width).toBeGreaterThanOrEqual(96);
       expect(Number.parseFloat(getComputedStyle(heading).fontSize)).toBeGreaterThanOrEqual(16);
       expect(heading).toHaveTextContent(work.title!.value);
-      const author = within(card).getByText(work.author!.value, { exact: true }).closest('p')!;
+      const author = within(card).getByText(work.author!.value,
+        { exact: true, selector: ':scope > p *' }).closest('p')!;
       expect(author.getBoundingClientRect().width).toBeCloseTo(128, 1);
       expect(Number.parseFloat(getComputedStyle(author).fontSize)).toBeGreaterThanOrEqual(14);
       const box = boxes[index]!;
