@@ -191,7 +191,7 @@ export const NativeRealmHeader: Story = {
     const primary = top.getByRole('group', { name: 'Primary actions' });
     const reactions = top.getByRole('group', { name: 'Reactions' });
     const more = top.getByRole('button', { name: `More actions for ${zone.name.value}` });
-    await expect(within(primary).getByRole('link', { name: 'Discussions' })).toHaveAttribute('href', `/en${zone.links.discussions}`);
+    await expect(within(primary).getByRole('link', { name: 'Discussions' })).toHaveAttribute('href', zone.links.discussions);
     await expect(primary.compareDocumentPosition(reactions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await expect(more.getBoundingClientRect().left).toBeGreaterThanOrEqual(reactions.getBoundingClientRect().right - 1);
     more.focus();

@@ -473,7 +473,9 @@ export const CurrentCoverCredit: Story = {
     await expect(await canvas.findByText('© Corrected holder')).toBeVisible();
     await waitFor(() => expect(canvas.queryByText('© Current holder')).toBeNull());
     await expect(canvasElement.querySelectorAll('[data-cover-credit]')).toHaveLength(1);
-    await expect(within(sources).getByRole('link', { name: 'Current archive' })).toHaveAttribute('href', 'https://example.test/cover/corrected');
+    const refreshedSources = canvas.getByRole('region', { name: 'Sources, licences and evidence' });
+    await expect(refreshedSources).toContainElement(canvas.getByText('© Corrected holder'));
+    await expect(within(refreshedSources).getByRole('link', { name: 'Current archive' })).toHaveAttribute('href', 'https://example.test/cover/corrected');
   },
 };
 
@@ -527,7 +529,9 @@ export const NativeHeader: Story = {
     await expect(primary.compareDocumentPosition(reactions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await expect(more.getBoundingClientRect().left).toBeGreaterThanOrEqual(reactions.getBoundingClientRect().right - 1);
     await expect(Math.abs(more.getBoundingClientRect().top - reactions.getBoundingClientRect().top)).toBeLessThan(16);
-    await expect(canvasElement.querySelector('[data-primary-content]')).toHaveTextContent(opening.body);
+    const useful = within(canvasElement.querySelector<HTMLElement>('[data-primary-content]')!);
+    for (const paragraph of opening.body!.split('\n\n'))
+      await expect(useful.getByText(paragraph)).toBeVisible();
     more.focus();
     await userEvent.keyboard('{Enter}');
     const report = await within(document.body).findByRole('menuitem', { name: 'Report this post' });
