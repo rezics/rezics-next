@@ -124,14 +124,14 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
     statements={statementSources} labels={sourceLabels} factObligations={factObligations}>
     {sources}
   </WorkSources>;
+  const nativeType = typeEntry(work.types);
+  const subjectIdentity = { 'data-subject-header': nativeType ? '' : undefined,
+    'data-resource': nativeType ? work.id : undefined, 'data-semantic-type': nativeType?.type };
   if (!showsBookControls(experience)) {
-    const nativeType = typeEntry(work.types);
-    const recipeType = nativeType?.presentation === 'recipe' ? nativeType.type : undefined;
     return <ReaderActionsProvider signedIn={signedIn} signInHref={signInHref ?? '/auth/start'}
       actingSubject={actingSubject} seed={readerSeed} ratingTarget={ratingTarget} actions={readerActions}>
       <PageContainer className="grid gap-7 max-lg:pb-24 [text-autospace:normal]">
-        <div data-work-identity data-subject-header={recipeType ? '' : undefined}
-          data-resource={recipeType ? work.id : undefined} data-semantic-type={recipeType}
+        <div data-work-identity {...subjectIdentity}
           className="grid min-w-0 gap-4 border-border/60 border-b pb-6">
           {reactions}
           <div className="grid min-w-0 content-start gap-3">
@@ -182,7 +182,7 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
   </>;
   return <ReaderActionsProvider signedIn={signedIn} signInHref={signInHref ?? '/auth/start'} actingSubject={actingSubject}
     seed={readerSeed} ratingTarget={ratingTarget} actions={readerActions}>
-    <PageContainer className="grid gap-6 max-lg:pb-24 [text-autospace:normal]">
+    <PageContainer {...subjectIdentity} className="grid gap-6 max-lg:pb-24 [text-autospace:normal]">
       <div data-work-identity>{reactions}</div>
       {artHeader}
       {showcase ? <ArtGrid workRef={workRef} className={`group/art ${bookGrid}`}>{columns}</ArtGrid>
@@ -196,13 +196,13 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
 /**
  * The primary action: start at chapter 1, or continue at the next unread
  * chapter, which is named under the button. A Work with nothing to read has
- * no Read button, so "Want to read" leads; when Main could not say, Read
- * opens Contents, which explains.
+ * no Read button, so "Want to read" leads. An unavailable answer cannot
+ * disclose a readable destination.
  */
 export function ReadButton({ workRef, start, messages }: {
   workRef: WorkAt; start: ReadStart; messages: WorkPageMessages;
 }) {
-  if (!start) return null;
+  if (!start || start.kind === 'unavailable') return null;
   const href = start.kind === 'contents' ? workHref(workRef, 'contents') : start.href;
   const label = start.kind === 'continue' ? messages.continueReadingShort
     : start.kind === 'start' ? messages.startReading : messages.read;

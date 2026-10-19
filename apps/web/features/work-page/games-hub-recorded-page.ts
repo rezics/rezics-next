@@ -30,7 +30,8 @@ export async function readSuppliedStart(client: Host, id: string, work: string, 
   const { main, actingSubject } = client;
   if (actingSubject) {
     const next = await settle(() => main.v1.me.continue.get({ query: { actingSubject, limit: 6 } }));
-    const item = next.ok ? next.data.items.find(entry => entry.work === work) : undefined;
+    const continuing = next.ok ? { entries: next.data.items, nextCursor: next.data.nextCursor } : null;
+    const item = continuing?.entries.find(entry => entry.work === work);
     if (item) {
       return { kind: item.lastPosition ? 'continue' as const : 'start' as const,
         href: item.nextUnread.href, chapter: item.nextUnread.title };
@@ -40,10 +41,13 @@ export async function readSuppliedStart(client: Host, id: string, work: string, 
   let parent: string | undefined;
   for (let depth = 0; depth < 3; depth += 1) {
     const level = await readSuppliedContents(client, id, { parent });
-    if (!level.ok) return depth === 0 && level.failure === 'missing' ? nothing() : { kind: 'contents' as const };
-    const first = level.data.items.find(item => item.availability === 'available');
+    if (!level.ok) return depth === 0 && level.failure === 'missing' ? nothing()
+      : { kind: 'unavailable' as const, ...level };
+    const contents = { entries: level.data.items, nextCursor: level.data.nextCursor };
+    const first = contents.entries.find(item => item.availability === 'available');
     const occurrence = first ? idOf(first.occurrence) : null;
-    if (!first || !occurrence) return depth === 0 && !level.data.items.length ? nothing() : { kind: 'contents' as const };
+    if (!first || !occurrence) return depth === 0 && !contents.entries.length && !contents.nextCursor
+      ? nothing() : { kind: 'contents' as const };
     if (first.role === 'chapter') return { kind: 'start' as const, href: chapterHref(id, occurrence),
       chapter: first.label?.value ?? null };
     parent = occurrence;

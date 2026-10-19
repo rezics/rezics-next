@@ -53,7 +53,12 @@ export async function PrimaryAction({ workRef, id, work, locale, messages, clien
   const [start, preference, releases] = await Promise.all([readStart(id, work.id, locale, work.selectedLanguage, client),
     readEditionPreference(id, client), readReleases(id, client)]);
   const progress = await readProgressSummary(id, progressLanguage(preference, locale), client);
-  const action = nextAction({ start, progress, preference, releases: releases.ok ? releases.data.items.length : 0 });
+  const inventory = releases.ok ? { entries: releases.data.items, nextCursor: releases.data.nextCursor } : null;
+  const action = nextAction({ start, progress, preference, releases: inventory?.entries.length ?? 0 });
+  if (start?.kind === 'unavailable') return <div className="grid gap-3">
+    <RegionFailure title={messages.contents} failure={start.failure} messages={messages} />
+    {action ? <NextActionView action={action} workRef={workRef} locale={locale} messages={messages} /> : null}
+  </div>;
   return action ? <NextActionView action={action} workRef={workRef} locale={locale} messages={messages} /> : null;
 }
 

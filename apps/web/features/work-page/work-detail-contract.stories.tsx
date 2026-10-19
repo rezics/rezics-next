@@ -113,6 +113,10 @@ async function readableGuide({ canvasElement, args }: { canvasElement: HTMLEleme
   await expect(sources.getBoundingClientRect().top).toBeGreaterThan(article.getBoundingClientRect().bottom);
   await expect(within(sources).getByRole('link', { name: 'CC BY-SA 3.0' })).toBeVisible();
   await expect(canvas.getByRole('heading', { level: 1 })).toBeVisible();
+  const subject = canvasElement.querySelector('[data-subject-header]')!;
+  await expect(subject).toHaveAttribute('data-resource', fixture.work.id);
+  await expect(subject).toHaveAttribute('data-semantic-type', 'https://schema.org/DigitalDocument');
+  await expect(within(subject as HTMLElement).getByRole('heading', { level: 1 })).toBeVisible();
 }
 
 export const LongEnglish1440: Story = { globals: { viewport: { value: 'desktop1440' } }, play: readableGuide };

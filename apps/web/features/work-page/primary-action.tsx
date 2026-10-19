@@ -20,8 +20,8 @@ import type { WorkAt } from './route.ts';
 // reader's edition preference); this only maps its answers to a button and renders it.
 
 export type NextAction =
-  /** Hosted text to read: chapters, a text, or Contents when Main could not say. */
-  | { kind: 'read'; start: NonNullable<ReadStart> }
+  /** Hosted text to read: chapters, a text, or admitted Contents. */
+  | { kind: 'read'; start: Exclude<ReadStart, { kind: 'unavailable' } | null> }
   /** The next part of a composition, as Main names it. `continue` once the reader has finished a part. */
   | { kind: 'part'; mode: 'continue' | 'start'; href: string; part: string | null }
   /** The reader has no edition for what comes next: the page that lets them choose one. */
@@ -53,8 +53,8 @@ export function nextAction({ start, progress, preference, releases }: {
     }
     return { kind: 'part', mode: series.furthestCompleted ? 'continue' : 'start', href: globalWorkHref(work), part };
   }
-  if (start) return { kind: 'read', start };
-  const chosen = Boolean(preference?.ok && preference.data?.edition);
+  if (start && start.kind !== 'unavailable') return { kind: 'read', start };
+  const chosen = Boolean(preference?.ok && preference.data);
   return releases > 0 && !chosen ? { kind: 'choose', href: `#${hubAnchors.availability}`, part: null } : null;
 }
 
