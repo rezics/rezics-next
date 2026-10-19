@@ -5,6 +5,7 @@ import type { PersonPreferencesStore } from '../preferences/store.ts';
 import { authorNameProvenance } from '../source/author-name.ts';
 import { coverCreditSchema } from '../media/cover-credit.ts';
 import type { Viewer } from '../suitability/policy.ts';
+import { catalogueNavigation } from '../query/navigation-contract.ts';
 import { recordedText, recordedRelevance, serialStatus } from './metadata-schema.ts';
 
 export const readId = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
@@ -97,8 +98,10 @@ export const workHeader = t.Object({ rights: t.Optional(t.Object({ basis: t.Lite
   selectedLanguage: t.Nullable(t.String()),
   /** Present when the Work is a chapter: its Book, and where the chapter is read in the Book's contents. */
   sourcePosition: readPosition,
+  navigation: t.Optional(catalogueNavigation),
   links: t.Object({ versions: t.String(), classifications: t.String(), adoptions: t.String(),
-    ratings: t.String(), history: t.String(), credits: t.String(), metadata: t.String(), editions: t.String() }) });
+    ratings: t.String(), history: t.String(), credits: t.String(), metadata: t.String(), editions: t.String(),
+    releases: t.Optional(t.String()), realizations: t.Optional(t.String()) }) });
 export const pageFields = { nextCursor: t.Nullable(t.String()), sourcePosition: readPosition,
   count: t.Object({ value: t.Integer({ minimum: 0 }), kind: t.Literal('exact-page'), total: t.Null() }) };
 export const versionItem = t.Object({ id: readId,
