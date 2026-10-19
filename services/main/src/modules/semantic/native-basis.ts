@@ -1,20 +1,22 @@
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
-import { commandReceiptIri, readCommandReceipt } from '../context/command.ts';
+import { commandReceiptIri, readCommandReceipt, type ContextCommandReceipt } from '../context/command.ts';
 import { GLOBAL_CLASSIFICATION_CONTEXT } from '../classification/context.ts';
-import { readStatement, readStatementRevisionSnapshot } from '../statement/read.ts';
+import { readStatement, readStatementRevisionSnapshot, StatementNotFound } from '../statement/read.ts';
 import { STATEMENT_FAMILIES } from '../statement/receipt-family.ts';
 import type { StatementValue } from '../statement/schema.ts';
 import { normalizeStatementQualification } from '../statement/qualification.ts';
-import { readStatementV2Revision, statementV2Acceptance, verifyStatementV2Current } from '../statement/v2-read.ts';
+import { readStatementV2MeaningBasis, readStatementV2Revision, resolveAdoptedOccurrenceV2,
+  statementV2Acceptance, verifyStatementV2Current, type StatementOwnerQuery } from '../statement/v2-read.ts';
 import { resolveStatementCoverage } from '../statement/v2-coverage.ts';
 import { checkedStatementCoverage, statementNativeId, STATEMENT_V2_PROFILE, type StatementCoverage } from '../statement/v2-schema.ts';
 import { discloseInventory } from '../disclosure/read.ts';
 import { disclosureViewer } from '../disclosure/viewer.ts';
 import { referenceDisclosure } from '../target/disclosed-references.ts';
+import { relationAttributionVerifier } from '../relation/attribution.ts';
 import { DATASET, GRAPHS, RV, iri, lit } from '../work/activate.ts';
 import { readCurrentComponent, SEMANTIC_CHANGE_FAMILY, type SemanticProperty } from './change.ts';
-import { familyReceiptIri, readSemanticTerminal } from './command.ts';
+import { familyReceiptIri, readSemanticTerminal, type SemanticTerminal } from './command.ts';
 import { checkedSemanticValue, type SemanticValue } from './value.ts';
 
 export type NativeSelectionLanguage = { state: 'omitted' } | { state: 'null' } | { state: 'value'; value: string };
@@ -39,7 +41,15 @@ export interface VerifiedSemanticBasis {
   receipt: string; revision: string; operation: string; manifest: string;
   modelGeneration: string | null;
   sourcePosition: { datasetId: 'product'; dataEpoch: string; sequence: string };
+  commandReceipt: VerifiedNativeCommandReceipt;
+  /** A participation trait's decision does not adopt its occurrence. */
+  occurrenceAdoption?: { native: Extract<AcknowledgedSemanticBasis, { kind: 'statement' }>;
+    commandReceipt: VerifiedNativeCommandReceipt; manifest: string; modelGeneration: string | null };
   headGuarantee: 'verified-before-commit';
+}
+export interface VerifiedNativeCommandReceipt {
+  outcome: 'succeeded'; receipt: string; admissionId: string; requestDigest: string; authorityEpoch: string;
+  scope: string; dataEpoch: string; sequence: string; component: string; revision: string; operation: string;
 }
 export class NativeBasisVerificationProblem extends Error {
   constructor(readonly status: 403 | 409 | 422 | 503,
@@ -52,6 +62,12 @@ const fail = (code: NativeBasisVerificationProblem['code'], message: string): ne
 const canonical = (value: unknown): string => JSON.stringify(value, (_key, member) => member && typeof member === 'object'
   && !Array.isArray(member) ? Object.fromEntries(Object.entries(member).sort(([left], [right]) => left.localeCompare(right))) : member);
 const same = (left: unknown, right: unknown) => canonical(left) === canonical(right);
+const commandAcknowledgement = (receipt: SemanticTerminal | ContextCommandReceipt,
+  operation: string, component: string, revision: string): VerifiedNativeCommandReceipt => ({
+  outcome: 'succeeded', receipt: receipt.receipt, admissionId: receipt.admissionId, requestDigest: receipt.requestDigest,
+  authorityEpoch: receipt.authorityEpoch, scope: receipt.scope, dataEpoch: receipt.dataEpoch, sequence: receipt.sequence,
+  component, revision, operation,
+});
 
 /** Only exact native values or their retained scalar lexicals qualify. There is no existential/value coercion. */
 export function selectedNativeValueMatches(value: SemanticValue | StatementValue,
@@ -70,7 +86,7 @@ export function selectedNativeValueMatches(value: SemanticValue | StatementValue
 
 /** One owner entry point for Source. Source alone owns coordinate/mapping/rights checks and certificate settlement. */
 async function verifyNativeBasis(
-  work: Pick<MainWorkDependencies, 'environment' | 'access' | 'contextSelections'>,
+  work: Pick<MainWorkDependencies, 'environment' | 'access' | 'contextSelections' | 'relationAttribution'>,
   principal: VerifiedPrincipal,
   input: NativeBasisVerificationInput,
 ): Promise<VerifiedSemanticBasis> {
@@ -108,12 +124,14 @@ async function verifyNativeBasis(
   if (basis.kind !== 'statement' || basis.coverage?.kind !== 'occurrence') {
     if (!(await readable([basis.target])).has(basis.target)) return fail('native_basis_unavailable', 'native target is unavailable to this principal');
   }
-  const initiallyDisclosed = await disclose([basis.target, basis.revision]);
-  if (!initiallyDisclosed.has(basis.target) || !initiallyDisclosed.has(basis.revision)) {
+  const owned = [...new Set([basis.target, basis.revision, basis.kind === 'statement' ? basis.statement : basis.component])];
+  const initiallyDisclosed = await disclose(owned);
+  if (owned.some(ref => !initiallyDisclosed.has(ref))) {
     return fail('native_basis_unavailable', 'native target disclosure is unavailable');
   }
   let result: VerifiedSemanticBasis;
   let headGuard: string;
+  const completionChecks: (() => Promise<void>)[] = [];
   if (basis.kind === 'component-property') {
     if (basis.owner !== 'semantic' || basis.target !== basis.component) return fail('native_target_mismatch', 'native property target differs from its component');
     const receipt = await readSemanticTerminal(env, basis.receipt);
@@ -140,7 +158,11 @@ async function verifyNativeBasis(
     result = { native: { ...basis, property: { predicate: basis.property.predicate, value } }, receipt: receipt.receipt,
       revision: basis.revision, operation: anchors[0].operation.value, modelGeneration: anchors[0].generation.value,
       manifest: current.manifest, sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch, sequence: receipt.sequence },
+      commandReceipt: commandAcknowledgement(receipt, anchors[0].operation.value, basis.component, basis.revision),
       headGuarantee: 'verified-before-commit' };
+    if (value.kind === 'resource') completionChecks.push(async () => {
+      if (!(await readable([value.ref])).has(value.ref)) return fail('native_basis_unavailable', 'native property reference disclosure changed');
+    });
     headGuard = `GRAPH ${iri(GRAPHS.current)} { ${iri(basis.component)} rv:semanticHead ${iri(basis.revision)} }`;
   } else {
     if (basis.owner !== 'statement') return fail('native_target_mismatch', 'unsupported native Statement owner');
@@ -183,8 +205,43 @@ async function verifyNativeBasis(
       || !same([...meaning.interpretationDefinitions].sort(), [...basis.qualifiers.interpretationDefinitions].sort())
       || !same(meaning.qualification, qualification) || !same(v2?.meaning.coverage, basis.coverage)
       || !selectedNativeValueMatches(meaning.value, input.selected)) return fail('native_value_mismatch', 'Statement value, exact coverage or qualifiers differ from the selected native basis');
+    const valueReference = meaning.value.kind === 'resource'
+      ? 'ref' in meaning.value ? meaning.value.ref : meaning.value.iri : null;
+    const references = [...new Set([basis.statement, basis.revision, meaning.predicate, meaning.relationDefinition,
+      ...meaning.applicability, ...meaning.interpretationDefinitions, ...(v2?.evidence ?? []),
+      ...(meaning.qualification ? [meaning.qualification.definition, meaning.qualification.interpretationContext,
+        ...(meaning.qualification.editionScope ? [meaning.qualification.editionScope] : [])] : []),
+      ...(valueReference ? [valueReference] : [])])].filter(statementNativeId);
+    const checkReferences = async () => {
+      const disclosed = await disclose(references);
+      if (references.some(ref => !disclosed.has(ref))
+        || statementNativeId(meaning.predicate) && !(await readable([meaning.predicate])).has(meaning.predicate)
+        || valueReference && basis.coverage?.kind !== 'occurrence'
+          && !(await readable([valueReference])).has(valueReference)) {
+        return fail('native_basis_unavailable', 'native Statement references are unavailable');
+      }
+    };
+    await checkReferences();
+    completionChecks.push(checkReferences);
+    const ownerQuery: StatementOwnerQuery = async (body, limit) => {
+      const bindings = (await env.fuseki.query(`PREFIX rv: <${RV}> ${body}`, 4 * 1024 * 1024)).results?.bindings ?? [];
+      if (bindings.length > limit) return fail('native_basis_unavailable', 'native Statement owner read exceeds its bound');
+      return bindings;
+    };
     let coverageGuard = '';
-    if (v2) coverageGuard = (await resolveStatementCoverage(env, v2.meaning, canRead, canRead, disclose, readable)).guard;
+    if (v2) {
+      const readCoverage = () => resolveStatementCoverage(env, v2.meaning, canRead, canRead, disclose, readable,
+        relationAttributionVerifier(work.relationAttribution, principal, input.actingSubject));
+      const coverage = await readCoverage();
+      coverageGuard = coverage.guard;
+      const readMeaning = () => readStatementV2MeaningBasis(v2, ownerQuery, canReadPrivate);
+      const meaningBasis = await readMeaning();
+      completionChecks.push(async () => {
+        if (!same(coverage, await readCoverage()) || !same(meaningBasis, await readMeaning())) {
+          return fail('native_basis_unavailable', 'native Statement coverage or meaning Context changed');
+        }
+      });
+    }
     const positionRows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence ?head WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence }
       GRAPH ${iri(GRAPHS.current)} { ${iri(basis.statement)} rv:head ?head ; rv:statementState rv:Active }
@@ -194,7 +251,15 @@ async function verifyNativeBasis(
     const position = { dataEpoch: positionRows[0].epoch.value, sequence: positionRows[0].sequence.value };
     const context = ['global', 'urn:rezics:context:global-native', GLOBAL_CLASSIFICATION_CONTEXT].includes(basis.context) ? 'global' : basis.context;
     const acceptance = context === 'global' ? { kind: 'global' as const } : { kind: 'realm' as const, realm: context };
-    if (context !== 'global' && !await work.access.realmReadProof?.(principal, input.actingSubject, context)) return fail('native_basis_unavailable', 'Statement acceptance Context is unavailable');
+    if (context !== 'global') {
+      const proof = await work.access.realmReadProof?.(principal, input.actingSubject, context);
+      if (!proof) return fail('native_basis_unavailable', 'Statement acceptance Context is unavailable');
+      completionChecks.push(async () => {
+        if (await work.access.realmReadProof?.(principal, input.actingSubject, context) !== proof) {
+          return fail('native_basis_unavailable', 'Statement acceptance Context authority changed');
+        }
+      });
+    }
     const adoption = await statementV2Acceptance(env, { statement: basis.statement,
       meaningKey: v2?.meaningKey ?? v1Snapshot!.meaningKey! }, acceptance, position);
     if (!adoption || adoption.result.state === 'unavailable') return fail('native_basis_unavailable', 'current Statement adoption is unavailable');
@@ -204,14 +269,48 @@ async function verifyNativeBasis(
     }
     result = { native: basis, receipt: receipt.receipt, revision: basis.revision, operation: anchors[0].operation.value,
       manifest: anchors[0].manifest.value, modelGeneration: v2?.modelGeneration ?? null,
+      commandReceipt: commandAcknowledgement(receipt, anchors[0].operation.value, basis.statement, basis.revision),
       sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch, sequence: receipt.sequence }, headGuarantee: 'verified-before-commit' };
     headGuard = `GRAPH ${iri(GRAPHS.current)} { ${iri(basis.statement)} rv:head ${iri(basis.revision)} ; rv:statementState rv:Active }
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(position.dataEpoch)} ; rv:sequence ${position.sequence} }
       ${coverageGuard}`;
+    if (v2?.meaning.coverage.kind === 'participation') {
+      const covered = v2.meaning.coverage;
+      const assertion = await resolveAdoptedOccurrenceV2(covered.occurrence, covered.occurrenceRevision, ownerQuery,
+        async (statement, revision) => {
+          const snapshot = await readStatementV2Revision(env, statement, revision);
+          if (snapshot.state !== 'active' || snapshot.currentState !== 'active' || snapshot.head !== revision) {
+            throw new StatementNotFound('Occurrence assertion is unavailable');
+          }
+          if (snapshot.meaning.coverage.kind !== 'occurrence' || snapshot.meaning.subject.kind !== 'resource') {
+            return fail('native_basis_unavailable', 'occurrence assertion owner returned another authored coverage');
+          }
+          const adopted = await statementV2Acceptance(env, snapshot, acceptance, position);
+          if (adopted.result.state !== 'accepted') throw new StatementNotFound('Occurrence assertion is unavailable');
+          const native: Extract<AcknowledgedSemanticBasis, { kind: 'statement' }> = {
+            kind: 'statement', owner: 'statement', target: snapshot.meaning.subject.ref,
+            statement, revision, receipt: snapshot.receipt.receipt, predicate: snapshot.meaning.predicate,
+            relationDefinition: snapshot.meaning.relationDefinition, value: snapshot.meaning.value,
+            coverage: snapshot.meaning.coverage, context: basis.context,
+            qualifiers: { applicability: snapshot.meaning.applicability, interpretationDefinitions: snapshot.meaning.interpretationDefinitions,
+              ...(snapshot.meaning.qualification ? { qualification: { ...snapshot.meaning.qualification } } : {}) },
+            acceptance: { context: adopted.acceptanceContext, decision: adopted.result.decision, source: adopted.result.source },
+          };
+          // This resolves independent native adoption, not retained conversion.
+          // Occurrence coverage cannot recurse into participation coverage.
+          const verified = await verifyNativeBasis(work, principal, { actingSubject: input.actingSubject, native,
+            selected: { value: snapshot.meaning.value, language: { state: 'omitted' } } });
+          return { coverage: snapshot.meaning.coverage, native, verified };
+        });
+      result.occurrenceAdoption = { native: assertion.native, commandReceipt: assertion.verified.commandReceipt,
+        manifest: assertion.verified.manifest, modelGeneration: assertion.verified.modelGeneration };
+      headGuard += ` GRAPH ${iri(GRAPHS.current)} { ${iri(assertion.native.statement)} rv:head ${iri(assertion.native.revision)} ; rv:statementState rv:Active }`;
+    }
   }
   // Source settles in its own registry after this read. No cross-owner transaction guarantee is claimed.
+  for (const check of completionChecks) await check();
   if (!await work.access.activePrincipalId(principal)
-    || (await disclose([basis.target, basis.revision])).size !== 2
+    || (await disclose(owned)).size !== owned.length
     || (basis.kind !== 'statement' || basis.coverage?.kind !== 'occurrence') && !(await readable([basis.target])).has(basis.target)) {
     return fail('native_basis_unavailable', 'native target disclosure changed');
   }
@@ -227,7 +326,7 @@ async function verifyNativeBasis(
 
 /** Resolve an acknowledged command through the actual Semantic/Statement owner, never through a relabelled ID. */
 export async function verifyAcknowledgedSemanticBasis(
-  work: Pick<MainWorkDependencies, 'environment' | 'access' | 'contextSelections'>,
+  work: Pick<MainWorkDependencies, 'environment' | 'access' | 'contextSelections' | 'relationAttribution'>,
   principal: VerifiedPrincipal,
   input: NativeBasisVerificationInput,
 ): Promise<VerifiedSemanticBasis> {

@@ -1,12 +1,17 @@
 import { ContextCommandUnavailable } from '../context/problems.ts';
 import { readExactDefinition, readExactOccurrence, type OccurrenceState } from '../relation/change.ts';
+import { readAttributedOccurrence, validateAttributedOccurrence } from '../relation/v2-read.ts';
+import { relationAttributionVerifier, type RelationAttributionVerifier } from '../relation/attribution.ts';
 import { systemDisclosure, type ReferenceDisclosure } from '../target/disclosed-references.ts';
 import { PROFILES } from '../semantic/schema.ts';
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { OCCURRENCE_ASSERTION_NOTATION, statementCoverageRejected,
   type StatementMeaningV2 } from './v2-schema.ts';
 
-export interface ResolvedStatementCoverage { guard: string; applicability: string[]; references: string[] }
+export interface ResolvedStatementCoverage {
+  guard: string; applicability: string[]; references: string[];
+  native?: { receipt: string; manifest: string; modelGeneration: string; attribution: unknown };
+}
 export class StatementCoverageHidden extends ContextCommandUnavailable {}
 
 /** Match the full Participant, never just its key, label, type or another co-participant. */
@@ -26,6 +31,7 @@ export async function resolveStatementCoverage(env: WorkActivationEnvironment, m
   canRead: (reference: string) => Promise<boolean>, canReadDefinition?: (definition: string) => Promise<boolean>,
   discloseOwned?: ReferenceDisclosure,
   readReferences?: ReferenceDisclosure,
+  attribution?: RelationAttributionVerifier,
 ): Promise<ResolvedStatementCoverage> {
   if (meaning.coverage.kind === 'subject-global') return { guard: '', applicability: [], references: [] };
   const coverage = meaning.coverage;
@@ -35,6 +41,10 @@ export async function resolveStatementCoverage(env: WorkActivationEnvironment, m
   if (!definition?.association || definition.modelRevision !== PROFILES.definitionV2 || definition.lifecycle !== 'active') {
     throw new ContextCommandUnavailable('covered occurrence has no exact authored association binding');
   }
+  const attributed = exact.state.profile === 'relation-change-v2'
+    ? await readAttributedOccurrence(env, coverage.occurrence, coverage.occurrenceRevision) : null;
+  const currentAttribution = attributed ? await validateAttributedOccurrence(env, attributed, definition,
+    attribution ?? relationAttributionVerifier(undefined, null, undefined)) : null;
   const works = exact.state.participations.filter(part => part.role === `${definition.definition}/role/${definition.association!.workRole}`);
   if (works.length !== 1 || works[0]!.participant.kind !== 'resource') {
     return statementCoverageRejected('authored Work role must bind exactly one native Work');
@@ -83,9 +93,11 @@ export async function resolveStatementCoverage(env: WorkActivationEnvironment, m
     GRAPH ${iri(GRAPHS.revisions)} { ${iri(coverage.occurrenceRevision)} a rv:RelationOccurrenceRevision ;
       rv:component ${iri(coverage.occurrence)} ; rv:relationDefinition ${iri(exact.state.definition)} ; rv:lifecycle rv:Active
       ${coverage.kind === 'participation' ? `; rv:participation ${iri(coverage.participation)}` : ''} . }
-    ${assertionGuard}`;
+    ${assertionGuard} ${currentAttribution?.guard ?? ''}`;
   if ((await env.fuseki.query(`PREFIX rv: <${RV}> ASK { ${guard} }`)).boolean !== true) {
     throw new ContextCommandUnavailable('covered occurrence changed or is retired');
   }
-  return { guard, applicability: exact.state.applicability, references: [...new Set(references)] };
+  return { guard, applicability: exact.state.applicability, references: [...new Set(references)],
+    ...(attributed ? { native: { receipt: attributed.receipt, manifest: attributed.manifest,
+      modelGeneration: attributed.modelGeneration, attribution: currentAttribution } } : {}) };
 }

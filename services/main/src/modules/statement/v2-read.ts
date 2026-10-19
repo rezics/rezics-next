@@ -4,7 +4,7 @@ import { readComponent } from '../semantic/command.ts';
 import { semanticValueExport, semanticValueRdf, type ValueRdf } from '../semantic/value.ts';
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
-import { WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
+import { WorkReadMoved, WorkReadUnavailable, type ReadRow, type WorkReadSession } from '../work/read-session.ts';
 import { framePattern, readFrames } from '../projection/frame-read.ts';
 import { targetSummaries } from '../target/resolve.ts';
 import { readingBoundary } from '../reading-position/boundary.ts';
@@ -13,8 +13,9 @@ import { statementQualificationExport } from './qualification.ts';
 import { MAX_PUBLIC_STATEMENT_BATCH, StatementNotFound, resolveStatementAcceptancesAt, type MeaningBasis, type StatementResolution } from './read.ts';
 import { STATEMENT_FAMILIES } from './receipt-family.ts';
 import { checkedStatementMeaningV2, statementMeaningKeyV2, statementNativeId, StatementV2Rejected,
-  STATEMENT_V2_PROFILE, type StatementMeaningV2 } from './v2-schema.ts';
+  STATEMENT_V2_PROFILE, type StatementCoverage, type StatementMeaningV2 } from './v2-schema.ts';
 import { resolveStatementCoverage, StatementCoverageHidden } from './v2-coverage.ts';
+import { relationAttributionVerifier } from '../relation/attribution.ts';
 
 const RDF = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
 export interface StatementV2Snapshot {
@@ -176,11 +177,14 @@ async function readableReferences(session: WorkReadSession, references: readonly
   return allowed;
 }
 
-/** The occurrence has its own adoption, independently of any trait's decision.
- * Exact revision reads and evidence continuation consume the same owner proof. */
-export async function readAdoptedOccurrenceV2(session: WorkReadSession, occurrence: string, occurrenceRevision: string,
-  context: string, frames: readonly string[], canReadPrivate: (context: string) => Promise<boolean>) {
-  const candidates = await session.query(`SELECT DISTINCT ?statement ?revision WHERE {
+export type StatementOwnerQuery = (body: string, limit: number) => Promise<readonly ReadRow[]>;
+
+/** Select the same bounded exact assertion inventory for HTTP reads and native
+ * support admission. Each consumer resolves the assertion through its real
+ * Statement owner, including that assertion's own adoption and current head. */
+export async function resolveAdoptedOccurrenceV2<T extends { coverage: StatementCoverage }>(occurrence: string,
+  occurrenceRevision: string, query: StatementOwnerQuery, readAdopted: (statement: string, revision: string) => Promise<T>): Promise<T> {
+  const candidates = await query(`SELECT DISTINCT ?statement ?revision WHERE {
     GRAPH ${iri(GRAPHS.current)} { ?statement a <${RDF}Statement> ; rv:modelRevision ${iri(STATEMENT_V2_PROFILE)} ;
       rv:statementState rv:Active ; rv:head ?revision ; rv:statementCoverage rv:OccurrenceCoverage ;
       rv:coveredOccurrence ${iri(occurrence)} ; rv:coveredOccurrenceRevision ${iri(occurrenceRevision)} ;
@@ -192,7 +196,7 @@ export async function readAdoptedOccurrenceV2(session: WorkReadSession, occurren
     try {
       // This resolves that assertion's own exact receipt, meaning, DecisionSlots,
       // frame, authority and final disclosure. Occurrence coverage cannot recurse.
-      const assertion = await readAdoptedStatementV2(session, candidate.statement.value, candidate.revision.value, context, frames, canReadPrivate);
+      const assertion = await readAdopted(candidate.statement.value, candidate.revision.value);
       if (assertion.coverage.kind !== 'occurrence' || assertion.coverage.occurrence !== occurrence
         || assertion.coverage.occurrenceRevision !== occurrenceRevision) {
         throw new WorkReadUnavailable('Occurrence assertion differs from its exact owner coverage');
@@ -203,6 +207,28 @@ export async function readAdoptedOccurrenceV2(session: WorkReadSession, occurren
     }
   }
   throw new StatementNotFound('Statement is unavailable');
+}
+
+/** The occurrence has its own adoption, independently of any trait's decision. */
+export function readAdoptedOccurrenceV2(session: WorkReadSession, occurrence: string, occurrenceRevision: string,
+  context: string, frames: readonly string[], canReadPrivate: (context: string) => Promise<boolean>) {
+  return resolveAdoptedOccurrenceV2(occurrence, occurrenceRevision, (body, limit) => session.query(body, limit),
+    (statement, revision) => readAdoptedStatementV2(session, statement, revision, context, frames, canReadPrivate));
+}
+
+export async function readStatementV2MeaningBasis(snapshot: Pick<StatementV2Snapshot, 'meaning' | 'semanticContextRevision'>,
+  query: StatementOwnerQuery, canReadPrivate: (context: string) => Promise<boolean>): Promise<MeaningBasis> {
+  const interpretationDefinitions = snapshot.meaning.interpretationDefinitions;
+  if (!snapshot.semanticContextRevision) return interpretationDefinitions.length
+    ? { state: 'defined', interpretationDefinitions } : { state: 'none' };
+  const pins = await query(`SELECT ?context ?disclosure WHERE {
+    GRAPH ${iri(GRAPHS.revisions)} { ${iri(snapshot.semanticContextRevision)} a rv:ContextSemanticRevision ; rv:component ?context }
+    GRAPH ${iri(GRAPHS.current)} { ?context rv:disclosure ?disclosure }
+  } LIMIT 2`, 2);
+  if (pins.length !== 1 || !pins[0]?.context || (pins[0].disclosure?.value !== `${RV}Public`
+    && !await canReadPrivate(pins[0].context.value))) throw new StatementNotFound('Statement is unavailable');
+  return { state: 'readable', context: pins[0].context.value, semanticRevision: snapshot.semanticContextRevision,
+    interpretationDefinitions };
 }
 
 /** A trait's decision cannot adopt its occurrence. */
@@ -251,24 +277,16 @@ export async function readAdoptedStatementV2(session: WorkReadSession, statement
     if (!await canRead(snapshot.meaning.subject.ref)) throw new StatementNotFound('Statement is unavailable');
   }
   let coverage;
+  const attribution = relationAttributionVerifier(session.deps.relationAttribution, session.principal, session.options.actingSubject);
   try { coverage = await resolveStatementCoverage(env, snapshot.meaning, canRead, canRead, disclose,
-    refs => readableReferences(session, refs)); }
+    refs => readableReferences(session, refs), attribution); }
   catch (error) { if (error instanceof StatementCoverageHidden) throw new StatementNotFound('Statement is unavailable'); throw error; }
   session.observeDependency(`statement-coverage:${statement}:${revision}`, coverage,
     () => resolveStatementCoverage(env, snapshot.meaning, async ref => (await readableReferences(session, [ref])).has(ref),
-      async ref => (await readableReferences(session, [ref])).has(ref), disclose, refs => readableReferences(session, refs)));
-  let meaningBasis: MeaningBasis = snapshot.meaning.interpretationDefinitions.length
-    ? { state: 'defined', interpretationDefinitions: snapshot.meaning.interpretationDefinitions } : { state: 'none' };
-  if (snapshot.semanticContextRevision) {
-    const pins = await session.query(`SELECT ?context ?disclosure WHERE {
-      GRAPH ${iri(GRAPHS.revisions)} { ${iri(snapshot.semanticContextRevision)} a rv:ContextSemanticRevision ; rv:component ?context }
-      GRAPH ${iri(GRAPHS.current)} { ?context rv:disclosure ?disclosure }
-    } LIMIT 2`, 2);
-    if (pins.length !== 1 || !pins[0]?.context || (pins[0].disclosure?.value !== `${RV}Public`
-      && !await canReadPrivate(pins[0].context.value))) throw new StatementNotFound('Statement is unavailable');
-    meaningBasis = { state: 'readable', context: pins[0].context.value, semanticRevision: snapshot.semanticContextRevision,
-      interpretationDefinitions: snapshot.meaning.interpretationDefinitions };
-  }
+      async ref => (await readableReferences(session, [ref])).has(ref), disclose, refs => readableReferences(session, refs), attribution));
+  const readMeaning = () => readStatementV2MeaningBasis(snapshot, (body, limit) => session.query(body, limit), canReadPrivate);
+  const meaningBasis = await readMeaning();
+  session.observeDependency(`statement-meaning-basis:${statement}:${revision}`, meaningBasis, readMeaning);
   const selectedFrames = frames.length ? await readFrames(session, frames) : [];
   const matched = await session.query(`SELECT ?statement WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(statement)} a <${RDF}Statement> ; rv:head ${iri(revision)} }

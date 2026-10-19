@@ -77,7 +77,7 @@ async function fixture() {
   const input: NativeBasisVerificationInput = { actingSubject: id(8), native: { kind: 'component-property', owner: 'semantic',
     target: component, component, revision, receipt, property: state.properties[0]! },
     selected: { value: '原作', language: { state: 'value', value: 'ja' } } };
-  return { work, input, receipt, revision, operation, generation, manifest, queries,
+  return { work, input, receipt, revision, operation, generation, manifest, queries, admissionId,
     head: (value: string) => { head = value; }, receiptRevision: (value: string) => { acknowledgedRevision = value; },
     receiptAvailable: (value: boolean) => { succeeds = value; },
     finalHeadMatches: (value: boolean) => { finalHeadMatches = value; }, active: (value: boolean) => { active = value; } };
@@ -87,6 +87,9 @@ test('Source owner verifier resolves the actual Semantic command, exact projecti
   const f = await fixture();
   expect(await verifyAcknowledgedSemanticBasis(f.work, principal, f.input)).toEqual({ native: f.input.native,
     receipt: f.receipt, revision: f.revision, operation: f.operation, manifest: f.manifest, modelGeneration: f.generation,
+    commandReceipt: { outcome: 'succeeded', receipt: f.receipt, admissionId: f.admissionId, requestDigest: hash('request'),
+      authorityEpoch: '1', scope: `semantic:edit:${f.input.native.target}`, dataEpoch: 'epoch-one', sequence: '4',
+      component: f.input.native.target, revision: f.revision, operation: f.operation },
     sourcePosition: { datasetId: 'product', dataEpoch: 'epoch-one', sequence: '4' }, headGuarantee: 'verified-before-commit' });
   expect(f.queries.at(-1)).toContain(f.receipt);
   expect(f.queries.at(-1)).toContain('semanticHead');
