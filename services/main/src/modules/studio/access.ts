@@ -63,12 +63,20 @@ export class StudioAccess {
         ? await maintainerControllerProof(client, actor.id, agent) : null;
       const candidates = (await client.query<{ id: string; work: string; action: string;
         created_at: Date; generation: string; writer: string;
-        state: string; graph_outcome: string | null }>(`
+        created_key: string; updated_key: string; state: string; graph_outcome: string | null }>(`
         SELECT a.id::text, s.work, a.action, a.registered_at AS created_at, s.generation::text,
-          a.state, a.graph_outcome, a.acting_subject AS writer
+          a.state, a.graph_outcome, a.acting_subject AS writer,
+          to_char(a.registered_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_key,
+          to_char(greatest(a.registered_at, edits.updated_at) AT TIME ZONE 'UTC',
+            'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_key
         FROM access.work_maintainer m
         JOIN access.work_maintainer_set s ON s.work = m.work
         JOIN access.admission a ON a.id = s.creation_admission
+        LEFT JOIN LATERAL (
+          SELECT max(sealed_at) AS updated_at FROM access.admission
+          WHERE scope_id = 'work:edit:' || s.work AND action = 'work.edit'
+            AND state = 'sealed' AND graph_outcome = 'succeeded'
+        ) edits ON true
         WHERE m.agent = $1 AND m.work > $2
         ORDER BY m.work LIMIT $3 FOR SHARE OF m, s`, [agent, after, limit])).rows;
       const generations = new Map<string, string>();
@@ -121,13 +129,21 @@ export class StudioAccess {
         ? await maintainerControllerProof(client, actor.id, agent) : null;
       const generation = controller
         ? await authorWorkGeneration(client, this.graph, actor.id, agent, work) : null;
-      const row = (await client.query<{ action: string; created_at: Date; generation: string;
+      const row = (await client.query<{ action: string; created_at: Date; created_key: string; updated_key: string; generation: string;
         writer: string }>(`
-        SELECT a.action, a.registered_at AS created_at, s.generation::text,
+        SELECT a.action, a.registered_at AS created_at,
+          to_char(a.registered_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS created_key, s.generation::text,
+          to_char(greatest(a.registered_at, edits.updated_at) AT TIME ZONE 'UTC',
+            'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_key,
           a.acting_subject AS writer
         FROM access.work_maintainer_set s
         JOIN access.work_maintainer m ON m.work = s.work AND m.agent = $2
         JOIN access.admission a ON a.id = s.creation_admission
+        LEFT JOIN LATERAL (
+          SELECT max(sealed_at) AS updated_at FROM access.admission
+          WHERE scope_id = 'work:edit:' || s.work AND action = 'work.edit'
+            AND state = 'sealed' AND graph_outcome = 'succeeded'
+        ) edits ON true
         WHERE s.work = $1 AND s.generation = $3::bigint AND a.state = 'sealed'
           AND a.graph_outcome = 'succeeded' FOR SHARE OF s, m`, [work, agent, generation])).rows[0];
       return { row: row ?? null, stamp: JSON.stringify([actor.id, actor.epoch, mandate.id,

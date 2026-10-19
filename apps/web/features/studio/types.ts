@@ -16,6 +16,24 @@ export type InventoryPage = Ok<ReturnType<Main['v1']['me']['agents']>['works']['
 export type InventoryWork = InventoryPage['items'][number];
 /** Main's authoring state: Recipes follow their Structure publication; other Works follow the Agent's texts. */
 export type InventoryState = InventoryWork['state'];
+export const inventoryOrders = ['recent', 'created', 'title'] as const;
+export type InventoryOrder = (typeof inventoryOrders)[number];
+export interface InventoryQuery { q: string; sort: InventoryOrder }
+
+/** Search and order live in the address, including on continuation and browser Back. */
+export function inventoryQuery(query: { q?: unknown; sort?: unknown }): InventoryQuery {
+  return { q: typeof query.q === 'string' ? query.q.trim() : '',
+    sort: inventoryOrders.find(order => order === query.sort) ?? 'recent' };
+}
+
+export function inventoryAddress(base: string, view: string, query: InventoryQuery, cursor?: string): string {
+  const params = new URLSearchParams();
+  if (view !== 'all') params.set('view', view);
+  if (query.q) params.set('q', query.q);
+  params.set('sort', query.sort);
+  if (cursor) params.set('cursor', cursor);
+  return `${base}?${params}`;
+}
 export type SubmissionPage = Ok<Main['v1']['my']['submissions']['get']>;
 export type Submission = Omit<SubmissionPage['items'][number], 'state'> & { state: SubmissionState };
 // Main builds this union from a mapped array (services/main/src/modules/realm-submission/schema.ts),
