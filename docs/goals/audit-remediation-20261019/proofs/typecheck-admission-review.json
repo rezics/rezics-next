@@ -399,5 +399,240 @@
     }
   ],
   "evidence_path_base": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2852",
-  "completed_at_utc": "2026-10-19T10:40:36.163946+00:00"
+  "completed_at_utc": "2026-10-19T10:40:36.163946+00:00",
+  "review_record_scope": {
+    "original_sections": "All pre-existing top-level sections, including verdict and findings, describe the original 84eecfc candidate and remain unchanged.",
+    "latest_verdict": "current_verdict and correction_review describe the same-review continuation for the exact 1b0699 correction."
+  },
+  "correction_review": {
+    "reviewed_at_utc": "2026-10-19T10:52:54.687259+00:00",
+    "continuation_of_same_independent_review": true,
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "account_fallback_used": false,
+      "nested_agents_used": false,
+      "implementation_correction_report_read": false,
+      "implementation_results_used_as_independent_proof": false
+    },
+    "scope": "Only the complete two-path correction diff from the original candidate to the exact single-parent correction, adjacent notification/completion logic, and the three unchanged original counterexamples. Original source review and its evidence remain above; no whole candidate or goalctl baseline replay.",
+    "original_review_preservation": {
+      "commit": "0eacf5e1e6fe547f94f107ee145a18a650a0c0dc",
+      "manager_rebased_worker_head": "f76975f72bd1444ab7080e75e7d7baa33c5d1901",
+      "report_blob": "09f02bad15fa3636b3709db6c12f498bbad2c94f",
+      "original_decision": "request_changes",
+      "all_original_top_level_fields_preserved": true
+    },
+    "candidate": {
+      "commit": "1b0699d0b4ca59b9b10088619259f9c36d1d9025",
+      "parent": "84eecfc15b72d39dd085f977d62e562def4b6212",
+      "original_base": "3b34e7cd53e8bec9d346a5a2ccecced22ea512b5",
+      "tree": "10e0b7ec8f048301cd84d8b4b61e052ce98214fa",
+      "source_and_test_blobs": {
+        "scripts/goal/typecheck-gate.ts": "63534a7fbdb4e66c3cf84b543c9c1c63ff4c2179",
+        "scripts/qa/host-admission.ts": "20e060f612be5aac2b9653138443e351cab2874b",
+        "scripts/goal/typecheck-gate.test.ts": "192cb6952f38a4973621fcf759b737a7f45a6f28",
+        "scripts/goal/goalctl.test.ts": "e235cf5959f23630e7b76df80ea6872a542f1cfd"
+      },
+      "all_pins_match": true,
+      "only_changed_paths": [
+        "scripts/goal/typecheck-gate.test.ts",
+        "scripts/goal/typecheck-gate.ts"
+      ],
+      "execution_checkout": ".temp/typecheck-admission-review/correction",
+      "execution_checkout_method": "Independent detached shared-object clone inside this worker worktree. Local node_modules entries reuse worker dependencies after equal dependency-input digests; the dependency stamp is local. Manager candidate and product sources were not modified.",
+      "tracked_candidate_source_modified": false
+    },
+    "source_findings": [],
+    "resolved_findings": [
+      {
+        "id": "incomplete-notification-fail-open",
+        "original_severity": "high",
+        "status": "resolved_in_exact_correction",
+        "locations": [
+          {
+            "file": "scripts/goal/typecheck-gate.ts",
+            "line": 156,
+            "end_line": 164,
+            "conclusion": "Token matching is checked before the required separator. Exact-token records lacking a separator now set invalid and expire the run."
+          },
+          {
+            "file": "scripts/goal/typecheck-gate.ts",
+            "line": 185,
+            "end_line": 207,
+            "conclusion": "Both output streams flush their pending EOF tails through observe(..., false). The child close handler flushes both tails before resolving completion. Clearing pending makes end and close flushing idempotent."
+          },
+          {
+            "file": "scripts/goal/typecheck-gate.ts",
+            "line": 224,
+            "end_line": 237,
+            "conclusion": "An invalid observation reaches the existing owned-process cleanup path, and !invalid remains required even when Task close wins the race. A previously valid END cannot make the resulting run eligible for diagnostic inheritance."
+          },
+          {
+            "file": "scripts/goal/typecheck-gate.test.ts",
+            "line": 208,
+            "end_line": 235,
+            "conclusion": "The three added regression cases emit a valid BEGIN/END followed by duplicate EOF, malformed EOF, or a token-only line, then require main done=false and an inconclusive comparison."
+          }
+        ],
+        "independent_execution": "All three original reviewer assertions pass unchanged on this exact correction. Their original fail-open observations and failing assertions remain in the original evidence above."
+      }
+    ],
+    "independently_verified_behavior": [
+      {
+        "cases": [
+          "duplicate-eof",
+          "malformed-eof",
+          "token-only-line"
+        ],
+        "result": "For every mode the real new-protocol branch host wrapper completes with done=true and a genuine compiler diagnostic; the fault-injected main completion returns done=false, status=null and Invalid type check admission notification. The gate refuses inherited classification with the type check on main is inconclusive.",
+        "tests": 3,
+        "assertions": 3,
+        "failed": 0,
+        "filtered": 5,
+        "evidence": ".temp/goal/jobs/831cfbcd-b27e-4d23-8c72-9893c102c344.log"
+      },
+      {
+        "result": "The copied reviewer test is byte-identical to the retained final original counterexamples. Only its relative import resolves to the new pinned checkout. No assertions, compiler budgets or admission limits were changed.",
+        "fixture_sha256": "5cfb4979a1d98712eed4dbdd1a794dae97f6ba8e33bd66ce582ed0a1665dab52",
+        "evidence": ".temp/typecheck-admission-review/correction-pins.json"
+      }
+    ],
+    "source_only_conclusions": [
+      "The correction handles both newline-terminated token-only records and unterminated matching-token tails. A matching tail is invalid regardless of whether it arrived before or after a valid completion. Nonmatching ordinary output is still ignored by the notification parser.",
+      "Flush runs on each stream end and again before child close resolves, so an EOF tail cannot remain unexamined merely because the child close event supplied the final outcome. The existing !invalid condition also rejects a malformed record when the close promise wins the timeout race.",
+      "No execution/admission/terminal constants, active-budget accounting, status/signal/timeout checks, exact legacy blob recognition, host admission implementation or owned-process cleanup contract changed. The correction diff contains only the parser change and its three regression cases.",
+      "The review identifies no remaining executable finding in this exact correction. This is a source verdict supported by the three rerun counterexamples and the retained original proof, rather than a newly executed whole-candidate validation."
+    ],
+    "preserved_original_validation": {
+      "rerun": false,
+      "focused_admission_gate_tests": {
+        "passed": 40,
+        "assertions": 125,
+        "candidate": "84eecfc15b72d39dd085f977d62e562def4b6212",
+        "scope": "Original gate, host and CPU admission tests; unchanged host/CPU wrappers, budget, status, signal, timeout, legacy recognition and process cleanup controls."
+      },
+      "pre_merge_diagnostic_subset": {
+        "passed": 11,
+        "assertions": 72,
+        "candidate": "84eecfc15b72d39dd085f977d62e562def4b6212",
+        "scope": "Original existing goalctl pre-merge type check diagnostic subset via retained import adapter; no baseline rerun."
+      },
+      "additional_original_controls": "Original real modern inherited comparison and missing/newline-malformed/newline-duplicate/finite-terminal-shutdown controls remain retained. They were not rerun during this correction review.",
+      "evidence_location": "All original commands, outcomes, source pins and evidence SHA256s remain in their unchanged top-level sections."
+    },
+    "commands_and_results": [
+      {
+        "command": "git diff 84eecfc15b72d39dd085f977d62e562def4b6212 1b0699d0b4ca59b9b10088619259f9c36d1d9025 -- scripts/goal/typecheck-gate.ts",
+        "exit_status": 0,
+        "result": "Complete correction source diff reviewed with numbered adjacent notification/terminal code; retained with the complete test diff in correction.diff."
+      },
+      {
+        "command": "git diff 84eecfc15b72d39dd085f977d62e562def4b6212 1b0699d0b4ca59b9b10088619259f9c36d1d9025 -- scripts/goal/typecheck-gate.test.ts",
+        "exit_status": 0,
+        "result": "Complete 29-line regression-test addition reviewed."
+      },
+      {
+        "command": "git clone --shared --no-checkout . .temp/typecheck-admission-review/correction",
+        "exit_status": 0,
+        "result": "Created isolated execution checkout within the worker worktree."
+      },
+      {
+        "command": "git checkout --detach 1b0699d0b4ca59b9b10088619259f9c36d1d9025",
+        "cwd": ".temp/typecheck-admission-review/correction",
+        "exit_status": 0,
+        "result": "Detached checkout matches exact correction, tree and all four blob pins. Git rev-parse/diff-tree verification and unchanged test hash retained in correction-pins.json."
+      },
+      {
+        "command": "env CLAUDECODE=1 bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --dir .temp/typecheck-admission-review/correction goal -- test ./.temp/review/notification.test.ts --test-name-pattern 'incomplete notification'",
+        "job": "831cfbcd-b27e-4d23-8c72-9893c102c344",
+        "exit_status": 0,
+        "result": "3 tests passed, 3 assertions, 0 failed, 5 filtered. Bun 1.4.3; test time 2.50s. Goal QA selector executed the unchanged private Bun test through Task and local goalctl test.",
+        "log": ".temp/goal/jobs/831cfbcd-b27e-4d23-8c72-9893c102c344.log"
+      }
+    ],
+    "unexecuted_limits": [
+      "No new whole gate/host/CPU suite, 11-case goalctl subset, 16-case author correction suite, affected compiler graph, lint or AST replay was performed for this review continuation. Prior independent 40/125 and 11/72 proof is retained at its original candidate pin; author implementation results are context only.",
+      "The three rerun tests exercise real Task and branch host admission wrappers with fault-injected main notification bytes. They do not prove that the ordinary host wrapper emits malformed records, nor exhaust arbitrary byte splits, cross-stream reorderings or all EOF event schedules. Broader EOF/race handling is a source-only conclusion.",
+      "Manager reports five unrelated baseline fixture failures. Those failures remain explicitly unresolved by this review; they were not rerun, independently diagnosed or used to approve baseline fixtures.",
+      "No live 720000ms compiler run, six-hour admission wait, full pre-merge installation/comparison, browser journey or product audit-class closure was executed. Original unexecuted limits remain applicable.",
+      "Manager notes current main ca43 has a sameScope goalctl delta. This review neither assembles nor changes it; later manager assembly must preserve that delta. Approval is limited to the exact correction pins and does not validate a future assembled tree."
+    ],
+    "retained_evidence": [
+      {
+        "path": ".temp/typecheck-admission-review/correction.diff",
+        "sha256": "db2257c1b044689d4cc33195deff0a316381faa15369a852110d3936f40ea5e8"
+      },
+      {
+        "path": ".temp/typecheck-admission-review/correction-pins.json",
+        "sha256": "db6ebf4eb53e46112e80ad9f3c6424afb9da7f8e68ab1b87ddd9d018e37b9c24"
+      },
+      {
+        "path": ".temp/typecheck-admission-review/correction-dependencies.json",
+        "sha256": "054477847214ee3f71783da5593e1c0cf1663535eaea72f5e79bb4b473a51c98"
+      },
+      {
+        "path": ".temp/typecheck-admission-review/correction/.temp/review/notification.test.ts",
+        "sha256": "5cfb4979a1d98712eed4dbdd1a794dae97f6ba8e33bd66ce582ed0a1665dab52"
+      },
+      {
+        "path": ".temp/typecheck-admission-review/correction/.temp/review/observations.json",
+        "sha256": "4e3a4ff03b60f659a1cbc1ba5148d45fd642e1bd931a79684ec76c0eaf6e0872"
+      },
+      {
+        "path": ".temp/goal/jobs/831cfbcd-b27e-4d23-8c72-9893c102c344.log",
+        "sha256": "55225b8a8121cbcff8769dd307128ea7db0f71702100046556d057b5f9a5a4c0"
+      },
+      {
+        "path": ".temp/goal/jobs/db317e51-088c-4c8d-8b31-327f0891b571.1.log",
+        "sha256": "21c8dcbdadd499757c4fc2db15f2e369ea13aa0070364b410b3f2d3c39d59749"
+      },
+      {
+        "path": ".temp/goal/jobs/db317e51-088c-4c8d-8b31-327f0891b571.2.log",
+        "sha256": "8871fd49c95e281db2619bb7661100564f75c18a8d7d936400e4479c6a05cf42"
+      },
+      {
+        "path": ".temp/goal/check/run-5fFmM7/output.log",
+        "sha256": "ce8584b28d5209e1bb3be0f8441ef29bd16193f12646c16b1915b1c6bbba8731"
+      }
+    ],
+    "publication_validation": {
+      "status": "passed",
+      "job": "db317e51-088c-4c8d-8b31-327f0891b571",
+      "recorded_command": "env CLAUDECODE=1 bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "commands": [
+        {
+          "command": "task docs:check",
+          "exit_status": 0,
+          "result": "13 checker tests passed; 250 Markdown files checked for local links, fragments and navigation.",
+          "log": ".temp/goal/jobs/db317e51-088c-4c8d-8b31-327f0891b571.1.log"
+        },
+        {
+          "command": "task goal -- check",
+          "exit_status": 0,
+          "result": "AST and the 1/45 repository guard selected for the sole changed JSON path passed. No TypeScript/source workspace changed; no test files named in brief.",
+          "log": ".temp/goal/jobs/db317e51-088c-4c8d-8b31-327f0891b571.2.log",
+          "full_output": ".temp/goal/check/run-5fFmM7/output.log"
+        }
+      ],
+      "note": "Publication validation checks this report only; it does not add candidate type/lint/test claims. Check results and evidence hashes were appended after passing checks, with no Markdown link, source or check-selection changes."
+    },
+    "verdict": {
+      "decision": "approve",
+      "blocking_findings": 0,
+      "scope": "Exact source correction 1b0699d0b4ca59b9b10088619259f9c36d1d9025 only, continuing the same independent codex-1/gpt-6.1-sol/xhigh review.",
+      "reason": "The sole original HIGH finding is resolved in source and all three unchanged reviewer counterexamples now refuse inherited diagnostics. Original REQUEST_CHANGES history, passing controls and limitations are preserved.",
+      "next_action": "Manager may accept the correction review and assemble under existing authority, preserving the current main goalctl delta and explicit baseline-fixture failures. This worker does not land sources or close product audit classes."
+    },
+    "completed_at_utc": "2026-10-19T10:53:51.535985+00:00"
+  },
+  "current_verdict": {
+    "decision": "approve",
+    "candidate": "1b0699d0b4ca59b9b10088619259f9c36d1d9025",
+    "tree": "10e0b7ec8f048301cd84d8b4b61e052ce98214fa",
+    "blocking_findings": 0,
+    "scope": "Exact correction source review with three original counterexamples passing; original request_changes preserved above.",
+    "limitations": "Retained original validation and explicit unexecuted limits apply; no product landing, audit closure or future assembled-tree approval."
+  }
 }
