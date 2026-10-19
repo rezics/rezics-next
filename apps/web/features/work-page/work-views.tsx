@@ -63,7 +63,6 @@ import type { RecipeWorkHost } from './recipe-reading-recorded-page.ts';
 import { recipeRegion, recipeWorkFrame, recipeWorkOverview } from './recipe-reading-recorded-page.tsx';
 import { HubExperience } from './types/hub.tsx';
 import { GuideExperience } from './types/guide.tsx';
-import { NextActionView } from './primary-action.tsx';
 
 // Server compositions for the `/w/[ref]` routes: each region reads Main on its
 // own under Suspense, so the page streams as answers arrive and one failure
@@ -99,6 +98,7 @@ async function recipePageHost(): Promise<RecipeWorkHost> {
     publicFetch: anonymousShowcaseFetch as typeof fetch,
     actingSubject: actingSubject ?? null,
     signedIn,
+    pageUrl: (await headers()).get('x-rezics-page-url'),
   };
 }
 
@@ -198,14 +198,8 @@ export const readExperience = async (id: string, types: readonly string[], clien
 /** A type's own action (cook, copy, install), or for cover-led Works the one primary action the hub leads with. */
 async function ReadSlot({ workRef, id, work, experience, locale, messages, client }: Common & { workRef: WorkAt; id: string;
   work: Header; experience: WorkExperience }) {
-  if (experience.kind === 'book') {
+  if (experience.kind === 'book' || showsEditionStatus(experience)) {
     return PrimaryAction({ workRef, id, work, locale, messages, client });
-  }
-  if (showsEditionStatus(experience)) {
-    const releases = await readReleases(id, client);
-    const inventory = releases.ok ? { editions: releases.data.items, nextCursor: releases.data.nextCursor } : null;
-    return inventory && (inventory.editions.length || inventory.nextCursor) ? <NextActionView
-      action={{ kind: 'choose', href: '#availability', part: null }} workRef={workRef} locale={locale} messages={messages} /> : null;
   }
   if (experience.kind === 'guide') {
     const text = await readText(work.mainVersion, work.selectedLanguage ?? undefined);

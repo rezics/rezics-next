@@ -81,7 +81,7 @@ export function OnThisPage({ workRef, label, sections, labels, viewsLabel }: {
     if (event.relatedTarget instanceof Node && !event.currentTarget.contains(event.relatedTarget)) setOpen(false);
   }}>
     <button ref={trigger} type="button" aria-expanded={open} aria-controls={menu} onClick={() => setOpen(value => !value)}
-      className={cn(buttonVariants({ variant: 'outline', size: 'md', pill: true }), 'w-full justify-between')}>
+      className={cn(buttonVariants({ variant: 'outline', size: 'md', pill: true }), 'min-h-11 w-full justify-between')}>
       {label}<ChevronDownIcon aria-hidden="true" className={cn('transition-transform', open && 'rotate-180')} />
     </button>
     {open ? <nav id={menu} aria-label={label} className="mt-2 grid max-h-[70svh]

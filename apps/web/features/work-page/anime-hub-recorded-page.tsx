@@ -17,7 +17,7 @@ import { EDITION_SAVED } from '../tracking/series-progress-panel.tsx';
 import type { EditionPreference } from '../tracking/types.ts';
 import { booksEditionReads, readBooksEditionStatus } from './books-edition-page.read.ts';
 import { messages } from './messages.ts';
-import { IdentityStatus, NextActionView } from './primary-action.tsx';
+import { IdentityStatus, nextAction, NextActionView } from './primary-action.tsx';
 import { YourEdition } from './your-edition.tsx';
 import { WorkCredits } from './credits.tsx';
 import { Region } from './region.tsx';
@@ -65,6 +65,9 @@ export function AnimeHubRecordedPage({ persona, actingSubject, main, workId, kin
       return () => { mounted = false; };
     }
     const storeActions = { current: undefined as ReaderActions | undefined };
+    let identityRevision = 0;
+    void readBooksEditionStatus(booksEditionReads({ main, actingSubject }), workId, locale)
+      .then(status => { if (mounted && identityRevision === 0) setIdentity(status); }).catch(fail);
     void readDatedAnimeHub(main, actingSubject, workId).then(page => {
       if (!mounted) return;
       if (!page.header.ok) { setFault(`Work header: ${page.header.failure}`); return; }
@@ -79,9 +82,12 @@ export function AnimeHubRecordedPage({ persona, actingSubject, main, workId, kin
       const detail = (event as CustomEvent<{ work: string; preference: EditionPreference | null }>).detail;
       const tracking = storeActions.current?.kind === 'ready' ? storeActions.current.tracking : undefined;
       if (!tracking || detail.work.slice(-36) !== workId) return;
+      const revision = ++identityRevision;
       void readBooksEditionStatus({ ...booksEditionReads({ main, actingSubject }),
         readProgressSummary: (resource, language) => tracking.series(resource, language) },
-      workId, locale, { ok: true, data: detail.preference }).then(status => { if (mounted) setIdentity(status); }).catch(fail);
+      workId, locale, { ok: true, data: detail.preference }).then(status => {
+        if (mounted && identityRevision === revision) setIdentity(status);
+      }).catch(fail);
     };
     window.addEventListener(EDITION_SAVED, refresh);
     return () => { mounted = false; window.removeEventListener(EDITION_SAVED, refresh); };
@@ -105,11 +111,8 @@ export function AnimeHubRecordedPage({ persona, actingSubject, main, workId, kin
     </div>;
   }
   if (!dated?.header.ok || !dated.statements) return null;
-  const inventory = [dated.realizations, dated.releases].some(read => {
-    if (!read.ok) return false;
-    const page = { entries: read.data.items, nextCursor: read.data.nextCursor };
-    return page.entries.length > 0 || page.nextCursor !== null;
-  });
+  const action = identity ? nextAction({ start: null, progress: identity.progress, preference: identity.preference,
+    releases: dated.releases.ok ? dated.releases.data.items.length : 0 }) : null;
   const experience = workExperience(dated.projection.ok ? dated.projection.data : null, dated.header.data.types);
   return <div className="grid min-w-0 gap-3" lang={locale}>
     <div className="px-4 pt-4 sm:px-6">{who}</div>
@@ -117,7 +120,7 @@ export function AnimeHubRecordedPage({ persona, actingSubject, main, workId, kin
       signedIn={Boolean(actingSubject)} signInHref={signInHref} readerActions={actions} readerSeed={dated.seed ?? undefined}
       statementSources={dated.statements}
       credits={<WorkCredits agentCredits={dated.agentCredits} credits={dated.credits} locale={locale} messages={pageMessages} />}
-      readAction={inventory ? <NextActionView action={{ kind: 'choose', href: '#availability', part: null }}
+      readAction={action ? <NextActionView action={action}
         workRef={workId} locale={locale} messages={pageMessages} /> : null}
       status={identity ? <IdentityStatus {...identity} locale={locale} messages={pageMessages} /> : undefined}
       sections={[{ id: 'statements', label: facts.statements }, { id: 'availability', label: pageMessages.sectionAvailability }]}>
