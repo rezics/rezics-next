@@ -1,12 +1,13 @@
 import { CLASSIFICATION_PROPOSITION_PROFILE } from '../classification/proposition.ts';
 import { ContextCommandUnavailable, InvalidContextCommand, term } from '../context/command.ts';
 import { activeDirectDefinitionsGuard } from '../context/definition-state.ts';
-import { checkedStoredState, type DefinitionState } from '../semantic/change.ts';
+import { checkedComponentProfile, checkedStoredState, type DefinitionState } from '../semantic/change.ts';
 import { readComponent } from '../semantic/command.ts';
 import { checkedNativeIri, definitionKindIri, PROFILES } from '../semantic/schema.ts';
 import { InvalidSemanticValue, temporalParts } from '../semantic/value.ts';
 import { GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import type { StatementRetainedClaimProvenance, StatementValue } from './schema.ts';
+import { StatementV2Rejected } from './v2-schema.ts';
 
 /**
  * The supported interpretation Definition declares this complete qualification:
@@ -433,15 +434,17 @@ async function exactDefinitions(
   references: readonly string[],
   canReadDefinition?: (definition: string) => Promise<boolean>,
   readState: typeof readComponent = readComponent,
+  profile: 'statement-v1' | 'statement-v2' = 'statement-v1',
 ): Promise<Map<string, ExactStatementDefinition>> {
   const unique = [...new Set(references.map(nativeDefinition))];
   const rows =
     (
       await env.fuseki.query(`PREFIX rv: <${RV}>
-    SELECT ?revision ?definition ?manifest ?kind ?lifecycle ?head WHERE {
+    SELECT ?revision ?definition ?manifest ?kind ?lifecycle ?head ?model WHERE {
       VALUES ?revision { ${unique.map(iri).join(' ')} }
       GRAPH ${iri(GRAPHS.revisions)} { ?revision a rv:DefinitionRevision ; rv:component ?definition ;
-        rv:manifest ?manifest ; rv:definitionKind ?kind ; rv:lifecycle ?lifecycle . }
+        rv:manifest ?manifest ; rv:definitionKind ?kind ; rv:lifecycle ?lifecycle .
+        OPTIONAL { ?revision rv:modelRevision ?model } }
       OPTIONAL { GRAPH ${iri(GRAPHS.current)} { ?definition a rv:SemanticDefinition ; rv:definitionHead ?head } }
     } LIMIT ${unique.length + 1}`)
     ).results?.bindings ?? [];
@@ -467,9 +470,11 @@ async function exactDefinitions(
     if (canReadDefinition && !(await canReadDefinition(definition))) {
       throw new ContextCommandUnavailable('Statement definition is unavailable');
     }
-    const state = checkedStoredState(
-      await readState(env, row.manifest.value, definition, PROFILES.definition),
-    );
+    const model = checkedComponentProfile(row.model?.value, 'definition');
+    if (profile === 'statement-v1' && model === PROFILES.definitionV2) {
+      throw new StatementV2Rejected('unsupported_model_revision', 'V1 Statement writers cannot adopt a V2 definition');
+    }
+    const state = checkedStoredState(await readState(env, row.manifest.value, definition, model), model);
     if (
       state.component !== 'definition' ||
       row.kind.value !== definitionKindIri(state.kind) ||
@@ -500,6 +505,7 @@ export async function validateStatementDefinitions(
   env: WorkActivationEnvironment,
   input: { predicate: string; relationDefinition: string; value?: StatementValue; qualification?: StatementQualification },
   canReadDefinition?: (definition: string) => Promise<boolean>,
+  profile: 'statement-v1' | 'statement-v2' = 'statement-v1',
 ): Promise<{ guard: string; graphPredicate: string }> {
   // Event aliases retain this reviewed platform profile, not an arbitrary
   // native DefinitionRef. The exact predicate has no qualification contract.
@@ -526,9 +532,12 @@ export async function validateStatementDefinitions(
     input.relationDefinition,
     ...(qualification ? [qualification.definition] : []),
   ];
-  const definitions = await exactDefinitions(env, references, canReadDefinition);
+  const definitions = await exactDefinitions(env, references, canReadDefinition, readComponent, profile);
   const relation = definitions.get(input.relationDefinition)!;
   const firstPublication = relation.state.notation === DATE_PUBLISHED_DEFINITION_NOTATION;
+  if (firstPublication && profile === 'statement-v2') {
+    throw new StatementV2Rejected('unsupported_model_revision', 'the retained first-publication property binds the V1 literal contract');
+  }
   if (firstPublication) {
     if (relation.state.kind !== 'property' || relation.state.roles.length !== 0
       || relation.state.successor !== null || relation.definition !== input.predicate) {

@@ -19,3 +19,10 @@ export const statementQualificationSchema = t.Object(
   },
   { additionalProperties: false },
 );
+
+const native = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
+export const statementCoverageSchema = t.Union([
+  t.Object({ kind: t.Literal('participation'), occurrence: native, occurrenceRevision: native, participation: native }, { additionalProperties: false }),
+  t.Object({ kind: t.Literal('occurrence'), occurrence: native, occurrenceRevision: native }, { additionalProperties: false }),
+  t.Object({ kind: t.Literal('subject-global') }, { additionalProperties: false }),
+]);

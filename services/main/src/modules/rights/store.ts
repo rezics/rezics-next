@@ -1,4 +1,5 @@
 import type { VerifiedSourceImportBinding } from '../source/native-work-adoption.ts';
+import { validSynopsisText } from '../source/field-control-language.ts';
 import { contentConnection, contentSessionClient } from '../../../../content/src/connection.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
@@ -239,6 +240,37 @@ export class RightsStore {
     }
   }
 
+  /** Source's verified factual mapping supplies its own positive basis. This
+   * exact import-use check closes current Rights refusals and source-apply
+   * fences; it grants neither quotation nor artwork/public delivery rights. */
+  async retainedFieldReusePermitted(record: string,
+    observations: readonly { record: string; observation: string }[]): Promise<boolean> {
+    if (!agentPattern.test(record) || observations.length < 1 || observations.length > 512
+      || observations.some(item => !agentPattern.test(item.record) || !agentPattern.test(item.observation))) {
+      throw new RightsInvalid('invalid retained field reuse scope');
+    }
+    const records = [...new Set([record, ...observations.map(item => item.record)])];
+    const targets = observations.flatMap(item => [{ record, observation: item.observation }, item]);
+    try {
+      const [rights, fences] = await Promise.all([
+        contentConnection(this.content).query(`SELECT 1 FROM rights.material m
+          JOIN rights.use_assessment_head h ON h.material_id=m.id
+          JOIN rights.use_assessment a ON a.id=h.assessment_id
+          WHERE m.scope_kind='source_record' AND m.source_record_id=ANY($1::uuid[])
+            AND h.family='data_rights' AND h.use_kind='redistribution'
+            AND h.use_scope='rezics:imports' AND a.outcome='not_supported' LIMIT 1`,
+        [records.map(value => value.slice(-36))]),
+        this.access.query(`SELECT 1 FROM unnest($1::text[],$2::text[]) AS wanted(record,observation)
+          JOIN access.governance_enforcement e ON e.owner='source' AND e.resource=wanted.record
+            AND e.state='restricted' AND e.effect='source_apply'
+            AND e.context='urn:rezics:context:global'
+            AND (e.revision IS NULL OR e.revision=wanted.observation) LIMIT 1`,
+        [targets.map(item => item.record), targets.map(item => item.observation)]),
+      ]);
+      return rights.rowCount === 0 && fences.rowCount === 0;
+    } catch { throw new RightsUnavailable('retained field reuse rights are unavailable'); }
+  }
+
   /** One indexed current-head lookup. Historical or withdrawn assessments are never a public basis. */
   async currentPublicDomainAssessment(work: string, assessmentId: string, client?: PoolClient): Promise<boolean> {
     if (!agentPattern.test(work) || !/^[0-9a-f-]{36}$/i.test(assessmentId)) {
@@ -289,22 +321,31 @@ export class RightsStore {
    * A pending Content certificate can follow a committed graph write, so it remains tainted.
    * A 65th matching support fails closed instead of making disclosure depend on a truncated result. */
   async nativeSynopsisRestricted(work: string, value: string, effects: readonly string[]): Promise<boolean> {
-    if (!agentPattern.test(work) || value.length < 1 || value.length > 8000) {
+    if (!agentPattern.test(work) || !validSynopsisText(value)) {
       throw new RightsInvalid('invalid native synopsis fence target');
     }
     const valueDigest = sha256(JSON.stringify(value));
     let rows: Array<{ record: string; observation: string }>;
     try {
       rows = (await this.content.query<{ record: string; observation: string }>(`
-        SELECT DISTINCT 'https://rezics.com/id/' || s.record_id AS record,
-          'https://rezics.com/id/' || c.observation_id AS observation
+        SELECT DISTINCT provenance.record,provenance.observation
         FROM source.field_support s
         JOIN source.field_support_step st ON st.support_id = s.id
         LEFT JOIN source.field_support_outcome out ON out.step_id = st.id
         JOIN source.conversion c ON c.id = st.conversion_id
+        LEFT JOIN source.retained_record_binding b ON b.id=st.retained_binding_id
+        CROSS JOIN LATERAL (
+          SELECT 'https://rezics.com/id/' || s.record_id AS record,
+            'https://rezics.com/id/' || c.observation_id AS observation
+          UNION ALL SELECT part->>'record',part->>'observation'
+            FROM jsonb_array_elements(COALESCE(b.request#>'{retained,intakes}','[]')) part
+          UNION ALL SELECT 'https://rezics.com/id/' || s.record_id,part->>'observation'
+            FROM jsonb_array_elements(COALESCE(b.request#>'{retained,intakes}','[]')) part
+        ) provenance
         WHERE s.target = $1 AND s.slot = 'work-editorial-field-v1#synopsis'
           AND s.context = 'global' AND st.value_digest = $2
-          AND (out.outcome = 'applied' OR out.step_id IS NULL)
+          AND (out.outcome = 'applied' OR out.step_id IS NULL
+            OR (out.outcome='attached' AND out.attachment_profile='source-field-support-attachment-v2'))
         LIMIT 65`, [work, valueDigest])).rows;
     } catch { throw new RightsUnavailable('native synopsis provenance is unavailable'); }
     if (rows.length > 64) throw new RightsUnavailable('native synopsis provenance exceeds the read bound');
