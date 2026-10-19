@@ -43,7 +43,7 @@ import {
   loadRecipeIdentity, recipeReadingReads, type RecipeWorkHost,
 } from './recipe-reading-recorded-page.ts';
 import { RegionFailure } from './region.tsx';
-import { RecipeExperience, RecipeFacts, type RecipePageRead } from './types/recipe.tsx';
+import { RecipeExperience, RecipeFacts, RecipeReadFailure, type RecipePageRead } from './types/recipe.tsx';
 import { WorkRecord } from './record.tsx';
 import { EVERYONE, iriOf, mainScope, workHref, type WorkAt, type WorkScope } from './route.ts';
 import { ScopeBar, type ScopeRealm } from './scope-bar.tsx';
@@ -161,7 +161,7 @@ export function RecipeRegionView({ recipe, href, actingSubject, text, edit, loca
   recipe: Loaded<RecipeWorkPage | null>; href: string; actingSubject: string | null; text: string | null;
   edit?: { href: string; label: string } | null; locale: UiLocale; messages: WorkPageMessages; readPage?: RecipePageRead;
 }) {
-  if (!recipe.ok) return <RegionFailure title={messages.recipeMethod} failure={recipe.failure} messages={messages} />;
+  if (!recipe.ok) return <RecipeReadFailure failure={recipe.failure} messages={messages} />;
   return <RecipeExperience initial={recipe.data} href={href} actingSubject={actingSubject} text={text}
     edit={edit} locale={locale} messages={messages} readPage={readPage} exportApi={exportApi} saveExport={saveExport} />;
 }
@@ -177,7 +177,7 @@ export async function recipeRegion({ host, id, work, href, locale, messages }: {
     // Signed-in readers read the page again for `work.edit`. It is the same projection.
     host.actingSubject ? reads.readProjection(id) : Promise.resolve(null),
   ]);
-  if (!recipe.ok) return <RegionFailure title={messages.recipeMethod} failure={recipe.failure} messages={messages} />;
+  if (!recipe.ok) return <RecipeReadFailure failure={recipe.failure} messages={messages} />;
   const allowed = authority?.ok ? allowedActionsOf(authority.data) : [];
   // Only data crosses this server/client boundary. RecipeExperience creates its continuation
   // reader in the browser; a reader closure here cannot be serialized by React Server Components.
@@ -268,7 +268,7 @@ export async function recipeWorkOverview({ host, workRef, id, work, scope, local
     recipeIdentity(host.main, host.actingSubject, id), recipeProjection(host.main, host.actingSubject, id),
   ]);
   if (identity.kind !== 'ready' || !projection.ok) {
-    return <RegionFailure title={messages.recipeMethod} failure={identity.kind === 'ready' ? 'unavailable' : identity.failure}
+    return <RecipeReadFailure failure={identity.kind === 'ready' ? 'unavailable' : identity.failure}
       messages={messages} />;
   }
   const experience = workExperience(projection.data, work.types);
@@ -280,7 +280,7 @@ export async function recipeWorkOverview({ host, workRef, id, work, scope, local
   const [recipe, statements, discussion, parts, wholes, relations, realizations, releases, populations,
     ratings, classifications, facets, adoptions, alsoEnjoyed, authority] = await Promise.all([
     section ? recipeRegion({ host, id, work, href: section.href, locale, messages })
-      : Promise.resolve(<RegionFailure title={messages.recipeMethod} failure="unavailable" messages={messages} />),
+      : Promise.resolve(<RecipeReadFailure failure="unavailable" messages={messages} />),
     statementsSection ? readLinkedStatements(host.main, actingSubject, statementsSection.href) : Promise.resolve(null),
     discussionSection ? settleOpen(() => host.main.v1.resources({ resource: id }).discussion.get({
       query: { actingSubject },

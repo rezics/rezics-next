@@ -386,6 +386,9 @@ export const UnavailableBody: Story = {
     await expect(failure).toHaveTextContent('Recipe');
     await expect(failure).toHaveTextContent(messages.en.regionUnavailable);
     await expect(within(failure).getByRole('button', { name: messages.en.retry })).toBeVisible();
+    const recipe = canvas.getByRole('region', { name: /^Recipe$/ });
+    await expect(within(recipe).getByText(messages.en.recipeUnavailable)).toBeVisible();
+    await expect(recipe).toContainElement(failure);
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 };
@@ -393,6 +396,11 @@ export const UnavailableBody: Story = {
 export const UnavailableProjection: Story = {
   ...UnavailableBody,
   args: { phase: 'unavailable-projection' },
+};
+
+export const UnavailableBodyPhone: Story = {
+  ...UnavailableBody,
+  globals: { locale: 'en', viewport: { value: 'phone' } },
 };
 
 export const Loading: Story = {

@@ -11,7 +11,7 @@ import { iriOf, scopeAt, tabOf, workHref, workNavigationQuery, workTabs, workTas
 import { WorkKindActions } from './types/actions.tsx';
 import { shownLine } from './types/recipe.tsx';
 import { GuideExperience, guideSections } from './types/guide.tsx';
-import { RecipeFacts } from './types/recipe.tsx';
+import { RecipeFacts, RecipeReadFailure } from './types/recipe.tsx';
 import { WorkAbout, WorkHeader } from './work-header.tsx';
 import { workReportTargets } from './work-report-targets.ts';
 import { WorkFactsView, WorkSources, sourceHref, workFactsSelection, workRights, workSourceGroups } from './work-sources.tsx';
@@ -280,4 +280,15 @@ test("recipe reading keeps Main's complete line when an older occurrence names a
     type: 'ingredient-line', originalText: { value: '2 cups flour', language: 'en' },
   } }], ingredients: [item], measures: [] };
   expect(shownLine(item, 'written', page)).toBe('200 g butter, softened');
+});
+
+
+test('a failed Recipe owner read preserves the named task and explanation alongside its real failure and Retry', () => {
+  const html = render(<RecipeReadFailure failure="unavailable" messages={t} />);
+  expect(html).toContain('aria-labelledby="recipe-experience"');
+  expect(html).toContain(t.recipeMethod);
+  expect(html).toContain(t.recipeUnavailable);
+  expect(html).toContain('role="alert"');
+  expect(html).toContain(t.regionUnavailable);
+  expect(html).toContain(t.retry);
 });

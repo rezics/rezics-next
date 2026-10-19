@@ -17,10 +17,18 @@ import { formatMeasure } from '../../recipe-editor/quantity.ts';
 import Link from '../../shell/localized-link.tsx';
 import { recipePageReader } from '../recipe-reading-recorded-page.ts';
 import type { WorkPageMessages } from '../messages.ts';
-import { Region } from '../region.tsx';
-import type { RecipeWorkPage } from '../types.ts';
+import { Region, RegionFailure } from '../region.tsx';
+import type { ReadFailure, RecipeWorkPage } from '../types.ts';
 import { InstructionReading } from '../../recipe-editor/instruction-reading.tsx';
 import { recipeMethodReady, RECIPE_METHOD_STATE, type Instruction } from '../../recipe-editor/instructions.ts';
+
+/** A known Recipe keeps its task and explanation while the owner read remains explicitly failed and retryable. */
+export function RecipeReadFailure({ failure, messages }: { failure: ReadFailure; messages: WorkPageMessages }) {
+  return <Region id="recipe-experience" title={messages.recipeMethod}>
+    <p className="text-muted-foreground text-sm">{messages.recipeUnavailable}</p>
+    <RegionFailure title={messages.recipeMethod} failure={failure} messages={messages} />
+  </Region>;
+}
 
 /** What the published page and the editor's preview both render. The editor fills it from its own state. */
 export interface ReadableRecipe {
