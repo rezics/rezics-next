@@ -2531,5 +2531,1529 @@
     ],
     "noNewImplementationTaskOrContractRequested": true,
     "reviewReportValidation": "Worker report gate and task docs:check passed; final JSON structure, pinned Git provenance and source cleanliness verified."
+  },
+  "correctiveDeltas": [
+    {
+      "id": "selected-head-correction",
+      "owner": "G-2840",
+      "reviewedAt": "2026-10-19T11:50:14.083496+00:00",
+      "source": "b840a24a9adea5a4492769877cefa6af9eed326c",
+      "composedExecutionSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+      "scope": "Only four authored corrective commits, seven paths, adapter dependency and changed visible stale/recovery behavior. Original 22 authored paths were not re-reviewed as a new task.",
+      "manifestRecordedBeforeSourceReview": true,
+      "manifestMethod": "For each full commit: first parent, raw git diff --full-index --binary SHA256, raw per-file status/mode/full old and new blob IDs. Unrelated ancestors are dependencies.",
+      "authoredManifest": [
+        {
+          "commit": "7adff59a1fb8e76b976be4095013de64d3c5ad0d",
+          "parent": "8e4c323147718bf06cfa821b11f795ed527eba9c",
+          "subject": "fix(author): separate selected content from current draft heads",
+          "patchSha256": "64bfeb6877cb2a8c968209033eca077475a2bef5bc61b14c8249ce719276126a",
+          "files": [
+            {
+              "path": "apps/web/features/feed/author-actions.stories.tsx",
+              "status": "M",
+              "oldMode": "100644",
+              "newMode": "100644",
+              "oldBlob": "7d8d3f2bd040652d1e2e2a06873651a4ef0eb4fb",
+              "newBlob": "e460a5d9ad6a9b96248352ab4eed6d86799a0f39"
+            },
+            {
+              "path": "apps/web/features/feed/author-api.test.ts",
+              "status": "M",
+              "oldMode": "100644",
+              "newMode": "100644",
+              "oldBlob": "adadd17d0f31b2646f4bd5333de59905e2e143f0",
+              "newBlob": "5c1c71ee50e703e5278ae32dd39ca5579cceb2cd"
+            },
+            {
+              "path": "apps/web/features/feed/author-api.ts",
+              "status": "M",
+              "oldMode": "100644",
+              "newMode": "100644",
+              "oldBlob": "353370128765a7dffaeae8cbe09c5cacf5c5be85",
+              "newBlob": "b2a5611a6a6eaf57c07bfaf4c93ca01aa23affbc"
+            },
+            {
+              "path": "apps/web/features/feed/author-fixtures.ts",
+              "status": "M",
+              "oldMode": "100644",
+              "newMode": "100644",
+              "oldBlob": "8e1e95bbef6258166a4cbb7fee59690aab216b5b",
+              "newBlob": "fa9f2a281c0843a3cbb951b77220f165118e10d6"
+            }
+          ]
+        },
+        {
+          "commit": "868cfe4bea6a3d1e187e81700134795c4285f3ae",
+          "parent": "7adff59a1fb8e76b976be4095013de64d3c5ad0d",
+          "subject": "test(author): prove complete private variant lookup",
+          "patchSha256": "1051d242affd1e5fec00dd014d51088b7819e2484cae8043e2c65bd84c18f9aa",
+          "files": [
+            {
+              "path": "apps/web/features/feed/author-api.test.ts",
+              "status": "M",
+              "oldMode": "100644",
+              "newMode": "100644",
+              "oldBlob": "5c1c71ee50e703e5278ae32dd39ca5579cceb2cd",
+              "newBlob": "95e062a0c3f77fc4fb574ba3caadc82eaa5ab262"
+            },
+            {
+              "path": "apps/web/features/feed/author-api.ts",
+              "status": "M",
+              "oldMode": "100644",
+              "newMode": "100644",
+              "oldBlob": "b2a5611a6a6eaf57c07bfaf4c93ca01aa23affbc",
+              "newBlob": "183691a5a8fa5127188471ad477819b940e40583"
+            },
+            {
+              "path": "apps/web/features/feed/author-fixtures.ts",
+              "status": "M",
+              "oldMode": "100644",
+              "newMode": "100644",
+              "oldBlob": "fa9f2a281c0843a3cbb951b77220f165118e10d6",
+              "newBlob": "50bfe4eb83d7797da976fe4946a12ce12898acb4"
+            },
+            {
+              "path": "scripts/static/web-continuations.inventory.json",
+              "status": "M",
+              "oldMode": "100644",
+              "newMode": "100644",
+              "oldBlob": "79caf12dc66305ac073292db7f996371a932cb88",
+              "newBlob": "c4730b05304b26ab926ef3641024e653eca234bc"
+            },
+            {
+              "path": "scripts/static/web-page-filtering.inventory.json",
+              "status": "M",
+              "oldMode": "100644",
+              "newMode": "100644",
+              "oldBlob": "7348941d6b5cf92a464d466c1f67f459984be3bd",
+              "newBlob": "0b483885106d15b3a5822296f9a2bf354aba2209"
+            }
+          ]
+        },
+        {
+          "commit": "9c8d571f9c1c8577920a53c46295ed72aacfe92c",
+          "parent": "868cfe4bea6a3d1e187e81700134795c4285f3ae",
+          "subject": "fix(author): keep continuation evidence keys exact",
+          "patchSha256": "b0099bb66a35725d06d2a269f82fc5db81632b4f4c4024c55a7a5bd6239d6e7d",
+          "files": [
+            {
+              "path": "scripts/static/web-continuations.inventory.json",
+              "status": "M",
+              "oldMode": "100644",
+              "newMode": "100644",
+              "oldBlob": "c4730b05304b26ab926ef3641024e653eca234bc",
+              "newBlob": "789a40dd252fe4b190e326a51e8890111c98fadb"
+            }
+          ]
+        },
+        {
+          "commit": "b840a24a9adea5a4492769877cefa6af9eed326c",
+          "parent": "9c8d571f9c1c8577920a53c46295ed72aacfe92c",
+          "subject": "fix(author): finish stale recovery with acknowledged feedback",
+          "patchSha256": "6dc2322d9c012f12bdc19beb70dc926ed9606320952d34de5bf2343522259d47",
+          "files": [
+            {
+              "path": "apps/web/features/feed/author-actions.stories.tsx",
+              "status": "M",
+              "oldMode": "100644",
+              "newMode": "100644",
+              "oldBlob": "e460a5d9ad6a9b96248352ab4eed6d86799a0f39",
+              "newBlob": "5a9e35b4ed345fc59076785f0912db2abc796574"
+            },
+            {
+              "path": "apps/web/features/feed/author-actions.tsx",
+              "status": "M",
+              "oldMode": "100644",
+              "newMode": "100644",
+              "oldBlob": "7e7e3efbde245ff3224eae6527604df448747eb4",
+              "newBlob": "78a09d5a17c5b008242fa623b43a90a640314740"
+            }
+          ]
+        }
+      ],
+      "finalFilePins": [
+        {
+          "path": "apps/web/features/feed/author-actions.stories.tsx",
+          "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "blob": "5a9e35b4ed345fc59076785f0912db2abc796574",
+          "sha256": "87d91b62d81790b33b916730d5c723cdfa74684ffe84853b343ec13585de1448"
+        },
+        {
+          "path": "apps/web/features/feed/author-actions.tsx",
+          "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "blob": "78a09d5a17c5b008242fa623b43a90a640314740",
+          "sha256": "184cb01baf65ac16ddeb88ae115a60b812d28d08628b20edd6cb0b19b9e9b0a5"
+        },
+        {
+          "path": "apps/web/features/feed/author-api.test.ts",
+          "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "blob": "95e062a0c3f77fc4fb574ba3caadc82eaa5ab262",
+          "sha256": "cab7e1a1636a250582d078dbf9e0cedd8aeb31bcebb1a7cf8c051841091d8fda"
+        },
+        {
+          "path": "apps/web/features/feed/author-api.ts",
+          "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "blob": "183691a5a8fa5127188471ad477819b940e40583",
+          "sha256": "d9cbc06fe90467c672229c5047cd28bbd798c2bc5b486c2388098d0490616fec"
+        },
+        {
+          "path": "apps/web/features/feed/author-fixtures.ts",
+          "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "blob": "50bfe4eb83d7797da976fe4946a12ce12898acb4",
+          "sha256": "78b25ed56faf269462080f13d8d90b8cf6cc088efefc2f08197154839b6e2be9"
+        },
+        {
+          "path": "scripts/static/web-continuations.inventory.json",
+          "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "blob": "789a40dd252fe4b190e326a51e8890111c98fadb",
+          "sha256": "79bea9f7e3bbc1a149f8d5584a9f9f58ef671c8f10005045b1da3d705942f887"
+        },
+        {
+          "path": "scripts/static/web-page-filtering.inventory.json",
+          "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "blob": "0b483885106d15b3a5822296f9a2bf354aba2209",
+          "sha256": "7afb8219d982f85921ee5e658fc6c251b5776d9df397d44ab8f2c24dafa9b9fc"
+        }
+      ],
+      "resolvedFinding": {
+        "id": "author-correction-selected-head",
+        "originalSource": "210dab05cceea672ea513fd7db83a814b94cb500",
+        "originalFindingAndRedEvidencePreserved": true,
+        "ownerRedReproduction": {
+          "job": "274271e0-4fa4-4ffe-9728-22303aebcff2",
+          "source": "410fc3e1ca88f26feb8406345c0c93a477df07e3",
+          "testsPassed": 0,
+          "testsFailed": 2,
+          "outcomeAssertionsReached": true,
+          "assertionLines": [
+            21,
+            29
+          ],
+          "expected": "selected/current R2",
+          "actual": "immutable global creation R1"
+        },
+        "statusAtCorrectedSource": "resolved",
+        "sourceVerdict": "approved within the original source acceptance boundary"
+      },
+      "sourceReview": [
+        {
+          "path": "apps/web/features/feed/author-api.ts",
+          "line": 88,
+          "finding": "No remaining blocker",
+          "reason": "Separate authoritative private draft head from selected published placement revision. Private content-variants pages require matching resource and authoringSubject; follow opaque nextCursor until the exact variant, refuse exhaustion/repeated cursor/missing draft/401/403/503 before an editable basis. Exact-body request and receipt validation use placed.data.revisionId. No private draft body is requested or displayed."
+        },
+        {
+          "path": "apps/web/features/feed/author-api.ts",
+          "line": 125,
+          "finding": "No remaining blocker",
+          "reason": "Use saved draftHead for next expectedHead and verify the returned predecessor against it. The fallback is solely for pre-upgrade persisted frozen requests and replays the original CAS/key. Immutable global reply/history remain R1; selected spoiler comes from the exact published body. Backend authority/CAS, placement receipt identity and same-key ambiguity recovery remain in force."
+        },
+        {
+          "path": "services/main/src/routes/studio.ts",
+          "line": 121,
+          "finding": "Existing dependency supports the corrected read",
+          "reason": "Existing private no-store variant-head route explicitly admits CreativeWork or Post, requires controlled author proof or explicit read grant, repeats final authoring identity and fences the exact Content variant page. The adapter refuses a grant-only null authoringSubject. Frontend ownership display grants no write authority. No new contract or endpoint was introduced."
+        },
+        {
+          "path": "apps/web/features/feed/author-fixtures.ts",
+          "line": 27,
+          "finding": "Controlled transport scope retained",
+          "reason": "Stateful stand-in keeps immutable global R1, independent selected placement and private current draft head, CAS refusals, exact revision bodies and same-key committed replay maps. It does not stand in for native, signed-in or genuine product acceptance."
+        },
+        {
+          "path": "apps/web/features/feed/author-actions.tsx",
+          "line": 176,
+          "finding": "No remaining visible recovery blocker",
+          "reason": "Only acknowledged success clears the obsolete stale review notice. Existing receipt confirmation, local words, cancel/retry/reload and settled Close/object-menu focus remain; passing recovery play assertions and viewed captures corroborate it."
+        }
+      ],
+      "independentCheck": {
+        "job": "ce83dfa7-9994-42ca-846e-79d99d9dc5e8",
+        "recordedOwner": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job",
+        "orderedCommands": [
+          "task --dir .temp/author-lifecycle-correction-source install",
+          "task --dir .temp/author-lifecycle-correction-source goal -- test ./.temp/author-recovery-review.test.ts"
+        ],
+        "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+        "executionTree": ".temp/author-lifecycle-correction-source",
+        "execution": "Owned isolated detached exact-source shared clone; tracked source clean before and after; original source clone retained. No owner rebases/repins/mutations.",
+        "runnerVersion": "bun 1.4.3 (c6da4a4d3)",
+        "runnerPins": [
+          {
+            "path": "scripts/goal/goalctl.ts",
+            "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+            "blob": "329c2cfe66c9ef7ed12514b380432df97296100a",
+            "sha256": "2df513f782332d0181ecd2fd9042e99cc44bba5198937e2310990e95f59c9510"
+          },
+          {
+            "path": "scripts/qa/test.ts",
+            "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+            "blob": "81c4fa2ae7770c68b359f86ae910069aca509c08",
+            "sha256": "3f57d88efe82ff83e300594443f5c8bb824711003525ff3db615ef15a2165a80"
+          },
+          {
+            "path": "scripts/qa/core.ts",
+            "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+            "blob": "7e73c7a7b25c09930781ef55fd0f837587c7a97f",
+            "sha256": "c22fed1e7e7665bb18690864003b58563302e8c93e1884801a6a74973be8586c"
+          },
+          {
+            "path": "Taskfile.yml",
+            "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+            "blob": "30cfc2093436fab2cc18a589404a2f589783f7c7",
+            "sha256": "9ebb829d62cd74ab42b1fa2bd4ad2786cd9ef8d16e61ef4f3637d9a40693516f"
+          },
+          {
+            "path": "yarn.lock",
+            "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+            "blob": "239124b3f025a9beeb23d08d75adfbdbcc18c366",
+            "sha256": "5473e2ac8b308af7e28929652f8882e71e11d81728d567d6324ca7c65eb0ac30"
+          }
+        ],
+        "testSha256": "9963238353c91b798c3b9bb16b778a64f2554b2215ffb8798d226d2610e0c474",
+        "existingAssertionsModified": false,
+        "independentRerunCount": 1,
+        "testsPassed": 2,
+        "testsFailed": 0,
+        "expectCalls": 2,
+        "outcomeAssertionsReached": true,
+        "assertionLines": [
+          21,
+          29
+        ],
+        "result": "passed",
+        "artifact": {
+          "sourcePath": ".temp/goal/jobs/ce83dfa7-9994-42ca-846e-79d99d9dc5e8.2.log",
+          "privatePath": ".temp/author-lifecycle-correction/inputs/independent-two-assertions.log",
+          "sha256": "5ee49e72151b4e48099d75785026aa201eedead4692d3c6ff1da522104418155"
+        },
+        "qaRunId": null,
+        "qaRunIdReason": "This private isolated unit-only selection completed directly through goalctl test; the recorded job and exact log identify the run. No signed-in/native fixture or browser stack was used.",
+        "fixture": "authorTransport controlled stand-in at exact current source; no genuine fixture/restore pin",
+        "nativeImageUsed": null
+      },
+      "reusedAffectedChecks": [
+        {
+          "job": "ce5c09ba-1012-4a98-bfcb-3e37ecc6ff8f",
+          "step": 3,
+          "source": "19691a92073e5bfa2aeaa7e7aec59a9a202f5af0",
+          "command": "bun scripts/goal/goalctl.ts test apps/web/features/feed/author-api.test.ts ./.temp/author-recovery-review.test.ts",
+          "result": "18 pass, 0 fail, 77 expect calls",
+          "assertionReach": "16 tracked author-adapter test cases plus two unchanged reviewer cases. Includes real next correction result in the stand-in, selected/private head separation, complete pagination and 401/403/503, same-key replay, receipt mismatch and existing author failures.",
+          "equivalence": "author-api.ts, author-api.test.ts and author-fixtures.ts are byte-identical to current source; subsequent visible notice/story changes do not enter these tests.",
+          "artifact": {
+            "sourcePath": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2840/.temp/goal/jobs/ce5c09ba-1012-4a98-bfcb-3e37ecc6ff8f.3.log",
+            "privatePath": ".temp/author-lifecycle-correction/inputs/owner-18-units.log",
+            "sha256": "f6e5aa715d9eb6f717986b31a1f8ade5612de643a895226fe66f7698447151a2"
+          }
+        },
+        {
+          "job": "ce5c09ba-1012-4a98-bfcb-3e37ecc6ff8f",
+          "qa": "20261019t111005-6e1ce2",
+          "result": "Three passing affected stories (Correction, RetryAfterReload, SelectedHeadRecoveryPhone); two desktop recovery cases failed at an ambiguous Close role query after acknowledged success.",
+          "historicalFailuresPreserved": true,
+          "resolution": "Unambiguous footer text query retains focus assertions; only the three affected recovery cases reran, below. These earlier failures are not reported as green."
+        },
+        {
+          "job": "48af4f86-cc68-4a46-88cc-f9b1a07103d7",
+          "step": 3,
+          "source": "b75f1f60a21809534f45a6ff15dfac48fc33d819",
+          "qa": "20261019t111340-f70ecf",
+          "command": "bun scripts/goal/goalctl.ts test apps/web/features/feed/author-actions.stories.tsx --testNamePattern (Stale Correction|Selected Head Recovery( Phone)?)$",
+          "result": "3 pass, 0 fail, 15 skipped by filter; 18 total registered stories",
+          "stories": [
+            "StaleCorrection",
+            "SelectedHeadRecovery",
+            "SelectedHeadRecoveryPhone"
+          ],
+          "assertionReach": "Local words survive Load latest, keyboard Enter publishes, stale notice clears only after acknowledged success, footer Close has focus, object menu regains focus, selected coordinates remount and the next correction is read. Selected published bytes remain distinct from unseen private draft. Includes configured axe accessibility checks; no genuine backend transport.",
+          "equivalence": "All seven corrective files are byte-identical at tested b75, published b840 and exact current 1d8.",
+          "artifact": {
+            "sourcePath": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2840/.temp/goal/jobs/48af4f86-cc68-4a46-88cc-f9b1a07103d7.3.log",
+            "privatePath": ".temp/author-lifecycle-correction/inputs/owner-three-recovery-stories.log",
+            "sha256": "9c5664755d9d1e096135c80baff1baecef19a6d6ba7795654b7497e894745214"
+          }
+        },
+        {
+          "job": "48af4f86-cc68-4a46-88cc-f9b1a07103d7",
+          "source": "b75f1f60a21809534f45a6ff15dfac48fc33d819",
+          "result": "Lint, AST, 10 selected guards and two UI entry path types (1850 imported files) pass; corrective bytes match current."
+        },
+        {
+          "job": "48856f08-4108-402e-ab94-2a5b1dc319f7",
+          "step": 1,
+          "source": "b840a24a9adea5a4492769877cefa6af9eed326c",
+          "command": "task goal:type-files -- --project apps/web/tsconfig.json apps/web/features/feed/author-api.ts apps/web/features/feed/author-api.test.ts apps/web/features/feed/author-fixtures.ts apps/web/features/feed/author-actions.tsx apps/web/features/feed/author-actions.stories.tsx",
+          "result": "pass, 1851 files; exact published corrective bytes unchanged at current."
+        }
+      ],
+      "visualReview": {
+        "reviewerActuallyViewed": true,
+        "qa": "20261019t111340-f70ecf",
+        "source": "b75f1f60a21809534f45a6ff15dfac48fc33d819",
+        "sourceEquivalentToCurrent": true,
+        "screenshots": [
+          {
+            "story": "StaleCorrection",
+            "originalPath": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2840/.artifacts/qa/20261019t111340-f70ecf/story-screenshots/apps-web-features-feed-author-actions.stories.tsx/StaleCorrection.png",
+            "privatePath": ".temp/author-lifecycle-correction/screenshots/StaleCorrection.png",
+            "sha256": "454b2e7db68e086e69c84fad095bea296ec8e23cfd93b0e0aa95059d213db2d1"
+          },
+          {
+            "story": "SelectedHeadRecovery",
+            "originalPath": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2840/.artifacts/qa/20261019t111340-f70ecf/story-screenshots/apps-web-features-feed-author-actions.stories.tsx/SelectedHeadRecovery.png",
+            "privatePath": ".temp/author-lifecycle-correction/screenshots/SelectedHeadRecovery.png",
+            "sha256": "110760b892653d89ede73c3313f5fcf9ecadfba33fac08aa3812dd69b611b1c5"
+          },
+          {
+            "story": "SelectedHeadRecoveryPhone",
+            "originalPath": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2840/.artifacts/qa/20261019t111340-f70ecf/story-screenshots/apps-web-features-feed-author-actions.stories.tsx/SelectedHeadRecoveryPhone.png",
+            "privatePath": ".temp/author-lifecycle-correction/screenshots/SelectedHeadRecoveryPhone.png",
+            "sha256": "5b172ef4a52efb723aad55709f06d279f6793d93423199695506c1e2b8316926"
+          }
+        ],
+        "observations": [
+          "StaleCorrection 1200x900: acknowledged correction, receipt/history disclosure and visibly focused footer Close; obsolete review-latest notice absent.",
+          "SelectedHeadRecovery 1200x900: reopened editor retains the next published words; editor and Cancel/Publish controls fit.",
+          "SelectedHeadRecoveryPhone 390x844, Chinese/dark: bottom sheet, text wrapping and action buttons fit without clipping; no private unpublished draft displayed."
+        ],
+        "newVisualFindings": [],
+        "boundary": "Final reopened-editor screenshots complement the play assertions; they alone do not demonstrate success-to-menu focus, reload persistence or genuine backend effects. Original 21 viewed captures remain preserved above."
+      },
+      "verdict": "No remaining blocking source defect found in this bounded correction. Original independent finding is resolved only at the corrected source; no original genuine criterion is closed."
+    },
+    {
+      "id": "submission-adoption-checkout",
+      "owner": "G-2839",
+      "reviewedAt": "2026-10-19T11:50:14.083496+00:00",
+      "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+      "parent": "b840a24a9adea5a4492769877cefa6af9eed326c",
+      "scope": "Exactly store.ts and author-lifecycle-submission.test.ts in the single published producer delta. No original backend chain/full-wave/native rerun or authority redesign.",
+      "manifestRecordedBeforeSourceReview": true,
+      "authoredManifest": [
+        {
+          "commit": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "parent": "b840a24a9adea5a4492769877cefa6af9eed326c",
+          "subject": "fix(submission): prepare adoption claims before reservation checkout",
+          "patchSha256": "e2e0bc336c5ba95432c8616435c496bf7c8ccb3157b13e357b5048619910719a",
+          "files": [
+            {
+              "path": "services/main/src/modules/realm-submission/store.ts",
+              "status": "M",
+              "oldMode": "100644",
+              "newMode": "100644",
+              "oldBlob": "3f751e4f0a5b1cdb04e080473ba4192d14844dd3",
+              "newBlob": "cfdff868158fcefb912a56e056ab853351b3531e"
+            },
+            {
+              "path": "services/main/tests/author-lifecycle-submission.test.ts",
+              "status": "A",
+              "oldMode": "000000",
+              "newMode": "100644",
+              "oldBlob": "0000000000000000000000000000000000000000",
+              "newBlob": "bcc8159fea4bbec1bc1c8ceec2b10f7b525c080e"
+            }
+          ]
+        }
+      ],
+      "finalFilePins": [
+        {
+          "path": "services/main/src/modules/realm-submission/store.ts",
+          "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "blob": "cfdff868158fcefb912a56e056ab853351b3531e",
+          "sha256": "3cd9a3b6aaec04ebc8194eb3e33b0663b9907ec35a06b0f62d9877b1f9591707"
+        },
+        {
+          "path": "services/main/tests/author-lifecycle-submission.test.ts",
+          "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "blob": "bcc8159fea4bbec1bc1c8ceec2b10f7b525c080e",
+          "sha256": "a98a1905bae3e471b058b9dc59f98b11370f3d70e93efdd31b4a7aa58e4bb7eb"
+        }
+      ],
+      "sourceReview": [
+        {
+          "path": "services/main/src/modules/realm-submission/store.ts",
+          "line": 83,
+          "finding": "No remaining nested checkout blocker",
+          "reason": "Prepare/register/claim adoption before holding the reservation client. If preflight fails while the same-key operation concurrently commits, query the saved operation and resume its durable reservation. No pool widening, nested checkout exemption or admission bypass."
+        },
+        {
+          "path": "services/main/src/modules/realm-submission/store.ts",
+          "line": 98,
+          "finding": "Final review authority retained",
+          "reason": "Lock/revalidate review claim through existing Access.fenceClaim on the reservation client before admission-row locks, following Access authority lock order. Recovery fence, fresh claim and exact saved-operation replay remain. AdmissionExpired can return an already committed reservation; otherwise domain refusal propagates."
+        },
+        {
+          "path": "services/main/src/modules/realm-submission/store.ts",
+          "line": 269,
+          "finding": "Final adoption and exact state fences retained",
+          "reason": "Prepared dispatch-eligible claimed adoption is rechecked through Access.fenceClaim in the same SQL transaction, then exact expected revision and pending state are locked/rechecked before the durable immutable adoption reservation is saved. No independent authority or manual graph seed is introduced."
+        },
+        {
+          "path": "services/main/src/modules/realm-submission/store.ts",
+          "line": 127,
+          "finding": "Native dispatch remains after SQL commit",
+          "reason": "finishAdoption is called only after reservation transaction returns committed; retries use the saved adoption input/admission. Existing final native selection receipt and Access graph acknowledgement owners are unchanged."
+        },
+        {
+          "path": "services/main/tests/author-lifecycle-submission.test.ts",
+          "line": 1,
+          "finding": "Meaningful bounded owner regression coverage",
+          "reason": "Read the actual full new test source. Uses existing isolated PostgreSQL, all Access migrations, grantFixtureAuthority, real AccessAdmissionRegistry and boundedPool max=1/mode=throw. Graph admission ASK only is answered; later graph reads throw a sentinel after SQL commit. Assertions inspect real durable SQL reservation, same-key retry, both final authority locks, changed revision, revoked review/adoption scopes and recovery hold. No native terminal receipt or genuine product outcome is fabricated."
+        }
+      ],
+      "ownerHistoricalRed": {
+        "job": "fb739329-ddf9-48b4-8bf8-e895d042e712",
+        "qa": "20261019t110005-c6aa52",
+        "source": "410fc3e1ca88f26feb8406345c0c93a477df07e3",
+        "fingerprint": "a71524c7327ccda3d7cd425385aaf8b4265ca172b5d0f4f7092256c85c8784f3",
+        "result": "2 assertion failures: both observed NestedPoolCheckoutError",
+        "log": ".artifacts/qa/20261019t110005-c6aa52/logs/owner.log"
+      },
+      "reusedChecks": {
+        "ownerTests": {
+          "job": "6fc784a8-e1a6-48c8-9deb-409aa3da9d28",
+          "qa": "20261019t110347-1cca2d",
+          "source": "410fc3e1ca88f26feb8406345c0c93a477df07e3",
+          "fingerprint": "c006ae46e08ab92b0c8d3dacb023cfeb69dcd7edbda2931edeff97d04d1a2414",
+          "sourceStable": true,
+          "tests": 10,
+          "failed": 0,
+          "assertions": 65,
+          "selection": [
+            "services/main/tests/author-lifecycle-submission.test.ts",
+            "services/main/tests/realm-submission.test.ts"
+          ],
+          "reached": [
+            "committed claimed adoption with one bounded connection",
+            "durable reservation and same-key retry",
+            "both final authority fences in the same SQL transaction",
+            "exact revision changed after preflight",
+            "review/adoption scope revocation after admission",
+            "recovery closure after admission"
+          ],
+          "boundary": "Graph admission fence is answered by a test adapter; all subsequent graph reads throw a sentinel. No native adoption or terminal receipt is fabricated; assertions inspect real SQL owners.",
+          "log": ".artifacts/qa/20261019t110347-1cca2d/logs/owner.log",
+          "static": {
+            "types": "passed",
+            "inference": "passed",
+            "lint": "passed",
+            "ast": "passed",
+            "guards": "24/45 selected, passed; automatic timeout retry passed",
+            "log": ".temp/goal/check/run-jK7SJ3/output.log"
+          },
+          "command": "bun scripts/goal/goalctl.ts test services/main/tests/author-lifecycle-submission.test.ts services/main/tests/realm-submission.test.ts",
+          "result": "10 passed, 0 failed, 65 assertions; actual acceptance record and owner log inspected.",
+          "sourceInterpretation": "Test source HEAD alone was dirty, not the complete product pin. Stable fingerprint plus recorded/published exact store/test blobs and matching current owner bytes identify the tested delta. The other selected test, Access owner, adoption/schema/graph dependencies and QA runners are unchanged from that base.",
+          "artifacts": {
+            "owner10AcceptanceRecord": {
+              "sourcePath": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2839/.artifacts/qa/20261019t110347-1cca2d/acceptance.json",
+              "privatePath": ".temp/author-lifecycle-correction/inputs/owner-10-acceptance.json",
+              "sha256": "dad0944571d0bf9dff2432e17d2f714824cecb11d0c2a054603f2c2c181919a5"
+            },
+            "owner10Tests": {
+              "sourcePath": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2839/.artifacts/qa/20261019t110347-1cca2d/logs/owner.log",
+              "privatePath": ".temp/author-lifecycle-correction/inputs/owner-10-tests.log",
+              "sha256": "7bde5d4df5abad3cc664e92e085ce579daeb4997103a8ba3a1aaf2c7703632cc"
+            },
+            "ownerBackendStatic": {
+              "sourcePath": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2839/.temp/goal/check/run-jK7SJ3/output.log",
+              "privatePath": ".temp/author-lifecycle-correction/inputs/owner-backend-static.log",
+              "sha256": "ef7bf505a78c015d81097e005a4404ce39f3052e9338809e26e37425801f2736"
+            }
+          }
+        },
+        "exactPublished": {
+          "job": "43396dd4-3af9-4ae6-b516-92ca96dabd00",
+          "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+          "clean": true,
+          "image": "task jena:image passed; input-pinned image available",
+          "main": "task goal:type-files -- --project services/main/tsconfig.json passed, 2810 files",
+          "web": "task web:typecheck passed, 4029 files"
+        },
+        "runners": {
+          "recordedJobOwner": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job",
+          "localGoalctlBlob": "329c2cfe66c9ef7ed12514b380432df97296100a",
+          "qaCoreBlob": "7e73c7a7b25c09930781ef55fd0f837587c7a97f",
+          "qaTestBlob": "81c4fa2ae7770c68b359f86ae910069aca509c08",
+          "imageRunnerBlob": "5912bce3130989eb492cab90a9901c18faab5bcf"
+        },
+        "guardHistory": "24/45 selected guards had one timeout failure in QA06; automatic retry passed without weakening assertions. Initial failure remains in the copied full static log.",
+        "inference": "Corrected backend inference already passed under CPU/9.5GiB admission (913.8s) in job6fc784a8; actual output inspected. Original independent corrected inference result be1859d1 at210 remains preserved above. No new missing inference check is identified."
+      },
+      "nativeImage": {
+        "currentInputPinnedImage": "rezics/fuseki:6.2.0-cmd0.5.43-594fa7318a91",
+        "pinVerifiedIn": [
+          "infra/dev/compose.yaml:41",
+          "scripts/dev/release-manifest.ts:16"
+        ],
+        "imageAvailabilityCheckJob": "43396dd4-3af9-4ae6-b516-92ca96dabd00",
+        "currentImageNativeQualificationRun": false,
+        "retainedQualificationProof": {
+          "job": "2a1dac67-030c-4f51-8fb5-ae0fef00d302",
+          "source": "359e5fc2100d830d2e8c9df4aaf04ac9653c9cf1",
+          "testPin": {
+            "path": "infra/jena/command-module/src/test/java/com/rezics/jena/ContentSearchQualificationTest.java",
+            "source": "359e5fc2100d830d2e8c9df4aaf04ac9653c9cf1",
+            "blob": "7ee0badd3887ca1910ddce86e9c4b364c839ad32",
+            "sha256": "e37709162f8e89db25cfa682fa10e44633d8fbbcc607b27ea71be1433f53faac"
+          },
+          "runnerPin": {
+            "source": "359e5fc2100d830d2e8c9df4aaf04ac9653c9cf1",
+            "path": "scripts/qa/native-module-suite.ts",
+            "blob": "1ea41290c8dfafa530a9783e14ae661114e0b102",
+            "sha256": "cd1d33a6351c7a86af1292718fe3ea6343a2edba7c9761fd156d3c451d083cf8"
+          },
+          "image": "rezics/fuseki:6.2.0-cmd0.5.43-2bdde6636207",
+          "selection": "ContentSearchQualificationTest",
+          "command": "task jena:test -- --tests ContentSearchQualificationTest",
+          "result": "7 tests passed; 0 failures, errors or skips",
+          "record": {
+            "source": {
+              "root": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2839",
+              "revision": "359e5fc2100d830d2e8c9df4aaf04ac9653c9cf1",
+              "status": "M docs/development/toolchain.md\n M infra/dev/compose.yaml\n M scripts/dev/release-manifest.ts",
+              "inputTag": "rezics/fuseki:6.2.0-cmd0.5.43-2bdde6636207"
+            },
+            "selection": "ContentSearchQualificationTest",
+            "scope": "selected",
+            "result": "passed",
+            "startedAt": "2026-10-19T08:25:01.655Z",
+            "finishedAt": "2026-10-19T08:25:16.414Z",
+            "budgetMs": 2700000,
+            "command": [
+              "docker",
+              "build",
+              "--progress",
+              "plain",
+              "--target",
+              "module-test",
+              "--build-arg",
+              "NATIVE_TEST_SELECTION=ContentSearchQualificationTest",
+              "--build-arg",
+              "NATIVE_TEST_CACHE_ID=rezics-native-test-files-selected-d431e6672ebec19851f9c823d1191cb7c825cf7565a268bd1c53257b0e6e3d47",
+              "--file",
+              "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2839/infra/jena/Dockerfile",
+              "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2839"
+            ],
+            "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2839/.temp/native-module-suite/da928fc2-1044-43d8-a48e-9d4637f5a29d.log",
+            "error": null
+          },
+          "fixturePin": "Native test-owned datasets; no genuine signed-in product fixture.",
+          "equivalence": "All infra/jena source, test and build files are identical from 359e5fc210 to 210dab05cc; native runner also matches. Lifecycle authored/generated profile and POST operation subsets match. Only three generated image pin files were dirty at the run and were committed as d393d028dc.",
+          "runnerUnchangedAtReviewedHead": true
+        },
+        "boundary": "Prior seven-case native proof is exactly at359e/image2bdde; qualification source/test bytes are unchanged, but it is not a fresh pass against current image594. Historical 578-test ranked deadline error is retained unchanged in evidenceReuse.historicalNativeFailure, with no rerun or green relabelling."
+      },
+      "newChecksRequired": [],
+      "reasonNoAdditionalRun": "Actual 10/65 owner proof, exact published Main/Web types, inference/lint/AST/guards and unchanged original51/7 evidence cover the only producer delta. No source change or missing affected assertion was identified to justify repeating them.",
+      "verdict": "No blocking source defect found in the two-file delta. This approves the reviewed source reservation/admission correction, not native adoption or genuine D2-004 outcomes."
+    }
+  ],
+  "correctiveSourceEquivalence": {
+    "method": "Git blob and byte comparison to immutable tested sources, original tracked-source pins and read-only owner working bytes; exact story export blocks and generated lifecycle subsets compared separately. No owner checkout was changed.",
+    "currentSource": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+    "originalSource": "210dab05cceea672ea513fd7db83a814b94cb500",
+    "uiEvidence": {
+      "19691a92073e5bfa2aeaa7e7aec59a9a202f5af0": [
+        {
+          "path": "apps/web/features/feed/author-actions.stories.tsx",
+          "evidenceSource": "19691a92073e5bfa2aeaa7e7aec59a9a202f5af0",
+          "evidenceBlob": "e460a5d9ad6a9b96248352ab4eed6d86799a0f39",
+          "currentBlob": "5a9e35b4ed345fc59076785f0912db2abc796574",
+          "equal": false
+        },
+        {
+          "path": "apps/web/features/feed/author-actions.tsx",
+          "evidenceSource": "19691a92073e5bfa2aeaa7e7aec59a9a202f5af0",
+          "evidenceBlob": "7e7e3efbde245ff3224eae6527604df448747eb4",
+          "currentBlob": "78a09d5a17c5b008242fa623b43a90a640314740",
+          "equal": false
+        },
+        {
+          "path": "apps/web/features/feed/author-api.test.ts",
+          "evidenceSource": "19691a92073e5bfa2aeaa7e7aec59a9a202f5af0",
+          "evidenceBlob": "95e062a0c3f77fc4fb574ba3caadc82eaa5ab262",
+          "currentBlob": "95e062a0c3f77fc4fb574ba3caadc82eaa5ab262",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/feed/author-api.ts",
+          "evidenceSource": "19691a92073e5bfa2aeaa7e7aec59a9a202f5af0",
+          "evidenceBlob": "183691a5a8fa5127188471ad477819b940e40583",
+          "currentBlob": "183691a5a8fa5127188471ad477819b940e40583",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/feed/author-fixtures.ts",
+          "evidenceSource": "19691a92073e5bfa2aeaa7e7aec59a9a202f5af0",
+          "evidenceBlob": "50bfe4eb83d7797da976fe4946a12ce12898acb4",
+          "currentBlob": "50bfe4eb83d7797da976fe4946a12ce12898acb4",
+          "equal": true
+        },
+        {
+          "path": "scripts/static/web-continuations.inventory.json",
+          "evidenceSource": "19691a92073e5bfa2aeaa7e7aec59a9a202f5af0",
+          "evidenceBlob": "789a40dd252fe4b190e326a51e8890111c98fadb",
+          "currentBlob": "789a40dd252fe4b190e326a51e8890111c98fadb",
+          "equal": true
+        },
+        {
+          "path": "scripts/static/web-page-filtering.inventory.json",
+          "evidenceSource": "19691a92073e5bfa2aeaa7e7aec59a9a202f5af0",
+          "evidenceBlob": "0b483885106d15b3a5822296f9a2bf354aba2209",
+          "currentBlob": "0b483885106d15b3a5822296f9a2bf354aba2209",
+          "equal": true
+        }
+      ],
+      "b75f1f60a21809534f45a6ff15dfac48fc33d819": [
+        {
+          "path": "apps/web/features/feed/author-actions.stories.tsx",
+          "evidenceSource": "b75f1f60a21809534f45a6ff15dfac48fc33d819",
+          "evidenceBlob": "5a9e35b4ed345fc59076785f0912db2abc796574",
+          "currentBlob": "5a9e35b4ed345fc59076785f0912db2abc796574",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/feed/author-actions.tsx",
+          "evidenceSource": "b75f1f60a21809534f45a6ff15dfac48fc33d819",
+          "evidenceBlob": "78a09d5a17c5b008242fa623b43a90a640314740",
+          "currentBlob": "78a09d5a17c5b008242fa623b43a90a640314740",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/feed/author-api.test.ts",
+          "evidenceSource": "b75f1f60a21809534f45a6ff15dfac48fc33d819",
+          "evidenceBlob": "95e062a0c3f77fc4fb574ba3caadc82eaa5ab262",
+          "currentBlob": "95e062a0c3f77fc4fb574ba3caadc82eaa5ab262",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/feed/author-api.ts",
+          "evidenceSource": "b75f1f60a21809534f45a6ff15dfac48fc33d819",
+          "evidenceBlob": "183691a5a8fa5127188471ad477819b940e40583",
+          "currentBlob": "183691a5a8fa5127188471ad477819b940e40583",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/feed/author-fixtures.ts",
+          "evidenceSource": "b75f1f60a21809534f45a6ff15dfac48fc33d819",
+          "evidenceBlob": "50bfe4eb83d7797da976fe4946a12ce12898acb4",
+          "currentBlob": "50bfe4eb83d7797da976fe4946a12ce12898acb4",
+          "equal": true
+        },
+        {
+          "path": "scripts/static/web-continuations.inventory.json",
+          "evidenceSource": "b75f1f60a21809534f45a6ff15dfac48fc33d819",
+          "evidenceBlob": "789a40dd252fe4b190e326a51e8890111c98fadb",
+          "currentBlob": "789a40dd252fe4b190e326a51e8890111c98fadb",
+          "equal": true
+        },
+        {
+          "path": "scripts/static/web-page-filtering.inventory.json",
+          "evidenceSource": "b75f1f60a21809534f45a6ff15dfac48fc33d819",
+          "evidenceBlob": "0b483885106d15b3a5822296f9a2bf354aba2209",
+          "currentBlob": "0b483885106d15b3a5822296f9a2bf354aba2209",
+          "equal": true
+        }
+      ],
+      "b840a24a9adea5a4492769877cefa6af9eed326c": [
+        {
+          "path": "apps/web/features/feed/author-actions.stories.tsx",
+          "evidenceSource": "b840a24a9adea5a4492769877cefa6af9eed326c",
+          "evidenceBlob": "5a9e35b4ed345fc59076785f0912db2abc796574",
+          "currentBlob": "5a9e35b4ed345fc59076785f0912db2abc796574",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/feed/author-actions.tsx",
+          "evidenceSource": "b840a24a9adea5a4492769877cefa6af9eed326c",
+          "evidenceBlob": "78a09d5a17c5b008242fa623b43a90a640314740",
+          "currentBlob": "78a09d5a17c5b008242fa623b43a90a640314740",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/feed/author-api.test.ts",
+          "evidenceSource": "b840a24a9adea5a4492769877cefa6af9eed326c",
+          "evidenceBlob": "95e062a0c3f77fc4fb574ba3caadc82eaa5ab262",
+          "currentBlob": "95e062a0c3f77fc4fb574ba3caadc82eaa5ab262",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/feed/author-api.ts",
+          "evidenceSource": "b840a24a9adea5a4492769877cefa6af9eed326c",
+          "evidenceBlob": "183691a5a8fa5127188471ad477819b940e40583",
+          "currentBlob": "183691a5a8fa5127188471ad477819b940e40583",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/feed/author-fixtures.ts",
+          "evidenceSource": "b840a24a9adea5a4492769877cefa6af9eed326c",
+          "evidenceBlob": "50bfe4eb83d7797da976fe4946a12ce12898acb4",
+          "currentBlob": "50bfe4eb83d7797da976fe4946a12ce12898acb4",
+          "equal": true
+        },
+        {
+          "path": "scripts/static/web-continuations.inventory.json",
+          "evidenceSource": "b840a24a9adea5a4492769877cefa6af9eed326c",
+          "evidenceBlob": "789a40dd252fe4b190e326a51e8890111c98fadb",
+          "currentBlob": "789a40dd252fe4b190e326a51e8890111c98fadb",
+          "equal": true
+        },
+        {
+          "path": "scripts/static/web-page-filtering.inventory.json",
+          "evidenceSource": "b840a24a9adea5a4492769877cefa6af9eed326c",
+          "evidenceBlob": "0b483885106d15b3a5822296f9a2bf354aba2209",
+          "currentBlob": "0b483885106d15b3a5822296f9a2bf354aba2209",
+          "equal": true
+        }
+      ]
+    },
+    "originalAuthoredFiles": [
+      {
+        "path": "apps/web/features/feed/author-actions.stories.tsx",
+        "oldBlob": "7d8d3f2bd040652d1e2e2a06873651a4ef0eb4fb",
+        "currentBlob": "5a9e35b4ed345fc59076785f0912db2abc796574",
+        "equal": false
+      },
+      {
+        "path": "apps/web/features/feed/author-actions.tsx",
+        "oldBlob": "7e7e3efbde245ff3224eae6527604df448747eb4",
+        "currentBlob": "78a09d5a17c5b008242fa623b43a90a640314740",
+        "equal": false
+      },
+      {
+        "path": "apps/web/features/feed/author-api.test.ts",
+        "oldBlob": "adadd17d0f31b2646f4bd5333de59905e2e143f0",
+        "currentBlob": "95e062a0c3f77fc4fb574ba3caadc82eaa5ab262",
+        "equal": false
+      },
+      {
+        "path": "apps/web/features/feed/author-api.ts",
+        "oldBlob": "353370128765a7dffaeae8cbe09c5cacf5c5be85",
+        "currentBlob": "183691a5a8fa5127188471ad477819b940e40583",
+        "equal": false
+      },
+      {
+        "path": "apps/web/features/feed/author-fixtures.ts",
+        "oldBlob": "8e1e95bbef6258166a4cbb7fee59690aab216b5b",
+        "currentBlob": "50bfe4eb83d7797da976fe4946a12ce12898acb4",
+        "equal": false
+      },
+      {
+        "path": "apps/web/features/feed/author-messages.ts",
+        "oldBlob": "c403fd93eb0495925ecf2fc92b83172e408d349a",
+        "currentBlob": "c403fd93eb0495925ecf2fc92b83172e408d349a",
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/feed/card.tsx",
+        "oldBlob": "29765de04a513e0924890b6bd42c918b00bbbf98",
+        "currentBlob": "29765de04a513e0924890b6bd42c918b00bbbf98",
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/feed/discussion-card.tsx",
+        "oldBlob": "86c432806464caf29f89896ffac9543e40bf50d5",
+        "currentBlob": "86c432806464caf29f89896ffac9543e40bf50d5",
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/feed/post-row.tsx",
+        "oldBlob": "d9a4b379c6b751d2fa95d2f955a3564bad36cc27",
+        "currentBlob": "d9a4b379c6b751d2fa95d2f955a3564bad36cc27",
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/feed/reply-tree.tsx",
+        "oldBlob": "98b8362b832a8cf466ea86d71c109d2d46333c4d",
+        "currentBlob": "98b8362b832a8cf466ea86d71c109d2d46333c4d",
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/feed/thread-api.ts",
+        "oldBlob": "239c3b7ed15deb02d9cfdf612a2b5e4ba5ce5d57",
+        "currentBlob": "239c3b7ed15deb02d9cfdf612a2b5e4ba5ce5d57",
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/realm/discussion-content.tsx",
+        "oldBlob": "83daf9faf5413bc14d02f7082ac8aefac464d56d",
+        "currentBlob": "83daf9faf5413bc14d02f7082ac8aefac464d56d",
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/realm/discussion-list.tsx",
+        "oldBlob": "089b6a52ed8938edfdaad17edf1d5cdf4f09964e",
+        "currentBlob": "089b6a52ed8938edfdaad17edf1d5cdf4f09964e",
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/realm/ranking-page.tsx",
+        "oldBlob": "f0bae222a7542b3603d0182b383e85a19fbf1057",
+        "currentBlob": "f0bae222a7542b3603d0182b383e85a19fbf1057",
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/realm/thread-view.tsx",
+        "oldBlob": "ba89214c9effada1c1043059a42231b158638b86",
+        "currentBlob": "d18ddc022d02255fcd071fa45bf3bdeb82b900b9",
+        "equal": false
+      },
+      {
+        "path": "apps/web/features/studio/chapter-editor.stories.tsx",
+        "oldBlob": "d2d20966c1bb463052fb4e0cf8d4d3d042f78c46",
+        "currentBlob": "d2d20966c1bb463052fb4e0cf8d4d3d042f78c46",
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/studio/chapter-editor.tsx",
+        "oldBlob": "0d9b0db71782d45e1b867e390c95f5027ac6a125",
+        "currentBlob": "0d9b0db71782d45e1b867e390c95f5027ac6a125",
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/studio/content-api.ts",
+        "oldBlob": "9daf9fe547854cbe984f4e11c9f3acab778e2e51",
+        "currentBlob": "9daf9fe547854cbe984f4e11c9f3acab778e2e51",
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/studio/qualification-withdrawal.stories.tsx",
+        "oldBlob": "0c28e5abf3f75fd142f607c6deb5c34e96349a69",
+        "currentBlob": "0c28e5abf3f75fd142f607c6deb5c34e96349a69",
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/studio/qualification-withdrawal.test.ts",
+        "oldBlob": "03d7efd9e3eee21b23b435c29aed192f2d85cd75",
+        "currentBlob": "03d7efd9e3eee21b23b435c29aed192f2d85cd75",
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/studio/qualification-withdrawal.tsx",
+        "oldBlob": "d40076495639dc03dc13c43572094da1fa4b8aa3",
+        "currentBlob": "d40076495639dc03dc13c43572094da1fa4b8aa3",
+        "equal": true
+      },
+      {
+        "path": "docs/development/toolchain.md",
+        "oldBlob": "578216d114130e00c98d20403559890b72ea7e4d",
+        "currentBlob": "bf4379fd32d61267afed0cd9e5cca1c54f7bd78a",
+        "equal": false
+      },
+      {
+        "path": "generated/model/contexts/content-search-eligibility-withdrawal-v1.jsonld",
+        "oldBlob": "528eb7256d4859b082d99616d4b268c3d2874279",
+        "currentBlob": "528eb7256d4859b082d99616d4b268c3d2874279",
+        "equal": true
+      },
+      {
+        "path": "generated/model/manifest.json",
+        "oldBlob": "0529bdcc2e4cea2d590ec2fbf05ffc44f28f221f",
+        "currentBlob": "e857699823639514b957b3e802dee16eea98e8ca",
+        "equal": false
+      },
+      {
+        "path": "generated/model/shapes/content-search-eligibility-withdrawal-v1.ttl",
+        "oldBlob": "abcf3f143275f835d04fa7c6b1e08b7b0abcf663",
+        "currentBlob": "abcf3f143275f835d04fa7c6b1e08b7b0abcf663",
+        "equal": true
+      },
+      {
+        "path": "generated/openapi/main/public.json",
+        "oldBlob": "e9b4344b848a1621da43ce6a01d2b8d9ea3af240",
+        "currentBlob": "bb63eea40f1c0127ae5c5d9c8c213de79d3675aa",
+        "equal": false
+      },
+      {
+        "path": "infra/dev/compose.yaml",
+        "oldBlob": "ae504336f7956dc49647aa933a5fe0854002db16",
+        "currentBlob": "28e9a458e7953cfa8627dd6d5cd906602a1acb41",
+        "equal": false
+      },
+      {
+        "path": "infra/jena/command-module/src/main/java/com/rezics/jena/CommandService.java",
+        "oldBlob": "7b13aa43c27e6434d8cd47210464c1d651826cc2",
+        "currentBlob": "7b13aa43c27e6434d8cd47210464c1d651826cc2",
+        "equal": true
+      },
+      {
+        "path": "infra/jena/command-module/src/main/java/com/rezics/jena/ContentSearchQualification.java",
+        "oldBlob": "6ec875e19b19282882885b62a5a8a7957a7f28b8",
+        "currentBlob": "6ec875e19b19282882885b62a5a8a7957a7f28b8",
+        "equal": true
+      },
+      {
+        "path": "infra/jena/command-module/src/test/java/com/rezics/jena/ContentSearchQualificationTest.java",
+        "oldBlob": "7ee0badd3887ca1910ddce86e9c4b364c839ad32",
+        "currentBlob": "7ee0badd3887ca1910ddce86e9c4b364c839ad32",
+        "equal": true
+      },
+      {
+        "path": "model/definitions/content-search-eligibility-withdrawal-v1.ts",
+        "oldBlob": "ac43b088a38a2eb675ce353d5204dc3e676fcc92",
+        "currentBlob": "ac43b088a38a2eb675ce353d5204dc3e676fcc92",
+        "equal": true
+      },
+      {
+        "path": "model/definitions/content-search-eligibility-withdrawal-v1.ttl",
+        "oldBlob": "abcf3f143275f835d04fa7c6b1e08b7b0abcf663",
+        "currentBlob": "abcf3f143275f835d04fa7c6b1e08b7b0abcf663",
+        "equal": true
+      },
+      {
+        "path": "packages/model/src/generated/profiles.ts",
+        "oldBlob": "738721fa9ee7fdff16950fa5045ee882bd74eaf4",
+        "currentBlob": "4223913958a2c959fc68b941ad1256413577a301",
+        "equal": false
+      },
+      {
+        "path": "packages/model/src/generated/schemas.ts",
+        "oldBlob": "8dc0be00df9a418ac17efe0e9fcce480862c05df",
+        "currentBlob": "242239ce919f54b62b307229f22e6dd178f99033",
+        "equal": false
+      },
+      {
+        "path": "packages/model/src/generated/vocabulary.ts",
+        "oldBlob": "dcedfc38070227220c7eb4f35691d8415e8e8527",
+        "currentBlob": "2a19238ea9110b6191ba8c865f10292994661690",
+        "equal": false
+      },
+      {
+        "path": "scripts/dev/release-manifest.ts",
+        "oldBlob": "07b7df461fab325583a15d488e6cba40e3d0216a",
+        "currentBlob": "c9fd247d0622bf7c2c449e42654600811658ad7c",
+        "equal": false
+      },
+      {
+        "path": "scripts/static/web-continuations.inventory.json",
+        "oldBlob": "9b9a4f959649599e71524c404cee2672bb03163c",
+        "currentBlob": "789a40dd252fe4b190e326a51e8890111c98fadb",
+        "equal": false
+      },
+      {
+        "path": "services/main/src/api-responses.ts",
+        "oldBlob": "b8627eb3db63bc00090d2cfec2877f78a1bfee15",
+        "currentBlob": "b8627eb3db63bc00090d2cfec2877f78a1bfee15",
+        "equal": true
+      },
+      {
+        "path": "services/main/src/modules/content-publication/eligibility-admitted.ts",
+        "oldBlob": "fb3ef4ec92638f3fc1f73555e73de3dae7ef3b52",
+        "currentBlob": "fb3ef4ec92638f3fc1f73555e73de3dae7ef3b52",
+        "equal": true
+      },
+      {
+        "path": "services/main/src/modules/content-publication/eligibility-state.ts",
+        "oldBlob": "7f6e4e72d2ec67bba4c6d6bd2b8d3c062cf9c8c3",
+        "currentBlob": "7f6e4e72d2ec67bba4c6d6bd2b8d3c062cf9c8c3",
+        "equal": true
+      },
+      {
+        "path": "services/main/src/modules/content-publication/eligibility.ts",
+        "oldBlob": "e21d70b42c3ba87b3cf012a104d1275e430e358f",
+        "currentBlob": "e21d70b42c3ba87b3cf012a104d1275e430e358f",
+        "equal": true
+      },
+      {
+        "path": "services/main/src/modules/content-publication/relay.ts",
+        "oldBlob": "9e1d2b55957c878d93e9e7d6ee3f2015717542e7",
+        "currentBlob": "9e1d2b55957c878d93e9e7d6ee3f2015717542e7",
+        "equal": true
+      },
+      {
+        "path": "services/main/src/modules/outbox/relay.ts",
+        "oldBlob": "ca1e915abb1be9d7f1a710f531914248218a6430",
+        "currentBlob": "ca1e915abb1be9d7f1a710f531914248218a6430",
+        "equal": true
+      },
+      {
+        "path": "services/main/src/modules/realm-reply/content-store.ts",
+        "oldBlob": "f9912794b2d75aa4572af74680d1898d264535e6",
+        "currentBlob": "f9912794b2d75aa4572af74680d1898d264535e6",
+        "equal": true
+      },
+      {
+        "path": "services/main/src/modules/realm-reply/graph.ts",
+        "oldBlob": "76f614c9dc97733e3e9c486243e313953ec73ee0",
+        "currentBlob": "76f614c9dc97733e3e9c486243e313953ec73ee0",
+        "equal": true
+      },
+      {
+        "path": "services/main/src/modules/realm-reply/store.ts",
+        "oldBlob": "692ed7ad75fae6da401168143082d3721af8403e",
+        "currentBlob": "692ed7ad75fae6da401168143082d3721af8403e",
+        "equal": true
+      },
+      {
+        "path": "services/main/src/routes/content.ts",
+        "oldBlob": "571840e3115ead5577620aa5f35057475cb91d2c",
+        "currentBlob": "571840e3115ead5577620aa5f35057475cb91d2c",
+        "equal": true
+      },
+      {
+        "path": "services/main/src/routes/realm-replies.ts",
+        "oldBlob": "4305eb1f6a8d4da5d3c08c0756877ac22c716585",
+        "currentBlob": "4305eb1f6a8d4da5d3c08c0756877ac22c716585",
+        "equal": true
+      },
+      {
+        "path": "services/main/tests/author-lifecycle.test.ts",
+        "oldBlob": "28520ea909c1724a42209356dce5b0e84ab8a8da",
+        "currentBlob": "28520ea909c1724a42209356dce5b0e84ab8a8da",
+        "equal": true
+      },
+      {
+        "path": "services/main/tests/content-eligibility-delivery.test.ts",
+        "oldBlob": "099ed15adf816e824521787943d3af3606295a6f",
+        "currentBlob": "099ed15adf816e824521787943d3af3606295a6f",
+        "equal": true
+      },
+      {
+        "path": "services/main/tests/g-903-api-contract.test.ts",
+        "oldBlob": "2a8272b0df1f30e8c8a6af8e5d1c803c11d6501c",
+        "currentBlob": "2a8272b0df1f30e8c8a6af8e5d1c803c11d6501c",
+        "equal": true
+      }
+    ],
+    "testFilesSinceOriginalReview": [
+      {
+        "path": "services/main/tests/author-lifecycle.test.ts",
+        "evidenceSource": "210dab05cceea672ea513fd7db83a814b94cb500",
+        "evidenceBlob": "28520ea909c1724a42209356dce5b0e84ab8a8da",
+        "currentBlob": "28520ea909c1724a42209356dce5b0e84ab8a8da",
+        "equal": true
+      },
+      {
+        "path": "services/main/tests/content-eligibility.test.ts",
+        "evidenceSource": "210dab05cceea672ea513fd7db83a814b94cb500",
+        "evidenceBlob": "206a0c1df6c826adf9cba31e6489abb4ff257bfa",
+        "currentBlob": "206a0c1df6c826adf9cba31e6489abb4ff257bfa",
+        "equal": true
+      },
+      {
+        "path": "services/main/tests/content-eligibility-state.test.ts",
+        "evidenceSource": "210dab05cceea672ea513fd7db83a814b94cb500",
+        "evidenceBlob": "8395deb7bd27f42c8d1220513605b05152649221",
+        "currentBlob": "8395deb7bd27f42c8d1220513605b05152649221",
+        "equal": true
+      },
+      {
+        "path": "services/main/tests/content-eligibility-delivery.test.ts",
+        "evidenceSource": "210dab05cceea672ea513fd7db83a814b94cb500",
+        "evidenceBlob": "099ed15adf816e824521787943d3af3606295a6f",
+        "currentBlob": "099ed15adf816e824521787943d3af3606295a6f",
+        "equal": true
+      },
+      {
+        "path": "services/main/tests/realm-reply-outbox.test.ts",
+        "evidenceSource": "210dab05cceea672ea513fd7db83a814b94cb500",
+        "evidenceBlob": "3641e5060a1ca46264fccab8ec7317005bcbc169",
+        "currentBlob": "3641e5060a1ca46264fccab8ec7317005bcbc169",
+        "equal": true
+      },
+      {
+        "path": "services/main/tests/g-903-api-contract.test.ts",
+        "evidenceSource": "210dab05cceea672ea513fd7db83a814b94cb500",
+        "evidenceBlob": "2a8272b0df1f30e8c8a6af8e5d1c803c11d6501c",
+        "currentBlob": "2a8272b0df1f30e8c8a6af8e5d1c803c11d6501c",
+        "equal": true
+      },
+      {
+        "path": "model/tests/search-projection-turtle.test.ts",
+        "evidenceSource": "210dab05cceea672ea513fd7db83a814b94cb500",
+        "evidenceBlob": "ab803e6ccff228bdbcabcf2c926e675be6bbddc3",
+        "currentBlob": "ab803e6ccff228bdbcabcf2c926e675be6bbddc3",
+        "equal": true
+      },
+      {
+        "path": "infra/jena/command-module/src/test/java/com/rezics/jena/ContentSearchQualificationTest.java",
+        "evidenceSource": "210dab05cceea672ea513fd7db83a814b94cb500",
+        "evidenceBlob": "7ee0badd3887ca1910ddce86e9c4b364c839ad32",
+        "currentBlob": "7ee0badd3887ca1910ddce86e9c4b364c839ad32",
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/feed/author-api.test.ts",
+        "evidenceSource": "210dab05cceea672ea513fd7db83a814b94cb500",
+        "evidenceBlob": "adadd17d0f31b2646f4bd5333de59905e2e143f0",
+        "currentBlob": "95e062a0c3f77fc4fb574ba3caadc82eaa5ab262",
+        "equal": false
+      },
+      {
+        "path": "apps/web/features/studio/qualification-withdrawal.test.ts",
+        "evidenceSource": "210dab05cceea672ea513fd7db83a814b94cb500",
+        "evidenceBlob": "03d7efd9e3eee21b23b435c29aed192f2d85cd75",
+        "currentBlob": "03d7efd9e3eee21b23b435c29aed192f2d85cd75",
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/feed/author-actions.stories.tsx",
+        "evidenceSource": "210dab05cceea672ea513fd7db83a814b94cb500",
+        "evidenceBlob": "7d8d3f2bd040652d1e2e2a06873651a4ef0eb4fb",
+        "currentBlob": "5a9e35b4ed345fc59076785f0912db2abc796574",
+        "equal": false
+      },
+      {
+        "path": "apps/web/features/studio/qualification-withdrawal.stories.tsx",
+        "evidenceSource": "210dab05cceea672ea513fd7db83a814b94cb500",
+        "evidenceBlob": "0c28e5abf3f75fd142f607c6deb5c34e96349a69",
+        "currentBlob": "0c28e5abf3f75fd142f607c6deb5c34e96349a69",
+        "equal": true
+      }
+    ],
+    "originalStoryDefinitions": [
+      {
+        "story": "OwnedAndForeign",
+        "oldSha256": "96fced900043170c8a1c4057a28a024edc487e61945adc86f3172c23a4b5687a",
+        "currentSha256": "96fced900043170c8a1c4057a28a024edc487e61945adc86f3172c23a4b5687a",
+        "equal": true
+      },
+      {
+        "story": "NormalPostMenus",
+        "oldSha256": "355328f3d4e1e1cd35047ecb06e988f553eb594d7072f3b33519dd2c2382cbd7",
+        "currentSha256": "355328f3d4e1e1cd35047ecb06e988f553eb594d7072f3b33519dd2c2382cbd7",
+        "equal": true
+      },
+      {
+        "story": "NestedReplyMenus",
+        "oldSha256": "9776671ffc2ac26546d5176325a2c361b8e2b749d491d53f3e678bcea5bf5a86",
+        "currentSha256": "9776671ffc2ac26546d5176325a2c361b8e2b749d491d53f3e678bcea5bf5a86",
+        "equal": true
+      },
+      {
+        "story": "ForeignObject",
+        "oldSha256": "c1676be09e1f7ef449c66f2a6269c2031bfd6266e71b21dca295946405ede905",
+        "currentSha256": "c1676be09e1f7ef449c66f2a6269c2031bfd6266e71b21dca295946405ede905",
+        "equal": true
+      },
+      {
+        "story": "Visitor",
+        "oldSha256": "aa979e998ecdf088f7510658a8611df97d15bdd024adb6012bd1c34adb2b4f15",
+        "currentSha256": "aa979e998ecdf088f7510658a8611df97d15bdd024adb6012bd1c34adb2b4f15",
+        "equal": true
+      },
+      {
+        "story": "Correction",
+        "oldSha256": "27fac228a383663568f74ef6110003a4af0a2878f44feeece7b6cc5af4e964cf",
+        "currentSha256": "27fac228a383663568f74ef6110003a4af0a2878f44feeece7b6cc5af4e964cf",
+        "equal": true
+      },
+      {
+        "story": "CancelAndReopen",
+        "oldSha256": "8e767a4430bf92b07e2b3c683889cf913708952df59e39bab6f0d3d5a99c4fc8",
+        "currentSha256": "8e767a4430bf92b07e2b3c683889cf913708952df59e39bab6f0d3d5a99c4fc8",
+        "equal": true
+      },
+      {
+        "story": "RetryAfterReload",
+        "oldSha256": "a19dc8c7bfc47a22dedc3d583c664c37b085101430b587eae4335cfa34d86999",
+        "currentSha256": "a19dc8c7bfc47a22dedc3d583c664c37b085101430b587eae4335cfa34d86999",
+        "equal": true
+      },
+      {
+        "story": "StaleCorrection",
+        "oldSha256": "23c79e655b0557a750b8f116665540aa96f32ec583b2d195d419bbc9c7702923",
+        "currentSha256": "261bb3740811781a3fc8c5a3fcb7badb280f8d97a6a2618ab15595972cebff13",
+        "equal": false
+      },
+      {
+        "story": "WithdrawPlacement",
+        "oldSha256": "fbefbdb4b4344e77786462e41df59fe17a72369c0dca308a436ff23b9686db36",
+        "currentSha256": "fbefbdb4b4344e77786462e41df59fe17a72369c0dca308a436ff23b9686db36",
+        "equal": true
+      },
+      {
+        "story": "RetryWithdrawal",
+        "oldSha256": "602070dcf207ca8f65cf95eecd469dc49de3029947cbeae88d4d93489416056d",
+        "currentSha256": "602070dcf207ca8f65cf95eecd469dc49de3029947cbeae88d4d93489416056d",
+        "equal": true
+      },
+      {
+        "story": "ExpiredSession",
+        "oldSha256": "34c13fd7d14303c7770e860e00802019c215515768dc2bd36c88e7d1dd90db50",
+        "currentSha256": "34c13fd7d14303c7770e860e00802019c215515768dc2bd36c88e7d1dd90db50",
+        "equal": true
+      },
+      {
+        "story": "KeyboardRetry",
+        "oldSha256": "04cac29942e542dc4221672760e6e4d3eb7d2a9c2b74201dba91fef46346f0f5",
+        "currentSha256": "04cac29942e542dc4221672760e6e4d3eb7d2a9c2b74201dba91fef46346f0f5",
+        "equal": true
+      },
+      {
+        "story": "PermissionRevoked",
+        "oldSha256": "b3ab9e2e4202f7daba8ee7c7374eccea46ed44f80be5abc1aa8278f52a9c44de",
+        "currentSha256": "b3ab9e2e4202f7daba8ee7c7374eccea46ed44f80be5abc1aa8278f52a9c44de",
+        "equal": true
+      },
+      {
+        "story": "PhoneChinese",
+        "oldSha256": "f3103944a37906562a36662f79ec20876ab61da590b4289d5f2859db657b5851",
+        "currentSha256": "f3103944a37906562a36662f79ec20876ab61da590b4289d5f2859db657b5851",
+        "equal": true
+      },
+      {
+        "story": "DarkWithdrawal",
+        "oldSha256": "0e1cc219af402d457147b339ee15c3e26500d8afbe761b29153aafbd586e77c0",
+        "currentSha256": "0e1cc219af402d457147b339ee15c3e26500d8afbe761b29153aafbd586e77c0",
+        "equal": true
+      }
+    ],
+    "generatedSubsets": {
+      "profile": {
+        "oldSha256": "ccbebb40454233ba852a9efbd183aa08fcf2190eb24230bd7d49961bc1d7df62",
+        "currentSha256": "ccbebb40454233ba852a9efbd183aa08fcf2190eb24230bd7d49961bc1d7df62",
+        "equal": true
+      },
+      "manifest": {
+        "oldSha256": "d5633c51ae11db096c0fa6edb2e54ee11162bc1f309036555339c854f9319f89",
+        "currentSha256": "d5633c51ae11db096c0fa6edb2e54ee11162bc1f309036555339c854f9319f89",
+        "equal": true
+      },
+      "schemaDeclarations": {
+        "oldSha256": "6fe8e120207e63fcbaa732b08f476f7b1e1a73e263fde39df82c51d04b66ba6f",
+        "currentSha256": "6fe8e120207e63fcbaa732b08f476f7b1e1a73e263fde39df82c51d04b66ba6f",
+        "equal": true
+      },
+      "qualificationOperation": {
+        "oldSha256": "aa5ee66699ea6861a7a122ebb4646f080b4107f5433f545ec8f734f2b9c65bb5",
+        "currentSha256": "aa5ee66699ea6861a7a122ebb4646f080b4107f5433f545ec8f734f2b9c65bb5",
+        "equal": true
+      },
+      "placementOperation": {
+        "oldSha256": "6cc15157e9b98f73990fabc756bc31554bf745be3051645f0d0a6779d037e5bf",
+        "currentSha256": "6cc15157e9b98f73990fabc756bc31554bf745be3051645f0d0a6779d037e5bf",
+        "equal": true
+      }
+    },
+    "backendOwnerWorkingAndDirtyTestBase": [
+      {
+        "path": "services/main/src/modules/realm-submission/store.ts",
+        "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+        "blob": "cfdff868158fcefb912a56e056ab853351b3531e",
+        "sha256": "3cd9a3b6aaec04ebc8194eb3e33b0663b9907ec35a06b0f62d9877b1f9591707",
+        "ownerWorkingSha256": "3cd9a3b6aaec04ebc8194eb3e33b0663b9907ec35a06b0f62d9877b1f9591707",
+        "ownerWorkingEqual": true,
+        "equalToTestHeadBeforeDirtyDelta": false
+      },
+      {
+        "path": "services/main/tests/author-lifecycle-submission.test.ts",
+        "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+        "blob": "bcc8159fea4bbec1bc1c8ceec2b10f7b525c080e",
+        "sha256": "a98a1905bae3e471b058b9dc59f98b11370f3d70e93efdd31b4a7aa58e4bb7eb",
+        "ownerWorkingSha256": "a98a1905bae3e471b058b9dc59f98b11370f3d70e93efdd31b4a7aa58e4bb7eb",
+        "ownerWorkingEqual": true,
+        "equalToTestHeadBeforeDirtyDelta": false
+      },
+      {
+        "path": "services/main/tests/realm-submission.test.ts",
+        "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+        "blob": "61d7d63a7cbe86813ea260142aa7a6c4a50d7884",
+        "sha256": "cbb94e174aec8489b5e95192241bb66fb53bcee074d2822d50aed48c4a319fc8",
+        "ownerWorkingSha256": "cbb94e174aec8489b5e95192241bb66fb53bcee074d2822d50aed48c4a319fc8",
+        "ownerWorkingEqual": true,
+        "equalToTestHeadBeforeDirtyDelta": true
+      },
+      {
+        "path": "services/main/src/modules/access/admission.ts",
+        "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+        "blob": "aef348515d8573ec066c9c765af01139151d719c",
+        "sha256": "38249c3dc3e91bb26c1ec36c06aa2bbeadfae9ad64450f78f4b5615636068a4b",
+        "ownerWorkingSha256": "38249c3dc3e91bb26c1ec36c06aa2bbeadfae9ad64450f78f4b5615636068a4b",
+        "ownerWorkingEqual": true,
+        "equalToTestHeadBeforeDirtyDelta": true
+      },
+      {
+        "path": "services/main/src/modules/realm-submission/resource.ts",
+        "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+        "blob": "388cb7205c8f03f0320af1d3981bf5c3bd7c726d",
+        "sha256": "3742968553e225dc37a3865a12b25b2495cd50432718f4233896d49275d1b48d",
+        "ownerWorkingSha256": "3742968553e225dc37a3865a12b25b2495cd50432718f4233896d49275d1b48d",
+        "ownerWorkingEqual": true,
+        "equalToTestHeadBeforeDirtyDelta": true
+      },
+      {
+        "path": "services/main/src/modules/realm-submission/graph.ts",
+        "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+        "blob": "181def38c24eb5e290d6a71de079b88c77b6f91e",
+        "sha256": "02006ec07bdfe362021cbad4703cebf9f45ebdb9cd3265ca7edfb6563b93a428",
+        "ownerWorkingSha256": "02006ec07bdfe362021cbad4703cebf9f45ebdb9cd3265ca7edfb6563b93a428",
+        "ownerWorkingEqual": true,
+        "equalToTestHeadBeforeDirtyDelta": true
+      },
+      {
+        "path": "services/main/src/modules/realm-submission/schema.ts",
+        "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+        "blob": "9ab9dd4784107c0083479d30724768ad843e3376",
+        "sha256": "533f0ddfd259e0cea089b5d516ecc53412bb0955132fd69af585234dc8b3a71e",
+        "ownerWorkingSha256": "533f0ddfd259e0cea089b5d516ecc53412bb0955132fd69af585234dc8b3a71e",
+        "ownerWorkingEqual": true,
+        "equalToTestHeadBeforeDirtyDelta": true
+      },
+      {
+        "path": "scripts/goal/goalctl.ts",
+        "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+        "blob": "329c2cfe66c9ef7ed12514b380432df97296100a",
+        "sha256": "2df513f782332d0181ecd2fd9042e99cc44bba5198937e2310990e95f59c9510",
+        "ownerWorkingSha256": "2df513f782332d0181ecd2fd9042e99cc44bba5198937e2310990e95f59c9510",
+        "ownerWorkingEqual": true,
+        "equalToTestHeadBeforeDirtyDelta": true
+      },
+      {
+        "path": "scripts/qa/core.ts",
+        "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+        "blob": "7e73c7a7b25c09930781ef55fd0f837587c7a97f",
+        "sha256": "c22fed1e7e7665bb18690864003b58563302e8c93e1884801a6a74973be8586c",
+        "ownerWorkingSha256": "c22fed1e7e7665bb18690864003b58563302e8c93e1884801a6a74973be8586c",
+        "ownerWorkingEqual": true,
+        "equalToTestHeadBeforeDirtyDelta": true
+      },
+      {
+        "path": "scripts/qa/test.ts",
+        "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+        "blob": "81c4fa2ae7770c68b359f86ae910069aca509c08",
+        "sha256": "3f57d88efe82ff83e300594443f5c8bb824711003525ff3db615ef15a2165a80",
+        "ownerWorkingSha256": "3f57d88efe82ff83e300594443f5c8bb824711003525ff3db615ef15a2165a80",
+        "ownerWorkingEqual": true,
+        "equalToTestHeadBeforeDirtyDelta": true
+      }
+    ],
+    "privateReadDependencies": [
+      {
+        "path": "services/main/src/routes/studio.ts",
+        "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+        "blob": "332c6b0ee18c92237863e9ecd8478a03ec501802",
+        "sha256": "8d485d19180b36fbab6fe04b1a2e86701ec8d6c49d7d2971e26894b4d72b3b7d"
+      },
+      {
+        "path": "services/main/src/modules/studio/access.ts",
+        "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+        "blob": "e1a76597038a74975df36d5ec82f6166853bc6a2",
+        "sha256": "b1de9034e7ccac4256a8b6230642a82f55a29d1414687cca77b87310afaaccfe"
+      },
+      {
+        "path": "services/main/src/modules/studio/variant-heads.ts",
+        "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+        "blob": "751bdf6b4c58f3d64c0cda82f6df1ecaceaffd4b",
+        "sha256": "97a1957c9f1035c9ade6a1c55191ea289ffbab2a956f6c65beff53a6ab6531d3"
+      }
+    ],
+    "priorProofBoundary": "The retained 51 backend tests and seven native qualification tests retain their original source, runner and image pins. Lifecycle implementation/native test files remain byte-identical; generated lifecycle profile/schema/operation subsets are identical. Unrelated generated registry, image and thread presentation changes are inherited dependencies, not a new wave review.",
+    "priorUiBoundary": "Original QA20261019t093745-297783 remains a historical 21-story/9-unit/49-assertion pass with all 21 PNGs viewed in the original review. Fifteen of its sixteen author story definitions remain byte-identical; the five qualification stories, qualification test and Studio implementation are wholly unchanged. Shared author adapter/fixture bytes intentionally changed, so the original nine-unit/21-story aggregate is not relabelled as a fresh current-head run. The old seven author units are retained/expanded by the exact current 16 author units plus the two unchanged reviewer assertions (18/77); affected stale and selected-head recovery are covered by the three exact passing stories below. Whole-file original UI equality is expressly not claimed.",
+    "inheritedThreadCaller": "apps/web/features/realm/thread-view.tsx differs in unrelated SubjectHeader/ReportMenu/reaction presentation. The existing ReplyAuthorActions call, author/reply/Realm/selected revision/placement coordinates and blocked/foreign ownership fence remain identical. This dependency is not included as reviewer-authored implementation or independently reapproved unrelated UI."
+  },
+  "currentDecision": {
+    "reviewedAt": "2026-10-19T11:50:14.083496+00:00",
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "independentReviewsPerformed": 1,
+      "nestedAgentsUsed": false,
+      "accountFallbackUsed": false,
+      "candidateImplementationAuthored": false,
+      "productionEdits": false,
+      "existingAssertionsEdited": false,
+      "sameIndependentReviewerContinuation": true,
+      "additionalIndependentReviewers": 0
+    },
+    "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+    "uiSource": "b840a24a9adea5a4492769877cefa6af9eed326c",
+    "sourceVerdict": "approved-within-reviewed-scope",
+    "backendSourceVerdict": "no blocking source defect found",
+    "uiSourceVerdict": "original selected-head blocker resolved; no remaining blocking scoped source or visual defect found",
+    "canApproveExactComposedSourceWithinReviewedScope": true,
+    "unresolvedConfirmedSourceFindings": [],
+    "resolvedFindingIds": [
+      "author-correction-selected-head"
+    ],
+    "historicalDecisionPreserved": "Top-level decision/findings/newChecks/visualReview/handoff remain the original immutable210 verdict and evidence. These appended corrective records supersede that source blocker only at1d8, without deleting its failures.",
+    "originalFinding": "D2-004",
+    "originalFindingClosed": false,
+    "genuineProductAcceptanceEstablished": false,
+    "mainIntegrationEstablished": false,
+    "independentReviewCountRemains": 1,
+    "nestedAgentsUsed": false,
+    "accountFallbackUsed": false,
+    "productionOrExistingAssertionEdits": false,
+    "fullNativeRankedDeadlineErrorPreserved": true
+  },
+  "currentGenuineAcceptance": {
+    "outcomesReachedInThisContinuation": [],
+    "genuineOutcomeAssertionsReached": false,
+    "genuineCheckRun": false,
+    "currentDataAbsenceAsserted": false,
+    "sourceAndStoriesDoNotCloseD2004": true,
+    "currentBackendSupportsReviewedWithdrawalUnions": {
+      "source": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+      "qualificationPath": "services/main/src/routes/content.ts:360",
+      "qualificationProfile": "content-search-eligibility-withdrawal-v1",
+      "placementPath": "services/main/src/routes/realm-replies.ts:59",
+      "placementProfile": "realm-reply-placement-withdrawal-v1",
+      "nativeImage": "rezics/fuseki:6.2.0-cmd0.5.43-594fa7318a91",
+      "inspection": "Verified both producer unions and input image pins at exact current source; no live backend claim. Historical75409ac3 lacks these unions and cannot supply this acceptance."
+    },
+    "requiredPremise": {
+      "productPin": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+      "composedUiPin": "b840a24a9adea5a4492769877cefa6af9eed326c",
+      "nativeImage": "rezics/fuseki:6.2.0-cmd0.5.43-594fa7318a91",
+      "operations": [
+        "POST /v1/content-search-eligibility with content-search-eligibility-withdrawal-v1",
+        "POST /v1/realm-reply-placements with realm-reply-placement-withdrawal-v1",
+        "existing authenticated author draft, exact revision, private variant-head and selected placement operations"
+      ],
+      "preparedData": "Existing compatible owned command-created published chapter, Post and nested-reply records with genuine controlled author, reader/search access, signed-in fixture and retained isolated backup/restore lineage. Manager coordinates admission with existing G-2825 and G-2778/G-2791 owners; no new full catalogue, original-baseline restore, manual graph/authority seed, shared refresh/reset/import, new fixture producer or fake receipt.",
+      "fixturePin": null,
+      "restorePin": null,
+      "fixtureStatus": "No live fixture or isolated restore admitted/used by this source review; this is not a claim that existing current data is absent."
+    },
+    "remainingOriginalCriteria": [
+      "A real owned published chapter exposes normal withdrawal, confirmation and exact acknowledgement; refresh plus another reader/search reflects withdrawal while draft and ownership remain.",
+      "Real operations preserve distinct effects and authority for Work Structure removal, Content qualification withdrawal, Work publication withdrawal and owned Post/reply placement withdrawal, with content rights/disclosure/erasure, independent support and immutable history intact.",
+      "A real owned published Post and nested reply expose correction/cancel/withdraw/retry/refresh through each object own menu, keep local recovery/focus and give no foreign-author powers."
+    ],
+    "acceptanceUnchanged": "No mandatory six-persona, full-theme/full-domain, unrelated whole Studio transfer or full catalogue requirement added. A setup premise or source approval does not close D2-004."
+  },
+  "correctiveHandoff": {
+    "deliverable": "Ready bounded corrective source verdict at1d8 plus preserved original review and affected proof.",
+    "ownerChanges": [],
+    "remainingSourceBlockers": [],
+    "next": [
+      "Manager may integrate reviewed exact source separately; this report establishes no main landing.",
+      "Existing proof/data owners coordinate the compatible1d8/image594/owned-record premise and original genuine chapter/Post/nested-reply outcomes; retain pending/failing markers until actual outcomes establish them.",
+      "Preserve historical original selected-head failure, earlier ambiguous-Close story failures, prior native image result and full-native ranked deadline error."
+    ],
+    "newImplementationTaskOrContractRequested": false,
+    "reportValidation": {
+      "status": "passed",
+      "reportOnlyDurableEdit": "docs/goals/audit-remediation-20261019/proofs/author-lifecycle-review.json",
+      "oldReportSha256BeforeAppend": "346302a6a29582daafd3e6876b6feb55183bfb7b4a8e52c0152d7bbc6da60316",
+      "historicalTopLevelFieldsPreserved": true,
+      "job": "cfbdb2d6-e516-432e-b50d-5eadaad0a97c",
+      "orderedCommands": [
+        "task goal -- check",
+        "task docs:check"
+      ],
+      "workerCheck": {
+        "result": "passed",
+        "selectedGuards": "1/45 for report-only changed path",
+        "types": "not applicable: no TypeScript workspace changed",
+        "tests": "not applicable: no test files named in brief",
+        "lint": "not applicable: no source file changed",
+        "ast": "passed",
+        "guards": "passed",
+        "output": ".temp/goal/check/run-euI5qO/output.log"
+      },
+      "documentationCheck": {
+        "result": "passed",
+        "tests": 13,
+        "markdownFiles": 255,
+        "reach": "local links, fragments and design navigation; no runtime behavior claim"
+      },
+      "finalVerification": "JSON parsed; all 19 historical top-level values match worker HEAD; only the claimed report changed; source execution clone remains clean and at exact1d8."
+    }
   }
 }
