@@ -1,9 +1,8 @@
 import type { ZoneShelfTab, ZoneWork } from '@rezics/zone-sdk';
-import type { CanonicalAddress } from '@rezics/model/address';
-import type { readShowcaseWorks, WorkSummary } from '../api/showcase.ts';
+import type { readShowcaseWorks, ShowcaseWork } from '../api/showcase.ts';
 import { resourceHref } from '../address/path.ts';
-import { liveSlides, presentationSlide, type AdaptContext } from '../realm/adapt.ts';
-import type { enrichShowcaseModules, loadModules, moduleMoreHref, readHeroImages, showcaseContext, summaryWork } from '../realm/modules.ts';
+import { liveSlides, presentationSlide, type AdaptContext, type zoneWork } from '../realm/adapt.ts';
+import type { enrichShowcaseModules, loadModules, moduleMoreHref, readHeroImages, showcaseContext } from '../realm/modules.ts';
 import { siteHref } from '../realm/route.ts';
 import { zoneContentText } from '../language/untagged.ts';
 import { placedModule, type ModuleSource, type PresentationModule, type ZonePresentation } from '../zones/presentation.ts';
@@ -23,7 +22,7 @@ const empty = { state: 'empty' } as const;
 export interface PreviewModuleReaders {
   publicModules: typeof loadModules;
   summaries: typeof readShowcaseWorks;
-  work: typeof summaryWork;
+  work: typeof zoneWork;
   context: typeof showcaseContext;
   more: typeof moduleMoreHref;
   enrich: typeof enrichShowcaseModules;
@@ -85,9 +84,9 @@ export async function loadPreviewHomeModules(preview: Pick<ZoneAuthoringPreview,
     data.find(item => item.id === module.id)?.sources.find(item => sameSource(item.source, source));
   const publicModule = async (module: PresentationModule): Promise<ModuleState> =>
     (await read.publicModules({ ...presentation, modules: [module] }, context, preview.slideMedia))[0]?.state ?? failed;
-  const summaryCard = (item: WorkSummary, mount: string | null = null): ZoneWork => {
-    const address = item.address as CanonicalAddress;
-    const work = read.work({ id: item.reference, title: item.name, cover: item.avatar, address }, context, mount);
+  const summaryCard = (item: ShowcaseWork, mount: string | null = null): ZoneWork => {
+    const address = item.address;
+    const work = read.work(item, context, null, mount);
     // A public summary supplies no site membership; a selected Collection
     // and its mount are the only route witness in this saved source contract.
     return mount ? work : { ...work, href: resourceHref('/w/', address) };
@@ -109,7 +108,9 @@ export async function loadPreviewHomeModules(preview: Pick<ZoneAuthoringPreview,
       // Partial/skipped/unavailable data has no continuation contract. Keep a
       // visible failed region rather than present a partial cut as complete.
       if (saved.state !== 'complete') return { ok: false };
-      const targets = saved.members.map(item => item.work);
+      const limit = module.type === 'hero-carousel' ? Math.min(5, module.options?.limit ?? 5)
+        : module.options?.limit ?? (module.type === 'rising' ? 6 : 14);
+      const targets = saved.members.slice(0, limit).map(item => item.work);
       const cards = await summaries(targets);
       if (targets.some(target => !cards.has(target))) return { ok: false };
       const mount = source.kind === 'collection' ? context.mounts?.get(source.collection) ?? null : null;

@@ -1,0 +1,924 @@
+{
+  "goal": "audit-remediation-20261019",
+  "worker": "G-2855",
+  "finding": "AUD-014",
+  "recordedAt": "2026-10-19T10:44:44.237158+00:00",
+  "reviewer": {
+    "engine": "codex-1",
+    "model": "gpt-6.1-sol",
+    "effort": "xhigh",
+    "independentSourceReview": true,
+    "fallbackUsed": false,
+    "nestedAgentsUsed": false,
+    "productOrAssertionEdits": false
+  },
+  "sourceVerdict": {
+    "result": "pass",
+    "scope": "Executable source delta only; no source counterexample found against original AUD-014. Rendered observations and genuine API/browser acceptance are separate.",
+    "recordedBeforeRenderedExecution": true,
+    "blockingFindings": [],
+    "sourceFixRequired": false
+  },
+  "originalAcceptanceVerbatim": [
+    "同UUID在保存精选、Latest、关联和搜索中保留真实内容类型与选定封面身份；已公开信用信息正确解析。覆盖保存成员、header缺失fallback和Realm补充卡缺失，不硬编码样本或把所有资源当Book。静态调用范围hero:228、quote:464、discussion:488、editorial:517需分条件验证，未宣称全部复现。"
+  ],
+  "originalEvidence": {
+    "canonical": ".temp/ref/original-all-findings.json#issues[id=AUD-014]",
+    "sha256": "e2721c44e74305c694b02e81e757e4476c3a19de414d25b0689617316c5ebc3f",
+    "examples": [
+      "01a14a2d-ec13-7224-b991-80f3ffc98421",
+      "01a14a2e-09d4-7639-85a7-25670a4f73b4"
+    ],
+    "invariant": "Same Work UUID preserves actual type, selected/generated cover identity and public credit identity across saved curated, Latest, related and search. Different card density alone is not a failure.",
+    "producerHandoff": ".temp/ref/producer-handoff.md",
+    "scopeDecision": "This brief supersedes the older producer request for all 15 stories, new save/publish mutations and broad journeys. Only the eight affected original rendered states are selected; G-2755 retains genuine API/browser qualification."
+  },
+  "source": {
+    "base": "a6ad1ad22408aa3190aa0e52d8d30c90c32096b7",
+    "candidate": "8f108a9a438b6efef16862cfe8a73062c50a53ab",
+    "authored": "086ba8ac0f28de9e6c4669eab7d2e8406796da8c",
+    "retainedChecked": "459d44b63007f2ca9fe90adb6230b6f14474ba00",
+    "reportBaseline": "87c7c6c8f94aa04dc822864fcfc7ae656254dcdb",
+    "changedPaths": [
+      "apps/web/features/api/showcase.ts",
+      "apps/web/features/realm/adapt.ts",
+      "apps/web/features/realm/modules.ts",
+      "apps/web/features/zone-editor/home-modules.fixtures.ts",
+      "apps/web/features/zone-editor/home-modules.ts",
+      "apps/web/features/zone-editor/home-page.stories.tsx",
+      "apps/web/features/zone-editor/module-delegates.test.ts",
+      "apps/web/features/zones/card.tsx",
+      "apps/web/features/zones/zone-home-recorded-page.tsx",
+      "apps/web/tests/showcase-fidelity.test.ts",
+      "apps/web/tests/zone.test.ts",
+      "packages/zone-sdk/src/index.ts",
+      "scripts/static/web-continuations.inventory.json",
+      "scripts/static/web-page-filtering.inventory.json"
+    ],
+    "changedPathCount": 14,
+    "manifest": ".temp/ref/candidate/file-blob-manifest.json",
+    "manifestSha256": "12de6e2d3d04c49724e651745d5fb5cb10ecc6135d88f76bbca817665f1b1375",
+    "independentPinVerification": ".temp/ref/independent-pin-verification.json",
+    "all14ManifestHashesVerified": true,
+    "all12SourceSupportTestStoryBlobsExactAuthoredAndChecked": true,
+    "inventoryComposition": [
+      {
+        "path": "scripts/static/web-continuations.inventory.json",
+        "removed": 5,
+        "added": 6,
+        "exactOriginalRowDelta": true,
+        "metadataExact": true
+      },
+      {
+        "path": "scripts/static/web-page-filtering.inventory.json",
+        "removed": 0,
+        "added": 1,
+        "exactOriginalRowDelta": true,
+        "metadataExact": true
+      }
+    ],
+    "reviewedDependencies": [
+      "apps/web/features/api/main.ts",
+      "apps/web/features/api/browser.ts",
+      "apps/web/features/api/media-metadata.ts",
+      "apps/web/features/catalogue/work.ts",
+      "apps/web/features/catalogue/types.ts",
+      "apps/web/features/discover/resource-card.tsx",
+      "apps/web/features/author/route.ts",
+      "apps/web/features/zones/adapt-cards.ts",
+      "apps/web/features/zones/presentation.ts",
+      "apps/web/features/zone-editor/preview.tsx",
+      "apps/web/features/realm/read.ts",
+      "apps/web/features/realm/types.ts",
+      "apps/web/features/language/untagged.ts",
+      "apps/web/tests/realm.test.ts",
+      "yarn.lock",
+      "package.json",
+      "apps/web/package.json",
+      "packages/zone-sdk/package.json",
+      "packages/ui/package.json",
+      "packages/ui/src/components/work-cover.tsx"
+    ],
+    "dependencyDifferencesReviewed": [
+      {
+        "path": "apps/web/features/discover/resource-card.tsx",
+        "assessment": "resourceWork identity conversion is unchanged. Differences concern unrelated non-Work resource rendering/dispatch and do not affect retained coverProps/author assertions."
+      },
+      {
+        "path": "packages/ui/src/components/work-cover.tsx",
+        "assessment": "Only preview size variant differs. WorkCoverRatio and generated design inputs are unchanged. Density is outside the original identity invariant; rendered evidence must pin the candidate."
+      }
+    ],
+    "additionalDependenciesReviewed": [
+      "apps/web/features/address/path.ts",
+      "apps/web/features/realm/route.ts",
+      "apps/web/features/catalogue/type-fixtures.ts",
+      "services/main/src/modules/query/templates/work-credits.schema.ts",
+      "services/main/src/modules/query/template-read.ts",
+      "services/main/src/modules/query/work-cards.ts"
+    ],
+    "dependencyReuseLimit": "Exact byte equality is asserted only for listed equal files. Retained source checks were executed on 459d44, not a new execution on candidate. Renderer differences are separately inspected rather than called an identical historical tree."
+  },
+  "criteria": [
+    {
+      "id": "identity-hydration",
+      "sourceResult": "pass",
+      "paths": [
+        "apps/web/features/api/showcase.ts:90",
+        "apps/web/features/realm/adapt.ts:218",
+        "apps/web/features/zones/card.tsx:43"
+      ],
+      "reason": "Only complete authorized Work summaries for requested targets enter hydration. The exact matching Work header supplies types and saved metadata; the summary supplies selected title/avatar/address. Header ID mismatch, missing/denied header or unavailable credits leaves the target absent. No summary-only card, default Book, private-token or authority fallback is introduced. Existing registry determines actual Book/Document/Recipe semantics.",
+      "existingAssertions": [
+        "curated Work identity > thin summaries are named links without a fabricated card kind or cover",
+        "curated Work identity > semantic kinds come from the Work, including non-Book curated members",
+        "bounded public showcase hydration > summary selection, header meaning and role-filtered credit preview form one complete card"
+      ]
+    },
+    {
+      "id": "public-credit-preview",
+      "sourceResult": "pass",
+      "paths": [
+        "apps/web/features/api/showcase.ts:117",
+        "apps/web/features/realm/adapt.ts:228",
+        "packages/zone-sdk/src/index.ts:671"
+      ],
+      "reason": "Anonymous production client never consults a private bearer. Query roots equal the requested Work, role is author and limit is 3. Complete answers or a real nextCursor admit the bounded author preview; incomplete answers without continuation fail. Role-filtered public names retain source order and agent/Open Library destinations; no importer/account credit is fabricated. Four Work jobs are active per chunk (up to eight header/query HTTP requests), with a maximum 64 unique targets per read. This is preview semantics, not exhaustive author or catalogue completeness.",
+      "existingAssertions": [
+        "bounded public showcase hydration > a bounded public author preview accepts its real continuation and omits an absent context",
+        "bounded public showcase hydration > public hydration keeps at most four Works in flight and returns only requested identities",
+        "curated Work identity > platform metadata keeps the creator preview off its byline"
+      ]
+    },
+    {
+      "id": "cover-language-metadata",
+      "sourceResult": "pass",
+      "paths": [
+        "apps/web/features/realm/adapt.ts:25",
+        "apps/web/features/realm/adapt.ts:37",
+        "apps/web/features/realm/adapt.ts:235",
+        "apps/web/features/zones/card.tsx:26",
+        "packages/zone-sdk/src/index.ts:671",
+        "apps/web/features/zones/zone-home-recorded-page.tsx:220"
+      ],
+      "reason": "Zone conversion retains kind, Work UUID cover seed, selected media URL/dimensions/cover credit, ordered author names/destinations, title language/direction/fallback basis, tagline, status, chapters, words, update time and fact obligations. Shared catalogue/cover conversion consumes these fields. Recorded page now supplies zoneWork to the same saved/public loader. Generated fallback uses actual identity/title/authors and the shared design.",
+      "existingAssertions": [
+        "curated Work identity > saved and published shelf retain the canonical Book and saved metadata",
+        "curated Work identity > saved and published editorial-list retain the canonical Book and saved metadata",
+        "curated Work identity > saved and published rising retain the canonical Book and saved metadata",
+        "curated Work identity > saved and published hero-carousel retain the canonical Book and saved metadata",
+        "curated Work identity > a selected image and its public cover credit survive the Zone and catalogue adapters"
+      ]
+    },
+    {
+      "id": "saved-members",
+      "sourceResult": "pass",
+      "paths": [
+        "apps/web/features/zone-editor/home-modules.ts:76",
+        "apps/web/features/zone-editor/home-modules.ts:98"
+      ],
+      "reason": "Saved producer membership is authoritative. Only members in the module display window are hydrated, then mapped in saved order. Partial/skipped/unavailable sources fail before reads; complete sources with any missing visible target also fail. Scheduled saved heroes require a complete hydrated card for every displayed Work.",
+      "existingAssertions": [
+        "curated Work identity > saved display windows hydrate only their visible members and preserve their order",
+        "curated Work identity > partial sources and missing displayed cards remain failed, with no invented replacements"
+      ]
+    },
+    {
+      "id": "conditional-realm-hero",
+      "sourceResult": "pass",
+      "paths": [
+        "apps/web/features/realm/modules.ts:214"
+      ],
+      "reason": "Scheduled Work slides use complete public hydration where available. Full header semantic kind overrides an older differing Realm kind; complete known Realm cards provide missing-header fallback. Missing both causes failed hero. This conditional scheduled path is reviewed separately from feed heroes and static non-Work slides.",
+      "existingAssertions": [
+        "Realm modules with missing supplementary cards > a scheduled Book uses its full public identity without a Realm adoption card",
+        "Realm modules with missing supplementary cards > a missing header can use a complete Realm card; missing both produces a failed hero",
+        "Realm modules with missing supplementary cards > a full scheduled header retains its semantic kind when an older Realm card differs"
+      ]
+    },
+    {
+      "id": "conditional-quote-discussion-editorial",
+      "sourceResult": "pass",
+      "paths": [
+        "apps/web/features/realm/modules.ts:201",
+        "apps/web/features/realm/modules.ts:446",
+        "apps/web/features/realm/modules.ts:473",
+        "apps/web/features/realm/modules.ts:502"
+      ],
+      "reason": "Quote and discussion visible references reuse complete known cards or hydrate missing supplementary cards by exact UUID; an unavailable displayed target fails the region. Editorial applies the same completion and rejects selected partial lists, preserving mounted/canonical destinations. summaryWork now supplies only named links. These callers have distinct predicates and are not all claimed as observed original reproductions.",
+      "existingAssertions": [
+        "Realm modules with missing supplementary cards > quote-stream hydrates a missing Realm card and refuses an unavailable Work",
+        "Realm modules with missing supplementary cards > discussion-list hydrates a missing Realm card and refuses an unavailable Work",
+        "Realm modules with missing supplementary cards > editorial cards retain complete identity, mounted links, partial and unavailable states"
+      ]
+    }
+  ],
+  "retainedChecks": {
+    "job": "64fd17b2-21ba-40c7-aac3-e5189684f222",
+    "executionRevision": "459d44b63007f2ca9fe90adb6230b6f14474ba00",
+    "unitFiles": [
+      "apps/web/tests/showcase-fidelity.test.ts",
+      "apps/web/tests/realm.test.ts",
+      "apps/web/tests/zone.test.ts"
+    ],
+    "unitResult": {
+      "pass": 150,
+      "fail": 0,
+      "assertions": 63881
+    },
+    "selectedPaths": 14,
+    "selectedGuards": "10/45",
+    "results": {
+      "types": "pass 26.9s",
+      "inference": "pass 270.7s",
+      "lint": "pass 0.6s",
+      "ast": "pass 0.7s",
+      "guards": "pass 13.7s"
+    },
+    "logs": [
+      ".temp/ref/retained-units.log",
+      ".temp/ref/retained-checks.log",
+      ".temp/ref/retained-check-output.log"
+    ],
+    "selectionScript": ".temp/ref/check-showcase-commit.ts",
+    "reuse": "Personally checked logs, exact three test blobs, 12 source/support/story blobs and lock/package pins; reviewed affected dependency differences. No 150-test, baseline, all-story or whole-domain rerun.",
+    "historicalResultsPreserved": [
+      "50266d9a-25e3-403d-8f11-6abb38b05e8e passed tests/static work then failed inline direction syntax, subsequently corrected",
+      "9db59c23-8890-4818-a3a6-7004da5d11d3 passed units; post-push static selection empty and not used as explicit-path proof",
+      "6398f4ac-6bc8-469b-bf05-c4c328061385 SQLITE_BUSY before checker; not a product assertion"
+    ]
+  },
+  "renderedObservations": {
+    "status": "completed affected review: seven stories pass; editorial accessibility assertion fails; all eight initial and six supplemental images personally viewed",
+    "selectedStories": [
+      "CanonicalAndSavedBook",
+      "CanonicalAndSavedBookPhone",
+      "SavedEditorialBook",
+      "SavedScheduledBook",
+      "SavedRtlBook",
+      "SavedRtlBookPhone",
+      "UnavailableSavedBook",
+      "IncompleteCollectionPreview"
+    ],
+    "personallyViewedImages": [
+      {
+        "story": "CanonicalAndSavedBook",
+        "phase": "original after-play capture",
+        "path": ".temp/candidate/.artifacts/qa/20261019t104739-bdec21/story-screenshots/apps-web-features-zone-editor-home-page.stories.tsx/CanonicalAndSavedBook.png",
+        "sha256": "8a088a117d3e5db97cf3829181a33ca0182eb9e471f92fadf66a832c914617c5",
+        "viewport": {
+          "width": 1200,
+          "height": 900
+        },
+        "personallyViewed": true,
+        "observation": "Canonical pink generated Book cover, Pride and Prejudice and Jane Austen readable; saved module begins below; density differs."
+      },
+      {
+        "story": "CanonicalAndSavedBookPhone",
+        "phase": "original after-play capture",
+        "path": ".temp/candidate/.artifacts/qa/20261019t104739-bdec21/story-screenshots/apps-web-features-zone-editor-home-page.stories.tsx/CanonicalAndSavedBookPhone.png",
+        "sha256": "32719e9482762d99fa6d6646f66ba1027ad4a04dd0381b795f8ac2a033f5121a",
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "personallyViewed": true,
+        "observation": "Canonical Book/title/byline readable at 390px; saved heading reaches viewport bottom, so saved card inspected separately below."
+      },
+      {
+        "story": "SavedEditorialBook",
+        "phase": "original after-play capture",
+        "path": ".temp/candidate/.artifacts/qa/20261019t104739-bdec21/story-screenshots/apps-web-features-zone-editor-home-page.stories.tsx/SavedEditorialBook.png",
+        "sha256": "9caa9e5adfa8764fa18970dfa840f5b90518bfe230a803bad6eb421d136a46bb",
+        "viewport": {
+          "width": 1200,
+          "height": 900
+        },
+        "personallyViewed": true,
+        "observation": "Canonical and saved editorial pink Book/title/credit readable; repeated Saved reading list headings are visible, consistent with the accessibility failure."
+      },
+      {
+        "story": "SavedScheduledBook",
+        "phase": "original after-play capture",
+        "path": ".temp/candidate/.artifacts/qa/20261019t104739-bdec21/story-screenshots/apps-web-features-zone-editor-home-page.stories.tsx/SavedScheduledBook.png",
+        "sha256": "84ef4bfce60a33a2b00bb9cf5db0d26e6704557f963e525ddcd7865bc86fc831",
+        "viewport": {
+          "width": 1200,
+          "height": 900
+        },
+        "personallyViewed": true,
+        "observation": "Canonical Book readable; scheduled region starts below the initial viewport, inspected separately below."
+      },
+      {
+        "story": "SavedRtlBook",
+        "phase": "original after-play capture",
+        "path": ".temp/candidate/.artifacts/qa/20261019t104739-bdec21/story-screenshots/apps-web-features-zone-editor-home-page.stories.tsx/SavedRtlBook.png",
+        "sha256": "6196d47da2241d9ff4fd3c476230163adb0d7090f84d4110b9f9644a7c7d1ea3",
+        "viewport": {
+          "width": 1200,
+          "height": 900
+        },
+        "personallyViewed": true,
+        "observation": "Arabic title and pink generated Book identity retained in canonical and saved presentation; Jane Austen readable."
+      },
+      {
+        "story": "SavedRtlBookPhone",
+        "phase": "original after-play capture",
+        "path": ".temp/candidate/.artifacts/qa/20261019t104739-bdec21/story-screenshots/apps-web-features-zone-editor-home-page.stories.tsx/SavedRtlBookPhone.png",
+        "sha256": "0c07c61ffa8b321074adf14c3c5bee89a50f06dfe64a212d74fcef4140c07cb2",
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "personallyViewed": true,
+        "observation": "Canonical Arabic title/Book/byline readable; saved card inspected separately below."
+      },
+      {
+        "story": "UnavailableSavedBook",
+        "phase": "original after-play capture",
+        "path": ".temp/candidate/.artifacts/qa/20261019t104739-bdec21/story-screenshots/apps-web-features-zone-editor-home-page.stories.tsx/UnavailableSavedBook.png",
+        "sha256": "f5a5b0cb2296868372e741f718c33930c81376729ab9c824a42135d3ab955a62",
+        "viewport": {
+          "width": 1200,
+          "height": 900
+        },
+        "personallyViewed": true,
+        "observation": "Readable Couldn’t load Saved reading list and Try again; no fabricated Work card."
+      },
+      {
+        "story": "IncompleteCollectionPreview",
+        "phase": "original after-play capture",
+        "path": ".temp/candidate/.artifacts/qa/20261019t104739-bdec21/story-screenshots/apps-web-features-zone-editor-home-page.stories.tsx/IncompleteCollectionPreview.png",
+        "sha256": "f5a5b0cb2296868372e741f718c33930c81376729ab9c824a42135d3ab955a62",
+        "viewport": {
+          "width": 1200,
+          "height": 900
+        },
+        "personallyViewed": true,
+        "observation": "Readable failed region with Try again; no fabricated saved member."
+      },
+      {
+        "story": "CanonicalAndSavedBook",
+        "phase": "supplemental scrolled capture",
+        "path": ".temp/rendered-scroll/CanonicalAndSavedBook-scrolled.png",
+        "sha256": "d1913a9cf0c5a350a02343e4904dab28bb9c26ebd27006723d59543304977815",
+        "viewport": {
+          "width": 1200,
+          "height": 900
+        },
+        "personallyViewed": true,
+        "observation": "Saved shelf shows the same pink striped generated Book cover, Pride and Prejudice and Jane Austen; readable at its smaller density."
+      },
+      {
+        "story": "CanonicalAndSavedBookPhone",
+        "phase": "supplemental scrolled capture",
+        "path": ".temp/rendered-scroll/CanonicalAndSavedBookPhone-scrolled.png",
+        "sha256": "eba130ac5d38a1e78af9f647f8008159dde05fa48f725fa1c62bf8aeaa51fba0",
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "personallyViewed": true,
+        "observation": "Saved Book cover, full title and author visible at 390px; no visible clipping or horizontal overflow."
+      },
+      {
+        "story": "SavedEditorialBook",
+        "phase": "supplemental scrolled capture",
+        "path": ".temp/rendered-scroll/SavedEditorialBook-scrolled.png",
+        "sha256": "c63f11af8131f7f43b13b3d5b0640982adfdaed20f57b1a45fe297a250b60d68",
+        "viewport": {
+          "width": 1200,
+          "height": 900
+        },
+        "personallyViewed": true,
+        "observation": "Saved row preserves pink Book/title/Jane Austen; duplicate module/list title is visible. Landmark failure remains unresolved."
+      },
+      {
+        "story": "SavedScheduledBook",
+        "phase": "supplemental scrolled capture",
+        "path": ".temp/rendered-scroll/SavedScheduledBook-scrolled.png",
+        "sha256": "fc0a754c5c89f1030856ad19e87661fa74f3f3ad37ebc792ed73881a6a5283bc",
+        "viewport": {
+          "width": 1200,
+          "height": 900
+        },
+        "personallyViewed": true,
+        "observation": "Scheduled hero fully visible with pink Book cover, full title, Jane Austen and Start reading; no visible clipping or overlap."
+      },
+      {
+        "story": "SavedRtlBook",
+        "phase": "supplemental scrolled capture",
+        "path": ".temp/rendered-scroll/SavedRtlBook-scrolled.png",
+        "sha256": "ede23941a95ebdef7deb3f0e28b7d0e8dd0f5e5a327c6e4ad69e856531fc9b2b",
+        "viewport": {
+          "width": 1200,
+          "height": 900
+        },
+        "personallyViewed": true,
+        "observation": "Saved Arabic title and pink Book retain the canonical identity; Latin author remains readable."
+      },
+      {
+        "story": "SavedRtlBookPhone",
+        "phase": "supplemental scrolled capture",
+        "path": ".temp/rendered-scroll/SavedRtlBookPhone-scrolled.png",
+        "sha256": "2682a6cf0337af1e2f86a4c3b2b525e16b8e9a8e545062fd938b905868b82120",
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "personallyViewed": true,
+        "observation": "Saved Arabic title, pink Book and Jane Austen readable at 390px; no visible clipping or horizontal overflow."
+      }
+    ],
+    "limit": "Deterministic story transport is component evidence, not genuine backend replies. Generated covers are rendered here; selected-image fidelity is retained unit/source evidence only. Other seven stories were unselected; no whole-domain, old-baseline or 150-test rerun.",
+    "attempts": [
+      {
+        "job": "a3053d73-bc01-4a5f-b7b5-ea2a30bf028d",
+        "qaRun": "20261019t104537-1ec9b1",
+        "result": "harness failure before collection; zero tests",
+        "exitStatus": 201,
+        "assertionReached": false,
+        "log": ".temp/goal/jobs/a3053d73-bc01-4a5f-b7b5-ea2a30bf028d.log",
+        "reason": "Linked addon resolved outside isolated checkout; Vitest setup-file dynamic import failed. @storybook/react-dom-shim optimization warning also present.",
+        "correction": "Replace linked dependency layout with normal immutable Task/Yarn install in isolated candidate; no product/test/assertion changes."
+      },
+      {
+        "job": "3c95087e-fc72-4c8c-82ca-aed9b77e3c55",
+        "qaRun": "20261019t104739-bdec21",
+        "result": "7 passed, 1 failed, 7 unselected skipped",
+        "exitStatus": 201,
+        "assertionReached": true,
+        "failedStory": "SavedEditorialBook",
+        "failedAssertion": "expect(...).toHaveNoViolations(): landmark-unique",
+        "log": ".temp/goal/jobs/3c95087e-fc72-4c8c-82ca-aed9b77e3c55.2.log",
+        "setupStep": "task --dir .temp/candidate install passed; normal immutable Yarn install; no tracked source drift",
+        "identityPlay": "All eight selected story play functions reached their assertions; the only reported failure is the after-play accessibility check for editorial."
+      },
+      {
+        "job": "235415ef-a15c-471f-8bc4-fea182818aaa",
+        "command": "bun scripts/goal/goalctl.ts slot -- bun .temp/capture-showcase.ts",
+        "purpose": "Supplemental scrolled screenshots and DOM only; existing stories discovered from official index, no test/assertion change or suite rerun.",
+        "result": "harness failure at context teardown after all six captures and receipt were saved",
+        "exitStatus": 1,
+        "assertionReached": "No new outcome assertions; existing DOM and pixels inspected.",
+        "reason": "In-flight axe-core asset route.fetch reported Request context disposed while a browser context closed. All six pages reached two Work covers and saved images/DOM with empty pageerror lists. This job is not claimed as passing.",
+        "log": ".temp/goal/jobs/235415ef-a15c-471f-8bc4-fea182818aaa.log",
+        "receipt": ".temp/rendered-scroll/receipt.json",
+        "helper": ".temp/capture-showcase.ts",
+        "helperSha256": "b4ad6815b85709fb87031583bffc3c0abbc9dfef68349061e01a209756cbe7b7",
+        "officialStoryIndex": ".temp/rendered-scroll/story-index.json",
+        "cleanup": "receipt serverStopped=true; owned Storybook process group terminated"
+      }
+    ],
+    "accessibilityFindings": [
+      {
+        "id": "editorial-duplicate-landmark-name",
+        "result": "confirmed existing accessibility assertion failure",
+        "story": "SavedEditorialBook",
+        "counterexample": "ModuleFrame section named Saved reading list contains EditorialModule list section with the same accessible name Saved reading list.",
+        "sourcePaths": [
+          "apps/web/features/zones/module-frame.tsx:25",
+          "apps/web/features/zones/modules.tsx:105",
+          "apps/web/features/zone-editor/home-modules.ts:165"
+        ],
+        "affectedExistingAssertion": "apps/web/features/zone-editor/home-page.stories.tsx > Saved Editorial Book > addon afterEach expect(...).toHaveNoViolations(): landmark-unique",
+        "identitySourceVerdictEffect": "Does not falsify AUD-014 Work type/cover/public-credit identity. Preserve the source pass; report this scoped rendered gate failure separately to the existing implementation owner.",
+        "fixPerformed": false,
+        "assertionLocation": "@storybook/addon-a11y/dist/preview.js exports afterEach; _browser-chunks/chunk-5WURYCET.js invokes toHaveNoViolations; recorded compiled stack reaches applyAfterEach",
+        "reproduce": "task --dir .temp/candidate goal -- test apps/web/features/zone-editor/home-page.stories.tsx -t 'Saved Editorial Book'"
+      }
+    ],
+    "frontendPin": "8f108a9a438b6efef16862cfe8a73062c50a53ab",
+    "isolatedCandidate": ".temp/candidate",
+    "trackedCandidateDriftAfterExecution": "none",
+    "runnerPins": {
+      "manifest": ".temp/ref/render-runner-pins.json",
+      "manifestSha256": "236a8f9ef5011447045ab777fda692dbd3cfa7a0be829153b7b560f179b3ee45",
+      "runtime": {
+        "bun": "1.4.3",
+        "node": "v26.3.0",
+        "playwright": "1.63.0",
+        "chromium": "153.0.8010.12",
+        "storybook": "11.0.0-alpha.6",
+        "vitest": "5.0.4"
+      },
+      "recordedJobOwnerCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- <command>",
+      "qaCommand": "task --dir .temp/candidate goal -- test apps/web/features/zone-editor/home-page.stories.tsx -t 'Canonical|Editorial|Scheduled|[Rr][Tt][Ll]|Unavailable|Incomplete'",
+      "installLog": ".temp/goal/jobs/3c95087e-fc72-4c8c-82ca-aed9b77e3c55.1.log"
+    },
+    "domObservations": {
+      "receipt": ".temp/rendered-scroll/receipt.json",
+      "receiptSha256": "761b85af6fa236fc6a2768b0ecadf37ed8a8974ec9236c832b0c409967944a46",
+      "interpretation": "All six successful-identity story DOMs expose two book covers, matching title/author text and /en/authors/open-library/OL21594A links. English headings retain en/ltr; Arabic headings ar/rtl. All six report no document horizontal overflow. Duplicate editorial section names confirm the existing after-play assertion. No genuine API outcome is inferred.",
+      "caseCount": 6,
+      "publicAuthorDestination": "/en/authors/open-library/OL21594A",
+      "allSixHaveTwoBookCovers": true,
+      "allSixDocumentHorizontalOverflow": false,
+      "allSixPageErrorListsEmpty": true,
+      "englishHeadingAttributes": {
+        "lang": "en",
+        "dir": "ltr"
+      },
+      "arabicHeadingAttributes": {
+        "lang": "ar",
+        "dir": "rtl"
+      },
+      "duplicateEditorialNames": [
+        "zone-module-saved-shelf",
+        "saved-shelf-saved-shelf"
+      ]
+    },
+    "storyResults": [
+      {
+        "story": "CanonicalAndSavedBook",
+        "identityOrFailurePlay": "pass",
+        "afterPlayAccessibility": "pass",
+        "suiteResult": "pass"
+      },
+      {
+        "story": "CanonicalAndSavedBookPhone",
+        "identityOrFailurePlay": "pass",
+        "afterPlayAccessibility": "pass",
+        "suiteResult": "pass"
+      },
+      {
+        "story": "SavedEditorialBook",
+        "identityOrFailurePlay": "pass",
+        "afterPlayAccessibility": "fail: landmark-unique",
+        "suiteResult": "fail"
+      },
+      {
+        "story": "SavedScheduledBook",
+        "identityOrFailurePlay": "pass",
+        "afterPlayAccessibility": "pass",
+        "suiteResult": "pass"
+      },
+      {
+        "story": "SavedRtlBook",
+        "identityOrFailurePlay": "pass",
+        "afterPlayAccessibility": "pass",
+        "suiteResult": "pass"
+      },
+      {
+        "story": "SavedRtlBookPhone",
+        "identityOrFailurePlay": "pass",
+        "afterPlayAccessibility": "pass",
+        "suiteResult": "pass"
+      },
+      {
+        "story": "UnavailableSavedBook",
+        "identityOrFailurePlay": "pass",
+        "afterPlayAccessibility": "pass",
+        "suiteResult": "pass"
+      },
+      {
+        "story": "IncompleteCollectionPreview",
+        "identityOrFailurePlay": "pass",
+        "afterPlayAccessibility": "pass",
+        "suiteResult": "pass"
+      }
+    ]
+  },
+  "genuineApiBrowserAcceptance": {
+    "status": "pending-existing-owner",
+    "owner": "G-2755 through goal-audit-remediation-20261019 manager",
+    "originalAssertionsStillMissing": [
+      "Actual original UUID comparison across existing saved curated, Latest, related and search mounts: resource identity, true type, selected/generated cover and public author names/destinations.",
+      "Genuine authorized summary batch, matching Work header and author-only query replies pinned to frontend, backend and retained data inputs, plus viewed browser evidence."
+    ],
+    "coordination": {
+      "status": "Requested retained inputs and owner disposition through manager; no completed genuine evidence supplied to this reviewer.",
+      "managerSession": "goal-audit-remediation-20261019",
+      "mailId": "mail:d6d38af5-3ab0-41c7-941d-086e1ae1a4ed",
+      "retryKey": "G-2855-source-verdict-retained-inputs",
+      "request": ".temp/manager-showcase-coordination.txt",
+      "requiredPins": [
+        "exact frontend",
+        "compatible genuine backend revision/configuration",
+        "retained data inputs",
+        "authorization fixture",
+        "actual summary/header/author-query replies",
+        "same-UUID viewed browser results"
+      ],
+      "restriction": "G-2755 retains qualification; reviewer creates no competing corpus, account, selection, save or publish writes. Exact frontend with compatible retained backend/data is sufficient; no fresh catalogue or old baseline restore."
+    },
+    "noAcceptanceSubstitution": "Source review, units and story screenshots cannot establish these genuine outcomes."
+  },
+  "reportChecks": {
+    "status": "pass",
+    "job": "be8227ac-7130-446b-9ba2-f0c7ad474e17",
+    "exitStatus": 0,
+    "docs": {
+      "command": "task docs:check",
+      "result": "pass; 13 checker tests, 250 Markdown files, local links/fragments/design navigation",
+      "log": ".temp/goal/jobs/be8227ac-7130-446b-9ba2-f0c7ad474e17.1.log"
+    },
+    "worker": {
+      "command": "task goal -- check",
+      "result": "pass; report path selected; AST and 1/45 repository guards pass; no TypeScript workspace, source lint input or brief test file changed",
+      "log": ".temp/goal/jobs/be8227ac-7130-446b-9ba2-f0c7ad474e17.2.log",
+      "output": ".temp/goal/check/run-JEeeCu/output.log",
+      "rebaseOrMergePerformed": false
+    },
+    "integrity": [
+      "JSON parsed successfully",
+      "git diff --check passed",
+      "isolated candidate tracked files remain clean"
+    ],
+    "limit": "These are report checks. Product unit/static evidence is reused only under the separately recorded source/dependency pins."
+  },
+  "classClosed": false,
+  "mainProductLandingAuthorizedByThisReview": false,
+  "observationsCompletedAt": "2026-10-19T10:55:31.049042+00:00",
+  "reviewDisposition": {
+    "source": "pass; no executable counterexample to original AUD-014 identity/fidelity invariant found in the 14-path candidate and affected dependencies",
+    "affectedRendered": "review completed; 7/8 selected suites pass, editorial after-play accessibility assertion fails; all eight play outcomes and fourteen images recorded",
+    "genuineOriginalAcceptance": "pending G-2755 retained genuine replies/browser evidence through manager; no source or story substitution",
+    "existingOwnerFollowup": "Dispose or correct SavedEditorialBook duplicate named landmarks at existing assertion; do not widen this identity review into unrelated module/annotation/research requirements.",
+    "managerDecision": "No class closure or main product landing authorized by reviewer."
+  },
+  "continuationHistory": [
+    {
+      "phase": "source-review",
+      "recordedAt": "2026-10-19T12:10:51.359543+00:00",
+      "authority": "Same original AUD-014 outcome/claims; manager-directed bounded correction review; no fallback or nested agent.",
+      "previousReportHead": "c3e5ebfa411425c11add3fdc2c92db617f901c07",
+      "rebasedReportHead": "dde2b2c926591f3c877b5dcea89d1020a2a773d8",
+      "originalCandidate": "8f108a9a438b6efef16862cfe8a73062c50a53ab",
+      "finalCandidate": "93f663f2bb80649a61b6f4276e346e469b45c07d",
+      "rendererCommit": "02cdd549d35860dd4e9a7de8c6a45fe2d0032b97",
+      "inventoryCommit": "93f663f2bb80649a61b6f4276e346e469b45c07d",
+      "reviewedPaths": [
+        "apps/web/features/zones/modules.tsx",
+        "scripts/static/web-continuations.inventory.json"
+      ],
+      "sourceVerdict": {
+        "result": "pass",
+        "recordedBeforeRetainedRenderedProofReuse": true,
+        "blockingIdentityCounterexamples": [],
+        "reason": "Only the editorial list wrapper changes from a named section (a region landmark) to a named div role=group. The outer ModuleFrame region and inner heading/label relation remain. Work mapping, card callback/row layout, keys, heading content, list href, localized link and hydration authority inputs are byte-for-byte unchanged. This removes the duplicate named landmark without changing original AUD-014 type, selected/generated cover, public author destination or summary identity.",
+        "inventoryResult": "Exactly one EditorialModule list.items dropped-continuation context hash changes. Rule, expression, all peers, metadata and row order remain exact. No guard weakening.",
+        "originalSourceVerdict": "Retained pass on original 8f108 candidate; this bounded wrapper correction does not reopen the original 14-path source review."
+      },
+      "pins": [
+        {
+          "path": "apps/web/features/zones/modules.tsx",
+          "originalBlob": "caf143bd02a84a72f11aa585461fee4f94d39b59",
+          "finalBlob": "4e0842a28c3754bfff22b3c7e33a84903c0e3e9e",
+          "originalSha256": "83bc2975b3ab9ba94622f75b7816026b8af55d32f37a0a60bc834246b2c6a172",
+          "finalSha256": "5056062216972e8151ba858224ad4eea01564a00c1fdf476b1b25ef44204ed5e"
+        },
+        {
+          "path": "scripts/static/web-continuations.inventory.json",
+          "originalBlob": "1c5d65c05163633a1c16cc8fe1e5bdfcabd0fffa",
+          "finalBlob": "44a56951606eae5f0ea4773266dddc0def545568",
+          "originalSha256": "5fc6f08b4553938a3d03e866abd7c49dc49215fa95be66b1c6b1007cd0e0d444",
+          "finalSha256": "fb20bb16ed2fe5d158108adcf81ed36f8aa9b65a023ce9441c59de91afe9b6e8"
+        }
+      ],
+      "independentVerification": ".temp/continuation-review/source-pins.json",
+      "patch": ".temp/continuation-review/reviewed-renderer-and-context.patch",
+      "patchSha256": "cef9c7dbb4b7e1b658706ef5da9f4f9780df59ba50b73214948b20a7824a550d",
+      "productOrTestOrAssertionMutation": false
+    },
+    {
+      "phase": "retained-proof-review",
+      "recordedAt": "2026-10-19T12:14:39.109244+00:00",
+      "sourceVerdictCommit": "2487483a4b0507c2bec7df9d1bfb92357d3ff678",
+      "finalCandidate": "93f663f2bb80649a61b6f4276e346e469b45c07d",
+      "evidenceReadAfterSourceVerdict": true,
+      "producerReceipt": {
+        "path": ".temp/continuation-review/g2755-receipt.json",
+        "sha256": "d36beedbd4b8383a2f6468f00b114322e364114373bbf00fa7cbd9b6bd6df2c6"
+      },
+      "retainedEvidenceManifest": {
+        "path": ".temp/continuation-review/retained-evidence-manifest.json",
+        "sha256": "a8f3403b4f67ba3339bfd726622bd4b8d11a6eb2b8b59d00d2365e5b8f3c738a"
+      },
+      "reuseVerification": {
+        "dependencyManifest": {
+          "path": ".temp/continuation-review/dependency-reuse-pins.json",
+          "sha256": "68267a3426fd7c03ba08b45c03ba409e5e02e407b41c5b1b295e9bf02d79a7c7"
+        },
+        "installedRuntimeManifest": {
+          "path": ".temp/continuation-review/runtime-reuse-pins.json",
+          "sha256": "92c5166ec778e3cf885103f1b83e2b6cda6baf3426b93c9b1ac8a92d2c1cb301"
+        },
+        "unchangedPinnedFiles": 52,
+        "all17PriorRunnerPinsExact": true,
+        "producerHeadObserved": "93f663f2bb80649a61b6f4276e346e469b45c07d",
+        "producerTrackedStatusObserved": "clean",
+        "all12OriginalSourceSupportTestStoryFilesExact": true,
+        "threeRetainedUnitFilesExactCheckedRevision": true,
+        "lockAndPackageMetadataExact": true,
+        "a11yPreviewAndImplementationBytesExactPriorRunner": true,
+        "runtimeVersions": {
+          "storybook": "11.0.0-alpha.6",
+          "vitest": "5.0.4",
+          "playwright": "1.63.0",
+          "@storybook/addon-a11y": "11.0.0-alpha.6",
+          "@storybook/addon-vitest": "11.0.0-alpha.6"
+        },
+        "sevenStoryReuseBoundary": "The only differing product file is zones/modules.tsx: exact two-tag change confined to EditorialModule. The seven other selected stories retain their original rendered execution on 8f108; their active renderers and all remaining source/fixture/cover/link/authority/runner dependencies are exact. This is retained proof, not seven new executions on final.",
+        "unitReuseBoundary": "Retain job 64fd17b2-21ba-40c7-aac3-e5189684f222: 150 pass / 63881 assertions and original explicit 14-path static evidence. Its original source/dependency differences remain as reviewed; the only new executable delta is the editorial JSX wrapper. No claim that the historical entire tree equals final."
+      },
+      "correctedEditorialStory": {
+        "job": "39ccdce3-842a-4e42-9ddf-67016c280cc5",
+        "qaRun": "20261019t112750-c538b3",
+        "command": "env REZICS_STORY_SCREENSHOTS_DIR=.temp/aud014-prove/editorial-story bun scripts/goal/goalctl.ts test apps/web/features/zone-editor/home-page.stories.tsx -t \"Saved Editorial Book\"",
+        "frontendPinBasis": "Producer receipt pins final 93f663f2bb; adjacent projection step of this same recorded job reports that exact stable source; observed producer checkout is clean at final and all affected file/dependency bytes match.",
+        "result": {
+          "pass": 1,
+          "fail": 0,
+          "skippedUnselected": 14,
+          "identityPlay": "pass",
+          "normalAfterPlayAccessibility": "pass"
+        },
+        "existingAssertions": "Unchanged checkBookIdentity requires two Book covers, matching Pride and Prejudice headings and Jane Austen text, plus no horizontal overflow; the existing addon afterEach toHaveNoViolations now passes.",
+        "rawLog": {
+          "path": ".temp/continuation-review/retained/.temp/goal/jobs/39ccdce3-842a-4e42-9ddf-67016c280cc5.2.log",
+          "sha256": "a2b5a313b52be2d96e8f735d964669555c1594a09da4788a5c958c1b7ee2abd7"
+        },
+        "personallyViewedImage": {
+          "path": ".temp/continuation-review/retained/.artifacts/qa/20261019t112750-c538b3/story-screenshots/apps-web-features-zone-editor-home-page.stories.tsx/SavedEditorialBook.png",
+          "sha256": "9caa9e5adfa8764fa18970dfa840f5b90518bfe230a803bad6eb421d136a46bb",
+          "width": 1200,
+          "height": 900,
+          "personallyViewed": true,
+          "observation": "Canonical pink generated Book and Pride and Prejudice/Jane Austen remain readable. The saved editorial row shows the same pink Book/title/byline near the viewport bottom. Repeated heading text remains visually unchanged; the inner accessible container is now a group by exact source. The saved cover extends below this viewport; the prior scrolled image remains applicable because styling/card markup are unchanged."
+        },
+        "rerunByReviewer": false
+      },
+      "selectedRenderedDisposition": {
+        "result": "Eight selected states now have passing retained proof: seven unchanged original runs plus the one corrected editorial run.",
+        "unchangedStories": [
+          "CanonicalAndSavedBook",
+          "CanonicalAndSavedBookPhone",
+          "SavedScheduledBook",
+          "SavedRtlBook",
+          "SavedRtlBookPhone",
+          "UnavailableSavedBook",
+          "IncompleteCollectionPreview"
+        ],
+        "unchangedQaRun": "20261019t104739-bdec21",
+        "correctedStory": "SavedEditorialBook",
+        "correctedQaRun": "20261019t112750-c538b3",
+        "executionLimit": "No combined eight-story or all-15-story rerun; no new product test or screenshot execution by this reviewer."
+      },
+      "correctionStaticEvidence": {
+        "historicalAttempt": {
+          "job": "eb21b43e-2bc4-4ac5-91e3-b1f8ad45315a",
+          "selection": [
+            "apps/web/features/zones/modules.tsx"
+          ],
+          "types": "pass 47.6s",
+          "inference": "pass 1003.5s",
+          "lint": "pass 0.8s",
+          "ast": "pass 0.3s",
+          "guards": "8/9 files passed; web-continuations existing projection assertion failed on the changed EditorialModule syntax context. This attempt remains a failure.",
+          "log": {
+            "path": ".temp/continuation-review/retained/.temp/goal/jobs/eb21b43e-2bc4-4ac5-91e3-b1f8ad45315a.1.log",
+            "sha256": "0c1b71329207728fdd97bdc5097edd2f33f271c59f6a8bc9feb33a3073309eee"
+          },
+          "fullOutput": {
+            "path": ".temp/continuation-review/retained/.temp/goal/check/run-0IROFP/output.log",
+            "sha256": "36fb97befc2914f9949069b5130bacba67c57e0f71b53676f6a902bb9c9ca83f"
+          }
+        },
+        "focusedCorrection": {
+          "job": "39ccdce3-842a-4e42-9ddf-67016c280cc5",
+          "qaRun": "20261019t112736-1b8e9f",
+          "sourceStable": "93f663f2bb80649a61b6f4276e346e469b45c07d",
+          "command": "bun scripts/goal/goalctl.ts test scripts/static/web-continuations.test.ts",
+          "result": {
+            "pass": 45,
+            "fail": 0,
+            "assertions": 57
+          },
+          "junit": {
+            "path": ".temp/continuation-review/retained/.artifacts/qa/20261019t112736-1b8e9f/owner.xml",
+            "sha256": "34bc1aeda586782926582481d586b51b05395574c8adff25351ad64050a41e6a"
+          },
+          "rawLog": {
+            "path": ".temp/continuation-review/retained/.artifacts/qa/20261019t112736-1b8e9f/logs/owner.log",
+            "sha256": "39888cd01dee97ef899a067952ddf2fe1f812a35588301c742fd6576bb1c48ad"
+          },
+          "limit": "Focused owner rerun verifies the one corrected inventory context; other eight selected guard results are retained, not freshly rerun on final."
+        }
+      },
+      "historyPreservation": "Every original report field is unchanged. The original SavedEditorialBook landmark failure, zero-test setup failure, supplemental capture teardown failure, and the correction guard failure remain recorded. The later focused passes supersede only the affected rendered/context assertions.",
+      "genuineOriginalAcceptance": {
+        "status": "open; original public UUIDs unavailable and recorded search-credit parity failures remain",
+        "owner": "G-2755 through goal-audit-remediation-20261019 manager",
+        "frontend": "93f663f2bb80649a61b6f4276e346e469b45c07d",
+        "backend": {
+          "revision": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+          "appHostHash": "e1afce481faa0c5912e120d55f9ca60a3682db085493002eef10c1c73216c9cc",
+          "appHostSession": "https://localhost:35195",
+          "refreshId": "069bf6dd9d89b2446c8f69a060b990f8"
+        },
+        "backendStable": true,
+        "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+        "authority": "Anonymous public reader; no bearer, cookie, acting identity, new account, data import, save, publish, notification or preference mutation.",
+        "originalUuidResults": [
+          {
+            "id": "01a14a2d-ec13-7224-b991-80f3ffc98421",
+            "title": "Pride and Prejudice",
+            "result": "unavailable-to-original-public-reader",
+            "summary": {
+              "reference": "https://rezics.com/id/01a14a2d-ec13-7224-b991-80f3ffc98421",
+              "status": "unavailable"
+            },
+            "address": 404,
+            "credits": 404,
+            "browser": 404,
+            "assertion": "Original same-UUID saved/Latest/related/search type, selected cover, public credits, language and saved metadata parity cannot be evaluated.",
+            "limit": "Unavailable responses intentionally do not distinguish absence from denied visibility. Same-title different UUIDs are corpus controls only."
+          },
+          {
+            "id": "01a14a2e-09d4-7639-85a7-25670a4f73b4",
+            "title": "Jane Eyre",
+            "result": "unavailable-to-original-public-reader",
+            "summary": {
+              "reference": "https://rezics.com/id/01a14a2e-09d4-7639-85a7-25670a4f73b4",
+              "status": "unavailable"
+            },
+            "address": 404,
+            "credits": 404,
+            "browser": 404,
+            "assertion": "Original same-UUID saved/Latest/related/search type, selected cover, public credits, language and saved metadata parity cannot be evaluated.",
+            "limit": "Unavailable responses intentionally do not distinguish absence from denied visibility. Same-title different UUIDs are corpus controls only."
+          }
+        ],
+        "searchCreditFailures": [
+          {
+            "assertion": "https://rezics.com/id/01a0e909-2857-70fc-b300-8091dc9a973f:search-public-credit-parity",
+            "result": "fail-on-inspected-backend",
+            "actualCredits": [],
+            "actualCreditCount": {
+              "value": 0,
+              "kind": "at-least"
+            },
+            "responseStale": true,
+            "expectedPublicAuthors": [
+              {
+                "text": "Jane Austen",
+                "href": "/en/authors/open-library/OL21594A"
+              }
+            ]
+          },
+          {
+            "assertion": "https://rezics.com/id/01a0e909-4963-77c2-b398-535b22259bec:search-public-credit-parity",
+            "result": "fail-on-inspected-backend",
+            "actualCredits": [],
+            "actualCreditCount": {
+              "value": 0,
+              "kind": "at-least"
+            },
+            "responseStale": true,
+            "expectedPublicAuthors": [
+              {
+                "text": "Charlotte Brontë",
+                "href": "/en/authors/open-library/OL113362A"
+              }
+            ]
+          }
+        ],
+        "qualificationLimit": "These are retained G-2755 observations, not new independent live/browser qualification. The same-title control UUIDs differ from the original Pride/Jane UUIDs and cannot replace original acceptance. Successful captures and source/story passes do not close the genuine criterion. No fresh catalogue, account, save or publish action is requested or performed."
+      },
+      "classClosed": false,
+      "mainProductLandingAuthorizedByThisReview": false
+    },
+    {
+      "phase": "report-checks-and-disposition",
+      "recordedAt": "2026-10-19T12:15:49.323036+00:00",
+      "reviewComplete": true,
+      "sourceVerdict": "pass on original 8f108 candidate plus bounded 8f108..93f663 renderer/context correction; no identity counterexample found",
+      "affectedRenderedVerdict": "pass using seven unchanged original story runs and corrected SavedEditorialBook QA20261019t112750-c538b3; no reviewer reruns",
+      "genuineOriginalAcceptance": "open: original Pride/Jane public UUIDs remain unavailable; two same-title control search-credit parity assertions fail on the inspected backend",
+      "genuinelyMissingOriginalAssertion": "Available original Pride 01a14a2d-ec13-7224-b991-80f3ffc98421 and Jane 01a14a2e-09d4-7639-85a7-25670a4f73b4 must retain true Work type, selected/generated cover identity, public author names/destinations, language and relevant saved metadata across saved curated, Latest, related and search, with genuine compatible replies and viewed browser proof. Different UUID controls do not satisfy this.",
+      "reportChecks": {
+        "job": "3526eb71-33e6-45d3-8c59-be7886d806c1",
+        "exitStatus": 0,
+        "docs": {
+          "command": "task docs:check",
+          "result": "pass; 13 checker tests, 256 Markdown files; local links/fragments/design navigation",
+          "log": ".temp/goal/jobs/3526eb71-33e6-45d3-8c59-be7886d806c1.1.log"
+        },
+        "worker": {
+          "command": "task goal -- check",
+          "result": "pass; report path selected, AST and 1/45 repository guards; no TypeScript workspace/source lint input/brief test files changed",
+          "log": ".temp/goal/jobs/3526eb71-33e6-45d3-8c59-be7886d806c1.2.log",
+          "output": ".temp/goal/check/run-0FVa8W/output.log",
+          "rebaseOrMergePerformed": false
+        },
+        "integrity": "JSON parsed; git diff --check passed; every original report field unchanged; all 17 retained evidence copy hashes verified"
+      },
+      "managerCoordination": "The manager supplied the requested G-2755 retained inputs in this same-scope continuation. No competing corpus, live qualification, account fallback, data mutation, save/publish write, broad story rerun or research/assistive-technology expansion.",
+      "ownerChanges": [],
+      "next": "Manager and existing G-2755 owner dispose the original public availability and inspected-backend search-credit limitations. Retain passing source/static/story evidence and compare original UUIDs only when compatible retained inputs allow it. This reviewer imposes no new capability or data-production requirement.",
+      "classClosed": false,
+      "mainProductLandingAuthorizedByThisReview": false
+    }
+  ]
+}
