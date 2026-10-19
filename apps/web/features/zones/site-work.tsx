@@ -1,6 +1,7 @@
 import { zoneMemberHref } from '../address/path.ts';
 import type { ZoneContext, ZonePackage, ZoneWork } from '@rezics/zone-sdk';
 import { notFound } from 'next/navigation';
+import { Suspense } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { getMessages } from '../../i18n/server.ts';
 import { zoneText } from '../realm/adapt.ts';
@@ -33,7 +34,7 @@ import {
 import { WorkUnavailable } from '../work-page/work-states.tsx';
 import { ConnectionsPage, EditionsPage } from '../work-levels/pages.tsx';
 import { parseConnectionsQuery, parseEditionsQuery } from '../work-levels/route.ts';
-import { RegionFailure } from '../work-page/region.tsx';
+import { RegionFailure, RegionSkeleton } from '../work-page/region.tsx';
 
 type Search = Record<string, string | string[] | undefined>;
 
@@ -81,14 +82,17 @@ export async function ZoneWorkPage({
   zone?: ZoneContext | null;
 }) {
   const discussionAddress = aboutDiscussionAddress(base.path);
-  // Start the live attachment read with the frame, before its streamed Work regions spend the page deadline.
-  const [work, messages, discussion] = await Promise.all([
+  // Start the attachment only where it is shown; its read must not hold up the Work's navigation.
+  const discussion = discussionAddress && (tab === 'overview' || tab === 'discussion')
+    ? ZoneAboutDiscussion({ spaceRef: discussionAddress.spaceRef, path: discussionAddress.path,
+      href: base.path, locale }) : null;
+  const [work, messages] = await Promise.all([
     loadWork(base.ref, locale),
     getMessages('workPage', locale),
-    discussionAddress ? ZoneAboutDiscussion({ spaceRef: discussionAddress.spaceRef, path: discussionAddress.path,
-      href: base.path, locale }) : null,
   ]);
   if (!work.ok) return <WorkUnavailable messages={messages} />;
+  const discussionRegion = discussion ? <Suspense fallback={<RegionSkeleton id="zone-work-discussion"
+    title={messages.discussion} label={messages.loadingRegion} />}>{discussion}</Suspense> : null;
   const common = { workRef: base, id: work.id, locale, messages };
   const scope = scopeAt(base, search);
   const context =
@@ -114,7 +118,7 @@ export async function ZoneWorkPage({
               Link={LocalizedLink} />
           </SlotBoundary> : null}
           <WorkOverview {...common} work={work.header} scope={scope} context={context} lead={lead} />
-          {discussion}
+          {discussionRegion}
         </>
       ) : tab === 'contents' ? (
         <WorkContents {...common} work={work.header} query={parseContentsQuery(search)} />
@@ -131,7 +135,7 @@ export async function ZoneWorkPage({
       ) : tab === 'history' ? (
         <WorkHistory {...common} query={parseHistoryQuery(search)} />
       ) : (
-        discussionAddress ? discussion : <WorkDiscussion {...common} scope={scope} cursor={parseCursor(search)} />
+        discussionAddress ? discussionRegion : <WorkDiscussion {...common} scope={scope} cursor={parseCursor(search)} />
       )}
     </WorkFrameView>
   );

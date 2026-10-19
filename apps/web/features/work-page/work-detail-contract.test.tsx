@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ReactNode } from 'react';
 import { AppRouterContext, type AppRouterInstance } from 'next/dist/shared/lib/app-router-context.shared-runtime.js';
+import { PathnameContext, SearchParamsContext } from 'next/dist/shared/lib/hooks-client-context.shared-runtime.js';
 import { zoneMemberHref } from '../address/path.ts';
 import { workExperience } from '../entity-page/experience.ts';
 import type { DisplayObligations } from '../rights-mark/rights-mark.tsx';
@@ -22,6 +23,8 @@ import { copyOf as levelsCopy } from '../work-levels/messages.ts';
 import { ConnectionsPreviewView, PartsPreviewView } from '../work-levels/previews.tsx';
 import { connectionsHref, editionsHref } from '../work-levels/route.ts';
 import { RegionFailure } from './region.tsx';
+import { WorkTabs } from './work-tabs.tsx';
+import { WorkTaskLink } from './work-nav.tsx';
 
 const router: AppRouterInstance = { bfcacheId: '', refresh() {}, push() {}, replace() {}, back() {}, forward() {}, prefetch() {} };
 const render = (node: ReactNode) => renderToStaticMarkup(<AppRouterContext.Provider value={router}>{node}</AppRouterContext.Provider>);
@@ -52,6 +55,40 @@ describe('public Work navigation', () => {
   test('an explicit global view survives a Zone with a default Realm', () => {
     const scope = scopeAt(zone, { scope: 'global' });
     expect(workHref(zone, 'connections', scope)).toBe(`${zone.path}/connections?scope=global`);
+  });
+
+  test('Connections and Editions render one current view and an Overview in the same scope', () => {
+    const mounted = { ...zone, path: zoneMemberHref('readers', 'library', 'the-cartographer-of-tides') };
+    const labels = { overview: 'Overview', contents: 'Contents', versions: 'Versions', editions: 'Editions',
+      connections: 'Connections', discussion: 'Discussion', history: 'History' };
+    for (const at of [fixture.workRef, mounted] satisfies WorkAt[]) {
+      for (const current of ['connections', 'editions'] as const) {
+        for (const selection of [{ scope: 'global' }, { scope: 'realm', realm: levels.current }]) {
+          const params = new URLSearchParams({ scope: selection.scope, language: 'ja', open: 'releases' });
+          if (selection.realm) params.set('realm', selection.realm);
+          const scope = scopeAt(at, Object.fromEntries(params));
+          const choices = workNavigationQuery(params);
+          const html = render(<PathnameContext value={`/en${workHref(at, current)}`}>
+            <SearchParamsContext value={params}>
+              <WorkTabs workRef={at} labels={labels} label="Work sections" />
+              <WorkTaskLink workRef={at} anchor="contents">Read chapters</WorkTaskLink>
+            </SearchParamsContext>
+          </PathnameContext>);
+          const links = [...html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/g)];
+          expect(links).toHaveLength(8);
+          expect(html.match(/aria-current="page"/g)).toHaveLength(1);
+          workTabs.forEach((tab, index) => {
+            const [, attributes, caption] = links[index]!;
+            const href = attributes!.match(/\bhref="([^"]*)"/)?.[1]?.replaceAll('&amp;', '&');
+            expect(href).toBe(`/en${workHref(at, tab, scope, choices)}`);
+            expect(caption).toBe(labels[tab]);
+            expect(attributes!.includes('aria-current="page"')).toBe(tab === current);
+          });
+          const task = links[7]![1]!.match(/\bhref="([^"]*)"/)?.[1]?.replaceAll('&amp;', '&');
+          expect(task).toBe(`/en${workHref(at, 'overview', scope, choices)}#contents`);
+        }
+      }
+    }
   });
 });
 

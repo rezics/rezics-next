@@ -5,7 +5,8 @@ import { cache, Suspense } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { signInPath } from '../auth/paths.ts';
-import { readEntityProjection, readStatements, sectionOf } from '../entity-page/read.ts';
+import { readStatements, sectionOf } from '../entity-page/read.ts';
+import { readCurrentWorkProjection } from './current-projection.ts';
 import { readPredicateLabels } from '../entity-page/predicate-labels.ts';
 import { namesOf } from '../work-levels/read.ts';
 import { workExperience } from '../entity-page/experience.ts';
@@ -72,7 +73,7 @@ export async function Status({ id, locale, messages, client }: Common & { id: st
 
 /** Facts and their source records share the same read on every Work view. */
 export const readWorkFacts = cache(async (id: string, locale: UiLocale, client?: WorkPageClient) => {
-  const projection = await readEntityProjection(id, undefined, client);
+  const projection = await readCurrentWorkProjection(id, client);
   const section = projection.ok ? sectionOf(projection.data, 'statements') : undefined;
   const page = section ? await readStatements(section, undefined, undefined, undefined, client) : undefined;
   const [labels, names] = page?.ok ? await Promise.all([
@@ -112,7 +113,7 @@ export async function AboutFacts({ id, locale, messages, client }: Common & { id
  * and the edition its parts are read in, so a Work with parts has the section too; one with neither does not.
  */
 export async function Availability({ workRef, id, locale, messages, client }: Common & { workRef: WorkAt; id: string }) {
-  const [work, projection] = await Promise.all([readWorkHeader(id, locale, client), readEntityProjection(id, undefined, client)]);
+  const [work, projection] = await Promise.all([readWorkHeader(id, locale, client), readCurrentWorkProjection(id, client)]);
   if (work.ok && workExperience(projection.ok ? projection.data : null, work.data.types).kind === 'book') {
     return <BooksEditionPage work={work.data.id} releases={await readReleases(id, client)} locale={locale} messages={messages}
       signInHref={signInPath(localizedPath(workHref(workRef), locale))} editionsHref={editionsHref(workRef)} />;
@@ -152,7 +153,7 @@ export async function Parts({ workRef, id, locale, messages, client }: Common & 
 
 /** The latest replies about the Work, with the way to start one, and the full discussion a link away. */
 export async function DiscussionHub({ workRef, id, locale, messages, client }: Common & { workRef: WorkAt; id: string }) {
-  const [page, { signedIn }] = await Promise.all([readEntityProjection(id, undefined, client), readingAgent(client)]);
+  const [page, { signedIn }] = await Promise.all([readCurrentWorkProjection(id, client), readingAgent(client)]);
   const section = page.ok ? sectionOf(page.data, 'discussion') : undefined;
   if (!page.ok) return <RegionFailure title={messages.sectionDiscussion} failure={page.failure} messages={messages} />;
   if (!section) return null;
