@@ -17,6 +17,9 @@ import { verifyMemberReplyDraftPrincipal } from '../modules/content-publication/
 import { RealmAboutPostCommand } from '../modules/realm-reply/about-command.ts';
 
 const native = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
+const nativePath = t.Union([readUuid, native]);
+const nativePathIri = (value: string) => value.startsWith('https://rezics.com/id/')
+  ? value : `https://rezics.com/id/${value}`;
 const uuid = t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 const digest = t.String({ pattern: '^[0-9a-f]{64}$' });
 const generation = t.String({ pattern: '^(0|[1-9][0-9]{0,18})$' });
@@ -207,14 +210,15 @@ export function realmReplyRoutes(work: MainWorkDependencies) {
       } catch (error) { return replyError(error); }
     })
     .get('/v1/realms/:realm/replies/:reply', {
-      params: t.Object({ realm: native, reply: native }),
+      params: t.Object({ realm: nativePath, reply: nativePath }),
       query: t.Object({ actingSubject: native }, { additionalProperties: false }),
       response: transportResponses(openApiOperations["/v1/realms/{realm}/replies/{reply}"].get, { 200: visibleResult, ...authorizedReadProblems, ...workReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, ['work:read']);
         if (!work.realmReplies) return problem(503, 'realm_reply_unavailable', 'Realm replies are unavailable');
-        const visible = await work.realmReplies.visible(params.realm, params.reply, principal, query.actingSubject);
+        const visible = await work.realmReplies.visible(nativePathIri(params.realm), nativePathIri(params.reply),
+          principal, query.actingSubject);
         if (!visible) return problem(404, 'realm_reply_unavailable', 'Reply is unavailable');
         await workRead(work, request, { actingSubject: query.actingSubject }, session =>
           resolveTargets(session, [visible.rootTarget], 'discussion'));
@@ -222,17 +226,18 @@ export function realmReplyRoutes(work: MainWorkDependencies) {
       } catch (error) { return replyError(error); }
     })
     .get('/v1/realms/:realm/reply-roots/:rootTarget/count', {
-      params: t.Object({ realm: native, rootTarget: native }),
+      params: t.Object({ realm: nativePath, rootTarget: nativePath }),
       query: t.Object({ actingSubject: native }, { additionalProperties: false }),
       response: transportResponses(openApiOperations["/v1/realms/{realm}/reply-roots/{rootTarget}/count"].get, { 200: countResult, ...authorizedReadProblems, ...workReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
         const principal = await work.account.verify(request, ['work:read']);
         if (!work.realmReplies) return problem(503, 'realm_reply_unavailable', 'Realm replies are unavailable');
+        const realm = nativePathIri(params.realm), rootTarget = nativePathIri(params.rootTarget);
         const count = await workRead(work, request, { actingSubject: query.actingSubject }, async session => {
-          await resolveTargets(session, [params.rootTarget], 'discussion');
-          const result = await work.realmReplies!.rootCount(params.realm, params.rootTarget, principal, query.actingSubject);
-          await resolveTargets(session, [params.rootTarget], 'discussion');
+          await resolveTargets(session, [rootTarget], 'discussion');
+          const result = await work.realmReplies!.rootCount(realm, rootTarget, principal, query.actingSubject);
+          await resolveTargets(session, [rootTarget], 'discussion');
           return result;
         });
         return Response.json({ profile: 'realm-reply-root-count-v1', ...count }, noStore);

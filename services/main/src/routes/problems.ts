@@ -409,8 +409,11 @@ function mapTypedRefusal(error: unknown): Response | undefined {
     return problem(400, 'invalid_request', 'Content publication request is invalid');
   }
   if (error instanceof ContentEligibilityDenied) return problem(403, 'authority_denied', 'Content eligibility is denied');
+  if (error instanceof ContentEligibilityStale) {
+    return problem(409, 'stale_eligibility_head', 'Expected Content eligibility head is stale');
+  }
   if (error instanceof ContentPublicationConflict || error instanceof StaleContentOwnerEpoch
-    || error instanceof ContentEligibilityConflict || error instanceof ContentEligibilityStale) {
+    || error instanceof ContentEligibilityConflict) {
     return problem(409, 'content_conflict', 'Content publication state changed');
   }
   if (error instanceof ContentPublicationProfileUnavailable

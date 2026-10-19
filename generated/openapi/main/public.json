@@ -709389,8 +709389,16 @@
             "name": "realm",
             "required": true,
             "schema": {
-              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-              "type": "string"
+              "anyOf": [
+                {
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                },
+                {
+                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                  "type": "string"
+                }
+              ]
             }
           },
           {
@@ -709398,8 +709406,16 @@
             "name": "reply",
             "required": true,
             "schema": {
-              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-              "type": "string"
+              "anyOf": [
+                {
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                },
+                {
+                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                  "type": "string"
+                }
+              ]
             }
           },
           {
@@ -710221,8 +710237,16 @@
             "name": "realm",
             "required": true,
             "schema": {
-              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-              "type": "string"
+              "anyOf": [
+                {
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                },
+                {
+                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                  "type": "string"
+                }
+              ]
             }
           },
           {
@@ -710230,8 +710254,16 @@
             "name": "rootTarget",
             "required": true,
             "schema": {
-              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-              "type": "string"
+              "anyOf": [
+                {
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                },
+                {
+                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                  "type": "string"
+                }
+              ]
             }
           },
           {
