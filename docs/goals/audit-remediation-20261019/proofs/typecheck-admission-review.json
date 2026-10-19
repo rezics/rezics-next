@@ -1,0 +1,403 @@
+{
+  "schema_version": 1,
+  "goal": "audit-remediation-20261019",
+  "worker": "G-2852",
+  "reviewed_at_utc": "2026-10-19T10:39:24.892367+00:00",
+  "reviewer": {
+    "engine": "codex-1",
+    "model": "gpt-6.1-sol",
+    "effort": "xhigh",
+    "identity_basis": "Worker dispatch identity supplied in this session; this worker performed the actual source review and commands.",
+    "independent_source_review_count": 1,
+    "account_fallback_used": false,
+    "nested_agents_used": false,
+    "previous_review_reports_read": false,
+    "implementation_log_used_as_independent_proof": false
+  },
+  "candidate": {
+    "commit": "84eecfc15b72d39dd085f977d62e562def4b6212",
+    "base": "3b34e7cd53e8bec9d346a5a2ccecced22ea512b5",
+    "tree": "1c55278bc8cd6fc4de16f1da20d32f0641d3afe8",
+    "source_and_test_blobs": {
+      "scripts/goal/typecheck-gate.ts": "55b2dce5af492df255ec99b0eccb217f589286ee",
+      "scripts/qa/host-admission.ts": "20e060f612be5aac2b9653138443e351cab2874b",
+      "scripts/goal/typecheck-gate.test.ts": "38cffcec812d415bf41f61a851e648cb73eb3d53",
+      "scripts/goal/goalctl.test.ts": "e235cf5959f23630e7b76df80ea6872a542f1cfd"
+    },
+    "all_pins_match": true,
+    "reviewed_diff": ".temp/typecheck-admission-review/candidate.diff",
+    "execution_checkout": ".temp/typecheck-admission-review/candidate",
+    "execution_checkout_method": "Independent detached local clone under the worker worktree, using read-only shared Git objects. No writes to the manager candidate checkout. Existing worker dependencies reused through local package symlinks only after equal dependency input digests; the dependency stamp is local to the clone.",
+    "tracked_candidate_source_modified": false,
+    "read_scope": "Complete four-path base-to-candidate diff, changed source/test contents, and directly relevant unchanged Task admission, memory deadline, CPU permit, diagnostic classification and owned-process termination contracts."
+  },
+  "verdict": {
+    "decision": "request_changes",
+    "blocking_findings": 1,
+    "reason": "Incomplete token-matching notifications can be ignored after a valid completion, allowing an inconsistent run to be classified as inherited diagnostics.",
+    "next_action": "Return the executable finding to the manager for candidate correction. This review changes no candidate/product source and does not land the candidate or close any product audit class."
+  },
+  "findings": [
+    {
+      "id": "incomplete-notification-fail-open",
+      "severity": "high",
+      "blocking": true,
+      "title": "Incomplete token-matching records can still admit inherited diagnostics",
+      "locations": [
+        {
+          "file": "scripts/goal/typecheck-gate.ts",
+          "line": 188,
+          "end_line": 195,
+          "reason": "The per-stream pending tail is never validated on stream end or child close."
+        },
+        {
+          "file": "scripts/goal/typecheck-gate.ts",
+          "line": 156,
+          "end_line": 158,
+          "reason": "A line containing the exact marker and token but no trailing space/payload is silently treated as unrelated output."
+        },
+        {
+          "file": "scripts/goal/typecheck-gate.ts",
+          "line": 218,
+          "end_line": 220,
+          "reason": "A previously valid completed record leaves done=true because neither ignored case sets invalid."
+        }
+      ],
+      "source_explanation": "After a valid BEGIN and END, a duplicate END or malformed END without a final newline stays in pending and is discarded. Even with a newline, QA_ADMITTED_COMMAND <exact-token> without the expected final space fails the prefix check and is discarded. In all three cases completed remains set and invalid remains false. A nonzero Task result and matching TypeScript diagnostic then enter the inherited-diagnostic comparison as a completed run.",
+      "impact": "Violates the explicit acceptance rule that malformed, duplicate or inconsistent completion evidence must never classify a run as inherited diagnostics. This is a protocol fault-injection result, not a claim that the unmodified host reporter normally emits these malformed records.",
+      "independent_executable_evidence": {
+        "test_file": ".temp/typecheck-admission-review/candidate/.temp/review/notification.test.ts",
+        "outcome_assertion_line": 87,
+        "outcome_assertion_reached": true,
+        "test_cases": [
+          "incomplete notification must refuse inherited diagnostic classification: duplicate-eof",
+          "incomplete notification must refuse inherited diagnostic classification: malformed-eof",
+          "incomplete notification must refuse inherited diagnostic classification: token-only-line"
+        ],
+        "expected": "The gate returns a main-side inconclusive refusal.",
+        "observed": "All three main runs returned done=true,status=201. The gate returned undefined (serialized as null in evidence), logged one diagnostic already on main and zero introduced, and did not refuse. All three Boolean outcome assertions failed with Expected:true, Received:false.",
+        "method": "Real pinned runTypecheck/typecheckGate and actual Task processes. The branch runs through the real pinned runHostAdmission wrapper with an injected adequate-memory reading. The main-side fixture is a controlled protocol emitter using its own caller token; it sends a valid envelope followed by one malformed/duplicate record. No production module is mocked or edited.",
+        "confirmation_job": "e5bcde20-7c6f-48cf-8336-5ac41e699b09",
+        "confirmation_log": ".temp/goal/jobs/e5bcde20-7c6f-48cf-8336-5ac41e699b09.log",
+        "observations": ".temp/typecheck-admission-review/candidate/.temp/review/observations.json"
+      },
+      "requested_correction": "Validate token-matching incomplete records and stream tails before accepting completion, including records missing the event separator. Preserve rejection of duplicate records and all existing timeout, signal and status checks. Add focused regression coverage for these three demonstrated cases. The manager owns the correction."
+    }
+  ],
+  "independently_verified_behavior": [
+    {
+      "behavior": "Affected admission/gate suite passes on the exact pinned source.",
+      "result": "40 tests,125 assertions,0 failures: host admission 14/59, typecheck gate 13/43, CPU admission 13/23.",
+      "qa_run_id": "20261019t103335-2173d8",
+      "evidence": ".temp/typecheck-admission-review/candidate/.artifacts/qa/20261019t103335-2173d8"
+    },
+    {
+      "behavior": "Memory/CPU admission can exceed a scaled execution budget while a fast compiler still completes; actual outer flock relay retains reporting and budget; shared parallel and sequential budgets do not reset or pause behind a waiting workspace.",
+      "basis": "Passing pinned typecheck-gate and host/CPU tests; scaled fixture budgets, not a twelve-minute live compiler run."
+    },
+    {
+      "behavior": "A slow admitted compiler is inconclusive and its owned detached descendant is gone before the test observes return; admission expiration starts no fixture compiler; real nonzero diagnostics compare while timeout/signal cases refuse.",
+      "basis": "Passing pinned typecheck-gate tests, including explicit processRunning assertions for both fixture PIDs."
+    },
+    {
+      "behavior": "Legacy diagnostic fixture comparison succeeds only in explicitly selected legacy mode; missing reporting in ordinary mode refuses. Exact legacy source recognition accepts only blob 0510625863c6d24de1194fb68fbf503d8074336d, rejects modified/partial/unknown content and throws for a missing file. Legacy shared wall accounting includes preparation and inter-comparison gaps.",
+      "basis": "Passing pinned typecheck-gate tests. These are focused fixtures, not a full preMergeTypecheckGate install/checkout run."
+    },
+    {
+      "behavior": "Existing pre-merge diagnostic subset passes.",
+      "result": "11 tests,72 assertions,289 filtered out,0 failures.",
+      "evidence": ".temp/goal/jobs/85de50dd-c2f8-4401-a28e-eff64dff1645.1.log"
+    },
+    {
+      "behavior": "Ordinary new-protocol inherited diagnostics work through real host wrappers on both sides.",
+      "result": "Both real Task runs done=true,status=201 with compiler status 2; no refusal for their matching diagnostic. Protocol controls were removed before the compiler.",
+      "evidence": ".temp/typecheck-admission-review/observations-first.json"
+    },
+    {
+      "behavior": "Missing END and newline-terminated malformed/duplicate records refuse; the separate terminal completion timer refuses a wrapper that remains alive after END.",
+      "result": "Four refusal controls passed; terminal-stall run returned done=false,status=null after 5252ms with terminal-cleanup-deadline output.",
+      "evidence": ".temp/typecheck-admission-review/observations-first.json"
+    },
+    {
+      "behavior": "Incomplete-record refusal fails as described in the blocking finding.",
+      "result": "Three outcome assertions fail; five controls passed in the full private probe run. Only the three failing cases were rerun with a Boolean outcome assertion, and all failed again."
+    }
+  ],
+  "source_only_conclusions": [
+    {
+      "conclusion": "The default per-side execution budget remains 720000ms; no budget increase or compiler/test graph exclusion is introduced.",
+      "locations": [
+        "scripts/goal/unit-gate.ts:718",
+        "scripts/goal/typecheck-gate.ts:290"
+      ],
+      "basis": "Unchanged unitGateBudgetMs policy and complete four-file diff."
+    },
+    {
+      "conclusion": "Sorted retained spans charge their union. Concurrent branch runs share one budget object; sequential main comparisons share a distinct single object. Each admitted compiler contributes a span, while the parent timer remains authoritative even if a child received an older remaining-budget snapshot.",
+      "locations": [
+        "scripts/goal/typecheck-gate.ts:62",
+        "scripts/goal/typecheck-gate.ts:103",
+        "scripts/goal/typecheck-gate.ts:118",
+        "scripts/goal/typecheck-gate.ts:199"
+      ]
+    },
+    {
+      "conclusion": "The gate computes qaMemoryDeadline once, preserves the inherited deadline or defaults to six hours from entry, and propagates it into Task admission. Admission is independently finite and stops charging its timer once that compiler has begun.",
+      "locations": [
+        "scripts/goal/typecheck-gate.ts:101",
+        "scripts/goal/typecheck-gate.ts:146",
+        "scripts/goal/typecheck-gate.ts:202",
+        "scripts/qa/memory-admission.ts:714"
+      ]
+    },
+    {
+      "conclusion": "Actual Task typecheck entries continue through the host CPU/memory wrapper. The outer flock relay retains protocol controls; final admission consumes the token, descriptor and command budget before starting compiler descendants. CPU permits release in finally.",
+      "locations": [
+        "Taskfile.yml:106",
+        "Taskfile.yml:195",
+        "scripts/qa/host-admission.ts:65",
+        "scripts/qa/host-admission.ts:118",
+        "scripts/qa/host-admission.ts:132",
+        "scripts/qa/cpu-admission.ts:88"
+      ]
+    },
+    {
+      "conclusion": "For recognized full records, the parser checks BEGIN/END order, timestamps, numeric status range, duplicate events, timeout/signal indicators and Task success/failure consistency. Task maps inner nonzero exits to status 201, so success/failure equivalence is intentional. These checks do not cover the incomplete-record finding.",
+      "locations": [
+        "scripts/goal/typecheck-gate.ts:157",
+        "scripts/goal/typecheck-gate.ts:218"
+      ]
+    },
+    {
+      "conclusion": "END starts the separate 5000ms Task/permit-shutdown bound and closes the compiler span. A timeout awaits stopProcessGroup; the host wrapper also awaits any initiated termination before reporting END. The existing process helper snapshots descendant groups, signals them, freezes/kills survivors and uses bounded post-kill waits.",
+      "locations": [
+        "scripts/goal/typecheck-gate.ts:174",
+        "scripts/goal/typecheck-gate.ts:216",
+        "scripts/qa/host-admission.ts:96",
+        "scripts/goal/unit-gate.ts:725",
+        "scripts/qa/process/terminate.ts:118"
+      ]
+    },
+    {
+      "conclusion": "Only the exact known old host-admission blob enables the legacy exception. Its explicitly logged shared wall budget begins at main-budget creation before baseline checkout/install and is not reset between comparisons. Unknown/partial sources get the ordinary protocol path; a missing blob lookup throws and cannot enable legacy mode. Acceptance on the ordinary protocol path remains subject to the blocking parser finding.",
+      "locations": [
+        "scripts/goal/typecheck-gate.ts:137",
+        "scripts/goal/typecheck-gate.ts:230",
+        "scripts/goal/typecheck-gate.ts:279",
+        "scripts/goal/typecheck-gate.ts:286"
+      ]
+    },
+    {
+      "conclusion": "CPU fixtures name private SQLite state and private slot directories; the gate fixture also gives its CPU override a private directory and lock. Injected readers/clocks keep fixture pressure independent of live Goal admission limits; no policy or fixture budget was raised.",
+      "locations": [
+        "scripts/goal/typecheck-gate.test.ts:69",
+        "scripts/goal/typecheck-gate.test.ts:74",
+        "scripts/qa/cpu-admission.test.ts:16",
+        "scripts/qa/memory-admission.ts:261"
+      ]
+    }
+  ],
+  "unchanged_contract_blob_pins": {
+    "Taskfile.yml": "30cfc2093436fab2cc18a589404a2f589783f7c7",
+    "scripts/goal/unit-gate.ts": "76f026c22e0a6f7fed372773a2d083e82050370d",
+    "scripts/qa/memory-admission.ts": "85a4cb28a1536564152a46d6eec3d140f46de05a",
+    "scripts/qa/cpu-admission.ts": "ae86c829feeecc03f8bc83fd7d26fb36a833b58a",
+    "scripts/qa/process/terminate.ts": "c6f9a172d9a93ac2a3bcdff553024ad8d2548309",
+    "tests/qa/unit/host-admission.test.ts": "5cf696be0d25ed67a2e803c68ab491133971b063",
+    "scripts/qa/cpu-admission.test.ts": "46e3897692e03c6b42e39422de4ed9584197cb3b"
+  },
+  "commands_and_results": [
+    {
+      "command": "git diff 3b34e7cd53e8bec9d346a5a2ccecced22ea512b5 84eecfc15b72d39dd085f977d62e562def4b6212 -- scripts/goal/typecheck-gate.ts scripts/qa/host-admission.ts scripts/goal/typecheck-gate.test.ts scripts/goal/goalctl.test.ts",
+      "exit_status": 0,
+      "result": "Complete diff retained and reviewed; exactly four changed paths."
+    },
+    {
+      "command": "git rev-parse 84eecfc15b72d39dd085f977d62e562def4b6212^{tree} 84eecfc15b72d39dd085f977d62e562def4b6212:scripts/goal/typecheck-gate.ts 84eecfc15b72d39dd085f977d62e562def4b6212:scripts/qa/host-admission.ts 84eecfc15b72d39dd085f977d62e562def4b6212:scripts/goal/typecheck-gate.test.ts 84eecfc15b72d39dd085f977d62e562def4b6212:scripts/goal/goalctl.test.ts",
+      "exit_status": 0,
+      "result": "All exact pins match and tracked candidate content remains unchanged.",
+      "evidence": ".temp/typecheck-admission-review/pins.json"
+    },
+    {
+      "command": "git -C .temp/typecheck-admission-review/candidate diff --exit-code 84eecfc15b72d39dd085f977d62e562def4b6212 --",
+      "exit_status": 0,
+      "result": "Empty tracked diff; four on-disk file blob hashes also match the pinned Git objects.",
+      "evidence": ".temp/typecheck-admission-review/pins.json"
+    },
+    {
+      "job": "c9323b46-2e9a-4334-917a-cf5328223d29",
+      "step": 1,
+      "command": "task --dir .temp/typecheck-admission-review/candidate goal -- test scripts/goal/typecheck-gate.test.ts tests/qa/unit/host-admission.test.ts scripts/qa/cpu-admission.test.ts",
+      "exit_status": 0,
+      "result": "40 tests/125 assertions passed.",
+      "qa_run_id": "20261019t103335-2173d8",
+      "log": ".temp/goal/jobs/c9323b46-2e9a-4334-917a-cf5328223d29.1.log"
+    },
+    {
+      "job": "c9323b46-2e9a-4334-917a-cf5328223d29",
+      "step": 2,
+      "command": "task --dir .temp/typecheck-admission-review/candidate goal -- test scripts/goal/goalctl.test.ts --test-name-pattern 'pre-merge type check'",
+      "exit_status": 201,
+      "result_class": "harness",
+      "result": "Selector rejected the arbitrary pattern for a registered owner suite before running that subset. The job stopped; the following private-probe step did not run.",
+      "log": ".temp/goal/jobs/c9323b46-2e9a-4334-917a-cf5328223d29.2.log"
+    },
+    {
+      "job": "8eae9b9c-7ce8-4d02-9bc2-bafb39e78154",
+      "step": 1,
+      "command": "task --dir .temp/typecheck-admission-review/candidate goal -- test .temp/review/diagnostics.test.ts --test-name-pattern 'pre-merge type check'",
+      "exit_status": 201,
+      "result_class": "harness",
+      "result": "Bun file discovery required an explicit ./.temp path. No diagnostic tests ran; the job stopped before private probes.",
+      "log": ".temp/goal/jobs/8eae9b9c-7ce8-4d02-9bc2-bafb39e78154.1.log"
+    },
+    {
+      "job": "85de50dd-c2f8-4401-a28e-eff64dff1645",
+      "step": 1,
+      "command": "task --dir .temp/typecheck-admission-review/candidate goal -- test ./.temp/review/diagnostics.test.ts --test-name-pattern 'pre-merge type check'",
+      "exit_status": 0,
+      "result": "11 tests/72 assertions passed,289 unrelated tests filtered out. A temporary import-only entry point loads the original pinned scripts/goal/goalctl.test.ts so goalctl test preserves the requested Bun pattern without editing tracked source.",
+      "log": ".temp/goal/jobs/85de50dd-c2f8-4401-a28e-eff64dff1645.1.log"
+    },
+    {
+      "job": "85de50dd-c2f8-4401-a28e-eff64dff1645",
+      "step": 2,
+      "command": "task --dir .temp/typecheck-admission-review/candidate goal -- test ./.temp/review/notification.test.ts",
+      "exit_status": 201,
+      "result_class": "assertion",
+      "result": "5 controls passed;3 notification-refusal outcome assertions failed. Each reached the body assertion with refusal=undefined, not a fixture/setup error.",
+      "log": ".temp/goal/jobs/85de50dd-c2f8-4401-a28e-eff64dff1645.2.log"
+    },
+    {
+      "job": "e5bcde20-7c6f-48cf-8336-5ac41e699b09",
+      "command": "task --dir .temp/typecheck-admission-review/candidate goal -- test ./.temp/review/notification.test.ts --test-name-pattern 'incomplete notification'",
+      "exit_status": 201,
+      "result_class": "assertion",
+      "result": "Only the three failed cases rerun after making the expected-refusal assertion explicitly Boolean;3 failed at line87,5 controls filtered out.",
+      "log": ".temp/goal/jobs/e5bcde20-7c6f-48cf-8336-5ac41e699b09.log"
+    }
+  ],
+  "execution_procedure": {
+    "recorded_job_runner": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job",
+    "recorded_job_cwd": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2852",
+    "qa_entry": "Task goal dispatches bun scripts/goal/goalctl.ts test inside the pinned clone.",
+    "claudecode_failure_only_logging": true,
+    "wakes": "Both PARKED returns ended their turns immediately; no polling or interruption of checks."
+  },
+  "publication_validation": {
+    "status": "passed",
+    "job": "df12dbfe-5194-4286-8e14-d1f80f72a8bc",
+    "commands": [
+      {
+        "command": "task docs:check",
+        "exit_status": 0,
+        "result": "13 checker tests passed;250 Markdown files checked for local links/fragments/navigation.",
+        "log": ".temp/goal/jobs/df12dbfe-5194-4286-8e14-d1f80f72a8bc.1.log"
+      },
+      {
+        "command": "task goal -- check",
+        "exit_status": 0,
+        "result": "AST and the 1/45 repository guard applicable to the sole changed JSON path passed. Types/lint selected no source; no brief test files selected. This check is publication validation, separate from the candidate tests and deliberately failing review probes.",
+        "log": ".temp/goal/jobs/df12dbfe-5194-4286-8e14-d1f80f72a8bc.2.log",
+        "full_output": ".temp/goal/check/run-YaJKWy/output.log"
+      }
+    ],
+    "note": "Only the claimed review JSON is published. Ignored evidence remains under .temp. Results were added to this JSON after the successful checks; no Markdown link, source or check-selection change followed."
+  },
+  "unexecuted_limits": [
+    "No full live twelve-minute compiler or six-hour admission run; long budget behavior is verified with scaled real-process fixtures and source accounting.",
+    "No full preMergeTypecheckGate checkout/install journey against the known old baseline. Focused legacy-mode wall accounting and exact source recognition are independently tested; preparation ordering and explicit logging are source-reviewed.",
+    "The four-file type graph, oxlint and ast-grep results reported in the implementation context were not rerun and are not independent review evidence. This review edits no TypeScript source.",
+    "No browser/product journey, unrelated fixture suite, graph exclusion, admission-policy change, running-check interruption, candidate landing or product audit-class closure.",
+    "Signal/timeout and owned detached-descendant cleanup claims are limited to the executed fixtures and the existing bounded termination contract; arbitrary operating-system failure modes are not newly certified.",
+    "All other notification byte sequences or timestamp/status combinations were inspected in source only unless explicitly listed as executed probes."
+  ],
+  "retained_evidence": [
+    {
+      "path": ".temp/typecheck-admission-review/candidate.diff",
+      "sha256": "ec28fd73a0967c83735f9f49b0cb872f5b3407c3c3110507c14c82b8d970eebe"
+    },
+    {
+      "path": ".temp/typecheck-admission-review/pins.json",
+      "sha256": "2e542dae5589cc37f07b3c29a9f63f3c1a33d110888a6aa432bf8910d023d2be"
+    },
+    {
+      "path": ".temp/typecheck-admission-review/dependencies.json",
+      "sha256": "545743fee8f662a830a3e518c516de317d5ad7048bcd72563a0ef448390488f0"
+    },
+    {
+      "path": ".temp/typecheck-admission-review/observations-first.json",
+      "sha256": "be45d50661e09ea4d3c7c69b79b37c01ae40c21775361e47960051f70ba4d515"
+    },
+    {
+      "path": ".temp/typecheck-admission-review/candidate/.temp/review/notification.test.ts",
+      "sha256": "5cfb4979a1d98712eed4dbdd1a794dae97f6ba8e33bd66ce582ed0a1665dab52"
+    },
+    {
+      "path": ".temp/typecheck-admission-review/candidate/.temp/review/diagnostics.test.ts",
+      "sha256": "d21c0ec70d74002a7650f18753ad40b7c51ee982ab23f3755c6b191816bd7ded"
+    },
+    {
+      "path": ".temp/typecheck-admission-review/candidate/.temp/review/observations.json",
+      "sha256": "a305ae49db8f59ebee3eea0edc947efa5accea213412e1c862a6f0f13e365987"
+    },
+    {
+      "path": ".temp/typecheck-admission-review/candidate/.artifacts/qa/20261019t103335-2173d8/summary.md",
+      "sha256": "b89a202ab28357084623c08f45da8beab68e0b212b8386e4e400714470ddbf0e"
+    },
+    {
+      "path": ".temp/typecheck-admission-review/candidate/.artifacts/qa/20261019t103335-2173d8/unit.xml",
+      "sha256": "3c6991ffa548d26e07a9d52a9d2b0b75b2edad74c79a70ed85cecb64a1df2573"
+    },
+    {
+      "path": ".temp/typecheck-admission-review/candidate/.artifacts/qa/20261019t103335-2173d8/owner.xml",
+      "sha256": "dbc2d956f250ed4e79d39c7675f63a590ea4e696cb01bd133b432027a4006438"
+    },
+    {
+      "path": ".temp/goal/jobs/c9323b46-2e9a-4334-917a-cf5328223d29.1.log",
+      "sha256": "c9dd2c955ede7412e259557738411027084196b249cddb3dd00cd7e511eea5e3"
+    },
+    {
+      "path": ".temp/goal/jobs/c9323b46-2e9a-4334-917a-cf5328223d29.2.log",
+      "sha256": "b0f56e46dd23efd93fc31b42f5ba5c42059413dfeaf1f278c440f172bc52b97c"
+    },
+    {
+      "path": ".temp/goal/jobs/8eae9b9c-7ce8-4d02-9bc2-bafb39e78154.1.log",
+      "sha256": "def04b7272dd235a375a33e409bf6337ab22fdd9ea68d61b8b4f68932393a442"
+    },
+    {
+      "path": ".temp/goal/jobs/85de50dd-c2f8-4401-a28e-eff64dff1645.1.log",
+      "sha256": "50392ae030c99a2ce3328159c284ba3074447298cc42517e37e174f066a3d5e2"
+    },
+    {
+      "path": ".temp/goal/jobs/85de50dd-c2f8-4401-a28e-eff64dff1645.2.log",
+      "sha256": "aa91215586d41a31e1687ead37988d615ca1fde517330c279b89f843175c42a2"
+    },
+    {
+      "path": ".temp/goal/jobs/e5bcde20-7c6f-48cf-8336-5ac41e699b09.log",
+      "sha256": "27fa954c2d0db24fe6b3ca8ada2dab603462468f04cf17ff7e36688bcd454561"
+    },
+    {
+      "path": ".temp/goal/jobs/df12dbfe-5194-4286-8e14-d1f80f72a8bc.1.log",
+      "sha256": "667086b669fe39f0128e6470eaee3dded89da8b9144ff5638d189008c8c1f111"
+    },
+    {
+      "path": ".temp/goal/jobs/df12dbfe-5194-4286-8e14-d1f80f72a8bc.2.log",
+      "sha256": "d4f6a20a52a527583a321abb124fd0eb9605f845e5a1b13207b592d43716f5c1"
+    },
+    {
+      "path": ".temp/goal/check/run-YaJKWy/output.log",
+      "sha256": "3e864740ca6947a707104dc7746409f45df0c316357b0e98197f65149e672c6f"
+    },
+    {
+      "path": ".temp/typecheck-admission-review/candidate/.artifacts/qa/20261019t103335-2173d8/logs/unit.log",
+      "sha256": "2066b4a55e8fcdb5e379bfa4fb71d04ae819834179eae5ec14b9e6321ef76990"
+    },
+    {
+      "path": ".temp/typecheck-admission-review/candidate/.artifacts/qa/20261019t103335-2173d8/logs/owner.log",
+      "sha256": "84825868017f667b5152a1c3a68f4eb688609f13e7fbdb4afea74858f0088c7e"
+    }
+  ],
+  "evidence_path_base": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2852",
+  "completed_at_utc": "2026-10-19T10:40:36.163946+00:00"
+}
