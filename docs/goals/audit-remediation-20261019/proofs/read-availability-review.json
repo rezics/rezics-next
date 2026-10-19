@@ -732,74 +732,74 @@
   "originalCriteria": {
     "D5-001": [
       {
-        "criterion": "\u5728\u76ee\u6807\u5de5\u4f5c\u8d1f\u8f7d\u9884\u7b97\u5185\uff0c\u521b\u5efa\u5377\u7ae0\u548c\u53d1\u5e03\u83b7\u5f97\u6210\u529f\u56de\u6267\u540e\uff0c\u5237\u65b0\u3001\u8fd4\u56de\u76ee\u5f55\u3001\u518d\u5f00\u7f16\u8f91\u9875\u3001\u81ea\u5df1\u7684\u516c\u5f00\u8be6\u60c5\u53ca\u53e6\u4e00\u8d26\u53f7\u89c6\u56fe\u5747\u80fd\u8bfb\u53d6\u8be5\u786e\u5207\u5bf9\u8c61\uff1b\u4e0d\u80fd\u9760\u91cd\u65b0\u521b\u5efa\u6216\u91cd\u590d\u53d1\u5e03\u6062\u590d\u3002",
+        "criterion": "在目标工作负载预算内，创建卷章和发布获得成功回执后，刷新、返回目录、再开编辑页、自己的公开详情及另一账号视图均能读取该确切对象；不能靠重新创建或重复发布恢复。",
         "disposition": "pending-other-owner-outcomes",
         "evidenceAndResidual": "The creation/edit/navigation and exact-object read acceptance in this merged audit row is retained under its existing owners; this review adds no whole-suite gate."
       },
       {
-        "criterion": "\u540c\u4e00\u53d7\u652f\u6301\u8bfb\u53d6\u5728 Main \u6210\u529f\u6240\u9700\u7684\u65f6\u95f4\u5e94\u5904\u4e8e\u6574\u6761 Web \u8bfb\u53d6\u94fe\u7684\u5951\u7ea6\u5185\uff1b\u7ed9\u524d\u7f6e\u8bfb\u53d6\u3001\u76ee\u6807\u8bfb\u53d6\u548c\u9875\u9762\u603b\u671f\u9650\u5206\u914d\u53ef\u6267\u884c\u9884\u7b97\uff0c\u5e76\u7528\u6301\u7eed\u6d4b\u91cf\u9a8c\u8bc1\u3002\u4e0d\u80fd\u4ec5\u589e\u52a0\u4e00\u4e2a\u8d85\u65f6\u6216\u964d\u4f4e\u8bbf\u95ee\u6821\u9a8c\u3002",
+        "criterion": "同一受支持读取在 Main 成功所需的时间应处于整条 Web 读取链的契约内；给前置读取、目标读取和页面总期限分配可执行预算，并用持续测量验证。不能仅增加一个超时或降低访问校验。",
         "disposition": "partial-source-and-unit-only",
         "evidenceAndResidual": "Main notification allocation is shared, including Account. End-to-end BFF timing and normal successful pages on the retained corpus were not reached."
       },
       {
-        "criterion": "\u5bf9\u9884\u7b97\u8d85\u9650\u3001\u8eab\u4efd\u5f85\u6821\u9a8c\u3001\u4e0a\u6e38\u62d2\u7edd\u548c\u6682\u65f6\u4e0d\u53ef\u7528\u5206\u522b\u4fdd\u7559\u53ef\u8bca\u65ad\u7ed3\u679c\uff1b\u524d\u95e8\u4ecd\u63d0\u4f9b\u9519\u8bef\u8bf4\u660e\u53ca\u91cd\u8bd5\u5165\u53e3\uff0c\u7f16\u8f91\u5185\u5bb9\u548c\u5df2\u6210\u529f\u56de\u6267\u7ee7\u7eed\u53ef\u89c1\u3002",
+        "criterion": "对预算超限、身份待校验、上游拒绝和暂时不可用分别保留可诊断结果；前门仍提供错误说明及重试入口，编辑内容和已成功回执继续可见。",
         "disposition": "pending-public-outcomes",
         "evidenceAndResidual": "No current public diagnostic/error/retry assertion ran; a finite 503 is not success."
       },
       {
-        "criterion": "\u4e3e\u62a5\u539f\u5e42\u7b49\u952e\u91cd\u8bd5\u53ea\u751f\u6210\u4e00\u4e2a\u6848\u4ef6\u5e76\u8fd4\u56de\u53ef\u8bbf\u95ee\u7684\u79c1\u6709\u56de\u6267\uff1b\u4e34\u65f6\u8bfb\u53d6\u5931\u8d25\u4e0d\u5f97\u4e22\u5b57\u6bb5\u6216\u5f15\u5bfc\u7528\u6237\u91cd\u590d\u65b0\u5efa\u4e3e\u62a5\u3002",
+        "criterion": "举报原幂等键重试只生成一个案件并返回可访问的私有回执；临时读取失败不得丢字段或引导用户重复新建举报。",
         "disposition": "pending-other-owner-outcomes",
         "evidenceAndResidual": "The report idempotency/private receipt criterion remains with its existing owner."
       },
       {
-        "criterion": "stream/unread\u53ca\u6240\u6709\u5185\u5c42\u8bfb\u5171\u4eabwall\u3001RPC\u3001\u5b57\u8282\u548c\u5f15\u64ce\u5de5\u4f5c\u9884\u7b97\u3002",
+        "criterion": "stream/unread及所有内层读共享wall、RPC、字节和引擎工作预算。",
         "disposition": "partial-source-and-unit-only",
         "evidenceAndResidual": "Shared 10s/160 graph RPC/4MiB response allocation and bounded seeks are present; actual SQL/engine work and complete real pages remain unmeasured."
       },
       {
-        "criterion": "\u5ba2\u6237\u7aef\u4e2d\u6b62\u540e\u4e0d\u518d\u542f\u52a8\u540e\u7eedsubject/SQL/RPC\uff0c\u5b58\u91cf\u5de5\u4f5c\u5728\u660e\u786e\u5bbd\u9650\u5185\u91ca\u653e\u3002",
+        "criterion": "客户端中止后不再启动后续subject/SQL/RPC，存量工作在明确宽限内释放。",
         "disposition": "partial-source-and-unit-only",
         "evidenceAndResidual": "Existing unit doubles cover abort during Account, SQL checkout/statement and subject resolution; the five signed-in public 100ms-grace/300ms-observation cases hit setup failure."
       },
       {
-        "criterion": "1/2/4/8\u901a\u77e5\u4e0eWork\u3001Discover\u3001\u6b63\u6587\u641c\u7d22\u6df7\u5408\u4f1a\u8bdd\u5747\u80fd\u5b8c\u6210\uff1b\u505c\u6b62\u5ba2\u6237\u7aef\u540epending\u5f52\u96f6\u4e14\u4e0d\u6301\u7eed\u5360\u7528\u6838\u5fc3\u8bfb\u5bb9\u91cf\u3002",
+        "criterion": "1/2/4/8通知与Work、Discover、正文搜索混合会话均能完成；停止客户端后pending归零且不持续占用核心读容量。",
         "disposition": "pending-workload-premise",
         "evidenceAndResidual": "No original mixed 1/2/4/8 notification/Work/Discover/chapter-search selector or fifty-active-target-notification corpus was available through the supported retained restore. Native pending-to-zero and capacity recovery were not measured."
       },
       {
-        "criterion": "\u4fdd\u6301disclosure\u6b63\u786e\u6027\uff0c\u4e0d\u4ee5\u65e0\u754c\u5e76\u884c\u6216\u4e0d\u65ad\u63d0\u9ad8\u8d85\u65f6\u63a9\u76d6\u653e\u5927\u3002",
+        "criterion": "保持disclosure正确性，不以无界并行或不断提高超时掩盖放大。",
         "disposition": "pending-public-disclosure-with-source-concern",
         "evidenceAndResidual": "Recipient batches and final fences are present; original six-persona isolation assertions did not run. The inbox also discards sanitized process-notice fields from its final fence (unconfirmed public source counterexample below)."
       },
       {
-        "criterion": "\u5728\u540c\u7b49\u6570\u636e\u89c4\u6a21\u548c\u6b63\u5e38\u5e76\u53d1\u8bfb\u53d6\u4e0b\uff0cAll\u3001\u63a8\u8350\u3001\u6982\u5ff5/Realm \u641c\u7d22\u3001\u7ae0\u8282\u3001New feed \u548c\u77ed\u7eed\u9875\u5747\u80fd\u5b8c\u6210\uff1b\u5931\u8d25\u4fdd\u7559\u8bcd\u4e0e\u6761\u4ef6\uff0c\u660e\u786e\u53d6\u5f97/\u672a\u53d6\u5f97\u90e8\u5206\uff0c\u91cd\u8bd5\u6709\u53ef\u6d4b\u7ec8\u6001\u3002",
+        "criterion": "在同等数据规模和正常并发读取下，All、推荐、概念/Realm 搜索、章节、New feed 和短续页均能完成；失败保留词与条件，明确取得/未取得部分，重试有可测终态。",
         "disposition": "pending-other-owner-outcomes",
         "evidenceAndResidual": "The larger All/recommendation/Realm/search/chapter/New-feed/continuation acceptance stays with its existing owners; this proof does not claim those pages pass."
       },
       {
-        "criterion": "\u9884\u7b97\u4fdd\u6301\u6709\u754c\uff1b\u6bcf\u4e2a\u5931\u8d25\u7801\u5bf9\u5e94\u53ef\u8bca\u65ad\u9636\u6bb5\uff0c\u9519\u8bef\u548c\u672a\u5b8c\u6210\u626b\u63cf\u4e0d\u5f97\u8868\u793a\u6210\u96f6\u5339\u914d\uff1b\u4e0e AUD-010 \u7684 complete/scan \u9a8c\u6536\u4e00\u8d77\u8bc1\u660e\u3002",
+        "criterion": "预算保持有界；每个失败码对应可诊断阶段，错误和未完成扫描不得表示成零匹配；与 AUD-010 的 complete/scan 验收一起证明。",
         "disposition": "partial-source-only",
         "evidenceAndResidual": "Limits remain finite and unavailable unread subjects fail rather than lower the count. Native engine work and the broader complete/scan criteria are not proven here."
       },
       {
-        "criterion": "\u540c\u4e00\u672c\u5730\u8d26\u6237\u80fd\u591f\u8bfb\u53d6\u901a\u77e5\u53ca\u672a\u8bfb\u6570\uff1b\u63a7\u5236\u5176\u4ed6\u53ea\u8bfb\u9875\u9762\u53ef\u7528\u65f6\uff0c\u5217\u8868\u4e0e\u8ba1\u6570\u5747\u5728\u8bf7\u6c42\u9884\u7b97\u5185\u5b8c\u6210\uff1b\u4e00\u6b21\u771f\u5b9e\u6682\u65f6\u6545\u969c\u540eTry again\u53ef\u6062\u590d\u3002\u7528Main\u539f\u59cb\u8bf7\u6c42\u548cBFF\u8bf7\u6c42\u8fdb\u4e00\u6b65\u5b9a\u4f4d\uff0c\u4e0d\u9760\u5ef6\u957f\u8d85\u65f6\u6216\u9690\u85cf\u9519\u8bef\u89c6\u56fe\u901a\u8fc7\u3002",
+        "criterion": "同一本地账户能够读取通知及未读数；控制其他只读页面可用时，列表与计数均在请求预算内完成；一次真实暂时故障后Try again可恢复。用Main原始请求和BFF请求进一步定位，不靠延长超时或隐藏错误视图通过。",
         "disposition": "pending-public-outcomes",
         "evidenceAndResidual": "Original notification complete-page, admission and fresh retry selectors were pinned unchanged but not executed past corpus setup. No current Main/BFF success or failure was reproduced."
       }
     ],
     "D5-004": [
       {
-        "criterion": "\u6301\u7eed\u975e\u6cd5\u8f93\u5165\u7ec8\u6b62/\u9694\u79bb\u4e14\u539f\u56e0\u53ef\u8bca\u65ad\uff0c\u65e0source\u53d8\u5316\u4e0d\u91cd\u505a\u540c\u4e00\u5b8c\u6574\u5de5\u4f5c\u3002",
+        "criterion": "持续非法输入终止/隔离且原因可诊断，无source变化不重做同一完整工作。",
         "disposition": "partial-owner-composition-pass",
         "evidenceAndResidual": "The actual contradictory Work-revision sequence producer was quarantined once with a diagnosis and no unchanged population rereads. The obsolete invalid-media producer is absent and was not reproduced. Public diagnostic selection was rejected."
       },
       {
-        "criterion": "\u6682\u6001\u6545\u969c\u9000\u907f\u5e76\u5728\u6062\u590d\u540e\u63a8\u8fdbcheckpoint\uff0c\u7ef4\u62a4\u603b\u5de5\u4f5c\u548cscope\u516c\u5e73\u6027\u6709\u9884\u7b97\u3002",
+        "criterion": "暂态故障退避并在恢复后推进checkpoint，维护总工作和scope公平性有预算。",
         "disposition": "partial-owner-composition-pass",
         "evidenceAndResidual": "Durable owners demonstrated retained checkpoints/generations, transient retries/recovery, 21 parked scopes and one fleet probe in an allowance. Production-clock concurrent restart/lease races, prolonged idle rates, SQL/engine work and mixed core reads remain unmeasured."
       },
       {
-        "criterion": "\u9694\u79bbfixture\u9a8c\u8bc1invalid media\u91cd\u8bd5\u4e0a\u754c\u3001\u4fee\u590d\u540e\u6062\u590d\u53ca\u4e0e\u6838\u5fc3\u8bfb\u53d6\u5e76\u884c\u53ef\u7528\u3002",
+        "criterion": "隔离fixture验证invalid media重试上界、修复后恢复及与核心读取并行可用。",
         "disposition": "partial-current-producer-pass",
         "evidenceAndResidual": "Current malformed-source producer and an unreceipted graph repair rearmed the same generation using a runtime native version. This is a maintenance-owner case with personaJourney=false, not original public/mixed-load acceptance or an invalid-media reproduction."
       }
@@ -2129,20 +2129,20 @@
     },
     "originalCriteria": [
       {
-        "criterion": "\u6301\u7eed\u975e\u6cd5\u8f93\u5165\u7ec8\u6b62/\u9694\u79bb\u4e14\u539f\u56e0\u53ef\u8bca\u65ad\uff0c\u65e0source\u53d8\u5316\u4e0d\u91cd\u505a\u540c\u4e00\u5b8c\u6574\u5de5\u4f5c\u3002",
+        "criterion": "持续非法输入终止/隔离且原因可诊断，无source变化不重做同一完整工作。",
         "disposition": "proved for the actual current malformed-source owner path",
         "closure": "partial for the original class; no public-persona or refusal-witness-race proof",
         "evidence": "Retained native 32-assertion case and exact reviewed source: diagnosed basis-invalid, attempts reset, one full claim/read, zero unchanged rereads; source change rearms.",
         "limits": "Historical invalid-media trigger is not hydrated today. SRC-D5-004-001 remains unconfirmed; frozen public diagnostic was not executed."
       },
       {
-        "criterion": "\u6682\u6001\u6545\u969c\u9000\u907f\u5e76\u5728\u6062\u590d\u540e\u63a8\u8fdbcheckpoint\uff0c\u7ef4\u62a4\u603b\u5de5\u4f5c\u548cscope\u516c\u5e73\u6027\u6709\u9884\u7b97\u3002",
+        "criterion": "暂态故障退避并在恢复后推进checkpoint，维护总工作和scope公平性有预算。",
         "disposition": "partial",
         "evidence": "Retained real-owner 30/60-second transient backoff, generation/checkpoint preservation and successful activation; 21 parked scopes and one shared probe allowance. Source fairness/due-index bounds already reviewed.",
         "limits": "Fixture bounds only. No retained assertion measures healthy core reads or scope progress concurrently with malformed/transient work; no additional benchmark or scale requirement added."
       },
       {
-        "criterion": "\u9694\u79bbfixture\u9a8c\u8bc1invalid media\u91cd\u8bd5\u4e0a\u754c\u3001\u4fee\u590d\u540e\u6062\u590d\u53ca\u4e0e\u6838\u5fc3\u8bfb\u53d6\u5e76\u884c\u53ef\u7528\u3002",
+        "criterion": "隔离fixture验证invalid media重试上界、修复后恢复及与核心读取并行可用。",
         "disposition": "partial; concurrent core-read assertion unreached",
         "evidence": "Actual contradictory-source quarantine and unreceipted repair/recovery passed.",
         "limits": "Old invalid-media input is obsolete for this owner. The retained post-repair /v1/works read is sequential. No supported existing selector found for the original overlap assertion."
@@ -2973,7 +2973,7 @@
     },
     "originalCriteria": [
       {
-        "criterion": "\u6301\u7eed\u975e\u6cd5\u8f93\u5165\u7ec8\u6b62/\u9694\u79bb\u4e14\u539f\u56e0\u53ef\u8bca\u65ad\uff0c\u65e0source\u53d8\u5316\u4e0d\u91cd\u505a\u540c\u4e00\u5b8c\u6574\u5de5\u4f5c\u3002",
+        "criterion": "持续非法输入终止/隔离且原因可诊断，无source变化不重做同一完整工作。",
         "disposition": "proved for the actual current malformed-source owner path",
         "closure": "partial for the original class; no public-persona or refusal-witness-race proof",
         "evidence": "Retained native 32-assertion case and exact reviewed source: diagnosed basis-invalid, attempts reset, one full claim/read, zero unchanged rereads; source change rearms.",
@@ -2981,14 +2981,14 @@
         "thisContinuation": "Unchanged retained owner proof reused; no additional execution."
       },
       {
-        "criterion": "\u6682\u6001\u6545\u969c\u9000\u907f\u5e76\u5728\u6062\u590d\u540e\u63a8\u8fdbcheckpoint\uff0c\u7ef4\u62a4\u603b\u5de5\u4f5c\u548cscope\u516c\u5e73\u6027\u6709\u9884\u7b97\u3002",
+        "criterion": "暂态故障退避并在恢复后推进checkpoint，维护总工作和scope公平性有预算。",
         "disposition": "partial",
         "evidence": "Retained real-owner 30/60-second transient backoff, generation/checkpoint preservation and successful activation; 21 parked scopes and one shared probe allowance. Source fairness/due-index bounds already reviewed.",
         "limits": "Fixture bounds only. No retained assertion measures healthy core reads or scope progress concurrently with malformed/transient work; no additional benchmark or scale requirement added.",
         "thisContinuation": "Unchanged transient/fleet assertions reused; new overlap selector not executed because preparation prerequisites are absent."
       },
       {
-        "criterion": "\u9694\u79bbfixture\u9a8c\u8bc1invalid media\u91cd\u8bd5\u4e0a\u754c\u3001\u4fee\u590d\u540e\u6062\u590d\u53ca\u4e0e\u6838\u5fc3\u8bfb\u53d6\u5e76\u884c\u53ef\u7528\u3002",
+        "criterion": "隔离fixture验证invalid media重试上界、修复后恢复及与核心读取并行可用。",
         "disposition": "partial; original concurrent core-read assertion still unreached",
         "evidence": "Previously proved actual contradictory-source quarantine and repair/recovery reused. Original test owner now authored D5004C01 at 652e825ee2858d5370f9c654cfa5d8f2bbfff4bc; independently inspected, not executed.",
         "limits": "Historical invalid-media trigger remains obsolete. The retained post-repair read remains sequential. A compatible genuine queries projection/restore for exact ff5a214 product is not available; no concurrent API result or resource measurement is claimed."
@@ -3391,7 +3391,7 @@
     },
     "originalCriteria": [
       {
-        "criterion": "\u6301\u7eed\u975e\u6cd5\u8f93\u5165\u7ec8\u6b62/\u9694\u79bb\u4e14\u539f\u56e0\u53ef\u8bca\u65ad\uff0c\u65e0source\u53d8\u5316\u4e0d\u91cd\u505a\u540c\u4e00\u5b8c\u6574\u5de5\u4f5c\u3002",
+        "criterion": "持续非法输入终止/隔离且原因可诊断，无source变化不重做同一完整工作。",
         "disposition": "proved for the actual current malformed-source owner path",
         "closure": "partial for the original class; no public-persona or refusal-witness-race proof",
         "evidence": "Retained native 32-assertion case and exact reviewed source: diagnosed basis-invalid, attempts reset, one full claim/read, zero unchanged rereads; source change rearms.",
@@ -3399,14 +3399,14 @@
         "thisContinuation": "Original 32-assertion native malformed-source quarantine proof reused; no new native assertion executed."
       },
       {
-        "criterion": "\u6682\u6001\u6545\u969c\u9000\u907f\u5e76\u5728\u6062\u590d\u540e\u63a8\u8fdbcheckpoint\uff0c\u7ef4\u62a4\u603b\u5de5\u4f5c\u548cscope\u516c\u5e73\u6027\u6709\u9884\u7b97\u3002",
+        "criterion": "暂态故障退避并在恢复后推进checkpoint，维护总工作和scope公平性有预算。",
         "disposition": "partial",
         "evidence": "Retained real-owner 30/60-second transient backoff, generation/checkpoint preservation and successful activation; 21 parked scopes and one shared probe allowance. Source fairness/due-index bounds already reviewed.",
         "limits": "Fixture bounds only. No retained assertion measures healthy core reads or scope progress concurrently with malformed/transient work; no additional benchmark or scale requirement added.",
         "thisContinuation": "Original transient 30/60-second recovery and fleet/probe evidence reused; no replay or new benchmark."
       },
       {
-        "criterion": "\u9694\u79bbfixture\u9a8c\u8bc1invalid media\u91cd\u8bd5\u4e0a\u754c\u3001\u4fee\u590d\u540e\u6062\u590d\u53ca\u4e0e\u6838\u5fc3\u8bfb\u53d6\u5e76\u884c\u53ef\u7528\u3002",
+        "criterion": "隔离fixture验证invalid media重试上界、修复后恢复及与核心读取并行可用。",
         "disposition": "partial; original concurrent core-read assertion remains unreached",
         "evidence": "Root-authored additive case at exact 3e1181ca29016dfe8cd8e3331c5afaf75f3bb2a7 independently inspected. The supported recorded Task Goal invocation rejected its full-name selector before QA startup.",
         "limits": "Local existing native fixture is sufficient for these bindings; the old G-2750 query projection and all-six-persona preparation are not prerequisites for this narrow assertion. No Work response, held native delivery or quarantine state was observed in this continuation. Original post-repair read remains sequential."
@@ -3738,19 +3738,19 @@
     },
     "originalCriteria": [
       {
-        "criterion": "\u6301\u7eed\u975e\u6cd5\u8f93\u5165\u7ec8\u6b62/\u9694\u79bb\u4e14\u539f\u56e0\u53ef\u8bca\u65ad\uff0c\u65e0source\u53d8\u5316\u4e0d\u91cd\u505a\u540c\u4e00\u5b8c\u6574\u5de5\u4f5c\u3002",
+        "criterion": "持续非法输入终止/隔离且原因可诊断，无source变化不重做同一完整工作。",
         "disposition": "proved for actual malformed-source owner path; original class partial",
         "evidence": "Retained 32-assertion real-owner pass: one full claim/read, no unchanged population rereads, diagnosed basis-invalid and repair rearm. Not replayed to a pass in this run.",
         "limits": "Actual contradictory revision source, not obsolete media hydration. SRC-D5-004-001 remains an unconfirmed P2 source inference."
       },
       {
-        "criterion": "\u6682\u6001\u6545\u969c\u9000\u907f\u5e76\u5728\u6062\u590d\u540e\u63a8\u8fdbcheckpoint\uff0c\u7ef4\u62a4\u603b\u5de5\u4f5c\u548cscope\u516c\u5e73\u6027\u6709\u9884\u7b97\u3002",
+        "criterion": "暂态故障退避并在恢复后推进checkpoint，维护总工作和scope公平性有预算。",
         "disposition": "partial; retained bounded fixture proof unchanged",
         "evidence": "Retained real-owner 30/60-second transient backoff, checkpoint/generation preservation, activation, 21 parked populations and one shared fleet probe allowance.",
         "limits": "No new fleet/transient assertion passed here; injected clock and transport seam limits remain. No extra benchmark or concurrency matrix added."
       },
       {
-        "criterion": "\u9694\u79bbfixture\u9a8c\u8bc1invalid media\u91cd\u8bd5\u4e0a\u754c\u3001\u4fee\u590d\u540e\u6062\u590d\u53ca\u4e0e\u6838\u5fc3\u8bfb\u53d6\u5e76\u884c\u53ef\u7528\u3002",
+        "criterion": "隔离fixture验证invalid media重试上界、修复后恢复及与核心读取并行可用。",
         "disposition": "partial; original parallel core availability assertion still unreached",
         "evidence": "Retry/quarantine/repair proof remains retained. Corrected title selected exactly one real-native case, but budget-exit TypeError stopped the run before additive core overlap assertions.",
         "limits": "No claimed response-delivery overlap, Jena CPU saturation, mixed 1/2/4/8 workload, six-persona journey or cancellation proof."
@@ -4206,19 +4206,19 @@
     },
     "originalCriteria": [
       {
-        "criterion": "\u6301\u7eed\u975e\u6cd5\u8f93\u5165\u7ec8\u6b62/\u9694\u79bb\u4e14\u539f\u56e0\u53ef\u8bca\u65ad\uff0c\u65e0source\u53d8\u5316\u4e0d\u91cd\u505a\u540c\u4e00\u5b8c\u6574\u5de5\u4f5c\u3002",
+        "criterion": "持续非法输入终止/隔离且原因可诊断，无source变化不重做同一完整工作。",
         "disposition": "proved for actual current malformed-source isolated owner path",
         "evidence": "Original retained 32-assertion pass now also passes unchanged within this 40-assertion case: finite diagnosis/quarantine, one complete population read, no unchanged rereads, native source repair rearm.",
         "limits": "Does not claim the obsolete invalid-media producer was hydrated; SRC-D5-004-001 remains a separately retained unconfirmed P2 source inference with no reached failing outcome."
       },
       {
-        "criterion": "\u6682\u6001\u6545\u969c\u9000\u907f\u5e76\u5728\u6062\u590d\u540e\u63a8\u8fdbcheckpoint\uff0c\u7ef4\u62a4\u603b\u5de5\u4f5c\u548cscope\u516c\u5e73\u6027\u6709\u9884\u7b97\u3002",
+        "criterion": "暂态故障退避并在恢复后推进checkpoint，维护总工作和scope公平性有预算。",
         "disposition": "proved within original bounded owner fixture; source-only fairness review retained",
         "evidence": "30/60-second transient backoff and recovery, stable checkpoint/generation, 21 parked populations and one fleet probe allowance all reached and passed at current composition.",
         "limits": "Injected queue clock and authored transport seam retained; no new real-time benchmark, production scale or wider restart-race claim."
       },
       {
-        "criterion": "\u9694\u79bbfixture\u9a8c\u8bc1invalid media\u91cd\u8bd5\u4e0a\u754c\u3001\u4fee\u590d\u540e\u6062\u590d\u53ca\u4e0e\u6838\u5fc3\u8bfb\u53d6\u5e76\u884c\u53ef\u7528\u3002",
+        "criterion": "隔离fixture验证invalid media重试上界、修复后恢复及与核心读取并行可用。",
         "disposition": "proved within current isolated fixture; original missing parallel core assertion closed",
         "evidence": "Existing retry upper bounds and repair recovery pass with new real native-result delivery overlap: both real Main public200/exact-id and private404/no-id bodies answered in 387.0033ms, before response delivery release and while refresh unsettled, within original 10000ms bound.",
         "limits": "Response-delivery overlap only; native engine already returned its result. No Jena CPU saturation, mixed 1/2/4/8 sessions, BFF, six-persona or cancellation assertion claimed."
@@ -5076,18 +5076,18 @@
     },
     "originalCriteria": [
       {
-        "criterion": "\u6301\u7eed\u975e\u6cd5\u8f93\u5165\u7ec8\u6b62/\u9694\u79bb\u4e14\u539f\u56e0\u53ef\u8bca\u65ad\uff0c\u65e0source\u53d8\u5316\u4e0d\u91cd\u505a\u540c\u4e00\u5b8c\u6574\u5de5\u4f5c\u3002",
+        "criterion": "持续非法输入终止/隔离且原因可诊断，无source变化不重做同一完整工作。",
         "disposition": "proved for actual current malformed-source and MediaInvalid fixture paths",
         "evidence": "Prior32 owner assertions plus new22 native assertions: finite diagnosed quarantine, no unchanged full population rereads. Historical asset identity is not proved."
       },
       {
-        "criterion": "\u6682\u6001\u6545\u969c\u9000\u907f\u5e76\u5728\u6062\u590d\u540e\u63a8\u8fdbcheckpoint\uff0c\u7ef4\u62a4\u603b\u5de5\u4f5c\u548cscope\u516c\u5e73\u6027\u6709\u9884\u7b97\u3002",
+        "criterion": "暂态故障退避并在恢复后推进checkpoint，维护总工作和scope公平性有预算。",
         "disposition": "existing bounded owner-fixture assertions retained; no new prerequisite or rerun",
         "evidence": "Retained native32/40 cases cover transient30/60s backoff/recovery, checkpoint/generation preservation,21 parked populations and one shared probe allowance. New owner MediaUnavailable case remains transient.",
         "limits": "Controlled clocks and transport seam remain explicit; these assertions do not measure unrestricted production SQL/engine work or claim full persona/mixed-load success."
       },
       {
-        "criterion": "\u9694\u79bbfixture\u9a8c\u8bc1invalid media\u91cd\u8bd5\u4e0a\u754c\u3001\u4fee\u590d\u540e\u6062\u590d\u53ca\u4e0e\u6838\u5fc3\u8bfb\u53d6\u5e76\u884c\u53ef\u7528\u3002",
+        "criterion": "隔离fixture验证invalid media重试上界、修复后恢复及与核心读取并行可用。",
         "disposition": "original previously missing applicable MediaInvalid retry/repair assertion now proved; original core overlap already proved",
         "evidence": "D5004C02 genuine native22 assertions: one full claim,3 unchanged probes with0 population rereads, repaired source activates same retained generation. Reuse D5004C01 jobdb958b66 QA20261019t115726-ea25da,40 assertions with public200/private404 in387ms while real native result delivery and refresh remain held.",
         "limits": "Two complementary controlled fixture cases. Core overlap is response-delivery overlap, not Jena CPU saturation, mixed1/2/4/8 or six-persona journey proof."
@@ -5750,6 +5750,293 @@
       "priorReportCommit": "2715cba4c54380095bfe463cc0426e3e15feb682",
       "acceptedZoneAndSourceCutsReplayed": false,
       "historicalRuntimeFailuresRetained": true
+    }
+  },
+  "sourceAcknowledgementCompositionReview": {
+    "reviewedAt": "2026-10-19T13:35:51.425914+00:00",
+    "authority": "Second, separately qualified first independent review of only6b34ae composition/test delta after MediaInvalid review. Current brief authorizes receipt reuse, report checks only, no unchanged native/credit review or proof rerun.",
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "authoredProductChanges": false,
+      "independentReviewsOfThisDelta": 1,
+      "nestedAgentsUsed": false,
+      "accountFallbackUsed": false,
+      "unchangedSourceReviewOrPassingRuntimeReplayed": false
+    },
+    "decision": {
+      "sourceVerdict": "APPROVE",
+      "reviewedDelta": "6b34ae1833028628173880738ad3be4051a73b87",
+      "newBlockingSourceFindings": [],
+      "qualification": "Default production acknowledgement wiring and captured-transport/real-SQL owner composition only; not live-native public notification/query/persona acceptance.",
+      "dependenciesRequired": "Use the tested Source/native dependency composition and Source SQL2705 repair; do not infer these wave-owned dependencies are on main.",
+      "automaticLanding": false,
+      "originalAuditClassClosureClaimed": false,
+      "landing": "Manager composes the reviewed two-path delta with actual ready dependencies through a small normal gate, preserving current notification and other current-main bytes."
+    },
+    "immutablePins": {
+      "source": "6b34ae1833028628173880738ad3be4051a73b87",
+      "parent": "98995b69c021f4ec40e05c6d85116a6753485f41",
+      "tree": "195069dd0d7fc5d88e88bfb18dd3936b5e674751",
+      "changedPaths": [
+        "services/main/src/composition.ts",
+        "services/main/tests/composition-source-native-owners.test.ts"
+      ],
+      "manifest": [
+        {
+          "path": "services/main/src/composition.ts",
+          "blob": "0b22f552b1969ac08f2449b72daa163977266165",
+          "parentBlob": "2349f5848fefc99487ee40f4ff9e1a00de1a374d",
+          "sha256": "e6c7d892393e023db8cf6e60befbab17d9966d493e8969e8f961bfca887a82a0",
+          "testedWaveBlob": "0b22f552b1969ac08f2449b72daa163977266165"
+        },
+        {
+          "path": "services/main/tests/composition-source-native-owners.test.ts",
+          "blob": "d1ff1876aaef31ab715ae2f688cf1a127ecd2893",
+          "parentBlob": null,
+          "sha256": "05f673c90c644fe9aed6f8e92d38b07c6b7ffac28684e4025f917944e2ddac2a",
+          "testedWaveBlob": "d1ff1876aaef31ab715ae2f688cf1a127ecd2893"
+        }
+      ]
+    },
+    "dependencyManifest": {
+      "testedWave": "2f53317556f68b209bc82987093478e2b2e5ab71",
+      "sourceSqlRepair": "222d57ae9bb8886db39f42d7d76e7e3ea58aac7c",
+      "manifest": [
+        {
+          "path": "services/main/tests/support/source-field-native-fixture.ts",
+          "blob": "2cb63b82b92a7ecbe3292317154d0098f385405e",
+          "sha256": "d584fcab37edde02fafd966750ec97848adfad6b6d1b3228b1acdd21774a27bf"
+        },
+        {
+          "path": "services/main/src/modules/semantic/native-basis.ts",
+          "blob": "5361b74296d1bb8197c88477bca9470a4b3b8c09",
+          "sha256": "8350cd3509e0d076e23b8b6264b4dc967270e0aca1087be21a17c0b33e6866bd"
+        },
+        {
+          "path": "services/main/src/modules/source/field-support-acknowledged.ts",
+          "blob": "9e45319d4d5561f5fdc8f475364a1527d359f7b3",
+          "sha256": "515ec9ca32354049d898dcb7d896170a8354179773275a534e168209da188d60"
+        },
+        {
+          "path": "services/main/src/modules/source/field-support-retained.ts",
+          "blob": "811373af9c9c88b783edc4fdcc46aa9d7ac6faa7",
+          "sha256": "d5f6017fa7d9734498af94933b2029764922674bfc801afb12169795e5d5cc8c"
+        },
+        {
+          "path": "services/main/src/modules/source/field-support-native.ts",
+          "blob": "e113dbcbdacd2438d62d5d503f93086b22c684cf",
+          "sha256": "0016869b5c4a5164a22f5f3a4ee474cc28fae0e9dae566c45718d45f0b92b686"
+        },
+        {
+          "path": "services/main/src/modules/work/credit-attribution.ts",
+          "blob": "e73b1b4412fcec643bcebbbce7af722bd87e9fb6",
+          "sha256": "f1403de976ec0963362514c2954afd2cf5af7c6370d7676f99cf20a5c3483ba3"
+        },
+        {
+          "path": "services/content/migrations/2705_source_field_slot_bounds.sql",
+          "blob": "fda035ff91a4bc2183d255b6c0235eea83fc017c",
+          "sha256": "db09f0a63cf218120841daa46a6f8c8922228860f68de8bcbcb3d776b5e1b3ab"
+        }
+      ],
+      "landingState": "Wave-owned dependencies supplied for review; this review does not claim them landed on main."
+    },
+    "producerOutcomeRead": {
+      "path": ".temp/worktrees/g-2763/.temp/goal/composition-source-native-owners-rerun-receipt.json",
+      "copiedReceipt": ".temp/read-availability-review/media-invalid-ea0-source-6b34/source-composition/producer-receipt.json",
+      "sha256": "22d0070d56ae65d1c645e931c66114ec0129d7913ecb2a83ed4bc0450e3eafa4"
+    },
+    "sourceReview": [
+      {
+        "path": "services/main/src/composition.ts",
+        "line": 444,
+        "observation": "One actual creditAttributionOwner(environment) default instance is created; that same object is passed to acknowledgedSemanticSupportOwners and exposed in dependencies at line520. The focused spy proves Source verification reaches that exposed instance."
+      },
+      {
+        "path": "services/main/src/composition.ts",
+        "line": 445,
+        "observation": "Existing retainedFieldEvidenceOwners remains first in the owner spread. Added adapter supplies semantic/statement only; final sourceRetainedOwners spread preserves explicit named overrides. Real rights/evidence owners survive and Statement remains usable when only Semantic is overridden."
+      },
+      {
+        "path": "services/main/src/modules/source/field-support-acknowledged.ts",
+        "line": 25,
+        "observation": "Material dependency inspected only for the new handoff: calls actual verifyAcknowledgedSemanticBasis with selected retained value/current principal. Persists actual succeeded terminal receipt/admission/scope/operation/revision/epoch/sequence, validates correspondence, and retains independent occurrenceAdoption."
+      },
+      {
+        "path": "services/main/src/modules/source/field-support-retained.ts",
+        "line": 172,
+        "observation": "Existing attach resolves and rights-verifies retained evidence, then actual native acknowledgement, then Access owner authority and Source SQL settlement transaction. Failed/missing native or citation authority refuses before settlement; native acknowledgement is verified-before-commit, not atomic across native and Source owners."
+      }
+    ],
+    "actualFocusedTestReview": {
+      "path": "services/main/tests/composition-source-native-owners.test.ts",
+      "lines": "1-389",
+      "reviewed": "Read actual complete focused file, its captured native fixture and material adapter interfaces; not merely producer claims.",
+      "semanticAndStatement": "Real composition stores the actual native terminal acknowledgement with retained Source evidence; ordinary supplied ID alone cannot be an acknowledgement.",
+      "refusal": "Missing terminal, mismatched receipt revision/head/target/value, withdrawn Rights and failed owner authority each refuse without any Source settlement row.",
+      "overrides": "Explicit Semantic owner override replaces that named owner; Statement and authorizeReuse/publicEvidence functions remain and Statement attaches.",
+      "occurrence": "Real verifier consumes captured independent V2 occurrence assertion and receipt; removing its independent adoption causes503 with no new settlement.",
+      "citations": "A sealed historical source-binding attribution is not current citation authority. Without the independent citation delegate, the same exposed attribution owner is invoked and Source refuses503 with no settlement.",
+      "cleanup": "afterEach restores transport/visibility spies; afterAll ends both pools, stops the disposable host PostgreSQL cluster and removes test scratch objects.",
+      "limits": "Graph/object transports and native visibility are controlled captured fixtures. Real Semantic/Statement verifiers are not mocked, and Source/Access use real SQL. No live-native command, external provider, public API/persona or mixed-load outcome is asserted."
+    },
+    "retainedOriginalFailure": {
+      "qa": "20261019t120525-9084bc",
+      "job": "6d84878c-722d-4090-96db-b85ee85b246c step2",
+      "command": "bun scripts/goal/goalctl.ts test services/main/tests/composition-source-native-owners.test.ts",
+      "exitCode": 1,
+      "counts": {
+        "executed": 6,
+        "passed": 5,
+        "failed": 1,
+        "errors": 0,
+        "skippedOrFiltered": 0,
+        "assertions": 35
+      },
+      "source": {
+        "head": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+        "fingerprint": "3a40e7ac68b6afc4d26326f6024d605559be4bd56cd8659075d2d09c8270801c",
+        "clean": false
+      },
+      "sourceStable": true,
+      "acceptanceIdsCertified": 0,
+      "evidenceDirectory": ".temp/read-availability-review/media-invalid-ea0-source-6b34/source-composition/original-2201B-failure",
+      "failure": "Semantic success reached Source SQL settlement and failed inherited migration2702 regex with PostgreSQL2201B invalid repetition count(s).",
+      "repair": "Existing Source owner additive2705 at222d57ae preserves the URL-body1..512 constraint without unsupported bounded regex repetition. Original six-case assertion/test blob is unchanged; it passed at tested2f533175."
+    },
+    "retainedPassingOwnerProof": {
+      "qa": "20261019t130841-8d96bf",
+      "job": "eb6b3bce-070a-4d4a-b35a-d0ecdecaa9ee",
+      "command": "bun scripts/goal/goalctl.ts test services/main/tests/composition-source-native-owners.test.ts",
+      "exitCode": 0,
+      "counts": {
+        "executed": 6,
+        "passed": 6,
+        "failed": 0,
+        "errors": 0,
+        "skippedOrFiltered": 0,
+        "assertions": 36
+      },
+      "source": {
+        "head": "2f53317556f68b209bc82987093478e2b2e5ab71",
+        "fingerprint": "19371a401d87f75e732528027c704f76e614024709ff19bb3c35c5d9f42601c7",
+        "clean": true
+      },
+      "sourceStable": true,
+      "acceptanceIdsCertified": 0,
+      "evidenceDirectory": ".temp/read-availability-review/media-invalid-ea0-source-6b34/source-composition/corrected-outcome"
+    },
+    "runtime": {
+      "postgres": "postgres (PostgreSQL) 18.6",
+      "postgresBinary": "/usr/bin/postgres",
+      "postgresBinarySha256": "ab3f53fad9ac079ba36c85a13e6ff0f86d60d1c3bc5f9bb3142f73b9773cacfe",
+      "bun": "1.4.3",
+      "containerImagesUsed": [],
+      "imageDisposition": "No container image or shared stack used; disposable host-native PostgreSQL only"
+    },
+    "preparation": {
+      "testedSource": "2f53317556f68b209bc82987093478e2b2e5ab71",
+      "sourceStable": true,
+      "sourceClean": true,
+      "sourceSqlRepair": "222d57ae9bb8886db39f42d7d76e7e3ea58aac7c",
+      "migration": "services/content/migrations/2705_source_field_slot_bounds.sql",
+      "application": "Existing beforeAll migrateContent prepares fresh Content SQL including2705 and tracked Access schema files in its isolated host PostgreSQL cluster. No retained corpus or backup is needed; no manual SQL edit/adoption performed by reviewer.",
+      "sameTwoReviewedBlobsAtTestedWave": true,
+      "sameOriginalSixCaseTestBlobBeforeAndAfterSourceRepair": true,
+      "nativeImagesUsed": [],
+      "dependencyLandingClaim": "Not claimed on main"
+    },
+    "reusedAffectedChecks": [
+      {
+        "job": "6d84878c-722d-4090-96db-b85ee85b246c step1",
+        "command": "task goal -- check --only types,lint,guards",
+        "exitCode": 0,
+        "result": "types, inference, lint, AST and24 selected repository guards passed for the exact two reviewed paths before additive Source SQL repair"
+      },
+      {
+        "job": "ad12094e-6139-4cf5-8ed0-57d1c77ca85c",
+        "exitCode": 0,
+        "result": "Recorded6b34ae remained current; types and inference pass. Reviewer did not rebase any checkout or rerun checks.",
+        "recordedAction": "Existing owner rebase/type/inference receipt; exact originating CLI not retained in copied log"
+      }
+    ],
+    "originalAcceptanceDisposition": {
+      "D5004": "No change from the separately qualified MediaInvalid section and previously retained core-overlap proof.",
+      "notifications": "D5-001/D2-001/D6-001/AUD-004 public persona, complete allocation, cancellation and genuine50-notification mixed-load requirements remain as previously recorded; this Source wiring does not close them.",
+      "Zone": "Completeda4a253 source approval and actual G920180s timeout preserved; existingG-2790 owns localization. No Zone review/proof repeated.",
+      "otherSourceOwners": "Standalone converter and independent citation responsibilities remain authoritative; no invented converter, annotation or citation design, no review of unchanged credit implementation."
+    },
+    "evidence": {
+      "directory": ".temp/read-availability-review/media-invalid-ea0-source-6b34",
+      "rawManifest": ".temp/read-availability-review/media-invalid-ea0-source-6b34/raw-evidence-manifest.json",
+      "rawManifestSha256": "95831fe1ce9bbea8388233048a60f9b0dc7de3f4993ec38a58cb3d3925600e79",
+      "scope": "Private copied raw producer logs/JUnit/acceptance, original failures, exact diff/files, dependency and runner pins; no credentials or generated environment contents published."
+    },
+    "ownedReportChecks": {
+      "status": "passed",
+      "job": "ffad0f4a-b47b-4e69-b73c-a2292b0cae44",
+      "commands": [
+        {
+          "command": "task docs:check",
+          "exitCode": 0,
+          "executed": 13,
+          "passed": 13,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "markdownFiles": 249
+        },
+        {
+          "command": "task goal -- check",
+          "exitCode": 0,
+          "types": "not applicable; no TypeScript workspace changed",
+          "tests": "none named in brief",
+          "lint": "not applicable; no source file changed",
+          "ast": "passed (0.7s)",
+          "guards": {
+            "selected": "1/44 files",
+            "executed": 2,
+            "passed": 2,
+            "failed": 0,
+            "errors": 0,
+            "skipped": 0,
+            "assertions": 6
+          }
+        }
+      ],
+      "artifactDirectory": ".temp/read-availability-review/media-invalid-ea0-source-6b34/report-checks",
+      "rawHashes": [
+        {
+          "path": ".temp/read-availability-review/media-invalid-ea0-source-6b34/report-checks/ffad0f4a-b47b-4e69-b73c-a2292b0cae44.1.log",
+          "sha256": "f021e04c9500817cb7a51eb0c69756b2f2632f11c2810d0e78735e0076c850e5"
+        },
+        {
+          "path": ".temp/read-availability-review/media-invalid-ea0-source-6b34/report-checks/ffad0f4a-b47b-4e69-b73c-a2292b0cae44.2.log",
+          "sha256": "a01a29a7d2ef2f575c1464789dd650624278c747def26a64530cee5e482afebe"
+        },
+        {
+          "path": ".temp/read-availability-review/media-invalid-ea0-source-6b34/report-checks/ffad0f4a-b47b-4e69-b73c-a2292b0cae44.log",
+          "sha256": "2d6da1225d9c67b4723c8cf9b8d3f0325b42ba2bf50ce1c63ca5e9805bc48d99"
+        },
+        {
+          "path": ".temp/read-availability-review/media-invalid-ea0-source-6b34/report-checks/worker-check/ast-0.log",
+          "sha256": "a46e969b40ae4b0e34512e0ba50066c6839bcbf90405a20acca2abcd845d658f"
+        },
+        {
+          "path": ".temp/read-availability-review/media-invalid-ea0-source-6b34/report-checks/worker-check/guards-0-artifacts/unit.xml",
+          "sha256": "e41e0e9bc2c84407c2282cf28d7f272cf56fcb49f1c0d487153fac4f4aaade80"
+        },
+        {
+          "path": ".temp/read-availability-review/media-invalid-ea0-source-6b34/report-checks/worker-check/guards-0.log",
+          "sha256": "397dad28bd7a2561ce66b5dd4446e27bb3fe69dd97a26297982372aa8ef02cfb"
+        },
+        {
+          "path": ".temp/read-availability-review/media-invalid-ea0-source-6b34/report-checks/worker-check/output.log",
+          "sha256": "30dd1b06eb120e60b4e026a4291f79518b5200d326b766eaf7cb32a2d872afcb"
+        }
+      ],
+      "qualification": "Report only; no product or runtime proof rerun. Only receipt metadata finalized afterward. Non-blocking harness-behind-main notice retained in raw output; both commands exited0."
     }
   }
 }
