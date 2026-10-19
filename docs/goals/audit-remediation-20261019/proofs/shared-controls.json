@@ -1,0 +1,329 @@
+{
+  "goal": "audit-remediation-20261019",
+  "worker": "G-2821",
+  "reviewer": "Codex-1 / GPT-6.1 Sol / xhigh",
+  "finding": "D4-001",
+  "recordedAt": "2026-10-19T04:16:48.156442+00:00",
+  "outcome": {
+    "sharedControlRepairVerified": true,
+    "allD4001AcceptanceMet": false,
+    "reason": "All scoped rendered control assertions and measured states pass. Authenticated Settings remains unverified because the correctly configured worktree web frontend fails before listening.",
+    "otherFindingClassesCompleted": false
+  },
+  "source": {
+    "ref": "wave/audit-20261019",
+    "sha": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+    "pinCommand": "git reset --hard 92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+    "initiallyClean": true,
+    "pinnedBeforeTests": true,
+    "advancedDuringChecks": false,
+    "productFilesChanged": false,
+    "originalAssertionsChanged": false,
+    "proofOnlyCommit": true
+  },
+  "method": {
+    "browser": "Repository Storybook Vitest addon with official @vitest/browser-playwright provider and repository storyBrowser/captureStoryScreenshot helpers; Browser MCP unavailable.",
+    "retainedHelperSource": ".temp/audit-remediation-20261019/control-review-retained/artifacts",
+    "adaptedHelpers": [
+      ".temp/shared-controls/vitest.config.mts",
+      ".temp/shared-controls/review.setup.ts",
+      ".temp/shared-controls/analyze.py",
+      ".temp/shared-controls/apps.test.ts"
+    ],
+    "adaptation": "Private capture/measurement only. Existing stories and control-contrast acceptance assertions are unchanged. Native Tab starts at an offscreen capture sentinel; selected EmptyFields values are cleared through userEvent after authored play.",
+    "viewports": {
+      "desktop": [
+        1440,
+        1000
+      ],
+      "phone": [
+        390,
+        844
+      ]
+    },
+    "themes": [
+      "light",
+      "dark"
+    ],
+    "contrast": "Browser canvas alpha compositing and actual unmodified PNG point samples, WCAG sRGB luminance; enabled threshold 3:1. Disabled states retain native semantics and are exempt from that threshold.",
+    "limitations": "Solid straight-edge/center point samples, not an exhaustive pixel scan; screenshot review is the listed viewed subset."
+  },
+  "recordedJobLauncher": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- <command\u2026>",
+  "checks": [
+    {
+      "job": "13f3011e-c331-4968-ba24-714849fd6ceb",
+      "command": "bun scripts/goal/goalctl.ts test packages/ui/src/components/input.stories.tsx packages/ui/src/components/input-group.stories.tsx packages/ui/src/components/textarea.stories.tsx packages/ui/src/components/switch.stories.tsx",
+      "qaRun": "20261019t040626-3473bc",
+      "result": "passed",
+      "files": 4,
+      "stories": 59,
+      "log": ".temp/goal/jobs/13f3011e-c331-4968-ba24-714849fd6ceb.log"
+    },
+    {
+      "job": "af3dcc12-9640-4f61-a3bf-437fcd36ac80",
+      "command": "bun scripts/goal/goalctl.ts test packages/ui/src/components/input.stories.tsx packages/ui/src/components/input-group.stories.tsx packages/ui/src/components/textarea.stories.tsx packages/ui/src/components/switch.stories.tsx --config /home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2821/.temp/shared-controls/vitest.config.mts",
+      "qaRun": "20261019t040907-15b422",
+      "result": "passed",
+      "files": 4,
+      "stories": 59,
+      "purpose": "Unmodified assertions plus capture/measurement-only afterEach helper.",
+      "log": ".temp/goal/jobs/af3dcc12-9640-4f61-a3bf-437fcd36ac80.log"
+    },
+    {
+      "job": "b1ed8194-7ed0-4199-a901-da14564e6f5c",
+      "command": "bun scripts/goal/goalctl.ts test .temp/shared-controls/apps.test.ts",
+      "result": "setup-failed",
+      "outcomeAssertionReached": false,
+      "reason": "Bun treated the hidden-directory argument as a filter; corrected invocation to ./.temp/shared-controls/apps.test.ts. No product assertion failed.",
+      "log": ".temp/goal/jobs/b1ed8194-7ed0-4199-a901-da14564e6f5c.log"
+    },
+    {
+      "job": "8cd1bbee-f6f9-48f3-8632-3eff0e5b2e2c",
+      "step": 1,
+      "command": "bun scripts/goal/goalctl.ts test ./.temp/shared-controls/apps.test.ts",
+      "result": "probe-completed",
+      "tests": 1,
+      "caveat": "Artifact collection has no app acceptance assertions; exit 0 does not establish Settings success.",
+      "log": ".temp/goal/jobs/8cd1bbee-f6f9-48f3-8632-3eff0e5b2e2c.1.log"
+    },
+    {
+      "job": "8cd1bbee-f6f9-48f3-8632-3eff0e5b2e2c",
+      "step": 2,
+      "command": "python .temp/shared-controls/analyze.py",
+      "result": "passed",
+      "note": "Final analysis additionally samples the owning password group border, 1 px outside the inner Ark input. Inner-input pixel samples are not group boundary failures.",
+      "log": ".temp/goal/jobs/8cd1bbee-f6f9-48f3-8632-3eff0e5b2e2c.2.log"
+    },
+    {
+      "job": "f5909946-3c63-4891-9b7b-6a8e55a91b27",
+      "command": "python .temp/shared-controls/analyze.py",
+      "result": "setup-failed",
+      "outcomeAssertionReached": false,
+      "reason": "Temporary sampler correction accidentally looked up an Accounts-only name on story measurements (KeyError: name); fixed the helper only. Original assertions and source unchanged.",
+      "log": ".temp/goal/jobs/f5909946-3c63-4891-9b7b-6a8e55a91b27.log"
+    },
+    {
+      "job": "02af6f27-bffd-4f3e-9893-2b183b5026c4",
+      "step": 1,
+      "command": "python .temp/shared-controls/analyze.py",
+      "result": "passed",
+      "log": ".temp/goal/jobs/02af6f27-bffd-4f3e-9893-2b183b5026c4.1.log"
+    },
+    {
+      "job": "02af6f27-bffd-4f3e-9893-2b183b5026c4",
+      "step": 2,
+      "command": "python .temp/shared-controls/build-proof.py",
+      "result": "passed",
+      "log": ".temp/goal/jobs/02af6f27-bffd-4f3e-9893-2b183b5026c4.2.log"
+    },
+    {
+      "job": "02af6f27-bffd-4f3e-9893-2b183b5026c4",
+      "step": 3,
+      "command": "task docs:check",
+      "result": "passed",
+      "log": ".temp/goal/jobs/02af6f27-bffd-4f3e-9893-2b183b5026c4.3.log",
+      "evidence": "235 Markdown files; links, fragments and navigation passed; 13 documentation tests passed."
+    },
+    {
+      "job": "02af6f27-bffd-4f3e-9893-2b183b5026c4",
+      "step": 4,
+      "command": "env GOAL_CHECK_PREPARED_TREE=/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2821 task goal -- check",
+      "result": "passed",
+      "log": ".temp/goal/jobs/02af6f27-bffd-4f3e-9893-2b183b5026c4.4.log",
+      "evidence": "types/tests/lint: no affected workspace, brief tests or source. ast passed; 1/45 affected repository guard selected and passed.",
+      "checkLog": ".temp/goal/check/run-6nxujA/output.log"
+    }
+  ],
+  "assertions": {
+    "passed": [
+      "Both four-story selections: 59/59 existing story cases, including authored interactions and configured accessibility checks.",
+      "InvalidFields across both themes/viewports: empty and populated Input, InputGroup input, InputGroup textarea and standalone Textarea. Tab adds a solid 2 px outline at 2 px offset, preserves aria-invalid, entered value and the error border; 32 measured focus states.",
+      "InputGroup owns descendant field focus; its addon action retains its own focus cue, as asserted by existing stories.",
+      "Empty enabled controls remain identifiable on background/card/muted surfaces; 60 PNG field samples and authored boundary assertions meet 3:1 against outer surface and inner fill.",
+      "Unchecked and checked switches: 48 PNG track/thumb samples across sm/md/lg and three surfaces meet 3:1; thumb offset agrees with state. Existing OnAndOff play passes Tab and Space on/off.",
+      "All four components expose disabled semantics in authored plays; 16 theme/viewport keyboard probes skip disabled controls, with no disabled field or switch focused.",
+      "No horizontal overflow in 140 measured records; viewed focus rings, error text and controls remain contained at phone and desktop widths."
+    ],
+    "failed": []
+  },
+  "measurements": {
+    "artifact": ".temp/shared-controls/pixel-evidence.json",
+    "rawRecords": ".temp/shared-controls/rendered/measurements.ndjson",
+    "captureRecords": 140,
+    "missingCaptureImages": [],
+    "invalidFocusStates": 32,
+    "invalidFocusPixelStatesMissing": 0,
+    "byTheme": {
+      "light": {
+        "emptyFieldPngSampleCount": 30,
+        "emptyFieldMinOutside": 3.2476,
+        "emptyFieldMinInside": 3.0298,
+        "switchPngSampleCount": 24,
+        "switchTrackMin": 3.5162,
+        "switchThumbMin": 3.7927,
+        "invalidFocusCount": 16,
+        "invalidFocusMinCompositedContrast": 5.5549,
+        "invalidFocusMinPngContrast": 5.5549
+      },
+      "dark": {
+        "emptyFieldPngSampleCount": 30,
+        "emptyFieldMinOutside": 3.4501,
+        "emptyFieldMinInside": 3.1719,
+        "switchPngSampleCount": 24,
+        "switchTrackMin": 3.5968,
+        "switchThumbMin": 3.142,
+        "invalidFocusCount": 16,
+        "invalidFocusMinCompositedContrast": 8.2675,
+        "invalidFocusMinPngContrast": 8.2675
+      }
+    },
+    "accountsEnabledFieldBoundary": {
+      "light": {
+        "samples": 8,
+        "minOutside": 3.5413,
+        "minInside": 3.2883
+      },
+      "dark": {
+        "samples": 8,
+        "minOutside": 4.0618,
+        "minInside": 3.7605
+      }
+    }
+  },
+  "parentContexts": {
+    "storyContexts": [
+      "background/card/muted surfaces",
+      "Field labels/errors/disabled groups",
+      "InputGroup prefix, trailing text, textarea and addon action",
+      "Switch labels and all three sizes"
+    ],
+    "accounts": {
+      "route": "/sign-up",
+      "origin": "http://127.0.0.1:42291",
+      "result": "rendered",
+      "themes": [
+        "light",
+        "dark"
+      ],
+      "viewports": [
+        "desktop",
+        "phone"
+      ],
+      "observed": "Four empty enabled fields, consent checkbox, responsive card and keyboard email focus; form never submitted. Password boundary belongs to its InputGroup, 1 px outside the inner input rectangle.",
+      "evidence": [
+        ".temp/shared-controls/apps/results.json",
+        ".temp/shared-controls/apps/accounts.server.log"
+      ]
+    },
+    "settings": {
+      "route": "/en/settings",
+      "origin": "http://127.0.0.1:37451",
+      "result": "unverified",
+      "environment": {
+        "sharedDevEnvironmentLoaded": true,
+        "oauthClientConfigured": true,
+        "oauthClientMatchesFixture": true,
+        "registeredCallbackOrigins": [
+          "http://localhost:3000",
+          "http://127.0.0.1:3000"
+        ]
+      },
+      "attemptedCommand": "task web:dev -- --port 37451",
+      "actualEnvironment": "Shared .temp/stack/rezics-dev/dev.env loaded in memory; WEB_OAUTH_CLIENT_ID is present and matches existing local fixture. No credentials copied into this report.",
+      "blocker": "Vite RSC optimizer startup: Error: react-dom/server is not supported in React Server Components. task web:dev exits 201 before listening.",
+      "assertionReached": false,
+      "authenticatedSessionAttempted": false,
+      "reasonSessionNotAttempted": "Frontend readiness failed before the bounded existing-fixture sign-in step.",
+      "noSettingsPng": true,
+      "evidence": ".temp/shared-controls/apps/web.server.log"
+    }
+  },
+  "remainingControlDefects": [],
+  "unverifiedStates": [
+    "Actual authenticated Settings on/off switches, invalid/empty fields and responsive layout in both themes/viewports: worktree web startup fails before route loading.",
+    "Registration completion was outside scope and never attempted."
+  ],
+  "imagesActuallyViewed": [
+    ".temp/shared-controls/rendered/packages-ui-src-components-input.stories.tsx/InvalidFields_light_desktop_rest.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-input.stories.tsx/InvalidFields_light_desktop_keyboard_focus_0.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-input.stories.tsx/InvalidFields_dark_phone_rest.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-input.stories.tsx/InvalidFields_dark_phone_keyboard_focus_1.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFields_light_desktop_rest.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFields_light_desktop_keyboard_focus_0.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFields_dark_phone_keyboard_focus_2.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFields_light_phone_keyboard_focus_3.png",
+    ".temp/shared-controls/apps/.temp-shared-controls-accounts/accounts_light_desktop_rest.png",
+    ".temp/shared-controls/apps/.temp-shared-controls-accounts/accounts_dark_phone_rest.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-input.stories.tsx/InvalidFields_dark_desktop_keyboard_focus_0.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-input.stories.tsx/InvalidFields_light_phone_keyboard_focus_1.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFields_dark_desktop_keyboard_focus_1.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFields_dark_desktop_keyboard_focus_3.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-input-group.stories.tsx/InvalidFields_light_phone_keyboard_focus_2.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-textarea.stories.tsx/InvalidFields_light_desktop_rest.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-textarea.stories.tsx/InvalidFields_light_desktop_keyboard_focus_0.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-textarea.stories.tsx/InvalidFields_light_phone_keyboard_focus_1.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-textarea.stories.tsx/InvalidFields_dark_desktop_keyboard_focus_1.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-textarea.stories.tsx/InvalidFields_dark_phone_keyboard_focus_0.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-switch.stories.tsx/OnAndOff_light_desktop_rest.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-switch.stories.tsx/OnAndOff_light_phone_rest.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-switch.stories.tsx/OnAndOff_dark_desktop_rest.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-switch.stories.tsx/OnAndOff_dark_phone_rest.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-switch.stories.tsx/OnAndOff_dark_phone_keyboard_focus_0.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-switch.stories.tsx/Sizes_light_desktop_rest.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-input.stories.tsx/EmptyFields_light_desktop_rest.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-input.stories.tsx/EmptyFields_dark_phone_rest.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-input-group.stories.tsx/EmptyFields_light_desktop_rest.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-input-group.stories.tsx/EmptyFields_dark_phone_rest.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-textarea.stories.tsx/EmptyFields_light_desktop_rest.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-textarea.stories.tsx/EmptyFields_dark_phone_rest.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-input.stories.tsx/Disabled_light_desktop_rest.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-input.stories.tsx/Disabled_dark_phone_keyboard_skip.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-input-group.stories.tsx/Disabled_light_desktop_rest.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-input-group.stories.tsx/Disabled_dark_phone_keyboard_skip.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-textarea.stories.tsx/Disabled_light_desktop_rest.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-textarea.stories.tsx/Disabled_dark_phone_keyboard_skip.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-switch.stories.tsx/Disabled_light_desktop_rest.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-switch.stories.tsx/Disabled_dark_phone_keyboard_skip.png",
+    ".temp/shared-controls/apps/.temp-shared-controls-accounts/accounts_light_phone_keyboard_focus.png",
+    ".temp/shared-controls/apps/.temp-shared-controls-accounts/accounts_dark_desktop_rest.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-switch.stories.tsx/Sizes_dark_phone_rest.png",
+    ".temp/shared-controls/rendered/packages-ui-src-components-switch.stories.tsx/OnAndOff_light_desktop_keyboard_focus_0.png"
+  ],
+  "lifecycle": {
+    "startedServersStopped": true,
+    "portsAfterStop": {
+      "42291": "closed",
+      "37451": "closed"
+    },
+    "oneFrontendAtATime": true,
+    "boundSecondsPerFrontend": 180,
+    "registrationSubmitted": false,
+    "preferencesChanged": false,
+    "permissionGrants": false,
+    "sharedDataChanged": false,
+    "backendRefreshImportOrCorpusRebuild": false
+  },
+  "integrity": {
+    "preparedTreeMode": "GOAL_CHECK_PREPARED_TREE=/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2821",
+    "verification": "scripts/goal/goalctl.ts:218-234 and main launcher implementation match: exact cwd env value bypasses prepareCheckTree, deletes the env var and invokes workerCheck({treePrepared:true}); merge-base change selection remains enabled.",
+    "checks": "passed",
+    "headAfterChecks": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+    "onlyTrackedChange": "docs/goals/audit-remediation-20261019/proofs/shared-controls.json",
+    "instructionEffect": {
+      "path": ".agents/skills/goal-worker/SKILL.md",
+      "instruction": "Run the recorded check once before handing off done; it includes the repository-wide guards.",
+      "effect": "Ran the recorded administrative check using verified prepared-tree mode to preserve the brief-mandated source pin."
+    }
+  },
+  "retention": {
+    "roots": [
+      ".temp/shared-controls",
+      ".artifacts/qa/20261019t040626-3473bc",
+      ".artifacts/qa/20261019t040907-15b422",
+      ".temp/goal/jobs",
+      ".temp/goal/check/run-6nxujA"
+    ],
+    "manifest": ".temp/shared-controls/proof-sha256.json",
+    "instruction": "Retain private helpers, raw measurements, pixel evidence, viewed PNGs, QA artifacts and job logs before worktree removal; only this proof JSON is committed."
+  }
+}
