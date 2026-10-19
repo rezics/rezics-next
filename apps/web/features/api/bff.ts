@@ -8,7 +8,8 @@ import {
   serverFetch,
   deadlineFromHeaders,
   SERVER_READ_LIMITS,
-  waitForServerRead,
+  serverRequestText,
+  ServerTransportError,
 } from './server-fetch.ts';
 import { mainBodyRead } from './main-read-operation.ts';
 
@@ -62,7 +63,22 @@ export const FORWARDED_RESPONSE_HEADERS = [
   'location',
   'retry-after',
   'www-authenticate',
+  'x-request-id',
+  'x-correlation-id',
+  'x-rezics-request-id',
+  'traceparent',
 ] as const;
+
+type BffPhase = 'session-agent' | 'person-preferences' | 'request-body' | 'main';
+class PrereadError extends Error {
+  constructor(readonly phase: BffPhase, readonly problem: unknown) { super('Main pre-read failed'); }
+}
+
+async function refusedPreread(phase: BffPhase, response: Response): Promise<never> {
+  throw new PrereadError(phase, { status: response.status,
+    problem: await response.json().catch(() => null), retryAfter: response.headers.get('retry-after'),
+    authenticate: response.headers.get('www-authenticate') });
+}
 
 export function mainRequestHeaders(
   incoming: Headers,
@@ -141,10 +157,13 @@ async function signedInReadingLanguages(
   sessionKey: string,
   fetchImpl: typeof fetch,
   clientHeaders: Headers,
-  deadlineAt?: number,
+  deadlineAt: number,
+  signal: AbortSignal,
 ): Promise<string[]> {
+  signal.throwIfAborted();
   const cached = cachedReadingLanguages(accessToken);
   if (cached) return cached;
+  let phase: BffPhase = 'session-agent';
   try {
     const headers = new Headers();
     const clientIp = clientHeaders.get('x-rezics-client-ip');
@@ -153,22 +172,23 @@ async function signedInReadingLanguages(
     if (sessionKey) headers.set('x-session-key', sessionKey);
     const session = await serverFetch(
       `${mainOrigin}/v1/me/session-agent`,
-      { headers },
-      { fetch: fetchImpl, deadlineAt, timeoutMs: SERVER_READ_LIMITS.metadata },
+      { headers, signal },
+      { fetch: fetchImpl, deadlineAt, timeoutMs: SERVER_READ_LIMITS.metadata, forwardDeadline: true },
     );
-    if (!session.ok) return [];
+    if (!session.ok) return await refusedPreread(phase, session);
     const state = (await session.json()) as {
       sessionAgent?: { actingSubject?: string; eligible?: boolean };
     };
     const actor = state.sessionAgent?.eligible ? state.sessionAgent.actingSubject : null;
     if (!actor) return [];
+    phase = 'person-preferences';
     headers.delete('x-session-key');
     const preferences = await serverFetch(
       `${mainOrigin}/v1/me/person-preferences?actingSubject=${encodeURIComponent(actor)}`,
-      { headers },
-      { fetch: fetchImpl, deadlineAt, timeoutMs: SERVER_READ_LIMITS.metadata },
+      { headers, signal },
+      { fetch: fetchImpl, deadlineAt, timeoutMs: SERVER_READ_LIMITS.metadata, forwardDeadline: true },
     );
-    if (!preferences.ok) return [];
+    if (!preferences.ok) return await refusedPreread(phase, preferences);
     const value = (await preferences.json()) as { contentLanguages?: unknown };
     const languages = Array.isArray(value.contentLanguages)
       ? value.contentLanguages.filter(
@@ -177,8 +197,8 @@ async function signedInReadingLanguages(
       : [];
     rememberReadingLanguages(accessToken, languages);
     return languages;
-  } catch {
-    return [];
+  } catch (error) {
+    throw error instanceof PrereadError ? error : new PrereadError(phase, error);
   }
 }
 
@@ -198,6 +218,7 @@ async function applyDisplayLanguages(
     /** A preferences write must not cache the list it is about to replace. */
     writing: boolean;
     deadlineAt: number;
+    signal: AbortSignal;
   },
 ): Promise<void> {
   const lookup =
@@ -233,6 +254,7 @@ async function applyDisplayLanguages(
           input.fetch,
           headers,
           input.deadlineAt,
+          input.signal,
         )
       : [];
   const languageHeaders = displayLanguageHeaders({
@@ -256,6 +278,9 @@ export async function forwardToMain(
     accessToken: string | undefined;
     fetch?: typeof fetch;
     clientIpHeader?: string;
+    deadlineAt?: number;
+    /** Worker request cancellation survives framework Request reconstruction. */
+    signal?: AbortSignal;
   },
 ): Promise<Response> {
   const target = mainTarget(segments, new URL(request.url).search, input.mainOrigin);
@@ -272,20 +297,23 @@ export async function forwardToMain(
     request.method === 'PUT' &&
     (segments[2] === 'person-preferences' || segments[2] === 'feed-preferences');
   const fetchImpl = input.fetch ?? fetch;
-  const deadlineAt = deadlineFromHeaders(request.headers) ?? Date.now() + SERVER_READ_LIMITS.page;
+  const signal = input.signal ? AbortSignal.any([request.signal, input.signal]) : request.signal;
+  const deadlineAt = Math.min(Date.now() + (segments[1] === 'media' ? SERVER_READ_LIMITS.transfer : SERVER_READ_LIMITS.page),
+    input.deadlineAt ?? Infinity, deadlineFromHeaders(request.headers) ?? Infinity);
   const headers = mainRequestHeaders(request.headers, input.accessToken, input.clientIpHeader);
   const media = mediaRead(request.method, segments);
   // A signed-in reader's languages cost Main two session reads; no media read uses them.
-  if (!media)
-    await applyDisplayLanguages(request, headers, {
-      ...input,
-      fetch: fetchImpl,
-      segments,
-      writing: writesLanguages,
-      deadlineAt,
-    });
   let response: Response;
+  let phase: BffPhase = 'request-body';
   try {
+    signal.throwIfAborted();
+    if (!media)
+      await applyDisplayLanguages(request, headers, {
+        ...input, fetch: fetchImpl, segments, writing: writesLanguages, deadlineAt, signal,
+      });
+    const replayBody = bodyRead ? await serverRequestText(request, deadlineAt, signal) : body;
+    signal.throwIfAborted();
+    phase = 'main';
     // Body-bearing reads use a replayable JSON string. Writes retain streaming
     // upload bodies and are never automatically replayed.
     response = await serverFetch(
@@ -293,8 +321,8 @@ export async function forwardToMain(
       {
         method: request.method,
         headers,
-        body: bodyRead ? await waitForServerRead(request.text(), deadlineAt) : body,
-        signal: request.signal,
+        body: replayBody,
+        signal,
         ...(body ? { duplex: 'half' } : {}),
         redirect: 'manual',
         cache: 'no-store',
@@ -302,6 +330,7 @@ export async function forwardToMain(
       {
         fetch: fetchImpl,
         deadlineAt,
+        forwardDeadline: true,
         idempotentRead: bodyRead,
         timeoutMs:
           segments[1] === 'media' && !bodyRead
@@ -312,10 +341,45 @@ export async function forwardToMain(
           !upstream.headers.get('content-type')!.includes('json'),
       },
     );
-  } catch {
+  } catch (error) {
+    const failure = error instanceof PrereadError ? error.problem : error;
+    const failedPhase = error instanceof PrereadError ? error.phase : phase;
+    // A prerequisite's received refusal still belongs to its identity/permission/
+    // rate-limit owner. The requested operation has not been sent in this phase.
+    if (!signal.aborted && error instanceof PrereadError && failure && typeof failure === 'object' &&
+      'status' in failure && typeof failure.status === 'number' && failure.status >= 400 && failure.status < 500) {
+      const status = failure.status;
+      const problem = 'problem' in failure && failure.problem && typeof failure.problem === 'object'
+        ? failure.problem : {};
+      const safe: Record<string, string> = {};
+      for (const field of ['error', 'code', 'type', 'title', 'detail', 'message']) {
+        const value = Reflect.get(problem, field);
+        if (typeof value === 'string') safe[field] = value;
+      }
+      const code = safe.code ?? (status === 401 ? 'web_unauthorized' : status === 403 ? 'web_forbidden'
+        : status === 429 ? 'web_rate_limited' : 'web_preread_refused');
+      const headers = new Headers({ 'cache-control': 'no-store' });
+      if ('retryAfter' in failure && typeof failure.retryAfter === 'string') headers.set('retry-after', failure.retryAfter);
+      if ('authenticate' in failure && typeof failure.authenticate === 'string') headers.set('www-authenticate', failure.authenticate);
+      return Response.json({ ...safe, code, phase: failedPhase, attempts: 0,
+        retry: status === 429 ? 'safe' : 'none',
+        receipt: request.method !== 'GET' && !bodyRead ? 'not-sent' : 'not-applicable' }, { status, headers });
+    }
+    const reason = signal.aborted ? 'cancelled' : failure instanceof ServerTransportError ? failure.reason :
+      Date.now() >= deadlineAt ? 'deadline' : 'unavailable';
+    const write = request.method !== 'GET' && !bodyRead;
+    const sent = failedPhase === 'main' && (!(failure instanceof ServerTransportError) || failure.attempts > 0);
+    const retryAfter = failure && typeof failure === 'object' && 'retryAfter' in failure &&
+      typeof failure.retryAfter === 'string' ? failure.retryAfter : '5';
     return Response.json(
-      { error: 'Main is unavailable' },
-      { status: 503, headers: { 'retry-after': '5' } },
+      { error: 'Main is unavailable', code: `web_${reason}`, phase: failedPhase,
+        transportPhase: failure instanceof ServerTransportError ? failure.phase : undefined,
+        attempts: failure instanceof ServerTransportError ? failure.attempts : 0,
+        retry: reason === 'cancelled' ? 'none' : write && sent
+          ? headers.has('idempotency-key') ? 'same-idempotency-key' : 'check-receipt' : 'safe',
+        receipt: write ? sent ? 'unknown' : 'not-sent' : 'not-applicable',
+        ...(failure && typeof failure === 'object' && !(failure instanceof Error) ? { upstream: failure } : {}) },
+      { status: 503, headers: { 'cache-control': 'no-store', ...(reason !== 'cancelled' ? { 'retry-after': retryAfter } : {}) } },
     );
   }
   if (writesLanguages && response.ok) forgetReadingLanguages(input.accessToken);

@@ -24,10 +24,22 @@ function escapeHtml(value: string): string {
  * The Worker entry executes in the RSC environment: pre-shell HTML must not
  * import react-dom/server, whose react-server export deliberately throws. */
 export async function addressFailureResponse(url: URL, locale: UiLocale,
-  status: 404 | 410 | 429 | 503, retryAfter?: string): Promise<Response> {
-  const { data: t } = await getTranslation('shell', [locale]);
+  status: 400 | 404 | 409 | 410 | 422 | 429 | 503, retryAfter?: string): Promise<Response> {
+  const [{ data: t }, { data: page }] = await Promise.all([
+    getTranslation('shell', [locale]), getTranslation('workPage', [locale]),
+  ]);
   const missing = status === 404 || status === 410;
+  const restart = status === 400 || status === 409;
+  const task = new URL(url);
+  if (restart) {
+    task.searchParams.delete('after');
+    const parents = task.searchParams.getAll('parent');
+    if (parents.length !== 1 || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(parents[0]!))
+      task.searchParams.delete('parent');
+  }
   const title = missing ? t.notFoundTitle : t.errorTitle;
+  const description = missing ? t.notFoundBody : status === 400 ? page.invalid :
+    status === 409 ? page.moved : status === 422 ? page.budget : t.errorBody;
   const link = (href: string, label: string) => `<a href="${escapeHtml(href)}">${escapeHtml(label)}</a>`;
   // The same decorative Lucide search-x / triangle-alert paths, without a React import.
   const icon = missing
@@ -39,14 +51,14 @@ export async function addressFailureResponse(url: URL, locale: UiLocale,
 <style>html{color-scheme:light dark;font:100%/1.6 system-ui}body{margin:0}main{max-width:42rem;margin:12vh auto;padding:1.5rem;overflow-wrap:anywhere}svg{width:2rem;height:2rem}h1{font-size:1.75rem}a{display:inline-block;margin:.5rem 1rem .5rem 0;text-underline-offset:.2em}a:focus-visible{outline:3px solid;outline-offset:4px}</style>
 </head><body><main><div data-slot="empty-state"${missing ? '' : ' role="alert"'}>
 <span><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icon}</svg></span>
-<h1>${escapeHtml(title)}</h1><p>${escapeHtml(missing ? t.notFoundBody : t.errorBody)}</p><div>
-${missing ? '' : link(url.pathname + url.search, t.retry)}
+<h1>${escapeHtml(title)}</h1><p>${escapeHtml(description)}</p><div>
+${missing ? '' : link(task.pathname + task.search, restart ? page.firstPage : t.retry)}
 ${link(`/${locale}/discover${url.searchParams.get('type') === 'lists' ? '?type=lists' : ''}`, t.searchWorks)}
 ${link(`/${locale}`, t.backHome)}
 </div></div></main></body></html>`;
   return new Response(document, { status, headers: { 'content-type': 'text/html; charset=utf-8',
     'cache-control': 'no-store', 'x-robots-tag': 'noindex', 'referrer-policy': 'no-referrer',
-    ...(!missing ? { 'retry-after': retryAfter ?? '5' } : {}) } });
+    ...(!missing && retryAfter ? { 'retry-after': retryAfter } : status === 429 || status === 503 ? { 'retry-after': '5' } : {}) } });
 }
 
 /** vinext normalizes trailing slashes before middleware. Resolve addressed
