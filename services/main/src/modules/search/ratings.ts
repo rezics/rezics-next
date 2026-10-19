@@ -42,7 +42,7 @@ export async function searchPageRatings(session: WorkReadSession,
   });
   const readBatch = () => queryWorkStandingRatings(session.deps.environment, {
       readRatingAggregateInventory: (ctx, main, signal) => access.readRatingAggregateInventory!(ctx, main, signal),
-      checkRatingAggregateFence: (generation, signal) => access.checkRatingAggregateFence!(generation, signal),
+      checkRatingAggregateFence: (generation, signal, cuts) => access.checkRatingAggregateFence!(generation, signal, cuts),
     }, { targets: completeTargets, kind: realm ? 'realm' : 'global', context: selected, preview: true });
   const batch = await readBatch();
   const selectedBatch = (values: typeof batch) => completeTargets.map(target => {

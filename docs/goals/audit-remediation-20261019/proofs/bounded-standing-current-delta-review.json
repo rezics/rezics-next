@@ -1,0 +1,1189 @@
+{
+  "schemaVersion": 1,
+  "kind": "independent-scoped-source-review",
+  "recordedAt": "2026-10-19T11:51:39.728855+00:00",
+  "worker": "G-2858",
+  "goal": "audit-remediation-20261019",
+  "managerSession": "goal-audit-remediation-20261019",
+  "reviewer": {
+    "engine": "codex-1",
+    "model": "gpt-6.1-sol",
+    "effort": "xhigh",
+    "profile": "codex-1/gpt-6.1-sol/xhigh; no account fallback; no nested agents",
+    "profileEvidence": "Assigned worker session and dispatch profile; one independent source review in this session.",
+    "accountFallbackUsed": false,
+    "nestedAgentsUsed": 0,
+    "externalReviewerInvocations": 0
+  },
+  "candidate": {
+    "commit": "79aa206d48b218e0955618f425886e0cd591df87",
+    "tree": "b290d342a2df90bd97992e69789ad9cac389a7c1",
+    "base": "8a40424aa15eb5387183a1fa15fa3f24758b45c9",
+    "referenceWorktree": ".temp/worktrees/site-rating-bounded-main-candidate",
+    "readMethod": "Immutable Git objects read from the G-2858 worktree; references in other worktrees were read only.",
+    "manifest": ".temp/audit-remediation-20261019/two-hour-sprint/site-rating-bounded-candidate/full-file-blob-manifest.json",
+    "manifestSha256": "0ee77a1bbf40cf61780b42125d5b6ea02d3eeb6196317ae05a0115fb73e69ef7",
+    "ownedUnionPathsVerified": 32,
+    "allBlobAndSha256PinsVerified": true
+  },
+  "acceptanceVerbatim": [
+    "8/9/更多Official Zone及100/101/更多Work评级均得到正确契约化结果。",
+    "采用分页/增量聚合/明确lower-bound表达读取边界，不以合法第9/101个对象导致整体失败。"
+  ],
+  "verdict": {
+    "scopedSourceDelta": "ACCEPT",
+    "summary": "No new blocking source defect found in the nine-path bounded correction, the two numeric casts, or the specified current-main pool/schema integration. Acceptance is confined to this source delta.",
+    "newBlockingFindings": 0,
+    "exactCandidateRuntimeQualified": false,
+    "runtimeDependencyDisposition": "The separate G2762/b8ec request-budget correction is absent from the candidate. Preserve its independent ownership and account for it before claiming composed runtime equivalence or execution qualification.",
+    "originalPublicAssertionsPassedByThisReview": false,
+    "individualLandingAuthorized": false,
+    "originalClassClosed": false
+  },
+  "inspectedCorrection": [
+    {
+      "path": "services/main/migrations/access/2607_standing_rating_bounded_progress.sql",
+      "blob": "92ca05e467c3b03be3570330e05508055286d71c",
+      "sha256": "96ee20fb3ce837f1f89354f7906974cb1cebc596b81fa50d94396ad24c25356a",
+      "scope": "bounded correction hunks and necessary enclosing code",
+      "hunkComparisonBase": "e6af19aa60526ba571f14861501812482347c592",
+      "ownedHunks": [
+        {
+          "candidateStartLine": 1,
+          "candidateLineCount": 428
+        }
+      ],
+      "byteIdenticalAtPublishedAndExecutedPins": true
+    },
+    {
+      "path": "services/main/src/modules/rating/README.md",
+      "blob": "2bf2579622aab26ee53f159a9099068130c51a38",
+      "sha256": "81fca826bd0758d7eb035be7bcd2dc4e6bd126aab4fb8c4aed9129e25071b1a2",
+      "scope": "bounded correction hunks and necessary enclosing code",
+      "hunkComparisonBase": "e6af19aa60526ba571f14861501812482347c592",
+      "ownedHunks": [
+        {
+          "candidateStartLine": 91,
+          "candidateLineCount": 7
+        },
+        {
+          "candidateStartLine": 111,
+          "candidateLineCount": 5
+        },
+        {
+          "candidateStartLine": 119,
+          "candidateLineCount": 3
+        },
+        {
+          "candidateStartLine": 133,
+          "candidateLineCount": 10
+        },
+        {
+          "candidateStartLine": 145,
+          "candidateLineCount": 7
+        },
+        {
+          "candidateStartLine": 159,
+          "candidateLineCount": 4
+        },
+        {
+          "candidateStartLine": 165,
+          "candidateLineCount": 2
+        },
+        {
+          "candidateStartLine": 172,
+          "candidateLineCount": 1
+        },
+        {
+          "candidateStartLine": 181,
+          "candidateLineCount": 8
+        }
+      ],
+      "byteIdenticalAtPublishedAndExecutedPins": true
+    },
+    {
+      "path": "services/main/src/modules/rating/aggregate-inventory.ts",
+      "blob": "cfe8b7195dea57b713c3c478fbc14032d952218f",
+      "sha256": "a1735be57b5902d00829b1ed3fa3313cc7de5241f0462b9bca83758ea55dd8dd",
+      "scope": "bounded correction hunks and necessary enclosing code",
+      "hunkComparisonBase": "e6af19aa60526ba571f14861501812482347c592",
+      "ownedHunks": [
+        {
+          "candidateStartLine": 281,
+          "candidateLineCount": 2
+        },
+        {
+          "candidateStartLine": 304,
+          "candidateLineCount": 1
+        },
+        {
+          "candidateStartLine": 307,
+          "candidateLineCount": 2
+        },
+        {
+          "candidateStartLine": 310,
+          "candidateLineCount": 4
+        },
+        {
+          "candidateStartLine": 315,
+          "candidateLineCount": 3
+        },
+        {
+          "candidateStartLine": 322,
+          "candidateLineCount": 2
+        },
+        {
+          "candidateStartLine": 566,
+          "candidateLineCount": 3
+        },
+        {
+          "candidateStartLine": 571,
+          "candidateLineCount": 1
+        },
+        {
+          "candidateStartLine": 574,
+          "candidateLineCount": 5
+        },
+        {
+          "candidateStartLine": 582,
+          "candidateLineCount": 1
+        },
+        {
+          "candidateStartLine": 720,
+          "candidateLineCount": 6
+        },
+        {
+          "candidateStartLine": 734,
+          "candidateLineCount": 1
+        }
+      ],
+      "byteIdenticalAtPublishedAndExecutedPins": true
+    },
+    {
+      "path": "services/main/src/modules/rating/standing-publication.ts",
+      "blob": "948088beb96f09f7cace5ef4b3a7732ec1acfbaa",
+      "sha256": "8c623292556fd00cf0881359d181a8947d6eef0a802b5273ee4fa5f09cdc8208",
+      "scope": "bounded correction hunks and necessary enclosing code",
+      "hunkComparisonBase": "e6af19aa60526ba571f14861501812482347c592",
+      "ownedHunks": [
+        {
+          "candidateStartLine": 24,
+          "candidateLineCount": 1
+        },
+        {
+          "candidateStartLine": 48,
+          "candidateLineCount": 5
+        },
+        {
+          "candidateStartLine": 56,
+          "candidateLineCount": 1
+        },
+        {
+          "candidateStartLine": 129,
+          "candidateLineCount": 1
+        }
+      ],
+      "byteIdenticalAtPublishedAndExecutedPins": true
+    },
+    {
+      "path": "services/main/src/modules/work/access-recovery-coverage.ts",
+      "blob": "1ebb4e18a19c36168730c5c340f3a92ed02ee65d",
+      "sha256": "71a7d070b82ebe41dc8f85cebb34a2d661132b0c1803acb1e534dda79f0613db",
+      "scope": "bounded correction hunks and necessary enclosing code",
+      "hunkComparisonBase": "e6af19aa60526ba571f14861501812482347c592",
+      "ownedHunks": [
+        {
+          "candidateStartLine": 730,
+          "candidateLineCount": 35
+        },
+        {
+          "candidateStartLine": 901,
+          "candidateLineCount": 4
+        }
+      ],
+      "byteIdenticalAtPublishedAndExecutedPins": true
+    },
+    {
+      "path": "services/main/src/modules/work/merge-command.ts",
+      "blob": "91cdf5dbffa45dbdf5e73100406a2760cef51ab7",
+      "sha256": "9e9f671b3c112420ee093e42bae6eada1a999014a01c6d55bfaa9e613f7562af",
+      "scope": "bounded correction hunks and necessary enclosing code",
+      "hunkComparisonBase": "e6af19aa60526ba571f14861501812482347c592",
+      "ownedHunks": [
+        {
+          "candidateStartLine": 44,
+          "candidateLineCount": 3
+        },
+        {
+          "candidateStartLine": 53,
+          "candidateLineCount": 1
+        }
+      ],
+      "byteIdenticalAtPublishedAndExecutedPins": true
+    },
+    {
+      "path": "services/main/tests/rating-standing-publication.test.ts",
+      "blob": "be7045318c8748dd3c5cdcb98d2be9c5b3c87684",
+      "sha256": "4b9cf9f6f9e581bf74d2ba8f5a6562e2c0a67bc19ccdc1d2eaa83950fce583bb",
+      "scope": "bounded correction hunks and necessary enclosing code",
+      "hunkComparisonBase": "e6af19aa60526ba571f14861501812482347c592",
+      "ownedHunks": [
+        {
+          "candidateStartLine": 23,
+          "candidateLineCount": 1
+        },
+        {
+          "candidateStartLine": 39,
+          "candidateLineCount": 4
+        },
+        {
+          "candidateStartLine": 123,
+          "candidateLineCount": 17
+        },
+        {
+          "candidateStartLine": 226,
+          "candidateLineCount": 2
+        },
+        {
+          "candidateStartLine": 230,
+          "candidateLineCount": 1
+        }
+      ],
+      "byteIdenticalAtPublishedAndExecutedPins": true
+    },
+    {
+      "path": "tests/qa/integration/rating-standing-bounded-work.test.ts",
+      "blob": "7a954c16c2259aa54fe8b5c1b20a6251e0c21284",
+      "sha256": "c6c10c0609b746cfb99cf9a644bc8b6700786545ab7c38feb28408d7d398a101",
+      "scope": "bounded correction hunks and necessary enclosing code",
+      "hunkComparisonBase": "e6af19aa60526ba571f14861501812482347c592",
+      "ownedHunks": [
+        {
+          "candidateStartLine": 1,
+          "candidateLineCount": 164
+        }
+      ],
+      "byteIdenticalAtPublishedAndExecutedPins": true
+    },
+    {
+      "path": "tests/qa/integration/rating-standing-components.test.ts",
+      "blob": "17b9bf6eb1b4281a8d4081a1dd90c844dce5290a",
+      "sha256": "030daa5d797f2e1153238ca546ea39f7d226ca6650fc60f84939f5db9feead40",
+      "scope": "bounded correction hunks and necessary enclosing code",
+      "hunkComparisonBase": "e6af19aa60526ba571f14861501812482347c592",
+      "ownedHunks": [
+        {
+          "candidateStartLine": 12,
+          "candidateLineCount": 3
+        },
+        {
+          "candidateStartLine": 22,
+          "candidateLineCount": 15
+        },
+        {
+          "candidateStartLine": 42,
+          "candidateLineCount": 5
+        },
+        {
+          "candidateStartLine": 114,
+          "candidateLineCount": 33
+        },
+        {
+          "candidateStartLine": 155,
+          "candidateLineCount": 34
+        },
+        {
+          "candidateStartLine": 190,
+          "candidateLineCount": 4
+        },
+        {
+          "candidateStartLine": 199,
+          "candidateLineCount": 19
+        },
+        {
+          "candidateStartLine": 378,
+          "candidateLineCount": 1
+        }
+      ],
+      "byteIdenticalAtPublishedAndExecutedPins": true
+    }
+  ],
+  "narrowCompatibilityInspection": [
+    {
+      "path": "services/main/migrations/access/2045_standing_rating_components.sql",
+      "blob": "9f4f8785c05a66f6056c8c577ae3420a304de195",
+      "scope": "Only the two UNION NULL::numeric casts; unchanged migration coverage reused from G2818.",
+      "hunkComparisonBase": "995391774353902f3a636ce1978080a35bbbb53c",
+      "ownedHunks": [
+        {
+          "candidateStartLine": 52,
+          "candidateLineCount": 1
+        },
+        {
+          "candidateStartLine": 57,
+          "candidateLineCount": 1
+        }
+      ]
+    },
+    {
+      "path": "services/main/src/composition.ts",
+      "blob": "4543b05f915f5c122f9e21e98ab542628a04ecea",
+      "scope": "Only material integration of reservedTransactionPool import and entry call before ordinary owners. Exactly the G2818-reviewed whole-file blob; unrelated wave archive/retained-field additions are absent.",
+      "hunkComparisonBase": "8a40424aa15eb5387183a1fa15fa3f24758b45c9",
+      "ownedHunks": [
+        {
+          "candidateStartLine": 211,
+          "candidateLineCount": 1
+        },
+        {
+          "candidateStartLine": 241,
+          "candidateLineCount": 1
+        }
+      ]
+    },
+    {
+      "path": "generated/openapi/main/public.json",
+      "blob": "872688c08c91bc5fd0640ce45ad4fe6662a2a0f1",
+      "scope": "Only global aggregate and Realm/Global synthesis count schemas: 0 additions and 12 deletions of maximum:100; all peer bytes retained.",
+      "hunkComparisonBase": "8a40424aa15eb5387183a1fa15fa3f24758b45c9",
+      "ownedHunks": [
+        {
+          "candidateStartLine": 264343,
+          "candidateLineCount": 0
+        },
+        {
+          "candidateStartLine": 264348,
+          "candidateLineCount": 0
+        },
+        {
+          "candidateStartLine": 264367,
+          "candidateLineCount": 0
+        },
+        {
+          "candidateStartLine": 264502,
+          "candidateLineCount": 0
+        },
+        {
+          "candidateStartLine": 630115,
+          "candidateLineCount": 0
+        },
+        {
+          "candidateStartLine": 630120,
+          "candidateLineCount": 0
+        },
+        {
+          "candidateStartLine": 630135,
+          "candidateLineCount": 0
+        },
+        {
+          "candidateStartLine": 630241,
+          "candidateLineCount": 0
+        },
+        {
+          "candidateStartLine": 630291,
+          "candidateLineCount": 0
+        },
+        {
+          "candidateStartLine": 630296,
+          "candidateLineCount": 0
+        },
+        {
+          "candidateStartLine": 630311,
+          "candidateLineCount": 0
+        },
+        {
+          "candidateStartLine": 630417,
+          "candidateLineCount": 0
+        }
+      ]
+    }
+  ],
+  "reusedIndependentCoverage": {
+    "count": 21,
+    "basis": "Candidate whole-file equality to independently reviewed source blobs; mapping and equality verified, prior review reasoning was not re-reviewed.",
+    "entries": [
+      {
+        "path": "services/main/migrations/access/2077_standing_rating_publication.sql",
+        "blob": "e5e814eaf7ae0cc95e8a86e0327e661b337b494f",
+        "coverage": [
+          {
+            "worker": "G2818",
+            "sourcePin": "995391774353902f3a636ce1978080a35bbbb53c"
+          }
+        ]
+      },
+      {
+        "path": "services/main/migrations/access/2606_standing_rating_affected_cuts.sql",
+        "blob": "b056050edeb03283ba067392c912f5b718233a4f",
+        "coverage": [
+          {
+            "worker": "G2834",
+            "sourcePin": "e6af19aa60526ba571f14861501812482347c592"
+          }
+        ]
+      },
+      {
+        "path": "services/main/src/app.ts",
+        "blob": "92de922df6af3cf952ca608b47abf11265d9c71c",
+        "coverage": [
+          {
+            "worker": "G2818",
+            "sourcePin": "995391774353902f3a636ce1978080a35bbbb53c"
+          }
+        ]
+      },
+      {
+        "path": "services/main/src/composition.ts",
+        "blob": "4543b05f915f5c122f9e21e98ab542628a04ecea",
+        "coverage": [
+          {
+            "worker": "G2818",
+            "sourcePin": "995391774353902f3a636ce1978080a35bbbb53c"
+          }
+        ]
+      },
+      {
+        "path": "services/main/src/infrastructure/pool-reservation.ts",
+        "blob": "7efb1b951a883aebebb01c992f2560dd295aa5d4",
+        "coverage": [
+          {
+            "worker": "G2818",
+            "sourcePin": "995391774353902f3a636ce1978080a35bbbb53c"
+          }
+        ]
+      },
+      {
+        "path": "services/main/src/modules/access/admission.ts",
+        "blob": "aef348515d8573ec066c9c765af01139151d719c",
+        "coverage": [
+          {
+            "worker": "G2834",
+            "sourcePin": "e6af19aa60526ba571f14861501812482347c592"
+          }
+        ]
+      },
+      {
+        "path": "services/main/src/modules/discovery/source.ts",
+        "blob": "9006f95b049fda51a24693222d6b96013729e61f",
+        "coverage": [
+          {
+            "worker": "G2834",
+            "sourcePin": "e6af19aa60526ba571f14861501812482347c592"
+          }
+        ]
+      },
+      {
+        "path": "services/main/src/modules/identity-merge/runtime.ts",
+        "blob": "fa251d74845e3d943cb8bc164386e8fc079917f5",
+        "coverage": [
+          {
+            "worker": "G2818",
+            "sourcePin": "995391774353902f3a636ce1978080a35bbbb53c"
+          }
+        ]
+      },
+      {
+        "path": "services/main/src/modules/onboarding/suggestions.ts",
+        "blob": "db788e0921171a11bea6bf2eedbd0e5e29684452",
+        "coverage": [
+          {
+            "worker": "G2806",
+            "sourcePin": "9758dbecd9b6cfd64fa1b4b7347484c2093336ce"
+          },
+          {
+            "worker": "G2818",
+            "sourcePin": "995391774353902f3a636ce1978080a35bbbb53c"
+          }
+        ]
+      },
+      {
+        "path": "services/main/src/modules/rating/global-aggregate.ts",
+        "blob": "c15054e1daca902c33fd3099b79f5026570239fa",
+        "coverage": [
+          {
+            "worker": "G2834",
+            "sourcePin": "e6af19aa60526ba571f14861501812482347c592"
+          }
+        ]
+      },
+      {
+        "path": "services/main/src/modules/rating/global-api.ts",
+        "blob": "c037625062cf3fab71373b44a647e7c16fd1b26f",
+        "coverage": [
+          {
+            "worker": "G2806",
+            "sourcePin": "9758dbecd9b6cfd64fa1b4b7347484c2093336ce"
+          },
+          {
+            "worker": "G2818",
+            "sourcePin": "995391774353902f3a636ce1978080a35bbbb53c"
+          }
+        ]
+      },
+      {
+        "path": "services/main/src/modules/rating/legacy-reconstruction.ts",
+        "blob": "24acc327302a61ca97f10a35cec9a412d27d2b03",
+        "coverage": [
+          {
+            "worker": "G2806",
+            "sourcePin": "9758dbecd9b6cfd64fa1b4b7347484c2093336ce"
+          },
+          {
+            "worker": "G2818",
+            "sourcePin": "995391774353902f3a636ce1978080a35bbbb53c"
+          }
+        ]
+      },
+      {
+        "path": "services/main/src/modules/rating/merge-handler.ts",
+        "blob": "4fe53f11ac8a950628923c63448876e623fc0e29",
+        "coverage": [
+          {
+            "worker": "G2834",
+            "sourcePin": "e6af19aa60526ba571f14861501812482347c592"
+          }
+        ]
+      },
+      {
+        "path": "services/main/src/modules/rating/synthesis.ts",
+        "blob": "b1cdd5e7717c8753a66931090dbfb9b9e705a2c2",
+        "coverage": [
+          {
+            "worker": "G2806",
+            "sourcePin": "9758dbecd9b6cfd64fa1b4b7347484c2093336ce"
+          },
+          {
+            "worker": "G2818",
+            "sourcePin": "995391774353902f3a636ce1978080a35bbbb53c"
+          }
+        ]
+      },
+      {
+        "path": "services/main/src/modules/search/ratings.ts",
+        "blob": "7ca12c25d754119a04852e523147131942b315b8",
+        "coverage": [
+          {
+            "worker": "G2834",
+            "sourcePin": "e6af19aa60526ba571f14861501812482347c592"
+          }
+        ]
+      },
+      {
+        "path": "services/main/src/modules/work/read-rating.ts",
+        "blob": "c235f3781327cb8f0452aa9997a0245ed71ed3da",
+        "coverage": [
+          {
+            "worker": "G2834",
+            "sourcePin": "e6af19aa60526ba571f14861501812482347c592"
+          }
+        ]
+      },
+      {
+        "path": "services/main/src/rating-reconstruction.ts",
+        "blob": "4309fce77d7e5e2510dd86bbab30844380c3a1dc",
+        "coverage": [
+          {
+            "worker": "G2818",
+            "sourcePin": "995391774353902f3a636ce1978080a35bbbb53c"
+          }
+        ]
+      },
+      {
+        "path": "services/main/tests/onboarding-concepts.test.ts",
+        "blob": "de2a5f969650343cc01193d397805cec18d19bec",
+        "coverage": [
+          {
+            "worker": "G2806",
+            "sourcePin": "9758dbecd9b6cfd64fa1b4b7347484c2093336ce"
+          },
+          {
+            "worker": "G2818",
+            "sourcePin": "995391774353902f3a636ce1978080a35bbbb53c"
+          }
+        ]
+      },
+      {
+        "path": "services/main/tests/rating-population-boundaries.test.ts",
+        "blob": "237d9a2574b5d35127fdbbbb60d203e4f34619a8",
+        "coverage": [
+          {
+            "worker": "G2834",
+            "sourcePin": "e6af19aa60526ba571f14861501812482347c592"
+          }
+        ]
+      },
+      {
+        "path": "services/main/tests/rating-seal-value.test.ts",
+        "blob": "8cb2bcb2b11e84c15ec6aa28b667dd37d49d4982",
+        "coverage": [
+          {
+            "worker": "G2806",
+            "sourcePin": "9758dbecd9b6cfd64fa1b4b7347484c2093336ce"
+          },
+          {
+            "worker": "G2818",
+            "sourcePin": "995391774353902f3a636ce1978080a35bbbb53c"
+          }
+        ]
+      },
+      {
+        "path": "tests/qa/integration/rating-standing-availability.test.ts",
+        "blob": "238e3d49fa44f9563013a1ac38ce91bbe4ceb41a",
+        "coverage": [
+          {
+            "worker": "G2834",
+            "sourcePin": "e6af19aa60526ba571f14861501812482347c592"
+          }
+        ]
+      }
+    ],
+    "overlap": "composition.ts is one of the 21 reused blobs and also receives the requested narrow current-main integration check. Thus 9 new correction files + casts + generated schema + 21 reused blobs = 32 paths."
+  },
+  "necessaryUnchangedContractsAndCallers": [
+    {
+      "path": "services/main/src/infrastructure/pool-reservation.ts",
+      "candidateBlob": "7efb1b951a883aebebb01c992f2560dd295aa5d4",
+      "inspection": "Only directly relevant definitions/call sites; not a repeated whole-file review."
+    },
+    {
+      "path": "services/main/src/modules/identity-merge/runtime.ts",
+      "candidateBlob": "fa251d74845e3d943cb8bc164386e8fc079917f5",
+      "inspection": "Only directly relevant definitions/call sites; not a repeated whole-file review."
+    },
+    {
+      "path": "services/main/migrations/access/029_rating_aggregate_inventory.sql",
+      "candidateBlob": "2086358cb503b094dbfe5e99b4f32ea3e752adca",
+      "inspection": "Only directly relevant definitions/call sites; not a repeated whole-file review."
+    },
+    {
+      "path": "services/main/migrations/access/971_identity_merge_items.sql",
+      "candidateBlob": "f09970652dbe8eb8761b9801b92f778403f1481b",
+      "inspection": "Only directly relevant definitions/call sites; not a repeated whole-file review."
+    },
+    {
+      "path": "services/main/migrations/access/985_bounded_rating_merge_inventory.sql",
+      "candidateBlob": "813aa355dcec663cc5dcf1f0103f29df19760841",
+      "inspection": "Only directly relevant definitions/call sites; not a repeated whole-file review."
+    },
+    {
+      "path": "services/main/migrations/access/2075_work_submission_pages.sql",
+      "candidateBlob": "5a0d06c2c2fcacc84b798be045c564c162795de0",
+      "inspection": "Only directly relevant definitions/call sites; not a repeated whole-file review."
+    },
+    {
+      "path": "services/main/migrations/access/2077_standing_rating_publication.sql",
+      "candidateBlob": "e5e814eaf7ae0cc95e8a86e0327e661b337b494f",
+      "inspection": "Only directly relevant definitions/call sites; not a repeated whole-file review."
+    },
+    {
+      "path": "services/main/migrations/access/2606_standing_rating_affected_cuts.sql",
+      "candidateBlob": "b056050edeb03283ba067392c912f5b718233a4f",
+      "inspection": "Only directly relevant definitions/call sites; not a repeated whole-file review."
+    },
+    {
+      "path": "services/main/src/modules/rating/global-api.ts",
+      "candidateBlob": "c037625062cf3fab71373b44a647e7c16fd1b26f",
+      "inspection": "Only directly relevant definitions/call sites; not a repeated whole-file review."
+    },
+    {
+      "path": "services/main/src/modules/rating/global-aggregate.ts",
+      "candidateBlob": "c15054e1daca902c33fd3099b79f5026570239fa",
+      "inspection": "Only directly relevant definitions/call sites; not a repeated whole-file review."
+    },
+    {
+      "path": "services/main/src/modules/work/read-rating.ts",
+      "candidateBlob": "c235f3781327cb8f0452aa9997a0245ed71ed3da",
+      "inspection": "Only directly relevant definitions/call sites; not a repeated whole-file review."
+    },
+    {
+      "path": "tests/qa/integration/rating-global-synthesis.test.ts",
+      "candidateBlob": "6509e92dfa57236872694ace38d23ab8d67a541e",
+      "inspection": "Only directly relevant definitions/call sites; not a repeated whole-file review."
+    },
+    {
+      "path": "services/main/src/infrastructure/fuseki.ts",
+      "candidateBlob": "2c24b3c6ee648792ef1bd1618605a3c96c8feb3e",
+      "inspection": "Only directly relevant definitions/call sites; not a repeated whole-file review."
+    },
+    {
+      "path": "services/main/src/modules/realm-directory/worker.ts",
+      "candidateBlob": "d3c51cf71d3cbc1bcf329c913350f97d297815f0",
+      "inspection": "Only directly relevant definitions/call sites; not a repeated whole-file review."
+    }
+  ],
+  "newSourceDefectFindings": [],
+  "independentlyInspectedSourceObservations": [
+    {
+      "id": "bounded-preparation",
+      "severity": "info",
+      "locations": [
+        {
+          "path": "services/main/src/modules/rating/standing-publication.ts",
+          "startLine": 19,
+          "endLine": 60
+        },
+        {
+          "path": "services/main/src/modules/work/merge-command.ts",
+          "startLine": 42,
+          "endLine": 54
+        },
+        {
+          "path": "services/main/migrations/access/2607_standing_rating_bounded_progress.sql",
+          "startLine": 126,
+          "endLine": 191
+        }
+      ],
+      "conclusion": "An independent Access transaction commits the immutable task cut and at most 100 discovery units. The transition row is locked before its progress row. Preparing returns only after COMMIT, and both receipt replay and new graph delivery handle that state. New graph delivery refuses finished or unprepared cuts; the graph WHERE still binds both Main Versions and exact revision/authority/disclosure guards.",
+      "limit": "Static control-flow inspection; not a new concurrent identity or public availability execution."
+    },
+    {
+      "id": "revocation-and-continuation",
+      "severity": "info",
+      "locations": [
+        {
+          "path": "services/main/migrations/access/2607_standing_rating_bounded_progress.sql",
+          "startLine": 108,
+          "endLine": 124
+        },
+        {
+          "path": "services/main/migrations/access/2607_standing_rating_bounded_progress.sql",
+          "startLine": 158,
+          "endLine": 190
+        },
+        {
+          "path": "services/main/migrations/access/2607_standing_rating_bounded_progress.sql",
+          "startLine": 193,
+          "endLine": 285
+        },
+        {
+          "path": "services/main/migrations/access/2607_standing_rating_bounded_progress.sql",
+          "startLine": 287,
+          "endLine": 335
+        }
+      ],
+      "conclusion": "A retained original-to-revoker binding precedes graph effects. Preparation marks lineage and enumerates children/components with indexed durable cursors. Newly delivered descendants inherit revocation and register their own hold/cleanup. Completion permits metadata progress but stops before projection deletion. Cleanup charges deletion and exhausted probes to the same page, retires exhausted walk nodes, and only then releases component holds. Revocation ancestry and the identity journal remain retained; the recursive read/cleanup APIs are dropped.",
+      "limit": "The completion trigger can perform up to 100 metadata units in addition to its fixed completion bookkeeping; this is not a promise of 100 total SQL statements."
+    },
+    {
+      "id": "inventory-index-probes",
+      "severity": "info",
+      "locations": [
+        {
+          "path": "services/main/src/modules/rating/aggregate-inventory.ts",
+          "startLine": 277,
+          "endLine": 324
+        },
+        {
+          "path": "services/main/src/modules/rating/aggregate-inventory.ts",
+          "startLine": 549,
+          "endLine": 588
+        },
+        {
+          "path": "services/main/migrations/access/029_rating_aggregate_inventory.sql",
+          "startLine": 9,
+          "endLine": 22
+        },
+        {
+          "path": "services/main/migrations/access/2045_standing_rating_components.sql",
+          "startLine": 20,
+          "endLine": 46
+        }
+      ],
+      "conclusion": "Both candidate branches retain their 101-row bound before precedence/origin checks. Native precedence and origin reads seek (context,main_version,slot) before checking principal/release identity. Correlated admission probes use the admission primary key and OFFSET 0. The large-component witness starts at the unique head admission and seeks one component member by its primary-key prefix before verifying exact principal, origin, admission and known value. Bounded probes retain missing-origin and identity validation failures rather than silently counting absent evidence."
+    },
+    {
+      "id": "publication-and-final-fence",
+      "severity": "info",
+      "locations": [
+        {
+          "path": "services/main/migrations/access/2607_standing_rating_bounded_progress.sql",
+          "startLine": 59,
+          "endLine": 105
+        },
+        {
+          "path": "services/main/migrations/access/2607_standing_rating_bounded_progress.sql",
+          "startLine": 347,
+          "endLine": 425
+        },
+        {
+          "path": "services/main/src/modules/rating/aggregate-inventory.ts",
+          "startLine": 666,
+          "endLine": 738
+        }
+      ],
+      "conclusion": "Contribution mutations advance the component revision. Hold membership and registration increment a local pending/revision cut atomically; release advances it again. Publication materializes component/cut metadata once and the final fresh SELECT rechecks every selected generation and pending flag with recovery generation. Ordered one-row seeks check equality after LIMIT, including absent component/cut keys. The two four-statement snapshots plus one fence preserve nine SQL statements.",
+      "limit": "Origin delivery readiness remains a distinct inherited branch, described below."
+    },
+    {
+      "id": "planner-setting-scope",
+      "severity": "info",
+      "locations": [
+        {
+          "path": "services/main/migrations/access/2607_standing_rating_bounded_progress.sql",
+          "startLine": 394,
+          "endLine": 425
+        }
+      ],
+      "conclusion": "enable_bitmapscan=off and enable_seqscan=off are CREATE FUNCTION SET attributes on rating_standing_publication_state. They apply while that helper executes and restore the caller setting on return; there is no ALTER SYSTEM, role/database default or session-wide runtime SET in this correction. Readiness, inventory metadata and final fences all use that same helper.",
+      "limit": "The integration tests configure auto_explain on private measurement sessions; those test-only session settings do not alter production policy."
+    },
+    {
+      "id": "recovery-classification",
+      "severity": "info",
+      "locations": [
+        {
+          "path": "services/main/src/modules/work/access-recovery-coverage.ts",
+          "startLine": 730,
+          "endLine": 764
+        },
+        {
+          "path": "services/main/src/modules/work/access-recovery-coverage.ts",
+          "startLine": 901,
+          "endLine": 904
+        },
+        {
+          "path": "services/main/tests/rating-standing-publication.test.ts",
+          "startLine": 225,
+          "endLine": 242
+        },
+        {
+          "path": "services/main/migrations/access/2075_work_submission_pages.sql",
+          "startLine": 12,
+          "endLine": 27
+        }
+      ],
+      "conclusion": "All seven new progress/cut/walk/revocation/registration/bootstrap relations are authority-cut entries with writer, reason and coherent restore/reconstruction dependencies. The retained submission Work cursor revision is separately classified. Unknown relations still refuse the catalog guard; no relation is authorized to be cleared alone to reopen publication.",
+      "limit": "Classification and guard source are inspected; a genuine corpus backup/isolated restore is not established here."
+    },
+    {
+      "id": "contracts-budgets-and-evidence",
+      "severity": "info",
+      "locations": [
+        {
+          "path": "services/main/src/modules/rating/global-api.ts",
+          "startLine": 8,
+          "endLine": 12
+        },
+        {
+          "path": "services/main/src/modules/rating/global-api.ts",
+          "startLine": 49,
+          "endLine": 86
+        },
+        {
+          "path": "services/main/src/modules/rating/global-aggregate.ts",
+          "startLine": 25,
+          "endLine": 28
+        },
+        {
+          "path": "services/main/src/modules/rating/global-aggregate.ts",
+          "startLine": 146,
+          "endLine": 226
+        },
+        {
+          "path": "services/main/src/modules/rating/aggregate-inventory.ts",
+          "startLine": 13,
+          "endLine": 35
+        },
+        {
+          "path": "services/main/src/modules/rating/standing-publication.ts",
+          "startLine": 70,
+          "endLine": 137
+        },
+        {
+          "path": "tests/qa/integration/rating-global-synthesis.test.ts",
+          "startLine": 218,
+          "endLine": 268
+        }
+      ],
+      "conclusion": "Population remains an integer with a separate populationPolicy literal; count, withdrawnCount and histogram entries share the unbounded nonnegative count contract. Scale/bin limits, 101-head sentinel, 100-item continuation/reconstruction bound, one graph call, graph/manifest bytes, deadlines and request cancellation remain. Existing graph receipt, digest, immutable-manifest, principal/scope and disclosure checks still gate the exact additive result. The unrelated experience aggregate schema is outside the twelve-deletion patch.",
+      "limit": "Source agreement and unchanged expectations do not establish frozen public Account/Zone outcomes."
+    },
+    {
+      "id": "tests-and-original-failures",
+      "severity": "info",
+      "locations": [
+        {
+          "path": "tests/qa/integration/rating-standing-components.test.ts",
+          "startLine": 114,
+          "endLine": 217
+        },
+        {
+          "path": "tests/qa/integration/rating-standing-bounded-work.test.ts",
+          "startLine": 21,
+          "endLine": 164
+        },
+        {
+          "path": "services/main/tests/rating-standing-publication.test.ts",
+          "startLine": 123,
+          "endLine": 139
+        }
+      ],
+      "conclusion": "Nested PostgreSQL plans are captured under the Access role, including helper work rather than a Function Scan output alone. The native 100/101/102/512/2048 assertions retain readiness<64, inventory<2000 and fence<128. The complete components test blob is identical to the original failing source 1d7743e8ae6bd4eba133542dc2a4684758072919. The separate mixed fixture checks bounded index rows/loops/sorts rather than claiming the native total-work threshold. The lineage fixture is explicitly private native evidence; the owner preparation test is a transport mock, not a public outcome test."
+    },
+    {
+      "id": "typed-unknown-backfill",
+      "severity": "info",
+      "locations": [
+        {
+          "path": "services/main/migrations/access/2045_standing_rating_components.sql",
+          "startLine": 50,
+          "endLine": 61
+        }
+      ],
+      "conclusion": "Both UNION arms explicitly type their unknown backfill value as numeric, matching the destination column. value_known remains false; the casts do not invent a zero, withdrawal or usable witness. Only these two hunks were newly reviewed against G2818."
+    }
+  ],
+  "retainedInheritedOriginLimits": {
+    "severity": "info",
+    "classification": "explicit retained source limits; not new original class acceptance conditions",
+    "locations": [
+      {
+        "path": "services/main/migrations/access/2607_standing_rating_bounded_progress.sql",
+        "startLine": 403,
+        "endLine": 411
+      },
+      {
+        "path": "services/main/src/modules/rating/README.md",
+        "startLine": 133,
+        "endLine": 142
+      }
+    ],
+    "nativeOnly": "No effective inherited-origin dependencies means readiness skips rating_standing_refresh population checks.",
+    "mixedInherited": "Publication still visits distinct effective inherited origins. Work can grow with their count; no constant total native bound is claimed for arbitrary mixed origins. An origin-wide pending frontier can conservatively hold another person in the same origin component, including an overridden or absent pending person.",
+    "availabilityConclusion": "Do not extrapolate native readiness or bounded lineage continuation into broad inherited-history or exact affected-person availability."
+  },
+  "independentRuntimeDependency": {
+    "owner": "G2762",
+    "correction": "b8ec0159dfd3b4f38d210bead790757222f8871f",
+    "classification": "pre-existing main runtime defect / separately owned correction; not introduced by the bounded rating delta",
+    "severity": "high",
+    "locations": [
+      {
+        "path": "services/main/src/infrastructure/fuseki.ts",
+        "startLine": 60,
+        "endLine": 74
+      },
+      {
+        "path": "services/main/src/modules/realm-directory/worker.ts",
+        "startLine": 46,
+        "endLine": 57
+      }
+    ],
+    "sourceInference": "The candidate run override dereferences store.callsLeft or store.signal without handling undefined. AsyncLocalStorage.exit enters run(undefined); the unchanged directory worker calls exit for detached scheduled work. The known guard is absent, so that path can throw instead of detaching from a request allocation. No new reproduction or owner correction was attempted.",
+    "candidateAndBaseBlob": "2c24b3c6ee648792ef1bd1618605a3c96c8feb3e",
+    "b8ecBlob": "7aa4919f57f878348ecf1ba2a737dabbae456d72",
+    "executedNativeSourceBlob": "fb558d2501031163699b901a66007f42fced0294",
+    "executedSourceDifference": "The executed source has the equivalent undefined-store guard with different comment/type bytes; it is not the exact b8ec whole-file blob.",
+    "candidateBudgetTestBlob": "36255b6f437328ed057b8241df085fa47eaaf30f",
+    "b8ecBudgetTestBlob": "52def96aaa632897d106e05f117c951b7c507733",
+    "executedBudgetTestBlob": "4405f2f505dc6e1fec00de296aaca46657d503c9",
+    "candidateImportsWholeWaveRuntimeBlob": false,
+    "consequence": "The nine correction files are byte-exact to the execution source, but the candidate is not an exact whole-stack execution dependency set. Keep scoped delta acceptance separate from runtime qualification; integrate/verify the independent owner correction through the manager."
+  },
+  "implementationProofReused": {
+    "source": "d82713ca0504284899929e8044aad6439a7844fc",
+    "published": "407c5efcbd115837e2b7a8e8ad217cab94368cec",
+    "job": "effacd3e-ade4-4e87-a5fc-c2a5f5f64207",
+    "qa": "20261019t102912-4a6524",
+    "selected": [
+      "tests/qa/integration/rating-standing-components.test.ts",
+      "tests/qa/integration/rating-standing-availability.test.ts",
+      "tests/qa/integration/rating-global-synthesis.test.ts"
+    ],
+    "reportedResult": {
+      "passed": 3,
+      "failed": 0,
+      "expectCalls": 750,
+      "elapsedSeconds": 202.4,
+      "ordinaryBudgetSeconds": 480
+    },
+    "provenance": "Existing owner handoff and brief; source blob correspondence independently verified. Execution was not repeated and raw logs were not newly audited as a separate proof review.",
+    "nativeMeasurementsReported": [
+      {
+        "population": 100,
+        "readinessWork": 11,
+        "inventoryWork": 1818,
+        "fenceWork": 26
+      },
+      {
+        "population": 101,
+        "readinessWork": 11,
+        "inventoryWork": 1847,
+        "fenceWork": 26
+      },
+      {
+        "population": 102,
+        "readinessWork": 11,
+        "inventoryWork": 1847,
+        "fenceWork": 26
+      },
+      {
+        "population": 512,
+        "readinessWork": 11,
+        "inventoryWork": 1847,
+        "fenceWork": 26
+      },
+      {
+        "population": 2048,
+        "readinessWork": 11,
+        "inventoryWork": 1847,
+        "fenceWork": 26
+      }
+    ],
+    "unchangedNativeThresholds": {
+      "readinessLessThan": 64,
+      "inventoryLessThan": 2000,
+      "fenceLessThan": 128
+    },
+    "mixedCase": {
+      "population": 2048,
+      "nativeOverrides": 32,
+      "reportedWork": 2429.96,
+      "scope": "Separate structural bound: index rows/loops <=101, no filtered rows, sort <=202; not native-only inventory<2000."
+    },
+    "retainedOriginalFailures": {
+      "source": "1d7743e8ae6bd4eba133542dc2a4684758072919",
+      "qa": "20261019t091155-85af34",
+      "first": "Readiness expected<64, received154, reached original assertion.",
+      "rerun": "Inventory expected<2000, received2096 at512, reached original assertion.",
+      "componentsTestBlobUnchangedThroughCandidate": "17b9bf6eb1b4281a8d4081a1dd90c844dce5290a"
+    },
+    "otherReceipts": "Existing owner units, generation, focused types, affected inference/lint/guards and wave publication receipts remain owner evidence, not new G-2858 executions."
+  },
+  "originalPublicProofStatus": {
+    "selectionReference": ".temp/audit-remediation-20261019/two-hour-sprint/site-D5-006-407-original-source-selection.json",
+    "selectionSha256": "d085651f60b0ef348b31325c64627bd08082fa1919bc746a67ce4e017b80a6ac",
+    "frozenFiles": [
+      {
+        "path": "tests/qa/integration/official-zone-read-budget.test.ts",
+        "ownerPath": ".temp/worktrees/g-2750/tests/qa/integration/official-zone-read-budget.test.ts",
+        "sha256": "490e09a5dba826239bfeaa4d80d336856b7679ae574dc1fba6dab33b00860d23",
+        "testNames": [
+          "D5-006 ${name}: ninth and tenth official Zones preserve bounded suggestions",
+          "D5-006 ${name}: suggestions require authentication and the acting Agent together"
+        ],
+        "ownerFileSha256IndependentlyVerified": true,
+        "executedByThisReviewer": false
+      },
+      {
+        "path": "tests/qa/integration/rating-population-read-budget.test.ts",
+        "ownerPath": ".temp/worktrees/g-2750/tests/qa/integration/rating-population-read-budget.test.ts",
+        "sha256": "7a70561d2f59fa031953bfc1dbdaf1305291d3bff17aaa6686b8e9e2104ce168",
+        "testNames": [
+          "D5-006 ${name}: 100, 101 and 102 ratings remain readable without revealing voters"
+        ],
+        "ownerFileSha256IndependentlyVerified": true,
+        "executedByThisReviewer": false
+      }
+    ],
+    "frozenSelectors": [
+      "task",
+      "goal",
+      "--",
+      "test",
+      "tests/qa/integration/official-zone-read-budget.test.ts",
+      "tests/qa/integration/rating-population-read-budget.test.ts"
+    ],
+    "assertionOwner": "G2750",
+    "compatibleDataAndExecutionOwner": "Existing G2826 / Program preparation",
+    "preparationStatus": "The retained genuine Zone/rating corpora require a supported compatible derivative; direct restore of old storage correctly refuses compatibility. This is a setup status, not an outcome assertion failure or source-delta blocker.",
+    "newExecution": false,
+    "acceptanceConclusion": "No genuine public 8/9/10 Official Zone or 100/101/102 independent Account proof is established by this review. Original acceptance remains open and unchanged."
+  },
+  "newlyExecutedReviewChecks": [
+    {
+      "kind": "read-only pin verification",
+      "result": "pass",
+      "details": "git rev-parse/cat-file and Python hashlib: candidate tree, 32 manifest blobs/SHA256 values, 21 reviewed-blob matches, nine published/executed byte matches, and frozen owner test hashes."
+    },
+    {
+      "kind": "read-only composition/schema comparison",
+      "result": "pass",
+      "details": "Git diff and parsed JSON comparison: only the two pool-reservation lines over base; two NULL::numeric casts over G2818; generated OpenAPI differs only by twelve maximum:100 deletions, with no other values changed."
+    },
+    {
+      "kind": "independent focused outcome tests",
+      "result": "not-run",
+      "details": "None required for a new in-scope source defect. Per the brief, no stack, migration, corpus restore/rebuild, duplicate native selection or whole-tier check was started."
+    },
+    {
+      "kind": "documentation validation",
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task docs:check",
+      "result": "pass",
+      "job": "70da4a7a-21aa-4da4-b4cf-80f923feb9c2",
+      "exitCode": 0,
+      "log": ".temp/goal/jobs/70da4a7a-21aa-4da4-b4cf-80f923feb9c2.log",
+      "details": "13 tests passed; 255 Markdown files checked. This checks documentation links/fragments/navigation, not runtime behavior."
+    }
+  ],
+  "sourceOnlyLimits": [
+    "Static source review plus reused source coverage and explicitly attributed implementation proof; not a new public class result.",
+    "No exact whole-stack dependency equivalence between candidate, published wave and native execution source.",
+    "No broad inherited-origin/history availability, full graph preservation, delayed seal/graph-loss, arbitrary mixed-origin contention or genuine backup/isolated restore qualification.",
+    "Voice control, frontend completion, all 61 findings and unrelated journeys are outside this scoped verdict.",
+    "No candidate/product source, assertion, historical failure/report, corpus, worker, data, lock or class-status mutation; only this report is published."
+  ],
+  "managerNext": "Consume this scoped source acceptance and retain the independent G2762 runtime dependency. Continue the already owned compatible genuine-data preparation and unchanged frozen public suites without closing D5-006 from this report.",
+  "provenance": {
+    "ownerHandoff": ".temp/worktrees/g-2786/.temp/goal/standing-bounded-work-handoff.md",
+    "ownerHandoffSha256": "a3302c968ae44dd5d1be3abee99e3080fe2b7b046eb22d0bbab00cf8bc6a68df",
+    "priorReviewsReadOrResumed": false,
+    "candidateProductSourcesEdited": false,
+    "publishedPaths": [
+      "docs/goals/audit-remediation-20261019/proofs/bounded-standing-current-delta-review.json"
+    ]
+  },
+  "alreadyMainDependencies": [
+    {
+      "role": "already-main native/request implementation",
+      "commit": "df1a88d9de3d9d25d13b3ad3ac3b6c407f1e206d",
+      "ancestorOfPinnedBase": true,
+      "disposition": "Reused dependency; not new G2786 source and not re-reviewed as a new task."
+    },
+    {
+      "role": "already-main actual boundary proof",
+      "commit": "271b7e40b3713782eec2148443c0e3b53f65a059",
+      "ancestorOfPinnedBase": true,
+      "disposition": "Reused dependency; not new G2786 source and not re-reviewed as a new task."
+    }
+  ],
+  "landingMigrationOrdering": {
+    "recordedAt": "2026-10-19T12:21:39.511731+00:00",
+    "baseMain": "d1d0fe7ff737bcf884e0eb9686184e865b8e0b5a",
+    "priorMainHighestMigration": 2605,
+    "reason": "Normal capture refused to rewrite a historical review brief outside the selected files. Manually append the four reviewed SQL migrations after current main, preserving their relative order and exact SQL bytes. Historical reviewed pins and path names above remain unchanged.",
+    "supersededFailedCapture": "manager-beddaa26-046d-42d5-b68c-f3f44f0a5740",
+    "mapping": [
+      {
+        "originalPath": "services/main/migrations/access/2045_standing_rating_components.sql",
+        "landingPath": "services/main/migrations/access/2606_standing_rating_components.sql",
+        "sha256": "65d2a75a859182d5808f7ad8ca3b197006c9d684a7c1bb41c005880e800314f5",
+        "sqlBodyUnchanged": true
+      },
+      {
+        "originalPath": "services/main/migrations/access/2077_standing_rating_publication.sql",
+        "landingPath": "services/main/migrations/access/2607_standing_rating_publication.sql",
+        "sha256": "6583a1657afe45a3ee250a0ec4eb11fc244bf88820b05bf7a7e739ad5cce7b41",
+        "sqlBodyUnchanged": true
+      },
+      {
+        "originalPath": "services/main/migrations/access/2606_standing_rating_affected_cuts.sql",
+        "landingPath": "services/main/migrations/access/2608_standing_rating_affected_cuts.sql",
+        "sha256": "7d1f1743e6b8c771b275fe8dd1afa601cab07fb62b553699bce52ab76f2b4677",
+        "sqlBodyUnchanged": true
+      },
+      {
+        "originalPath": "services/main/migrations/access/2607_standing_rating_bounded_progress.sql",
+        "landingPath": "services/main/migrations/access/2609_standing_rating_bounded_progress.sql",
+        "sha256": "96ee20fb3ce837f1f89354f7906974cb1cebc596b81fa50d94396ad24c25356a",
+        "sqlBodyUnchanged": true
+      }
+    ],
+    "activeReferencesChangedOnly": [
+      "services/main/src/modules/work/access-recovery-coverage.ts",
+      "services/main/tests/rating-standing-publication.test.ts"
+    ],
+    "behaviorChange": "None; only ordered migration file paths and exact existing active references changed. No historical review or assertion weakened.",
+    "historicalPublicProofPinsUnchanged": true
+  }
+}

@@ -264341,13 +264341,11 @@
                       "type": "string"
                     },
                     "count": {
-                      "maximum": 100,
                       "minimum": 0,
                       "type": "integer"
                     },
                     "histogram": {
                       "items": {
-                        "maximum": 100,
                         "minimum": 0,
                         "type": "integer"
                       },
@@ -264367,7 +264365,6 @@
                       ]
                     },
                     "population": {
-                      "maximum": 100,
                       "minimum": 0,
                       "type": "integer"
                     },
@@ -264503,7 +264500,6 @@
                       ]
                     },
                     "withdrawnCount": {
-                      "maximum": 100,
                       "minimum": 0,
                       "type": "integer"
                     },
@@ -630117,13 +630113,11 @@
                               "type": "string"
                             },
                             "count": {
-                              "maximum": 100,
                               "minimum": 0,
                               "type": "integer"
                             },
                             "histogram": {
                               "items": {
-                                "maximum": 100,
                                 "minimum": 0,
                                 "type": "integer"
                               },
@@ -630139,7 +630133,6 @@
                               ]
                             },
                             "population": {
-                              "maximum": 100,
                               "minimum": 0,
                               "type": "integer"
                             },
@@ -630246,7 +630239,6 @@
                               ]
                             },
                             "withdrawnCount": {
-                              "maximum": 100,
                               "minimum": 0,
                               "type": "integer"
                             }
@@ -630297,13 +630289,11 @@
                               "type": "string"
                             },
                             "count": {
-                              "maximum": 100,
                               "minimum": 0,
                               "type": "integer"
                             },
                             "histogram": {
                               "items": {
-                                "maximum": 100,
                                 "minimum": 0,
                                 "type": "integer"
                               },
@@ -630319,7 +630309,6 @@
                               ]
                             },
                             "population": {
-                              "maximum": 100,
                               "minimum": 0,
                               "type": "integer"
                             },
@@ -630426,7 +630415,6 @@
                               ]
                             },
                             "withdrawnCount": {
-                              "maximum": 100,
                               "minimum": 0,
                               "type": "integer"
                             }
