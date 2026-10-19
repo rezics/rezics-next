@@ -9617,5 +9617,378 @@
       "peerChanges": []
     },
     "managerNext": "Select only this exact seven-source delta into the approved current-Main composition through the normal affected gate, preserving peer inventories/auth/Experience and other current source. Retain original runtime gaps and separately owned acceptance; no whole historical blob restoration or new prerequisites."
+  },
+  "readerMetadataFirstReview": {
+    "observedAt": "2026-10-19T14:43:51.195563+00:00",
+    "reviewer": {
+      "account": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independent": true,
+      "delegation": false,
+      "fallback": false
+    },
+    "authority": "First bounded source review of the two metadata export corrections and their new direct-export tests. Existing catalogue/read-state authority; no product edits, native stack, data preparation, original assertion edits or landing.",
+    "priorReport": {
+      "commit": "d2c64515f7cbdcbfcea47fd8de8db9f89569028a",
+      "bytes": 594166,
+      "sha256": "dd0f356c677b8a05095410dcccaefa6211036dd4287ea6437949ca2641d7375f",
+      "preservedTopLevelFields": [
+        "format",
+        "goal",
+        "worker",
+        "observedAt",
+        "reviewer",
+        "disposition",
+        "acceptance",
+        "pins",
+        "scope",
+        "acceptanceReference",
+        "findings",
+        "sourceReviewObservations",
+        "checksActuallyExecuted",
+        "proofReuse",
+        "limitations",
+        "managerNext",
+        "originalReviewCheckpoint",
+        "finalCandidateCheckpoint",
+        "finalCandidateResolutionCheckpoint",
+        "boundedActionGroupCheckpoint",
+        "boundedSourceFooterCheckpoint",
+        "boundedCreditsCookCheckpoint",
+        "boundedBookCoverCheckpoint",
+        "boundedBookRetryCorrectionCheckpoint",
+        "boundedD1003NavigationCorrectionCheckpoint",
+        "boundedD1003BackQueryAssertionCheckpoint",
+        "boundedNonWorkReleaseFirstSourceCheckpoint",
+        "storyRefreshSeamFirstReview"
+      ]
+    },
+    "pins": {
+      "base": "7ca18eef390b8dbd4f0d65e78a11c64aa2e4a835",
+      "candidate": "8ce3a5f3c740f3b7515b80d6149b963b53dd4346",
+      "frozenObservedMain": "a8e44a3372a7ed61a0d0124b5d5667bf7ddf9502"
+    },
+    "manifest": {
+      "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-G2841-four-path-first-review/manifest.json",
+      "sha256": "146f704c2e92b46b82928b36cfd7fdb6b8a63dcbe9b17ac1e36ad4869abfff03"
+    },
+    "patch": {
+      "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-G2841-four-path-first-review/reader-metadata.patch",
+      "sha256": "0019b7128007cec650d472d31c7261e0dad85ad67717067f21308b9a0ddc4d58",
+      "immutableAuthoredPatchSha256": "04c888210277a31b3b7e763874aad46a7fa819ddee4bcebb4bca80cb76ba0b69"
+    },
+    "inspectedSource": [
+      {
+        "path": "apps/web/app/[locale]/w/[ref]/read/[chapter]/page.tsx",
+        "checkpoint": "reader-metadata-three-next",
+        "originalAuthoredPin": "8ce3a5f3c740f3b7515b80d6149b963b53dd4346",
+        "base": "7ca18eef390b8dbd4f0d65e78a11c64aa2e4a835",
+        "before": {
+          "blob": "c572af292519b7109f40e0f90feed35c4c4d7c27",
+          "sha256": "9befbd818bc0b0e4105b73ac75d544dd758749990f29b6004c0a35dc6b9c1c1d",
+          "bytes": 3823
+        },
+        "observedMain": {
+          "blob": "c572af292519b7109f40e0f90feed35c4c4d7c27",
+          "sha256": "9befbd818bc0b0e4105b73ac75d544dd758749990f29b6004c0a35dc6b9c1c1d",
+          "bytes": 3823
+        },
+        "target": {
+          "blob": "abf8354f7a5cf4930b7893d385f0e23cf490b485",
+          "sha256": "029aa3387cf84cbc0765a61e61df588d69ac4782c39bd89f5b6ea07623944989",
+          "bytes": 4128
+        },
+        "baseAndMainEqual": true,
+        "selectedForNewFirstReviewOnly": true
+      },
+      {
+        "path": "apps/web/app/[locale]/w/[ref]/read/page.tsx",
+        "checkpoint": "reader-metadata-three-next",
+        "originalAuthoredPin": "8ce3a5f3c740f3b7515b80d6149b963b53dd4346",
+        "base": "7ca18eef390b8dbd4f0d65e78a11c64aa2e4a835",
+        "before": {
+          "blob": "250ee9597daeb1648d30ef52b6b21038c8616019",
+          "sha256": "64362742b887429a55fbfcf47c727f2a7c7cdaf37d0b3b834ed9bc1a3b2dba59",
+          "bytes": 2733
+        },
+        "observedMain": {
+          "blob": "250ee9597daeb1648d30ef52b6b21038c8616019",
+          "sha256": "64362742b887429a55fbfcf47c727f2a7c7cdaf37d0b3b834ed9bc1a3b2dba59",
+          "bytes": 2733
+        },
+        "target": {
+          "blob": "3657445bd872617de4db4fd63d412320cecbb0d1",
+          "sha256": "e62fb896af3b1ad93fbbaf2b70f4624adfa1d79007981bfb22380ff4bffbb6d5",
+          "bytes": 2973
+        },
+        "baseAndMainEqual": true,
+        "selectedForNewFirstReviewOnly": true
+      },
+      {
+        "path": "apps/web/tests/reader-metadata.test.ts",
+        "checkpoint": "reader-metadata-three-next",
+        "originalAuthoredPin": "8ce3a5f3c740f3b7515b80d6149b963b53dd4346",
+        "base": "7ca18eef390b8dbd4f0d65e78a11c64aa2e4a835",
+        "before": null,
+        "observedMain": null,
+        "target": {
+          "blob": "f58db812d514ef71cb1a0ce9f1acaa230909c295",
+          "sha256": "025d1cba9d61cfec2b4070a08d4cb0b27e1a8171749a92434c88201ab0d70806",
+          "bytes": 4265
+        },
+        "baseAndMainEqual": true,
+        "selectedForNewFirstReviewOnly": true
+      }
+    ],
+    "inspectedMaterialDependencies": [
+      {
+        "path": "apps/web/features/work-page/read.ts",
+        "pin": "8ce3a5f3c740f3b7515b80d6149b963b53dd4346",
+        "blob": "9b8211c2ba87a9c159c4686de4a9f2992a42b2a0",
+        "sha256": "01248ed321e11c3b46a6d68d4c3f3b01602bd3d79ae0c8aefcf68ddf85d90f9d",
+        "unchangedFromBase": true,
+        "inspectedScope": "WorkResolution/resolveWork/loadWork; postPlaceInBook; readText/readChapter/readBooksLanguagePage; request-cache and actingSubject boundary"
+      },
+      {
+        "path": "apps/web/features/work-page/route.ts",
+        "pin": "8ce3a5f3c740f3b7515b80d6149b963b53dd4346",
+        "blob": "2f5073aa044699ff0fac1579382cce1136755226",
+        "sha256": "e100ee05a171fdea32b72bc652bdccd4a80ae2d5b75f7a711e1ff98e70fe7266",
+        "unchangedFromBase": true,
+        "inspectedScope": "parseWorkRef and parseReaderLanguage"
+      },
+      {
+        "path": "apps/web/features/work-page/books-language-recorded-page.ts",
+        "pin": "8ce3a5f3c740f3b7515b80d6149b963b53dd4346",
+        "blob": "a85ccc1df18368478e040430474590aecbbc68b2",
+        "sha256": "edb14b3e1e3f7b4df97ef66279d50e9efbd74a90aa1944d253a230bc11e5d772",
+        "unchangedFromBase": true,
+        "inspectedScope": "readText/readPage and booksLanguageReading/failed classification"
+      },
+      {
+        "path": "apps/web/features/work-page/books-language-recorded-page.tsx",
+        "pin": "8ce3a5f3c740f3b7515b80d6149b963b53dd4346",
+        "blob": "5d9d400d4863c07ea03e9dd044fe9181c2814931",
+        "sha256": "1d066a0175d449fb787627606edd67d0a0e4808b48c84bdf5c63780e2560cdd4",
+        "unchangedFromBase": true,
+        "inspectedScope": "actual missing, unavailable and supplied refusal-title body branches"
+      },
+      {
+        "path": "apps/web/features/work-page/reader.tsx",
+        "pin": "8ce3a5f3c740f3b7515b80d6149b963b53dd4346",
+        "blob": "176d46467dfe1254e9b34dc5e37befcc5ce28919",
+        "sha256": "16ad025b77f5863ba1e2c3468d081003cc47afe1952fd0968566e03a47f20194",
+        "unchangedFromBase": true,
+        "inspectedScope": "ChapterNotFound/ChapterUnavailable and TextNotFound/TextUnavailable title keys and Retry"
+      },
+      {
+        "path": "apps/web/features/work-page/books-edition-page.read.ts",
+        "pin": "8ce3a5f3c740f3b7515b80d6149b963b53dd4346",
+        "blob": "f4bb900bc781e1cc2bb5e137667ac10001495b50",
+        "sha256": "a69f306f31ae8b0cf4d7ae2d25110de496d1aca154d689d187c35e53821b6fba",
+        "unchangedFromBase": true,
+        "inspectedScope": "settle/refusedRead/pendingRead and owner queries; only relevant failure/read boundary"
+      },
+      {
+        "path": "apps/web/features/work-page/failure.ts",
+        "pin": "8ce3a5f3c740f3b7515b80d6149b963b53dd4346",
+        "blob": "4d699697a665fb6727a406ec964b98c2cc359478",
+        "sha256": "a5cad71f70d7dc99d902960b8e390d3e9095bee531e02bcbde23270042d1f76a",
+        "unchangedFromBase": true,
+        "inspectedScope": "HTTP-status categories"
+      },
+      {
+        "path": "apps/web/features/work-page/work-states.tsx",
+        "pin": "8ce3a5f3c740f3b7515b80d6149b963b53dd4346",
+        "blob": "b3543715553fc6e24384bafe7da6102ba73dba64",
+        "sha256": "ed83df55907b0264bb92287b32ba8c1f089b5af66f901c854de829899916a191",
+        "unchangedFromBase": true,
+        "inspectedScope": "Work missing/unavailable headings and recovery"
+      },
+      {
+        "path": "apps/web/features/work-page/messages.ts",
+        "pin": "8ce3a5f3c740f3b7515b80d6149b963b53dd4346",
+        "blob": "9b44d2a1470777744624765c165d311b040914f1",
+        "sha256": "2d570f9ec4eefa5eb6ffd033b0bca103e12e0ad17ae3f699984f8d1999dcb507",
+        "unchangedFromBase": true,
+        "inspectedScope": "existing localized title keys and locale mapping"
+      },
+      {
+        "path": "apps/web/i18n/server.ts",
+        "pin": "8ce3a5f3c740f3b7515b80d6149b963b53dd4346",
+        "blob": "17a2e82595b13095ba070ae4a91d136f69fe6f6a",
+        "sha256": "e9ef5bcdbda5dea5fcb460d4f419d7244abbbcaddcd3d6ecddecfef26bf8f56f",
+        "unchangedFromBase": true,
+        "inspectedScope": "requestLocale, getTranslation and getMessages"
+      },
+      {
+        "path": "apps/web/features/seo/work.ts",
+        "pin": "8ce3a5f3c740f3b7515b80d6149b963b53dd4346",
+        "blob": "f8502560bc912e943701e14cd8b2f3fcabcff493",
+        "sha256": "2b2143c4a02a7ffa95843a3f64c656012b2273441fb8638a2aeab8b9ab791f09",
+        "unchangedFromBase": true,
+        "inspectedScope": "workMetadata; anonymousWork/workTitle/workPageMetadata privacy and successful metadata path"
+      },
+      {
+        "path": "apps/web/tests/support/module-replacement.ts",
+        "pin": "8ce3a5f3c740f3b7515b80d6149b963b53dd4346",
+        "blob": "836eb144e326b8edc28a1c61139ad6a3cec531de",
+        "sha256": "36943ecec3bc21307ef816b7124fe127cb1f827ed3d6532b9ac74294175a69d9",
+        "unchangedFromBase": true,
+        "inspectedScope": "real-export delegate setup/restoration"
+      },
+      {
+        "path": "apps/web/tests/seo.test.ts",
+        "pin": "8ce3a5f3c740f3b7515b80d6149b963b53dd4346",
+        "blob": "fa10c969f171bcafedc5f83c20fd791e6a4a01c5",
+        "sha256": "a40f7fa31af4fd545fd47d0b5a49f93619b829600947d9a65eb6ed6421cad8d0",
+        "unchangedFromBase": true,
+        "inspectedScope": "existing public/private metadata and anonymous title coverage; relevant assertions"
+      }
+    ],
+    "integrationComparison": "The two source preimages and absent new test equal frozen observed Main. The material production read/body/route/SEO/message dependencies compared against a8e44 are byte-identical to base; no peer source selection or restore is authorized.",
+    "originalAcceptance": {
+      "id": "D4-008",
+      "title": "公开作品到正文的阅读链路失败；不可用与“章节不存在”还被混在一起",
+      "criteriaVerbatim": [
+        "至少一本含公开实章的作品，从Zone推荐、作品目录、章节搜索三条入口都能到实际正文；1440和390核对标题、正文、前后章、返回目录和阅读设置，不能用录制故事替代现场通过。",
+        "搜索Post地址正常解析到本书occurrence；中间404不终止placement路径；真正missing与暂时503分别展示并正确命名文档。",
+        "同一作品目录或正文失败时保留有原因、有可执行恢复的页面，不出现长时间空白503；可用性恢复后旧链接仍可完成阅读。"
+      ],
+      "source": "Recorded original acceptance in the selected manager manifest; no criterion modified."
+    },
+    "branchDispositions": [
+      {
+        "case": "Work missing, unavailable, moved",
+        "sourceDisposition": "APPROVE",
+        "reason": "Both exports distinguish missing -> existing notFoundTitle, unavailable -> existing unavailableTitle plus noindex, and moved -> no title claim. Unchanged loadWork owns missing notFound, canonical permanentRedirect and WorkUnavailable body, and resolveWork shares the charged address/header result."
+      },
+      {
+        "case": "Malformed or repeated language / malformed chapter ID",
+        "sourceDisposition": "APPROVE",
+        "reason": "The unchanged parser returns null for malformed language and arrays; null or invalid chapter ID prevents read and retains not-found/noindex metadata, matching page branch. Valid language is passed through unchanged; text keeps header.selectedLanguage fallback."
+      },
+      {
+        "case": "Chapter belongs to another Work",
+        "sourceDisposition": "APPROVE",
+        "reason": "Successful chapter read must have data.work exactly equal to resolved work.header.id. The missing/noindex condition matches the body, preserving exact Work/address ownership; no reference, language or revision is invented."
+      },
+      {
+        "case": "Missing versus denied/pending/moved/invalid/budget/unavailable chapter/text reads",
+        "sourceDisposition": "APPROVE",
+        "reason": "Only failure missing (or invalid address/language producing null) gets the existing not-found title. Every other failed read gets existing chapterUnavailableTitle/textUnavailableTitle and noindex. Existing settle retains 202, 401/403, 409, 400, 422 and transport failures; metadata does not invent a new failure policy or alter the body/refusal evidence."
+      },
+      {
+        "case": "Public success, privacy and robots",
+        "sourceDisposition": "APPROVE",
+        "reason": "Successful return expressions are byte-identical: workTitle plus workPageMetadata with the original chapter/text view, chapter ID, query and locale. The unchanged SEO helper makes anonymous reads and suppresses private title/description/preview; no personalized header title is published. New failed states are noindex. Existing missing Work behavior is left to the unchanged not-found handling."
+      },
+      {
+        "case": "Page body, placement redirects and recovery authority",
+        "sourceDisposition": "APPROVE",
+        "reason": "Both complete default page bodies are byte-identical to base. postPlaceInBook/permanentRedirect remains before missing chapter body; no change to reading progress, settings, exact read owner, actingSubject, contents links or Retry. Text recorded-problem responses retain supplied problem.title; metadata uses the localized unavailable category rather than claiming missing for non-missing failures."
+      },
+      {
+        "case": "New tests and locale use",
+        "sourceDisposition": "APPROVE",
+        "reason": "20 controlled metadata cases invoke actual generateMetadata exports with scoped read/SEO/i18n delegates and afterEach restoration. The assertions distinguish failure categories, malformed ID/language, other-Work chapter and successful export composition. Existing workPage locale catalog is consumed by requestLocale/getTranslation; no new English strings or localization policy are added. The test suite itself uses English and does not prove native localized browser rendering."
+      }
+    ],
+    "disposition": {
+      "verdict": "APPROVE",
+      "kind": "bounded SOURCE approval of exactly three paths",
+      "newActionableFindings": [],
+      "canonicalClosure": false
+    },
+    "evidenceClassification": {
+      "sourceInference": "Independent inspection of exact diff, complete changed exports/tests and material unchanged body/read/SEO/i18n call chains. Counts support regression evidence but do not determine source approval.",
+      "reproducedAssertionFailure": {
+        "owner": "Existing root execution, reused; not rerun by G-2841",
+        "base": "7ca18eef390b8dbd4f0d65e78a11c64aa2e4a835",
+        "result": "20 tests: 6 pass, 14 fail, 24 expects",
+        "assertionsReached": true,
+        "concreteCounterexamples": [
+          "Work unavailable returns Work not found at new test line 36 on unchanged base.",
+          "Chapter unavailable returns Chapter not found at line 48 on unchanged base.",
+          "Text budget/invalid/unavailable returns Nothing to read here at line 48 on unchanged base."
+        ],
+        "scope": "Controlled direct-production metadata exports with replaced read/SEO/i18n dependencies; actual output assertion failures, not native reader UI failures."
+      },
+      "setupFailure": {
+        "description": "Initial wrong-catalog fixture setup failure is retained independently in the manager evidence and excluded from the corrected red/green assertion results.",
+        "rawSetupLogInspected": false,
+        "limit": "The supplied evidence manifest records this initial setup failure, but its raw log is absent from this selected evidence directory. No outcome assertion or product failure is inferred from it."
+      }
+    },
+    "reusedEvidence": {
+      "manifest": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-reader-metadata-first-review/manifest.json",
+        "sha256": "e417441106da475e467a4b64ebc993706d91889f6a84aedf85854a75304b9777"
+      },
+      "logs": [
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-reader-metadata-first-review/reader-metadata-before.log",
+          "sha256": "5a25e4ced5415f9a2573a0247eba492c49ffe3a340ccae21c16e3e5bdb654c2d",
+          "bytes": 14596,
+          "readOnlyExisting": true
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-reader-metadata-first-review/reader-metadata-after.log",
+          "sha256": "d12d4ccd7481f1726f20c7f29e514630c3d44aba3a9c94901e4a8b5d4fbe10e7",
+          "bytes": 241,
+          "readOnlyExisting": true
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-reader-metadata-first-review/reader-metadata-types.log",
+          "sha256": "11f39bfbf2e8fd6fa48a20b930640f9ce2db75311e20b61be5c5a1967d5304ff",
+          "bytes": 405,
+          "readOnlyExisting": true
+        }
+      ],
+      "results": {
+        "red": "6 pass / 14 fail / 24 expects across 20 new metadata tests on unchanged source",
+        "green": "33 pass / 0 fail / 85 expects across the same 20 new metadata tests and existing 13 SEO tests",
+        "types": "5282 files, no type errors, 20.30s"
+      },
+      "executedByThisCheckpoint": false,
+      "rerun": false
+    },
+    "checksActuallyExecuted": [
+      "Read and SHA256-verified exact selected patch, metadata evidence manifest and all three retained red/green/type logs.",
+      "Verified all three before/after blobs and SHA256 values, frozen Main preimage equality and absent base/Main test.",
+      "Verified both default page bodies are byte-identical to base and inspected unchanged relevant reader/read/SEO/i18n dependencies.",
+      "Read all 20 new controlled cases and existing relevant SEO privacy/robots assertions; no product test/type/browser rerun or service launch."
+    ],
+    "limitations": [
+      "The controlled export tests replace read/SEO/i18n functions; they establish metadata branch behavior and retain existing SEO regression coverage, not genuine original D4-008 UI/body availability or production backend responses.",
+      "No native reader, installed-router rendering, real 503 recovery, Post-to-occurrence placement journey, reading settings, previous/next chapter, language-switch UI or original 1440/390 browser acceptance was executed here. Those original applicable assertions remain independently due.",
+      "Successful empty-text body and supplied problem-title presentation follow unchanged body owners; these three metadata paths do not introduce or prove a new native availability contract. Non-missing refusals are categorized as unavailable rather than erased as missing.",
+      "Source approval does not close D4-008, A11/C28 or other original catalogue classes and does not turn the retained unit count or setup failure into public-reader acceptance.",
+      "All 28 earlier report fields, findings/dispositions, original failures, WORK-REVIEW-09 unconfirmed setup attempts, Back/query evidence and earlier accepted Work/footer/Cook/Book source remain unchanged."
+    ],
+    "reportValidation": {
+      "status": "PASS",
+      "job": "job:b807c84b-f25c-43c7-872c-54e60ed80a5d",
+      "commands": [
+        {
+          "command": "task docs:check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/b807c84b-f25c-43c7-872c-54e60ed80a5d.1.log"
+        },
+        {
+          "command": "task goal -- check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/b807c84b-f25c-43c7-872c-54e60ed80a5d.2.log"
+        }
+      ],
+      "limits": "Report-only checks. Docs check covers local documentation links/navigation; Goal check runs AST and the selected repository guard. Product types/lint/tests are skipped because the changed tracked path is JSON documentation."
+    },
+    "resources": {
+      "started": [],
+      "stopped": [],
+      "productWrites": [],
+      "peerChanges": []
+    }
   }
 }

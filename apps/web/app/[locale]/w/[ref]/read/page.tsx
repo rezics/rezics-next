@@ -15,11 +15,16 @@ type Props = Params & { searchParams: Promise<Record<string, string | string[] |
 export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
   const [{ ref }, query, locale] = await Promise.all([params, searchParams, requestLocale()]);
   const [work, { t }] = await Promise.all([resolveWork(ref, locale), getTranslation('workPage', [locale])]);
-  if (work.kind !== 'work') return { title: t.notFoundTitle };
+  if (work.kind === 'missing') return { title: t.notFoundTitle };
+  if (work.kind === 'unavailable') return { title: t.unavailableTitle, robots: { index: false } };
+  if (work.kind === 'moved') return {};
   const language = parseReaderLanguage(query);
   const text = language === null ? null
     : await readText(work.header.mainVersion, language ?? work.header.selectedLanguage ?? undefined);
-  if (!text?.ok) return { title: await workTitle(work, t.textNotFoundTitle), robots: { index: false } };
+  if (!text?.ok) {
+    const title = !text || text.failure === 'missing' ? t.textNotFoundTitle : t.textUnavailableTitle;
+    return { title: await workTitle(work, title), robots: { index: false } };
+  }
   return { title: await workTitle(work), ...await workPageMetadata(work, { tab: 'text' }, query, locale) };
 }
 
