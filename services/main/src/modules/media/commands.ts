@@ -10,7 +10,7 @@ import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { DATASET, GRAPHS, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { ImageFormatRejected, verifyImage } from './image.ts';
 import { verifyRecording } from './recording.ts';
-import { validateImageInference, validateMediaField, type ImageInferenceInput,
+import { validateDocumentImageUse, validateImageInference, validateMediaField, type ImageInferenceInput,
   type MediaFieldInput, type DocumentImageUseInput } from './presentation.ts';
 import { receiptFamilies } from './receipt-family.ts';
 import type { RequiredSafetyMatcher } from '../media-screen/required-matcher.ts';
@@ -40,7 +40,7 @@ export interface MediaDependencies {
 
 type Account = Pick<AccountAssertionVerifier, 'verify'>;
 type Access = Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome' | 'activePrincipalId'>
-  & Partial<Pick<AccessAdmissionRegistry, 'withPreservationFence'>>;
+  & Partial<Pick<AccessAdmissionRegistry, 'withPreservationFence' | 'withOwnerAuthority' | 'fenceClaim'>>;
 
 function sha256(value: string | Uint8Array): string {
   return createHash('sha256').update(value).digest('hex');
@@ -74,15 +74,18 @@ export function avatarDigest(input: AvatarSelectionInput): string {
 async function admitted<T extends { position: CommandOutcome['position']; replayed: boolean }>(
   env: WorkActivationEnvironment, account: Account, access: Access, request: Request,
   args: { scope: string; action: string; actingSubject: string; idempotencyKey: string; digest: string;
-    operation: (id: string) => string; accountScope: string },
+    operation: (id: string) => string; accountScope: string; authorityFence?: boolean;
+    baselineRelatedWork?: string; baselineSourceRevision?: string },
   store: MediaStore, run: (admission: MediaAdmission) => Promise<T>,
 ): Promise<T & { admission: string }> {
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const principal = await account.verify(request, [args.accountScope]);
+  const authority = { principal, actingSubject: args.actingSubject, scope: args.scope, action: args.action,
+    ...(args.baselineRelatedWork !== undefined ? { baselineRelatedWork: args.baselineRelatedWork } : {}),
+    ...(args.baselineSourceRevision !== undefined ? { baselineSourceRevision: args.baselineSourceRevision } : {}) };
   let registered: RegisteredAdmission;
   try {
-    registered = await access.register({ principal, actingSubject: args.actingSubject,
-      scope: args.scope, action: args.action, idempotencyKey: args.idempotencyKey,
+    registered = await access.register({ ...authority, idempotencyKey: args.idempotencyKey,
       requestDigest: args.digest });
   } catch (error) {
     if (error instanceof AdmissionDenied) throw new MediaDenied('media authority is not admitted');
@@ -102,9 +105,19 @@ async function admitted<T extends { position: CommandOutcome['position']; replay
     }
   }
   let result:T;
-  try { result = await run({ admissionId: registered.id, principalId: registered.principalId,
+  const execute = () => run({ admissionId: registered.id, principalId: registered.principalId,
     actingSubject: registered.actingSubject, authorityEpoch: registered.authorityEpoch,
-    requestDigest: args.digest }); }
+    requestDigest: args.digest });
+  try {
+    if (args.authorityFence && !await store.readOutcome(args.operation(registered.id))) {
+      if (!access.withOwnerAuthority || !access.fenceClaim)
+        throw new MediaUnavailable('media authority fence is unavailable');
+      result = await access.withOwnerAuthority(authority, async client => {
+        await access.fenceClaim!(client, registered.id, args.digest, principal);
+        return execute();
+      });
+    } else result = await execute();
+  }
   catch(error) {
     const recorded=await store.readOutcome(args.operation(registered.id));
     const family=receiptFamilies[registered.action as keyof typeof receiptFamilies];
@@ -114,7 +127,15 @@ async function admitted<T extends { position: CommandOutcome['position']; replay
         requestDigest:registered.requestDigest,authorityEpoch:registered.authorityEpoch,scope:registered.scope,
         dataEpoch:recorded.position.dataEpoch,sequence:recorded.position.sequence});
     }
-    throw error;
+    // A concurrent retry can seal after this request's first owner read. A
+    // durable success is replayed, never dispatched under a closed authority.
+    if (args.authorityFence && recorded?.outcome === 'succeeded'
+      && (error instanceof AdmissionDenied || error instanceof AdmissionExpired)) result = await execute();
+    else {
+      if (args.authorityFence && (error instanceof AdmissionDenied || error instanceof AdmissionExpired))
+        throw new MediaDenied('media dispatch is not admitted');
+      throw error;
+    }
   }
   if ((result as { outcome?: string }).outcome === 'rejected') throw new MediaDenied('media admission was fenced');
   const family=receiptFamilies[registered.action as keyof typeof receiptFamilies];
@@ -343,6 +364,13 @@ export function createAdmittedDocumentImageUse(env: WorkActivationEnvironment, m
   account: Account, access: Access, request: Request,
   input: DocumentImageUseInput & { actingSubject: string; idempotencyKey: string }) {
   const {actingSubject,idempotencyKey,...binding}=input;
+  validateDocumentImageUse(binding);
+  if (binding.memberReplyDraft) return admitted(env,account,access,request,{
+    scope:`content:draft:${binding.target}`,action:'media.member-reply.use',actingSubject,idempotencyKey,
+    baselineRelatedWork:binding.memberReplyDraft.rootTarget,baselineSourceRevision:binding.memberReplyDraft.rootRevision,
+    digest:sha256(stable({profile:'member-reply-document-image-use-v1',...binding})),
+    operation:id=>`media-document-use:${id}`,accountScope:'comment:create',authorityFence:true,
+  },media.store,admission=>media.store.presentation.createDocumentUse(admission,binding));
   return admitted(env,account,access,request,{scope:`content:publish:${binding.target}`,action:'media.use',
     actingSubject,idempotencyKey,digest:sha256(stable({profile:'document-image-use-v1',...binding})),
     operation:id=>`media-document-use:${id}`,accountScope:'work:edit'},
@@ -396,7 +424,8 @@ export async function sealMediaAdmission(store: MediaStore, admission: Registere
     : admission.action === 'media.manage' ? ['media-state', 'media.asset.state']
       : admission.action === 'media.avatar' ? ['media-avatar', 'media.selection.change']
         : admission.action === 'media.inference' ? ['media-inference','media.inference.record']
-          : admission.action === 'media.use' ? ['media-document-use','media.use.create']
+          : admission.action === 'media.use' || admission.action === 'media.member-reply.use'
+            ? ['media-document-use','media.use.create']
             : admission.action === 'media.campaign' ? ['media-campaign','media.use.create']
             : Object.hasOwn(receiptFamilies,admission.action) ? ['media-field','media.field.change'] : null;
   if (!family) throw new MediaInvalid('not a media admission');

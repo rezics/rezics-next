@@ -1584,5 +1584,775 @@
       "Automatic full-page error/success focus not established; BODY focus retained. Supplemental Retry warning-absence premise and original image/SlashMenu setup failures need owner disposition without weakening assertions."
     ],
     "reason": "Retained prior partial scope. Latest manager decision requires original three D2-002 assertions, without adding image403, complete search matrix, automatic-focus or physical-device prerequisites."
+  },
+  "memberReplyMediaSourceReview": {
+    "recordedAt": "2026-10-19T13:42:48.658341+00:00",
+    "reviewer": "G-2830 / codex-1 / gpt-6.1-sol / xhigh",
+    "request": "One source inspection of newly authored nine-path Media dependency for original D2-003; no fallback or nested agents.",
+    "verdict": "APPROVE the exact nine-path Media source delta; no actionable in-scope source defect identified. This is not approval of the missing Access delta, a genuine-policy pass or D2-003 closure.",
+    "candidate": "395c5a1676b1de442943c1b90c30a493d53d0b33",
+    "directParent": "d30a5b321d957addde34a377f91400509fe7753d",
+    "suppliedManifestSha256": "e77d4409f2f8498e90f7befa3124d0fdeea0604831996777455df4c841fbd175",
+    "pinsAndBlobs": [
+      {
+        "path": "generated/openapi/main/public.json",
+        "gitBlob": "2edb2df498dbdf8406a9ef162f772a8f5c6ba72a",
+        "sha256": "82d702209dee27ce41fa21619c5bf305a160f301399ee5edc120f9341ea09ab6",
+        "bytes": 42210566,
+        "reviewed": true
+      },
+      {
+        "path": "services/main/src/modules/media/README.md",
+        "gitBlob": "ad587133e36b08f31ab1bc59366bbb3e4387e15b",
+        "sha256": "6808372be84b7c07423ca6943abe0f22ef91caeb3d7f35bbed80061dfad0df0e",
+        "bytes": 25333,
+        "reviewed": true
+      },
+      {
+        "path": "services/main/src/modules/media/commands.ts",
+        "gitBlob": "153b75be40174312e41c9d33e1cfc9bbf53f7958",
+        "sha256": "31b4ef0460c40fdc766a551e4d4b7861e7178a01c7b15fbc386f0e0634a3bb38",
+        "bytes": 32699,
+        "reviewed": true
+      },
+      {
+        "path": "services/main/src/modules/media/presentation-contract.ts",
+        "gitBlob": "5caa930e28e8a49ab4e07164a16255f44bd4f9c4",
+        "sha256": "be66424a1431f2c5bc2fcf715c00b1a32d89e22481d7bfd816341003655bfecd",
+        "bytes": 5605,
+        "reviewed": true
+      },
+      {
+        "path": "services/main/src/modules/media/presentation.ts",
+        "gitBlob": "bc3ae3bf4c1bccb8a5add68cb1bf6678de5c5652",
+        "sha256": "c22602f98765e71d1e71a90f6513cf0c4fb5c5eb969f02efdc08a9f1693fb1ab",
+        "bytes": 30709,
+        "reviewed": true
+      },
+      {
+        "path": "services/main/src/modules/media/receipt-family.ts",
+        "gitBlob": "76b459204b3baa596ee81364bc4caa0b71180e89",
+        "sha256": "8649bde7d1fc69d470b1d838d8f2eebafdfe137600ea10adb8f8a45998054b1c",
+        "bytes": 535,
+        "reviewed": true
+      },
+      {
+        "path": "services/main/src/modules/media/typed-schema.ts",
+        "gitBlob": "31dbe4c27266ea75a3b4e35f240a24ead170aa96",
+        "sha256": "d3bc748d23ab7d28587d4edf5f8ee8f6535ad65ac9913b0b39c3c37efc651143",
+        "bytes": 12054,
+        "reviewed": true
+      },
+      {
+        "path": "services/main/tests/media-member-reply-admission.test.ts",
+        "gitBlob": "c88fe57715e10c19e26c1981eda2d410e14a4dd6",
+        "sha256": "18d99270c7cf9ffb2ad0f9840698d0cc12734288f4908c179e579cfa009929d0",
+        "bytes": 8846,
+        "reviewed": true
+      },
+      {
+        "path": "services/main/tests/media-member-reply.test.ts",
+        "gitBlob": "450c7965f84740e0e447f9a1587595bcc60cca1a",
+        "sha256": "ae19184c00999af9137fa9ae796d7fe69bbe2d8fc7b6e7ddc3db620b1c59d3dc",
+        "bytes": 12394,
+        "reviewed": true
+      }
+    ],
+    "manifest": "media-candidate-395c5a1676b1/pin-blob-manifest.json",
+    "inspection": {
+      "actualDiff": "All nine paths against direct parent; authored.patch retained",
+      "necessaryCallChains": [
+        {
+          "path": "services/main/src/routes/media.ts",
+          "ranges": [
+            [
+              58,
+              76
+            ],
+            [
+              504,
+              512
+            ]
+          ],
+          "purpose": "Existing exact command schema/default context/conceal, idempotency key, first 201/replay200 and denied/missing/stale/conflict/unavailable response mapping.",
+          "candidateBlob": "05236204854351c06dd276185033ccb7ef1db5e0",
+          "parentBlob": "05236204854351c06dd276185033ccb7ef1db5e0",
+          "unchangedFromParent": true,
+          "sha256": "8ef11b495760d53268f317044dbafa40fb1673d3ef3b953e12ccf00a152c1981",
+          "main178b831da1Blob": "05236204854351c06dd276185033ccb7ef1db5e0"
+        },
+        {
+          "path": "services/main/src/modules/media/store.ts",
+          "ranges": [
+            [
+              1689,
+              1714
+            ]
+          ],
+          "purpose": "Durable owner outcome and operation-key cancellation lock; prior success retained instead of a second Use.",
+          "candidateBlob": "41587420c0811c7dce564ea14967320210d0f6b5",
+          "parentBlob": "41587420c0811c7dce564ea14967320210d0f6b5",
+          "unchangedFromParent": true,
+          "sha256": "0bad6ffe330baad6d0c296a99117bc1519b4d4c71eb9745c2404064100810041"
+        },
+        {
+          "path": "services/content/src/core.ts",
+          "ranges": [
+            [
+              744,
+              761
+            ],
+            [
+              787,
+              889
+            ]
+          ],
+          "purpose": "Validated member reply, immutable author/root/origin, variant CAS and head/revision/receipt commit; final exact image binding and concealment guard.",
+          "candidateBlob": "2e1c25587dcb1ec2a593d44306e3f19f0605ee77",
+          "parentBlob": "2e1c25587dcb1ec2a593d44306e3f19f0605ee77",
+          "unchangedFromParent": true,
+          "sha256": "0cbab66fbb8fd9cb2d0e0c59953ce9cc30ba785b1dfa93856e6b35421d120802",
+          "main178b831da1Blob": "2e1c25587dcb1ec2a593d44306e3f19f0605ee77"
+        },
+        {
+          "path": "services/content/src/document-media.ts",
+          "ranges": [
+            [
+              17,
+              70
+            ]
+          ],
+          "purpose": "Exact Use/representation/occurrence/allowed target matching and protected concealment during document save.",
+          "candidateBlob": "0781b55f550912663ccaaffb08e8bf0f162edf6c",
+          "parentBlob": "0781b55f550912663ccaaffb08e8bf0f162edf6c",
+          "unchangedFromParent": true,
+          "sha256": "e39a508b6b44c388e9aed87eb8705fdd40e38ec85bb035f2fb515d7fabb92d52",
+          "main178b831da1Blob": "0781b55f550912663ccaaffb08e8bf0f162edf6c"
+        },
+        {
+          "path": "services/main/src/modules/content-publication/reply-draft.ts",
+          "ranges": [
+            [
+              148,
+              169
+            ],
+            [
+              198,
+              240
+            ]
+          ],
+          "purpose": "Real writer draft admission binds root/revision and returns its actual variant/current head and source position only after succeeded save.",
+          "candidateBlob": "9db875dec9a218344b8bc9b24bec861de8d36c13",
+          "parentBlob": "9db875dec9a218344b8bc9b24bec861de8d36c13",
+          "unchangedFromParent": true,
+          "sha256": "394b8a471fe791b82e201f0b6c4998ba0a6a7363586cc4627f1b968e69ee7507",
+          "main178b831da1Blob": "9db875dec9a218344b8bc9b24bec861de8d36c13"
+        },
+        {
+          "path": "services/main/src/modules/access/admission.ts",
+          "ranges": [
+            [
+              110,
+              135
+            ],
+            [
+              1216,
+              1263
+            ],
+            [
+              1850,
+              1918
+            ]
+          ],
+          "purpose": "Existing strict reply-intent classification, Access-owned current authority transaction and independently committed claim fence; new Media action absent from classifier.",
+          "candidateBlob": "aef348515d8573ec066c9c765af01139151d719c",
+          "parentBlob": "aef348515d8573ec066c9c765af01139151d719c",
+          "unchangedFromParent": true,
+          "sha256": "38249c3dc3e91bb26c1ec36c06aa2bbeadfae9ad64450f78f4b5615636068a4b"
+        },
+        {
+          "path": "services/main/src/modules/access/baseline.ts",
+          "ranges": [
+            [
+              60,
+              64
+            ],
+            [
+              95,
+              133
+            ]
+          ],
+          "purpose": "Closed existing baseline target vocabulary: new action absent. Known separate Access policy dependency, not a new Media source counterexample.",
+          "candidateBlob": "73b5cecd26c3a1b73f08aeb327aacbbf8c02ccba",
+          "parentBlob": "73b5cecd26c3a1b73f08aeb327aacbbf8c02ccba",
+          "unchangedFromParent": true,
+          "sha256": "e2083db72e93068f0436b66d578a6ffb696029ba5d89a7f6656db97ba0baec54"
+        },
+        {
+          "path": "services/main/src/modules/access/receipt-families.ts",
+          "ranges": [
+            [
+              40,
+              52
+            ]
+          ],
+          "purpose": "Existing automatic owner receipt-family discovery incorporates the new media.member-reply.use mapping.",
+          "candidateBlob": "85478521da8b8c9203eef5d0d6070cc5eb5a0134",
+          "parentBlob": "85478521da8b8c9203eef5d0d6070cc5eb5a0134",
+          "unchangedFromParent": true,
+          "sha256": "e9218ec698c730118029febae1fb33d01f24a043cb2dfca16b44fc2bf5b59bba"
+        },
+        {
+          "path": "services/content/migrations/2162_media_recording.sql",
+          "ranges": [
+            [
+              14,
+              22
+            ]
+          ],
+          "purpose": "Existing nullable double-precision duration_seconds DDL; typed-schema addition reconciles this column without a new migration.",
+          "candidateBlob": "1eb367af48da933fb3711858d5fad1565bdb3cec",
+          "parentBlob": "1eb367af48da933fb3711858d5fad1565bdb3cec",
+          "unchangedFromParent": true,
+          "sha256": "5a8ce4b1775233dfb41696e74ae75b316047bf09a5b28faaa40cef62d1ece2af"
+        }
+      ],
+      "generatedSchemaSelection": "Only memberReplyDraft additions to POST /v1/media/uses, in JSON/form/multipart request encodings; broader generated operations are unchanged context, not import authority.",
+      "priorReviewsRepeated": [],
+      "reviewsReused": [
+        "fd4e3c6be3",
+        "8c4fc20b3e",
+        "dabebfed5276 composer integration"
+      ],
+      "unrelatedReview": "G-2802 prior captured-media/dataset-producer review is closed and does not approve this new command; it was not resumed."
+    },
+    "observations": [
+      {
+        "scope": "Closed contract and exact intent",
+        "locations": [
+          "services/main/src/modules/media/presentation-contract.ts:58",
+          "services/main/src/modules/media/presentation.ts:55",
+          "services/main/src/modules/media/commands.ts:363"
+        ],
+        "verdict": "approve",
+        "reason": "Optional closed memberReplyDraft profile selects only the new member command; actual reply target, representation, occurrence, context, conceal and exact variant/head/root/revision are in the stable request digest. Account comment:create and Access content:draft:<reply> / media.member-reply.use carry root/revision as owner-bound metadata. No readable Work, publisher/admin, citation or generic grant substitution is added to Media."
+      },
+      {
+        "scope": "Acknowledged writer-owned Content basis",
+        "locations": [
+          "services/main/src/modules/media/presentation.ts:346"
+        ],
+        "verdict": "approve",
+        "reason": "New first execution joins and SHARE-locks actual reply_author, variant, current revision and matching succeeded draft.save receipt. It checks acting author, resource/reply identity, member model, available nondeleted head, provenance author, immutable variant/root/revision and actual origin Realm/default context before Use insertion. A caller-created ID or readable root alone cannot satisfy this local gate."
+      },
+      {
+        "scope": "Available owned image, exact Use and unchanged final save",
+        "locations": [
+          "services/main/src/modules/media/presentation.ts:384",
+          "services/content/src/core.ts:862",
+          "services/content/src/document-media.ts:37"
+        ],
+        "verdict": "approve",
+        "reason": "Occurrence advisory lock refuses a second binding. Existing owned active nonmoderated non-cover-only available cleared representation gate remains. Use/asset/representation/occurrence and Content position are returned. Content still checks exact Use/representation/occurrence/allowed target and protected concealment on save; no disclosure, rights, read-policy or public-delivery grant is added."
+      },
+      {
+        "scope": "Final authority and durable retry/refusal",
+        "locations": [
+          "services/main/src/modules/media/commands.ts:75",
+          "services/main/src/modules/media/presentation.ts:127",
+          "services/main/src/modules/media/presentation.ts:346"
+        ],
+        "verdict": "approve",
+        "reason": "New writes require existing withOwnerAuthority plus fenceClaim; absent fence support fails unavailable. Access holds its own client through the independent Media SQL commit. Durable success replays before checking a now-advanced head; same-key digest changes conflict. Stale/refused owner outcomes remain refused, and authority denial can return only an already-recorded success, never dispatch a new Use. Current Account/Access registration still precedes replay."
+      },
+      {
+        "scope": "Cancellation, receipt identity and outbox",
+        "locations": [
+          "services/main/src/modules/media/commands.ts:422",
+          "services/main/src/modules/media/receipt-family.ts:6",
+          "services/main/src/modules/media/presentation.ts:396",
+          "services/main/src/modules/media/store.ts:1701"
+        ],
+        "verdict": "approve",
+        "reason": "New action uses existing media-document-use operation/receipt family in both sealing and owner receipt discovery. The cancellation lock retains an existing success; otherwise a rejected owner receipt fences the operation. New succeeded outbox payload includes exact member basis and acknowledged draft operation. Failed new local checks occur before Use insertion and produce no new Use."
+      },
+      {
+        "scope": "Legacy path, generated selection and typed column",
+        "locations": [
+          "services/main/src/modules/media/commands.ts:374",
+          "generated/openapi/main/public.json",
+          "services/main/src/modules/media/typed-schema.ts:105",
+          "services/main/src/modules/media/README.md:242"
+        ],
+        "verdict": "approve",
+        "reason": "Absent memberReplyDraft retains work:edit / media.use / content:publish digest and admission semantics. Generated diff only adds memberReplyDraft to the three encodings of POST /v1/media/uses request body; do not replace current unrelated Main operations with this generated snapshot. durationSeconds describes existing nullable DDL column. Owner documentation separates a Use receipt from draft save and public delivery."
+      },
+      {
+        "scope": "Authored tests and evidence qualification",
+        "locations": [
+          "services/main/tests/media-member-reply.test.ts:76",
+          "services/main/tests/media-member-reply-admission.test.ts:15"
+        ],
+        "verdict": "approve within stated test boundary",
+        "reason": "Read both complete new test files: isolated SQL covers own draft/save/readback/replay, wrong author/basis/context, stale head, ownership/availability/occurrence, final Content substitution refusals, Realm, legacy input and cancellation. HTTP composition controls Account/Access and Media outcomes to cover scopes, final fence, key conflict, refusal/unavailable, lost Access acknowledgement and stale receipt. These are not genuine policy, fixture custody, browser decoding or full-page persistence receipts."
+      }
+    ],
+    "actionableFindings": [],
+    "knownIntegrationDependency": {
+      "status": "known required separate Access delta; not a newly discovered Media defect",
+      "owner": "G-2839/root",
+      "action": "media.member-reply.use",
+      "scope": "content:draft:<actual reply>",
+      "candidate": "395c5a1676b1de442943c1b90c30a493d53d0b33",
+      "mainDependencyPin": "178b831da1ccc347d0db6f57208ae75659685252",
+      "sourceEvidence": [
+        "services/main/src/modules/access/baseline.ts:79-132 has no mapping for the new action",
+        "services/main/src/modules/access/admission.ts:115-134 classifies only reply.create and root-bound content.draft, not the new Media action"
+      ],
+      "verified": "Exact new action absent from Access source at candidate and stated Main pin. Existing owner-authority API and lifecycle composition do not supply this missing strict Person/root policy.",
+      "required": "Implement strict existing current Person/controller/root/revision baseline and eligibility across register/claim/replay/withOwnerAuthority/fenceClaim, obtain independent source approval of that new delta and real policy evidence. No generic-grant/admin/Work-publication fallback.",
+      "effectOnVerdict": "Media slice approved; complete real-backend admission and D2-003 acceptance remain unproved. No known-incomplete-backend journey attempted."
+    },
+    "reusedOwnerChecks": {
+      "execution": "Not rerun by this reviewer. Supplied immutable owner manifest, retained logs and source inspected.",
+      "checks": [
+        {
+          "job": "3fd213db-4cbc-43be-887e-7b7614a08d6a",
+          "qa": "20261019t130757-7b1ffe",
+          "result": "failed",
+          "limits": "Generation passed. New owner upload fixture lacked bounded idle timeout; existing schema check exposed missing duration_seconds typed declaration. Both repaired. Later steps did not run."
+        },
+        {
+          "job": "4bb9fe5d-23e8-42ea-b2cb-e473487412b7",
+          "qa": "20261019t131230-927d69",
+          "result": "partial",
+          "limits": "Existing media-schema integration 5 tests / 107 assertions passed; owner 45 passed, 1 failed at expected text newline after image block, subsequently corrected. Later steps did not run."
+        },
+        {
+          "job": "d349a25a-d8c8-475f-95e6-cbb877223f05",
+          "qa": "20261019t131507-4edabd",
+          "result": "passed",
+          "commands": [
+            "bun scripts/goal/goalctl.ts test services/main/tests/media-member-reply.test.ts services/main/tests/media-member-reply-admission.test.ts",
+            "task docs:check",
+            "task goal -- check --only types,lint,guards",
+            "task web:typecheck"
+          ],
+          "limits": "15 tests / 100 assertions; real isolated Media+Content SQL and controlled HTTP Account/Access outcomes. No real member/root Access policy or business page proof."
+        }
+      ],
+      "generation": "job 3fd213db-4cbc-43be-887e-7b7614a08d6a step1 passed",
+      "schema": "QA20261019t131230-927d69 existing media-schema integration 5 tests /107 assertions passed; overall run still failed owner newline expectation",
+      "final": "job d349a25a-d8c8-475f-95e6-cbb877223f05 / QA20261019t131507-4edabd: 15 tests /100 assertions; docs, types/inference/lint/AST/guards and Web typecheck passed",
+      "qualifications": "Earlier missing fixture timeout/typed duration column and subsequent newline expectation failure retained with owner follow-ups. HTTP Account/Access outcomes controlled; no real policy pass."
+    },
+    "findingStatus": {
+      "D2-002": "Unchanged accepted original three assertions, eight natural input cases and prior real publication receipts retained; no rerun.",
+      "D2-003": "Remains open. Old genuine media-use403, unresolved original upload exception and original rendered failures preserved. This source-only delta supplies no new genuine API receipt or image persistence acceptance."
+    },
+    "limits": [
+      "No source/product/assertion change, test rerun, stack/server, data/account write, install, backend refresh/reset/import or corpus preparation.",
+      "Zero new API calls/writes and no new screenshots in this source-only continuation.",
+      "Full-page image/text persistence, reopen, unavailable preview/metadata and retry/remove/export at 1440/390/en/zh-Hans remain for existing G-2748/G-2830 after exact Media+reviewed Access+consumer integration.",
+      "Source inspection and controlled owner tests do not reproduce or diagnose the original audit upload exception, establish public delivery, prove browser image decode, or close a finding."
+    ],
+    "artifactDelivery": {
+      "workerBundle": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/media-candidate-395c5a1676b1",
+      "mainCopy": "Manager copies retained translated worker bundle; worker write boundary makes main read-only."
+    },
+    "reportChecks": {
+      "job": "1a822332-f19c-44f6-9df5-0c5ac69e484e",
+      "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "checkedCommit": "05a9b1b1b1fc79c15376f11e03dbe6e28ef15f7e",
+      "docs": {
+        "command": "task docs:check",
+        "status": "passed",
+        "tests": 13,
+        "markdownFiles": 250,
+        "log": "report-checks/1a822332-f19c-44f6-9df5-0c5ac69e484e.1.log"
+      },
+      "worker": {
+        "command": "task goal -- check",
+        "status": "blocked at automatic rebase before checks",
+        "exitStatus": 1,
+        "behindMainCommits": 91,
+        "conflict": "docs/goals/audit-remediation-20261019/proofs/post-draft-recovery.json",
+        "rebase": "undone by tooling; branch restored to checked commit; clean",
+        "checksRan": false,
+        "log": "report-checks/1a822332-f19c-44f6-9df5-0c5ac69e484e.2.log"
+      },
+      "sequenceExitStatus": 201,
+      "next": "Manager reconciles existing proof history and this append during integration, then runs normal worker checks. No manual main rebase or general-tier rerun by this worker."
+    },
+    "next": "Root integrates approved exact Media slice with separately source-approved strict Access dependency; existing G-2748 consumes exact command. Later continuation proves only original remaining D2-003 outcomes and reuses accepted D2-002."
+  },
+  "memberReplyMediaAccessSourceReview": {
+    "recordedAt": "2026-10-19T14:12:06.064897+00:00",
+    "reviewer": "G-2830 / codex-1 / gpt-6.1-sol / xhigh; no fallback or nested agents",
+    "scope": "One first independent source inspection of the genuinely new three-path Access dependency only",
+    "verdict": "APPROVE the exact three-path Access delta against its authored base; no actionable new source defect identified. Source approval does not close D2-003 or establish genuine persona/persistence success.",
+    "candidate": "643a8d25391f01b0ea8e0d234f50de2a4546d887",
+    "authoredBase": "3d6097238d9bc63de4da2b8fb797774a3da31df2",
+    "suppliedPatchSha256": "bad205343895a61f22b5e2839e5f2be019b8b2c618b2ff0f05ef6be4e46273f0",
+    "patchBytes": 20195,
+    "suppliedManifestSha256": "622424042b6781039fb9284196f150870b191fb1bb0693e38a5013ba3e4789bf",
+    "pinsAndBlobs": [
+      {
+        "path": "services/main/src/modules/access/admission.ts",
+        "gitBlob": "b3e946f323278c79f8644dba21dafda43fb4f5e5",
+        "baseBlob": "aef348515d8573ec066c9c765af01139151d719c",
+        "sha256": "3378cb8d1411c0be71bfce488a5fdccecdb204799e3645491a10fb216e4acfc0",
+        "bytes": 142306,
+        "reviewed": true
+      },
+      {
+        "path": "services/main/src/modules/access/baseline.ts",
+        "gitBlob": "010f895cd31e45f00e9cb8e2ee85001df177b693",
+        "baseBlob": "73b5cecd26c3a1b73f08aeb327aacbbf8c02ccba",
+        "sha256": "3acc79340e4ba5dabd3ec46c2fa344048b75bf21214140b10e8ac85b461e3da8",
+        "bytes": 28816,
+        "reviewed": true
+      },
+      {
+        "path": "services/main/tests/access-reply-authorship.test.ts",
+        "gitBlob": "c0a17612294a6b97264b73722c753b5a09a4b6d4",
+        "baseBlob": "2d4983e3631d0a0973058f9204301bca3673d143",
+        "sha256": "3b5923d7c98cba61809812c867672b114373a1779c4eaf458cf32ce232ef84e1",
+        "bytes": 34666,
+        "reviewed": true
+      }
+    ],
+    "necessaryCallChains": [
+      {
+        "path": "services/main/src/modules/access/admission.ts",
+        "pin": "643a8d25391f01b0ea8e0d234f50de2a4546d887",
+        "ranges": [
+          [
+            110,
+            138
+          ],
+          [
+            587,
+            618
+          ],
+          [
+            1191,
+            1287
+          ],
+          [
+            1330,
+            1445
+          ],
+          [
+            1540,
+            1582
+          ],
+          [
+            1853,
+            1953
+          ],
+          [
+            1987,
+            2025
+          ]
+        ],
+        "purpose": "New intent classifier and proof requirement, existing authenticated root reader, registration/current-authority replay, exact saved metadata conflict, owner authority probe, independent claim and final fence.",
+        "gitBlob": "b3e946f323278c79f8644dba21dafda43fb4f5e5",
+        "sha256": "3378cb8d1411c0be71bfce488a5fdccecdb204799e3645491a10fb216e4acfc0"
+      },
+      {
+        "path": "services/main/src/modules/access/baseline.ts",
+        "pin": "643a8d25391f01b0ea8e0d234f50de2a4546d887",
+        "ranges": [
+          [
+            53,
+            65
+          ],
+          [
+            103,
+            139
+          ],
+          [
+            140,
+            157
+          ],
+          [
+            201,
+            211
+          ],
+          [
+            306,
+            377
+          ],
+          [
+            384,
+            440
+          ]
+        ],
+        "purpose": "New action vocabulary and root requirements select existing Person/controller provision proof; existing root read and saved-proof generation checks preserve strict policy.",
+        "gitBlob": "010f895cd31e45f00e9cb8e2ee85001df177b693",
+        "sha256": "3acc79340e4ba5dabd3ec46c2fa344048b75bf21214140b10e8ac85b461e3da8"
+      },
+      {
+        "path": "services/main/src/modules/realm-reply/root.ts",
+        "pin": "643a8d25391f01b0ea8e0d234f50de2a4546d887",
+        "ranges": [
+          [
+            85,
+            143
+          ],
+          [
+            185,
+            204
+          ]
+        ],
+        "unchanged": true,
+        "purpose": "Existing authenticated target read and retained-root semantics receive the exact native resource/revision; current disclosure and erasure remain in force. No new root-reader implementation reviewed.",
+        "gitBlob": "1a5f1557bdda86e2e16c7f238df6430e95555e36",
+        "sha256": "6145aefacf0cb8b7a1ed55d4a34d4fbd1fe3cbc44412e192f3ca19fad2733e82",
+        "baseBlob": "1a5f1557bdda86e2e16c7f238df6430e95555e36"
+      },
+      {
+        "path": "services/main/src/modules/editorial-review/admission.ts",
+        "pin": "643a8d25391f01b0ea8e0d234f50de2a4546d887",
+        "ranges": [
+          [
+            114,
+            135
+          ]
+        ],
+        "unchanged": true,
+        "purpose": "Existing owner authority wrapper reaches ordinary registration for this content:draft action; no editorial/Work authority substitution.",
+        "gitBlob": "8759184ebb6c67f59c51970cee829a96d71e2ce2",
+        "sha256": "2a6748f10bbbf0476af125d7c3ecf1ae4d953713f1bd9b108840b349802b1547",
+        "baseBlob": "8759184ebb6c67f59c51970cee829a96d71e2ce2"
+      },
+      {
+        "path": "services/main/src/modules/media/commands.ts",
+        "pin": "395c5a1676b1de442943c1b90c30a493d53d0b33",
+        "ranges": [
+          [
+            363,
+            379
+          ]
+        ],
+        "purpose": "Previously approved dependency context only: exact action/scope, native root metadata, owner digest, comment:create and final authority fence. Nine-path Media review reused, not repeated.",
+        "gitBlob": "153b75be40174312e41c9d33e1cfc9bbf53f7958",
+        "sha256": "31b4ef0460c40fdc766a551e4d4b7861e7178a01c7b15fbc386f0e0634a3bb38"
+      }
+    ],
+    "observations": [
+      {
+        "scope": "Closed rooted member intent",
+        "locations": [
+          "services/main/src/modules/access/admission.ts:115",
+          "services/main/src/modules/access/baseline.ts:111"
+        ],
+        "reason": "The new action always enters memberReplyAuthoringIntent, even with no root metadata. Exact content:draft:<native reply>, native root and native revision are required; a bare UUID revision is insufficient for this action. Partial/foreign metadata, mixed contribution/collection/Zone intent and editorial permit fail before authority selection. Legacy content.draft revision vocabulary is unchanged."
+      },
+      {
+        "scope": "Actual current Person baseline; no substitute authority",
+        "locations": [
+          "services/main/src/modules/access/baseline.ts:60",
+          "services/main/src/modules/access/baseline.ts:139",
+          "services/main/src/modules/access/baseline.ts:306",
+          "services/main/src/modules/access/admission.ts:1545",
+          "services/main/src/modules/access/admission.ts:1574"
+        ],
+        "reason": "Native root requirements prevent Work-controller selection. The existing baseline requires an active provisioned Person, current direct agent.control mandate, active principal/subject/member policy and verified Account assertion. Member intent excludes administrator selection and must have a baseline before generic grants are considered. requireExplicitGrant, direct-principal, foreign controller, Org/service and unprovisioned substitutes cannot admit this new action. An installed policy does not gain a baseline override."
+      },
+      {
+        "scope": "Exact root binding and truthful retry",
+        "locations": [
+          "services/main/src/modules/access/admission.ts:587",
+          "services/main/src/modules/access/admission.ts:1333",
+          "services/main/src/modules/access/admission.ts:1417",
+          "services/main/src/modules/access/baseline.ts:384"
+        ],
+        "reason": "Registration and replay use the authenticated existing reply root reader with held Access client, current identity/actor and exact native root pair. Saved baseline root/revision are compared on replay, with request digest/actor/scope; changed intent conflicts after current authority is established. Current ordinary authority gates receipt disclosure; authority loss denies replay rather than returning a dispatchable historical proof. Existing retained-root semantics are unchanged; Media separately owns actual reply/variant/head/root binding."
+      },
+      {
+        "scope": "Claim, owner authority and final dispatch fence",
+        "locations": [
+          "services/main/src/modules/access/admission.ts:1221",
+          "services/main/src/modules/access/admission.ts:1853",
+          "services/main/src/modules/access/admission.ts:1923",
+          "services/main/src/modules/access/admission.ts:1987"
+        ],
+        "reason": "withOwnerAuthority runs the same strict registration probe under held locks. claim and fenceClaim require a saved Person baseline for this action, including legacy rows lacking a baseline; final fence still requires an independently committed claim. Existing current Account, controller/provision generation, scope/policy/recovery, lease, authenticated root and witness checks are retained. Root loss between owner authority and final fence refuses the effect. Denied/unavailable/moved root outcomes remain distinct."
+      },
+      {
+        "scope": "Bounded dependency and legacy behavior",
+        "locations": [
+          "services/main/src/modules/media/commands.ts:363",
+          "services/main/src/modules/access/baseline.ts:108"
+        ],
+        "reason": "Previously approved Media395c5a passes the exact action/content:draft/native root metadata and includes the immutable basis in its digest, with comment:create and authorityFence. Its actual writer/head/receipt/image checks remain separate. Existing media.use Work-author mapping, ordinary Work/Post/Zone drafts, reply.create and rights/disclosure paths are not replaced. No route/schema/API export or generation change is authored here."
+      },
+      {
+        "scope": "Authored assertions and historical premise corrections",
+        "locations": [
+          "services/main/tests/access-reply-authorship.test.ts:376",
+          "services/main/tests/access-reply-authorship.test.ts:415",
+          "services/main/tests/access-reply-authorship.test.ts:447"
+        ],
+        "reason": "Read the complete three-path diff and affected test file. Coverage includes exact saved Person/root, key/root conflicts, legacy no-baseline claim refusal, malformed intent, installed policy, foreign/non-Person/grant/admin refusal, current control/email/root loss through replay/claim/fence, and no dispatch after denial. Initial final-controller fixture failure was corrected by installing a replacement controller; three wrong nondispatchable-replay expectations were corrected to current authority denial. Access implementation bytes did not change in those test corrections."
+      }
+    ],
+    "actionableFindings": [],
+    "reusedMediaSourceReview": {
+      "candidate": "395c5a1676b1de442943c1b90c30a493d53d0b33",
+      "reportKey": "memberReplyMediaSourceReview",
+      "verdict": "existing nine-path APPROVE unchanged; binding inspected only as dependency context",
+      "newReviewOfMedia": false
+    },
+    "sourceDependencyStatus": "This exact approved Access delta supplies the strict action/classifier/baseline dependency absent at the previously reviewed Media candidate and historical Main pin. Prior dependency evidence remains accurate for those pins. Actual current-Main Media+Access composition and consumer integration remain root/G-2748 work.",
+    "reusedOwnerChecks": {
+      "execution": "No test rerun by reviewer; raw owner logs, immutable source equivalence and manifests inspected.",
+      "checks": [
+        {
+          "job": "aa22cf9a-ba91-4edb-b404-6d8f7b611dcb",
+          "source": "f4dd710ff1d0d9fadcbf98774706c88248817fce",
+          "qa": "20261019t135131-bce046",
+          "result": "failed historical run",
+          "command": "bun scripts/goal/goalctl.ts test services/main/tests/access-reply-authorship.test.ts services/main/tests/access-baseline.test.ts",
+          "testsPassed": 15,
+          "testsFailed": 4,
+          "causes": [
+            "control-loss fixture tried to revoke the final controller",
+            "three cases expected nondispatchable replay where current authority denies receipt disclosure"
+          ],
+          "correction": "test-only second commit; preserve continuity and exact current denial semantics",
+          "reusedPass": "3 baseline vocabulary tests passed; all Access implementation and baseline test bytes unchanged at final source"
+        },
+        {
+          "job": "d0592b3c-e981-4230-a43b-a85dd5d415fa",
+          "step": 1,
+          "source": "08c0b9bb4df0ca19060f9dac47ef0a7ea0fbbade",
+          "qa": "20261019t135254-90fcca",
+          "result": "passed",
+          "command": "bun scripts/goal/goalctl.ts test services/main/tests/access-reply-authorship.test.ts",
+          "testsPassed": 16,
+          "testsFailed": 0,
+          "assertions": 102,
+          "seconds": 8.8
+        },
+        {
+          "job": "d0592b3c-e981-4230-a43b-a85dd5d415fa",
+          "step": 2,
+          "source": "643a8d25391f01b0ea8e0d234f50de2a4546d887",
+          "result": "passed",
+          "command": "task goal -- check --only types,lint,guards",
+          "guards": {
+            "files": 24,
+            "tests": 172,
+            "failedFiles": 0
+          },
+          "types": true,
+          "inference": true,
+          "lint": true,
+          "ast": true,
+          "artifacts": ".temp/goal/check/run-dwtB6g/output.log"
+        }
+      ],
+      "finalOwner": {
+        "job": "d0592b3c-e981-4230-a43b-a85dd5d415fa",
+        "qa": "20261019t135254-90fcca",
+        "testedPin": "08c0b9bb4df0ca19060f9dac47ef0a7ea0fbbade",
+        "passedTests": 16,
+        "assertions": 102,
+        "sourceEquivalence": "14 listed source/dependency/test/toolchain Git objects verified byte exact at final candidate; tested-source-equivalence.json retained"
+      },
+      "finalWorker": {
+        "pin": "643a8d25391f01b0ea8e0d234f50de2a4546d887",
+        "types": "passed",
+        "inference": "passed",
+        "lint": "passed",
+        "ast": "passed",
+        "guards": {
+          "files": 24,
+          "tests": 172,
+          "failed": 0
+        },
+        "log": "owner-checks/run-dwtB6g-output.log"
+      },
+      "historical": {
+        "job": "aa22cf9a-ba91-4edb-b404-6d8f7b611dcb",
+        "qa": "20261019t135131-bce046",
+        "passed": 15,
+        "failed": 4,
+        "assertions": 105,
+        "failures": [
+          "control-loss fixture revoked final controller; PostgreSQL continuity constraint 23514 stopped setup",
+          "email-loss replay expected nondispatchable receipt; current ordinary authority correctly denied",
+          "root-loss replay expected nondispatchable receipt; current ordinary authority correctly denied",
+          "root outcome final denial expected nondispatchable receipt; current ordinary authority correctly denied"
+        ],
+        "correction": "Test-only replacement controller plus truthful AdmissionDenied expectations; all four raw failures retained.",
+        "baselineReuse": "Three unchanged access-baseline tests passed; both Access implementation files and baseline test blob verified exact between initial f4dd710 and final candidate."
+      },
+      "premise": {
+        "tier": "owner",
+        "database": "isolated PostgreSQL, all Access migrations",
+        "controlledOwnModules": [
+          "authorWorkGeneration",
+          "zoneSpaceCreatorAllowed",
+          "publicReplyRoot",
+          "readableReplyRoot"
+        ],
+        "assertionReach": "all 16 authorship cases and 102 assertions passed",
+        "genuinePersonaAssertions": 0,
+        "acceptanceIdsClosed": [],
+        "noNativeOrFullCorpusRerun": true
+      }
+    },
+    "findingStatus": {
+      "D2-002": "Accepted original three assertions/eight natural input cases and genuine text receipts unchanged and reused.",
+      "D2-003": "Open: genuine image/text persistence, full-page reopen, unavailable preview/metadata and retry/remove/export still need the complete integrated exact pin. Old genuine media-use403, original rendered failures and original unresolved low-level upload exception preserved."
+    },
+    "proofPreservation": {
+      "workerProofBase": "a1a50131a59b8a389e27e74662796886b3839b1f",
+      "allPreviousWorkerKeysPreserved": true,
+      "previousWorkerKeyCount": 25,
+      "mainReadPin": "3705a134475bb78de2c4b0a08dd3e6d1c7e3bb0b",
+      "allMainKeysAtReadPreserved": true,
+      "mainKeyCount": 24,
+      "merge": "Only the additive review key is authored; root retains reconciliation/integration of any subsequent Main proof updates. No worker rebase/merge/reset."
+    },
+    "limits": [
+      "Controlled isolated PostgreSQL with mocked own author/Zone/root readers is source/owner evidence; genuine persona assertions zero.",
+      "Zero new API calls/writes, no product/assertion edits, live stack, server, account fallback, install, native/author-lifecycle/general-tier rerun, backend refresh/reset/import or corpus preparation.",
+      "No new screenshots or durable image/public-delivery/browser-decode acceptance; original audit upload exception remains unreproduced and undiagnosed.",
+      "Previously approved composer/current-document/Media9 reviews and all historical failures remain unchanged; no repeated source review."
+    ],
+    "artifactDelivery": {
+      "workerBundle": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/access-candidate-643a8d25391f",
+      "mainCopy": "Root copies this private subtree to main; worker boundary keeps main and peer worktrees read-only."
+    },
+    "reportChecks": {
+      "job": "b819de71-b120-4bfc-9d1c-40aeae5c22f6",
+      "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "checkedCommit": "f0bdd8ddb61aaba4c348b3f303004d6ab1355425",
+      "docs": {
+        "command": "task docs:check",
+        "status": "passed",
+        "tests": 13,
+        "markdownFiles": 250,
+        "log": "report-checks/b819de71-b120-4bfc-9d1c-40aeae5c22f6.1.log"
+      },
+      "worker": {
+        "command": "task goal -- check",
+        "status": "blocked only by cumulative proof conflict during automatic rebase before checks",
+        "exitStatus": 1,
+        "behindMainCommits": 101,
+        "conflict": "docs/goals/audit-remediation-20261019/proofs/post-draft-recovery.json",
+        "rebase": "undone by tooling; checked commit restored and branch clean",
+        "checksRan": false,
+        "log": "report-checks/b819de71-b120-4bfc-9d1c-40aeae5c22f6.2.log"
+      },
+      "sequenceExitStatus": 201,
+      "next": "Per recorded continuation, retain exact source verdict/artifacts and return for root additive merge; no manual rebase/merge/reset or repeated source inspection."
+    },
+    "next": "Root composes approved Media9+Access3 on current Main and retains integration/closure. Existing G-2748 consumes the exact command; later G-2830 continuation proves only remaining original D2-003 image outcomes, reusing accepted D2-002."
   }
 }

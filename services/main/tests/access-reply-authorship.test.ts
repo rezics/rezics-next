@@ -6,6 +6,7 @@ import { Pool } from 'pg';
 import type { ContentCore, SaveDraftCommand, SaveDraftResult } from '../../content/src/core.ts';
 import type { AdmissionRequest, VerifiedPrincipal } from '../src/modules/access/admission.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { WorkReadMoved, WorkReadUnavailable } from '../src/modules/work/read-session.ts';
 import { platformAdministratorProof, savePlatformAdministratorProof } from '../src/modules/access/platform-administrator.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
@@ -15,6 +16,8 @@ const zoneAuthority = await import('../src/modules/space/create-authority.ts');
 const replyRoot = await import('../src/modules/realm-reply/root.ts');
 const authoredWorks = new Map<string, string>();
 const zoneOwnerships = new Set<string>();
+const rootDecisions = new Map<string, boolean | Error>();
+const rootReads: { resource: string; revision: string; principal: unknown; actor: string | undefined }[] = [];
 const graph = { query: async () => ({ boolean: true, results: { bindings: [] } }) };
 const { configureDisclosure } = await import('../src/modules/disclosure/read.ts');
 configureDisclosure(({ fuseki: graph,
@@ -33,10 +36,17 @@ await mock.module('../src/modules/space/create-authority.ts', () => ({
 await mock.module('../src/modules/realm-reply/root.ts', () => ({
   ...replyRoot,
   publicReplyRoot: async () => true,
-  readableReplyRoot: async () => true,
+  readableReplyRoot: async (...args: Parameters<typeof replyRoot.readableReplyRoot>) => {
+    const [, resource, revision, , principal, actor] = args;
+    rootReads.push({ resource, revision, principal, actor });
+    const decision = rootDecisions.get(`${resource}:${revision}`) ?? true;
+    if (decision instanceof Error) throw decision;
+    return decision;
+  },
 }));
 
-const { AccessAdmissionRegistry, AdmissionDenied } = await import('../src/modules/access/admission.ts');
+const { AccessAdmissionRegistry, AdmissionDenied, AdmissionConflict, AdmissionUnavailable } =
+  await import('../src/modules/access/admission.ts');
 const { resolveZonePageContent } = await import('../src/modules/access/zone-content-authority.ts');
 const { saveAdmittedContentDraft } = await import('../src/modules/content-publication/draft.ts');
 const { nativePostType } = await import('../src/modules/work/work-kinds.ts');
@@ -366,12 +376,13 @@ test('a Person with platform administrator and resource grants still saves the b
     [admitted.id])).rowCount).toBe(0);
 });
 
-test('an installed authoring policy refuses baseline and explicit-grant substitution', async () => {
+test.each(['content.draft', 'media.member-reply.use'])(
+  'an installed %s policy refuses baseline and explicit-grant substitution', async action => {
   const identity = principal();
   const member = await actor(identity, 'person');
   const target = nativeId();
   const scope = `content:draft:${target}`;
-  const sources = await grant(member.principalId, member.agent, 'content.draft', scope);
+  const sources = await grant(member.principalId, member.agent, action, scope);
   const policyId = randomUUID();
   const client = await pool.connect();
   try {
@@ -397,17 +408,21 @@ test('an installed authoring policy refuses baseline and explicit-grant substitu
   } finally {
     client.release();
   }
-  const input = request(identity, member.agent, 'content.draft', scope,
-    { baselineRelatedWork: nativeId(), baselineSourceRevision: randomUUID() });
+  const input = request(identity, member.agent, action, scope,
+    { baselineRelatedWork: nativeId(),
+      baselineSourceRevision: action === 'content.draft' ? randomUUID() : nativeId() });
   await expect(member.access.register(input)).rejects.toBeInstanceOf(AdmissionDenied);
 });
 
-test('a pending legacy reply.create without Person proof remains nondispatchable', async () => {
+test.each(['reply.create', 'media.member-reply.use'])(
+  'a pending legacy %s without Person proof remains nondispatchable', async action => {
   const identity = principal();
   const member = await actor(identity, 'person');
   const rootTarget = nativeId();
-  const rootRevision = randomUUID();
-  const input = request(identity, member.agent, 'reply.create', `reply:create:${rootTarget}`, {
+  const rootRevision = action === 'reply.create' ? randomUUID() : nativeId();
+  const input = request(identity, member.agent, action,
+    action === 'reply.create' ? `reply:create:${rootTarget}` : `content:draft:${nativeId()}`, {
+    ...(action === 'media.member-reply.use' ? { baselineRelatedWork: rootTarget } : {}),
     baselineSourceRevision: rootRevision,
   });
   const id = randomUUID();
@@ -427,4 +442,163 @@ test('a pending legacy reply.create without Person proof remains nondispatchable
 
   expect(await member.access.register(input)).toMatchObject({ id, replayed: true, dispatchEligible: false });
   await expect(member.access.claim(id, input.requestDigest, identity)).rejects.toBeInstanceOf(AdmissionDenied);
+});
+
+test('member-reply Media saves and rechecks its own Person and exact root proof through final dispatch', async () => {
+  const identity = principal();
+  const person = await actor(identity, 'person');
+  const rootTarget = nativeId();
+  const rootRevision = nativeId();
+  const input = request(identity, person.agent, 'media.member-reply.use', `content:draft:${nativeId()}`, {
+    baselineRelatedWork: rootTarget, baselineSourceRevision: rootRevision,
+  });
+  await grant(person.principalId, person.agent, input.action, input.scope);
+  await platformAdministratorGrants(person.principalId, person.agent, input.action, input.scope);
+
+  const admitted = await person.access.register(input);
+  expect(admitted.dispatchEligible).toBe(true);
+  expect((await pool.query(`SELECT b.provision_id, b.related_work, b.source_revision, b.author_work,
+    p.agent_kind FROM access.baseline_admission b JOIN access.agent_provision p ON p.id = b.provision_id
+    WHERE b.admission_id = $1`, [admitted.id])).rows[0]).toEqual({
+    provision_id: person.provisionId, related_work: rootTarget, source_revision: rootRevision,
+    author_work: null, agent_kind: 'person',
+  });
+  expect((await pool.query('SELECT admission_id FROM access.platform_administrator_admission WHERE admission_id = $1',
+    [admitted.id])).rowCount).toBe(0);
+  expect(await person.access.register(input)).toMatchObject({ id: admitted.id, replayed: true, dispatchEligible: true });
+  for (const changed of [
+    { requestDigest: digest('different Media use') },
+    { baselineRelatedWork: nativeId() },
+    { baselineSourceRevision: nativeId() },
+  ]) {
+    await expect(person.access.register({ ...input, ...changed })).rejects.toBeInstanceOf(AdmissionConflict);
+  }
+  await person.access.claim(admitted.id, input.requestDigest, identity);
+  let dispatched = 0;
+  await person.access.withOwnerAuthority(input, async client => {
+    await person.access.fenceClaim(client, admitted.id, input.requestDigest, identity);
+    dispatched++;
+  });
+  expect(dispatched).toBe(1);
+  expect(rootReads.at(-1)).toMatchObject({ resource: rootTarget, revision: rootRevision,
+    principal: { issuer: identity.issuer, subject: identity.subject }, actor: person.agent });
+  await expect(person.access.withOwnerAuthority(input, async client => {
+    rootDecisions.set(`${rootTarget}:${rootRevision}`, false);
+    await person.access.fenceClaim(client, admitted.id, input.requestDigest, identity);
+    dispatched++;
+  })).rejects.toBeInstanceOf(AdmissionDenied);
+  expect(dispatched).toBe(1);
+});
+
+test('member-reply Media refuses foreign controllers, non-Persons and grant or administrator substitutes', async () => {
+  const identity = principal();
+  const person = await actor(identity, 'person');
+  const foreign = await actor(principal(), 'person');
+  const organization = await actor(identity, 'organization');
+  const service = await actor(identity, 'service');
+  const unprovisioned = await actor(identity, 'person', false);
+  for (const selected of [foreign, organization, service, unprovisioned]) {
+    const input = request(identity, selected.agent, 'media.member-reply.use', `content:draft:${nativeId()}`, {
+      baselineRelatedWork: nativeId(), baselineSourceRevision: nativeId(),
+    });
+    await grant(person.principalId, selected.agent, input.action, input.scope);
+    await platformAdministratorGrants(person.principalId, selected.agent, input.action, input.scope);
+    let dispatched = false;
+    await expect(person.access.register(input)).rejects.toBeInstanceOf(AdmissionDenied);
+    await expect(person.access.withOwnerAuthority(input, async () => { dispatched = true; }))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    expect(dispatched).toBe(false);
+  }
+  const input = request({ ...identity, emailVerified: false }, person.agent,
+    'media.member-reply.use', `content:draft:${nativeId()}`, {
+      baselineRelatedWork: nativeId(), baselineSourceRevision: nativeId(),
+    });
+  await expect(person.access.register(input)).rejects.toBeInstanceOf(AdmissionDenied);
+});
+
+test('member-reply Media cannot fall through to Work authority with malformed or missing root metadata', async () => {
+  const identity = principal();
+  const person = await actor(identity, 'person');
+  const reply = nativeId();
+  const scope = `content:draft:${reply}`;
+  const metadata = { baselineRelatedWork: nativeId(), baselineSourceRevision: nativeId() };
+  authoredWorks.set(`${person.principalId}:${person.agent}:${reply}`, '0');
+  await grant(person.principalId, person.agent, 'media.member-reply.use', scope);
+  await platformAdministratorGrants(person.principalId, person.agent, 'media.member-reply.use', scope);
+  for (const invalid of [
+    { baselineRelatedWork: undefined, baselineSourceRevision: undefined },
+    { baselineRelatedWork: undefined }, { baselineSourceRevision: undefined },
+    { baselineRelatedWork: 'https://example.test/root' }, { baselineSourceRevision: randomUUID() },
+    { baselineContribution: nativeId() }, { baselineCollectionCreate: true },
+    { resolvedZonePage: nativeId() }, { editorialPermit: randomUUID() },
+    { scope: `content:publish:${reply}` }, { scope: 'content:draft:invalid' },
+    { requireExplicitGrant: true }, { authorityPath: 'direct-principal' as const },
+  ]) {
+    const input = request(identity, person.agent, 'media.member-reply.use', scope, { ...metadata, ...invalid });
+    await expect(person.access.register(input)).rejects.toBeInstanceOf(AdmissionDenied);
+  }
+  expect((await pool.query('SELECT id FROM access.admission WHERE scope_id = $1', [scope])).rowCount).toBe(0);
+});
+
+test.each(['control', 'email', 'root'] as const)(
+  'member-reply Media stops replay, claim and final dispatch after %s authority loss', async loss => {
+    const identity = principal();
+    const person = await actor(identity, 'person');
+    const input = request(identity, person.agent, 'media.member-reply.use', `content:draft:${nativeId()}`, {
+      baselineRelatedWork: nativeId(), baselineSourceRevision: nativeId(),
+    });
+    const admitted = await person.access.register(input);
+    await person.access.claim(admitted.id, input.requestDigest, identity);
+    if (loss === 'control') {
+      const replacementPrincipalId = randomUUID();
+      await pool.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
+        VALUES ($1,'https://replacement.reply-authorship.test',$2)`, [replacementPrincipalId, randomUUID()]);
+      await pool.query(`INSERT INTO access.representation (id,principal_id,subject_id,action,valid_until)
+        VALUES ($1,$2,$3,'agent.control','infinity')`, [randomUUID(), replacementPrincipalId, person.agent]);
+      await pool.query('UPDATE access.representation SET active = false WHERE id = $1', [person.controlId]);
+    } else if (loss === 'email') {
+      identity.emailVerified = false;
+      identity.currentAssertion = async () => identity;
+    } else {
+      rootDecisions.set(`${input.baselineRelatedWork}:${input.baselineSourceRevision}`, false);
+    }
+    await expect(person.access.register(input)).rejects.toBeInstanceOf(AdmissionDenied);
+    await expect(person.access.claim(admitted.id, input.requestDigest, identity)).rejects.toBeInstanceOf(AdmissionDenied);
+    let dispatched = false;
+    await expect(person.access.withOwnerAuthority(input, async () => { dispatched = true; }))
+      .rejects.toBeInstanceOf(AdmissionDenied);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await expect(person.access.fenceClaim(client, admitted.id, input.requestDigest, identity))
+        .rejects.toBeInstanceOf(AdmissionDenied);
+    } finally {
+      await client.query('ROLLBACK');
+      client.release();
+    }
+    expect(dispatched).toBe(false);
+  });
+
+test('member-reply Media distinguishes unavailable root reads from denied or superseded roots', async () => {
+  const identity = principal();
+  const person = await actor(identity, 'person');
+  const input = request(identity, person.agent, 'media.member-reply.use', `content:draft:${nativeId()}`, {
+    baselineRelatedWork: nativeId(), baselineSourceRevision: nativeId(),
+  });
+  const rootKey = `${input.baselineRelatedWork}:${input.baselineSourceRevision}`;
+  const admitted = await person.access.register(input);
+  await person.access.claim(admitted.id, input.requestDigest, identity);
+  rootDecisions.set(rootKey, new WorkReadMoved('root revision moved'));
+  await expect(person.access.register(input)).rejects.toBeInstanceOf(WorkReadMoved);
+  await expect(person.access.claim(admitted.id, input.requestDigest, identity)).rejects.toBeInstanceOf(WorkReadMoved);
+  rootDecisions.set(rootKey, new WorkReadUnavailable('root owner unavailable'));
+  await expect(person.access.register(input)).rejects.toBeInstanceOf(AdmissionUnavailable);
+  await expect(person.access.claim(admitted.id, input.requestDigest, identity)).rejects.toBeInstanceOf(AdmissionUnavailable);
+  let dispatched = false;
+  await expect(person.access.withOwnerAuthority(input, async () => { dispatched = true; }))
+    .rejects.toBeInstanceOf(AdmissionUnavailable);
+  expect(dispatched).toBe(false);
+  rootDecisions.set(rootKey, false);
+  await expect(person.access.register({ ...input, idempotencyKey: randomUUID() })).rejects.toBeInstanceOf(AdmissionDenied);
+  await expect(person.access.register(input)).rejects.toBeInstanceOf(AdmissionDenied);
 });

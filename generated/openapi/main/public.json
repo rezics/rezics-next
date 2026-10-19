@@ -407736,6 +407736,39 @@
                       }
                     ]
                   },
+                  "memberReplyDraft": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "expectedHead": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "member-reply-draft-image-v1",
+                        "type": "string"
+                      },
+                      "rootRevision": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "rootTarget": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "variantId": {
+                        "pattern": "^urn:rezics:variant:[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "variantId",
+                      "expectedHead",
+                      "rootTarget",
+                      "rootRevision"
+                    ],
+                    "type": "object"
+                  },
                   "occurrence": {
                     "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
@@ -407785,6 +407818,39 @@
                       }
                     ]
                   },
+                  "memberReplyDraft": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "expectedHead": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "member-reply-draft-image-v1",
+                        "type": "string"
+                      },
+                      "rootRevision": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "rootTarget": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "variantId": {
+                        "pattern": "^urn:rezics:variant:[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "variantId",
+                      "expectedHead",
+                      "rootTarget",
+                      "rootRevision"
+                    ],
+                    "type": "object"
+                  },
                   "occurrence": {
                     "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                     "type": "string"
@@ -407833,6 +407899,39 @@
                         "type": "string"
                       }
                     ]
+                  },
+                  "memberReplyDraft": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "expectedHead": {
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "member-reply-draft-image-v1",
+                        "type": "string"
+                      },
+                      "rootRevision": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "rootTarget": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "variantId": {
+                        "pattern": "^urn:rezics:variant:[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "variantId",
+                      "expectedHead",
+                      "rootTarget",
+                      "rootRevision"
+                    ],
+                    "type": "object"
                   },
                   "occurrence": {
                     "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
