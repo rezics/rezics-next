@@ -1666,5 +1666,1302 @@
     "Shared LanguagePicker owner: make accessible action names include visible localized language names and keep existing axe checks.",
     "Manager/local-development owner: provide an available isolated signed-in fixture and its own state for real Settings receipt/reload verification; G-2747 continues to own startup repair."
   ],
-  "next": "Manager reviews defects and partial acceptance, copies retained bundle to main under its own authority, and schedules owned repairs plus missing isolated signed-in proof. No source fix, landing or regression confirmation is claimed."
+  "next": "Manager reviews defects and partial acceptance, copies retained bundle to main under its own authority, and schedules owned repairs plus missing isolated signed-in proof. No source fix, landing or regression confirmation is claimed.",
+  "currentCandidateRuns": [
+    {
+      "id": "current-61df4790bcc1",
+      "recordedAt": "2026-10-19T06:57:49.320538+00:00",
+      "authorization": "Decision 2026-10-19T06:27:30Z: exact minimal Settings candidate continuation; no source fix, fallback, nested agents or full regression.",
+      "result": "partial",
+      "renderedCandidateChecksPassed": true,
+      "findingsClosed": [],
+      "regressionConfirmed": false,
+      "historicalBoundary": {
+        "reportCommit": "41e1aeef56eccababa64d672e622789a1b220844",
+        "productPin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+        "preserved": "All pre-existing report fields and historical evidence are retained unchanged. Their failures describe the original frozen pin; this separately pinned run does not erase them.",
+        "managerDecision": "2026-10-19 05:59:26 UTC accepted the historical partial report, one authored-patch review and 47 viewed screenshots; manager copied and verified the 159-entry historical bundle in main."
+      },
+      "source": {
+        "productPin": "61df4790bcc13e40d1ccce6358edb1d632089db8",
+        "candidateBase": "19180ec5cfcf2f8ef4ee493863129086c8b129d7",
+        "productBranch": "candidate/site-settings-20261019",
+        "isolatedProductCheckout": ".temp/settings-candidate-product",
+        "checkoutMethod": "Local shared clone inside this worker, detached immutable candidate; local main ref pinned to candidateBase for affected-check selection. Dependencies installed locally through QA/Task/Yarn.",
+        "reportBranch": "goal/g-2829",
+        "reportBaseline": "5b80beb70286f4a03addffafb2ac52cb5485db0c",
+        "reportBranchIsMainBased": true,
+        "pinFixedAcrossProductChecks": true,
+        "finalState": {
+          "at": "2026-10-19T06:56:00.158859+00:00",
+          "productPin": "61df4790bcc13e40d1ccce6358edb1d632089db8",
+          "productTrackedDiffEmpty": true,
+          "productStatus": "",
+          "workerStartedPort": 42831,
+          "portConnectResult": 111,
+          "workerStartedServerStopped": true,
+          "otherOwnersServersTouched": false,
+          "mainWritesExceptGoalctlBookkeeping": false
+        },
+        "candidateReceipt": "candidate-receipt.json",
+        "productCodeChanged": false,
+        "originalAssertionsChanged": false,
+        "onlyCommittedPath": "docs/goals/audit-remediation-20261019/proofs/settings-feedback.json"
+      },
+      "sourceReview": {
+        "reviewCountThisContinuation": 1,
+        "reusedOriginalReviewCommit": "e6cb5e65c108fb3e2fd899cf022b55d0ffd263a3",
+        "correction": "52018525928262b078f1adfb6f8690d73da0d961",
+        "completeCorrectionPatchRead": true,
+        "correctionFiles": [
+          "apps/web/features/onboarding/language-picker.tsx",
+          "apps/web/features/settings/notification-settings.stories.tsx",
+          "apps/web/features/settings/notification-settings.tsx",
+          "apps/web/features/settings/settings-sections.stories.tsx",
+          "apps/web/features/settings/settings-sections.tsx"
+        ],
+        "materialIntegrationCompared": [
+          "apps/web/features/settings",
+          "apps/web/features/onboarding/language-picker.tsx",
+          "packages/ui/src/components/field.tsx",
+          "packages/ui/src/components/switch.tsx",
+          "apps/web/.storybook",
+          "apps/web/vitest.config.ts",
+          "scripts/qa/story-browser.ts",
+          "yarn.lock",
+          "package.json"
+        ],
+        "materialIntegrationChangedFiles": [
+          "apps/web/features/onboarding/language-picker.tsx",
+          "apps/web/features/settings/notification-settings.stories.tsx",
+          "apps/web/features/settings/notification-settings.tsx",
+          "apps/web/features/settings/settings-sections.stories.tsx",
+          "apps/web/features/settings/settings-sections.tsx"
+        ],
+        "correctionBlobComparison": [
+          {
+            "path": "apps/web/features/onboarding/language-picker.tsx",
+            "publishedBlob": "8f2fa8cd33cdb0473dad0b5ad5275c2ded2cfac9",
+            "candidateBlob": "8f2fa8cd33cdb0473dad0b5ad5275c2ded2cfac9"
+          },
+          {
+            "path": "apps/web/features/settings/notification-settings.stories.tsx",
+            "publishedBlob": "a03b1f5a36e1f5e0581b4ccc3396c27ef2f606fa",
+            "candidateBlob": "a03b1f5a36e1f5e0581b4ccc3396c27ef2f606fa"
+          },
+          {
+            "path": "apps/web/features/settings/notification-settings.tsx",
+            "publishedBlob": "f55d9d785ae15d06dea370d402fb33a8e16aba60",
+            "candidateBlob": "f55d9d785ae15d06dea370d402fb33a8e16aba60"
+          },
+          {
+            "path": "apps/web/features/settings/settings-sections.stories.tsx",
+            "publishedBlob": "21ff27683c1b2962889df780e0949d2099f1c47c",
+            "candidateBlob": "21ff27683c1b2962889df780e0949d2099f1c47c"
+          },
+          {
+            "path": "apps/web/features/settings/settings-sections.tsx",
+            "publishedBlob": "0b23de0b27cc999936e7c49e463ecb9436e67b29",
+            "candidateBlob": "0b23de0b27cc999936e7c49e463ecb9436e67b29"
+          }
+        ],
+        "allCorrectionBlobsMatch": true,
+        "supportingControlsProviderDependenciesUnchanged": true,
+        "newBlockingSourceDefectsFound": [],
+        "independence": "One actual current-candidate correction/material-integration review by Codex-1 / GPT-6.1 Sol / xhigh. Reuses the valid unchanged original authored-patch review; no unchanged review chain.",
+        "evidence": [
+          "correction.patch",
+          "material-integration.diff",
+          "review-receipt.json"
+        ],
+        "conclusion": [
+          "All five correction file blobs exactly match published correction 52018525928262b078f1adfb6f8690d73da0d961. Only those five files differ from the historical pin across scoped Settings, LanguagePicker, controls, Storybook provider and dependencies.",
+          "Native plus localized language names are included in add/search action labels. The notification hidden label explicitly stays one pixel wide; the active feedback field is scrolled into view on feedback changes without moving focus.",
+          "Busy feedback follows LanguagePicker in normal flow; the language fieldset and explicit save/spoiler controls remain disabled during the shared write. The retained draft, revision and stale-receipt logic is unchanged from the accepted original review.",
+          "No new blocking source defect found in this review. The separate onboarding ChooseEverything consumer still selects Add Japanese and Add Brazilian Portuguese, which omit the repaired native-name text; G-2751 owns that pending selector continuation. Its stories were not run here."
+        ]
+      },
+      "method": {
+        "skills": [
+          "goal-worker",
+          "storybook-ui-review",
+          "local-development"
+        ],
+        "browser": "No Browser MCP. Original stories use the repository Task Storybook Vitest/Chromium provider with normal goalctl QA admission. Independent capture uses repository Playwright and scripts/qa/story-browser.ts serveStoryAsset.",
+        "viewports": [
+          [
+            1440,
+            1000
+          ],
+          [
+            390,
+            844
+          ]
+        ],
+        "storyIds": "Official running /index.json retained as story-index.json.",
+        "capture": "rendered-proof.ts starts Task Storybook on port 42831 in the immutable candidate. Eighteen isolated contexts cover first/middle/last rows times 200/503/409 times both sizes. Interception is restricted to same-origin /api/notification-preferences with a complete 45-choice matrix and held first PUT. Eight existing authored-story contexts supply localization, busy and recovery evidence.",
+        "keyboard": "Native Space activates each notification switch after programmatic focus. Following failure, natural Tab reaches the same switch then its local retry button (two Tabs in all twelve cases); Enter retries. Preference recovery uses programmatic focus followed by Enter, so it does not establish a complete Tab journey.",
+        "receiptBoundary": "All write commands, revisions and responses in the story/capture answers are simulated. No actual candidate API write receipt, authenticated mutation, reload persistence or live conflict/reload proof was reached.",
+        "announcementBoundary": "MutationObserver records visible associated role=status, aria-live=polite, aria-atomic=true text changes. No screen reader ran; no announcement heard by a person is claimed.",
+        "geometryBoundary": "The measured native switch input is visually hidden at 1x1; these dimensions are not the visible switch size. Complete field/status viewport assertions supplement, rather than replace, the original axe and width checks.",
+        "captureExitMeaning": "Corrected capture exits nonzero for setup/case errors and checks notification states, field/status viewport geometry, recovery and document width. Existing-story raw state and images were independently inspected. Official QA remains the authority for original assertions.",
+        "dataAndServerPolicy": "No new corpus, import/reset/refresh, shared mutation, candidate source edit or other-owner server operation. This worker stopped its port 42831 server and observed connection refused; Product owns its different-pin fixture runtime."
+      },
+      "checks": [
+        {
+          "job": "8a721d95-fda0-4ad1-9191-d2e8cd2db938",
+          "classification": "immutable candidate product QA and affected source checks",
+          "productPin": "61df4790bcc13e40d1ccce6358edb1d632089db8",
+          "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'sh -c \"cd .temp/settings-candidate-product && env GOAL_CHECK_PREPARED_TREE=/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2829/.temp/settings-candidate-product task goal -- check --only types,lint,guards\"' -- sh -c 'cd .temp/settings-candidate-product && bun scripts/goal/goalctl.ts test apps/web/features/settings/settings-sections.stories.tsx apps/web/features/settings/notification-settings.stories.tsx apps/web/features/settings/profile-settings.stories.tsx apps/web/features/settings/person-preferences.test.ts apps/web/tests/g-966-notifications.test.ts apps/web/tests/onboarding-topics.test.ts'",
+          "exit": 0,
+          "qaId": "20261019t063638-162050",
+          "steps": [
+            {
+              "command": "cd .temp/settings-candidate-product && bun scripts/goal/goalctl.ts test apps/web/features/settings/settings-sections.stories.tsx apps/web/features/settings/notification-settings.stories.tsx apps/web/features/settings/profile-settings.stories.tsx apps/web/features/settings/person-preferences.test.ts apps/web/tests/g-966-notifications.test.ts apps/web/tests/onboarding-topics.test.ts",
+              "exit": 0,
+              "storyFiles": 3,
+              "storiesPassed": 32,
+              "storiesFailed": 0,
+              "unitFiles": 3,
+              "unitTestsPassed": 15,
+              "unitTestsFailed": 0,
+              "unitAssertions": 109,
+              "originalAxeAndWidthAssertions": "retained and passed",
+              "evidence": [
+                "jobs/8a721d95-fda0-4ad1-9191-d2e8cd2db938.1.log",
+                "qa/20261019t063638-162050/summary.md"
+              ]
+            },
+            {
+              "command": "sh -c \"cd .temp/settings-candidate-product && env GOAL_CHECK_PREPARED_TREE=/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2829/.temp/settings-candidate-product task goal -- check --only types,lint,guards\"",
+              "exit": 0,
+              "result": "guards ok (9/44 selected for the 16 candidate paths), types ok, inference ok, lint ok, AST ok. Prepared-tree mode preserves the immutable candidate and compares to the exact candidate base.",
+              "timeoutOnlyRetriesPassed": [
+                "scripts/static/anti-silo.test.ts: a feature cannot import an official Zone package except through the loader",
+                "scripts/static/web-accepted-commands.test.ts: production adapters introduce no completion of admitted commands beyond exact existing debt"
+              ],
+              "checkId": "run-H79Yot",
+              "evidence": [
+                "jobs/8a721d95-fda0-4ad1-9191-d2e8cd2db938.2.log",
+                "candidate-check/run-H79Yot/output.log"
+              ]
+            }
+          ],
+          "warnings": "Unresolved optimizeDeps @storybook/react-dom-shim and native config-loader ESM warnings did not prevent the successful story assertions. Both timed-out guard cases passed the runner retry."
+        },
+        {
+          "job": "09044f2e-33b4-4ae9-8cdc-ccc3d000149b",
+          "classification": "private capture setup attempt",
+          "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun .temp/settings-feedback-current/rendered-proof.ts",
+          "exit": 1,
+          "resultClass": "harness",
+          "testPremise": "1440-reply-200 first navigation timed out at inherited 10000ms while Vite prepared browser dependencies; no interaction command or outcome assertion reached. Secondary disposed-request messages followed context shutdown.",
+          "setupCorrection": "One change to the private helper raises initial notification navigation timeout to 180000ms, matching the repository asset-provider allowance. No product or original assertion changed.",
+          "evidence": [
+            "jobs/09044f2e-33b4-4ae9-8cdc-ccc3d000149b.log",
+            "rendered-proof-first-setup.ts",
+            "rendered-answers-first-setup.json",
+            "storybook-server-first-setup.log",
+            "images/1440-reply-200-error.png"
+          ]
+        },
+        {
+          "job": "a5296634-d51f-4a2f-a072-85835374b209",
+          "classification": "corrected independent rendered capture",
+          "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun .temp/settings-feedback-current/rendered-proof.ts",
+          "exit": 0,
+          "casesObserved": 26,
+          "caseErrors": 0,
+          "notificationMatrixCases": 18,
+          "existingStoryContexts": 8,
+          "evidence": [
+            "jobs/a5296634-d51f-4a2f-a072-85835374b209.log",
+            "rendered-answers.json",
+            "storybook-server.log"
+          ]
+        }
+      ],
+      "assertionsReached": {
+        "officialStories": {
+          "settingsSections": "All six passed: SlowPrivacySave, SlowSpoilerSavePhone, SavingPreferencesPhone, FailedSaveRetainsDraft, ConflictRetainsDraft, ConflictRefreshFailure. Slow writes disable the shared preference domain; accepted languages remain [en,ko,fr]; 503/409 and refresh failure retain the draft; conflict retries use current version 8. A new [ko,en,fr] draft clears the stale receipt before a subsequent save.",
+          "notifications": "All fourteen passed, including Phone, Japanese, GermanPhone, first saving/success, middle 503, last 409, RetryFailure, ReviewConflictAndRetry and RefreshFailureAndRetry. The original width and axe assertions remain; corrected stories additionally assert complete feedback-field geometry and localized channel identification.",
+          "profile": "All twelve original parent stories passed, including ReadingLanguages/Phone, ChinesePhone, TraditionalChinesePhone, JapanesePhone and KoreanPhone. Previously reached accessible-name and localized width failures do not reproduce on this pin."
+        },
+        "independentNotificationMatrix": [
+          {
+            "case": "1440-reply-200",
+            "result": "observed",
+            "documentWidth": 1440,
+            "savingControl": {
+              "checked": false,
+              "disabled": true
+            },
+            "finalControl": {
+              "checked": true,
+              "disabled": false
+            },
+            "savingStatusFullyInViewport": true,
+            "finalStatus": {
+              "y": 198,
+              "bottom": 230,
+              "fullyInViewport": true,
+              "text": "Notification choice saved.",
+              "role": "status",
+              "live": "polite",
+              "atomic": "true"
+            },
+            "finalField": {
+              "y": 170,
+              "bottom": 230,
+              "fullyInViewport": true
+            },
+            "naturalTabsToRecovery": null,
+            "retryRevisions": [
+              "7"
+            ],
+            "freshIdempotencyKeys": true,
+            "retryChecked": null,
+            "domLiveTexts": [
+              "Saving…",
+              "Notification choice saved."
+            ],
+            "evidence": "rendered-answers.json#1440-reply-200"
+          },
+          {
+            "case": "1440-reply-503",
+            "result": "observed",
+            "documentWidth": 1440,
+            "savingControl": {
+              "checked": false,
+              "disabled": true
+            },
+            "finalControl": {
+              "checked": false,
+              "disabled": false
+            },
+            "savingStatusFullyInViewport": true,
+            "finalStatus": {
+              "y": 198,
+              "bottom": 230,
+              "fullyInViewport": true,
+              "text": "Could not save. Try again.",
+              "role": "status",
+              "live": "polite",
+              "atomic": "true"
+            },
+            "finalField": {
+              "y": 170,
+              "bottom": 274,
+              "fullyInViewport": true
+            },
+            "naturalTabsToRecovery": 2,
+            "retryRevisions": [
+              "7",
+              "7"
+            ],
+            "freshIdempotencyKeys": true,
+            "retryChecked": true,
+            "domLiveTexts": [
+              "Saving…",
+              "Could not save. Try again.",
+              "Notification choice saved."
+            ],
+            "evidence": "rendered-answers.json#1440-reply-503"
+          },
+          {
+            "case": "1440-reply-409",
+            "result": "observed",
+            "documentWidth": 1440,
+            "savingControl": {
+              "checked": false,
+              "disabled": true
+            },
+            "finalControl": {
+              "checked": false,
+              "disabled": false
+            },
+            "savingStatusFullyInViewport": true,
+            "finalStatus": {
+              "y": 198,
+              "bottom": 278,
+              "fullyInViewport": true,
+              "text": "Changed elsewhere. The latest choice is shown. Review it before saving again.",
+              "role": "status",
+              "live": "polite",
+              "atomic": "true"
+            },
+            "finalField": {
+              "y": 170,
+              "bottom": 322,
+              "fullyInViewport": true
+            },
+            "naturalTabsToRecovery": 2,
+            "retryRevisions": [
+              "7",
+              "8"
+            ],
+            "freshIdempotencyKeys": true,
+            "retryChecked": true,
+            "domLiveTexts": [
+              "Saving…",
+              "Loading latest choice…",
+              "Changed elsewhere. The latest choice is shown. Review it before saving again.",
+              "Notification choice saved."
+            ],
+            "evidence": "rendered-answers.json#1440-reply-409"
+          },
+          {
+            "case": "1440-review-200",
+            "result": "observed",
+            "documentWidth": 1440,
+            "savingControl": {
+              "checked": false,
+              "disabled": true
+            },
+            "finalControl": {
+              "checked": true,
+              "disabled": false
+            },
+            "savingStatusFullyInViewport": true,
+            "finalStatus": {
+              "y": 600,
+              "bottom": 632,
+              "fullyInViewport": true,
+              "text": "Notification choice saved.",
+              "role": "status",
+              "live": "polite",
+              "atomic": "true"
+            },
+            "finalField": {
+              "y": 572,
+              "bottom": 632,
+              "fullyInViewport": true
+            },
+            "naturalTabsToRecovery": null,
+            "retryRevisions": [
+              "7"
+            ],
+            "freshIdempotencyKeys": true,
+            "retryChecked": null,
+            "domLiveTexts": [
+              "Saving…",
+              "Notification choice saved."
+            ],
+            "evidence": "rendered-answers.json#1440-review-200"
+          },
+          {
+            "case": "1440-review-503",
+            "result": "observed",
+            "documentWidth": 1440,
+            "savingControl": {
+              "checked": false,
+              "disabled": true
+            },
+            "finalControl": {
+              "checked": false,
+              "disabled": false
+            },
+            "savingStatusFullyInViewport": true,
+            "finalStatus": {
+              "y": 600,
+              "bottom": 632,
+              "fullyInViewport": true,
+              "text": "Could not save. Try again.",
+              "role": "status",
+              "live": "polite",
+              "atomic": "true"
+            },
+            "finalField": {
+              "y": 572,
+              "bottom": 676,
+              "fullyInViewport": true
+            },
+            "naturalTabsToRecovery": 2,
+            "retryRevisions": [
+              "7",
+              "7"
+            ],
+            "freshIdempotencyKeys": true,
+            "retryChecked": true,
+            "domLiveTexts": [
+              "Saving…",
+              "Could not save. Try again.",
+              "Notification choice saved."
+            ],
+            "evidence": "rendered-answers.json#1440-review-503"
+          },
+          {
+            "case": "1440-review-409",
+            "result": "observed",
+            "documentWidth": 1440,
+            "savingControl": {
+              "checked": false,
+              "disabled": true
+            },
+            "finalControl": {
+              "checked": false,
+              "disabled": false
+            },
+            "savingStatusFullyInViewport": true,
+            "finalStatus": {
+              "y": 600,
+              "bottom": 680,
+              "fullyInViewport": true,
+              "text": "Changed elsewhere. The latest choice is shown. Review it before saving again.",
+              "role": "status",
+              "live": "polite",
+              "atomic": "true"
+            },
+            "finalField": {
+              "y": 572,
+              "bottom": 724,
+              "fullyInViewport": true
+            },
+            "naturalTabsToRecovery": 2,
+            "retryRevisions": [
+              "7",
+              "8"
+            ],
+            "freshIdempotencyKeys": true,
+            "retryChecked": true,
+            "domLiveTexts": [
+              "Saving…",
+              "Loading latest choice…",
+              "Changed elsewhere. The latest choice is shown. Review it before saving again.",
+              "Notification choice saved."
+            ],
+            "evidence": "rendered-answers.json#1440-review-409"
+          },
+          {
+            "case": "1440-proposal-reverted-200",
+            "result": "observed",
+            "documentWidth": 1440,
+            "savingControl": {
+              "checked": false,
+              "disabled": true
+            },
+            "finalControl": {
+              "checked": true,
+              "disabled": false
+            },
+            "savingStatusFullyInViewport": true,
+            "finalStatus": {
+              "y": 888,
+              "bottom": 920,
+              "fullyInViewport": true,
+              "text": "Notification choice saved.",
+              "role": "status",
+              "live": "polite",
+              "atomic": "true"
+            },
+            "finalField": {
+              "y": 860,
+              "bottom": 920,
+              "fullyInViewport": true
+            },
+            "naturalTabsToRecovery": null,
+            "retryRevisions": [
+              "7"
+            ],
+            "freshIdempotencyKeys": true,
+            "retryChecked": null,
+            "domLiveTexts": [
+              "Saving…",
+              "Notification choice saved."
+            ],
+            "evidence": "rendered-answers.json#1440-proposal-reverted-200"
+          },
+          {
+            "case": "1440-proposal-reverted-503",
+            "result": "observed",
+            "documentWidth": 1440,
+            "savingControl": {
+              "checked": false,
+              "disabled": true
+            },
+            "finalControl": {
+              "checked": false,
+              "disabled": false
+            },
+            "savingStatusFullyInViewport": true,
+            "finalStatus": {
+              "y": 888,
+              "bottom": 920,
+              "fullyInViewport": true,
+              "text": "Could not save. Try again.",
+              "role": "status",
+              "live": "polite",
+              "atomic": "true"
+            },
+            "finalField": {
+              "y": 860,
+              "bottom": 964,
+              "fullyInViewport": true
+            },
+            "naturalTabsToRecovery": 2,
+            "retryRevisions": [
+              "7",
+              "7"
+            ],
+            "freshIdempotencyKeys": true,
+            "retryChecked": true,
+            "domLiveTexts": [
+              "Saving…",
+              "Could not save. Try again.",
+              "Notification choice saved."
+            ],
+            "evidence": "rendered-answers.json#1440-proposal-reverted-503"
+          },
+          {
+            "case": "1440-proposal-reverted-409",
+            "result": "observed",
+            "documentWidth": 1440,
+            "savingControl": {
+              "checked": false,
+              "disabled": true
+            },
+            "finalControl": {
+              "checked": false,
+              "disabled": false
+            },
+            "savingStatusFullyInViewport": true,
+            "finalStatus": {
+              "y": 876,
+              "bottom": 956,
+              "fullyInViewport": true,
+              "text": "Changed elsewhere. The latest choice is shown. Review it before saving again.",
+              "role": "status",
+              "live": "polite",
+              "atomic": "true"
+            },
+            "finalField": {
+              "y": 848,
+              "bottom": 1000,
+              "fullyInViewport": true
+            },
+            "naturalTabsToRecovery": 2,
+            "retryRevisions": [
+              "7",
+              "8"
+            ],
+            "freshIdempotencyKeys": true,
+            "retryChecked": true,
+            "domLiveTexts": [
+              "Saving…",
+              "Loading latest choice…",
+              "Changed elsewhere. The latest choice is shown. Review it before saving again.",
+              "Notification choice saved."
+            ],
+            "evidence": "rendered-answers.json#1440-proposal-reverted-409"
+          },
+          {
+            "case": "390-reply-200",
+            "result": "observed",
+            "documentWidth": 390,
+            "savingControl": {
+              "checked": false,
+              "disabled": true
+            },
+            "finalControl": {
+              "checked": true,
+              "disabled": false
+            },
+            "savingStatusFullyInViewport": true,
+            "finalStatus": {
+              "y": 241,
+              "bottom": 273,
+              "fullyInViewport": true,
+              "text": "Notification choice saved.",
+              "role": "status",
+              "live": "polite",
+              "atomic": "true"
+            },
+            "finalField": {
+              "y": 189,
+              "bottom": 273,
+              "fullyInViewport": true
+            },
+            "naturalTabsToRecovery": null,
+            "retryRevisions": [
+              "7"
+            ],
+            "freshIdempotencyKeys": true,
+            "retryChecked": null,
+            "domLiveTexts": [
+              "Saving…",
+              "Notification choice saved."
+            ],
+            "evidence": "rendered-answers.json#390-reply-200"
+          },
+          {
+            "case": "390-reply-503",
+            "result": "observed",
+            "documentWidth": 390,
+            "savingControl": {
+              "checked": false,
+              "disabled": true
+            },
+            "finalControl": {
+              "checked": false,
+              "disabled": false
+            },
+            "savingStatusFullyInViewport": true,
+            "finalStatus": {
+              "y": 241,
+              "bottom": 273,
+              "fullyInViewport": true,
+              "text": "Could not save. Try again.",
+              "role": "status",
+              "live": "polite",
+              "atomic": "true"
+            },
+            "finalField": {
+              "y": 189,
+              "bottom": 317,
+              "fullyInViewport": true
+            },
+            "naturalTabsToRecovery": 2,
+            "retryRevisions": [
+              "7",
+              "7"
+            ],
+            "freshIdempotencyKeys": true,
+            "retryChecked": true,
+            "domLiveTexts": [
+              "Saving…",
+              "Could not save. Try again.",
+              "Notification choice saved."
+            ],
+            "evidence": "rendered-answers.json#390-reply-503"
+          },
+          {
+            "case": "390-reply-409",
+            "result": "observed",
+            "documentWidth": 390,
+            "savingControl": {
+              "checked": false,
+              "disabled": true
+            },
+            "finalControl": {
+              "checked": false,
+              "disabled": false
+            },
+            "savingStatusFullyInViewport": true,
+            "finalStatus": {
+              "y": 241,
+              "bottom": 337,
+              "fullyInViewport": true,
+              "text": "Changed elsewhere. The latest choice is shown. Review it before saving again.",
+              "role": "status",
+              "live": "polite",
+              "atomic": "true"
+            },
+            "finalField": {
+              "y": 189,
+              "bottom": 381,
+              "fullyInViewport": true
+            },
+            "naturalTabsToRecovery": 2,
+            "retryRevisions": [
+              "7",
+              "8"
+            ],
+            "freshIdempotencyKeys": true,
+            "retryChecked": true,
+            "domLiveTexts": [
+              "Saving…",
+              "Loading latest choice…",
+              "Changed elsewhere. The latest choice is shown. Review it before saving again.",
+              "Notification choice saved."
+            ],
+            "evidence": "rendered-answers.json#390-reply-409"
+          },
+          {
+            "case": "390-review-200",
+            "result": "observed",
+            "documentWidth": 390,
+            "savingControl": {
+              "checked": false,
+              "disabled": true
+            },
+            "finalControl": {
+              "checked": true,
+              "disabled": false
+            },
+            "savingStatusFullyInViewport": true,
+            "finalStatus": {
+              "y": 400,
+              "bottom": 432,
+              "fullyInViewport": true,
+              "text": "Notification choice saved.",
+              "role": "status",
+              "live": "polite",
+              "atomic": "true"
+            },
+            "finalField": {
+              "y": 348,
+              "bottom": 432,
+              "fullyInViewport": true
+            },
+            "naturalTabsToRecovery": null,
+            "retryRevisions": [
+              "7"
+            ],
+            "freshIdempotencyKeys": true,
+            "retryChecked": null,
+            "domLiveTexts": [
+              "Saving…",
+              "Notification choice saved."
+            ],
+            "evidence": "rendered-answers.json#390-review-200"
+          },
+          {
+            "case": "390-review-503",
+            "result": "observed",
+            "documentWidth": 390,
+            "savingControl": {
+              "checked": false,
+              "disabled": true
+            },
+            "finalControl": {
+              "checked": false,
+              "disabled": false
+            },
+            "savingStatusFullyInViewport": true,
+            "finalStatus": {
+              "y": 400,
+              "bottom": 432,
+              "fullyInViewport": true,
+              "text": "Could not save. Try again.",
+              "role": "status",
+              "live": "polite",
+              "atomic": "true"
+            },
+            "finalField": {
+              "y": 348,
+              "bottom": 476,
+              "fullyInViewport": true
+            },
+            "naturalTabsToRecovery": 2,
+            "retryRevisions": [
+              "7",
+              "7"
+            ],
+            "freshIdempotencyKeys": true,
+            "retryChecked": true,
+            "domLiveTexts": [
+              "Saving…",
+              "Could not save. Try again.",
+              "Notification choice saved."
+            ],
+            "evidence": "rendered-answers.json#390-review-503"
+          },
+          {
+            "case": "390-review-409",
+            "result": "observed",
+            "documentWidth": 390,
+            "savingControl": {
+              "checked": false,
+              "disabled": true
+            },
+            "finalControl": {
+              "checked": false,
+              "disabled": false
+            },
+            "savingStatusFullyInViewport": true,
+            "finalStatus": {
+              "y": 400,
+              "bottom": 496,
+              "fullyInViewport": true,
+              "text": "Changed elsewhere. The latest choice is shown. Review it before saving again.",
+              "role": "status",
+              "live": "polite",
+              "atomic": "true"
+            },
+            "finalField": {
+              "y": 348,
+              "bottom": 540,
+              "fullyInViewport": true
+            },
+            "naturalTabsToRecovery": 2,
+            "retryRevisions": [
+              "7",
+              "8"
+            ],
+            "freshIdempotencyKeys": true,
+            "retryChecked": true,
+            "domLiveTexts": [
+              "Saving…",
+              "Loading latest choice…",
+              "Changed elsewhere. The latest choice is shown. Review it before saving again.",
+              "Notification choice saved."
+            ],
+            "evidence": "rendered-answers.json#390-review-409"
+          },
+          {
+            "case": "390-proposal-reverted-200",
+            "result": "observed",
+            "documentWidth": 390,
+            "savingControl": {
+              "checked": false,
+              "disabled": true
+            },
+            "finalControl": {
+              "checked": true,
+              "disabled": false
+            },
+            "savingStatusFullyInViewport": true,
+            "finalStatus": {
+              "y": 743,
+              "bottom": 775,
+              "fullyInViewport": true,
+              "text": "Notification choice saved.",
+              "role": "status",
+              "live": "polite",
+              "atomic": "true"
+            },
+            "finalField": {
+              "y": 691,
+              "bottom": 775,
+              "fullyInViewport": true
+            },
+            "naturalTabsToRecovery": null,
+            "retryRevisions": [
+              "7"
+            ],
+            "freshIdempotencyKeys": true,
+            "retryChecked": null,
+            "domLiveTexts": [
+              "Saving…",
+              "Notification choice saved."
+            ],
+            "evidence": "rendered-answers.json#390-proposal-reverted-200"
+          },
+          {
+            "case": "390-proposal-reverted-503",
+            "result": "observed",
+            "documentWidth": 390,
+            "savingControl": {
+              "checked": false,
+              "disabled": true
+            },
+            "finalControl": {
+              "checked": false,
+              "disabled": false
+            },
+            "savingStatusFullyInViewport": true,
+            "finalStatus": {
+              "y": 699,
+              "bottom": 731,
+              "fullyInViewport": true,
+              "text": "Could not save. Try again.",
+              "role": "status",
+              "live": "polite",
+              "atomic": "true"
+            },
+            "finalField": {
+              "y": 647,
+              "bottom": 775,
+              "fullyInViewport": true
+            },
+            "naturalTabsToRecovery": 2,
+            "retryRevisions": [
+              "7",
+              "7"
+            ],
+            "freshIdempotencyKeys": true,
+            "retryChecked": true,
+            "domLiveTexts": [
+              "Saving…",
+              "Could not save. Try again.",
+              "Notification choice saved."
+            ],
+            "evidence": "rendered-answers.json#390-proposal-reverted-503"
+          },
+          {
+            "case": "390-proposal-reverted-409",
+            "result": "observed",
+            "documentWidth": 390,
+            "savingControl": {
+              "checked": false,
+              "disabled": true
+            },
+            "finalControl": {
+              "checked": false,
+              "disabled": false
+            },
+            "savingStatusFullyInViewport": true,
+            "finalStatus": {
+              "y": 635,
+              "bottom": 731,
+              "fullyInViewport": true,
+              "text": "Changed elsewhere. The latest choice is shown. Review it before saving again.",
+              "role": "status",
+              "live": "polite",
+              "atomic": "true"
+            },
+            "finalField": {
+              "y": 583,
+              "bottom": 775,
+              "fullyInViewport": true
+            },
+            "naturalTabsToRecovery": 2,
+            "retryRevisions": [
+              "7",
+              "8"
+            ],
+            "freshIdempotencyKeys": true,
+            "retryChecked": true,
+            "domLiveTexts": [
+              "Saving…",
+              "Loading latest choice…",
+              "Changed elsewhere. The latest choice is shown. Review it before saving again.",
+              "Notification choice saved."
+            ],
+            "evidence": "rendered-answers.json#390-proposal-reverted-409"
+          }
+        ],
+        "busyControlsAndLayout": [
+          {
+            "case": "existing-preferences-saving-preferences-phone-1440",
+            "disabledControls": [
+              {
+                "name": "Remove English",
+                "disabled": true
+              },
+              {
+                "name": "Move Korean up",
+                "disabled": true
+              },
+              {
+                "name": "Remove Korean",
+                "disabled": true
+              },
+              {
+                "name": "Move French up",
+                "disabled": true
+              },
+              {
+                "name": "Remove French",
+                "disabled": true
+              },
+              {
+                "name": "Add 日本語 Japanese",
+                "disabled": true
+              },
+              {
+                "name": "Add another language",
+                "disabled": true
+              },
+              {
+                "name": "Add Deutsch German de",
+                "disabled": true
+              },
+              {
+                "name": "Add Nederlands Dutch nl",
+                "disabled": true
+              },
+              {
+                "name": "Save changes",
+                "disabled": true
+              },
+              {
+                "name": "Unread chapter spoilers",
+                "disabled": true
+              }
+            ],
+            "languageLayout": {
+              "rows": [
+                {
+                  "text": "1English",
+                  "top": 202,
+                  "bottom": 250,
+                  "left": 425,
+                  "right": 1001
+                },
+                {
+                  "text": "2한국어Korean",
+                  "top": 258,
+                  "bottom": 306,
+                  "left": 425,
+                  "right": 1001
+                },
+                {
+                  "text": "3françaisFrench",
+                  "top": 314,
+                  "bottom": 362,
+                  "left": 425,
+                  "right": 1001
+                }
+              ],
+              "notice": {
+                "top": 682,
+                "bottom": 702,
+                "left": 425,
+                "right": 1015
+              }
+            },
+            "documentWidth": 1440
+          },
+          {
+            "case": "existing-preferences-saving-preferences-phone-390",
+            "disabledControls": [
+              {
+                "name": "Remove English",
+                "disabled": true
+              },
+              {
+                "name": "Move Korean up",
+                "disabled": true
+              },
+              {
+                "name": "Remove Korean",
+                "disabled": true
+              },
+              {
+                "name": "Move French up",
+                "disabled": true
+              },
+              {
+                "name": "Remove French",
+                "disabled": true
+              },
+              {
+                "name": "Add 日本語 Japanese",
+                "disabled": true
+              },
+              {
+                "name": "Add another language",
+                "disabled": true
+              },
+              {
+                "name": "Add Deutsch German de",
+                "disabled": true
+              },
+              {
+                "name": "Add Nederlands Dutch nl",
+                "disabled": true
+              },
+              {
+                "name": "Save changes",
+                "disabled": true
+              },
+              {
+                "name": "Unread chapter spoilers",
+                "disabled": true
+              }
+            ],
+            "languageLayout": {
+              "rows": [
+                {
+                  "text": "1English",
+                  "top": 44,
+                  "bottom": 92,
+                  "left": 37,
+                  "right": 353
+                },
+                {
+                  "text": "2한국어Korean",
+                  "top": 100,
+                  "bottom": 148,
+                  "left": 37,
+                  "right": 353
+                },
+                {
+                  "text": "3françaisFrench",
+                  "top": 156,
+                  "bottom": 204,
+                  "left": 37,
+                  "right": 353
+                }
+              ],
+              "notice": {
+                "top": 524,
+                "bottom": 564,
+                "left": 37,
+                "right": 353
+              }
+            },
+            "documentWidth": 390
+          }
+        ],
+        "localization": "Actually viewed first/middle/last rows of the existing English Phone, Japanese and GermanPhone states. Three channel labels remain beside every row while scrolling. Japanese email text wraps onto a short final line within its cell; German headings and long topics wrap inside the card. Document width remains 390; no horizontal clipping observed.",
+        "keyboardAndLiveRegions": "All twelve 503/409 notification recoveries used two natural Tabs and Enter, retained original unchecked state before retry and became checked on simulated success. Every retry has a fresh idempotency key; 503 reuses revision 7 and 409 uses refreshed revision 8. Saving/success/error/review/loading DOM live text remains associated through aria-describedby with the operated choice. No heard announcement established."
+      },
+      "historicalDefectDisposition": [
+        {
+          "defect": "Hidden-label horizontal overflow",
+          "currentResult": "Repaired in the measured cases and original 32-story suite. All eighteen notification final document widths equal their viewport; existing localized parent assertions and axe checks pass."
+        },
+        {
+          "defect": "Last-row conflict feedback clipped",
+          "currentResult": "Repaired for text and recovery button boxes. At 390, status y635..731 and field y583..775 fit within 844 before Tab. At 1440, a 12px automatic scroll fits status y876..956 and field y848..1000 within 1000 before Tab."
+        },
+        {
+          "defect": "Scrolled busy notice overlaps selected languages",
+          "currentResult": "Repaired in both captures. At 390, selected rows occupy y44..204 and notice y524..564; at 1440, rows y202..362 and notice y682..702. All eleven content controls are natively disabled."
+        },
+        {
+          "defect": "LanguagePicker visible-name mismatch",
+          "currentResult": "Repaired for the selected Settings/profile stories and busy captures: Add 日本語 Japanese, Add Deutsch German de, Add Nederlands Dutch nl. Original axe checks pass. Two separately owned onboarding consumer selectors remain pending."
+        }
+      ],
+      "concreteNewBlockingSourceOrRuntimeDefects": [],
+      "residualVisualObservations": [
+        {
+          "observation": "At 1440x1000 last-row 409, the retry button box is y964..1000. After natural Tab its outer blue focus outline meets and is clipped by the bottom viewport edge; the complete button box, label and conflict text remain visible and Enter succeeds.",
+          "evidence": [
+            "images/1440-proposal-reverted-409-natural-tab.png",
+            "rendered-answers.json#1440-proposal-reverted-409"
+          ],
+          "limit": "This is a retained visual detail, not a failed original visibility assertion or a reproduction of the historical clipped status. Settings owner can consider a small scroll margin."
+        }
+      ],
+      "acceptance": {
+        "D2-005": {
+          "status": "partial",
+          "rendered": "Accepted draft retention, explicit disabled shared controls, readable nonoverlapping busy feedback, slow save, 503/409, refresh recovery and stale-receipt assertions pass at this candidate.",
+          "remaining": "Genuine signed-in Settings writes, reload order/persistence and live conflict/reload against the same immutable product pin; full keyboard/touch journey."
+        },
+        "D4-004": {
+          "status": "rendered channel identification accepted; full finding remains open",
+          "rendered": "First/middle/last phone rows show channel names in English, Japanese and German, with complete accessible names and no horizontal document overflow; desktop baseline inspected.",
+          "remaining": "Original real signed-in Settings journey and screen-reader order/state verification. DOM attributes and screenshots do not establish heard announcements."
+        },
+        "D4-005": {
+          "status": "rendered feedback/recovery accepted; full finding remains open",
+          "rendered": "All eighteen first/middle/last by viewport by 200/503/409 cases keep saving/final feedback and local recovery in view. Failures retain original value, conflict explicitly requires review, and natural Tab/Enter recovery succeeds with local DOM live updates.",
+          "remaining": "Genuine candidate API write receipts, conflict/reload persistence and heard saving/success/error/retry announcements; retain the desktop focus-outline edge observation."
+        }
+      },
+      "authenticatedJourney": {
+        "status": "not reached at this candidate pin",
+        "fixtureAvailable": true,
+        "fixtureOwner": "Product / G-2825",
+        "fixtureReceipt": "site-auth-fixture-receipt.json",
+        "fixtureRuntimePin": "196a6f4a98413857dbf3e178d05ef65415035f29",
+        "fixtureEvidence": "The public owner receipt records supported OAuth PKCE sign-in, eligible session-agent HTTP 200 and private 0600 isolated browser/session state at its runtime pin. Development stopped; production reported running when receipt was read. No private credentials or storage state were read or copied.",
+        "settingsBytesMatchFixture": false,
+        "missingCandidateStartupCommits": [
+          "d2fddf941af31d3bd84df1a8a8b1660828b17b24",
+          "4fa4cbd1692bd7a701e6bdf993d56fdb43175635"
+        ],
+        "exactMissingPrerequisite": "Owner-selected immutable integration of Settings candidate 61df4790bcc13e40d1ccce6358edb1d632089db8 with the supported startup repairs, plus the genuine fixture and its own isolated state at that same pin (or an owner-supported runtime for this exact candidate). The available 196a6 runtime has different Settings/LanguagePicker bytes and cannot prove candidate persistence.",
+        "action": "No repeat of the old failed startup, no fabricated signed-in state, no startup source repair or shared write. Route the missing integration/live journey to Product existing verification owner; G-2747 retains startup repair.",
+        "evidence": [
+          "startup-integration.json",
+          "startup-integration.diff",
+          "site-auth-fixture-receipt.json"
+        ]
+      },
+      "screenshots": {
+        "actuallyViewedCount": 48,
+        "actuallyViewed": [
+          "images/1440-reply-200-final.png",
+          "images/1440-reply-503-final.png",
+          "images/1440-reply-409-final.png",
+          "images/1440-reply-200-saving.png",
+          "images/1440-review-200-final.png",
+          "images/1440-review-503-final.png",
+          "images/1440-review-409-final.png",
+          "images/1440-review-200-saving.png",
+          "images/1440-proposal-reverted-200-final.png",
+          "images/1440-proposal-reverted-503-final.png",
+          "images/1440-proposal-reverted-409-final.png",
+          "images/1440-proposal-reverted-200-saving.png",
+          "images/1440-proposal-reverted-409-natural-tab.png",
+          "images/1440-proposal-reverted-409-retry.png",
+          "images/390-reply-200-final.png",
+          "images/390-reply-503-final.png",
+          "images/390-reply-409-final.png",
+          "images/390-reply-200-saving.png",
+          "images/390-review-200-final.png",
+          "images/390-review-503-final.png",
+          "images/390-review-409-final.png",
+          "images/390-review-200-saving.png",
+          "images/390-proposal-reverted-200-final.png",
+          "images/390-proposal-reverted-503-final.png",
+          "images/390-proposal-reverted-409-final.png",
+          "images/390-proposal-reverted-200-saving.png",
+          "images/390-proposal-reverted-409-natural-tab.png",
+          "images/390-proposal-reverted-409-retry.png",
+          "images/existing-notifications-phone-390-row0.png",
+          "images/existing-notifications-phone-390-row8.png",
+          "images/existing-notifications-phone-390-row14.png",
+          "images/existing-notifications-japanese-390-row0.png",
+          "images/existing-notifications-japanese-390-row8.png",
+          "images/existing-notifications-japanese-390-row14.png",
+          "images/existing-notifications-german-phone-390-row0.png",
+          "images/existing-notifications-german-phone-390-row8.png",
+          "images/existing-notifications-german-phone-390-row14.png",
+          "images/existing-preferences-saving-preferences-phone-1440-content-disabled.png",
+          "images/existing-preferences-saving-preferences-phone-390-content-disabled.png",
+          "images/existing-preferences-conflict-refresh-failure-390-keyboard-recovered.png",
+          "images/existing-preferences-slow-privacy-save-1440-keyboard-recovered.png",
+          "images/existing-profile-japanese-phone-390-opening.png",
+          "qa/20261019t063638-162050/story-screenshots/apps-web-features-settings-notification-settings.stories.tsx/LastConflictPhone.png",
+          "qa/20261019t063638-162050/story-screenshots/apps-web-features-settings-notification-settings.stories.tsx/MiddleFailurePhone.png",
+          "qa/20261019t063638-162050/story-screenshots/apps-web-features-settings-notification-settings.stories.tsx/LastConflictDesktop.png",
+          "qa/20261019t063638-162050/story-screenshots/apps-web-features-settings-settings-sections.stories.tsx/FailedSaveRetainsDraft.png",
+          "qa/20261019t063638-162050/story-screenshots/apps-web-features-settings-settings-sections.stories.tsx/ConflictRetainsDraft.png",
+          "qa/20261019t063638-162050/story-screenshots/apps-web-features-settings-settings-sections.stories.tsx/SlowSpoilerSavePhone.png"
+        ],
+        "manifest": "viewed-images.json",
+        "retainedButNotClaimedViewed": "Remaining supplemental and official QA images, including the setup-error capture. Counts alone are not visual acceptance."
+      },
+      "retainedEvidence": {
+        "privateBundle": ".temp/settings-feedback-current/",
+        "handoffBundle": ".temp/audit-remediation-20261019/proofs/settings-feedback-G-2829-current-61df4790bcc1/",
+        "manifest": "manifest.json",
+        "original159EntryBundleModified": false,
+        "mainCopyCompleted": false,
+        "reason": "Main remains read-only under the current explicit worker instruction. The new bundle is copied and hash-verified at the translated worker location; manager must copy this sibling bundle into main. Historical main copy was already completed and verified by the manager decision.",
+        "managerRequestedMainDestination": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/proofs/settings-feedback-G-2829-current-61df4790bcc1/"
+      },
+      "administrativeReportChecks": {
+        "scope": "Main-based report branch only; no product code or original assertion changed. These administrative checks do not prove candidate behavior.",
+        "job": "f751dbc7-48fd-45b1-b457-ebe0a476652f",
+        "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+        "exit": 0,
+        "steps": [
+          {
+            "command": "task docs:check",
+            "exit": 0,
+            "result": "13 checker tests passed; 246 Markdown files checked for local links, fragments and design navigation. External URLs and runtime behavior not tested.",
+            "evidence": "jobs/f751dbc7-48fd-45b1-b457-ebe0a476652f.1.log"
+          },
+          {
+            "command": "task goal -- check",
+            "exit": 0,
+            "result": "types ok (no TypeScript workspace changed); tests ok (none named in brief); lint ok (no source changed); AST ok; guards ok (1/44 selected for the proof path).",
+            "checkId": "run-bwypUm",
+            "evidence": [
+              "jobs/f751dbc7-48fd-45b1-b457-ebe0a476652f.2.log",
+              "administrative-check/run-bwypUm/output.log"
+            ]
+          }
+        ]
+      },
+      "instructionEffects": [
+        {
+          "file": ".agents/skills/goal-worker/SKILL.md",
+          "quote": "End that turn immediately with RESULT: parked, without a handoff, polling, reading logs or starting more work.",
+          "effect": "Recorded jobs parked and resumed; continuations used no product fix round."
+        },
+        {
+          "file": "docs/goals/worker.md",
+          "quote": "Translate a main-checkout path into your worktree before editing it.",
+          "effect": "New retained bundle destination translated into this worker. Main/source/wave/other worktrees unchanged except goalctl bookkeeping."
+        }
+      ],
+      "ownerChanges": [],
+      "proposedTasks": [
+        "G-2751: finish the existing two onboarding consumer selector updates; no duplicate edit or cross-consumer completion claim here.",
+        "Product verification owner / G-2825 and startup owner G-2747: provide the exact immutable Settings plus startup integration with genuine isolated signed-in state, then complete actual Settings write receipts, conflict/reload persistence and heard-announcement checks.",
+        "Settings owner: consider viewport scroll margin for the retained desktop last-conflict focus-outline edge observation."
+      ],
+      "next": "Manager can use this reviewed and checked minimal Settings slice for its bounded landing decision, copy the current retained sibling bundle under its own authority, and retain all three findings open until the exact authenticated/announcement premises are verified. No land:auto or whole-wave confirmation."
+    }
+  ],
+  "latestEvidenceRun": "current-61df4790bcc1"
 }
