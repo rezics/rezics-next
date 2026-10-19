@@ -2002,5 +2002,350 @@
     "reason": "SOURCE-REFUSAL-1 requires a bounded correction at both inherited-key dispatch sites.",
     "next": "Existing owner corrects the two dispatch sites and adds meaningful refusal regressions without weakening positives or citation independence; manager freezes the corrected delta and preserves accepted library/A19 reports. No new owner or framework requested.",
     "originalClassClosure": false
+  },
+  "correctionReview": {
+    "kind": "SOURCE-REFUSAL-1-same-scope-correction-review",
+    "reviewedAtUtc": "2026-10-19T15:13:48.457012+00:00",
+    "reviewer": {
+      "worker": "G-2859",
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "fallback": false
+    },
+    "decision": "accept-bounded-corrected-candidate",
+    "priorReviewCommit": "8a7ca2b7bcfaf1a9432f26a3b48e7fdf5d1976e1",
+    "priorReportSha256": "67f80a543fecc64ba0e49265e9e3fe4c91caf3562cb63b507f4ca512593627c6",
+    "priorDecisionPreservedAsHistory": true,
+    "candidate": {
+      "commit": "e44ea5413624f3f868fb04c8591b74eb845c8505",
+      "parent": "da6764f83d0f4eaa08e004c499e06b3f54a913c5",
+      "directParentVerified": true,
+      "tree": "9740069dc0cbbc9ec3fdf8a61479dc0c199e4248",
+      "ref": "candidate/g-2781-retained-source-refusal-20261019",
+      "checkout": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/candidates/retained-source-refusal",
+      "comparedWithFirstReviewedCandidate": "55c1885659575f5fe4303a690b258388cd5d8e6e",
+      "originalSourceParent": "eaf9c5da53821b8851693dfcb62a6e12e61366cd",
+      "sourcePathCount": 86,
+      "unchangedPreviouslyReviewedBlobs": 82,
+      "changedSourcePaths": [
+        {
+          "path": "services/main/src/modules/relation/v2-schema.ts",
+          "testedBlob": "520ffe4b359b22b51465f8c4bfc40db363431e74",
+          "sha256": "5ad91fdf07df87989db9c6fd9f60635a40942c4a398f31d0deb7c451d43018f9",
+          "bytes": 7735,
+          "previousBlob": "ee183efe25930169dd3c236d70cd62f9855153d6",
+          "previousSha256": "cdffd9c899f8760b4e3e81dc8d6397712d642d1251b63bc1b20ee9ee3966aa65",
+          "originalAuthorship": "aa2898ed9b0f2c955a99cf6ac3b4f918be3d34e3\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T15:34:50+08:00",
+          "inspected": true
+        },
+        {
+          "path": "services/main/src/modules/source/retained-record-normalization.ts",
+          "testedBlob": "13b9b521ae09ac9c64e38b7dc8bf586cb2a5b731",
+          "sha256": "8edf9f5cf28ed44ef47b8c7fa743be4bc0fb3ed280e2c4a9cfb9596fa3197df9",
+          "bytes": 9663,
+          "previousBlob": "67522f1710cc16b1344b9b4d32c3233ebd4f20cc",
+          "previousSha256": "07d776d551d2f6aac322e3118438d96a0f4d7533854e8475ffbb6c75777153f8",
+          "originalAuthorship": "61ba57c0767dee7666f993e41773c2b7dac6a58c\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T15:50:57+08:00",
+          "inspected": true
+        },
+        {
+          "path": "tests/qa/unit/dataset-field-mapping.test.ts",
+          "testedBlob": "c28bc2f73eea472eda7d77af346493766e7a8dbb",
+          "sha256": "59cf474a13ad2f0f3d795fb3337216dabdd48b149a1d9ffa714acfc225ffb504",
+          "bytes": 23805,
+          "previousBlob": "5d43e3d4ebec7607505060a90ea344f9c2c625b6",
+          "previousSha256": "1ccb508a6a879227c58e3114019f89c41e9518e70339658c22353f89ec15d8bc",
+          "originalAuthorship": "07f38bc94391be16427b2bda266e6b8e25661a68\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T15:09:35+08:00",
+          "existingTestTextPreserved": true,
+          "inspected": true
+        },
+        {
+          "path": "tests/qa/unit/source-field-values.test.ts",
+          "testedBlob": "8a4d272d56f8b163812d7f34c91aeab9bcef24bc",
+          "sha256": "4d71b6c21c3df5a0d99856b15ab28bfc2986b09d845f7a9c7f0942465f5fd1fe",
+          "bytes": 3860,
+          "previousBlob": "da32de63c40ae14b82e74bd07b35c6fc693a99ff",
+          "previousSha256": "41262cc612ad5022006ef7f74f32ba66f50d3144bf875043a6c73de88ef05fa3",
+          "originalAuthorship": "487e1fb3bce2a5863ba9795f0bf2bca288aa7631\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T13:42:32+08:00",
+          "existingTestTextPreserved": true,
+          "inspected": true
+        }
+      ],
+      "scopeVerification": "Compared all Source manifest blob identities only: exactly 82 of 86 previously reviewed Source blobs unchanged. Exactly four Source paths changed, comprising two dispatch repairs and two additive regression files. No authored or generated schema changed. No repeated 86-file content review.",
+      "wholeCommitComparison": "The full diff from historical 55c1885659 also contains two previously accepted library correction paths. All five library blobs match accepted d27a26dd20 exactly and are outside this Source correction review. The direct parent da6764f83d0f4eaa08e004c499e06b3f54a913c5 already carries that library prerequisite; its Source delta is exactly the original 86-path set.",
+      "trackedCheckoutCleanVerified": true
+    },
+    "manifest": {
+      "path": ".temp/review/retained-source-correction/manifest.json",
+      "sha256": "98f865be038e369057f7e982edd2a8672fc3ed60879a8e8c1a08aaf9d6bc15b0",
+      "ownerPath": ".temp/worktrees/g-2781/.temp/goal/landing-candidates/retained-source-refusal-manifest.json",
+      "frozenOriginalManifestSha256": "ce0a5e7f1d5e0a8fcb51e7ccfd9a865fba4d8fa2b36c3ebf38f2ffd2d5969702"
+    },
+    "correctionPatch": {
+      "ownerPath": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/goal/landing-candidates/retained-source-refusal-four-path.patch",
+      "sha256": "0308b7b6204b4e8c5d2c4a7a92c40e91f91c1e54aaea2e78800e4bcd913dac4d",
+      "matchVerified": true
+    },
+    "inspection": [
+      {
+        "path": "services/main/src/modules/source/retained-record-normalization.ts",
+        "assessment": "Object.hasOwn(RETAINED_NAMESPACES, provider) now fences the lookup before includes is invoked. The same three declared provider arrays, all 28 pairs and exact revision string rule remain unchanged. An inherited provider now takes the existing mappingUnverified structured refusal; no conversion or saved-field semantics changed."
+      },
+      {
+        "path": "services/main/src/modules/relation/v2-schema.ts",
+        "assessment": "A module-private Map contains exactly the four former own basis entries. Map.get(String(basis.kind)) cannot resolve Object.prototype names. Required basis keys, native references, fields, evidence, ordering and budgets retain their existing validation. No manual citation prerequisite or new owner was introduced."
+      },
+      {
+        "path": "tests/qa/unit/dataset-field-mapping.test.ts",
+        "assessment": "Adds one case for all 28 exact pairs, ordinary unknown/empty/unsupported namespace input and every Object.prototype own name. Refusals require both SourceFieldProblem and 422/source_mapping_unverified. Existing file lines and assertions are unchanged; the diff has additions only."
+      },
+      {
+        "path": "tests/qa/unit/source-field-values.test.ts",
+        "assessment": "Adds one case for all four exact native basis objects and ordinary/prototype-name refusals as InvalidRelationOccurrence. Existing file lines/assertions remain unchanged. Final typing uses the existing CreditAttributionBasis union and a generic input helper, with only the creditedName literal narrowed as const. No any/unknown cast, skipped case or relaxed matcher replaces the assertions.",
+        "pretypeComparison": "Compared 087cf561460509ffc2c96163af2140c8073f38a2 to final e44ea541: type-only import, typed positive basis array and generic literal-preserving helper correct the expected-value inference. Runtime positive objects, error assertions, loop membership and evidence remain the same."
+      }
+    ],
+    "findingDisposition": {
+      "id": "SOURCE-REFUSAL-1",
+      "priority": "P2",
+      "status": "corrected-and-accepted-for-bounded-source-candidate",
+      "sites": 2,
+      "originalFailingCases": 6,
+      "originalOutcomeFailuresPreserved": true,
+      "verification": "All six original constructor/__proto__/toString outcome assertions now pass. Original ordinary refusal cases and 28 provider/four basis positives also pass without body changes.",
+      "remainingActionableFindingsInCorrection": 0,
+      "scopeLimit": "This closes the reported bounded dispatch refusal defect only. It does not close original catalogue classes or prove native/public product acceptance."
+    },
+    "checksActuallyExecuted": [
+      {
+        "kind": "targeted-original-reviewer-tests",
+        "job": "9e79d871-0a50-4c3e-a39e-9228f6c4d878",
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/review/retained-source-correction/retained-provider-refusal.test.ts ./.temp/review/retained-source-correction/retained-attribution-refusal.test.ts",
+        "recordedWith": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- <command>",
+        "result": "passed",
+        "exitCode": 0,
+        "tests": 11,
+        "passed": 11,
+        "failed": 0,
+        "assertions": 50,
+        "files": 2,
+        "hiddenPathsSelectedExplicitly": true,
+        "allOutcomeAssertionsReached": true,
+        "testCopies": [
+          {
+            "path": ".temp/review/retained-source-correction/retained-provider-refusal.test.ts",
+            "sha256": "5b7c892f5adcf7148889ffc43134dba81ff695c90493c3ca15a149254e377066",
+            "originalSha256": "68d329b3f3aae71bfcd1fcdfeee283e00aae283f5658a69b23144017504d8251",
+            "nonImportBytesSha256": "50fb60834a910f500f81862a3acb87255e90500ec20b9103de612ae264604bde",
+            "onlyImportsChanged": true,
+            "source": "import { expect, test } from 'bun:test';\nimport { retainedMappingRevision, RETAINED_NAMESPACES } from '/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/candidates/retained-source-refusal/services/main/src/modules/source/retained-record-normalization.ts';\nimport { SourceFieldProblem } from '/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/candidates/retained-source-refusal/services/main/src/modules/source/field-support-contract.ts';\n\nfunction refusal(provider: string, namespace: string): unknown {\n  try { retainedMappingRevision(provider, namespace); return null; }\n  catch (error) { return error; }\n}\n\ntest('all 28 declared retained provider/namespace pairs preserve their exact revisions', () => {\n  let count = 0;\n  for (const [provider, namespaces] of Object.entries(RETAINED_NAMESPACES)) {\n    for (const namespace of namespaces) {\n      expect(retainedMappingRevision(provider, namespace)).toBe(`${provider}-${namespace}-retained-map-v${namespace === 'release' ? 2 : 1}`);\n      count++;\n    }\n  }\n  expect(count).toBe(28);\n});\n\ntest('ordinary unknown provider, empty provider and unsupported namespace refuse structurally', () => {\n  for (const [provider, namespace] of [['unknown', 'vn'], ['', 'vn'], ['vndb', 'constructor']]) {\n    const error = refusal(provider!, namespace!);\n    expect(error).toBeInstanceOf(SourceFieldProblem);\n    expect(error).toMatchObject({ status: 422, code: 'source_mapping_unverified' });\n  }\n});\n\nfor (const provider of ['constructor', '__proto__', 'toString']) {\n  test(`unsupported retained provider ${provider} returns a structured mapping refusal`, () => {\n    const error = refusal(provider, 'vn');\n    expect(error).toBeInstanceOf(SourceFieldProblem);\n    expect(error).toMatchObject({ status: 422, code: 'source_mapping_unverified' });\n  });\n}\n"
+          },
+          {
+            "path": ".temp/review/retained-source-correction/retained-attribution-refusal.test.ts",
+            "sha256": "174353591829e2465898f1f6214313d6f1d5312b49b6afd84f74929bc6ce7926",
+            "originalSha256": "8ee2c8dfebde633c511743c06c7ca42a61eb91fb502d6daa6e02864df837454f",
+            "nonImportBytesSha256": "03dffedb9daf1a13fa6407ad9e94595fe4ab27cdb1a5b059d7f489ae7da173e0",
+            "onlyImportsChanged": true,
+            "source": "import { expect, test } from 'bun:test';\nimport { checkedAttributionSupports } from '/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/candidates/retained-source-refusal/services/main/src/modules/relation/v2-schema.ts';\nimport { InvalidRelationOccurrence } from '/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/candidates/retained-source-refusal/services/main/src/modules/relation/schema.ts';\n\nconst ref = 'https://rezics.com/id/12345678-1234-1234-1234-123456789abc';\nconst input = (basis: unknown) => [{ basis, fields: ['creditedName'], evidence: ['https://example.test/citation'] }];\n\ntest('the four declared attribution basis kinds keep their native owner references', () => {\n  for (const basis of [\n    { kind: 'source-credit', support: ref },\n    { kind: 'native-credit', credit: ref, revision: ref },\n    { kind: 'source-binding', binding: ref },\n    { kind: 'selected-publication', decision: ref },\n  ]) expect(checkedAttributionSupports(input(basis))).toEqual(input(basis));\n});\n\nfor (const kind of ['unknown', '', 'constructor', '__proto__', 'toString']) {\n  test(`unsupported attribution basis ${JSON.stringify(kind)} returns the native validation refusal`, () => {\n    let result: unknown = null;\n    try { checkedAttributionSupports(input({ kind })); }\n    catch (error) { result = error; }\n    expect(result).toBeInstanceOf(InvalidRelationOccurrence);\n  });\n}\n"
+          }
+        ],
+        "premise": "Only import module paths differ from the first reviewer tests. Non-import bytes, test bodies, names, fixtures and assertions are identical to the originals embedded in the first report. Both tests import the actual corrected candidate checkout read-only. No graph, SQL, HTTP, service, install or native admission run.",
+        "log": {
+          "path": ".temp/goal/jobs/9e79d871-0a50-4c3e-a39e-9228f6c4d878.log",
+          "sha256": "4bce81a31668dfd5d3dfece94bcb3bdebbad40cd62412a3894aaf7157cb0b88f"
+        }
+      },
+      {
+        "kind": "report-documentation-check",
+        "job": "75069982-aaf0-42d5-b4f8-06fa831515be",
+        "command": "task docs:check",
+        "result": "passed",
+        "exitCode": 0,
+        "markdownFiles": 259,
+        "checks": 13,
+        "log": {
+          "path": ".temp/goal/jobs/75069982-aaf0-42d5-b4f8-06fa831515be.1.log",
+          "sha256": "c1efe29e588ada4cd45f6789e67ab507e247ac9dcd2098bdfbcad1b701ffaf8d"
+        }
+      },
+      {
+        "kind": "required-worker-gate",
+        "job": "75069982-aaf0-42d5-b4f8-06fa831515be",
+        "command": "task goal -- check",
+        "result": "passed",
+        "exitCode": 0,
+        "details": "AST and 1/45 selected repository guards passed. No TypeScript workspace or source file changed; no tests named in brief. This report-only gate did not rerun Source implementation checks. The gate inherited path union mentions the accepted library report, whose bytes remain unchanged.",
+        "log": {
+          "path": ".temp/goal/jobs/75069982-aaf0-42d5-b4f8-06fa831515be.2.log",
+          "sha256": "b7898558aa5d5255d5158f9e43085389124d18c53ccfc97b99ed3357b02dbc5d"
+        }
+      }
+    ],
+    "reusedCorrectionEvidence": [
+      {
+        "job": "f26955e2-4fb8-4b00-bb47-f254e3681f5b",
+        "executedByReviewer": false,
+        "candidate": "e44ea5413624f3f868fb04c8591b74eb845c8505",
+        "tests": "14 pass/86 assertions/3 files: source-field-values and the two original reviewer copies selected with actual ./.temp paths.",
+        "types": "Task goal:type-files, scripts/tsconfig.json, four selected correction paths and closure: no errors in 1354 files.",
+        "matching": "Both Source runtime blobs, both owner test blobs and the unchanged reviewer assertion-body hashes were verified against the final manifest. No additional broad types or owner test run by this reviewer.",
+        "logs": [
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/goal/jobs/f26955e2-4fb8-4b00-bb47-f254e3681f5b.1.log",
+            "sha256": "ec1f0e8dce5f1761e5a09d66692e87df64bbb404fc65889909c0d899ba2cde9a"
+          },
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/goal/jobs/f26955e2-4fb8-4b00-bb47-f254e3681f5b.2.log",
+            "sha256": "cc73a5e0004c348d7b7985e815756afc60b60f5102d0e202c8c19a48c90bfa0a"
+          },
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/goal/jobs/f26955e2-4fb8-4b00-bb47-f254e3681f5b.log",
+            "sha256": "09307cf456b1baffd67c539db533361b0c19c462a53a1fefca91a7b115507f95"
+          }
+        ]
+      },
+      {
+        "job": "30e689ab-1ee0-4c91-b1c9-380da0708ac9",
+        "executedByReviewer": false,
+        "candidate": "087cf561460509ffc2c96163af2140c8073f38a2",
+        "tests": "15 pass/230 assertions in the two owner files. The hidden reviewer paths lacked ./ and were not selected; this step supplies no reviewer-test execution proof.",
+        "matching": "The dataset-field-mapping final blob is identical. The later source-field-values change fixes typing without changing runtime assertions.",
+        "types": "FAILED: TS2769 at source-field-values.test.ts:16, expected-value inference had basis:unknown instead of CreditAttributionBasis. Historical failure is preserved; final typed candidate passed in f26955e2.",
+        "preservedCandidateRef": "candidate/g-2781-retained-source-refusal-pretype-20261019",
+        "logs": [
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/goal/jobs/30e689ab-1ee0-4c91-b1c9-380da0708ac9.1.log",
+            "sha256": "e9d6fd2c112a4ce8a1278feffb5b6387dda27afafc4d5baeea54d50a2f3c64e7"
+          },
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/goal/jobs/30e689ab-1ee0-4c91-b1c9-380da0708ac9.2.log",
+            "sha256": "73f90869cad17fa09cc81241c831244c3c60a3b5db1fc3c80deaa20462d3cb4a"
+          },
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/goal/jobs/30e689ab-1ee0-4c91-b1c9-380da0708ac9.log",
+            "sha256": "e72c3b031523218719c2f34bc3adb23f2f79a8daeff5dda72dc8553c21ea4248"
+          }
+        ]
+      }
+    ],
+    "unchangedEvidenceReused": {
+      "source": {
+        "job": "82a469a4-27d4-4616-836b-1c4b598068ac",
+        "qa": "20261019t140749-d9861d",
+        "result": "55 tests/1177 assertions, Task generation, Main types/inference/lint/AST/selected guards and web types.",
+        "limit": "Reused for unchanged code and assertions only. Four-path repair proof is the focused new run plus matching supplied owner/type proof, not a claim that the full 55 were rerun against e44ea541."
+      },
+      "sql": {
+        "job": "81a51211-f0ff-4418-a1b4-1117f7702edf",
+        "result": "2 fresh/upgrade PostgreSQL tests/110 assertions; exact migration/test blobs unchanged."
+      },
+      "strictDependencies": {
+        "job": "eb6b3bce-070a-4d4a-b35a-d0ecdecaa9ee",
+        "result": "6 tests/36 assertions; reuse only matching unchanged dependencies.",
+        "limit": "The corrected relation/v2-schema.ts is a new blob accepted by this correction review; no duplicate native review is requested. Excluded Site composition is not asserted tested against the new correction."
+      },
+      "externalLibrary": {
+        "candidate": "d27a26dd20ebf71a27f212fca84484467fb7fa0f",
+        "landedMain": "fa76ef9adc59c52095ae7a1155df958d7c1116ce",
+        "allFiveAcceptedBlobsMatch": true,
+        "paths": [
+          {
+            "path": "packages/conversion/package.json",
+            "testedBlob": "946ba903846f0e8a734988322072eb34a95cc625",
+            "sha256": "a05f73f96a6d9f4d590913192b838d78c5e7f8305f7361978cf6309d5e88bf85",
+            "bytes": 167,
+            "unchangedAcceptedLibrary": true,
+            "outsideSource86": true
+          },
+          {
+            "path": "packages/conversion/src/bangumi.ts",
+            "testedBlob": "26e11897c263e140a0438e11b698e58c0548e35c",
+            "sha256": "98f49e86a7a3f7e7ec4c81613b017bc17059548558a427524b378d3fadbaf93c",
+            "bytes": 2299,
+            "unchangedAcceptedLibrary": true,
+            "outsideSource86": true
+          },
+          {
+            "path": "packages/conversion/src/errors.ts",
+            "testedBlob": "2e5c4f66c14b6a6f2f8e94fe37bd4e87e2e737c9",
+            "sha256": "ef8aa4000953066c9c7236dac582a31548e094f63da9e87cc92b6eeb1a7b56ed",
+            "bytes": 154,
+            "unchangedAcceptedLibrary": true,
+            "outsideSource86": true
+          },
+          {
+            "path": "packages/conversion/src/index.ts",
+            "testedBlob": "4d07ac212265d7b2f3ac14b6df4906609e16526c",
+            "sha256": "2677ab1def56c86886377a7308615da5238e98a37355a3158153e89a455773b5",
+            "bytes": 2886,
+            "unchangedAcceptedLibrary": true,
+            "outsideSource86": true
+          },
+          {
+            "path": "tests/qa/unit/conversion-library.test.ts",
+            "testedBlob": "a03831624e9c8b95144308d1da00cef0a2ec057d",
+            "sha256": "c9dc12dc0ca2c34dc3490c489cf97d849f4fced40b0149ab586448c9cdb939ec",
+            "bytes": 4638,
+            "unchangedAcceptedLibrary": true,
+            "outsideSource86": true
+          }
+        ],
+        "reviewedAgain": false
+      },
+      "preservedReports": "A19 and corrected external library reports remain byte-for-byte unchanged. All original Source six negative assertion failures, SQL2201B and earlier report checks remain in the historical sections above."
+    },
+    "limits": [
+      "Correction review only: no repeat of the 86-file content review, research, schema generation, whole-tier tests, native/public runtime, browser, producer, corpus or importer run.",
+      "Actual PostgreSQL owner proof remains distinct from controlled native graph and authority ports. Verified-before-commit remains the guarantee, not atomic cross-owner settlement.",
+      "No mandatory conversion ID, mapper, raw capture, re-conversion or converter proof was added to manual citations or ordinary native APIs.",
+      "The earlier whole-file owner pass did not include hidden reviewer files; its typing failure is preserved. The final focused type and reviewer checks passed and are separately attributed.",
+      "Original catalogue acceptance, full A19, installed public native admission and real current-head product journeys remain open. No original class closes."
+    ],
+    "integrationDisposition": {
+      "accepted": true,
+      "sourceCandidate": "e44ea5413624f3f868fb04c8591b74eb845c8505",
+      "landingPerformedByReviewer": false,
+      "next": "Manager integrates the accepted four-path correction with the already reviewed Source delta and selects/regenerates the actual main generated union. Preserve accepted strict external library and independently authored manual citations. The native owner can consume corrected relation/v2-schema.ts blob 520ffe4b359b22b51465f8c4bfc40db363431e74 without duplicating SOURCE-REFUSAL-1 review.",
+      "originalClassClosure": false
+    },
+    "reportValidation": {
+      "recordedSequence": "75069982-aaf0-42d5-b4f8-06fa831515be",
+      "results": [
+        {
+          "kind": "report-documentation-check",
+          "job": "75069982-aaf0-42d5-b4f8-06fa831515be",
+          "command": "task docs:check",
+          "result": "passed",
+          "exitCode": 0,
+          "markdownFiles": 259,
+          "checks": 13,
+          "log": {
+            "path": ".temp/goal/jobs/75069982-aaf0-42d5-b4f8-06fa831515be.1.log",
+            "sha256": "c1efe29e588ada4cd45f6789e67ab507e247ac9dcd2098bdfbcad1b701ffaf8d"
+          }
+        },
+        {
+          "kind": "required-worker-gate",
+          "job": "75069982-aaf0-42d5-b4f8-06fa831515be",
+          "command": "task goal -- check",
+          "result": "passed",
+          "exitCode": 0,
+          "details": "AST and 1/45 selected repository guards passed. No TypeScript workspace or source file changed; no tests named in brief. This report-only gate did not rerun Source implementation checks. The gate inherited path union mentions the accepted library report, whose bytes remain unchanged.",
+          "log": {
+            "path": ".temp/goal/jobs/75069982-aaf0-42d5-b4f8-06fa831515be.2.log",
+            "sha256": "b7898558aa5d5255d5158f9e43085389124d18c53ccfc97b99ed3357b02dbc5d"
+          }
+        }
+      ],
+      "finalization": "Gate receipt metadata appended after the passing sequence; a final docs:check is run before commit and reported in the worker handoff. Original report fields and all test assertions remain unchanged."
+    }
+  },
+  "effectiveDisposition": {
+    "candidate": "e44ea5413624f3f868fb04c8591b74eb845c8505",
+    "decision": "accept-bounded-corrected-candidate",
+    "SOURCE-REFUSAL-1": "corrected; both sites accepted",
+    "originalDecisionAndFailuresAreHistorical": true,
+    "originalClassClosure": false
   }
 }
