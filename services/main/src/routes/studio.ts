@@ -33,6 +33,7 @@ const item = t.Object({ id: readId, mainVersion: readId, workRevision: readId,
   cover: readAvatar, types: t.Array(t.String()),
   disclosure: t.Union([t.Literal('public'), t.Literal('restricted')]),
   state: t.Union([t.Literal('empty'), t.Literal('draft'), t.Literal('published')]),
+  chapterCount: t.Nullable(t.Object({ value: t.Integer({ minimum: 0 }), complete: t.Boolean() })),
   texts: t.Array(text, { maxItems: 200 }), submissions: t.Array(submission, { maxItems: 200 }),
   createdAt: t.String(), updatedAt: t.String() });
 const page = t.Object({ items: t.Array(item, { maxItems: 20 }), ...pageFields });
@@ -58,6 +59,9 @@ export function studioRoutes(work: MainWorkDependencies) {
     query: t.Object({ state: t.Optional(t.Union([t.Literal('empty'), t.Literal('draft'),
       t.Literal('published')])), type: t.Optional(workType),
     view: t.Optional(t.Union([t.Literal('authored'), t.Literal('curated')])),
+    // The owner validates scalar length after authority, returning invalid_read.
+    q: t.Optional(t.String({ description: 'NFKC title substring, at most 200 Unicode scalar values.' })),
+    sort: t.Optional(t.Union([t.Literal('recent'), t.Literal('created'), t.Literal('title')])),
     limit: t.Optional(t.Integer({ minimum: 1, maximum: 20 })),
     cursor: t.Optional(t.String({ minLength: 1, maxLength: 2048 })) },
     { additionalProperties: false }),
@@ -68,7 +72,7 @@ export function studioRoutes(work: MainWorkDependencies) {
       return Response.json(await workRead(work, request,
         { actingSubject: agent, limit: query.limit, cursor: query.cursor },
         session => readStudioWorks(session, agent, { state: query.state, type: query.type,
-          view: query.view })),
+          view: query.view, q: query.q, sort: query.sort })),
       { headers: { 'cache-control': 'private, no-store' } });
     } catch (error) {
       if (error instanceof ControlDenied) return problem(403, 'studio_denied', 'Agent control is unavailable');
