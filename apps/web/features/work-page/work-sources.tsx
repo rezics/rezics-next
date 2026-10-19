@@ -94,11 +94,12 @@ export function WorkSources({ work, locale, messages, avatarQuery, statements, l
   statements?: Loaded<StatementPage>; labels?: PredicateLabels; factObligations?: readonly DisplayObligations[];
 }) {
   const rights = workRights(work, messages, [...factObligations, ...statements?.ok ? [statements.data.factObligations] : []]);
+  const publication = publicationSource(work);
   return <SubjectSources locale={locale}><div data-work-sources className="grid min-w-0 gap-5">
-    <PublicationSource source={publicationSource(work)} messages={messages} />
+    <PublicationSource source={publication} messages={messages} />
     {rights.map(group => <div key={group.labels.join()} className="grid gap-1">
       <h3 className="font-medium text-sm">{group.labels.join(' · ')}</h3>
-      <RightsMark rights={group.rights} locale={locale} />
+      <RightsMark rights={group.rights} locale={locale} linkedSourceHref={publication?.url} />
     </div>)}
     <CatalogueCoverCredit work={{ id: work.id, title: work.title, cover: work.cover, kind: coverKindOf(work.types), authors: [] }}
       avatarQuery={avatarQuery} locale={locale} />

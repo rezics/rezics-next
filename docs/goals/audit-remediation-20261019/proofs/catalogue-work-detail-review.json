@@ -11422,5 +11422,1531 @@
       "productSourceChanged": false,
       "dataOrAccountWrites": false
     }
+  },
+  "boundedD1003BackQueryAssertionCheckpoint": {
+    "observedAt": "2026-10-19T13:40:13.083895Z",
+    "reviewer": {
+      "account": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independent": true,
+      "delegation": false,
+      "fallback": false
+    },
+    "authority": "Same G-2841 report claim and original D1-003 assertion-3 only. Latest maintainer continuation authorizes exactly two fresh width cells on one retained mounted Work path, with owned isolated frontend and existing genuine backend. No new source review, implementation, changed acceptance, eight-cell rerun, backend/corpus/session mutation or manager closure decision.",
+    "priorReport": {
+      "commit": "10b43591874ccd2a925130662733b6a0f9a344e6",
+      "sha256": "53d9fa32b830ccc6e2163f1e17963679100f0b0e0948e20a5688b41d5e9cf112",
+      "preservation": "Every pre-existing report field, verdict, limitation, historical finding and checkpoint is preserved unchanged, including top-level source APPROVE and boundedD1003NavigationCorrectionCheckpoint. This new key appends only the missing-original-assertion execution result."
+    },
+    "originalAssertion": "Direct links, Back and query changes preserve destination/current-state agreement.",
+    "originalCriterion": "各视图切换保留 scope/realm 和已支持的阅读位置；在全局 Work 及 Zone 挂载路径上验收。",
+    "disposition": "NOT PASS: neither fresh cell completed all required assertions; return exact failures to existing implementer",
+    "summary": "Phone390 passes the post-Overview Back/current and actual supported Realm-query/current assertions, then hits the unchanged60second whole-test timeout during final Back before asserting its DOM. Desktop1440 returns200 but renders a Work load-error page and fails its initial one-current-marker assertion (expected1, received0), before Back/query actions. No new successful two-cell acceptance or class closure is claimed.",
+    "selection": {
+      "path": "/en/z/franchise-wiki/franchise/1CfevZdz4Bm7jtyV1f2AbF-the-lantern-atlas/connections",
+      "widths": [
+        {
+          "width": 390,
+          "height": 844
+        },
+        {
+          "width": 1440,
+          "height": 1000
+        }
+      ],
+      "globalChoices": {
+        "scope": "global",
+        "language": "en",
+        "open": "releases"
+      },
+      "realmChoices": {
+        "scope": "realm",
+        "realm": "01a0e90b-63b4-70ae-a08e-91a25abd19d5",
+        "language": "en",
+        "open": "releases"
+      },
+      "queryNavigation": "ordinary browser URL navigation changing the existing supported scope selection to the resolved Books Realm; no fabricated UI scope-control action",
+      "retries": 0,
+      "testTimeoutMs": 60000,
+      "expectTimeoutMs": 5000,
+      "unrelatedCasesExecuted": 0,
+      "retainedEightCellRerun": false
+    },
+    "execution": {
+      "jobId": "11c7a1eb-e192-4cbf-837a-3e39a5baab08",
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task -t .temp/goal/d1-back-query/Taskfile.yml prove",
+      "admission": "Task prove target uses main goalctl slot; separate ignored two-cell Task browser selector, no peer prove target or old grep.",
+      "exitStatus": 201,
+      "reportedResultClass": "harness",
+      "qualification": "Outer job class is retained as reported; actual Playwright results below distinguish one test-body navigation timeout from one initial outcome assertion failure. Neither is a frontend-startup failure.",
+      "stats": {
+        "startTime": "2026-10-19T13:35:29.093Z",
+        "duration": 101113.959,
+        "expected": 0,
+        "skipped": 0,
+        "unexpected": 2,
+        "flaky": 0
+      },
+      "topLevelErrors": [],
+      "cases": [
+        {
+          "title": "D1-003 assertion-3 at 390: Back and actual supported scope query preserve destination and current",
+          "status": "timedOut",
+          "retry": 0,
+          "durationMs": 60541,
+          "errors": [
+            {
+              "message": "Test timeout of 60000ms exceeded.",
+              "location": null
+            },
+            {
+              "message": "Error: page.goBack: Test timeout of 60000ms exceeded.\nCall log:\n  - waiting for navigation until \"domcontentloaded\"\n    - navigated to \"http://127.0.0.1:41159/en/z/franchise-wiki/franchise/1CfevZdz4Bm7jtyV1f2AbF-the-lantern-atlas/connections?scope=global&language=en&open=releases\"\n\n\n  84 |       await capture(page, width, 'post-supported-query-realm', info);\n  85 |\n> 86 |       await page.goBack({ waitUntil: 'domcontentloaded' });\n     |                  ^\n  87 |       assertUrl(page.url(), connections, globalChoices);\n  88 |       await current(page, width, 'Connections', globalChoices);\n  89 |       await capture(page, width, 'post-query-back-global', info);\n    at /home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2841/.temp/goal/d1-back-query/back-query.e2e.ts:86:18",
+              "location": {
+                "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2841/.temp/goal/d1-back-query/back-query.e2e.ts",
+                "column": 18,
+                "line": 86
+              }
+            }
+          ],
+          "assertionProgress": {
+            "initialStatus200AndGlobalConnectionsURL": true,
+            "initialConnectionsCurrentAndExactlyOneMarker": true,
+            "overviewURLCurrentAndSupportedQueries": true,
+            "backFromOverviewGlobalConnectionsURLAndCurrent": true,
+            "ordinaryScopeQueryNavigationStatus200AndRealmConnectionsURL": true,
+            "realmConnectionsCurrentOneMarkerOverviewNotCurrentAndAllSevenViewLinkChoices": true,
+            "finalBackStarted": true,
+            "finalBackGlobalURLObservedInNavigationEvents": true,
+            "finalBackURLAssertionReached": false,
+            "finalBackRenderedCurrentMarkerAssertionReached": false
+          },
+          "classification": "Navigation/test-body timeout at final page.goBack, not a completed final outcome assertion or a startup/setup failure. Partial preceding assertions pass; entire cell does not pass."
+        },
+        {
+          "title": "D1-003 assertion-3 at 1440: Back and actual supported scope query preserve destination and current",
+          "status": "failed",
+          "retry": 0,
+          "durationMs": 37223,
+          "errors": [
+            {
+              "message": "Error: expect(locator).toHaveCount(expected) failed\n\nLocator:  getByRole('navigation', { name: 'Work sections', exact: true }).locator('[aria-current=\"page\"]')\nExpected: 1\nReceived: 0\nTimeout:  5000ms\n\nCall log:\n  - Expect \"toHaveCount\" getByRole('navigation', { name: 'Work sections', exact: true }).locator('[aria-current=\"page\"]') with timeout 5000ms\n  - waiting for getByRole('navigation', { name: 'Work sections', exact: true }).locator('[aria-current=\"page\"]')\n    14 × locator resolved to 0 elements\n       - unexpected value \"0\"\n\n\n  30 |   await expect(page.locator('main')).not.toContainText(/This page couldn.t load|Unexpectedly client reference/);\n  31 |   const nav = await navigation(page, width);\n> 32 |   await expect(nav.locator('[aria-current=\"page\"]')).toHaveCount(1);\n     |                                                      ^\n  33 |   await expect(nav.getByRole('link', { name: selected, exact: true })).toHaveAttribute('aria-current', 'page');\n  34 |   if (selected !== 'Overview') {\n  35 |     await expect(nav.getByRole('link', { name: 'Overview', exact: true })).not.toHaveAttribute('aria-current', 'page');\n    at current (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2841/.temp/goal/d1-back-query/back-query.e2e.ts:32:54)\n    at /home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2841/.temp/goal/d1-back-query/back-query.e2e.ts:66:23",
+              "location": {
+                "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2841/.temp/goal/d1-back-query/back-query.e2e.ts",
+                "column": 54,
+                "line": 32
+              }
+            }
+          ],
+          "assertionProgress": {
+            "initialStatus200AndGlobalConnectionsURL": true,
+            "mainHeadingVisibleAndOriginalPageCrashTextCheck": true,
+            "initialOneCurrentMarkerAssertionReached": true,
+            "initialOneCurrentMarkerAssertionPassed": false,
+            "overviewOrBackOrSupportedQueryActionsReached": false
+          },
+          "classification": "Actual initial current-marker assertion failed (expected1, received0). Error DOM/screenshot shows a mounted Work load-error page with no Work sections navigation, not a demonstrated wrongly selected tab after Back/query. Missing-assertion sequence remains unproved; source cause is not inferred."
+        }
+      ]
+    },
+    "sourceBinding": {
+      "frontendBase": "e9bff8c44b5317168b38c954b405938b458bd1e1",
+      "sourceHead": "e9bff8c44b5317168b38c954b405938b458bd1e1",
+      "dispatchWorktreeHead": "10b43591874ccd2a925130662733b6a0f9a344e6",
+      "ownedSource": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2841/.temp/goal/d1-back-query/frontend",
+      "ownedOrigin": "http://127.0.0.1:41159",
+      "backendHead": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "backendPointer": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "backendPointerAfter": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "patchTransport": {
+        "originalSha256": "2c8a2e4edd3bb50a51b653d34d96c7cc82e1c32b07cce840b616d8ddea43f26d",
+        "normalizedPath": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/site-D1-003-native-correction-normalized.patch",
+        "normalizedSha256": "50ac6eacb43a2e662cccdc38db916111ba7f8781dea1d98e229d7a9a505f7397",
+        "onlyAddedTerminatingNewline": true
+      },
+      "actualPatchSha256": "50ac6eacb43a2e662cccdc38db916111ba7f8781dea1d98e229d7a9a505f7397",
+      "fiveProductBlobsBefore": [
+        {
+          "path": "apps/web/features/work-page/current-projection.ts",
+          "blob": "62a07570834faa90dabf640e0579b6eefb8e611b",
+          "sha256": "777083298d5591cf509553d1ff025de800b133b3deb703b7c6b5d340cc3b1194"
+        },
+        {
+          "path": "apps/web/features/work-page/hub-sections.tsx",
+          "blob": "a299320b7b2ac258f53a300daddca807c586921f",
+          "sha256": "1bfff34b3138892b164abffeb5176b1b66678491738041b070fdf4162964cc84"
+        },
+        {
+          "path": "apps/web/features/work-page/work-views.tsx",
+          "blob": "cd1e3094b6f005ed54daf30857e7068e50c693fd",
+          "sha256": "1e65dd739a5247d8961824c262aa0fd880d8839d0323982afeb5da3c50481092"
+        },
+        {
+          "path": "apps/web/features/zones/catalogue-facts.ts",
+          "blob": "cdecd8edd908829316cfca9c6576a5d074716f65",
+          "sha256": "7126788f4fcddb7fdc67a1814dd583a932934ebb12ae99836d0b5ad718dcec58"
+        },
+        {
+          "path": "apps/web/features/zones/site-work.tsx",
+          "blob": "e50442fb6c3d67ea48216fbb9ec556a236e5d1d6",
+          "sha256": "03595c8678ca6620fc11b2c969dfba91ae2d73605a8a4328a2a9b9730b0db488"
+        }
+      ],
+      "fiveProductBlobsAfter": [
+        {
+          "path": "apps/web/features/work-page/current-projection.ts",
+          "blob": "62a07570834faa90dabf640e0579b6eefb8e611b",
+          "sha256": "777083298d5591cf509553d1ff025de800b133b3deb703b7c6b5d340cc3b1194"
+        },
+        {
+          "path": "apps/web/features/work-page/hub-sections.tsx",
+          "blob": "a299320b7b2ac258f53a300daddca807c586921f",
+          "sha256": "1bfff34b3138892b164abffeb5176b1b66678491738041b070fdf4162964cc84"
+        },
+        {
+          "path": "apps/web/features/work-page/work-views.tsx",
+          "blob": "cd1e3094b6f005ed54daf30857e7068e50c693fd",
+          "sha256": "1e65dd739a5247d8961824c262aa0fd880d8839d0323982afeb5da3c50481092"
+        },
+        {
+          "path": "apps/web/features/zones/catalogue-facts.ts",
+          "blob": "cdecd8edd908829316cfca9c6576a5d074716f65",
+          "sha256": "7126788f4fcddb7fdc67a1814dd583a932934ebb12ae99836d0b5ad718dcec58"
+        },
+        {
+          "path": "apps/web/features/zones/site-work.tsx",
+          "blob": "e50442fb6c3d67ea48216fbb9ec556a236e5d1d6",
+          "sha256": "03595c8678ca6620fc11b2c969dfba91ae2d73605a8a4328a2a9b9730b0db488"
+        }
+      ],
+      "exactReviewedBlobsVerified": true,
+      "runtimeProductPatchUnchanged": true,
+      "qualification": "Owned isolated clone of the reviewed e9bff runtime plus exact five-product native overlay. Manager normalized transport only adds the terminating newline; original12710byte SHA and normalized12711byte SHA are both retained. Every resulting product Git blob and SHA matches the prior authoritative reconstructed native manifest. No product bytes changed to bypass patch framing."
+    },
+    "dependencies": {
+      "source": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2757/.temp/goal/d1-zone/frontend/node_modules",
+        "mode": "read-only donor reflink copy into owned source; no install or peer write",
+        "lockSha256": "5473e2ac8b308af7e28929652f8882e71e11d81728d567d6324ca7c65eb0ac30"
+      },
+      "installedVersions": {
+        "vinext": "1.0.0-beta.13",
+        "vite": "8.3.4",
+        "react": "19.3.1",
+        "react-dom": "19.3.1",
+        "@playwright/test": "1.63.0"
+      },
+      "packageManifestHashesAndOwnedPaths": {
+        "vinext": {
+          "manifest": "0c2a580d880166b94bbad71bdee9e35b418c8804152ca7c0cc28355a509b7082",
+          "realPath": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2841/.temp/goal/d1-back-query/frontend/node_modules/vinext"
+        },
+        "vite": {
+          "manifest": "260a0a7a96a35e1b657480014c0f3b592b70061e42099edefc8fe97972f05fd4",
+          "realPath": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2841/.temp/goal/d1-back-query/frontend/node_modules/vite"
+        },
+        "react": {
+          "manifest": "9cc9c3de5441a2eea7f41f52f3f2a15a4fc51f90c0b72741f0d7638643a85e67",
+          "realPath": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2841/.temp/goal/d1-back-query/frontend/node_modules/react"
+        },
+        "react-dom": {
+          "manifest": "89d54f11575c9b0f7819962d9d72a31970dfb4d103f07e8b1d1b37e6d1fc3258",
+          "realPath": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2841/.temp/goal/d1-back-query/frontend/node_modules/react-dom"
+        },
+        "@playwright/test": {
+          "manifest": "5587f932b8979b6889654b60e3c28aeb7ca0abbac00eec8c176c939a16149536",
+          "realPath": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2841/.temp/goal/d1-back-query/frontend/node_modules/@playwright/test"
+        }
+      },
+      "browserDriver": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2841/node_modules/.bin/playwright",
+        "lockSha256": "5473e2ac8b308af7e28929652f8882e71e11d81728d567d6324ca7c65eb0ac30",
+        "playwrightVersion": "1.63.0"
+      },
+      "qualification": "Read-only donor dependencies reflink copied into the owned isolated frontend with the exact recorded lock hash. Runtime package paths are inside the owned source. No install, backend startup or peer dependency/runtime write."
+    },
+    "genuinePrerequisites": {
+      "resolvedRealmRequest": "/v1/addresses/resolve?scope=space&key=books",
+      "booksRealm": "01a0e90b-63b4-70ae-a08e-91a25abd19d5",
+      "requests": [
+        {
+          "path": "/v1/addresses/resolve?scope=space&key=franchise-wiki",
+          "status": 200,
+          "sha256": "6518fb4e7279b15f954e01573a66db1f0b82e4c4ce5e190b2635286488ff6aa5",
+          "bytes": 470
+        },
+        {
+          "path": "/v1/addresses/resolve?scope=space&key=books",
+          "status": 200,
+          "sha256": "f0afd73683d9764aedb678db5f0dda5df290d0ef7424d37efdac0b925d76aeb2",
+          "bytes": 443
+        }
+      ],
+      "frontendWarmReadiness": [
+        {
+          "status": 200,
+          "url": "http://127.0.0.1:41159/en/z/franchise-wiki/franchise/1CfevZdz4Bm7jtyV1f2AbF-the-lantern-atlas/connections?scope=global&language=en&open=releases",
+          "durationMs": 41903,
+          "bytes": 216718,
+          "sha256": "14e059bfe31fc7893902af7e08717a4ba8ac3c185f521a4ea56a1e7e8617c3ab"
+        },
+        {
+          "status": 200,
+          "url": "http://127.0.0.1:41159/en/z/franchise-wiki/franchise/1CfevZdz4Bm7jtyV1f2AbF-the-lantern-atlas?scope=global&language=en&open=releases",
+          "durationMs": 21102,
+          "bytes": 625476,
+          "sha256": "4f1a5ccf4d7b04357fec0b05aa0fff94e12cffa0f612447e5b0bd6ea1fdb4129"
+        },
+        {
+          "status": 200,
+          "url": "http://127.0.0.1:41159/en/z/franchise-wiki/franchise/1CfevZdz4Bm7jtyV1f2AbF-the-lantern-atlas/connections?scope=realm&realm=01a0e90b-63b4-70ae-a08e-91a25abd19d5&language=en&open=releases",
+          "durationMs": 15632,
+          "bytes": 421902,
+          "sha256": "d8c97cff35f0f24dc57407202447786e8da88b17893a62cf90443f1b646811fe"
+        }
+      ],
+      "qualification": "Only three destinations used by the two cells were warmed, following the retained harness. Readiness200 does not imply the later body or navigation assertions passed."
+    },
+    "assertionAndHarnessSources": [
+      {
+        "path": ".temp/goal/d1-back-query/back-query.e2e.ts",
+        "bytes": 5921,
+        "sha256": "ef6319e0f87e693ad421ca2dc54811ca4294498c1f2684a0aebddfe68e448b8a"
+      },
+      {
+        "path": ".temp/goal/d1-back-query/playwright.config.ts",
+        "bytes": 719,
+        "sha256": "a160e3a6766839180b24a1bee1b2025f292ed1083f48af23cb0a639bf1745640"
+      },
+      {
+        "path": ".temp/goal/d1-back-query/Taskfile.yml",
+        "bytes": 336,
+        "sha256": "a145fffbe75dfc17c5552f37a2c5d53feddd6e309dfa43534714eb7becc48cec"
+      },
+      {
+        "path": ".temp/goal/d1-back-query/run-proof.ts",
+        "bytes": 12276,
+        "sha256": "1a4e8ce38cbc26b31d1b7c4c94239435e4943ea00e667837ab35a7ad66386beb"
+      }
+    ],
+    "livePostNavigationDOM": [
+      {
+        "artifact": {
+          "path": ".temp/goal/d1-back-query/run-1792416824312/results/back-query.e2e.ts-D1-003-a-b0743-rve-destination-and-current/post-overview-back-global.dom.json",
+          "bytes": 10283,
+          "sha256": "12589e7eb76aafd6a692c9d1e70e179387a873862f5d4b9df3e5ff9057a69a44"
+        },
+        "state": "post-overview-back-global",
+        "width": 390,
+        "url": "http://127.0.0.1:41159/en/z/franchise-wiki/franchise/1CfevZdz4Bm7jtyV1f2AbF-the-lantern-atlas/connections?scope=global&language=en&open=releases",
+        "current": [
+          {
+            "text": "Connections",
+            "href": "/en/z/franchise-wiki/franchise/1CfevZdz4Bm7jtyV1f2AbF-the-lantern-atlas/connections?scope=global&language=en&open=releases"
+          }
+        ],
+        "links": [
+          {
+            "text": "Overview",
+            "href": "/en/z/franchise-wiki/franchise/1CfevZdz4Bm7jtyV1f2AbF-the-lantern-atlas?scope=global&language=en&open=releases",
+            "current": null
+          },
+          {
+            "text": "Contents",
+            "href": "/en/z/franchise-wiki/franchise/1CfevZdz4Bm7jtyV1f2AbF-the-lantern-atlas/contents?scope=global&language=en&open=releases",
+            "current": null
+          },
+          {
+            "text": "Versions",
+            "href": "/en/z/franchise-wiki/franchise/1CfevZdz4Bm7jtyV1f2AbF-the-lantern-atlas/versions?scope=global&language=en&open=releases",
+            "current": null
+          },
+          {
+            "text": "Editions",
+            "href": "/en/z/franchise-wiki/franchise/1CfevZdz4Bm7jtyV1f2AbF-the-lantern-atlas/editions?scope=global&language=en&open=releases",
+            "current": null
+          },
+          {
+            "text": "Connections",
+            "href": "/en/z/franchise-wiki/franchise/1CfevZdz4Bm7jtyV1f2AbF-the-lantern-atlas/connections?scope=global&language=en&open=releases",
+            "current": "page"
+          },
+          {
+            "text": "Discussion",
+            "href": "/en/z/franchise-wiki/franchise/1CfevZdz4Bm7jtyV1f2AbF-the-lantern-atlas/discussion?scope=global&language=en&open=releases",
+            "current": null
+          },
+          {
+            "text": "History",
+            "href": "/en/z/franchise-wiki/franchise/1CfevZdz4Bm7jtyV1f2AbF-the-lantern-atlas/history?scope=global&language=en&open=releases",
+            "current": null
+          }
+        ],
+        "bodyFailureTextPreserved": [
+          "This part of the page could not load. The rest is unaffected.",
+          "Retry",
+          "Parts could not be loaded.",
+          "Retry",
+          "This franchise’s members could not be loaded."
+        ]
+      },
+      {
+        "artifact": {
+          "path": ".temp/goal/d1-back-query/run-1792416824312/results/back-query.e2e.ts-D1-003-a-b0743-rve-destination-and-current/post-supported-query-realm.dom.json",
+          "bytes": 11604,
+          "sha256": "9fbda952a4606238ce4828491401fe6944fece7f98d9a83121a4c96c38d6d4d7"
+        },
+        "state": "post-supported-query-realm",
+        "width": 390,
+        "url": "http://127.0.0.1:41159/en/z/franchise-wiki/franchise/1CfevZdz4Bm7jtyV1f2AbF-the-lantern-atlas/connections?scope=realm&realm=01a0e90b-63b4-70ae-a08e-91a25abd19d5&language=en&open=releases",
+        "current": [
+          {
+            "text": "Connections",
+            "href": "/en/z/franchise-wiki/franchise/1CfevZdz4Bm7jtyV1f2AbF-the-lantern-atlas/connections?scope=realm&realm=01a0e90b-63b4-70ae-a08e-91a25abd19d5&language=en&open=releases"
+          }
+        ],
+        "links": [
+          {
+            "text": "Overview",
+            "href": "/en/z/franchise-wiki/franchise/1CfevZdz4Bm7jtyV1f2AbF-the-lantern-atlas?scope=realm&realm=01a0e90b-63b4-70ae-a08e-91a25abd19d5&language=en&open=releases",
+            "current": null
+          },
+          {
+            "text": "Contents",
+            "href": "/en/z/franchise-wiki/franchise/1CfevZdz4Bm7jtyV1f2AbF-the-lantern-atlas/contents?scope=realm&realm=01a0e90b-63b4-70ae-a08e-91a25abd19d5&language=en&open=releases",
+            "current": null
+          },
+          {
+            "text": "Versions",
+            "href": "/en/z/franchise-wiki/franchise/1CfevZdz4Bm7jtyV1f2AbF-the-lantern-atlas/versions?scope=realm&realm=01a0e90b-63b4-70ae-a08e-91a25abd19d5&language=en&open=releases",
+            "current": null
+          },
+          {
+            "text": "Editions",
+            "href": "/en/z/franchise-wiki/franchise/1CfevZdz4Bm7jtyV1f2AbF-the-lantern-atlas/editions?scope=realm&realm=01a0e90b-63b4-70ae-a08e-91a25abd19d5&language=en&open=releases",
+            "current": null
+          },
+          {
+            "text": "Connections",
+            "href": "/en/z/franchise-wiki/franchise/1CfevZdz4Bm7jtyV1f2AbF-the-lantern-atlas/connections?scope=realm&realm=01a0e90b-63b4-70ae-a08e-91a25abd19d5&language=en&open=releases",
+            "current": "page"
+          },
+          {
+            "text": "Discussion",
+            "href": "/en/z/franchise-wiki/franchise/1CfevZdz4Bm7jtyV1f2AbF-the-lantern-atlas/discussion?scope=realm&realm=01a0e90b-63b4-70ae-a08e-91a25abd19d5&language=en&open=releases",
+            "current": null
+          },
+          {
+            "text": "History",
+            "href": "/en/z/franchise-wiki/franchise/1CfevZdz4Bm7jtyV1f2AbF-the-lantern-atlas/history?scope=realm&realm=01a0e90b-63b4-70ae-a08e-91a25abd19d5&language=en&open=releases",
+            "current": null
+          }
+        ],
+        "bodyFailureTextPreserved": [
+          "This part of the page could not load. The rest is unaffected.",
+          "Retry",
+          "Parts could not be loaded.",
+          "Retry",
+          "Connections could not be loaded.",
+          "This part of the page could not load. The rest is unaffected.",
+          "Retry"
+        ]
+      }
+    ],
+    "screenshots": {
+      "actuallyViewed": 4,
+      "artifacts": [
+        {
+          "path": ".temp/goal/d1-back-query/run-1792416824312/results/back-query.e2e.ts-D1-003-a-86511-rve-destination-and-current/test-failed-1.png",
+          "bytes": 73146,
+          "sha256": "fe16f44648a8a19bd3325018376617efca221ef63afb9090bd49a52193094a62",
+          "actuallyViewedByThisReviewer": true,
+          "observation": "Desktop shows Franchise Wiki shell/breadcrumb and Couldn’t load this list error with Try again; Work sections navigation is absent. No desktop post-Back or post-query image exists because the initial current-marker assertion failed."
+        },
+        {
+          "path": ".temp/goal/d1-back-query/run-1792416824312/results/back-query.e2e.ts-D1-003-a-b0743-rve-destination-and-current/post-overview-back-global.png",
+          "bytes": 48339,
+          "sha256": "f2d22c972e3638724c5cad97f6bdc170e730eca92ca517ceb945618ca120ce92",
+          "actuallyViewedByThisReviewer": true,
+          "observation": "Phone rendered menu visibly marks Connections, with Overview unselected; Parts unavailable/Retry remains visible."
+        },
+        {
+          "path": ".temp/goal/d1-back-query/run-1792416824312/results/back-query.e2e.ts-D1-003-a-b0743-rve-destination-and-current/post-supported-query-realm.png",
+          "bytes": 48158,
+          "sha256": "d28dd9488e6707fd0b6e371210e8d478bbe698f35e50dcfd70c80581f11b8d0c",
+          "actuallyViewedByThisReviewer": true,
+          "observation": "Phone menu visibly marks Connections after ordinary supported Realm query navigation; Parts and Connections unavailable rendering remains visible. Query values are established by captured live DOM/URL assertions, not screenshot text."
+        },
+        {
+          "path": ".temp/goal/d1-back-query/run-1792416824312/results/back-query.e2e.ts-D1-003-a-b0743-rve-destination-and-current/test-failed-1.png",
+          "bytes": 18784,
+          "sha256": "39d5637dc33466ec823fd9caa79405758b5b4356dd71fc550e8e6ceb8bda338e",
+          "actuallyViewedByThisReviewer": true,
+          "observation": "Phone at final Back timeout shows Loading…/skeleton shell. This image does not establish a final current marker."
+        }
+      ],
+      "gaps": "No successful final post-query-Back current DOM/capture on phone and no desktop post-Back/post-query captures: those assertions were not reached. Failed-state PNGs, Playwright error DOM, URL transition logs and traces are retained instead."
+    },
+    "artifacts": [
+      {
+        "path": ".temp/goal/d1-back-query/run-1792416824312/receipt.json",
+        "bytes": 33985,
+        "sha256": "116616384b370f5e6fd5e065266ac92098ed5e23913fb77733ac731acffd393b"
+      },
+      {
+        "path": ".temp/goal/d1-back-query/run-1792416824312/result.json",
+        "bytes": 13360,
+        "sha256": "142229c2575931e3c4ad42ec0ee14bc62e5643826e02297c009c6d4e00ad8ddf"
+      },
+      {
+        "path": ".temp/goal/d1-back-query/run-1792416824312/browser.log",
+        "bytes": 7039,
+        "sha256": "c0c63ecaa81205e0000093675ff80765ce00e5e5ced2e12aa3fef523d67756cf"
+      },
+      {
+        "path": ".temp/goal/d1-back-query/run-1792416824312/server.log",
+        "bytes": 5209,
+        "sha256": "aacce5a14a3e9c9cdca34850aa2270d9a19a29b0c086465b6eb19661ab6febdd"
+      },
+      {
+        "path": ".temp/goal/d1-back-query/run-1792416824312/actual-native.patch",
+        "bytes": 12711,
+        "sha256": "50ac6eacb43a2e662cccdc38db916111ba7f8781dea1d98e229d7a9a505f7397"
+      },
+      {
+        "path": ".temp/goal/d1-back-query/run-1792416824312/franchise-wiki.address.json",
+        "bytes": 470,
+        "sha256": "6518fb4e7279b15f954e01573a66db1f0b82e4c4ce5e190b2635286488ff6aa5"
+      },
+      {
+        "path": ".temp/goal/d1-back-query/run-1792416824312/books.address.json",
+        "bytes": 443,
+        "sha256": "f0afd73683d9764aedb678db5f0dda5df290d0ef7424d37efdac0b925d76aeb2"
+      },
+      {
+        "path": ".temp/goal/d1-back-query/run-1792416824312/results/back-query.e2e.ts-D1-003-a-86511-rve-destination-and-current/error-context.md",
+        "bytes": 13337,
+        "sha256": "90f22b3a2049d19fa8c691905eb2af66afe47563ab9901da064eb30d9518eeec"
+      },
+      {
+        "path": ".temp/goal/d1-back-query/run-1792416824312/results/back-query.e2e.ts-D1-003-a-86511-rve-destination-and-current/test-failed-1.png",
+        "bytes": 73146,
+        "sha256": "fe16f44648a8a19bd3325018376617efca221ef63afb9090bd49a52193094a62",
+        "actuallyViewedByThisReviewer": true,
+        "observation": "Desktop shows Franchise Wiki shell/breadcrumb and Couldn’t load this list error with Try again; Work sections navigation is absent. No desktop post-Back or post-query image exists because the initial current-marker assertion failed."
+      },
+      {
+        "path": ".temp/goal/d1-back-query/run-1792416824312/results/back-query.e2e.ts-D1-003-a-86511-rve-destination-and-current/trace.zip",
+        "bytes": 750675,
+        "sha256": "395d4c3e86ae4eb4fa475d5fc8075646070ed10bc3055e9b97af28e7e5b64b78"
+      },
+      {
+        "path": ".temp/goal/d1-back-query/run-1792416824312/results/back-query.e2e.ts-D1-003-a-86511-rve-destination-and-current/url-transitions.json",
+        "bytes": 823,
+        "sha256": "d1dd464432c228f240a8daf4f3dd4ce6f8fe1cb9e67691549dd71902132cd8a0"
+      },
+      {
+        "path": ".temp/goal/d1-back-query/run-1792416824312/results/back-query.e2e.ts-D1-003-a-b0743-rve-destination-and-current/error-context.md",
+        "bytes": 9222,
+        "sha256": "9646a03ff2459c73e09f515f9a756c81935fffe0155dcab19c123d52183d3421"
+      },
+      {
+        "path": ".temp/goal/d1-back-query/run-1792416824312/results/back-query.e2e.ts-D1-003-a-b0743-rve-destination-and-current/post-overview-back-global.dom.json",
+        "bytes": 10283,
+        "sha256": "12589e7eb76aafd6a692c9d1e70e179387a873862f5d4b9df3e5ff9057a69a44"
+      },
+      {
+        "path": ".temp/goal/d1-back-query/run-1792416824312/results/back-query.e2e.ts-D1-003-a-b0743-rve-destination-and-current/post-overview-back-global.png",
+        "bytes": 48339,
+        "sha256": "f2d22c972e3638724c5cad97f6bdc170e730eca92ca517ceb945618ca120ce92",
+        "actuallyViewedByThisReviewer": true,
+        "observation": "Phone rendered menu visibly marks Connections, with Overview unselected; Parts unavailable/Retry remains visible."
+      },
+      {
+        "path": ".temp/goal/d1-back-query/run-1792416824312/results/back-query.e2e.ts-D1-003-a-b0743-rve-destination-and-current/post-supported-query-realm.dom.json",
+        "bytes": 11604,
+        "sha256": "9fbda952a4606238ce4828491401fe6944fece7f98d9a83121a4c96c38d6d4d7"
+      },
+      {
+        "path": ".temp/goal/d1-back-query/run-1792416824312/results/back-query.e2e.ts-D1-003-a-b0743-rve-destination-and-current/post-supported-query-realm.png",
+        "bytes": 48158,
+        "sha256": "d28dd9488e6707fd0b6e371210e8d478bbe698f35e50dcfd70c80581f11b8d0c",
+        "actuallyViewedByThisReviewer": true,
+        "observation": "Phone menu visibly marks Connections after ordinary supported Realm query navigation; Parts and Connections unavailable rendering remains visible. Query values are established by captured live DOM/URL assertions, not screenshot text."
+      },
+      {
+        "path": ".temp/goal/d1-back-query/run-1792416824312/results/back-query.e2e.ts-D1-003-a-b0743-rve-destination-and-current/test-failed-1.png",
+        "bytes": 18784,
+        "sha256": "39d5637dc33466ec823fd9caa79405758b5b4356dd71fc550e8e6ceb8bda338e",
+        "actuallyViewedByThisReviewer": true,
+        "observation": "Phone at final Back timeout shows Loading…/skeleton shell. This image does not establish a final current marker."
+      },
+      {
+        "path": ".temp/goal/d1-back-query/run-1792416824312/results/back-query.e2e.ts-D1-003-a-b0743-rve-destination-and-current/trace.zip",
+        "bytes": 3873720,
+        "sha256": "f3e3f7d9b1e0af499875f05fa04ecfd99bc88a4255b8e65f6ae8955e171e7570"
+      },
+      {
+        "path": ".temp/goal/d1-back-query/run-1792416824312/results/back-query.e2e.ts-D1-003-a-b0743-rve-destination-and-current/url-transitions.json",
+        "bytes": 3632,
+        "sha256": "99edcc569776f8993849e7cc4115ac2f98a54bece67654eea1010a0e904dff9c"
+      }
+    ],
+    "evidenceClassification": {
+      "freshAssertionPass": "Phone only: initial Connections, Overview, Back-to-global Connections, supported Realm-query Connections and all generated view-link values passed before final Back.",
+      "freshAssertionFailure": "Desktop initial current-marker assertion reached and failed: expected1, observed0. Actual error DOM shows Work-load unavailability; this is not proof of a wrong selected marker after Back/query and is not promoted to a new source finding.",
+      "navigationTimeout": "Phone final Back began and navigation events show the global Connections URL, but goBack did not complete before the unchanged60second total test budget. Final URL/current assertion was not reached; URL events alone are not substituted for that assertion.",
+      "setupFailure": "No startup/patch/source/backend/Realm-setup failure. Prior original patch framing issue was resolved by the manager-supplied normalized transport and exact resulting content checks. Outer harness classification is preserved separately.",
+      "sourceInference": "None newly requested or performed. Existing source APPROVE stays historical; no new source-cause or class-closure conclusion."
+    },
+    "resourceCleanup": {
+      "server": {
+        "pid": 75586,
+        "command": [
+          "task",
+          "web:dev",
+          "--",
+          "--port",
+          "41159",
+          "--strictPort"
+        ]
+      },
+      "ownedFrontendStopped": true,
+      "productApiMocks": false,
+      "sharedDataPreparation": false,
+      "backendLifecycle": false,
+      "peerFilesMutated": false,
+      "qualification": "Owned dynamically selected free port41159 with strictPort; peer fixed port43134 was not used. Only the owned Task/frontend process group was terminated. Backend pointer remained unchanged throughout."
+    },
+    "reportValidation": {
+      "status": "passed",
+      "jobId": "2a6a3004-fac0-463b-b51e-721e63536981",
+      "commands": [
+        {
+          "command": "task docs:check",
+          "exitCode": 0,
+          "result": "Passed13self-tests and249Markdown files; local links, fragments and design navigation. External URLs/runtime behavior not tested.",
+          "log": ".temp/goal/jobs/2a6a3004-fac0-463b-b51e-721e63536981.1.log",
+          "sha256": "19d256d9f58019cb5c39ed88fe8451d6dcb6ca1d133f1d5bdf5e479a85247991"
+        },
+        {
+          "command": "task goal -- check",
+          "exitCode": 0,
+          "result": "Report-only diff: AST and1/44selected guards passed; no TypeScript workspace changed, no source lint targets and no brief test files.",
+          "log": ".temp/goal/jobs/2a6a3004-fac0-463b-b51e-721e63536981.2.log",
+          "sha256": "28474f6b765d338ce2f7344da03ee6933200450d361b94b87145f222154b94f0"
+        }
+      ],
+      "goalCheckArtifact": ".temp/goal/check/run-0yMzlH/output.log",
+      "harnessNotice": "Harness reports4commits behind Main. All selected report checks pass; no rebase or main mutation.",
+      "subsequentEdits": "Only this validation metadata; JSON parsing, every prior JSON-value preservation, tracked claim scope and whitespace checked before commit.",
+      "qualification": "These checks validate the report, not the failed two-cell product acceptance."
+    },
+    "limitations": [
+      "Both new cells must complete the final Back/current assertions for PASS; neither did. No full D1-003 or catalogue class closure is inferred.",
+      "Desktop failed on initial Work-load error before the missing Back/query sequence. That initial availability/current assertion failure is retained without inventing a tab-mapping cause.",
+      "Phone passes two intermediate post-navigation DOM checks but final Back times out. Its final loading screenshot does not prove a current marker or completed browser navigation.",
+      "Existing Contents503/Parts404 and franchise/Connections unavailable rendering remain visible and preserved. Their bodies are not prerequisites substituted for these navigation assertions.",
+      "The unchanged original four Zone assertions, retained eight native passes, historical source approval and all prior findings/limitations are untouched. No D1-002/D1-005, global/mounted scope matrix, Work journey or account/session rerun.",
+      "No assertion or timeout weakening, automatic rerun, source implementation, dependency change, corpus preparation, backend lifecycle or peer mutation."
+    ],
+    "managerNext": "Return these exact retained two-cell failures to the existing implementer. Keep assertion-3 unproved at both widths and retain the partial phone evidence; no fresh source review or new task is requested. Manager retains integration and closure authority."
+  },
+  "i1001VisitorMenuRuntimePremiseCheckpoint": {
+    "observedAt": "2026-10-19T16:42:49.841531+00:00",
+    "reviewer": {
+      "account": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independent": true,
+      "fallback": false,
+      "delegation": false
+    },
+    "authority": "Same original I1-001 C22/C26 anonymous visitor-menu proof only. Reuse accepted boundedWorkDiscussionRoleMenuFirstReview; no source-review replay, Recipe/A08/all-domain callback, fresh corpus or backend startup. First check the exact existing shared discussion response before any frontend/browser launch.",
+    "priorReport": {
+      "commit": "9cb06aa65aac9ba8043c8bc40c1cbe4341925bff",
+      "sha256": "cf4516ca61551de0a124446bad20615a3a25b94e410d0736149e7ae27fb7e654",
+      "topLevelKeys": [
+        "format",
+        "goal",
+        "worker",
+        "observedAt",
+        "reviewer",
+        "disposition",
+        "acceptance",
+        "pins",
+        "scope",
+        "acceptanceReference",
+        "findings",
+        "sourceReviewObservations",
+        "checksActuallyExecuted",
+        "proofReuse",
+        "limitations",
+        "managerNext",
+        "originalReviewCheckpoint",
+        "finalCandidateCheckpoint",
+        "finalCandidateResolutionCheckpoint",
+        "boundedActionGroupCheckpoint",
+        "boundedSourceFooterCheckpoint",
+        "boundedCreditsCookCheckpoint",
+        "boundedBookCoverCheckpoint",
+        "boundedBookRetryCorrectionCheckpoint",
+        "boundedD1003NavigationCorrectionCheckpoint",
+        "boundedD1003BackQueryAssertionCheckpoint",
+        "boundedNonWorkReleaseFirstSourceCheckpoint",
+        "storyRefreshSeamFirstReview",
+        "readerMetadataFirstReview",
+        "boundedIdentityNameConsumerFirstReview",
+        "managerCallerCorrection",
+        "managerBookIntegration",
+        "identityAgentPickerFourPathFirstReview",
+        "boundedWorkDiscussionRoleMenuFirstReview"
+      ],
+      "preservation": "Every prior 34 field value, finding, source/runtime pin, report checkpoint and historical assertion/setup failure is preserved exactly."
+    },
+    "selection": {
+      "path": ".temp/goal/i1001-menu-8caf/runner-binding-selection.json",
+      "bytes": 6553,
+      "sha256": "9f5763b6cea2d1b3c7aea6721112287ed691997844b011e050c7fcbcdb4a501b"
+    },
+    "selectionRetainedSource": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/site-I1001-menu-premise-20261019T1637/runner-binding-selection.json",
+    "binding": {
+      "selectedFrontendPin": "8caf9bd4bfa312b7e07bdfa5f9e124ccd4462929",
+      "frontendPrepared": false,
+      "frontendServed": false,
+      "frontendPortSelectedButUnused": 43144,
+      "mainOrigin": "http://127.0.0.1:3001",
+      "backendDeclaredPin": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "backendActualServedSourceAttestation": false,
+      "backendSourceConclusion": "The fresh HTTP response lacks the selected required kind contract. Neither this response nor immutable Git blob matching attests the source of the serving shared3001 process. Do not claim it is serving the declared pin or the approved native modules.",
+      "accountsOriginSelectedButUnused": "http://127.0.0.1:3004",
+      "sourceBlobsVerifiedAtSelectedImmutablePin": [
+        {
+          "path": "apps/web/features/work-page/discussion.tsx",
+          "oldBlob": "d46b9ef59c5f2568d6870c7a86f69660116a20b8",
+          "newBlob": "62993c47ba90f666cd9b0b8e72c50243c4590687",
+          "unchanged": false,
+          "verifiedAtSelectedPin": "62993c47ba90f666cd9b0b8e72c50243c4590687"
+        },
+        {
+          "path": "apps/web/features/work-page/messages.ts",
+          "oldBlob": "9b44d2a1470777744624765c165d311b040914f1",
+          "newBlob": "0b67c64561da2af752f60d05c63efddac3e57077",
+          "unchanged": false,
+          "verifiedAtSelectedPin": "0b67c64561da2af752f60d05c63efddac3e57077"
+        },
+        {
+          "path": "services/main/src/modules/work-activity/read.ts",
+          "oldBlob": "4e58171ef09022faa0666f0ac3bbe93f581bacaf",
+          "newBlob": "54d84063b6ee7e13231962bc2be78cbdbfe86b7d",
+          "unchanged": false,
+          "verifiedAtSelectedPin": "54d84063b6ee7e13231962bc2be78cbdbfe86b7d"
+        },
+        {
+          "path": "services/main/src/modules/work-activity/read-contract.ts",
+          "oldBlob": "032be53f8055ec3334c65c9ec33eff3ec43179cc",
+          "newBlob": "e50718adf7411e75da46fe284629ffb49a236101",
+          "unchanged": false,
+          "verifiedAtSelectedPin": "e50718adf7411e75da46fe284629ffb49a236101"
+        },
+        {
+          "path": "services/main/src/modules/realm-reply/thread-store.ts",
+          "oldBlob": "dbd740b6e37a02c9cf406ad0a18ac9414b50bdf3",
+          "newBlob": "dbd740b6e37a02c9cf406ad0a18ac9414b50bdf3",
+          "unchanged": true,
+          "verifiedAtSelectedPin": "dbd740b6e37a02c9cf406ad0a18ac9414b50bdf3"
+        },
+        {
+          "path": "apps/web/features/api/browser.ts",
+          "oldBlob": "5b8c2d862068a9152b77de410bfefb247f047112",
+          "newBlob": "5b8c2d862068a9152b77de410bfefb247f047112",
+          "unchanged": true,
+          "verifiedAtSelectedPin": "5b8c2d862068a9152b77de410bfefb247f047112"
+        },
+        {
+          "path": "scripts/qa/chromium-loopback.ts",
+          "oldBlob": "dcda8afa8e586463108cd803a9830daa6346465d",
+          "newBlob": "dcda8afa8e586463108cd803a9830daa6346465d",
+          "unchanged": true,
+          "verifiedAtSelectedPin": "dcda8afa8e586463108cd803a9830daa6346465d"
+        },
+        {
+          "path": "apps/web/tests/support/tsconfig.playwright.json",
+          "oldBlob": "4f91c5c4c87ccb6db95d0d230df1d22b5f38f0d4",
+          "newBlob": "4f91c5c4c87ccb6db95d0d230df1d22b5f38f0d4",
+          "unchanged": true,
+          "verifiedAtSelectedPin": "4f91c5c4c87ccb6db95d0d230df1d22b5f38f0d4"
+        },
+        {
+          "path": "apps/web/vite.config.ts",
+          "oldBlob": "5340e037be04b55b3499adb537984ee440edcb61",
+          "newBlob": "264ebde4faa74e864463bc20c9525d73361fbf05",
+          "unchanged": false,
+          "verifiedAtSelectedPin": "264ebde4faa74e864463bc20c9525d73361fbf05"
+        },
+        {
+          "path": "apps/web/worker/index.ts",
+          "oldBlob": "fc345d1f85383b1fb16866d8cddc82c634f140c5",
+          "newBlob": "b25911c7d3fef939486223eb0f19b183c0b04f49",
+          "unchanged": false,
+          "verifiedAtSelectedPin": "b25911c7d3fef939486223eb0f19b183c0b04f49"
+        },
+        {
+          "path": "Taskfile.yml",
+          "oldBlob": "30cfc2093436fab2cc18a589404a2f589783f7c7",
+          "newBlob": "30cfc2093436fab2cc18a589404a2f589783f7c7",
+          "unchanged": true,
+          "verifiedAtSelectedPin": "30cfc2093436fab2cc18a589404a2f589783f7c7"
+        },
+        {
+          "path": "yarn.lock",
+          "oldBlob": "e70dcbe4159d3fcab2585962a1cf3688937eb0e5",
+          "newBlob": "e70dcbe4159d3fcab2585962a1cf3688937eb0e5",
+          "unchanged": true,
+          "verifiedAtSelectedPin": "e70dcbe4159d3fcab2585962a1cf3688937eb0e5"
+        }
+      ],
+      "dependencyAndRuntimeLimit": "No frontend copy, dependency installation, port acquisition, browser process or native process was prepared or started after the failed first-read premise. Selected Taskfile/yarn.lock/helper source hashes match 8caf; installed dependency/runtime compatibility was not exercised."
+    },
+    "originalCallback": {
+      "title": "C22 C26 / visitor / subject post and each reply have one owning overflow and no resting Report controls",
+      "originalLines": [
+        117,
+        134
+      ],
+      "selectedTests": 1,
+      "immutableInputs": [
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/a16-report-menu-original-v3/original-callback.ts.txt",
+          "bytes": 1220,
+          "sha256": "c0d5eb27454415887a2c54f3aa98911382020a3ee3e033ebe39cd68c0a5b698a"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/a16-report-menu-original-v3/original-hooks.ts.txt",
+          "bytes": 989,
+          "sha256": "afc0bc7cc52e1a8775cd74875764297f0af92d13b883ce82a808c681c54a6431"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/a16-report-menu-original-v3/fixture.json",
+          "bytes": 1724,
+          "sha256": "6bcb1fa0cc7b6a1bc6f28928db91a39e7d41dc0a2d06d5ca070f0f9ba63d371e"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/a16-report-menu-original-v3/report-menu.e2e.ts",
+          "bytes": 3402,
+          "sha256": "cb24bc0e7ccbfbeb3c81fa9b49506db95cb23e3240fdf93279f03f83f00be7fa"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/a16-report-menu-original-v3/original-helpers.ts",
+          "bytes": 2903,
+          "sha256": "20868c3e4fc1f0108be54b4f8b3fb671187788382f77d0638e580ac1825222aa"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/a16-report-menu-original-v3/Taskfile.yml",
+          "bytes": 2644,
+          "sha256": "9d830bf90a2b3f112d142347ae388e62fb10a9b217d74a82517d7c07377c5683"
+        }
+      ],
+      "callbackHooksHelperAssertionsBudgetEdits": false,
+      "executedTests": 0,
+      "browserAssertionsReached": false,
+      "readNote": "The original visitor callback was read and rehashed, including owning post/reply overflow, one generic Report, Escape/focus return and no-report-write assertions. It was not executed. No old run/verify/prove target or historical browser pass was substituted."
+    },
+    "freshRead": {
+      "job": "job:c0ea1592-35c4-4644-963f-f4ff594796c3",
+      "startedAt": "2026-10-19T16:41:15.068131+00:00",
+      "finishedAt": "2026-10-19T16:41:16.228226+00:00",
+      "method": "GET",
+      "url": "http://127.0.0.1:3001/v1/resources/01a0e909-2857-70fc-b300-8091dc9a973f/discussion",
+      "requestCount": 1,
+      "auth": false,
+      "retries": 0,
+      "timeoutMs": 30000,
+      "status": 200,
+      "reason": "OK",
+      "elapsedMs": 1160,
+      "problem": null,
+      "cause": "All three exact required discussion rows are present, but their kind property is absent. Required native post/reply identity is unavailable to the selected owning-menu renderer. This is a runtime-contract/binding premise failure, before browser assertions.",
+      "responseHeaders": [
+        [
+          "Cache-Control",
+          "private, no-store"
+        ],
+        [
+          "Content-Type",
+          "application/json;charset=utf-8"
+        ],
+        [
+          "Date",
+          "Mon, 19 Oct 2026 16:41:16 GMT"
+        ],
+        [
+          "Content-Length",
+          "4947"
+        ]
+      ],
+      "response": {
+        "path": ".temp/goal/i1001-menu-8caf/discussion-response.body",
+        "bytes": 4947,
+        "sha256": "dea25f8c080933fefff0743b1a7d13f8669b3902b99da172e0167ebedbb97918"
+      },
+      "formattedResponse": {
+        "path": ".temp/goal/i1001-menu-8caf/discussion-response.json",
+        "bytes": 5668,
+        "sha256": "e124b0157b62716fbf3be3ac0f99fc6f63b72db9b98940202efc6d0c6e481424"
+      },
+      "receipt": {
+        "path": ".temp/goal/i1001-menu-8caf/premise-receipt.json",
+        "bytes": 3899,
+        "sha256": "bdbd90a5da4a589c39c0922d5af75518768b97f5b570403477cac1f0dbb33ce0"
+      },
+      "requiredRows": [
+        {
+          "expectedKind": "post",
+          "kindPresent": false,
+          "observedRow": {
+            "reply": "https://rezics.com/id/bc9a25ec-27f0-4cdc-a8f0-869316104ecd",
+            "realm": "https://rezics.com/id/01a0e914-1857-74d8-8763-6628387b7f39",
+            "placement": "https://rezics.com/id/01a0e915-0bec-7730-8a55-a2195d948288",
+            "revisionId": "3ad710b4-8183-4885-a494-a612df6904b2",
+            "body": "First time reading Austen in English: any tips?\nEnglish is my third language, and the sentences are long and ironic. Should I read with a dictionary or just keep going?",
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "1479"
+          }
+        },
+        {
+          "expectedKind": "reply",
+          "kindPresent": false,
+          "observedRow": {
+            "reply": "https://rezics.com/id/66535ecd-3681-4328-a285-91e72efb2598",
+            "realm": "https://rezics.com/id/01a0e914-1857-74d8-8763-6628387b7f39",
+            "placement": "https://rezics.com/id/01a0e915-174e-720e-aa59-c8b614f9f787",
+            "revisionId": "e63da0e0-65fc-415f-905f-0ea6166cf527",
+            "body": "Keep going, and read the dialogue aloud. Austen’s irony is easier to hear than to see.",
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "1487"
+          }
+        },
+        {
+          "expectedKind": "reply",
+          "kindPresent": false,
+          "observedRow": {
+            "reply": "https://rezics.com/id/936bae70-0f1b-4060-a7df-343125ba7a67",
+            "realm": "https://rezics.com/id/01a0e914-1857-74d8-8763-6628387b7f39",
+            "placement": "https://rezics.com/id/01a0e915-228d-7649-a61d-0213d27046b9",
+            "revisionId": "b2ffc389-9c23-4ca7-9dc8-8c1ba523739f",
+            "body": "I read each chapter in Chinese first, then in English. It helped a lot.",
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "1495"
+          }
+        }
+      ],
+      "sourcePosition": {
+        "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+        "sequence": "11954"
+      },
+      "count": {
+        "value": 10,
+        "kind": "exact-page",
+        "total": null
+      },
+      "nextCursor": null,
+      "complete": true,
+      "noSubstitution": "Original bc9a25ec, 66535ecd and 936bae70 rows retained with exact supplied Realm, placement, revisionId, body, epoch and sequence. No replacement root posts or invented nested fixture."
+    },
+    "disposition": {
+      "verdict": "BLOCKED ON RUNTIME PREMISE; BROWSER NOT RUN",
+      "sourceInference": "Existing exact-source approval is reused unchanged. An HTTP200 list without kind does not satisfy the selected runtime contract; the actual serving source is unverified. No new product source defect is asserted.",
+      "reproducedAssertionFailure": null,
+      "setupFailure": {
+        "classification": "runtime_contract_binding_premise_failure",
+        "browserAssertionReached": false,
+        "requiredKinds": {
+          "https://rezics.com/id/bc9a25ec-27f0-4cdc-a8f0-869316104ecd": "post",
+          "https://rezics.com/id/66535ecd-3681-4328-a285-91e72efb2598": "reply",
+          "https://rezics.com/id/936bae70-0f1b-4060-a7df-343125ba7a67": "reply"
+        },
+        "observedKinds": "Property absent on all three exact rows.",
+        "evidence": {
+          "path": ".temp/goal/i1001-menu-8caf/premise-receipt.json",
+          "bytes": 3899,
+          "sha256": "bdbd90a5da4a589c39c0922d5af75518768b97f5b570403477cac1f0dbb33ce0"
+        }
+      },
+      "newActionableSourceFindings": [],
+      "productAcceptance": "No original I1-001/A16/C22/C26 acceptance or class closure. The visitor callback and separate own-row no-write case remain unproved."
+    },
+    "checksActuallyExecuted": [
+      {
+        "job": "job:2451c031-62b5-483d-8b24-306eea13351c",
+        "command": "task -t .temp/goal/i1001-menu-8caf/Taskfile.yml premise",
+        "result": "HARNESS SETUP FAILURE",
+        "taskExit": 2,
+        "recordedJobExit": 201,
+        "httpRequests": 0,
+        "browserAssertionsReached": false,
+        "cause": "Task resolves the command from the Taskfile directory; the initial command repeated .temp/goal/i1001-menu-8caf and could not find the Python script. Corrected only the ignored Task command to python3 read-premise.py.",
+        "log": {
+          "path": ".temp/goal/jobs/2451c031-62b5-483d-8b24-306eea13351c.log",
+          "bytes": 500,
+          "sha256": "454b9f000dc681bbc1cbdd0f678c76726dade1f324623e6b5777811cf9a9f44f"
+        }
+      },
+      {
+        "job": "job:c0ea1592-35c4-4644-963f-f4ff594796c3",
+        "command": "task -t .temp/goal/i1001-menu-8caf/Taskfile.yml premise",
+        "result": "FAILED RUNTIME PREMISE",
+        "taskExit": 1,
+        "recordedJobExit": 201,
+        "httpRequests": 1,
+        "browserAssertionsReached": false,
+        "assertionReached": "The dedicated anonymous GET premise inspected the actual returned rows. No original browser assertion was reached.",
+        "log": {
+          "path": ".temp/goal/jobs/c0ea1592-35c4-4644-963f-f4ff594796c3.log",
+          "bytes": 2449,
+          "sha256": "9aab1495dd76071c510de42b779ecacd1ce4d5ed7b20dd1942dedd2e1800f128"
+        }
+      },
+      {
+        "command": "Read-only SHA256 of retained callback/hooks/fixture/helpers and git rev-parse 8caf:<selected path> for all twelve binding entries",
+        "result": "MATCH",
+        "limit": "Input/source identity verification only; no executed frontend/native/dependency pass."
+      },
+      {
+        "job": "job:59397750-3451-4701-a913-6fc71bb094f4",
+        "commands": [
+          "task docs:check",
+          "task goal -- check"
+        ],
+        "result": "PASS",
+        "limit": "Report-only documentation/AST/path-selected guards; no product/runtime assertion."
+      }
+    ],
+    "ownedResources": {
+      "frontendLaunches": 0,
+      "nativeLaunches": 0,
+      "browserLaunches": 0,
+      "ownedProcessGroups": [],
+      "stopRequired": false,
+      "cleanupStatus": "No owned persistent resource was started. The single HTTP connection was closed in finally. Shared processes, peer files and leases were untouched.",
+      "sharedWrites": 0,
+      "accountOrPermissionMutation": false,
+      "corpusPreparation": false
+    },
+    "requiredManagerAction": {
+      "action": "Supply an already compatible serving process, or separately authorize and own a bounded compatible native runtime; then resume only the same original visitor callback with exact8caf frontend on owned43144.",
+      "alreadyApprovedNativeSource": "d30e5815cfa27992258674470bbd3ea916ff48ca",
+      "requiredRuntimePaths": [
+        "services/main/src/modules/work-activity/read.ts",
+        "services/main/src/modules/work-activity/read-contract.ts"
+      ],
+      "requiredTargetBlobs": {
+        "services/main/src/modules/work-activity/read.ts": "54d84063b6ee7e13231962bc2be78cbdbfe86b7d",
+        "services/main/src/modules/work-activity/read-contract.ts": "e50718adf7411e75da46fe284629ffb49a236101"
+      },
+      "threadIdentityDependency": "RealmReplyThreadStore.identities() remains byte-identical at dbd740b6e37a02c9cf406ad0a18ac9414b50bdf3 in the selected declared-backend comparison.",
+      "authorizationBoundary": "Manager explicitly instructed: If API lacks kind, report the exact source/binding failure immediately. Do not start normal Main or composeMain against shared data: startup can migrate, initialize metadata and start writers. No fresh catalogue/schema/native-image work is required by this already-approved two-module read correction."
+    },
+    "limitations": [
+      "No new screenshots, DOM/current-state, menu count, Escape/focus, report-write absence or installed-router result exists for this selected8caf proof.",
+      "HTTP200 and original row body/revision availability do not establish native kind, actual served Git source, frontend readiness or canonical acceptance.",
+      "The earlier source approval, controlled units/stories, genuine prior failures and other browser/runtime limitations remain separate and intact. The own-row no-write case remains independently due."
+    ],
+    "reportValidation": {
+      "status": "PASS",
+      "job": "job:59397750-3451-4701-a913-6fc71bb094f4",
+      "commands": [
+        {
+          "command": "task docs:check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/59397750-3451-4701-a913-6fc71bb094f4.1.log",
+          "sha256": "a31f3c3721fa11f67cc9cfc609fde742aadf541cf9a53b67e9f962e00005c60e"
+        },
+        {
+          "command": "task goal -- check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/59397750-3451-4701-a913-6fc71bb094f4.2.log",
+          "sha256": "4f32099140c7da81c91f48e2eb596dbf396602f7b34698dfa709216b368adc21"
+        }
+      ],
+      "result": "Documentation checker: 13 tests and 249 Markdown files PASS. Goal report checks: AST and 1/44 path-selected guards PASS. No TypeScript source changed, no test files named in the brief and no source lint selected.",
+      "scope": "Only the claimed additive review report; no product tests/types, native process or browser result inferred. Five-commits-behind harness notice was informational; no rebase performed. Completion receipt fields were inserted after the successful recorded checks."
+    }
+  },
+  "boundedWorkSourceAnchorDedupFirstReview": {
+    "observedAt": "2026-10-19T16:48:52.901786+00:00",
+    "reviewer": {
+      "account": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independent": true,
+      "fallback": false,
+      "delegation": false
+    },
+    "authority": "Finite first source review of exactly the original Work source-footer duplicate-address display correction. Existing A16/footer/source reviews are reused, not re-reviewed. Same original outcome, acceptance and sole report claim; no product implementation, source landing, service or data work.",
+    "priorReport": {
+      "commit": "025eabd9882534a5c5cedcfe44bc6e08524fb649",
+      "sha256": "26e06df740f140a9ef89d1178bd6d8ed8737883baa0b2bd6e20abd255cf0fac3",
+      "topLevelKeys": [
+        "format",
+        "goal",
+        "worker",
+        "observedAt",
+        "reviewer",
+        "disposition",
+        "acceptance",
+        "pins",
+        "scope",
+        "acceptanceReference",
+        "findings",
+        "sourceReviewObservations",
+        "checksActuallyExecuted",
+        "proofReuse",
+        "limitations",
+        "managerNext",
+        "originalReviewCheckpoint",
+        "finalCandidateCheckpoint",
+        "finalCandidateResolutionCheckpoint",
+        "boundedActionGroupCheckpoint",
+        "boundedSourceFooterCheckpoint",
+        "boundedCreditsCookCheckpoint",
+        "boundedBookCoverCheckpoint",
+        "boundedBookRetryCorrectionCheckpoint",
+        "boundedD1003NavigationCorrectionCheckpoint",
+        "boundedD1003BackQueryAssertionCheckpoint",
+        "boundedNonWorkReleaseFirstSourceCheckpoint",
+        "storyRefreshSeamFirstReview",
+        "readerMetadataFirstReview",
+        "boundedIdentityNameConsumerFirstReview",
+        "managerCallerCorrection",
+        "managerBookIntegration",
+        "identityAgentPickerFourPathFirstReview",
+        "boundedWorkDiscussionRoleMenuFirstReview",
+        "i1001VisitorMenuRuntimePremiseCheckpoint"
+      ],
+      "preservation": "All 35 prior worker report field values, including the independent shared3001 kind-absence premise checkpoint and every historical finding/failure, remain exactly unchanged."
+    },
+    "pins": {
+      "base": "2ae2f5080d546cab9560c4490ac538b01882e930",
+      "candidate": "cd44bd3321566eb10eb71c25a5215521f34202fe",
+      "candidateTree": "d6de3b7f6143afceff10cbc6c1a0e22690de0548",
+      "frozenMainIntegrationComparison": "dc33c7e21853430d69f2e6b62252bd58fc62048e",
+      "fourMainPreimagesEqualBase": true,
+      "wholeMainOrWorkerSourceApproval": false
+    },
+    "inputs": {
+      "manifest": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/A13-anchor-dedup/manifest.json",
+        "sha256": "91130cf63166eea8a0cdc45692abdbe4692c79b265fa6456cc3c3b0d2d97f045"
+      },
+      "patch": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/A13-anchor-dedup/candidate.patch",
+        "sha256": "d5ad76b1244377652cf42ca1ea63c33ff56af0638934e55e05528803f9c9d109"
+      },
+      "finalChecks": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/A13-anchor-dedup/check-results-final.json",
+        "sha256": "fc5b2d92c8e01e5e331fa0eb57eb4bd6a5875f3c5c61d31a8fa41a0450f68538"
+      },
+      "guardCapacityDiagnosis": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/A13-anchor-dedup/guard-capacity-diagnosis.json",
+        "sha256": "146f2f00d13ce274492a5bd291e21bc89eb01238fe08ce1991ee418b4d3edac0"
+      },
+      "inspectionReceipt": {
+        "path": ".temp/goal/a13-anchor-dedup-review/inspection-receipt.json",
+        "sha256": "45bf0f62603ce270a4730c0e25fcf3ae228523abb701b0a14f204274454ea16a"
+      }
+    },
+    "inspectedSourceDeltas": [
+      {
+        "path": "apps/web/features/rights-mark/rights-mark.tsx",
+        "baseBlob": "77b33711e55fc0459842a1b1a214fffff462004a",
+        "candidateBlob": "1f2ca61cd9cdab848e6e7aa84fbe6c6d80d1e665",
+        "candidateSHA256": "300c4571ab463de89a7a01d662426785689bec9932f27a8d16a2bae11515f3bd",
+        "mainPreimageEqualsBase": true,
+        "reviewedHunks": [
+          "@@ -83 +83 @@ function sourceCredit(notice: string): { name: string; href: string | null } {",
+          "@@ -85 +85 @@ function SourceCredit({ notice, label }: { notice: string; label: string }) {",
+          "@@ -126 +126 @@ function LicenceLink({ instrument, copy }: { instrument: string; copy: RightsMar",
+          "@@ -130 +130,2 @@ function markPieces(rights: Assessed, copy: RightsMarkCopy): ReactNode[] {",
+          "@@ -190 +191,5 @@ export function rightsRuns<T>(items: readonly T[], rightsOf: (item: T) => Displa",
+          "@@ -192 +197 @@ export function RightsMark({ rights, locale = 'en' }: { rights: DisplayObligatio"
+        ],
+        "symbols": [
+          "SourceCredit",
+          "markPieces",
+          "RightsMark"
+        ],
+        "disposition": "SOURCE APPROVE. Optional linkedSourceHref is normalized with the existing safe httpUrl helper. SourceCredit retains its parsed name and label, suppressing only the attribution anchor whose normalized href equals that preceding publication address. markPieces still iterates every attribution and retains existing licence, other-duty and notice processing. Unassessed/null rendering, rightsRuns, CoverCreditMark and no-prop consumers are unchanged."
+      },
+      {
+        "path": "apps/web/features/work-page/work-sources.tsx",
+        "baseBlob": "806aa2cd690e05581823e3627da0800877a692c5",
+        "candidateBlob": "92a7674d67568152558f7d0a9b3440ec18607e7c",
+        "candidateSHA256": "7558599cdae59ec70ceecc95a1c4d4c167490eed8e54f9e62ff717947b1010dc",
+        "mainPreimageEqualsBase": true,
+        "reviewedHunks": [
+          "@@ -96,0 +97 @@ export function WorkSources({ work, locale, messages, avatarQuery, statements, l",
+          "@@ -98 +99 @@ export function WorkSources({ work, locale, messages, avatarQuery, statements, l",
+          "@@ -101 +102 @@ export function WorkSources({ work, locale, messages, avatarQuery, statements, l"
+        ],
+        "symbols": [
+          "WorkSources"
+        ],
+        "disposition": "SOURCE APPROVE. Compute existing publicationSource(work) once, render PublicationSource first and pass only its actual URL into the subsequent RightsMark groups. Existing workRights grouping, field evidence, supplied cover credit, children/WorkRecord and page-end SubjectSources placement remain intact. No record/observation/source/evidence identity is compared or merged."
+      },
+      {
+        "path": "apps/web/features/work-page/work-detail-contract.test.tsx",
+        "baseBlob": "0a51a78572301cfe07aa3dd738c1390cf7a990ef",
+        "candidateBlob": "73d166380d1488f2a8c4d476df25c259420fd42a",
+        "candidateSHA256": "b17d987d8f8323268118e1da46839bae2e92688087fe9acba5bbf86e299bbb37",
+        "mainPreimageEqualsBase": true,
+        "reviewedHunks": [
+          "@@ -299,0 +300,31 @@ test('one source section retains record identity, exact evidence, missing eviden"
+        ],
+        "symbols": [
+          "a publication source links once while every distinct attribution and licence remains readable"
+        ],
+        "disposition": "SOURCE APPROVE. Adds a rendering regression with distinct facts and synopsis notices at one Gutenberg URL, distinct CC BY4.0/CC BY-SA4.0 instruments, both rights marks, a different publication URL and the no-publication control. All original tests/assertions remain byte-exact outside this insertion. This is a controlled render test, not public source-obligation acceptance."
+      },
+      {
+        "path": "apps/web/features/work-page/work-detail-contract.stories.tsx",
+        "baseBlob": "d223388e002ccc82a7821ea7f5737a63a2ee67b3",
+        "candidateBlob": "7ad0fe1fb378d4b536b399c607da7d12963a97db",
+        "candidateSHA256": "20472323684d4fbbcb3fa3b55b543ee448e96ff0601ac5e6447bb82e52707fc8",
+        "mainPreimageEqualsBase": true,
+        "reviewedHunks": [
+          "@@ -261 +261,2 @@ export const MixedReadFailures: Story = {",
+          "@@ -281 +282,7 @@ function SourcedWork({ at = fixture.workRef }: { at?: WorkAt }) {",
+          "@@ -326,0 +334,19 @@ export const ZoneSourcesAndEvidence: Story = { ...MobileSourcesAndEvidence,"
+        ],
+        "symbols": [
+          "SourcedWork",
+          "PublicationSourceOnce",
+          "MobilePublicationSourceOnce"
+        ],
+        "disposition": "SOURCE APPROVE. SourcedWork defaults publication=false and preserves its existing supplied data; the new opt-in fixture adds a selected publication and distinct facts credit. Original play assertions are unchanged. The two added desktop/phone cases check exactly one publication-address link, readable credit, retained two licence links and external source record, keyboard focus and width. Existing Field evidence stays collapsed in the selected captures."
+      }
+    ],
+    "materialCallChain": {
+      "flow": "WorkFrame renders its shared WorkSources evidence after the view content on Book and nonBook branches. WorkSources renders SubjectSources -> PublicationSource -> each existing rights group -> selected cover credit -> field evidence -> WorkRecord/children. Only that already-rendered publication URL is supplied to RightsMark -> markPieces -> SourceCredit.",
+      "preservation": "WorkHeader still derives the Main public Work read through the existing typed client. publicationSource still requires the existing public-domain source contract and valid http(s) URL; no new clearance or source inference is introduced. Distinct rights groups still compare complete supplied obligations, not URL/title; distinct notice/instrument records survive even when their addresses match. LicenceLink/NoticeText, native source records, evidence/withheld handling and selected media credit remain untouched.",
+      "sharedConsumers": "Inspected exact call sites in catalogue Work row/tile, Discover chapter-text hits, entity statement/projection/source views, shared RightsRunRows and RightsMark stories. All omit linkedSourceHref and keep their previous attribution links. Current only supplying call site is WorkSources immediately after PublicationSource. Invalid/absent publication results supply no suppression; different addresses, queries or fragments remain linked. Existing locale labels, dir=auto and wrapping/focus classes remain.",
+      "dependencies": [
+        {
+          "path": "apps/web/features/work-page/publication-source.tsx",
+          "base": "3676938798f0f7c9abe3a7c6877ba2a0c79534e3",
+          "candidate": "3676938798f0f7c9abe3a7c6877ba2a0c79534e3",
+          "frozenMain": "3676938798f0f7c9abe3a7c6877ba2a0c79534e3",
+          "candidateEqualsFrozenMain": true
+        },
+        {
+          "path": "apps/web/features/work-page/work-frame.tsx",
+          "base": "e37a1cc6e224d42825cabf6a6b670c0b7a851879",
+          "candidate": "e37a1cc6e224d42825cabf6a6b670c0b7a851879",
+          "frozenMain": "e37a1cc6e224d42825cabf6a6b670c0b7a851879",
+          "candidateEqualsFrozenMain": true
+        },
+        {
+          "path": "apps/web/features/work-page/record.tsx",
+          "base": "ecb8942b021dd0df3706509b4b1012114c87f931",
+          "candidate": "ecb8942b021dd0df3706509b4b1012114c87f931",
+          "frozenMain": "ecb8942b021dd0df3706509b4b1012114c87f931",
+          "candidateEqualsFrozenMain": true
+        },
+        {
+          "path": "apps/web/features/work-page/types.ts",
+          "base": "d8d9e31adf25b2e899b819fec37923f3d60d1723",
+          "candidate": "d8d9e31adf25b2e899b819fec37923f3d60d1723",
+          "frozenMain": "d8d9e31adf25b2e899b819fec37923f3d60d1723",
+          "candidateEqualsFrozenMain": true
+        },
+        {
+          "path": "apps/web/features/entity-page/sources.tsx",
+          "base": "16978455cf768ae0f341ecdc8daec824111dc163",
+          "candidate": "16978455cf768ae0f341ecdc8daec824111dc163",
+          "frozenMain": "16978455cf768ae0f341ecdc8daec824111dc163",
+          "candidateEqualsFrozenMain": true
+        },
+        {
+          "path": "apps/web/features/catalogue/cover.tsx",
+          "base": "f82bd4c35cf48cc4d5b0eea47cb9d5f6793070d0",
+          "candidate": "f82bd4c35cf48cc4d5b0eea47cb9d5f6793070d0",
+          "frozenMain": "f82bd4c35cf48cc4d5b0eea47cb9d5f6793070d0",
+          "candidateEqualsFrozenMain": true
+        },
+        {
+          "path": "apps/web/features/catalogue/work-row.tsx",
+          "base": "0988cbe980ebfe5053a49508655f47bde5fa7bf6",
+          "candidate": "0988cbe980ebfe5053a49508655f47bde5fa7bf6",
+          "frozenMain": "0988cbe980ebfe5053a49508655f47bde5fa7bf6",
+          "candidateEqualsFrozenMain": true
+        },
+        {
+          "path": "apps/web/features/catalogue/work-tile.tsx",
+          "base": "60303c76df069b775bfbb12305488dc2c699024a",
+          "candidate": "60303c76df069b775bfbb12305488dc2c699024a",
+          "frozenMain": "60303c76df069b775bfbb12305488dc2c699024a",
+          "candidateEqualsFrozenMain": true
+        },
+        {
+          "path": "apps/web/features/discover/chapter-text.tsx",
+          "base": "44f8716f86b180628dd050023d19aa13581c1061",
+          "candidate": "44f8716f86b180628dd050023d19aa13581c1061",
+          "frozenMain": "44f8716f86b180628dd050023d19aa13581c1061",
+          "candidateEqualsFrozenMain": true
+        },
+        {
+          "path": "apps/web/features/entity-page/projection-views.tsx",
+          "base": "30cbfb80021508430a133ddeb6d567a52a7e21c7",
+          "candidate": "30cbfb80021508430a133ddeb6d567a52a7e21c7",
+          "frozenMain": "30cbfb80021508430a133ddeb6d567a52a7e21c7",
+          "candidateEqualsFrozenMain": true
+        },
+        {
+          "path": "apps/web/features/entity-page/views.tsx",
+          "base": "c8b3084dd8c531bc9f9a710d4ddfe87266cff902",
+          "candidate": "c8b3084dd8c531bc9f9a710d4ddfe87266cff902",
+          "frozenMain": "c8b3084dd8c531bc9f9a710d4ddfe87266cff902",
+          "candidateEqualsFrozenMain": true
+        },
+        {
+          "path": "apps/web/features/rights-mark/rights-mark.stories.tsx",
+          "base": "4bc951eb4ca9f248924c356b91d44e18ab608f0f",
+          "candidate": "4bc951eb4ca9f248924c356b91d44e18ab608f0f",
+          "frozenMain": "4bc951eb4ca9f248924c356b91d44e18ab608f0f",
+          "candidateEqualsFrozenMain": true
+        },
+        {
+          "path": "apps/web/features/rights-mark/messages.ts",
+          "base": "6d2a86720feea6e11081264af22af760c38f588a",
+          "candidate": "6d2a86720feea6e11081264af22af760c38f588a",
+          "frozenMain": "6d2a86720feea6e11081264af22af760c38f588a",
+          "candidateEqualsFrozenMain": true
+        }
+      ],
+      "integrationLimit": "All thirteen listed material dependency blobs are identical at base, candidate and frozen dc33 Main; all four selected Main preimages match base. Approval selects only the four reviewed hunks and preserves unrelated current-Main source."
+    },
+    "frozenMainReportPreservation": {
+      "pin": "dc33c7e21853430d69f2e6b62252bd58fc62048e",
+      "sha256": "934e3fa33517378e216f046aecd6d29c1bedee46e268913005d77841949ae733",
+      "additionalTopLevelKeys": [],
+      "mainValuesDifferingFromWorkerHistory": {
+        "disposition": "bounded-2cc223-credits-cook-review-complete-one-reproduced-typecheck-finding",
+        "acceptance": "Immutable2cc2233811e03867ad11567ece53a5e97bba4b90 versus80265f871e601ce870c5eaeadea7095fc122a726 reviewed across22paths. Credits and Cook source/progression inspected with exact regression receipts; WORK-REVIEW-07 reproduces two existing entry test callers missing newly required resource. Prior findings and all historical failures/dispositions preserved. Genuine C27 remains independently due; C21 and Performer owner gaps are not closed."
+      },
+      "disposition": "Frozen Main carries the older Credits/Cook summary strings while this worker retains its later original navigation summary. Both exact historical values are preserved here; no current Main or prior review value is silently replaced or treated as a fresh approval. All other frozen Main report values already equal the retained worker values."
+    },
+    "disposition": {
+      "verdict": "SOURCE APPROVE",
+      "scope": "Exactly 2ae2f5080d546cab9560c4490ac538b01882e930..cd44bd3321566eb10eb71c25a5215521f34202fe, four listed paths. No actionable new defect found in this display correction or its current shared call sites.",
+      "actionableFindings": [],
+      "sourceInference": "The changed branch removes only a repeated attribution hyperlink when an actual preceding publication link owns the same normalized address. It preserves each existing credit notice, licence, obligation/group and source/evidence record; URL equality does not become source/reference identity equality.",
+      "reproducedAssertionFailure": null,
+      "setupFailure": null,
+      "canonicalAcceptance": "This bounded source approval and controlled component evidence do not close original A13/C21 or modify any canonical status. Existing visitor-menu/native-kind blocker and all prior failures remain separate."
+    },
+    "retainedEvidenceReused": [
+      {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-a13-anchor-dedup/.temp/a13-anchor-unit-v2.log",
+        "sha256": "9bc93dd248cc9c70489f0536e7bb99511e288514d177502f6e87a8061159b46b",
+        "name": "unit",
+        "sha256MatchesFreeze": true,
+        "actualResult": "21 passed, 0 failed, 461 expect calls in the single work-detail-contract.test.tsx file."
+      },
+      {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-a13-anchor-dedup/.temp/a13-anchor-types-v2.log",
+        "sha256": "22d89681c5185f839f0014eafb61cb054dba62dc993722d6210a6bc9634aeb18",
+        "name": "selectedTypes",
+        "sha256MatchesFreeze": true,
+        "actualResult": "No type errors in 1874 selected/transitive files; host CPU/memory admission retained in the log."
+      },
+      {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-a13-anchor-dedup/.temp/a13-anchor-story-capture.log",
+        "sha256": "02ef3956772cbd3b9ff1e94f6563a13ad84c30daa7f349252512a985a36dc217",
+        "name": "storybook",
+        "sha256MatchesFreeze": true,
+        "actualResult": "2 selected cases passed, 20 skipped, 1 file passed. PublicationSourceOnce and MobilePublicationSourceOnce; their actual supplied PNGs were viewed by this reviewer. Existing a11y setup/assertions were not changed."
+      },
+      {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-a13-anchor-dedup/.temp/a13-anchor-lint-guards.log",
+        "sha256": "71ecf14c98a9d8c382f8c80743ad53fd8d71d0681c43b3f2ea42563c8d336dac",
+        "name": "lintASTGuards",
+        "sha256MatchesFreeze": true,
+        "actualResult": "lint and AST passed. Original aggregate guard step failed after two initial timeouts and a further normal-retry package-import admission timeout. This log itself is not a whole-guard PASS; final individual receipts are recorded separately."
+      }
+    ],
+    "guardEvidence": {
+      "finalReceipt": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/A13-anchor-dedup/check-results-final.json",
+        "sha256": "fc5b2d92c8e01e5e331fa0eb57eb4bd6a5875f3c5c61d31a8fa41a0450f68538"
+      },
+      "originalAndRetryJUnit": [
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-a13-anchor-dedup/.temp/goal/check/run-H09spJ/guards-0-artifacts/unit.xml",
+          "declared": {
+            "tests": "129",
+            "failures": "2",
+            "skipped": "0",
+            "time": "28.756455844"
+          },
+          "suiteCount": 10,
+          "cases": 129,
+          "actualPassed": 127,
+          "actualFailed": 2,
+          "actualSkipped": 0
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-a13-anchor-dedup/.temp/goal/check/run-H09spJ/guards-0-retry-2-artifacts/unit.xml",
+          "declared": {
+            "tests": "11",
+            "failures": "1",
+            "skipped": "0",
+            "time": "86.34657549900001"
+          },
+          "suiteCount": 1,
+          "cases": 11,
+          "actualPassed": 10,
+          "actualFailed": 1,
+          "actualSkipped": 0
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-a13-anchor-dedup/.temp/goal/check/run-H09spJ/guards-0-retry-5-artifacts/unit.xml",
+          "declared": {
+            "tests": "19",
+            "failures": "0",
+            "skipped": "0",
+            "time": "9.642591249"
+          },
+          "suiteCount": 1,
+          "cases": 19,
+          "actualPassed": 19,
+          "actualFailed": 0,
+          "actualSkipped": 0
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/A13-anchor-dedup/anti-silo-package-retry.xml",
+          "declared": {
+            "tests": "11",
+            "failures": "0",
+            "skipped": "10",
+            "time": "0.985249645"
+          },
+          "suiteCount": 1,
+          "cases": 11,
+          "actualPassed": 1,
+          "actualFailed": 0,
+          "actualSkipped": 10
+        }
+      ],
+      "originalSelection": "10 guard files; 129 original test rows (124 unique file/name pairs); original 127 passed and 2 timed out.",
+      "normalRetry": "Anti-silo full-file retry: 10 passed, 1 package-import timeout; the initial Zone-loader failure passed unchanged. Web accepted-commands retry: 19 passed, 0 failed.",
+      "finalFocusedRetry": {
+        "log": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-a13-anchor-dedup/.temp/a13-anchor-anti-silo-package-retry.log",
+          "sha256": "62513ab894b2f0cd521040f93635ca7c3d2ac83979ff851cf25ae7a676b125ec"
+        },
+        "junit": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/A13-anchor-dedup/anti-silo-package-retry.xml",
+          "sha256": "6cee4346acdcea38f28609651cb761734298ee414e61ef1a1da775630b8d30e7"
+        },
+        "actualResult": "Only a shared read cannot import package solving executed: 1 passed, 6 assertions, 10 skipped. The wrapper summary counts 11 declared cases; it does not mean eleven newly executed passing tests.",
+        "unchanged": "Same candidate source/assertions and unchanged normal retry arguments; no source, guard selection or global admission setting changed."
+      },
+      "conclusion": "Every original selected case name has passing evidence across retained runs. Both original 5000ms timeouts and the later 60000ms CPU-permit timeout remain failures in their original receipts. No all-in-one ten-file PASS is claimed and no timeout is waived as acceptance."
+    },
+    "historicalEvidencePreserved": {
+      "earlierLogs": [
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-a13-anchor-dedup/.temp/a13-anchor-types.log",
+          "sha256": "38d47e7eef99da8d61a852d958113bbea26224b145be69d2ed8dd3f98699c060"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-a13-anchor-dedup/.temp/a13-anchor-story.log",
+          "sha256": "c88fbc8a046ecb4c1753bab61dc3d7fd687847ff815bdd3dd1c55855eabc2103"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-a13-anchor-dedup/.temp/a13-anchor-story-v2.log",
+          "sha256": "3f08799e4edc135d9de05310935362051aa0240768c665dd1f8866e1910bc9a3"
+        }
+      ],
+      "fixtureTypes": "Initial selected types failed with 11 fixture errors in the two test/story files; final typed source and later1874-file PASS are distinct receipts.",
+      "emptyInitialStorySelection": "Initial Storybook log has one skipped file and all22 cases skipped, with a react-dom-shim resolution diagnostic. It is not a passing rendered check. Later v2 and captured runs actually executed the two selected cases.",
+      "ownerRedRegression": "Manifest reports expected1 versus actual3 publication anchors before the product patch in session80198, exit201, but explicitly has no separately captured raw log. This reviewer did not rerun or independently reproduce that historical red assertion."
+    },
+    "screenshotsActuallyViewed": [
+      {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/A13-anchor-screens/apps-web-features-work-page-work-detail-contract.stories.tsx/PublicationSourceOnce.png",
+        "sha256": "281ff7fa48f2201cddf04d98215b1eae45dd4eb95c11c83460c7118032bf66d8",
+        "viewport": {
+          "width": 1440,
+          "height": 1000
+        },
+        "actuallyViewedByThisReviewer": true,
+        "observation": "The footer follows Statements and shows one focused Gutenberg publication link, Project Gutenberg facts as readable text, its licence, the separate Catalogue facts/Description credit and licence, Open Library source record, collapsed Field evidence and Details. No visible overlap or horizontal clipping at this captured scroll position. The phone sticky Read control sits below the footer content.",
+        "limit": "Controlled English Storybook fixture, scrolled to footer; not a full-page/genuine-corpus/expanded-evidence or native keyboard/AT proof."
+      },
+      {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/A13-anchor-screens/apps-web-features-work-page-work-detail-contract.stories.tsx/MobilePublicationSourceOnce.png",
+        "sha256": "ea60defbb64517eed31a93c2bddd68682a813bc6df920421944e7fc6173ce833",
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "actuallyViewedByThisReviewer": true,
+        "observation": "The footer follows Statements and shows one focused Gutenberg publication link, Project Gutenberg facts as readable text, its licence, the separate Catalogue facts/Description credit and licence, Open Library source record, collapsed Field evidence and Details. No visible overlap or horizontal clipping at this captured scroll position. The phone sticky Read control sits below the footer content.",
+        "limit": "Controlled English Storybook fixture, scrolled to footer; not a full-page/genuine-corpus/expanded-evidence or native keyboard/AT proof."
+      }
+    ],
+    "checksActuallyExecuted": [
+      "Read exact four-path immutable diff and material caller contexts; verify manifest base/target blobs, SHA256 and patch equality, then git diff --check PASS. Thirteen material dependencies match base/candidate/frozen Main; all four frozen Main preimages match base.",
+      "Rehash and read selected retained unit/types/story/lint/guard logs, original and retry JUnit and final receipt. Verify all expected artifact and PNG hashes; reconcile actual executed versus skipped counts across runs.",
+      "Actually view both supplied exact1440x1000 and390x844 screenshots, including focus outline, credit/licence groups, source record, footer order and available phone width.",
+      "Compare the frozen Main report without re-reviewing it; preserve every prior worker field and the two differing historical Main summary values additively. No new product test/types/browser/native/guard run was performed; no concrete unresolved source counterexample required one.",
+      "Recorded job:6ab49fe8-aec0-4be8-bfc1-d4a5b17b97e6: task docs:check and task goal -- check PASS for this report-only path; no product runtime success inferred."
+    ],
+    "limitations": [
+      "Approval is for the finite publication/attribution display delta. Native/API/converter/mapper/source/citation architecture and resource identities are unchanged and not newly qualified.",
+      "Original keyed Cover+Synopsis genuine rich obligations, creator roles and full tab/1440/390 acceptance remain independently due; no fabricated data-source-key markers or inferred source ownership were added.",
+      "Retained stories/unit rendering are controlled fixtures, not genuine public C21 source adoption, browser/native availability, account authority or class closure. Current evidence views Field evidence collapsed; accepted unchanged evidence behavior is reused.",
+      "No whole-tier, unrelated browser journey, corpus preparation, service/runtime or product implementation was run. The shared3001 visitor menu premise failure in the prior checkpoint remains intact and does not hold this independently reviewed source cut."
+    ],
+    "managerNext": "Select the exact four reviewed hunks into current Main through the normal integration gate, preserving peer bytes and report history. Keep original A13/C21 genuine obligations/creator/tab-width acceptance and the separate I1-001 runtime-binding continuation open.",
+    "reportValidation": {
+      "status": "PASS",
+      "job": "job:6ab49fe8-aec0-4be8-bfc1-d4a5b17b97e6",
+      "commands": [
+        {
+          "command": "task docs:check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/6ab49fe8-aec0-4be8-bfc1-d4a5b17b97e6.1.log",
+          "sha256": "36cfb1cc1ca0fbe04d56f0dc2b675f7ac6daceccdb64668ca15b5daa07ca81e3"
+        },
+        {
+          "command": "task goal -- check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/6ab49fe8-aec0-4be8-bfc1-d4a5b17b97e6.2.log",
+          "sha256": "5695359fdb887a1abc963f79d5fe5e5a1a6dc516e8b1258b4bf619c640b7ad40"
+        }
+      ],
+      "result": "Documentation checks:13 tests/249 Markdown files PASS. Goal:AST and1/44 path-selected report guards PASS. No TypeScript/source lint/product test selected for the report-only diff.",
+      "limits": "No new product unit/types/story/native/whole-guard run. Five-commits-behind harness notice was informational; no rebase performed. Completion receipt fields were inserted after the successful recorded report checks."
+    }
+  },
+  "boundedWorkSourceAnchorDedupPriorSummaryCustody": {
+    "purpose": "Custody only: retain the two differing historical reviewer summary values without replacing any existing current-main value. No new source review, approval, runtime outcome or class closure.",
+    "mainPinAtPreparation": "49c33b1c0b3333d084d6dd4e5853ccdb7ef10a79",
+    "currentMainReportSHA256": "934e3fa33517378e216f046aecd6d29c1bedee46e268913005d77841949ae733",
+    "reviewReportCommit": "32fc87bb2effcc7a1fa79e3eb65b9557b682317a",
+    "reviewReportSHA256": "6fae51550aa8f25ae6b75f676a6277f479c783f41b823876d40c4de4f276d0b2",
+    "reviewerPriorRuntimeFailureCommit": "025eabd9882534a5c5cedcfe44bc6e08524fb649",
+    "reviewerPriorReportSHA256": "26e06df740f140a9ef89d1178bd6d8ed8737883baa0b2bd6e20abd255cf0fac3",
+    "preservedCurrentMainValues": {
+      "disposition": "bounded-2cc223-credits-cook-review-complete-one-reproduced-typecheck-finding",
+      "acceptance": "Immutable2cc2233811e03867ad11567ece53a5e97bba4b90 versus80265f871e601ce870c5eaeadea7095fc122a726 reviewed across22paths. Credits and Cook source/progression inspected with exact regression receipts; WORK-REVIEW-07 reproduces two existing entry test callers missing newly required resource. Prior findings and all historical failures/dispositions preserved. Genuine C27 remains independently due; C21 and Performer owner gaps are not closed."
+    },
+    "preservedReviewerPriorValues": {
+      "disposition": "bounded-D1-003-navigation-correction-source-APPROVE-no-new-actionable-delta-finding",
+      "acceptance": "Independent source approval of 2f53317556f68b209bc82987093478e2b2e5ab71 versus its direct parent 222d57ae9bb8886db39f42d7d76e7e3ea58aac7c and the inspected native five-file overlay. Eight genuine selected native navigation cases pass at 390/1440 on the recorded e9bff baseline plus overlay. This approves bounded correction hunks and their provenance, not whole worker blobs, a current-main browser run, all page bodies, broader catalogue classes or a canonical registry status change."
+    }
   }
 }
