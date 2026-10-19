@@ -3812,5 +3812,476 @@
       "harnessNotice": "Report check printed 4 commits behind main; all selected checks passed. No rebase, fallback, unrecorded check or repeated product test.",
       "receiptFinalization": "Only this report check receipt finalized after successful checks; decisions, assertions, source and historical fields unchanged."
     }
+  },
+  "discoveryNativeCoreOverlapResolvedProof": {
+    "reviewedAt": "2026-10-19T12:00:44.527606+00:00",
+    "authority": "Same original D5-004 claims and acceptance. Current manager selected approved b8ec ALS correction and current df1 native image. Run only unchanged D5004C01; no new corpus, assertion, workload matrix or source review.",
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "authoredCandidateChanges": false,
+      "independentReviewsPerformed": 1,
+      "nestedAgentsUsed": false,
+      "accountFallbackUsed": false,
+      "unchangedControlReviewReplayed": false
+    },
+    "decision": {
+      "status": "PASS targeted existing native owner case and original missing parallel core availability assertion",
+      "originalMissingParallelAssertionClosed": true,
+      "proofScope": "Controlled real native-result response-delivery overlap with simultaneous anonymous Main public/private Work Request/Response handlers.",
+      "originalTenPathSourceOnlyVerdict": "APPROVE retained exact 50f11211795621e95941719d745bfd3b3f381591 / report 39df91b7e4192b0cdccd23faabf8fbd6a267b09b. No unchanged source review replay.",
+      "approvedDependencyVerdictReused": "b8ec0159dfd3b4f38d210bead790757222f8871f independently APPROVED by G-2822 at 5f6f843220388445e33ba1a015fd5bbfde63908c; exact two composed blobs verified. No second review.",
+      "sourceOnlyLandingVerdict": "APPROVE ten-path mechanism with its already-approved current dependency composition. This targeted proof introduces no new blocking source finding or acceptance prerequisite. Manager owns landing.",
+      "canCertifyOriginalCombined1addCandidate": false,
+      "D5004ClassClosureClaimed": false,
+      "allBoundedReadsOrOtherClassesClosed": false,
+      "automaticLanding": false,
+      "limits": "This closes only the original missing parallel assertion at this current immutable composition. Prior original-class/source-concern accounting and all notification/public-workload residuals remain explicit; no new benchmark is imposed."
+    },
+    "immutablePins": {
+      "recordedAt": "2026-10-19T11:57:01.009844+00:00",
+      "originalProductPin": "ff5a214f7de0f66b888f728ab48e50863f338374",
+      "base": "4bafbee0d2b949ba8c2e9c5a44011c984525b372",
+      "sourceDependency": "b8ec0159dfd3b4f38d210bead790757222f8871f",
+      "independentDependencyReview": "5f6f843220388445e33ba1a015fd5bbfde63908c",
+      "executionCandidate": "d1006824ffe5570c17b1f98fe21090d08f769d3d",
+      "tree": "c4599a5f38d0cf964d995020438186d6e4ff5afc",
+      "changedPaths": [
+        {
+          "path": "services/main/src/infrastructure/fuseki.ts",
+          "approvedDependencyBlob": "7aa4919f57f878348ecf1ba2a737dabbae456d72",
+          "executionBlob": "7aa4919f57f878348ecf1ba2a737dabbae456d72",
+          "sha256": "913bd1d766a215932a0efd88e0362b083b2e0a0843d0f2f19b7ad47c9171de13",
+          "byteIdentical": true
+        },
+        {
+          "path": "services/main/tests/request-read-budget.test.ts",
+          "approvedDependencyBlob": "52def96aaa632897d106e05f117c951b7c507733",
+          "executionBlob": "52def96aaa632897d106e05f117c951b7c507733",
+          "sha256": "4b7038acc0d5fb00609b90b6505311da54d2dab6e5d6d22eb588bdaa7efcfdf1",
+          "byteIdentical": true
+        }
+      ],
+      "fixturePath": "tests/qa/integration/discovery-refresh.test.ts",
+      "fixtureBlob": "23267ab34e9d97353b0e49464560b0eca22a279d",
+      "fixtureSha256": "69ed4a47981d37677b49af9b04b5d37aea3561c0f4ba8bba35c2c9ad52a24b96",
+      "fixtureBodySelectorAllBytesUnchanged": true,
+      "runnerAndPreparationPins": [
+        {
+          "path": "scripts/qa/test.ts",
+          "blob": "81c4fa2ae7770c68b359f86ae910069aca509c08",
+          "sha256": "3f57d88efe82ff83e300594443f5c8bb824711003525ff3db615ef15a2165a80",
+          "unchangedFrom4baf": true
+        },
+        {
+          "path": "scripts/qa/core.ts",
+          "blob": "7e73c7a7b25c09930781ef55fd0f837587c7a97f",
+          "sha256": "c22fed1e7e7665bb18690864003b58563302e8c93e1884801a6a74973be8586c",
+          "unchangedFrom4baf": true
+        },
+        {
+          "path": "scripts/qa/acceptance.ts",
+          "blob": "aa99f17a1df1b75a7edf0f10768c980deabcc445",
+          "sha256": "f93eca85230d5aa39ac51c7ddd6809015c1575725328d7bcdfe06316c57eed0b",
+          "unchangedFrom4baf": true
+        },
+        {
+          "path": "scripts/qa/cli.ts",
+          "blob": "e6770de45d4e8511693c48fa20b7e0738d41dcf0",
+          "sha256": "8ba1141697413c310ff3fc6b80654e5fe7310591d9fb7c9ab57f869557d952a9",
+          "unchangedFrom4baf": true
+        },
+        {
+          "path": "scripts/goal/goalctl.ts",
+          "blob": "79ae1a7484acc4d6cd793c79aae05d5a94d61273",
+          "sha256": "cf06b6b0727f466917913fc2a607194323c43037439b8636ce8bc84342d6ccac",
+          "unchangedFrom4baf": true
+        },
+        {
+          "path": "tests/qa/integration/media-support.ts",
+          "blob": "547b14832c1529de99d933471dfa1cf872279c5b",
+          "sha256": "fe49d14654c61058ab0284b2fb0e84df9f166a03ea97b39f86e6360015701243",
+          "unchangedFrom4baf": true
+        },
+        {
+          "path": "tests/qa/support/databases.ts",
+          "blob": "25847ec5eaa3d586ac0cbf66cb028890f5947fe5",
+          "sha256": "42e40f50f50c45d8aab900a34e9875bd203239ff57e74b310faa52c3874e8d58",
+          "unchangedFrom4baf": true
+        },
+        {
+          "path": "scripts/qa/bootstrap.ts",
+          "blob": "4404aa1c2c2087f44c0cba8eb4f000982c6ca96e",
+          "sha256": "a1ae68baba2446c09b573c981a0c7c75cf17e12d1f2376fe8d498513b8306d48",
+          "unchangedFrom4baf": true
+        },
+        {
+          "path": "infra/dev/compose.yaml",
+          "blob": "f0c9d6ae17d570c57d92fe96454094dcf02a6f1f",
+          "sha256": "b45b3537365bcd9ab2745c3d8b4853196180f3a3f78dc33e3906d43585d00320",
+          "unchangedFrom4baf": true
+        },
+        {
+          "path": "services/main/migrations/access/2605_discovery_refresh_disposition.sql",
+          "blob": "43b36a41e6d3d3ea6ad540f8153098494cd59317",
+          "sha256": "ef134594fd78c03871e1fd18e7e9364b29deaa13c96df71f39ccf01e6414d90f",
+          "unchangedFrom4baf": true
+        }
+      ],
+      "nativeSelection": "rezics/fuseki:6.2.0-cmd0.5.43-6699b42ecd5d",
+      "nativeImageIdBeforeRun": "sha256:1f130a1afc35d1e286f7b30a12d2afd56b4e623f7ceef3501939f6e79db010bc",
+      "nativeSelectionAuthority": "Current manager explicitly supersedes historical 57fb exact environment premise only. Compose equals df1 byte-for-byte.",
+      "receiptSha256": "0d3f34322796788c982f93ae977e7bf217d501daa9c3c5524a25a4b95a17f5b6",
+      "peerHeadVerified": "d1006824ffe5570c17b1f98fe21090d08f769d3d",
+      "peerCleanVerified": true,
+      "dependencySourceReviewRepeated": false
+    },
+    "reusedIndependentDependencyReview": {
+      "commit": "5f6f843220388445e33ba1a015fd5bbfde63908c",
+      "path": "docs/goals/audit-remediation-20261019/proofs/native-request-boundary.json",
+      "source": "b8ec0159dfd3b4f38d210bead790757222f8871f",
+      "worker": "G-2822",
+      "status": "bounded_correction_verified",
+      "job": "7b2f66f1-8f5a-48d3-8101-91519734936e",
+      "counts": {
+        "listed": 15,
+        "executed": 3,
+        "passed": 3,
+        "failures": 0,
+        "errors": 0,
+        "filteredOut": 12,
+        "selectedSkipped": 0,
+        "assertions": 56,
+        "files": 1
+      },
+      "reviewRepeated": false,
+      "unchangedRegressionSuiteRepeated": false
+    },
+    "execution": {
+      "job": "db958b66-c3ee-45e6-a827-73f2fc102c5b",
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts slot -- task --dir .temp/read-availability-native-overlap-execution goal -- test tests/qa/integration/discovery-refresh.test.ts -t D5004C01",
+      "exitCode": 0,
+      "qaRun": "20261019t115726-ea25da",
+      "source": {
+        "head": "d1006824ffe5570c17b1f98fe21090d08f769d3d",
+        "fingerprint": "4a6613daa7c229cc27d9501b3d0a82ecedaf877df970c1d9352d0c9d126a2509",
+        "clean": true
+      },
+      "sourceStable": true,
+      "counts": {
+        "listed": 2,
+        "selectedExecuted": 1,
+        "pass": 1,
+        "fail": 0,
+        "error": 0,
+        "selectedSkipped": 0,
+        "filteredSkipped": 1,
+        "expectCalls": 40,
+        "retainedOwnerAssertions": 32,
+        "addedOverlapAssertions": 8,
+        "files": 1
+      },
+      "tiers": [
+        {
+          "name": "integration",
+          "status": "passed",
+          "elapsedMs": 13392,
+          "shards": [
+            {
+              "project": "20261019t115726-ea25da-1",
+              "files": [
+                "tests/qa/integration/discovery-refresh.test.ts"
+              ],
+              "status": "passed",
+              "stage": "test",
+              "budgetMs": 480000,
+              "resourceClass": "ordinary",
+              "startupMs": 19055,
+              "bootstrapMs": 2568,
+              "elapsedMs": 13392,
+              "missingFiles": [],
+              "cleanupMs": 5758
+            }
+          ]
+        }
+      ],
+      "tests": [
+        {
+          "name": "Discovery scheduled refresh: native source proof, automatic enrollment, restart, leases, Mine isolation and bounded work",
+          "file": "tests/qa/integration/discovery-refresh.test.ts",
+          "tier": "integration",
+          "failed": false,
+          "skipped": true,
+          "durationMs": 0,
+          "ids": [],
+          "status": "skipped"
+        },
+        {
+          "name": "D5004C01: refresh owners quarantine malformed source once, bound fleet probes, recover transient work and rearm repaired input",
+          "file": "tests/qa/integration/discovery-refresh.test.ts",
+          "tier": "integration",
+          "failed": false,
+          "skipped": false,
+          "durationMs": 11495,
+          "ids": [
+            "D5004C01"
+          ],
+          "status": "passed"
+        }
+      ],
+      "acceptanceIdCounts": {
+        "uncovered": 292,
+        "partial-pass": 0,
+        "passed": 0,
+        "failed": 0
+      },
+      "maintenance": {
+        "capability": "discovery-refresh-maintenance",
+        "permanentFullClaims": 1,
+        "permanentPopulationReads": 1,
+        "unchangedPopulationReads": 0,
+        "parkedPopulations": 21,
+        "probesInOneAllowance": 1,
+        "transientAttempts": 2,
+        "personaJourney": false,
+        "queueClock": "injected; graph, Access, projection and leases use production owners"
+      },
+      "overlap": {
+        "capability": "discovery-refresh-maintenance",
+        "phase": "concurrent-core-read",
+        "personaJourney": false,
+        "nativeEngineCpuOverlapClaimed": false,
+        "responseDeliveryHeld": true,
+        "nativeResponseAtMs": 6378.02814,
+        "coreStartedAtMs": 6378.066973,
+        "coreAnsweredAtMs": 6765.070272,
+        "deliveryReleasedAtMs": 6765.247764,
+        "refreshSettledAtMs": 0,
+        "refreshSettledAtAnswer": false,
+        "publicStatus": 200,
+        "privateStatus": 404,
+        "assertionReached": true,
+        "failure": null,
+        "coreDurationMs": 387.00329899999997,
+        "heldDurationMs": 387.2196239999994
+      },
+      "nativeImage": {
+        "image": "rezics/fuseki:6.2.0-cmd0.5.43-6699b42ecd5d",
+        "imageIdBeforeRun": "sha256:1f130a1afc35d1e286f7b30a12d2afd56b4e623f7ceef3501939f6e79db010bc",
+        "imageIdAfterRun": "sha256:1f130a1afc35d1e286f7b30a12d2afd56b4e623f7ceef3501939f6e79db010bc",
+        "repoDigests": [
+          "rezics/fuseki@sha256:1f130a1afc35d1e286f7b30a12d2afd56b4e623f7ceef3501939f6e79db010bc"
+        ],
+        "sourceComposeEqualsDf1": true,
+        "sourceComposePath": "infra/dev/compose.yaml",
+        "sourceComposeBlob": "f0c9d6ae17d570c57d92fe96454094dcf02a6f1f",
+        "perContainerImageInspectionExported": false,
+        "receiptMeaning": "Supported lifecycle selected the exact immutable Compose image; local Docker image ID/repository digest was equal before and after. Fresh bootstrap verified native command module against Compose. No separate per-container inspect receipt is asserted."
+      },
+      "remainingProjectContainers": []
+    },
+    "reachedOverlapAssertions": {
+      "path": "tests/qa/integration/discovery-refresh.test.ts",
+      "selector": "D5004C01",
+      "caseLine": 222,
+      "newAssertionsStartLine": 347,
+      "transport": "Actual in-process Main.handle(Request) HTTP Request/Response handlers; full response bodies consumed. No external TCP/BFF persona journey claimed.",
+      "nativePopulation": "Original actual native population query forwarded unchanged, actual native result awaited, only delivery held; no synthetic successful native result.",
+      "publicWork": {
+        "status": 200,
+        "exactCreatedWorkIdBodyAssertion": "PASS: JSON body matches id: work.work",
+        "rawBodyPersisted": false,
+        "evidence": "Immutable authored file and passing 40-assertion JUnit; artifact stores status/timestamps, not success body."
+      },
+      "privateWork": {
+        "status": 404,
+        "privateIdentifierAbsentFromResponseBodyAssertion": "PASS",
+        "rawBodyPersisted": false
+      },
+      "observations": {
+        "capability": "discovery-refresh-maintenance",
+        "phase": "concurrent-core-read",
+        "personaJourney": false,
+        "nativeEngineCpuOverlapClaimed": false,
+        "responseDeliveryHeld": true,
+        "nativeResponseAtMs": 6378.02814,
+        "coreStartedAtMs": 6378.066973,
+        "coreAnsweredAtMs": 6765.070272,
+        "deliveryReleasedAtMs": 6765.247764,
+        "refreshSettledAtMs": 0,
+        "refreshSettledAtAnswer": false,
+        "publicStatus": 200,
+        "privateStatus": 404,
+        "assertionReached": true,
+        "failure": null,
+        "coreDurationMs": 387.00329899999997,
+        "heldDurationMs": 387.2196239999994
+      },
+      "timingBudgetMs": 10000,
+      "observedNativeResponseToCoreAnswersMs": 387.0421319999996,
+      "refreshLifetime": "Artifact refreshSettledAtMs=0 is the inner-finally snapshot at release, after both core answers. Subsequent owner assertions awaited pendingRefresh and reached diagnosed quarantine, repair and transient recovery; zero is not a claim of a permanently pending refresh.",
+      "responseGateReleasedBeforeCoreAnswers": false,
+      "refreshSettledBeforeCoreAnswers": false,
+      "nativeEngineCpuOverlapClaimed": false,
+      "mixed1_2_4_8WorkloadClaimed": false,
+      "sixPersonaJourneyClaimed": false,
+      "cancellationOrGlobalPendingZeroClaimed": false
+    },
+    "reachedOwnerAssertions": {
+      "counts": {
+        "capability": "discovery-refresh-maintenance",
+        "permanentFullClaims": 1,
+        "permanentPopulationReads": 1,
+        "unchangedPopulationReads": 0,
+        "parkedPopulations": 21,
+        "probesInOneAllowance": 1,
+        "transientAttempts": 2,
+        "personaJourney": false,
+        "queueClock": "injected; graph, Access, projection and leases use production owners"
+      },
+      "permanent": "One full permanent claim/population read, basis-invalid diagnosis and zero unchanged population rereads across repeated probes; checkpoint and generation retained. Actual malformed revision-sequence source, not historical invalid media hydration.",
+      "fleet": "21 parked populations; exactly one shared probe allowance, no further full population reads. Bounded loops and scope progress assertions retained.",
+      "repair": "Native contradictory evidence removed through authored isolated repair; fresh store/worker rearmed without a receipted source cut change, activated the retained generation and exposed the public Work while omitting private Work.",
+      "transient": "Authored transport-seam WorkReadUnavailable twice, 30/60-second injected-clock backoff; no early lease, retained generation/checkpoint, recovery activated and included appended Work.",
+      "expectedFaultLogs": "Two fixture transport worker_fault entries are intentional transient-failure injection; selected test has zero failures/errors.",
+      "limits": "personaJourney=false; queue clock injected, transport failure seam and original fixture authority unchanged. Production graph/Access/projection/leases exercised. No claim of broad production concurrency or scoped health diagnostic privacy."
+    },
+    "migrationNativeBackupAndCleanup": {
+      "native": {
+        "image": "rezics/fuseki:6.2.0-cmd0.5.43-6699b42ecd5d",
+        "imageIdBeforeRun": "sha256:1f130a1afc35d1e286f7b30a12d2afd56b4e623f7ceef3501939f6e79db010bc",
+        "imageIdAfterRun": "sha256:1f130a1afc35d1e286f7b30a12d2afd56b4e623f7ceef3501939f6e79db010bc",
+        "repoDigests": [
+          "rezics/fuseki@sha256:1f130a1afc35d1e286f7b30a12d2afd56b4e623f7ceef3501939f6e79db010bc"
+        ],
+        "sourceComposeEqualsDf1": true,
+        "sourceComposePath": "infra/dev/compose.yaml",
+        "sourceComposeBlob": "f0c9d6ae17d570c57d92fe96454094dcf02a6f1f",
+        "perContainerImageInspectionExported": false,
+        "receiptMeaning": "Supported lifecycle selected the exact immutable Compose image; local Docker image ID/repository digest was equal before and after. Fresh bootstrap verified native command module against Compose. No separate per-container inspect receipt is asserted."
+      },
+      "nativePremiseDisposition": "Current manager explicitly superseded only historical 57fb environment pin with exact reviewed current 6699b42ecd5d image. Earlier 57fb evidence remains historical; no image was built or old run relabelled.",
+      "migration": {
+        "path": "services/main/migrations/access/2605_discovery_refresh_disposition.sql",
+        "blob": "43b36a41e6d3d3ea6ad540f8153098494cd59317",
+        "sha256": "ef134594fd78c03871e1fd18e7e9364b29deaa13c96df71f39ccf01e6414d90f",
+        "supportedPreparation": "Fresh scripts/qa/bootstrap.ts applies tracked Access migrations before cloning owner templates and test stage.",
+        "runnerBootstrapMs": 2568,
+        "result": "Bootstrap passed; selected owner SQL read quarantine disposition columns and all corresponding state assertions passed. No missing migration or retained-store transition refusal occurred.",
+        "receipt": "run/acceptance.json test stage/bootstrap duration plus run/integration.xml 40 passing assertions are retained command-created execution receipts.",
+        "perFileSqlReceiptExported": false,
+        "receiptLimit": "Runner retains bootstrap output only on failure and removes isolated databases. No individual public.rezics schema migration receipt row was exported; schema outcome success is not relabelled as a captured SQL row receipt."
+      },
+      "backup": {
+        "retainedCatalogueBackupUsed": false,
+        "backupSha256": null,
+        "mode": "Existing fixture clones consistent freshly migrated QA Access/content/relay templates; snapshot/restore helpers remain authored but no retained old-corpus restore required here.",
+        "newBroadCorpusOrAuthorityProducer": false,
+        "existingBackupsModified": false
+      },
+      "admission": {
+        "normalRecordedGoalJobAndSlot": true,
+        "memoryAdmitted": true,
+        "cpuSomeAvg10Percent": 11.43,
+        "cpuLimitPercent": 12,
+        "loadWaitSeconds": 5.4,
+        "resourceClass": "ordinary",
+        "startupMs": 19055,
+        "testBudgetMs": 480000,
+        "forceUsage": false,
+        "alternateAccount": false
+      },
+      "cleanup": {
+        "innerGateReleased": true,
+        "timerClearedByAuthoredFinally": true,
+        "pendingRefreshAwaitedBeforeOwnerRestore": true,
+        "outerFixtureFinallyCompleted": "Selected case passed after awaited query restoration, graph repair/restoration, relay.end, f.stop and owners.close.",
+        "runnerCleanupMs": 5758,
+        "project": "rezics-qa-20261019t115726-ea25da-1",
+        "remainingProjectContainers": 0,
+        "manualPeerOrSharedLifecycleMutation": false,
+        "globalResourceDrainMeasured": false
+      }
+    },
+    "originalCriteria": [
+      {
+        "criterion": "持续非法输入终止/隔离且原因可诊断，无source变化不重做同一完整工作。",
+        "disposition": "proved for actual current malformed-source isolated owner path",
+        "evidence": "Original retained 32-assertion pass now also passes unchanged within this 40-assertion case: finite diagnosis/quarantine, one complete population read, no unchanged rereads, native source repair rearm.",
+        "limits": "Does not claim the obsolete invalid-media producer was hydrated; SRC-D5-004-001 remains a separately retained unconfirmed P2 source inference with no reached failing outcome."
+      },
+      {
+        "criterion": "暂态故障退避并在恢复后推进checkpoint，维护总工作和scope公平性有预算。",
+        "disposition": "proved within original bounded owner fixture; source-only fairness review retained",
+        "evidence": "30/60-second transient backoff and recovery, stable checkpoint/generation, 21 parked populations and one fleet probe allowance all reached and passed at current composition.",
+        "limits": "Injected queue clock and authored transport seam retained; no new real-time benchmark, production scale or wider restart-race claim."
+      },
+      {
+        "criterion": "隔离fixture验证invalid media重试上界、修复后恢复及与核心读取并行可用。",
+        "disposition": "proved within current isolated fixture; original missing parallel core assertion closed",
+        "evidence": "Existing retry upper bounds and repair recovery pass with new real native-result delivery overlap: both real Main public200/exact-id and private404/no-id bodies answered in 387.0033ms, before response delivery release and while refresh unsettled, within original 10000ms bound.",
+        "limits": "Response-delivery overlap only; native engine already returned its result. No Jena CPU saturation, mixed 1/2/4/8 sessions, BFF, six-persona or cancellation assertion claimed."
+      }
+    ],
+    "historicalPreservation": {
+      "allPriorReportValuesUnchanged": true,
+      "priorReportSha256": "f664c5ca5c10c188bf88ab06e75bd30e8aed409b72de8f20d19933425ba02d61",
+      "previousRuntimeFailure": "cba4bd61ac8d710dba7e93d23d10a0c0d6814a43 / QA20261019t114738-6bf98f remains an actual TypeError setup failure with one expect and no overlap assertion. Current b8 correction resolves this execution prerequisite; history not rewritten.",
+      "previousSelectorFailure": "704903c72156318d6996bb2eaa65a2007ff6a2c3 full-title rejection remains preserved; original assertion body unchanged.",
+      "originalNative": "Original QA20261019t070623-ce62e2 32-assertion malformed pass and whole-file 53-assertion 1pass/1fail remain distinct from current selected 40-assertion pass.",
+      "inheritedCreditFailure": "Original scheduled-refresh credit namespace discrepancy at line121 remains failed, later lease/Mine assertions unreached. It was filtered out here; no silent fix or pass relabel.",
+      "notificationAndSixPersona": "Notification repair source approval, retained public/setup failures, fifty-notification/mixed-load premise, and all six 652 persona assertions remain unchanged and open under original accounting. Not new prerequisites for D5004C01.",
+      "transitionDependency": "b0b3 migration transition review unchanged; no migration adoption by G-2846.",
+      "productAndAssertionsEdited": false,
+      "mainLedgerOrOtherWorkersMutated": false
+    },
+    "evidence": {
+      "privateBundle": ".temp/read-availability-review/native-core-overlap-d100",
+      "rawRun": "run/",
+      "pins": "source-and-runner-pins.json",
+      "sourceCompositionDelta": "mechanical-dependency-delta.patch",
+      "nativeSelection": "native-image-selection.json",
+      "result": "recorded-selection-result.json",
+      "reusedReview": "approved-dependency-review.json",
+      "priorReport": "report-before-als-proof.json",
+      "inventory": "inventory.json",
+      "privateEnvFilesCopied": false
+    },
+    "ownedReportChecks": {
+      "job": "2b7e0a87-3e5b-4f52-8e0c-0fa93e1b7530",
+      "status": "pass",
+      "docs": {
+        "command": "task docs:check",
+        "exitCode": 0,
+        "executed": 13,
+        "pass": 13,
+        "fail": 0,
+        "error": 0,
+        "skip": 0,
+        "markdownFiles": 249
+      },
+      "worker": {
+        "command": "task goal -- check",
+        "exitCode": 0,
+        "types": "not applicable; no TypeScript workspace changed",
+        "tests": "none named in brief; no unchanged product replay",
+        "lint": "not applicable; no source changed",
+        "ast": "pass (0.3s)",
+        "guards": {
+          "selectedFiles": 1,
+          "availableFiles": 44,
+          "executed": 2,
+          "pass": 2,
+          "fail": 0,
+          "error": 0,
+          "skip": 0,
+          "assertions": 6,
+          "elapsedSeconds": 3.0
+        }
+      },
+      "harnessNotice": "Four commits behind main notice; selected checks passed. No rebase, fallback or repeated product suite.",
+      "receiptFinalization": "Only report receipt metadata finalized after successful checks; source, assertions, decisions and all historical fields unchanged."
+    }
   }
 }
