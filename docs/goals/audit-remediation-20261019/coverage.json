@@ -336,9 +336,11 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "描述类型保留却没有绑定实体页面注册表",
-      "status": "pending",
-      "owner": null,
-      "proof": []
+      "status": "closed",
+      "owner": "G-2758",
+      "proof": [
+        "docs/goals/audit-remediation-20261019/proofs/catalogue-A15-acceptance.json"
+      ]
     },
     {
       "id": "A17",
