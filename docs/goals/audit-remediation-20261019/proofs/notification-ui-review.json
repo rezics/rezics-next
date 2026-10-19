@@ -9,9 +9,9 @@
     "canonicalClassStatusChanged": false
   },
   "navigationAffectedGateVerdict": {
-    "status": "pending-exact-G-2747-correction-pin",
+    "status": "pass-exact-correction-and-affected-normal-accessibility-case",
     "sourceVerdictBlocked": false,
-    "reviewedCorrectionPin": null,
+    "reviewedCorrectionPin": "808734e0d8eaf3d538576e3ff77e16d8d57e8090",
     "assembledCurrentMainCandidate": null,
     "affectedCaseExecutedByThisReviewer": false,
     "retainedFailure": "Filtered Beside Shell Count: label-content-name-mismatch in normal accessibility afterEach/addon, after all original play outcome assertions passed.",
@@ -33,9 +33,742 @@
       "actualComputedCombinedVisibleName": null,
       "limit": "Retained screenshot shows both fragments. Neither retained JSON nor this source-only inspection measures their combined DOM/axe visible name; no invented computed measurement."
     },
-    "requiredNextCheck": "After the exact actual compatible G-2747 delta is supplied, review only it once, verify five UI blobs and dependency/runner pins on the assembled candidate, then run only the unchanged Filtered Beside Shell Count with normal accessibility.",
+    "requiredNextCheck": null,
     "supportedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test apps/web/features/shell/notifications/notifications.stories.tsx -t \"Filtered Beside Shell Count\"",
-    "additionalReview": "Preserve collapsed/expanded localized navigation names and visible badge. Record actual computed visible/accessibility names, UI/nav/dependency/runner pins and the affected QA result. No speculative corrected pin or completed gate is claimed."
+    "additionalReview": "Completed exact nav delta/source compatibility review and personal inspection of the actual one-story QA screenshot plus the measured after screenshot. No additional original row assertion is affected by a literal text separator in SideNav.",
+    "summary": "APPROVE the exact G-2747 separator delta. The unchanged Filtered Beside Shell Count passed its four original play assertions, normal addon accessibility and repository afterEach on an immutable compatible composition. Reuse the producer-owned one-story run as explicitly authorized; no duplicate or whole-tier run.",
+    "compatibleImmutableCandidate": "fa5ec60bb8000a18f44de0e3a35b8e52c4284fe4",
+    "candidateBase": "ca43d9b8f19e4ba57c0d1460761d36b8c510bf68",
+    "candidateScope": "G-2747 prepared ca43d9b plus exactly the five original G-2838 UI blobs and exactly the published G-2747 nav blob. It is a compatible immutable proof composition, not a claim to be the entire current-main tree.",
+    "affectedCaseExecutionOwner": "G-2747; existing producer job preserved and reused with manager authorization after independent exact-blob/harness verification.",
+    "exactDelta": {
+      "path": "apps/web/features/shell/side-nav.tsx",
+      "authoredPaths": 1,
+      "insertions": 1,
+      "deletions": 1,
+      "change": "Add {' '} immediately after the item.label[locale] span, before the expanded unread badge; all attributes, classes, state reads and handlers are unchanged.",
+      "blobs": {
+        "before": "78da75177b25e3775d5e8ccfff7ff58fb9d8e609",
+        "authoredAfter": "0b22ec801aed87b52740d88a58a25138b8e57895",
+        "proof": "0b22ec801aed87b52740d88a58a25138b8e57895"
+      },
+      "diffSha256": "13b950863765c7bdf0c6718468ca31c093aaa19805af31627d9922fb8359e1eb",
+      "sourceVerdict": "approve",
+      "expandedNaming": "The label and visible localized unreadCount badge now have a literal separating DOM text node. The existing t.notificationsUnread aria-label, active-page state, destination, badge visibility and focus classes are unchanged.",
+      "collapsedNaming": "The existing localized sr-only destination name, localized title and t.notificationsUnread aria-label remain. The count stays in the unchanged aria-hidden UnreadBadge on the icon; the added whitespace carries no new accessible words.",
+      "localizedNaming": "navLabel still selects each locale with its existing English fallback; notificationsUnread/unreadCount copy, locale paths and locale ordering remain byte-identical. Preservation is a static source finding across existing locale branches, not a new eight-locale execution claim.",
+      "otherOriginalAssertionsAffected": []
+    },
+    "sourceAndHarnessEquivalence": {
+      "workerHeadAtInspection": "8638c3bc4cde25375b6e001331cb7acbb5558123",
+      "observedMainAtInspection": "e9bff8c44b5317168b38c954b405938b458bd1e1",
+      "trackedProofCleanAtInspection": true,
+      "onlyProofChangesFromBase": [
+        "apps/web/features/shell/notifications/closure-notifications.stories.tsx",
+        "apps/web/features/shell/notifications/messages.ts",
+        "apps/web/features/shell/notifications/notification-traversal.stories.tsx",
+        "apps/web/features/shell/notifications/notifications-view.tsx",
+        "apps/web/features/shell/notifications/notifications.stories.tsx",
+        "apps/web/features/shell/side-nav.tsx"
+      ],
+      "fiveExactBlobs": [
+        {
+          "path": "apps/web/features/shell/notifications/closure-notifications.stories.tsx",
+          "blobs": {
+            "ui": "eeed70e9a1a92ec4d5901f17dae39ee3377887f4",
+            "capture": "eeed70e9a1a92ec4d5901f17dae39ee3377887f4",
+            "proof": "eeed70e9a1a92ec4d5901f17dae39ee3377887f4"
+          }
+        },
+        {
+          "path": "apps/web/features/shell/notifications/messages.ts",
+          "blobs": {
+            "ui": "089700843eaf5e60fe3ab780d050f05009009f27",
+            "capture": "089700843eaf5e60fe3ab780d050f05009009f27",
+            "proof": "089700843eaf5e60fe3ab780d050f05009009f27"
+          }
+        },
+        {
+          "path": "apps/web/features/shell/notifications/notification-traversal.stories.tsx",
+          "blobs": {
+            "ui": "57941281008049b993a4ad57a2a4c07746ce8978",
+            "capture": "57941281008049b993a4ad57a2a4c07746ce8978",
+            "proof": "57941281008049b993a4ad57a2a4c07746ce8978"
+          }
+        },
+        {
+          "path": "apps/web/features/shell/notifications/notifications-view.tsx",
+          "blobs": {
+            "ui": "a1f053b0e1fbdadfe696c0ff367116f1dee0d8a8",
+            "capture": "a1f053b0e1fbdadfe696c0ff367116f1dee0d8a8",
+            "proof": "a1f053b0e1fbdadfe696c0ff367116f1dee0d8a8"
+          }
+        },
+        {
+          "path": "apps/web/features/shell/notifications/notifications.stories.tsx",
+          "blobs": {
+            "ui": "c8b7e25e68685039722fa93d34306ec050e02e80",
+            "capture": "c8b7e25e68685039722fa93d34306ec050e02e80",
+            "proof": "c8b7e25e68685039722fa93d34306ec050e02e80"
+          }
+        }
+      ],
+      "dependencyManifest": [
+        {
+          "path": "apps/web/.storybook/preview.tsx",
+          "blobs": {
+            "ui": "1ba5806d7f8720646dfe0a591067966745179187",
+            "reviewBase": "1ba5806d7f8720646dfe0a591067966745179187",
+            "proof": "1ba5806d7f8720646dfe0a591067966745179187",
+            "workerHead": "1ba5806d7f8720646dfe0a591067966745179187",
+            "observedMain": "1ba5806d7f8720646dfe0a591067966745179187"
+          }
+        },
+        {
+          "path": "apps/web/features/address/path.ts",
+          "blobs": {
+            "ui": "bc58a81f68e3f565b269256f72b647fe75b15357",
+            "reviewBase": "bc58a81f68e3f565b269256f72b647fe75b15357",
+            "proof": "bc58a81f68e3f565b269256f72b647fe75b15357",
+            "workerHead": "bc58a81f68e3f565b269256f72b647fe75b15357",
+            "observedMain": "bc58a81f68e3f565b269256f72b647fe75b15357"
+          }
+        },
+        {
+          "path": "apps/web/features/api/browser.ts",
+          "blobs": {
+            "ui": "5b8c2d862068a9152b77de410bfefb247f047112",
+            "reviewBase": "5b8c2d862068a9152b77de410bfefb247f047112",
+            "proof": "5b8c2d862068a9152b77de410bfefb247f047112",
+            "workerHead": "5b8c2d862068a9152b77de410bfefb247f047112",
+            "observedMain": "5b8c2d862068a9152b77de410bfefb247f047112"
+          }
+        },
+        {
+          "path": "apps/web/features/auth/paths.ts",
+          "blobs": {
+            "ui": "8730d85d6ee9e6031595a5aa91afe352b650934f",
+            "reviewBase": "8730d85d6ee9e6031595a5aa91afe352b650934f",
+            "proof": "8730d85d6ee9e6031595a5aa91afe352b650934f",
+            "workerHead": "8730d85d6ee9e6031595a5aa91afe352b650934f",
+            "observedMain": "8730d85d6ee9e6031595a5aa91afe352b650934f"
+          }
+        },
+        {
+          "path": "apps/web/features/feed/time.ts",
+          "blobs": {
+            "ui": "20521c937c4c42e94c018e2b0d1cd3b63a2b0cd6",
+            "reviewBase": "20521c937c4c42e94c018e2b0d1cd3b63a2b0cd6",
+            "proof": "20521c937c4c42e94c018e2b0d1cd3b63a2b0cd6",
+            "workerHead": "20521c937c4c42e94c018e2b0d1cd3b63a2b0cd6",
+            "observedMain": "20521c937c4c42e94c018e2b0d1cd3b63a2b0cd6"
+          }
+        },
+        {
+          "path": "apps/web/features/feed/types.ts",
+          "blobs": {
+            "ui": "cf9bfe368463b819092c832bc1d927f14da0c82d",
+            "reviewBase": "30384ba864d7e6e4105fc6ec9b0e166832320932",
+            "proof": "30384ba864d7e6e4105fc6ec9b0e166832320932",
+            "workerHead": "30384ba864d7e6e4105fc6ec9b0e166832320932",
+            "observedMain": "30384ba864d7e6e4105fc6ec9b0e166832320932"
+          }
+        },
+        {
+          "path": "apps/web/features/shell/app-shell.tsx",
+          "blobs": {
+            "ui": "50cb99542b2f01bbee00810fd0114e979635b1f5",
+            "reviewBase": "50cb99542b2f01bbee00810fd0114e979635b1f5",
+            "proof": "50cb99542b2f01bbee00810fd0114e979635b1f5",
+            "workerHead": "50cb99542b2f01bbee00810fd0114e979635b1f5",
+            "observedMain": "50cb99542b2f01bbee00810fd0114e979635b1f5"
+          }
+        },
+        {
+          "path": "apps/web/features/shell/community-icon.tsx",
+          "blobs": {
+            "ui": "60c9ff4c6ad0268f9c7e78291180b96906115195",
+            "reviewBase": "60c9ff4c6ad0268f9c7e78291180b96906115195",
+            "proof": "60c9ff4c6ad0268f9c7e78291180b96906115195",
+            "workerHead": "60c9ff4c6ad0268f9c7e78291180b96906115195",
+            "observedMain": "60c9ff4c6ad0268f9c7e78291180b96906115195"
+          }
+        },
+        {
+          "path": "apps/web/features/shell/empty-state.tsx",
+          "blobs": {
+            "ui": "f76bf7aa77c32e52ea55b5809be9fe6a8a472756",
+            "reviewBase": "f76bf7aa77c32e52ea55b5809be9fe6a8a472756",
+            "proof": "f76bf7aa77c32e52ea55b5809be9fe6a8a472756",
+            "workerHead": "f76bf7aa77c32e52ea55b5809be9fe6a8a472756",
+            "observedMain": "f76bf7aa77c32e52ea55b5809be9fe6a8a472756"
+          }
+        },
+        {
+          "path": "apps/web/features/shell/localized-link.tsx",
+          "blobs": {
+            "ui": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba",
+            "reviewBase": "47c2aa66fb14afa3a84d0a187aa863998a2aba97",
+            "proof": "47c2aa66fb14afa3a84d0a187aa863998a2aba97",
+            "workerHead": "47c2aa66fb14afa3a84d0a187aa863998a2aba97",
+            "observedMain": "47c2aa66fb14afa3a84d0a187aa863998a2aba97"
+          }
+        },
+        {
+          "path": "apps/web/features/shell/messages.ts",
+          "blobs": {
+            "ui": "145a8ff150ec721517d7a0b7f3a3cbbc36dba8c3",
+            "reviewBase": "145a8ff150ec721517d7a0b7f3a3cbbc36dba8c3",
+            "proof": "145a8ff150ec721517d7a0b7f3a3cbbc36dba8c3",
+            "workerHead": "145a8ff150ec721517d7a0b7f3a3cbbc36dba8c3",
+            "observedMain": "145a8ff150ec721517d7a0b7f3a3cbbc36dba8c3"
+          }
+        },
+        {
+          "path": "apps/web/features/shell/notifications/delivery.tsx",
+          "blobs": {
+            "ui": "5233df60c515163bbda86348c6e6a5e1de2babc6",
+            "reviewBase": "5233df60c515163bbda86348c6e6a5e1de2babc6",
+            "proof": "5233df60c515163bbda86348c6e6a5e1de2babc6",
+            "workerHead": "5233df60c515163bbda86348c6e6a5e1de2babc6",
+            "observedMain": "5233df60c515163bbda86348c6e6a5e1de2babc6"
+          }
+        },
+        {
+          "path": "apps/web/features/shell/notifications/sanction.ts",
+          "blobs": {
+            "ui": "f86c51043061cfb1b7ba3b8b79ab5c225d260d1a",
+            "reviewBase": "f86c51043061cfb1b7ba3b8b79ab5c225d260d1a",
+            "proof": "f86c51043061cfb1b7ba3b8b79ab5c225d260d1a",
+            "workerHead": "f86c51043061cfb1b7ba3b8b79ab5c225d260d1a",
+            "observedMain": "f86c51043061cfb1b7ba3b8b79ab5c225d260d1a"
+          }
+        },
+        {
+          "path": "apps/web/features/shell/notifications/window.ts",
+          "blobs": {
+            "ui": "dfb30686c769efc2600ca0f1f0e6236093f3c7b8",
+            "reviewBase": "dfb30686c769efc2600ca0f1f0e6236093f3c7b8",
+            "proof": "dfb30686c769efc2600ca0f1f0e6236093f3c7b8",
+            "workerHead": "dfb30686c769efc2600ca0f1f0e6236093f3c7b8",
+            "observedMain": "dfb30686c769efc2600ca0f1f0e6236093f3c7b8"
+          }
+        },
+        {
+          "path": "apps/web/features/shell/page.tsx",
+          "blobs": {
+            "ui": "4cc617a4321d8252bc4e5d52ddc00e486c2023a2",
+            "reviewBase": "4cc617a4321d8252bc4e5d52ddc00e486c2023a2",
+            "proof": "4cc617a4321d8252bc4e5d52ddc00e486c2023a2",
+            "workerHead": "4cc617a4321d8252bc4e5d52ddc00e486c2023a2",
+            "observedMain": "4cc617a4321d8252bc4e5d52ddc00e486c2023a2"
+          }
+        },
+        {
+          "path": "apps/web/features/shell/shell-provider.tsx",
+          "blobs": {
+            "ui": "bc23ae0b00cfd1ff4b522776e95f6ce5cc82ec23",
+            "reviewBase": "bc23ae0b00cfd1ff4b522776e95f6ce5cc82ec23",
+            "proof": "bc23ae0b00cfd1ff4b522776e95f6ce5cc82ec23",
+            "workerHead": "bc23ae0b00cfd1ff4b522776e95f6ce5cc82ec23",
+            "observedMain": "bc23ae0b00cfd1ff4b522776e95f6ce5cc82ec23"
+          }
+        },
+        {
+          "path": "apps/web/features/shell/side-nav.tsx",
+          "blobs": {
+            "ui": "78da75177b25e3775d5e8ccfff7ff58fb9d8e609",
+            "reviewBase": "78da75177b25e3775d5e8ccfff7ff58fb9d8e609",
+            "proof": "0b22ec801aed87b52740d88a58a25138b8e57895",
+            "workerHead": "78da75177b25e3775d5e8ccfff7ff58fb9d8e609",
+            "observedMain": "78da75177b25e3775d5e8ccfff7ff58fb9d8e609"
+          }
+        },
+        {
+          "path": "apps/web/features/shell/unread.ts",
+          "blobs": {
+            "ui": "151a7a968f70dfd847c9d983b8131b028f2c1fec",
+            "reviewBase": "151a7a968f70dfd847c9d983b8131b028f2c1fec",
+            "proof": "151a7a968f70dfd847c9d983b8131b028f2c1fec",
+            "workerHead": "151a7a968f70dfd847c9d983b8131b028f2c1fec",
+            "observedMain": "151a7a968f70dfd847c9d983b8131b028f2c1fec"
+          }
+        },
+        {
+          "path": "apps/web/features/work-page/route.ts",
+          "blobs": {
+            "ui": "2f5073aa044699ff0fac1579382cce1136755226",
+            "reviewBase": "2f5073aa044699ff0fac1579382cce1136755226",
+            "proof": "2f5073aa044699ff0fac1579382cce1136755226",
+            "workerHead": "2f5073aa044699ff0fac1579382cce1136755226",
+            "observedMain": "2f5073aa044699ff0fac1579382cce1136755226"
+          }
+        },
+        {
+          "path": "apps/web/i18n/define.ts",
+          "blobs": {
+            "ui": "409e97b5683c92ff8b1c19e5ad61ab1076f0fc1f",
+            "reviewBase": "409e97b5683c92ff8b1c19e5ad61ab1076f0fc1f",
+            "proof": "409e97b5683c92ff8b1c19e5ad61ab1076f0fc1f",
+            "workerHead": "409e97b5683c92ff8b1c19e5ad61ab1076f0fc1f",
+            "observedMain": "409e97b5683c92ff8b1c19e5ad61ab1076f0fc1f"
+          }
+        },
+        {
+          "path": "apps/web/i18n/locale.ts",
+          "blobs": {
+            "ui": "5f476e4102ea7b3673ae6e6d7ec2d320b920a4ce",
+            "reviewBase": "5f476e4102ea7b3673ae6e6d7ec2d320b920a4ce",
+            "proof": "5f476e4102ea7b3673ae6e6d7ec2d320b920a4ce",
+            "workerHead": "5f476e4102ea7b3673ae6e6d7ec2d320b920a4ce",
+            "observedMain": "5f476e4102ea7b3673ae6e6d7ec2d320b920a4ce"
+          }
+        },
+        {
+          "path": "apps/web/package.json",
+          "blobs": {
+            "ui": "788bd74341217c9fb7f655e00ccd902d64210f5b",
+            "reviewBase": "788bd74341217c9fb7f655e00ccd902d64210f5b",
+            "proof": "788bd74341217c9fb7f655e00ccd902d64210f5b",
+            "workerHead": "788bd74341217c9fb7f655e00ccd902d64210f5b",
+            "observedMain": "788bd74341217c9fb7f655e00ccd902d64210f5b"
+          }
+        },
+        {
+          "path": "package.json",
+          "blobs": {
+            "ui": "5b83cc84bb8984bbb72f1056d2ecc9463973fde3",
+            "reviewBase": "5b83cc84bb8984bbb72f1056d2ecc9463973fde3",
+            "proof": "5b83cc84bb8984bbb72f1056d2ecc9463973fde3",
+            "workerHead": "5b83cc84bb8984bbb72f1056d2ecc9463973fde3",
+            "observedMain": "5b83cc84bb8984bbb72f1056d2ecc9463973fde3"
+          }
+        },
+        {
+          "path": "packages/ui/src/components/button.tsx",
+          "blobs": {
+            "ui": "b7045c0b4c05c46c49c31cfdcc0a473fac9c478f",
+            "reviewBase": "b7045c0b4c05c46c49c31cfdcc0a473fac9c478f",
+            "proof": "b7045c0b4c05c46c49c31cfdcc0a473fac9c478f",
+            "workerHead": "b7045c0b4c05c46c49c31cfdcc0a473fac9c478f",
+            "observedMain": "b7045c0b4c05c46c49c31cfdcc0a473fac9c478f"
+          }
+        },
+        {
+          "path": "packages/ui/src/components/checkbox.tsx",
+          "blobs": {
+            "ui": "6e30a7f19caa7e6ab35ea63aa120fe62de70727f",
+            "reviewBase": "6e30a7f19caa7e6ab35ea63aa120fe62de70727f",
+            "proof": "6e30a7f19caa7e6ab35ea63aa120fe62de70727f",
+            "workerHead": "6e30a7f19caa7e6ab35ea63aa120fe62de70727f",
+            "observedMain": "6e30a7f19caa7e6ab35ea63aa120fe62de70727f"
+          }
+        },
+        {
+          "path": "packages/ui/src/components/collapsible.tsx",
+          "blobs": {
+            "ui": "d79b595a6cd1b2577f6ade0180e7c0b6ef215ce3",
+            "reviewBase": "d79b595a6cd1b2577f6ade0180e7c0b6ef215ce3",
+            "proof": "d79b595a6cd1b2577f6ade0180e7c0b6ef215ce3",
+            "workerHead": "d79b595a6cd1b2577f6ade0180e7c0b6ef215ce3",
+            "observedMain": "d79b595a6cd1b2577f6ade0180e7c0b6ef215ce3"
+          }
+        },
+        {
+          "path": "packages/ui/src/components/field.tsx",
+          "blobs": {
+            "ui": "866cf238036f554f39cd344fa81a6aebd0121a7f",
+            "reviewBase": "866cf238036f554f39cd344fa81a6aebd0121a7f",
+            "proof": "866cf238036f554f39cd344fa81a6aebd0121a7f",
+            "workerHead": "866cf238036f554f39cd344fa81a6aebd0121a7f",
+            "observedMain": "866cf238036f554f39cd344fa81a6aebd0121a7f"
+          }
+        },
+        {
+          "path": "packages/ui/src/utils.ts",
+          "blobs": {
+            "ui": "7639ba19138d1b3aaf26be8c64f07354199021d9",
+            "reviewBase": "7639ba19138d1b3aaf26be8c64f07354199021d9",
+            "proof": "7639ba19138d1b3aaf26be8c64f07354199021d9",
+            "workerHead": "7639ba19138d1b3aaf26be8c64f07354199021d9",
+            "observedMain": "7639ba19138d1b3aaf26be8c64f07354199021d9"
+          }
+        },
+        {
+          "path": "scripts/qa/story-accessibility.setup.ts",
+          "blobs": {
+            "ui": "42250728a58a9ad42f3ca561a732b7315aee0780",
+            "reviewBase": "42250728a58a9ad42f3ca561a732b7315aee0780",
+            "proof": "42250728a58a9ad42f3ca561a732b7315aee0780",
+            "workerHead": "42250728a58a9ad42f3ca561a732b7315aee0780",
+            "observedMain": "42250728a58a9ad42f3ca561a732b7315aee0780"
+          }
+        },
+        {
+          "path": "yarn.lock",
+          "blobs": {
+            "ui": "239124b3f025a9beeb23d08d75adfbdbcc18c366",
+            "reviewBase": "239124b3f025a9beeb23d08d75adfbdbcc18c366",
+            "proof": "239124b3f025a9beeb23d08d75adfbdbcc18c366",
+            "workerHead": "239124b3f025a9beeb23d08d75adfbdbcc18c366",
+            "observedMain": "239124b3f025a9beeb23d08d75adfbdbcc18c366"
+          }
+        }
+      ],
+      "dependencyDecision": "Of the original 30 inspected direct dependencies, only the intentionally corrected side-nav.tsx differs from the reviewed base and observed main. The other 29 are identical, including the two previously reviewed compatible feed/types.ts and LocalizedLink variants. All 11 unchanged notification siblings remain byte-identical to the original candidate. No fresh row-assertion dependency change.",
+      "runnerAndInstallInputs": [
+        {
+          "path": "Taskfile.yml",
+          "blobs": {
+            "ui": "29a6a6cbf701c55c5fd12cba0a33d6eb6e8a35d2",
+            "proof": "30cfc2093436fab2cc18a589404a2f589783f7c7",
+            "workerHead": "30cfc2093436fab2cc18a589404a2f589783f7c7",
+            "observedMain": "30cfc2093436fab2cc18a589404a2f589783f7c7"
+          }
+        },
+        {
+          "path": "apps/web/.storybook/main.ts",
+          "blobs": {
+            "ui": "9ff3e4e1f77dac7c040eb566b6cb102b83cce455",
+            "proof": "9ff3e4e1f77dac7c040eb566b6cb102b83cce455",
+            "workerHead": "9ff3e4e1f77dac7c040eb566b6cb102b83cce455",
+            "observedMain": "9ff3e4e1f77dac7c040eb566b6cb102b83cce455"
+          }
+        },
+        {
+          "path": "apps/web/.storybook/preview.tsx",
+          "blobs": {
+            "ui": "1ba5806d7f8720646dfe0a591067966745179187",
+            "proof": "1ba5806d7f8720646dfe0a591067966745179187",
+            "workerHead": "1ba5806d7f8720646dfe0a591067966745179187",
+            "observedMain": "1ba5806d7f8720646dfe0a591067966745179187"
+          }
+        },
+        {
+          "path": "apps/web/.storybook/story-screenshots.setup.ts",
+          "blobs": {
+            "ui": "92f97d8ac171d5dbb652b4506c0ceb4b038a03fd",
+            "proof": "92f97d8ac171d5dbb652b4506c0ceb4b038a03fd",
+            "workerHead": "92f97d8ac171d5dbb652b4506c0ceb4b038a03fd",
+            "observedMain": "92f97d8ac171d5dbb652b4506c0ceb4b038a03fd"
+          }
+        },
+        {
+          "path": "apps/web/package.json",
+          "blobs": {
+            "ui": "788bd74341217c9fb7f655e00ccd902d64210f5b",
+            "proof": "788bd74341217c9fb7f655e00ccd902d64210f5b",
+            "workerHead": "788bd74341217c9fb7f655e00ccd902d64210f5b",
+            "observedMain": "788bd74341217c9fb7f655e00ccd902d64210f5b"
+          }
+        },
+        {
+          "path": "apps/web/vitest.config.ts",
+          "blobs": {
+            "ui": "87980f03e746d949c3235e27a6b1f4fcc1f19231",
+            "proof": "87980f03e746d949c3235e27a6b1f4fcc1f19231",
+            "workerHead": "87980f03e746d949c3235e27a6b1f4fcc1f19231",
+            "observedMain": "87980f03e746d949c3235e27a6b1f4fcc1f19231"
+          }
+        },
+        {
+          "path": "package.json",
+          "blobs": {
+            "ui": "5b83cc84bb8984bbb72f1056d2ecc9463973fde3",
+            "proof": "5b83cc84bb8984bbb72f1056d2ecc9463973fde3",
+            "workerHead": "5b83cc84bb8984bbb72f1056d2ecc9463973fde3",
+            "observedMain": "5b83cc84bb8984bbb72f1056d2ecc9463973fde3"
+          }
+        },
+        {
+          "path": "scripts/goal/goalctl.ts",
+          "blobs": {
+            "ui": "329c2cfe66c9ef7ed12514b380432df97296100a",
+            "proof": "79ae1a7484acc4d6cd793c79aae05d5a94d61273",
+            "workerHead": "79ae1a7484acc4d6cd793c79aae05d5a94d61273",
+            "observedMain": "79ae1a7484acc4d6cd793c79aae05d5a94d61273"
+          }
+        },
+        {
+          "path": "scripts/qa/accessibility.ts",
+          "blobs": {
+            "ui": "50813fdb58b6967a1bcdcf0ec9e8c933d754f263",
+            "proof": "50813fdb58b6967a1bcdcf0ec9e8c933d754f263",
+            "workerHead": "50813fdb58b6967a1bcdcf0ec9e8c933d754f263",
+            "observedMain": "50813fdb58b6967a1bcdcf0ec9e8c933d754f263"
+          }
+        },
+        {
+          "path": "scripts/qa/story-accessibility.setup.ts",
+          "blobs": {
+            "ui": "42250728a58a9ad42f3ca561a732b7315aee0780",
+            "proof": "42250728a58a9ad42f3ca561a732b7315aee0780",
+            "workerHead": "42250728a58a9ad42f3ca561a732b7315aee0780",
+            "observedMain": "42250728a58a9ad42f3ca561a732b7315aee0780"
+          }
+        },
+        {
+          "path": "scripts/qa/story-accessibility.ts",
+          "blobs": {
+            "ui": "917a2b35f070cdbd43aaaf5c2d5af13016e029fd",
+            "proof": "917a2b35f070cdbd43aaaf5c2d5af13016e029fd",
+            "workerHead": "917a2b35f070cdbd43aaaf5c2d5af13016e029fd",
+            "observedMain": "917a2b35f070cdbd43aaaf5c2d5af13016e029fd"
+          }
+        },
+        {
+          "path": "scripts/qa/story-browser.ts",
+          "blobs": {
+            "ui": "bd99caa7b38c87e229d57f491b3c8b8b66ff4aad",
+            "proof": "bd99caa7b38c87e229d57f491b3c8b8b66ff4aad",
+            "workerHead": "bd99caa7b38c87e229d57f491b3c8b8b66ff4aad",
+            "observedMain": "bd99caa7b38c87e229d57f491b3c8b8b66ff4aad"
+          }
+        },
+        {
+          "path": "scripts/qa/story-screenshots.ts",
+          "blobs": {
+            "ui": "531b2bb355b48534fbbbd4b4d981fb599e8c2382",
+            "proof": "531b2bb355b48534fbbbd4b4d981fb599e8c2382",
+            "workerHead": "531b2bb355b48534fbbbd4b4d981fb599e8c2382",
+            "observedMain": "531b2bb355b48534fbbbd4b4d981fb599e8c2382"
+          }
+        },
+        {
+          "path": "scripts/qa/test.ts",
+          "blobs": {
+            "ui": "81c4fa2ae7770c68b359f86ae910069aca509c08",
+            "proof": "81c4fa2ae7770c68b359f86ae910069aca509c08",
+            "workerHead": "81c4fa2ae7770c68b359f86ae910069aca509c08",
+            "observedMain": "81c4fa2ae7770c68b359f86ae910069aca509c08"
+          }
+        },
+        {
+          "path": "yarn.lock",
+          "blobs": {
+            "ui": "239124b3f025a9beeb23d08d75adfbdbcc18c366",
+            "proof": "239124b3f025a9beeb23d08d75adfbdbcc18c366",
+            "workerHead": "239124b3f025a9beeb23d08d75adfbdbcc18c366",
+            "observedMain": "239124b3f025a9beeb23d08d75adfbdbcc18c366"
+          }
+        }
+      ],
+      "runnerDecision": "All listed proof runner/install inputs equal the reviewed base and observed main. Relative to original UI/capture, Taskfile.yml changes only unrelated jena:test argument forwarding and goalctl.ts only resume usage text. Actual story selection, accessibility setup/engine/rules/viewports, Storybook preview, Vitest configuration, screenshot/browser setup and package/lock inputs are unchanged. No assertion edit, exclusion, normal afterEach suppression or product/test change by G-2854.",
+      "verificationReceipt": {
+        "path": ".temp/notification-review/navigation/verification.json",
+        "sha256": "94687de4f7e14c41d4b827159096e896aa87d6e6ca6ff51cf36d199037fb7c66"
+      }
+    },
+    "affectedCaseResult": {
+      "status": "passed",
+      "job": "job:a0799bf7-e6f0-424e-8182-ced4446186af",
+      "owner": "G-2747",
+      "step": 1,
+      "exitStatus": 0,
+      "run": "20261019t103657-799545",
+      "proofSource": "fa5ec60bb8000a18f44de0e3a35b8e52c4284fe4",
+      "command": [
+        "bun",
+        ".temp/notification-name/run.ts",
+        "bun",
+        "scripts/goal/goalctl.ts",
+        "test",
+        "apps/web/features/shell/notifications/notifications.stories.tsx",
+        "-t",
+        "Filtered Beside Shell Count"
+      ],
+      "actualTaskCommand": "task storybook:test -- features/shell/notifications/notifications.stories.tsx -t 'Filtered Beside Shell Count'",
+      "file": "apps/web/features/shell/notifications/notifications.stories.tsx",
+      "story": "Filtered Beside Shell Count",
+      "storyId": "shell-notifications--filtered-beside-shell-count",
+      "counts": {
+        "passed": 1,
+        "skipped": 44,
+        "failed": 0,
+        "filesPassed": 1
+      },
+      "unchangedPlayAssertions": {
+        "shellAccessibleName": "Notifications, 6 unread",
+        "visibleBadge": "6 unread",
+        "filteredPageRows": 2,
+        "pageContainsStandaloneSix": false
+      },
+      "normalAccessibility": {
+        "previewAddon": "a11y: { test: 'error' }",
+        "repositoryAfterEach": "Unchanged unconditional Vitest setup scans the completed story body in light/dark at 390x844 and 1280x860 with the existing WCAG tag set and serious/critical blocking rule. Story-local settings cannot disable it.",
+        "outcome": "passed; the prior label-content-name-mismatch did not recur"
+      },
+      "log": {
+        "path": ".temp/notification-review/navigation/qa.log",
+        "sha256": "0f056dcb77e4af368ae3e88c0240f617be8e0406eb45eae305755eb8a30e9866"
+      },
+      "scope": "Exactly one selected story. No unchanged 97-case or 45-case rerun, no backend journey and no claim that skipped cases executed again."
+    },
+    "computedNameEvidence": {
+      "measurementSource": "fa5ec60bb8000a18f44de0e3a35b8e52c4284fe4",
+      "viewport": {
+        "width": 1280,
+        "height": 860
+      },
+      "beforeVisibleName": "Notifications6 unread",
+      "afterVisibleName": "Notifications 6 unread",
+      "afterAccessibleNameAxe": "Notifications, 6 unread",
+      "afterAccessibleNameChromium": "Notifications, 6 unread",
+      "afterAriaLabel": "Notifications, 6 unread",
+      "afterTextContent": "Notifications 6 unread",
+      "afterInnerText": "Notifications\n6 unread",
+      "afterChildNodes": [
+        {
+          "type": 1,
+          "text": ""
+        },
+        {
+          "type": 1,
+          "text": "Notifications"
+        },
+        {
+          "type": 3,
+          "text": " "
+        },
+        {
+          "type": 1,
+          "text": "6 unread"
+        }
+      ],
+      "afterFragments": [
+        {
+          "text": "Notifications",
+          "className": "min-w-0 flex-1 truncate",
+          "rect": {
+            "x": 56,
+            "y": 227,
+            "width": 104,
+            "height": 20,
+            "top": 227,
+            "right": 160,
+            "bottom": 247,
+            "left": 56
+          }
+        },
+        {
+          "text": "6 unread",
+          "className": "rounded-full bg-primary px-1.5 py-0.5 font-bold text-[11px] text-primary-foreground leading-none shrink-0",
+          "rect": {
+            "x": 172,
+            "y": 229.5,
+            "width": 59,
+            "height": 15,
+            "top": 229.5,
+            "right": 231,
+            "bottom": 244.5,
+            "left": 172
+          }
+        }
+      ],
+      "afterAriaCurrent": "page",
+      "targetedRuleViolations": [],
+      "targetedRulePasses": [
+        {
+          "id": "label-content-name-mismatch",
+          "nodes": 1
+        }
+      ],
+      "limits": "These actual producer browser measurements supplement the separately passing normal one-story gate. The measurement job job:135eb3dc-57af-4095-bfea-f9a101d5b81a exited 1 after writing its JSON/screenshot because an in-flight Storybook addon asset route was disposed during teardown. Its focused axe result is not reported as a passing job or substituted for normal accessibility. The measurement also recorded one unread-count API 404, preserved below; source keeps the seeded badge on failed polling. No backend success is claimed.",
+      "measurementJobExitStatus": 1,
+      "errors": [
+        "Failed to load resource: the server responded with a status of 404 (Not Found)"
+      ],
+      "httpErrors": [
+        {
+          "url": "http://127.0.0.1:37473/api/main/v1/me/notifications/unread-count",
+          "status": 404
+        }
+      ]
+    },
+    "personallyViewedNewImages": [
+      {
+        "path": ".temp/notification-review/navigation/qa-FilteredBesideShellCount.png",
+        "sha256": "f98d6ea9d5880cc8865528ef15f49f9445b1047ea96bd540b8d825bad43a1715",
+        "width": 1440,
+        "height": 1000,
+        "role": "Actual passing affected-case QA screenshot",
+        "observation": "Expanded shell shows Notifications and a visible 6 unread badge; main Saved/Watching content shows two distinct rows with no total of six. Target hierarchy and subordinate Actions remain legible."
+      },
+      {
+        "path": ".temp/notification-review/navigation/measured-after.png",
+        "sha256": "cf7843612601d6a9d3811b44e4eef16faa6029a7cf5b7f28fc58670ae02a3e8a",
+        "width": 1280,
+        "height": 860,
+        "role": "Actual producer browser measurement screenshot, supplemental to passing normal QA",
+        "observation": "Visible unread badge, selected Saved/Watching filters and exactly two rows agree with the measured names and original assertions."
+      }
+    ],
+    "privateRetainedArtifacts": [
+      {
+        "path": ".temp/notification-review/navigation/qa.log",
+        "sha256": "0f056dcb77e4af368ae3e88c0240f617be8e0406eb45eae305755eb8a30e9866"
+      },
+      {
+        "path": ".temp/notification-review/navigation/measurement-harness.log",
+        "sha256": "7ca3462f13446019c29375e7287b73f69380cc88fddf92b1ec4a51180014e3bb"
+      },
+      {
+        "path": ".temp/notification-review/navigation/before-measurement.json",
+        "sha256": "0fa5fe5254df7f3d1e4a5a877d363d7a32a7a82c9bda7a4bebe2ea414e8c2819"
+      },
+      {
+        "path": ".temp/notification-review/navigation/after-measurement.json",
+        "sha256": "e4d9b0df698e04e750fead652ad7d058833781f4c5d4096937fb72dd93880173"
+      },
+      {
+        "path": ".temp/notification-review/navigation/measured-after.png",
+        "sha256": "cf7843612601d6a9d3811b44e4eef16faa6029a7cf5b7f28fc58670ae02a3e8a"
+      },
+      {
+        "path": ".temp/notification-review/navigation/qa-summary.md",
+        "sha256": "13746e95722585af49139c099b97e28298ab69ba90f78b2057b853d11d05cb3f"
+      },
+      {
+        "path": ".temp/notification-review/navigation/qa-FilteredBesideShellCount.png",
+        "sha256": "f98d6ea9d5880cc8865528ef15f49f9445b1047ea96bd540b8d825bad43a1715"
+      },
+      {
+        "path": ".temp/notification-review/navigation/context.ts",
+        "sha256": "3aed30fe57df9006e2f14107f6a054a2b3886f33141490d71dcc71b816653014"
+      },
+      {
+        "path": ".temp/notification-review/navigation/prepare.ts",
+        "sha256": "6adb869914d46f038207d785cbeccfe487cae36014e2aad2311d6d1f5a4532e8"
+      },
+      {
+        "path": ".temp/notification-review/navigation/run.ts",
+        "sha256": "bc1827a5871ec3804a97b72c9301b16b11779410a202845b8966f9a62b9c2705"
+      },
+      {
+        "path": ".temp/notification-review/navigation/measure.ts",
+        "sha256": "8c237fcff0a3e7fedc8b5a2562f8217b9a4c9094c53e0e1c44e3af435b072f22"
+      },
+      {
+        "path": ".temp/notification-review/navigation/before-source.json",
+        "sha256": "5a6650f4bb7d56076323e9025a8b18279bce25f50a8cc14105bba5ef40fde8f7"
+      }
+    ],
+    "producerJobReceipts": [
+      {
+        "path": ".temp/notification-review/navigation/a0799bf7-e6f0-424e-8182-ced4446186af.json",
+        "sha256": "fae6b50a1a941aab4095432a0ab3f22d12dd7879cc27290e5b0098ffc6a61fa0"
+      },
+      {
+        "path": ".temp/notification-review/navigation/135eb3dc-57af-4095-bfea-f9a101d5b81a.json",
+        "sha256": "3a22b3948650bcff2b7ea6b9cb778efd1c486152ca1fee097a3afad047802310"
+      },
+      {
+        "path": ".temp/notification-review/navigation/a23f7a87-d285-4feb-99d1-0596ec825b43.json",
+        "sha256": "5411b7861d3b2a2c394d54eea3c398356b3e7ac230454e659dfcb34c6c97b31c"
+      }
+    ],
+    "evidenceAccounting": "Prior source approval, three criteria, 35 checked image hashes/17 personally viewed images and separate 96/97 plus 44/45 historical runs remain unchanged. Two newly personally viewed images and this separate 1-pass/44-skipped run are appended; no 101-case total or reconstructed full-tier pass.",
+    "canonicalClassStatusChanged": false
   },
   "schemaVersion": 1,
   "recordedAt": "2026-10-19T10:35:46.868806+00:00",
@@ -782,12 +1515,17 @@
         "mainBase": "a6ad1ad22408aa3190aa0e52d8d30c90c32096b7",
         "note": "The required check command automatically rebased this report onto two newer main commits. No manual worker rebase or product edit. All five reviewed before-blobs and 30 dependency blobs were reverified unchanged afterward; side-nav remains 78da75177b25e3775d5e8ccfff7ff58fb9d8e609. Incoming backend report/task edits were preserved; their independent review was not repeated."
       }
+    },
+    "navigationAppendixValidation": {
+      "status": "pending-recorded-documentation-and-worker-check",
+      "scope": "Only the owned review JSON changes; prior source review and checks remain preserved above."
     }
   },
   "managerNext": [
-    "Use the completed five-path source verdict immediately; canonical class disposition remains with the manager.",
-    "Supply the exact published G-2747 correction and, if assembled, immutable compatible current-main candidate. Append only that delta review, computed name evidence and the one affected normal-a11y case result.",
-    "Do not add a new capability, contract, persona matrix, nonzero backend fixture or whole-domain journey as a precondition for the original D4-015 Storybook row class."
+    "The original five-path source review is APPROVE and all three original D4-015 component criteria remain individually PASS.",
+    "The exact G-2747 nav correction 808734e0d8eaf3d538576e3ff77e16d8d57e8090 is APPROVE; its sole affected unchanged Filtered Beside Shell Count is PASS on compatible immutable proof fa5ec60bb8000a18f44de0e3a35b8e52c4284fe4. Manager may use this completed bounded review for closure disposition.",
+    "Canonical class/ledger status remains the manager responsibility. No backend notification delivery, nonzero backend fixture, new capability/contract/persona matrix, unrelated voice-control gate or whole-domain journey is added as an original D4-015 precondition."
   ],
-  "validationCompletedAt": "2026-10-19T10:37:48.403616+00:00"
+  "validationCompletedAt": "2026-10-19T10:37:48.403616+00:00",
+  "navigationReviewCompletedAt": "2026-10-19T10:53:55.255892+00:00"
 }
