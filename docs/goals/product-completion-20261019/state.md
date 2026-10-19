@@ -1,19 +1,12 @@
 # Product completeness state
 
-Checkpoint 869d6bce-082b-48e6-9bf2-14ec20961691 retains checkpoint 99c97f67
+Checkpoint 22f35050-84e6-4996-a4c2-b8118b340630 retains checkpoint 869d6bce
 and covers handled events:
-mail:2158ce9d-693a-408e-8388-81bf9ba03d54,
-task:G-2823:42,
-mail:53b91242-c44c-42e3-bbb8-cbc046fd6fa5,
-mail:dcc9ebea-bbda-4c82-a708-1a75f9411742,
-mail:22e486f8-36af-48ac-9f4c-3d7d4ecce37f,
-mail:c0dda814-f494-4b19-99b4-14ac48183e09,
-mail:5ae920a3-3785-4858-88b4-0d6056352751,
-mail:7f57af43-9071-4554-9855-adda3416fefc,
-mail:16b12b2a-2f90-4499-a4cc-27eb95c2bd29 and
-mail:084afc30-bb73-43eb-bdea-55e69d31e6cf.
-The ten turns ran between 15:43:41Z and 16:19:09Z on 2026-10-19.
-All nine mail acknowledgements were confirmed at this checkpoint. Measures
+mail:e5577a22-de12-4ec3-9756-14a249d4e878,
+mail:977e8af5-3c49-45b9-b973-099088f33d06 and
+mail:71274ec3-f510-482e-ac29-a28be1bff0aa.
+The three turns ran between 16:20:45Z and 16:31:19Z on 2026-10-19.
+All three mail acknowledgements were confirmed at this checkpoint. Measures
 were read here and may include later activity; other turns retain their own
 dispositions. This checkpoint changes no brief or worker instruction.
 
@@ -312,11 +305,28 @@ present, so its brief stayed unchanged. No landing or activation receipt is
 claimed by this event. Start no duplicate scheduler task, landing or review.
 
 G-2783 retained four dirty Claude files and transferred to codex-2/max only
-after its exact Claude PID exited;
-G-2785 remains under audit's capacity queue ownership. Preserve fresh five-hour
+after its exact Claude PID exited. Preserve fresh five-hour
 evidence, in-flight headroom, at least one-third about reserve and no paid Claude
 fallback. Unknown capacity admits nothing; no arbitrary worker cap or live-PID
 replacement is authorized.
+
+Mail 71274ec3 produced committed G-2785 decision 475c770b339a80320dd97d2c6a15099ac7f21413.
+Its added `apps/web/features/work-levels/parts.tsx` claim is limited to Completion's
+evidence anchor: replace hover-only underline with the permanent `underline`
+class, retaining the other classes. The event preserved active attempt 16 and
+delegated the finite resume to Audit's existing owner at its next safe exit;
+reply 5b219195 supplied the exact resume instruction without interrupting or
+rebasing its live publication. No duplicate worker, check or review was started.
+Retain four passing name-recovery cases, 14 unit passes/562 assertions and the
+1,874-file types pass at their original pins. Original source
+2f7d7769c1d882dd79db41bdc805adcb30341786, QA 20261019t161925-f668a7, passed
+the Parts interaction but failed afterEach `link-in-text-block`. The brief
+requires only `work-name-section-recovery--parts-recover-in-place` and unchanged
+accessibility checks at the corrected pin in the reported en/dark phone and
+desktop conditions, plus an actually viewed corrected screenshot. Audit retains
+the correction's later handoff through the existing composition/first-review
+owner. The covered events establish no corrected runtime pass, Parts acceptance
+or class closure; A16/Recipe and separate A13 analysis retain their owners.
 
 Mail 739c0a87 records two 60-second CPU-admission failures at 4/4 permits:
 Web types passed, but the metadata guard analyzers never started. Product
@@ -419,13 +429,26 @@ nor product assertions ran. The immutable blocker was confirmed at
 notified; G-2823 remains open without an unchanged retry or landing.
 
 G-2791 remains sole retained-data/runtime custodian. Its actual39 qualification
-8015dc7909 supplied no compatible current copy or released lease. Audit owns
-G-2842's bounded second inspected 4a616-source/history transition and three
-verified identical-SQL renames through existing frozen-template/schema/data-effect
-checks; manager 0f84995f was pending in the covered mail. Preserve original
-759244 refusals, ordinary behavior, locks and idempotence. After that reviewed
-owner delta, G-2791 owes the supported isolated transition, native alignment,
-current backup/qualified restore and released G-2823 lease. Book46775/C2746787
+8015dc7909 exited blocked, supplying no compatible current copy or released lease.
+Mail e5577a22 was disposed as an already executing correction: G-2842's decision
+a05621a0fd8bee0a98cea1744b271fb0c876fa29 was on main and attempt 11, resumed
+at 16:17:18.952Z on codex-2/max, was confirmed live on that clean source.
+Its claims already cover the history-transition source/test and existing owner
+bootstrap/migration paths; no brief change, duplicate dispatch or Program ruling
+was needed. Reply 50959c05 returned this execution receipt to Audit.
+
+The decision requires independently pinned
+4a616b079a364b8f5ac7fe4d4ff56bc99849e766 frozen inventory/template/schema/
+data-effect verification and genuine verification of all three migration
+filename transitions before adoption. Preserve unknown/partial/drift refusals,
+original 759244 refusals, ordinary behavior, locks, idempotence and budgets.
+Earlier b0b3a5e7's eight-case verification proves only its earlier supported
+input; the new sourcecut, first independent codex-1/xhigh review and result were
+not supplied by these events. Audit retains their later disposition. G-2791
+remains idle pending that reviewed owner delta, then owes the supported isolated
+copy/history verification/owner migrations/model bootstrap/native readiness/
+stopped current backup/qualified restore and released G-2823 proof lease.
+Diagnostic job 9023a0b9 establishes no admission or acceptance. Book46775/C2746787
 do not inherit the separate old default fixture's missing Access2601 diagnosis.
 Source/native/query source 510d591dd0d3 and its reported 15 Java passes prove
 no served acceptance. No duplicate producer, manifest bypass, arbitrary source
@@ -468,13 +491,18 @@ The verified additive plan at
 has SHA-256 e2e08260605fd8e26b00987e763ae5da1b43a3fe8cf8671890956fe457cdf919:
 17 paths against ee0cc428, six exact copies, ten additive changes and one OpenAPI
 change, preserving newer copy, shared fixture and the exact inventory rule.
-Reuse existing unit/story/backend and dependency-review evidence. Audit owns
-the separate two-path Source composition with accepted review reuse; manager
-5b7fd7's gates were pending in the covered mail. These events claim no completed
-A16 or Source landing. Catalogue remains at its reported 3/18 original classes
-closed (A02/A15/A18), distinct from original61 and scope rows. C27's retained
-source premise remains with Program's existing question; it supplies no invented
-data, weaker assertion or hold on unrelated proof.
+Reuse existing unit/story/backend and dependency-review evidence. Mail 977e8af5
+supersedes Source/importer's pending-landing wording: Source composition is main
+0c037acb96b5 and importer custody/native adapters are main
+2ae2f5080d546cab9560c4490ac538b01882e930, with importer manager 452 reported
+landed. Exact selected-blob verification remained with Audit; this receipt
+establishes no new public acceptance. AgentPicker recovery consumers are main
+24338d4fc11e. A16 remains with its single Site owner, and no completed A16 landing
+is claimed. Catalogue remains at its reported 3/18 original classes closed
+(A02/A15/A18), 15 open and original 31 scenarios unchanged, distinct from
+original61 and scope rows. Existing native-name, Recipe, bounded history and
+A13 owners continue; C27/C30 source decisions remain with Program's existing
+questions. No invented data, weaker assertion or hold on unrelated proof follows.
 
 Program completed supported `task dev:stop` and `task dev`, both exit 0, with
 AppHost PID 1363725 and reported healthy Account/Accounts/Main/relay/Web/Storybook.
@@ -518,24 +546,31 @@ custody rather than another setup experiment. Event-29's storage-reader harness
 cause was corrected through the existing owner reader in the accepted finite
 comparison. G-2823 owns the isolated backend handoff and causal cleanup repair. The
 unclassified wakes and one retained other-kind refusal still need tooling
-disposition. The ten successful manager turns for the covered events recorded
-6,609,015 input/49,295 output tokens, including 6,116,224 cached input. These
+disposition. The three successful manager turns for the covered events recorded
+2,362,035 input/21,269 output tokens, including 2,188,416 cached input. These
 exclude this checkpoint and do not establish a comparable manager/worker share.
 Product has no live worker and two open tasks.
-Latest recorded efficiency window remains 2026-10-18T08:36:08Z–20:36:08Z:
-552.47M processed input, 527.63M cached; 37% other-session share cannot establish
-manager-only share and omits older-started sessions. No comparable savings or
-spending claim follows. Audit owns shared scheduling; verified hourly coverage,
-later full-window comparison and instrumentation attribution remain due.
+Latest recorded efficiency window remains 2026-10-18T08:36:08Z–20:36:08Z;
+retain its earlier 552.47M input/527.63M cached and 37% other-session reading.
+The same start-time window reread here returned 135 sessions, 1,232.46M input
+and 1,174.98M cached: workers 83%, landing reviews under 1%, other sessions 17%.
+Continuing sessions change this cumulative reading; the figures omit older-started
+sessions and other-session share cannot establish manager-only share. No
+comparable savings or spending claim follows. Audit owns shared scheduling;
+verified hourly coverage, later full-window comparison and instrumentation
+attribution remain due.
 
-Next event owners: Audit delivers G-2842's reviewed supported history transition
-through sole custodian G-2791, then its actual qualified recipe and released
+Next event owners: Audit consumes G-2842's existing bounded history result and
+its first independent review, then delivers the accepted supported owner cut
+through sole custodian G-2791, its actual qualified recipe and released
 copy lease. Product resumes G-2823 only on that changed premise for the isolated
 current-source backend handoff; G-2830 retains image-persistence acceptance.
 After that handoff, product requires demonstrated cleanup repair and reviewed
 follow-up landing, then executes delegated normal refresh and runtime proof.
-Existing Work/Recipe, G-2762/Book, A16 and Source owners retain their bounded
-fixes, pending gates and original proof without duplicate execution. Audit consumes
+Existing Work/Recipe, G-2762/Book and A16 owners retain their bounded fixes,
+pending gates and original proof without duplicate execution. Audit retains
+Source/importer selected-blob verification and G-2785's finite Parts correction
+and proof through the existing composition/first-review owner. Audit consumes
 G-2825's landed report and fixture through G-2829's separate Settings repair
 prerequisite and routes residual site acceptance to existing owners. Product
 starts G-2826's accepted single composed landing against decision f1792f86d9,
