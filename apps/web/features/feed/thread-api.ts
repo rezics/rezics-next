@@ -205,7 +205,7 @@ export function mainThreadApi(main: () => MainClient = browserMainApi): ThreadAp
           },
           headers(step.key, 'place'),
         );
-        if (data) return { kind: 'placed', reply: data.reply, placement: data.placement };
+        if (data?.profile === 'realm-reply-placement-v1') return { kind: 'placed', reply: data.reply, placement: data.placement };
         if (!terminalRefusal(error)) return { kind: 'failed', progress: step };
         // Nothing places it here, so it must not linger as a public reply to the Work.
         return refuse(input, step);

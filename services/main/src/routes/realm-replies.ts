@@ -56,6 +56,13 @@ const placementResult = t.Object({ profile: t.Literal('realm-reply-placement-v1'
   concepts: t.Optional(t.Array(native, { maxItems: 8, uniqueItems: true })),
   primaryConcept: t.Optional(t.Nullable(native)),
   reviewDecisionId: uuid, reviewGeneration: generation, replayed: t.Boolean() });
+export const placementWithdrawalBody = t.Object({ profile: t.Literal('realm-reply-placement-withdrawal-v1'),
+  realm: native, reply: native, expectedHead: native, expectedRevisionId: uuid, actingSubject: native,
+}, { additionalProperties: false });
+export const placementWithdrawalResult = t.Object({ profile: t.Literal('realm-reply-placement-withdrawal-v1'),
+  realm: native, reply: native, revisionId: uuid, withdrawnPlacement: native, withdrawal: native, replayed: t.Boolean(),
+});
+
 const visibleResult = t.Object({ profile: t.Literal('realm-reply-placement-v1'),
   placement: native, realm: native, reply: native, revisionId: uuid,
   reviewDecisionId: uuid, rootTarget: native, author: native });
@@ -177,14 +184,21 @@ export function realmReplyRoutes(work: MainWorkDependencies) {
           { ...noStore, status: result.replayed ? 200 : 201 });
       } catch (error) { return replyError(error); }
     })
-    .post('/v1/realm-reply-placements', { body: placementBody,
-      response: transportResponses(openApiOperations["/v1/realm-reply-placements"].post, { 200: placementResult, 201: placementResult, ...writeProblems }, 'POST') },
+    .post('/v1/realm-reply-placements', { body: t.Union([placementBody, placementWithdrawalBody]),
+      response: transportResponses(openApiOperations["/v1/realm-reply-placements"].post, { 200: t.Union([placementResult, placementWithdrawalResult]),
+        201: t.Union([placementResult, placementWithdrawalResult]), ...writeProblems }, 'POST') },
     async ({ request, body }) => {
       try {
         const principal = await work.account.verify(request, ['realm:adopt']);
         if (!work.realmReplies) return problem(503, 'realm_reply_unavailable', 'Realm replies are unavailable');
         const idempotencyKey = key(request);
         if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'Idempotency-Key is required');
+        if (body.profile === 'realm-reply-placement-withdrawal-v1') {
+          const { profile: _profile, actingSubject, ...input } = body;
+          const result = await work.realmReplies.withdraw(principal, actingSubject,
+            input, idempotencyKey, realmReplyDigest(body));
+          return Response.json(result, { ...noStore, status: result.replayed ? 200 : 201 });
+        }
         const { profile: _profile, actingSubject, ...input } = body;
         const result = await work.realmReplies.place(principal, actingSubject,
           input, idempotencyKey, realmReplyDigest(body));
