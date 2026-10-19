@@ -74,23 +74,37 @@ unchanged. A reader's own slot is an indexed selection, independent of populatio
 The bounded private inventory still reads at most 101 heads, including its
 overflow sentinel; it is not the aggregate's population.
 
-Standing publication is held across identity merge/unmerge and deferred source
-projection changes. Before changing the graph identity edge, the identity owner
-commits a task marker on an independent Access checkout, even if its journal is
-inside an outer transaction. App composition reserves one connection from the
+Standing publication follows the affected Work, MainVersion, Context and
+retained contribution paths. Before changing the graph identity edge, the
+identity owner commits the task's source/survivor Work and MainVersion pair on
+an independent Access checkout, even if its journal is inside an outer
+transaction. The graph command must still match that bound pair. A completed
+fence permits receipt replay, never a new effect when its receipt is missing.
+App composition reserves one connection from the
 existing Access pool limit for these independently committed fences: the default
 ten connections become nine ordinary connections plus one fence connection.
 The Access pool owns and closes both lanes. The usual nested-checkout guard
 still applies within each lane; a full ordinary pool cannot starve the fence.
 Reservation precedes request service and requires a pool limit of at least two.
-Only the existing journal's guarded completion,
-after every owner is exhausted, removes that marker. A native rollback or lost
-graph response retains the conservative hold until that exact task reconciles.
-The gate covers the whole component, including detached contributions other
-than the one chosen as witness, for both Realm and Global. An inherited witness
-must also retain its graph path to the requested Work. Deleting a native head
+Only the existing journal's guarded completion, after every owner is exhausted,
+marks that fence finished; its cut and revocation evidence remain retained.
+A native rollback or lost graph response holds the affected cuts until that
+exact task reconciles. An unrelated Work or a Context with no affected
+contribution stays readable. The fence covers detached contributions other than
+the one chosen as witness, for both Realm and Global. An inherited witness must
+also retain its graph path to the requested Work. Deleting a native head
 reselects a surviving contribution with one indexed probe, so a consistent
 102-to-101 deletion does not need a later write to become readable.
+
+Grouped dependency counts record each component's effective origins and merge
+paths. Immutable path nodes and per-person retained-item bindings distinguish
+different histories carried by the same task. A native vote overrides its
+inherited selection; undoing that selection's ancestor cannot revoke the native
+vote or a later descendant that inherited it. New selection delivery needs one
+indexed parent binding and at most two inserts, independently of ancestry depth.
+Upgrade reconstructs old paths from retained rating snapshots and refuses
+missing/cyclic ancestry or an orphan fence without its identity journal; it
+cannot guess an affected pair or silently discard revocation evidence.
 
 A source head seal, replacement, deletion or reconstruction CAS refreshes its
 native slot and at most one retained projection synchronously. An indexed second
@@ -102,44 +116,47 @@ to resume one page of at most 100 projections; `--context`, `--batch-size` and
 `--batches` narrow or bound the work as for reconstruction. Progress stays in
 Access, and a new source seal rewinds the cursor atomically. Page replay applies
 the same native-precedence/delta function as admission, under the recovery,
-authority and source gates. Missing originals remain explicitly unknown.
+authority and source gates. Missing originals remain explicitly unknown. A read
+waits only if its effective contribution still differs from the current source
+head. Already refreshed projections and native overrides remain readable while
+other projections wait. Every page checks current revocation before refreshing
+a slot, so continuation cannot reconstruct an undone inherited contribution.
 
-The publication gate deliberately holds all standing reads, including own-slot
-reads and otherwise unaffected Contexts, while any identity marker or projection
-page remains pending. It returns unavailable rather than a partial exact figure.
-The refresh command's `complete` describes its selected projection jobs;
-`publicationReady` also accounts for unfinished identity tasks, jobs outside
-that selection and an unsettled transaction horizon. Completing projection pages
-cannot release an identity hold. Writers append one change per transaction,
-without updating a counter shared by unrelated targets. Two indexed change
-probes produce a settled equality head and detect changes at or above snapshot
-xmin. Those unsettled changes conservatively hold publication until older
-transactions drain, preventing a late lower-xid commit from hiding behind a newer
-head. A task that starts and finishes during a read changes its equality fence.
-The recovery generation leads transaction ids across logical restores.
-This coarse gate keeps validity checks constant: validating every dependent
-component during an interrupted identity change would recreate the unbounded
-fanout the continuation removes. Availability during reconciliation is the
-deliberate tradeoff; population size alone never closes the gate.
+Completed unmerges can leave revoked inherited selections beyond their direct
+pair. The same continuation removes at most 100 of those selections per page,
+with each deletion applying the normal native-precedence delta. Affected reads
+remain unavailable until their own exact state is consistent; an unrelated cut
+does not need this cleanup to finish. The command's `complete` describes the
+selected Context's projection jobs and revoked-selection cleanup, and its
+`recoveryGeneration` binds that progress to the recovery cut. It does not declare
+all standing reads available or finish an identity task.
+
+Each component carries a revision under its existing target gate. Publication
+hashes that revision and the sorted set of related identity task cuts, including
+finished cuts. A task that starts and finishes during a read changes its fence,
+including a late commit with a lower transaction id. Unrelated transactions do
+not hold publication behind a database-wide snapshot horizon. The recovery
+generation invalidates reads across logical restores. Validity follows grouped
+provenance rather than a scan of the rating population; recursive metadata reads
+retain the existing statement timeout and request cancellation budget.
 The repeatable-read inventory returns candidates, component and witness in one
 SELECT: BEGIN, SET, SELECT, COMMIT per Context, plus one final fence SELECT for
 synthesis, preserving the retained nine-statement SQL contract at 100 and 101.
-The bounded projection worker prunes at most 256 settled change rows per page,
-retaining the equality head. It inspects publication readiness after committing
-its own page; neither requests nor head triggers prune or fold shared state.
-The five standing Access relations are explicit authority-cut entries in
+The final fence rechecks every selected Work/Context cut in that one fresh
+statement. Neither requests nor head triggers maintain a global publication
+counter. The eight standing Access relations are explicit authority-cut entries in
 `work/access-recovery-coverage.ts`, with their derivation and restore dependencies;
 none can be cleared independently to reopen publication.
 
 This uses PostgreSQL's [stable repeatable-read snapshot](https://www.postgresql.org/docs/18/transaction-iso.html#XACT-REPEATABLE-READ),
 [AFTER-trigger visibility](https://www.postgresql.org/docs/18/trigger-datachanges.html)
-[transaction snapshot horizon](https://www.postgresql.org/docs/18/functions-info.html#FUNCTIONS-PG-SNAPSHOT)
 and [indexed ordered limits](https://www.postgresql.org/docs/18/indexes-ordering.html).
 Stack-free checks cover owner protocol, adapter call counts and manifest
 composition; they do not establish native interruption, trigger fanout, lock
 contention or restore correctness. Public 101/102-head outcomes, delayed seals
 and graph-only loss, old retained merge snapshots, cancellation and authenticated
-corpus/backup restores still require the isolated prove phase. A surviving
+corpus/backup restores still require the isolated prove phase at the retained
+original product baseline. A surviving
 witness is not an independent maximum-position seal for all earlier heads.
 
 For standing heads sealed before additive values existed, use
