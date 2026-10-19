@@ -10,7 +10,7 @@
     "fallbackUsed": false,
     "nestedAgentsUsed": false
   },
-  "status": "source review complete; report delivery checks recorded separately; product proof pending",
+  "status": "source review and report delivery complete; product proof pending",
   "conclusion": {
     "newSourceFindings": 0,
     "decision": "No new blocking source defect identified in the complete repaired request-budget slice. The predecessor P1 monitor-wait mechanism is addressed in source at the pinned head. Its required runtime release/cleanup and atomic-cut proof remains unexecuted.",
@@ -32,7 +32,10 @@
     "reportBranch": "goal/g-2817",
     "reportBranchInitialHead": "0c64d1e85b78a2b66fb072dc83929c963f738b87",
     "reportBranchInitialHeadIsAncestorOfCommittedMain": true,
-    "movingWaveReadForSource": false
+    "movingWaveReadForSource": false,
+    "reportDeliveryBase": "12f9856904dcbaedb15108e7e0005acb2ec647ff",
+    "reportDeliverySourceCommit": "76cae6de26677abc439028d633548f9d6160cb9d",
+    "reportDeliveryRebase": "task goal -- check refreshed the isolated report branch from committed main; no implementation or wave file entered the report diff. Fixed source-review pins were unchanged."
   },
   "scope": {
     "commits": [
@@ -1513,17 +1516,55 @@
       "check": "report branch provenance",
       "result": "pass",
       "method": "Initial clean goal/g-2817 HEAD 0c64d1e85b78a2b66fb072dc83929c963f738b87 is an ancestor of committed main. Source implementation was not checked out or inherited into the report diff."
+    },
+    {
+      "check": "report JSON/scope validation",
+      "result": "pass",
+      "method": "Python JSON parse, exact eight commit/24 changed-file scope, 60 pinned blob IDs, 122 native method names, nine capture-case records, staged evidence digests and zero new findings; git diff --check."
+    },
+    {
+      "check": "task docs:check",
+      "result": "pass",
+      "job": "8f636491-f1e9-469f-a06d-06e1cc295a37",
+      "log": ".temp/goal/jobs/8f636491-f1e9-469f-a06d-06e1cc295a37.1.log",
+      "detail": "13 documentation tests passed; 225 Markdown files checked. Local links/fragments/design navigation; no runtime or external URL verification."
+    },
+    {
+      "check": "task goal -- check",
+      "result": "pass",
+      "job": "8f636491-f1e9-469f-a06d-06e1cc295a37",
+      "log": ".temp/goal/jobs/8f636491-f1e9-469f-a06d-06e1cc295a37.2.log",
+      "checkOutput": ".temp/goal/check/run-vcKsEj/output.log",
+      "detail": "Report-only paths: AST passed; selected repository guard 1/44, 1 file and 2 tests passed. Types/lint had no source/workspace changes; brief selected no test files. The runner refreshed from committed main and installed changed dependencies. No stack/native/product test ran."
+    },
+    {
+      "check": "post-gate report-only diff",
+      "result": "pass",
+      "method": "git diff --name-status 12f9856904dcbaedb15108e7e0005acb2ec647ff..HEAD contained only the added claimed report; worktree clean before recording delivery metadata."
     }
   ],
   "reportDeliveryChecks": {
-    "status": "pending recorded Task jobs",
-    "productTestsSelected": [],
-    "required": [
-      "task docs:check",
-      "task goal -- check"
-    ],
+    "status": "passed",
+    "job": "8f636491-f1e9-469f-a06d-06e1cc295a37",
     "recordingCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
-    "note": "Main goalctl code owns recording/wake behavior; commands execute from this isolated worktree. No brief tests are selected. These are report-delivery checks only."
+    "checkedReportCommit": "76cae6de26677abc439028d633548f9d6160cb9d",
+    "commands": [
+      {
+        "command": "task docs:check",
+        "exit": 0,
+        "log": ".temp/goal/jobs/8f636491-f1e9-469f-a06d-06e1cc295a37.1.log",
+        "result": "13 tests and 225 Markdown files passed"
+      },
+      {
+        "command": "task goal -- check",
+        "exit": 0,
+        "log": ".temp/goal/jobs/8f636491-f1e9-469f-a06d-06e1cc295a37.2.log",
+        "result": "AST and selected repository guard (1 file, 2 tests) passed; no brief tests selected"
+      }
+    ],
+    "combinedLog": ".temp/goal/jobs/8f636491-f1e9-469f-a06d-06e1cc295a37.log",
+    "productTestsSelected": [],
+    "note": "Main goalctl code recorded both ordered Task commands from this worktree. The following metadata-only commit records their results; it changes no review finding or implementation. No passing worker test or prohibited proof was repeated."
   },
   "retainedEvidence": {
     "predecessorRoot": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/reviews/request-budget-g2813/",
