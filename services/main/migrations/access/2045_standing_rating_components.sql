@@ -49,12 +49,12 @@ CREATE INDEX rating_standing_component_unvalued ON access.rating_standing_compon
 
 INSERT INTO access.rating_standing_contribution
   (context,main_version,principal_id,effective_slot,origin_main_version,origin_slot,value,value_known,admission_id)
-SELECT h.context,h.main_version,h.principal_id,h.slot,h.main_version,h.slot,NULL,false,h.admission_id
+SELECT h.context,h.main_version,h.principal_id,h.slot,h.main_version,h.slot,NULL::numeric,false,h.admission_id
 FROM access.rating_aggregate_head h
 WHERE h.target_release IS NULL AND h.slot = access.rating_standing_slot(h.principal_id,h.context,h.main_version)
 UNION ALL
 SELECT s.context,s.main_version,s.principal_id,access.rating_standing_slot(s.principal_id,s.context,s.main_version),
-  s.origin_main_version,s.origin_slot,NULL,false,h.admission_id
+  s.origin_main_version,s.origin_slot,NULL::numeric,false,h.admission_id
 FROM access.rating_merge_selection s
 LEFT JOIN access.rating_aggregate_head h ON (h.context,h.main_version,h.slot) = (s.context,s.origin_main_version,s.origin_slot)
 WHERE NOT EXISTS (SELECT 1 FROM access.rating_aggregate_head n
