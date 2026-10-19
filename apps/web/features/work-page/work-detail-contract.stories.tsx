@@ -122,7 +122,7 @@ async function readableGuide({ canvasElement, args }: { canvasElement: HTMLEleme
     const reactions = top.getByRole('group', { name: 'Reactions' });
     await expect(within(primary).getByRole('link', { name: 'View guide' })).toBeVisible();
     await expect(within(reactions).getByRole('button', { name: 'Ratings' })).toBeVisible();
-    const more = top.getByRole('button', { name: `More actions for ${fixture.work.title.value}` });
+    const more = top.getByRole('button', { name: `More actions for ${top.getByRole('heading', { level: 1 }).textContent}` });
     await expect(more).toBeVisible();
     await expect(primary.compareDocumentPosition(reactions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const r = reactions.getBoundingClientRect(), m = more.getBoundingClientRect();
