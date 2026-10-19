@@ -25,7 +25,7 @@ export function workFactsSelection(workRef: WorkAt, pageUrl?: string | null) {
   const page = new URL(pageUrl ?? workHref(workRef), 'https://work.invalid');
   const values = page.searchParams.getAll('statements');
   const cursors = parseEntityCursors({ statements: values.length > 1 ? values : values[0] });
-  const cursor = cursors?.statements;
+  const { statements: cursor } = cursors ?? {};
   const invalid = cursors === null;
   const resource = standaloneHrefFor({}, workHref(workRef));
   const hrefFor: HrefFor = link => {
