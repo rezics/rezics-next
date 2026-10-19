@@ -4579,6 +4579,12 @@ process.exit(0);
       const refused = r.run(['resume', id, '-m', 'third fix', '--fresh', '--force-usage']);
       expect(refused.status).toBe(1); expect(refused.stderr).toContain('two fix rounds exhausted');
       expect(r.ledger().tasks[id]!.attempts).toHaveLength(5);
+      const resumed = r.run(['resume', id, '--class', 'sameScope', '-m',
+        'Same claims, outcome, authority and acceptance. Correct the retained focus failure.']);
+      expect(resumed.status, resumed.stderr).toBe(0);
+      r.workers.set(id, await waitForWorkerReady(join(r.dir, '.temp/ready', id), r.workers.get(id)!.worker));
+      await r.stopFixture(id);
+      expect(r.ledger().tasks[id]!.attempts.at(-1)).toMatchObject({ round: 'fix', resumeClass: 'sameScope' });
       // Landing that partial fix authorizes the next step even though no further fix is authorized.
       const ledger = r.ledger(); const task = ledger.tasks[id]!;
       task.state = 'merged';

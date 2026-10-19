@@ -30,7 +30,7 @@ export interface Attempt {
   /** Why settlement continued an ended worker attempt without a manager resume. */
   continuedFor?: 'transport' | 'capacity' | 'handoff' | 'job';
   jobResult?: JobResultClass;
-  resumeClass?: 'baselineRed' | 'environment' | 'fixRound';
+  resumeClass?: 'baselineRed' | 'environment' | 'fixRound' | 'sameScope';
 }
 export interface Task extends Omit<Brief, 'worktree'> {
   brief: string; worktree: string; branch: string; base: string; state: State; attempts: Attempt[];

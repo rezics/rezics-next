@@ -242,7 +242,7 @@ async function main(argv: string[]): Promise<number> {
       }
       console.error('Usage: goalctl goal start <slug> --manager <session> [--adopt] [--allow-area] | goal close <slug> [--dry-run]'
         + ' | new [--goal <slug>] <title> | dispatch <G-id|brief.md> [--engine <engine>] [--dry-run] [--force-usage] [--allow-area]'
-        + ' | wait <id> | owner <path> | reclaim <id> <brief> [--allow-area] | resume <id> (-m <text> | --file <path>) [--effort e] [--class baselineRed|environment|fixRound]'
+        + ' | wait <id> | owner <path> | reclaim <id> <brief> [--allow-area] | resume <id> (-m <text> | --file <path>) [--effort e] [--class baselineRed|environment|fixRound|sameScope]'
         + ` [--engine ${engineNames().join('|')}] [--fresh] [--force-usage]`
         + ' | stop <id> | scope <id> | land <id> | merge <id> [--allow-scope] [--allow-ids] [--landed] [--skip-unit-gate] [--skip-type-gate]'
         + ' | gate <id> [--skip-unit-gate] [--skip-type-gate]'
