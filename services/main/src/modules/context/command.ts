@@ -7,6 +7,8 @@ import { DATASET, GRAPHS, IdempotencyConflict, PendingActivation, RV, hash, iri,
   type WorkActivationEnvironment } from '../work/activate.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { ProjectionRefused } from '../projection/schema.ts';
+import { ContextCommandUnavailable, InvalidContextCommand } from './problems.ts';
+export { ContextCommandUnavailable, InvalidContextCommand } from './problems.ts';
 
 // One graph command family for Contexts, selections, Statements and decisions.
 // It is the classification decision pattern (classification/decision.ts and
@@ -15,8 +17,6 @@ import { ProjectionRefused } from '../projection/schema.ts';
 // terminal and replay through the receipt. The relay must register these event
 // kinds before the operations are enabled for delivery.
 
-export class InvalidContextCommand extends Error {}
-export class ContextCommandUnavailable extends Error {}
 /** The Context, Realm or rule is absent or hidden right now. The same key is re-evaluated once it is visible. */
 export class ContextCurrentVisibility extends ContextCommandUnavailable {}
 export class StaleContextCommand extends Error {}

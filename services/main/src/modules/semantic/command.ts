@@ -27,7 +27,8 @@ export type SemanticRejection = 'stale-head' | 'retired-definition' | 'unavailab
 
 export class SemanticChangeRejected extends Error {
   constructor(readonly code: 'invalid' | 'unsupported' | 'identity-axiom' | 'schema-axiom' | 'reserved-owner'
-    | 'unavailable-reference' | 'retired-definition' | 'star-violation' | 'too-large' | 'question-presentation-language-limit', message: string) { super(message); }
+    | 'unavailable-reference' | 'retired-definition' | 'star-violation' | 'too-large' | 'question-presentation-language-limit'
+    | 'invalid-association-binding' | 'immutable-meaning' | 'unsupported-model-revision', message: string) { super(message); }
 }
 
 export interface SubmittedSemanticReference {
