@@ -306,7 +306,7 @@ async function buildRecipes(api: CorpusApi, actor: string, key: string,
   authorize: (scope: string, action: string) => Promise<void>,
   importFile: (key: string, actor: string, composition: RecipeCompositionReceipt,
     file: Record<string, unknown>, signal: AbortSignal) => Promise<RecipeFileImportReceipt>,
-  signal: AbortSignal) {
+  signal: AbortSignal, sources = launchRecipeSources()) {
   await authorize(`agent:control:${actor}`, 'agent.control');
   await authorize('space:create:root', 'space.create');
   const space = await api.command<{ space: string; realm: string }>(`${key}:space`, {
@@ -331,7 +331,6 @@ async function buildRecipes(api: CorpusApi, actor: string, key: string,
   await authorize(`publication:adopt:${space.realm}`, 'publication.adopt');
   await authorize(`review:decide:${space.realm}`, 'review.decide');
 
-  const sources = launchRecipeSources();
   const records: LaunchRecipeRecord[] = [];
   for (const source of sources) {
     signal.throwIfAborted();
@@ -604,7 +603,8 @@ async function buildRecipesApiBackup(withBook = false) {
   let relay: Pool | undefined;
   let sourceClosed = false;
   let relayClosed = false;
-  let corpus: LaunchRecipesCorpus | undefined;
+  let corpus: (Pick<LaunchRecipesCorpus, 'id' | 'realm' | 'backup' | 'buildMs' | 'records' | 'sources'>
+    & { counts: Record<string, number> }) | undefined;
   let driver: ReturnType<typeof createCorpusBackupDriver> | undefined;
   let failure: unknown;
   let closePersonas: (() => Promise<void>) | undefined;
@@ -640,7 +640,8 @@ async function buildRecipesApiBackup(withBook = false) {
         });
         const page = await api.read<{ items: { id: string }[]; nextCursor: string | null }>(
           `/v1/realms/${short(corpus!.realm)}/modules/browse?limit=20`);
-        if (page.items.length !== 20 || !page.nextCursor)
+        const expected = withBook ? corpus!.records.length : 20;
+        if (page.items.length !== expected || (withBook ? page.nextCursor !== null : !page.nextCursor))
           throw new Error('Restored recipes backup did not expose its first complete browse page');
         return { stack: opened, stop: async () => opened.stop() };
       } catch (error) {
@@ -783,9 +784,8 @@ async function buildRecipesApiBackup(withBook = false) {
       }
       writeFileSync(join(evidence, 'book.json'), JSON.stringify({ ...book, ...reading, anonymous }, null, 2) + '\n', { mode: 0o600 });
     }
-    corpus = await prepareLaunchRecipesCorpus({ api, actor, backups: driver,
-      directory, preparationStartedAt, authorize,
-      importFile: async (key, actor, composition, file, signal) => {
+    const importFile = async (key: string, actor: string, composition: RecipeCompositionReceipt,
+      file: Record<string, unknown>, signal: AbortSignal): Promise<RecipeFileImportReceipt> => {
         const sourceUrl = String(file.url);
         const retained = await api.command<{ observation: { observation: string } }>(`${key}:source`, {
           method: 'POST', path: '/v1/sources/intakes', body: { profile: 'source-manual-intake-v1',
@@ -804,10 +804,29 @@ async function buildRecipesApiBackup(withBook = false) {
         }, signal);
         return { structure: composition.structure, revision: imported.revision,
           sourceObservation: retained.observation.observation, replayed: false };
-      },
-    });
-    if (JSON.stringify(corpus.counts) !== JSON.stringify(launchRecipeCounts) || corpus.records.length !== 30)
-      throw new Error('Launch recipes API build returned an incomplete corpus');
+      };
+    if (withBook) {
+      // The observed thirty-recipe attempt exhausted 600 seconds before backup.
+      // Keep a genuine small cut through the same native owner without claiming
+      // the full launch manifest or changing its thirty-recipe contract.
+      const selected = launchRecipeSources().filter(row => row.pinId === 'artusi' && row.recipeId === 'passatelli-di-carne');
+      if (selected.length !== 1) throw new Error('Missing exact pinned Artusi delivery source');
+      const remaining = Math.floor(budgetMs - (performance.now() - preparationStartedAt));
+      if (remaining <= 0) throw new Error('Book/Recipe preparation exhausted its budget before Recipe creation');
+      const signal = AbortSignal.timeout(remaining), sliceId = `${id}-book-pg1342-artusi-passatelli`;
+      const built = await buildRecipes(api, actor, sliceId, authorize, importFile, signal, selected);
+      const backup = await driver.backup(sliceId, signal);
+      signal.throwIfAborted();
+      corpus = { ...built, id: sliceId, backup, sources, buildMs: performance.now() - preparationStartedAt,
+        counts: { works: 2, books: 1, recipes: 1, chapters: 5, releases: 6,
+          ingredientLines: selected[0]!.ingredients.length, methodLines: selected[0]!.methods.length } };
+    } else {
+      const complete = await prepareLaunchRecipesCorpus({ api, actor, backups: driver,
+        directory, preparationStartedAt, authorize, importFile });
+      if (JSON.stringify(complete.counts) !== JSON.stringify(launchRecipeCounts) || complete.records.length !== 30)
+        throw new Error('Launch recipes API build returned an incomplete corpus');
+      corpus = complete;
+    }
   } catch (error) {
     failure = error;
     record({ stage: 'preparation-failed', assertionsReached: false,
@@ -828,7 +847,7 @@ async function buildRecipesApiBackup(withBook = false) {
   }
   if (failure !== undefined) throw failure;
   if (!corpus || !driver) throw new Error('Launch recipes API build did not retain its corpus');
-  writeFileSync(join(evidence, 'preparation.json'), JSON.stringify({ sourceRunId, manifest: manifestPath,
+  writeFileSync(join(evidence, 'preparation.json'), JSON.stringify({ sourceRunId, manifest: withBook ? null : manifestPath,
     backup: corpus.backup, preparationMs: corpus.buildMs, recipeWorks: corpus.records.map(row => row.work),
     book: withBook ? join(evidence, 'book.json') : null, personas: withBook ? join(evidence, 'personas.json') : null,
     execution: join(evidence, 'execution.json'), commands: join(evidence, 'commands.jsonl'),
