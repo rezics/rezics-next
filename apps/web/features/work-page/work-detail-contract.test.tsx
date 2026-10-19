@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { AppRouterContext, type AppRouterInstance } from 'next/dist/shared/lib/app-router-context.shared-runtime.js';
 import { zoneMemberHref } from '../address/path.ts';
 import { workExperience } from '../entity-page/experience.ts';
+import { SubjectSources } from '../entity-page/sources.tsx';
 import type { DisplayObligations } from '../rights-mark/rights-mark.tsx';
 import * as fixture from './fixtures.ts';
 import { messages } from './messages.ts';
@@ -291,4 +292,15 @@ test('a failed Recipe owner read preserves the named task and explanation alongs
   expect(html).toContain('role="alert"');
   expect(html).toContain(t.regionUnavailable);
   expect(html).toContain(t.retry);
+});
+
+
+test('source footer is a named contentinfo landmark and preserves supplied evidence without fabricating identity', () => {
+  const html = render(<SubjectSources locale="en"><p>Exact permitted source notice</p></SubjectSources>);
+  expect(html).toContain('<footer role="contentinfo" aria-labelledby="sources"');
+  expect(html).toContain('id="sources"');
+  expect(html).toContain('Sources and licenses');
+  expect(html).toContain('Exact permitted source notice');
+  expect(html).not.toContain('data-source-key');
+  expect(render(<SubjectSources locale="zh-Hans"><p>原始来源说明</p></SubjectSources>)).toContain('来源与许可');
 });

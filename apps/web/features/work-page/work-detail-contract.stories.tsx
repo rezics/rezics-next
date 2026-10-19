@@ -258,7 +258,7 @@ export const MixedReadFailures: Story = {
   },
 };
 
-function SourcedWork() {
+function SourcedWork({ at = fixture.workRef }: { at?: WorkAt }) {
   const t = messages.en;
   const page: StatementPage = { ...entity.statements(), factObligations: attributed, groups: [
     { predicate: 'https://schema.org/identifier', items: [{ ...entity.componentStatements.groups[0]!.items[0]!, kind: 'component-property',
@@ -279,18 +279,21 @@ function SourcedWork() {
     submitter: 'https://rezics.com/id/00000000-0000-4000-8000-000000000021', rightsBasis: 'quotation',
   }];
   const work = { ...fixture.work, factObligations: attributed, descriptionObligations: attributed };
-  return <WorkFrame workRef={fixture.workRef} work={work} credits={null} locale="en" messages={t}
+  return <WorkFrame workRef={at} work={work} credits={null} locale="en" messages={t}
     statementSources={{ ok: true, data: page }} sourceLabels={entity.predicateLabels} factObligations={[attributed]}>
     <WorkAbout work={work} messages={t} />
     <WorkFactsView page={{ ok: true, data: page }} labels={entity.predicateLabels} names={new Map()}
-      hrefFor={() => workHref(fixture.workRef)} locale="en" t={entityCopy('en')} messages={t} />
+      hrefFor={() => workHref(at)} locale="en" t={entityCopy('en')} messages={t} />
   </WorkFrame>;
 }
 export const SourcesAndEvidence: Story = {
   render: () => <SourcedWork />, globals: { viewport: { value: 'desktop1440' } },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    const sources = canvas.getByRole('region', { name: messages.en.sourcesAndEvidence });
+    const sources = canvas.getByRole('contentinfo', { name: 'Sources and licenses' });
+    await expect(canvas.getAllByRole('contentinfo')).toHaveLength(1);
+    const lastContent = canvas.getByRole('region', { name: entityCopy('en').statements });
+    await expect(lastContent.compareDocumentPosition(sources) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await expect(canvasElement.querySelectorAll('[data-work-sources]')).toHaveLength(1);
     await expect(within(sources).getAllByRole('link', { name: 'CC BY-SA 3.0' })).toHaveLength(1);
     await expect(within(sources).getByText('Open Library · works · OL123W')).toBeVisible();
@@ -316,6 +319,10 @@ export const SourcesAndEvidence: Story = {
   },
 };
 export const MobileSourcesAndEvidence: Story = { ...SourcesAndEvidence, globals: { viewport: { value: 'phone' } } };
+export const ZoneSourcesAndEvidence: Story = { ...MobileSourcesAndEvidence,
+  render: () => <SourcedWork at={zone} />,
+  parameters: { route: { pathname: workHref(zone), search: '' } },
+};
 
 export const WorkObjectMenu: Story = {
   globals: { viewport: { value: 'phone' } },
