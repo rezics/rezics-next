@@ -57,7 +57,7 @@ const valueAt = (plan: DatasetFieldPlan, path: string) =>
   at(plan, path)[0]?.native?.property?.value;
 
 describe('source field projection over retained shapes', () => {
-  test('readable Work synopsis and source-language names go to the existing metadata owner', () => {
+  test('readable Work synopsis uses its editorial owner and names use metadata', () => {
     const plan = project({
       kind: 'subject',
       native: 'work',
@@ -70,7 +70,7 @@ describe('source field projection over retained shapes', () => {
     expect(at(plan, '/data/summary')[0]).toMatchObject({
       disposition: 'candidate',
       native: {
-        owner: 'work-metadata',
+        owner: 'work-editorial',
         material: 'expression',
         property: {
           predicate: `${SCHEMA}description`,
@@ -439,13 +439,14 @@ describe('source field projection over retained shapes', () => {
   });
 
   test('native text bounds are explicit; aliases are not sliced to a command limit', () => {
-    for (const summary of ['a'.repeat(4001), 'First line.\nSecond line.']) {
+    for (const summary of ['a'.repeat(9000), 'First line.\r\nSecond line.']) {
       const plan = project({ kind: 'subject', native: 'work', data: { summary } });
       expect(at(plan, '/data/summary')[0]).toMatchObject({
-        disposition: 'unmapped',
+        disposition: 'candidate',
         evidence: [{ valueDigest: sha256(canonical(summary)) }],
       });
-      expect(at(plan, '/data/summary')[0]!.native).toBeUndefined();
+      expect(at(plan, '/data/summary')[0]!.native).toMatchObject({ owner: 'work-editorial',
+        property: { value: { lexical: summary } } });
     }
     expect(
       at(
@@ -456,7 +457,11 @@ describe('source field projection over retained shapes', () => {
         }),
         '/data/summary',
       )[0]!.disposition,
-    ).toBe('unmapped');
+    ).toBe('candidate');
+    const tooLarge = 'x'.repeat(1_048_577);
+    const retained = at(project({ kind: 'subject', native: 'work', data: { summary: tooLarge } }), '/data/summary')[0]!;
+    expect(retained.disposition).toBe('unmapped');
+    expect(retained.evidence[0]?.valueDigest).toBe(sha256(canonical(tooLarge)));
     const synopsis = 'x'.repeat(5000);
     const supporting = at(project({ data: { summary: synopsis } }), '/data/summary')[0]!;
     expect(supporting.native?.property?.value).toMatchObject({ lexical: synopsis });

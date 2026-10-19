@@ -22,6 +22,11 @@ interface RetainedRow {
   id: string; conversion_id: string; principal_id: string; record_id: string;
   request: RetainedConversionRequest; request_digest: string; normalization_revision: string;
   normalization_rule: string; created_at: Date; field_inventory: RetainedInventory[];
+  projection?: { profile: string; recordDigest: string; inventoryDigest?: string };
+}
+export interface RetainedFieldCustody {
+  request: RetainedConversionRequest; observations: StagedSourceObservation[];
+  sourceRecord: string;
 }
 
 export async function retainedFieldPlan(request: RetainedConversionRequest): Promise<DatasetFieldPlan> {
@@ -36,7 +41,8 @@ export async function retainedFieldPlan(request: RetainedConversionRequest): Pro
 }
 export async function retainedInventory(request: RetainedConversionRequest): Promise<RetainedInventory[]> {
   return (await retainedFieldPlan(request)).fields.flatMap(field => field.evidence.map(evidence => ({
-    grain: request.retained.identity.namespace, field: evidence.path.slice(1), pointer: evidence.path,
+    grain: request.retained.identity.namespace,
+    field: evidence.path.slice(1), pointer: evidence.path,
     disposition: field.disposition, reason: field.reason, role: field.role,
     ...(Object.hasOwn(evidence, 'language') ? { language: evidence.language } : {}),
     ...(evidence.ordinal !== undefined ? { ordinal: evidence.ordinal } : {}) })))
@@ -108,7 +114,8 @@ export class SourceRetainedRecordStore {
         (id,observation_id,principal_id,mapping_revision,source_digest,projection,field_inventory)
         VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (observation_id,mapping_revision) DO NOTHING RETURNING id`,
       [Bun.randomUUIDv7(), observationId, principalId, request.mappingRevision, request.retained.payload.byteDigest,
-        JSON.stringify({ profile: 'source-retained-record-projection-v1', recordDigest: request.retained.recordDigest }),
+        JSON.stringify({ profile: 'source-retained-record-projection-v1', recordDigest: request.retained.recordDigest,
+          inventoryDigest: canonicalDigest(fieldInventory) }),
         JSON.stringify(fieldInventory)]);
       const conversion = (await client.query<{ id: string }>(`SELECT id FROM source.conversion
         WHERE observation_id=$1 AND mapping_revision=$2 AND principal_id=$3`,
@@ -135,13 +142,25 @@ export class SourceRetainedRecordStore {
     return evidence?.conversion ?? null;
   }
 
+  /** Custody is checked before rights, and rights before any private mismatch
+   * diagnosis. This lookup does not claim that the retained normalization passed. */
+  async custody(principalId: string, conversionId: string): Promise<RetainedFieldCustody | null> {
+    const id = sourceId(conversionId);
+    if (!sourceId(principalId) || !id) return sourceNotFound();
+    const row = (await contentConnection(this.pool).query<RetainedRow>(
+      'SELECT * FROM source.retained_record_binding WHERE conversion_id=$1 AND principal_id=$2',
+      [id,principalId])).rows[0];
+    return row ? { request: row.request, observations: await this.observations(principalId,row.request),
+      sourceRecord: sourceIri(row.record_id) } : null;
+  }
+
   async evidence(principalId: string, conversionId: string): Promise<{
     conversion: RetainedConversion; request: RetainedConversionRequest;
     record: DatasetRecord; payload: Record<string, unknown>; rule: string; observations: StagedSourceObservation[];
   } | null> {
     const id = sourceId(conversionId);
     if (!sourceId(principalId) || !id) return sourceNotFound();
-    const row = (await contentConnection(this.pool).query<RetainedRow>(`SELECT b.*,c.field_inventory
+    const row = (await contentConnection(this.pool).query<RetainedRow>(`SELECT b.*,c.field_inventory,c.projection
       FROM source.retained_record_binding b JOIN source.conversion c ON c.id=b.conversion_id
       WHERE b.conversion_id=$1 AND b.principal_id=$2 AND c.principal_id=b.principal_id`, [id, principalId])).rows[0];
     if (!row) return null;
@@ -149,8 +168,14 @@ export class SourceRetainedRecordStore {
       || row.request_digest !== canonicalDigest({ domain: 'source-retained-record-conversion-v1', principalId, request: row.request })) return supportUnavailable();
     const observations = await this.observations(principalId, row.request);
     const verified = verifyRetainedRecord(row.request, observations);
+    // The immutable inventory is the projection made at conversion time, not a
+    // fresh projection through today's producer. New native admissions verify
+    // their exact field/value separately; a mapper update cannot rewrite replay.
     if (verified.rule !== row.normalization_rule
-      || canonicalJson(await retainedInventory(row.request)) !== canonicalJson(row.field_inventory)) return supportUnavailable();
+      || row.projection?.profile !== 'source-retained-record-projection-v1'
+      || row.projection.recordDigest !== row.request.retained.recordDigest
+      || (row.projection.inventoryDigest !== undefined
+        && row.projection.inventoryDigest !== canonicalDigest(row.field_inventory))) return supportUnavailable();
     return { conversion: result(row), request: row.request, ...verified, observations };
   }
 }

@@ -150,6 +150,7 @@ import { SourceAuthorCreditStore } from './modules/source/author-credit.ts';
 import { SourceFieldWithdrawalStore } from './modules/source/withdrawal.ts';
 import { SourceFieldAttachmentStore } from './modules/source/support-attach.ts';
 import { SourceFieldApplicationStore } from './modules/source/field-application.ts';
+import { SourceRetainedFieldSupportStore, type RetainedFieldOwners } from './modules/source/field-support-retained.ts';
 import { SourceNativeChildStore } from './modules/source/child-native-support.ts';
 import { ProviderIdentityStore } from './modules/source/provider-identity.ts';
 import { SourceScoreStore } from './modules/source/score.ts';
@@ -221,6 +222,7 @@ export interface ComposeMainOverrides {
   account?: SearchRouteDependencies['account'];
   media?: MediaDependencies;
   mediaAccess?: SearchRouteDependencies['mediaAccess'];
+  sourceRetainedOwners?: Partial<RetainedFieldOwners>;
   /** Replaces fields on the production dependency object. A new production field stays unless named here. */
   dependencies?: Partial<SearchRouteDependencies>;
 }
@@ -433,7 +435,9 @@ export async function composeMain(input: ComposeMainInput) {
   const sourceAdoptions = new SourceNativeWorkAdoptionStore(contentPool, sourceProposals,
     environment, account, access);
   const sourceCorrespondences = new SourceChildCorrespondenceStore(contentPool, sourceConversions);
-  const sourceFieldWithdrawals = new SourceFieldWithdrawalStore(contentPool, environment);
+  const sourceRetainedFieldSupports = new SourceRetainedFieldSupportStore(contentPool,environment,
+    access,sourceConversions.retained,input.overrides?.sourceRetainedOwners);
+  const sourceFieldWithdrawals = new SourceFieldWithdrawalStore(contentPool, environment,sourceRetainedFieldSupports);
   const correctionWorker = new VerificationCorrectionWorker(new VerificationCorrectionPublisher(
     new VerificationStore(contentPool), new NotificationStore(pool)));
   const accessOwners = composeAccess(pool, environment);
@@ -573,6 +577,7 @@ export async function composeMain(input: ComposeMainInput) {
     sourceAuthorCredits: new SourceAuthorCreditStore(contentPool, sourceProposals, sourceConversions,
       sourceCorrespondences, environment, account, access, sourceAuthorNames),
     sourceFieldWithdrawals,
+    sourceRetainedFieldSupports,
     sourceFieldApplications: new SourceFieldApplicationStore(contentPool, environment,
       account, access, sourceConversions, sourceAdoptions, sourceFieldWithdrawals, rightsStore),
     sourceNativeChildren: new SourceNativeChildStore(contentPool, sourceProposals, sourceConversions,

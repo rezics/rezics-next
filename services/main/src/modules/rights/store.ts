@@ -1,4 +1,5 @@
 import type { VerifiedSourceImportBinding } from '../source/native-work-adoption.ts';
+import { validSynopsisText } from '../source/field-control-language.ts';
 import { contentConnection, contentSessionClient } from '../../../../content/src/connection.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
@@ -289,22 +290,31 @@ export class RightsStore {
    * A pending Content certificate can follow a committed graph write, so it remains tainted.
    * A 65th matching support fails closed instead of making disclosure depend on a truncated result. */
   async nativeSynopsisRestricted(work: string, value: string, effects: readonly string[]): Promise<boolean> {
-    if (!agentPattern.test(work) || value.length < 1 || value.length > 8000) {
+    if (!agentPattern.test(work) || !validSynopsisText(value)) {
       throw new RightsInvalid('invalid native synopsis fence target');
     }
     const valueDigest = sha256(JSON.stringify(value));
     let rows: Array<{ record: string; observation: string }>;
     try {
       rows = (await this.content.query<{ record: string; observation: string }>(`
-        SELECT DISTINCT 'https://rezics.com/id/' || s.record_id AS record,
-          'https://rezics.com/id/' || c.observation_id AS observation
+        SELECT DISTINCT provenance.record,provenance.observation
         FROM source.field_support s
         JOIN source.field_support_step st ON st.support_id = s.id
         LEFT JOIN source.field_support_outcome out ON out.step_id = st.id
         JOIN source.conversion c ON c.id = st.conversion_id
+        LEFT JOIN source.retained_record_binding b ON b.id=st.retained_binding_id
+        CROSS JOIN LATERAL (
+          SELECT 'https://rezics.com/id/' || s.record_id AS record,
+            'https://rezics.com/id/' || c.observation_id AS observation
+          UNION ALL SELECT part->>'record',part->>'observation'
+            FROM jsonb_array_elements(COALESCE(b.request#>'{retained,intakes}','[]')) part
+          UNION ALL SELECT 'https://rezics.com/id/' || s.record_id,part->>'observation'
+            FROM jsonb_array_elements(COALESCE(b.request#>'{retained,intakes}','[]')) part
+        ) provenance
         WHERE s.target = $1 AND s.slot = 'work-editorial-field-v1#synopsis'
           AND s.context = 'global' AND st.value_digest = $2
-          AND (out.outcome = 'applied' OR out.step_id IS NULL)
+          AND (out.outcome = 'applied' OR out.step_id IS NULL
+            OR (out.outcome='attached' AND out.attachment_profile='source-field-support-attachment-v2'))
         LIMIT 65`, [work, valueDigest])).rows;
     } catch { throw new RightsUnavailable('native synopsis provenance is unavailable'); }
     if (rows.length > 64) throw new RightsUnavailable('native synopsis provenance exceeds the read bound');

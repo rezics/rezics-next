@@ -9,6 +9,7 @@ import { BANGUMI_USER_POST_FIELDS, bangumiSkipReason } from '../bangumi.ts';
 import { canonical, sha256 } from '../store.ts';
 import type { DatasetRecord, DatasetSourceReference } from '../types.ts';
 import { datasetRecordDigest } from './context.ts';
+import { validSynopsisText, suppliedLanguage, synopsisPropertyValue } from '../../../services/main/src/modules/source/field-control-language.ts';
 
 const SCHEMA = 'https://schema.org/';
 const XSD = 'http://www.w3.org/2001/XMLSchema#';
@@ -45,7 +46,7 @@ export interface DatasetNativeField {
   reason: string;
   /** A candidate is not adoption, publication, rights clearance or a support receipt. */
   native?: {
-    owner: 'work-metadata' | 'semantic' | 'statement';
+    owner: 'work-metadata' | 'work-editorial' | 'semantic' | 'statement';
     property?: SemanticProperty;
     statementValue?: StatementValue;
     predicate: string;
@@ -240,6 +241,19 @@ export function projectDatasetFields(
     };
     fields.push(item);
     if (state !== 'value') return;
+    if (role === 'description' && record.native === 'work') {
+      if (!validSynopsisText(raw)) {
+        item.disposition = 'unmapped';
+        item.reason = 'Exact synopsis exceeds the native text contract or contains unsupported controls; retained without alteration';
+        return;
+      }
+      const language = suppliedLanguage(item.evidence[0]!);
+      item.native = { owner: 'work-editorial', predicate,
+        property: { predicate, value: synopsisPropertyValue(raw, language) }, material: 'expression' };
+      item.disposition = 'candidate';
+      item.reason = 'Lossless editorial synopsis candidate; supplied language and rights admission remain independent';
+      return;
+    }
     try {
       const value = convert(raw);
       const owner =
@@ -440,6 +454,10 @@ export function projectDatasetFields(
   );
 
   if (record.provider === 'vndb') {
+    for (const key of ['name', 'original'] as const) if (Object.hasOwn(record.data,key)) {
+      text(record.data,'/data',key,key === 'name' ? 'name' : 'aliases',
+        `${SCHEMA}${key === 'name' ? 'name' : 'alternateName'}`,undefined);
+    }
     text(
       record.data,
       '/data',
@@ -616,6 +634,9 @@ export function projectDatasetFields(
         });
     }
   } else if (record.provider === 'musicbrainz') {
+    for (const key of ['name','title'] as const) if (Object.hasOwn(record.data,key)) {
+      text(record.data,'/data',key,'name',`${SCHEMA}name`,undefined);
+    }
     aliases(record.data, '/data', 'aliases');
     text(record.data, '/data', 'sort-name', 'sort-name', `${SKOS}hiddenLabel`, undefined);
     text(

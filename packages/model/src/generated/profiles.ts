@@ -1644,6 +1644,20 @@ export const profileRegistry = {
       "control"
     ]
   },
+  "work-editorial-field-v2": {
+    "sha256": "429d88dbbd5b58588b429de468905d5675fb31846743cac5e67c5c45fb235c97",
+    "file": "shapes/work-editorial-field-v2.ttl",
+    "shapes": [
+      "https://rezics.com/definition/work-editorial-field-v2/slot-shape",
+      "https://rezics.com/definition/work-editorial-field-v2/value-shape",
+      "https://rezics.com/definition/work-editorial-field-v2/control-shape"
+    ],
+    "focusRoles": [
+      "slot",
+      "value",
+      "control"
+    ]
+  },
   "work-kind-v1": {
     "sha256": "d1cfc2074299ba294307ed19b97c2641dd0197b759f06a43eb376584cbe2d1d2",
     "file": "shapes/work-kind-v1.ttl",

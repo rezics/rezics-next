@@ -56,10 +56,9 @@ export type AcknowledgedNativeBasis = {
     qualification?: Record<string, unknown> };
   acceptance: { context: string; decision: string; source: string } | null;
 } | {
-  kind: 'editorial'; owner: 'work-editorial'; target: string; component: string;
-  revision: string; receipt: string; field: 'synopsis'; value: string; language: SuppliedLanguage;
-  /** These are separate owner heads, never aliases for the content revision. */
-  workHead: string; controlHead: string; controlEpoch: string; protectionHead: string | null;
+  kind: 'component-property'; owner: 'work-editorial'; target: string; component: string;
+  revision: string; receipt: string; field: 'synopsis'; property: SemanticProperty;
+  language: SuppliedLanguage;
 };
 export interface RetainedSupportRequest {
   profile: 'source-field-support-attachment-v2'; target: string; slot: string;
@@ -77,4 +76,13 @@ export interface RetainedSupportAdmission {
 }
 export interface FieldAttachmentCertificate {
   profile: 'source-field-attachment-certificate-v1'; receipt: string; requestDigest: string; nativeReceipt: string;
+}
+/** The native owner resolves these from its actual terminal command and current
+ * state. In particular, editorial Work/control/protection heads are not the
+ * content revision named by expectedHead. */
+export interface VerifiedNativeAcknowledgement {
+  receipt: string; admissionId: string; dataEpoch: string; sequence: string;
+  scope: string; action: 'semantic.change' | 'statement.record' | 'work.edit';
+  component: string; revision: string;
+  editorial?: { workHead: string; controlHead: string; controlEpoch: string; protectionHead: string | null };
 }
