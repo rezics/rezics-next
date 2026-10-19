@@ -39,6 +39,57 @@ not established causes here. Preserve request-local query clients as described b
 [TanStack's server rendering guidance](https://tanstack.com/query/latest/docs/framework/react/guides/advanced-ssr).
 Do not close AUD-006 on the unit results alone.
 
+### Concrete startup failure and targeted runtime verification
+
+The correctly configured development launch at `92b8a78f1cb06fb4a02703f2b471b80d1d069199`
+exited 201 before listening. Cloudflare's Worker export discovery loaded
+[`address/edge.ts`](../address/edge.ts), whose eager `react-dom/server.browser`
+import selected React's throwing `react-server` export. The pre-shell recovery
+response now produces escaped native HTML without importing a React renderer.
+The server boundary test follows route, middleware and Worker imports, including
+barrels, side effects and lazy imports, to reject the same renderer boundary.
+
+After that repair, a development request exposed a separate null dispatcher in
+`useShell`'s `use`, alongside an SSR dependency optimizer reload. Vinext copied
+the top-level browser dependency includes into RSC, while SSR first discovered
+`tailwind-variants` during rendering. [`vite.config.ts`](../../vite.config.ts)
+now scopes browser includes to `client` and prepares the shared localization and
+styling helpers in both server environments. The resolved-configuration tests
+check those boundaries. This trace does not establish the cause of the original
+intermittent `Providers` / `useState` report.
+
+The targeted development launch and production build / Worker preview passed
+at clean revision `e4f628e572d0561ddb2d49b5cfbe0f50c9ccf1be`, using the shared
+development environment and its matching OAuth client fixture. Each runtime
+loaded `/en`, `/en/discover`, `/en/discover?q=book`, `/en/proposals` and
+`/en/proposals?view=review-requested` at 1415×950 and 390×950, signed out.
+All ten documents returned 200 with the expected headings and no browser errors,
+overlays or streamed error fallback markers. An absent Japanese resource with
+a trailing slash and repeated query parameters returned the localized 404
+recovery document; its actual mobile screenshot was inspected. Both frontend
+processes were stopped. No backend refresh, record preparation or API mocking
+was performed, and no credentials were retained.
+
+The retained worktree evidence is `.temp/startup/before/` for the initial
+failure, `.temp/startup/development/` for the subsequent dispatcher trace, and
+`.temp/startup/development-live-assets/` and
+`.temp/startup/production-live-assets/` for the passing runtime checks. Each
+runtime directory contains `result.json` and `web.server.log`; passing runs
+also contain `localized-address-recovery.png`. The executable proof files are
+`.temp/startup/reproduce.ts`, `.temp/startup/runtime.test.ts` and
+`.temp/startup/production.ts`. Recorded job
+`5a4e92d0-fb70-4084-a04f-dcd7719b0025` steps 1 and 2 retain the passing output.
+Raw Chromium diagnostic runs are retained separately in
+`.temp/startup/development-scoped/` and `.temp/startup/development-network/`:
+the latter captured `net::ERR_NETWORK_CHANGED` on client modules during host
+interface changes. Passing runs used the existing `serveStoryAsset` helper to
+fetch unchanged GET assets from the actual frontend. Documents and API traffic
+kept their ordinary browser transport; HTTP errors were preserved.
+
+These bounded startup and anonymous page checks do not complete the repeated
+AUD-006 matrix above, the signed-in Proposals matrix, or the navigation proof
+matrix below. Preserve those independent acceptance checks on the final wave.
+
 ## Browser proof matrix
 
 | Finding | Required journeys and assertions |
@@ -57,6 +108,9 @@ successful response.
 Stack-free regressions:
 
 - `apps/web/tests/server-client-boundary.test.ts`
+- `apps/web/tests/dependency-environments.test.ts`
+- `apps/web/tests/g-943-address.test.ts`
+- `apps/web/features/address/g-1008.test.ts`
 - `apps/web/features/proposals/list-state.test.ts`
 - `apps/web/features/shell/providers.test.tsx`
 - `apps/web/features/shell/bottom-nav.test.tsx`
