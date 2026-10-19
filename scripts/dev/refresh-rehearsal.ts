@@ -49,13 +49,28 @@ function postgresCommand(container: string, step: string, args: string[], second
 /** One in-container process group owns the entire copy wall. A signal to the
  * host must stop that group, not merely disconnect docker exec. */
 async function copyDatabase(container: string, database: string, scratch: string, user: string,
-  signal: AbortSignal): Promise<void> {
+  signal: AbortSignal, copy: { quiescent: boolean }): Promise<void> {
   const started = Date.now();
-  const pidFile = `/tmp/${scratch}.pid`;
+  const state = `/tmp/${scratch}.copy`;
   const archive = `/tmp/${scratch}.dump`;
+  // Creation precedes docker exec. Launch and cancellation serialize on gate;
+  // deleting allowed revokes even an exec that has not started its shell yet.
+  postgresCommand(container, 'arm copy', ['bash', '-ec',
+    'umask 077; mkdir "$1"; touch "$1/allowed"', '--', state]);
+  copy.quiescent = false;
   const child = spawn('docker', ['exec', '--user', 'postgres', container, 'bash', '-c',
-    'umask 077; echo $$ > "$1"; shift; exec "$@"', '--', pidFile,
+    `umask 077
+      while ! mkdir "$1/gate" 2>/dev/null; do
+        [ -d "$1" ] || exit 125
+        sleep 0.05
+      done
+      [ -f "$1/allowed" ] || { rmdir "$1/gate"; exit 125; }
+      echo $$ > "$1/pid"
+      shift; exec "$@"`, '--', state,
     'timeout', '--signal=TERM', '--kill-after=2s', `${snapshotSeconds}s`,
+    // Release only after timeout owns its process group. Cancellation cannot
+    // observe a published shell PID before that ownership is established.
+    'bash', '-ec', 'rmdir "$1/gate"; shift; exec "$@"', '--', state,
     'bash', '-c', `
       # PostgreSQL is PID 1 in its container. Reap children on group signals:
       # an orphaned exec child would otherwise be mistaken for a crashed backend.
@@ -115,35 +130,58 @@ async function copyDatabase(container: string, database: string, scratch: string
         console.log(`Rehearsal copy +${Date.now() - started}ms wait=${line}`);
     }
   }, 5_000);
-  const terminate = () => {
-    if (cancelling) return;
-    cancelling = true;
-    console.log(`Rehearsal copy +${Date.now() - started}ms cancellation=${signal.aborted ? 'signal' : 'host-wall'}`);
+  const quiesce = () => {
+    if (copy.quiescent || cancelFailed) return;
     // timeout has its own process group with the recorded PID. Never signal a
     // process by name or any PostgreSQL backend outside this exact copy.
     try {
       postgresCommand(container, 'cancel copy', ['bash', '-c',
-        `if [ -f "$1" ]; then
-          read -r pid < "$1"
+        `while ! mkdir "$1/gate" 2>/dev/null; do
+          [ -d "$1" ] || exit 1
+          sleep 0.05
+        done
+        rm -f "$1/allowed"
+        if [ -f "$1/pid" ]; then
+          read -r pid < "$1/pid"
           case "$pid" in ''|*[!0-9]*) exit 1;; esac
           [ "$pid" -gt 1 ] || exit 1
-          [ -r "/proc/$pid/stat" ] || exit 0
+          if [ ! -r "/proc/$pid/stat" ]; then
+            ! kill -0 -- "-$pid" 2>/dev/null; exit $?
+          fi
           read -r current command state parent group rest < "/proc/$pid/stat"
           [ "$current" = "$pid" ] && [ "$command" = '(timeout)' ] && [ "$group" = "$pid" ] || exit 1
           kill -TERM -- "-$pid" 2>/dev/null || true
-          sleep 2
-          # The group may disappear while the signal is handled. Recheck its
-          # leader before escalation so a reused PID cannot widen this scope.
-          if [ -r "/proc/$pid/stat" ]; then
-            read -r current command state parent group rest < "/proc/$pid/stat"
-            [ "$current" = "$pid" ] && [ "$command" = '(timeout)' ] && [ "$group" = "$pid" ] || exit 1
-            kill -KILL -- "-$pid" 2>/dev/null || true
-          fi
-        fi`, '--', pidFile]);
+          # Keep supervisors alive to reap their children. Killing the whole
+          # group with KILL orphans exec children to PostgreSQL PID 1, which
+          # treats a signalled untracked child as a server crash.
+          for attempt in {1..20}; do
+            alive=false
+            for stat in /proc/[0-9]*/stat; do
+              read -r member command state parent group rest < "$stat" 2>/dev/null || continue
+              [ "$group" = "$pid" ] && [ "$state" != Z ] && [ "$state" != X ] || continue
+              alive=true
+              if [ "$attempt" -gt 10 ] && [ "$member" != "$pid" ]; then
+                children=''
+                read -r children < "/proc/$member/task/$member/children" 2>/dev/null || true
+                [ -n "$children" ] || kill -KILL "$member" 2>/dev/null || true
+              fi
+            done
+            [ "$alive" = false ] && exit 0
+            sleep 0.1
+          done
+          exit 1
+        fi`, '--', state]);
+      copy.quiescent = true;
     } catch { cancelFailed = true; }
     // The container group has its own termination above. Bound a broken Docker
     // transport too; disconnecting it alone is never the cleanup mechanism.
     child.kill('SIGKILL');
+  };
+  const terminate = () => {
+    if (cancelling) return;
+    cancelling = true;
+    console.log(`Rehearsal copy +${Date.now() - started}ms cancellation=${signal.aborted ? 'signal' : 'host-wall'}`);
+    quiesce();
   };
   signal.addEventListener('abort', terminate, { once: true });
   const wall = setTimeout(terminate, (snapshotSeconds + 3) * 1000);
@@ -162,7 +200,9 @@ async function copyDatabase(container: string, database: string, scratch: string
     clearTimeout(wall);
     clearInterval(observe);
     signal.removeEventListener('abort', terminate);
-    postgresCommand(container, 'copy bookkeeping cleanup', ['rm', '-f', pidFile, archive]);
+    quiesce();
+    if (!copy.quiescent) throw new Error('Rehearsal container cancellation unconfirmed; disposable copy bookkeeping retained');
+    postgresCommand(container, 'copy bookkeeping cleanup', ['rm', '-rf', state, archive]);
   }
 }
 
@@ -177,7 +217,9 @@ export async function snapshotRefreshDatabase(container: string, sourceUrl: stri
     throw new Error('Rehearsal requires an owner database URL');
   const scratch = `rezics_rehearsal_${randomBytes(12).toString('hex')}`;
   const controller = new AbortController();
+  const copy = { quiescent: true };
   const drop = () => {
+    if (!copy.quiescent) throw new Error('Rehearsal copy termination unconfirmed; disposable database and bookkeeping retained');
     // Wait for termination acknowledgement before DROP's backend check. The
     // same five-second wall covers both operations and only this random copy's
     // sessions qualify, including a migration interrupted inside a transaction.
@@ -192,7 +234,7 @@ export async function snapshotRefreshDatabase(container: string, sourceUrl: stri
       echo 'REHEARSAL cleanup done' >&2
     `, '--', scratch]); }
     finally { postgresCommand(container, 'copy bookkeeping cleanup',
-      ['rm', '-f', `/tmp/${scratch}.pid`, `/tmp/${scratch}.dump`]); }
+      ['rm', '-rf', `/tmp/${scratch}.copy`, `/tmp/${scratch}.dump`]); }
   };
   const removeHooks = () => {
     process.removeListener('exit', onExit);
@@ -216,11 +258,13 @@ export async function snapshotRefreshDatabase(container: string, sourceUrl: stri
   process.once('exit', onExit);
   process.on('SIGINT', onSignal);
   process.on('SIGTERM', onSignal);
-  const dispose = async () => { drop(); removeHooks(); };
+  const dispose = async () => {
+    try { drop(); } finally { removeHooks(); }
+  };
   try {
     postgresCommand(container, 'create', ['createdb', '--host=/var/run/postgresql',
       '--username=postgres', '--template=template0', '--owner', user, scratch]);
-    await copyDatabase(container, database, scratch, user, controller.signal);
+    await copyDatabase(container, database, scratch, user, controller.signal, copy);
     source.pathname = `/${scratch}`;
     return { url: source.toString(), dispose };
   } catch (error) {
