@@ -583,6 +583,33 @@ test('later Collection entry or member-name failures keep the initial document u
   }
 });
 
+test('a Collection withheld during entry or member rendering keeps the initial document missing', async () => {
+  const { default: NotFoundPage } = await import('../../app/[locale]/e/[ref]/not-found.tsx');
+  const request = new Request(new URL(localizedPath(resourceHref('/e/', fixture.iri('900')), 'en'), 'https://rezics.test'));
+  const props = { params: Promise.resolve({ ref: fixture.iri('900').slice(-36) }), searchParams: Promise.resolve({}) };
+  for (const phase of ['entry', 'members']) {
+    privateCollection = phase === 'entry';
+    collectionStatus = phase === 'members' ? 404 : 200;
+    const response = await originalTransport.withServerRequest(request, async () => {
+      try {
+        await EntityRoute(props);
+        throw new Error('An undisclosed Collection must stop at notFound');
+      } catch (error) {
+        expect(error).toMatchObject({ digest: expect.stringMatching(/^NEXT_HTTP_ERROR_FALLBACK;404$|^NEXT_NOT_FOUND$/) });
+        const missing = new Response(await renderToReadableStream(await NotFoundPage()), {
+          status: 404, headers: { 'content-type': 'text/html' },
+        });
+        return originalTransport.serverDocumentResponse(request, missing);
+      }
+    });
+    expect(response.status).toBe(404);
+    expect(response.headers.get('retry-after')).toBeNull();
+    const markup = await response.text();
+    expect(markup).toContain('<h1');
+    expect(markup).not.toContain('Public reading list');
+  }
+});
+
 test('a moved group continuation restarts within its group and retains unrelated task selections', async () => {
   const current = `${localizedPath(resourceHref('/e/', fixture.iri('900')), 'en')}?after=stale&parent=${encodeURIComponent(fixture.iri('9'))}&language=sv&tag=a&tag=b`;
   const markup = await markupOf(createElement(PublicCollectionPage, {
