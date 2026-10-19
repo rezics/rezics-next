@@ -116,6 +116,7 @@ export const SaveEmailDigest: Story = {
 function saveScenario(topic: (typeof settingsNotificationTopics)[number], firstStatus: 200 | 503 | 409,
   phone: boolean, recover = false, savingOnly = false, refreshFails = false): Story {
   let release: () => void;
+  let releaseRefresh: () => void;
   let commands: Record<string, unknown>[];
   return {
     args: { preview: false },
@@ -125,6 +126,7 @@ function saveScenario(topic: (typeof settingsNotificationTopics)[number], firstS
       let revision = '7';
       let failedRead = false;
       const gate = new Promise<void>(resolve => { release = resolve; });
+      const refreshGate = new Promise<void>(resolve => { releaseRefresh = resolve; });
       const prior = globalThis.fetch;
       globalThis.fetch = (async (_url, init) => {
         if (init?.method === 'PUT') {
@@ -141,6 +143,7 @@ function saveScenario(topic: (typeof settingsNotificationTopics)[number], firstS
           failedRead = true;
           return new Response(null, { status: 503 });
         }
+        if (revision === '8' && refreshFails) await refreshGate;
         return Response.json({ items: settingsNotificationTopics.flatMap(topic => notificationChannels.map(channel => ({
           purpose: topic.startsWith('proposal') || topic.endsWith('requested') ? 'governance'
             : ['new-work', 'new-release', 'followed-chapter', 'collection-change'].includes(topic) ? 'subscription' : 'social',
@@ -148,7 +151,7 @@ function saveScenario(topic: (typeof settingsNotificationTopics)[number], firstS
             ? 'disabled' : 'enabled', revision,
         }))) });
       }) as typeof fetch;
-      return () => { release(); globalThis.fetch = prior; };
+      return () => { release(); releaseRefresh(); globalThis.fetch = prior; };
     },
     async play({ canvasElement }) {
       const canvas = within(canvasElement);
@@ -182,8 +185,12 @@ function saveScenario(topic: (typeof settingsNotificationTopics)[number], firstS
       }
       if (recover) {
         if (refreshFails) {
-          await userEvent.click(cell.getByRole('button', { name: `${englishMessages.reviewLatest} · ${name}` }));
+          cell.getByRole('button', { name: `${englishMessages.reviewLatest} · ${name}` }).focus();
+          await userEvent.keyboard('{Enter}');
+          await waitFor(() => expect(status).toHaveTextContent(englishMessages.notificationRefreshing));
+          releaseRefresh();
           await waitFor(() => expect(status).toHaveTextContent(englishMessages.notificationConflict));
+          await expect(cell.getByRole('button', { name: `${englishMessages.notificationEnable} · ${name}` })).toHaveFocus();
           await expectFeedbackInViewport(status);
           await expect(commands).toHaveLength(1);
         }

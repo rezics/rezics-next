@@ -39,18 +39,21 @@ async function expectBusyDraftReadable(content: ReturnType<typeof within>, searc
 }
 
 function preferenceScenario(firstStatus: 200 | 503 | 409, phone: boolean,
-  trigger: 'privacy' | 'spoiler' = 'privacy', savingOnly = false, refreshFails = false): Story {
+  trigger: 'privacy' | 'spoiler' = 'privacy', savingOnly = false, refreshFails = false,
+  refreshOptions: { failAgain?: boolean; moveFocus?: boolean; unowned?: boolean } = {}): Story {
   let release: () => void;
+  let releaseRefresh: () => void;
   let commands: Record<string, unknown>[];
   return {
     globals: { viewport: { value: phone ? 'phone' : 'desktop1440' } },
     async beforeEach() {
       commands = [];
-      let failedRead = false;
+      let refreshReads = 0;
       let saved: PersonPreferences = { profile: 'person-preferences-v1', profileVisibility: 'public',
         followPolicy: 'everyone', hideReadingActivity: false, contentLanguages: ['ja', 'en'],
         spoilerPolicy: 'hide-unread', version: 7, blockedPeople: [] };
       const gate = new Promise<void>(resolve => { release = resolve; });
+      const refreshGate = new Promise<void>(resolve => { releaseRefresh = resolve; });
       const prior = globalThis.fetch;
       globalThis.fetch = (async (input, init) => {
         const path = new URL(input instanceof Request ? input.url : String(input), window.location.href).pathname;
@@ -65,9 +68,11 @@ function preferenceScenario(firstStatus: 200 | 503 | 409, phone: boolean,
             }
             const { actingSubject: _subject, expectedVersion: _version, ...values } = body;
             saved = { ...saved, ...values, version: saved.version + 1 };
-          } else if (saved.version === 8 && refreshFails && !failedRead) {
-            failedRead = true;
-            return new Response(null, { status: 503 });
+          } else if (saved.version === 8 && refreshFails) {
+            refreshReads++;
+            if (refreshReads === 1) return new Response(null, { status: 503 });
+            await refreshGate;
+            if (refreshOptions.failAgain && refreshReads === 2) return new Response(null, { status: 503 });
           }
           return Response.json(saved);
         }
@@ -79,7 +84,7 @@ function preferenceScenario(firstStatus: 200 | 503 | 409, phone: boolean,
         if (path.endsWith('/notification-preferences')) return Response.json({ items: [] });
         throw new Error(`Unexpected fixture request: ${path}`);
       }) as typeof fetch;
-      return () => { release(); globalThis.fetch = prior; };
+      return () => { release(); releaseRefresh(); globalThis.fetch = prior; };
     },
     async play({ canvasElement }) {
       const canvas = within(canvasElement);
@@ -127,8 +132,27 @@ function preferenceScenario(firstStatus: 200 | 503 | 409, phone: boolean,
         await expect(canvas.queryByText(t.personSaved)).not.toBeInTheDocument();
         if (refreshFails) {
           await expect(search).toBeDisabled();
-          await userEvent.click(canvas.getByRole('button', { name: t.reviewLatest }));
+          const review = canvas.getByRole('button', { name: t.reviewLatest });
+          const elsewhere = canvas.getByRole('combobox', { name: t.themeLabel });
+          if (refreshOptions.unowned) {
+            elsewhere.focus();
+            review.click();
+          } else {
+            review.focus();
+            await userEvent.keyboard('{Enter}');
+          }
+          await waitFor(() => expect(canvas.getByRole('status')).toHaveTextContent(t.personRefreshing));
+          if (refreshOptions.moveFocus) elsewhere.focus();
+          releaseRefresh();
+          if (refreshOptions.failAgain) {
+            await waitFor(() => expect(canvas.getByRole('status')).toHaveTextContent(t.personRefreshFailed));
+            await expect(canvas.getByRole('button', { name: t.reviewLatest })).toHaveFocus();
+            await userEvent.keyboard('{Enter}');
+          }
           await waitFor(() => expect(canvas.getByRole('status')).toHaveTextContent(t.personConflict));
+          const retry = canvas.getByRole('button', { name: t.retrySave });
+          await expect(retry).toBeEnabled();
+          await expect(refreshOptions.moveFocus || refreshOptions.unowned ? elsewhere : retry).toHaveFocus();
           await expect(commands).toHaveLength(1);
         }
         await userEvent.click(canvas.getByRole('button', { name: t.retrySave }));
@@ -159,3 +183,9 @@ export const SavingPreferencesPhone: Story = preferenceScenario(200, true, 'priv
 export const FailedSaveRetainsDraft: Story = preferenceScenario(503, true);
 export const ConflictRetainsDraft: Story = preferenceScenario(409, false);
 export const ConflictRefreshFailure: Story = preferenceScenario(409, true, 'spoiler', false, true);
+export const ConflictRefreshFailureAgain: Story = preferenceScenario(409, false, 'privacy', false, true,
+  { failAgain: true });
+export const ConflictRefreshKeepsOtherFocus: Story = preferenceScenario(409, false, 'privacy', false, true,
+  { moveFocus: true });
+export const ConflictRefreshLeavesUnownedFocus: Story = preferenceScenario(409, true, 'spoiler', false, true,
+  { unowned: true });

@@ -6,6 +6,7 @@ import { Field, FieldHelper, FieldLabel } from '@rezics/ui/field';
 import { Switch } from '@rezics/ui/switch';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { SettingsMessages } from './messages.ts';
+import { useRecoveryFocus } from './use-recovery-focus.ts';
 
 export const notificationChannels = ['inbox', 'push', 'email'] as const;
 type Channel = (typeof notificationChannels)[number];
@@ -131,6 +132,7 @@ export function NotificationSettings({
   );
   const [status, setStatus] = useState('');
   const [saving, setSaving] = useState('');
+  const recoveryFocus = useRecoveryFocus(!!saving);
   const inFlight = useRef(false);
   const feedbackId = useId();
   const [feedback, setFeedback] = useState<Record<string, ChoiceFeedback>>({});
@@ -209,6 +211,7 @@ export function NotificationSettings({
   };
   const reviewLatest = async (choice: NotificationChoice, checked: boolean) => {
     if (inFlight.current || preview) return;
+    recoveryFocus.remember();
     inFlight.current = true;
     const key = `${choice.topic}:${choice.channel}`;
     activeChoice.current = key;
@@ -288,7 +291,8 @@ export function NotificationSettings({
                           {result ? feedbackText(result.state) : ''}
                         </FieldHelper>
                         {choice && result && ['failed', 'conflict', 'refresh-failed'].includes(result.state) ?
-                          <Button type="button" variant="soft" size="sm"
+                          <Button ref={key === activeChoice.current ? recoveryFocus.target : undefined}
+                            type="button" variant="soft" size="sm"
                             className="h-auto min-h-9 max-w-full whitespace-normal px-2 py-1 text-center"
                             disabled={!!saving || preview}
                             aria-label={`${retryLabel} · ${label} · ${channelLabel}`}
