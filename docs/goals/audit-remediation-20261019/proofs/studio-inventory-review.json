@@ -1,9 +1,9 @@
 {
   "goal": "audit-remediation-20261019",
   "worker": "G-2848",
-  "reportVersion": 3,
-  "reportedAtUtc": "2026-10-19T10:59:12.728718+00:00",
-  "result": "partial: genuine Curated marker histories and six actual Work focus rings proved; two Details rings obscured by SSR error, and authorized backend rejects current inventory query/count contract",
+  "reportVersion": 4,
+  "reportedAtUtc": "2026-10-19T11:26:53.503434+00:00",
+  "result": "partial: exact two-file WorkMaintainers SSR correction approved; two missing genuine Details390/1440 rings now visibly proved; prior six rings/Curated histories preserved; original Studio inventory/title/count acceptance remains separately unproved",
   "reviewer": {
     "engine": "codex-1",
     "model": "GPT-6.1 Sol",
@@ -6376,5 +6376,910 @@
     },
     "completionBoundary": "Partial. The originally missing genuine Curated marker histories are now proved and six genuine Work rings visibly pass. Two Details visible-ring cases remain unproved due to the observed SSR error overlay. Required current product inventory/title/count behavior is not proved by the incompatible75409 API, aggregate complete flags, or recorded3章 placeholders. Original af37/9e evidence and all independent original acceptance distinctions remain intact.",
     "next": "Manager route the two precise runtime composition/SSR issues to the existing owners, preserving this reviewer and all unchanged proof. Remaining narrow UI assertion is unobscured actual Details focus ring at390/1440. No unchanged suite, fresh catalogue, full AMGT rerun, new reviewer or new contract requested."
+  },
+  "maintainersSsrCorrectionVerification": {
+    "reportedAtUtc": "2026-10-19T11:26:53.503434+00:00",
+    "authority": "Same original claims/outcome/authority/acceptance. Manager sameScope correction authorizes only the two WorkMaintainers source/test files and the two original Details390/1440 visible-ring assertions. Existing source review and all passing story/DOM/genuine proof retained; no second reviewer or nested agent.",
+    "historicalReadingRule": "This appended section is the latest verdict only for the two-file SSR correction and previously obscured Details rings. All earlier af37,9e,c43 failures, setup limits and source/runtime distinctions remain historical evidence at their recorded pins. Earlier Details obscuration is not a defect reproduced on acaf.",
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "sameIndependentReviewer": true,
+      "candidateAuthoredByReviewer": false,
+      "additionalReviewerCommissioned": false,
+      "nestedAgents": 0,
+      "accountOrModelFallback": false
+    },
+    "preservedReport": {
+      "commit": "7515ee6729465f55031090ac31245d7f63f52b7d",
+      "sha256": "94ac85d93c376238013b70d7f3b59f62dcb88cdc5784ca58cd34d9e3aeff4cc0",
+      "allExistingSectionsUnchanged": true,
+      "rootMetadataOnlyChanges": [
+        "reportVersion",
+        "reportedAtUtc",
+        "result"
+      ],
+      "priorSectionsInclude": "Original24-path review/checks, both continuation resolutions, four changed stories,20DOM/24viewedPNGs, Curated390 four histories, six real Work rings, all original source/acceptance distinctions and historical failures."
+    },
+    "pins": {
+      "reviewedSource": {
+        "base": "6430441893f5c3609efd97b3921a21a85eab0707",
+        "head": "c108a658a37676c1497fb501924fa5c90ab567a9",
+        "tree": "835fa89f076264dd3891a8581590b76dbe22bb20",
+        "onlyPaths": [
+          "apps/web/features/work-maintainers/api.ts",
+          "apps/web/tests/work-maintainers.test.tsx"
+        ],
+        "cleanExactExternalBeforeRead": true,
+        "cleanExactExternalAfterChecks": true,
+        "fileChecks": [
+          {
+            "path": "apps/web/features/work-maintainers/api.ts",
+            "blobsByPin": {
+              "6430441893f5c3609efd97b3921a21a85eab0707": "3a0e98f11309d4b58bb2fb39227be4ce07b60b7d",
+              "c43a05f": "3a0e98f11309d4b58bb2fb39227be4ce07b60b7d",
+              "c108a658": "f8893695baa34866f8d796b2ec120b57ee51550d",
+              "acaf46bd": "f8893695baa34866f8d796b2ec120b57ee51550d"
+            },
+            "sha256": "f0ddb5777c55addc9235f40f3b7cc449b961031f2e9e52f0d10709b6d6e1c1ad"
+          },
+          {
+            "path": "apps/web/tests/work-maintainers.test.tsx",
+            "blobsByPin": {
+              "6430441893f5c3609efd97b3921a21a85eab0707": "e4fe6e8707d4f94e4b147f0ee31dfdf21200fba0",
+              "c43a05f": "e4fe6e8707d4f94e4b147f0ee31dfdf21200fba0",
+              "c108a658": "9fe6fd6a5435c1d9cdd913e0573ba311ed29ee11",
+              "acaf46bd": "9fe6fd6a5435c1d9cdd913e0573ba311ed29ee11"
+            },
+            "sha256": "20dd6672c03fed72486d71d2d959a08e803b3e7b90df28043efd32868f7cb77a"
+          }
+        ]
+      },
+      "productFrontendRuntime": {
+        "head": "acaf46bd6962a337aa03f429b127b9f4076320f1",
+        "parent": "c43a05f54b8f80db57028ab08efc4dd277ad739d",
+        "tree": "06f2c9872822af6275fdd9273f6de531686257eb",
+        "ownedCheckClone": ".temp/studio-review/source",
+        "onlySameTwoPathsDifferFromParent": true,
+        "allOtherC43BytesPreserved": true,
+        "bothBeforeBlobsEqualActualMain643": true,
+        "sameStablePatchId": "4523331f8d242591cd4c1464082849498cf46ef2",
+        "cleanExactOwnedAndExternalAfterChecks": true
+      },
+      "runtimeMain": {
+        "commit": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "actualPointer": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "readinessStatus": 200,
+        "readyAtUtc": "2026-10-19T11:23:07.520Z",
+        "compatibility": "Existing75409 backend compatible with these unchanged Work exact/maintainer/profile reads, each actually200. No new Studio inventory contract compatibility inferred; the prior q/sort400 mismatch remains separately recorded."
+      },
+      "nativeImage": {
+        "tag": "rezics/fuseki:6.2.0-cmd0.5.39-5bc9e305cb80",
+        "imageId": "sha256:028a5b9ceefbb15dc98b2f91085e00c4e4bcb1485ac5b197e6d29f1f020f49b2"
+      },
+      "test": {
+        "file": "apps/web/tests/work-maintainers.test.tsx",
+        "blob": "9fe6fd6a5435c1d9cdd913e0573ba311ed29ee11",
+        "runOn": "acaf46bd6962a337aa03f429b127b9f4076320f1",
+        "productionOrAssertionOverlay": false
+      },
+      "runner": {
+        "productAndUnitRunnerSource": "acaf46bd6962a337aa03f429b127b9f4076320f1",
+        "recordedJobAndWakeOwner": "main Goalctl as explicitly instructed",
+        "recordedJobScript": "/home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts",
+        "browserHarnesses": [
+          {
+            "path": ".temp/studio-review/maintainers-ssr.ts",
+            "sha256": "70a2b98f5768c4f29aeb7d3b0eb874b905fdb32546677ae7845d57953e8d5f3a",
+            "bytes": 12518
+          },
+          {
+            "path": ".temp/studio-review/maintainers-ssr-auth-recovery.ts",
+            "sha256": "ab8686d82f056dacda7285b30b9d59ade133ec36fa9e0126b741e97da02f2915",
+            "bytes": 13082
+          }
+        ],
+        "noTestAssertionOrPendingDeclarationChanges": true
+      },
+      "configuration": {
+        "web": "http://127.0.0.1:43149",
+        "main": "http://127.0.0.1:3001",
+        "accounts": "http://127.0.0.1:3004",
+        "issuer": "http://127.0.0.1:3004/api/auth",
+        "resource": "https://main.rezics.test",
+        "clientId": "QiHpuGHytLRPOMsszswKmWmEbBfiCkSY"
+      },
+      "schemaAndBackup": {
+        "schemaMutation": false,
+        "migrationsRun": false,
+        "restoreRun": false,
+        "newCorpusOrAuthoritySeed": false,
+        "newBackupPin": null,
+        "boundary": "Read-only reuse of same genuine retained Work for the UI-only check. Existing backup/schema/owner migration limits preserved; this correction does not establish original full inventory/count data prerequisites."
+      },
+      "managerReceipts": [
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/site-work-maintainers-ssr-candidate.json",
+          "sha256": "8e66e33ccdd48a49c41c4aa9c9aa62efae3b285df6ef3fb9ff6863d8a6bb0770",
+          "bytes": 11860
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/site-studio-maintainers-ssr-runtime-candidate.json",
+          "sha256": "583f172237edb31047bd9982a2d978fb29e0f63a4c345f9c4eda8c8cd3573a55",
+          "bytes": 4954
+        }
+      ]
+    },
+    "sourceReview": {
+      "verdict": "approve exact two-file bounded correction; no actionable source finding",
+      "pathsReviewedInFull": [
+        {
+          "path": "apps/web/features/work-maintainers/api.ts",
+          "changedLines": "71-73,77,85,104,111",
+          "finding": "none",
+          "reason": "Optional injected client lives in the adapter closure; a single lazy getter creates and memoizes browserMainApi only on an actual method request. WorkMaintainers SSR useState initialization does not access window. All four request families retain the same routes, selected actor query, request body, credentials, bounded409 profile retry, error conversion and command idempotency header."
+        },
+        {
+          "path": "apps/web/tests/work-maintainers.test.tsx",
+          "changedLines": "1-7,20-86",
+          "finding": "none",
+          "reason": "Actual no-source WorkMaintainers renderToStaticMarkup with window absent and zero fetch covers the original failure. Injected real Eden client test covers read/names/valid handle/IRI/change, same-origin, selected actor, exactly one identical profile409 retry and exact command wire. Global fetch/window state restored. Eight existing bodies retained."
+        }
+      ],
+      "scopeBoundary": "No repeated Studio/dependency source review, implementation edits, browserMainApi global change, panel change, authority expansion, retry expansion or new wire schema.",
+      "originalFailureAndRepair": "Previous c43 Details page threw ReferenceError window is not defined at browser.ts33 from api.ts71/panel.ts123. Producer red actual SSR test is retained. Independent unit and genuine Details renders now pass on exact new api/test blobs."
+    },
+    "checks": {
+      "independentTargetedUnit": {
+        "jobId": "job:e63fc85d-4251-48bc-9fb8-30f3880708ab",
+        "step": 1,
+        "command": "GOAL_ID=audit-remediation-20261019 bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts slot -- task --dir .temp/studio-review/source goal -- test apps/web/tests/work-maintainers.test.tsx",
+        "exit": 0,
+        "tests": 10,
+        "assertions": 58,
+        "failures": 0,
+        "durationMs": 347,
+        "outcomeBodiesReached": "Both added SSR and injected transport bodies, plus eight retained bodies; no failing/expected-failure inversion.",
+        "log": ".temp/goal/jobs/e63fc85d-4251-48bc-9fb8-30f3880708ab.1.log"
+      },
+      "firstRuntimeSetup": {
+        "jobId": "job:e63fc85d-4251-48bc-9fb8-30f3880708ab",
+        "step": 2,
+        "command": "task goal -- slot -- bun .temp/studio-review/maintainers-ssr.ts",
+        "exit": 201,
+        "classification": "setup session failure; no product focus assertion reached",
+        "exactFailure": "Error: Existing retained exact Work read HTTP 401",
+        "firstRetainedExactWorkStatus": 401,
+        "focusAssertionsReached": 0,
+        "evidence": {
+          "path": ".temp/studio-review/maintainers-ssr/runtime/evidence.json",
+          "sha256": "e3fe9f6f3c13794d1e4ed6911d65f61308e5784fe074ddebba77b318de6c5772",
+          "bytes": 4488
+        },
+        "serverStopped": true,
+        "diagnosis": "Saved BFF access session had expired; existing Account session remained valid. Supported same-fixture OAuth sign-in renewal recovered exact read200. No policy/account/grant/environment/source correction or new fixture."
+      },
+      "genuineRuntimeRecovery": {
+        "jobId": "job:57c1beb0-3b84-488a-a66b-1af402fbf958",
+        "command": "GOAL_ID=audit-remediation-20261019 task goal -- slot -- bun .temp/studio-review/maintainers-ssr-auth-recovery.ts",
+        "exit": 0,
+        "assertionsReached": 2,
+        "passed": 2,
+        "failures": 0,
+        "pageErrors": [],
+        "requestFailures": [],
+        "coldRouteRecoveryNeeded": false,
+        "log": ".temp/goal/jobs/57c1beb0-3b84-488a-a66b-1af402fbf958.log",
+        "evidence": {
+          "path": ".temp/studio-review/maintainers-ssr/runtime-auth-recovery/evidence.json",
+          "sha256": "e005a991b064dfc888c83e6b1b1918300af6c7425962d9aa5b46b8e8ab1ec0c9",
+          "bytes": 26315
+        }
+      },
+      "retainedProducerChecks": {
+        "receipt": ".temp/audit-remediation-20261019/two-hour-sprint/site-work-maintainers-ssr-candidate.json",
+        "sourcePin": "c108a658a37676c1497fb501924fa5c90ab567a9",
+        "independentArtifactVerification": {
+          "files": 26,
+          "bytes": 77504,
+          "allShaAndLengthsVerified": true,
+          "manifest": {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/site-work-maintainers-ssr-candidate/evidence-manifest.json",
+            "sha256": "0904f09d367887becec47c86943845f8728f1476119865c103d72685121f2f14",
+            "bytes": 11196
+          }
+        },
+        "commandsExitsAndResults": [
+          {
+            "kind": "SSR red",
+            "command": "GOAL_ID=audit-remediation-20261019 task goal -- slot -- task test -- apps/web/tests/work-maintainers.test.tsx --test-name-pattern 'WorkMaintainers server renders'",
+            "exit": 201,
+            "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-work-maintainers-ssr-candidate/.temp/work-maintainers-ssr/red.log",
+            "result": "0 pass, 1 fail; real WorkMaintainers render without source/window throws ReferenceError window is not defined. api.ts was unchanged baseline blob3a0e98f11309d4b58bb2fb39227be4ce07b60b7d.",
+            "logSha256": "e6d0b348a1638f31ef5e0eccc7277d4c6dbbe8d7eb529915512c004227876e67"
+          },
+          {
+            "kind": "Initial unit",
+            "command": "GOAL_ID=audit-remediation-20261019 task goal -- slot -- task test -- apps/web/tests/work-maintainers.test.tsx",
+            "exit": 0,
+            "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-work-maintainers-ssr-candidate/.temp/work-maintainers-ssr/test.log",
+            "result": "10 pass, 58 assertions before the test-spy type-only correction.",
+            "logSha256": "9f660f41c76e76d3ba5d966fd09405659d66bd17759784ba3c24e2d65f7e2437"
+          },
+          {
+            "kind": "Initial selected types",
+            "command": "GOAL_ID=audit-remediation-20261019 task goal -- slot -- <selected typeCommands[0] in selected-checks.json>",
+            "exit": 201,
+            "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-work-maintainers-ssr-candidate/.temp/work-maintainers-ssr/types.log",
+            "result": "Only TS2741 in new fetch spy: missing required Bun fetch.preconnect. Corrected test spy with Object.assign; no product behavior or policy change.",
+            "logSha256": "6500b9d64ae355054703f872d6192af709534bd79cab66b67d98547f151816de"
+          },
+          {
+            "kind": "Selected guards initial",
+            "command": "GOAL_ID=audit-remediation-20261019 task goal -- slot -- task guards -- <all ten selected guards in selected-checks.json>",
+            "exit": 201,
+            "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-work-maintainers-ssr-candidate/.temp/work-maintainers-ssr/guards.log",
+            "result": "9 files/105 tests passed; web-accepted-commands had18 pass,1 five-second timeout in production inventory under8 parallel processes. Initial failure and JUnit retained.",
+            "logSha256": "f33c4c1f45cffd79662c9d332484dd82fe61f38e45ccdea384111abeed52a62b"
+          },
+          {
+            "kind": "Only failing guard isolated",
+            "command": "GOAL_ID=audit-remediation-20261019 task goal -- slot -- task guards -- scripts/static/web-accepted-commands.test.ts",
+            "exit": 0,
+            "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-work-maintainers-ssr-candidate/.temp/work-maintainers-ssr/guards-retry-alone.log",
+            "result": "19 pass unchanged, existing five-second timeout, one process. No threshold, baseline or product-source change between guard attempts.",
+            "logSha256": "b7be4730c0c67183fe69077e48139975b92400e2f4f238c180e59996159e9ff2"
+          },
+          {
+            "kind": "Final unit",
+            "command": "GOAL_ID=audit-remediation-20261019 task goal -- slot -- task test -- apps/web/tests/work-maintainers.test.tsx",
+            "exit": 0,
+            "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-work-maintainers-ssr-candidate/.temp/work-maintainers-ssr/test-final.log",
+            "result": "10 pass, 58 assertions, 443ms. Includes actual no-source/window SSR with zero fetch and injected-client read/names/IRI/handle/command wire, selected actor, same-origin, one409 profile retry, replay response, idempotency header and expected generation.",
+            "logSha256": "4cdccfb2f31d60801d676591b2abb6fadca947897228d08501fe875859d2ffcb"
+          },
+          {
+            "kind": "Final selected types",
+            "command": "GOAL_ID=audit-remediation-20261019 task goal -- slot -- <selected typeCommands[0] in selected-checks.json>",
+            "exit": 0,
+            "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-work-maintainers-ssr-candidate/.temp/work-maintainers-ssr/types-final.log",
+            "result": "No type errors in1,675 files,14.18s. Nine explicit entries selected by workerTypeCommands; existing host CPU/memory admission retained.",
+            "logSha256": "a4b68293dd774082087bb42663f74a036464769ada78775dddb4b31cda0eef25"
+          },
+          {
+            "kind": "Final lint",
+            "command": "GOAL_ID=audit-remediation-20261019 task goal -- slot -- node_modules/.bin/oxlint apps/web/features/work-maintainers/api.ts apps/web/tests/work-maintainers.test.tsx",
+            "exit": 0,
+            "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-work-maintainers-ssr-candidate/.temp/work-maintainers-ssr/lint-final.log",
+            "result": "Affected two files passed.",
+            "logSha256": "81225ff05a904615c8049ea4e7fd482e64f4af0460397d6a6858678748c7c9ce"
+          },
+          {
+            "kind": "Final AST",
+            "command": "GOAL_ID=audit-remediation-20261019 task goal -- slot -- task ast-grep -- scan apps/web/features/work-maintainers/api.ts apps/web/tests/work-maintainers.test.tsx",
+            "exit": 0,
+            "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-work-maintainers-ssr-candidate/.temp/work-maintainers-ssr/ast-final.log",
+            "result": "Affected two files passed.",
+            "logSha256": "29128f2d34f06892c18af2ed9b4ea3ba1806cef2ecd886404df29ec0a837bfab"
+          }
+        ],
+        "selectedGuards": {
+          "typeCommands": [
+            [
+              "task",
+              "goal:type-files",
+              "--",
+              "--project",
+              "apps/web/tsconfig.json",
+              "apps/web/app/[locale]/studio/[agent]/works/[work]/page.tsx",
+              "apps/web/features/showcase/assets.d.ts",
+              "apps/web/features/work-maintainers/api.ts",
+              "apps/web/features/work-maintainers/panel.stories.tsx",
+              "apps/web/features/work-maintainers/panel.tsx",
+              "apps/web/globals.d.ts",
+              "apps/web/next-env.d.ts",
+              "apps/web/tests/work-maintainers.test.tsx",
+              "apps/web/zones/env.d.ts"
+            ]
+          ],
+          "guards": [
+            "apps/web/tests/server-client-boundary.test.ts",
+            "scripts/static/web-continuations.test.ts",
+            "scripts/static/web-accepted-commands.test.ts",
+            "scripts/static/web-acting-identity.test.ts",
+            "scripts/static/web-page-filtering.test.ts",
+            "tests/qa/unit/test-registry.test.ts",
+            "scripts/static/anti-silo.test.ts",
+            "scripts/static/mechanism-dependencies.test.ts",
+            "scripts/static/one-language-parser-debt.test.ts",
+            "scripts/static/access-fixture-writes.test.ts"
+          ],
+          "selectedGuardFiles": 10,
+          "guardResultBasis": "Nine original files/105 tests pass plus unchanged single failing file/19 tests passing alone; not a claimed clean ten-file simultaneous rerun. Product API blob remained exact finalf8893695 throughout both guard attempts; only fetch-spy type metadata changed afterward/between checks.",
+          "noWholeTierOrUnchangedNineFileRerun": true
+        },
+        "attribution": "Producer Task/admission evidence, independently hash-verified and read; not claimed as a second independent execution. Initial real SSR failure, Bun fetch.preconnect type fixture failure and one five-second guard timeout under8-way load all retained. Final units/types/lint/AST passed; nine guard files passed plus unchanged failed file passed alone. No timeout/baseline relaxation or clean simultaneous10-file rerun claimed."
+      },
+      "docsCheck": {
+        "jobId": "job:9df04614-95ef-4a68-948a-9f9476eeb0fc",
+        "command": "GOAL_ID=audit-remediation-20261019 bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task docs:check",
+        "exit": 0,
+        "tests": 13,
+        "markdownFiles": 253,
+        "log": ".temp/goal/jobs/9df04614-95ef-4a68-948a-9f9476eeb0fc.log",
+        "limit": "Local links/fragments/design navigation; no external URL/runtime acceptance. Final receipt metadata added after check and JSON/preservation validated."
+      }
+    },
+    "genuineApiStatusesAndAnswers": [
+      {
+        "method": "GET",
+        "path": "/v1/me/agents/0c0f9afd-168c-4826-97fa-5fb61eb8d605/works/01a10a71-e9d6-75b0-bbfe-136c368ec0c4",
+        "status": 200,
+        "responsePrivatePath": ".temp/studio-review/maintainers-ssr/runtime-auth-recovery/private/response-1.json",
+        "keys": [
+          "item",
+          "sourcePosition"
+        ],
+        "responseSha256": "57b29b0fd2c87a787bf6e759addf0fd1584216b03dcb326867b109b70da0b163",
+        "answer": {
+          "id": "https://rezics.com/id/01a10a71-e9d6-75b0-bbfe-136c368ec0c4",
+          "title": {
+            "value": "The Lantern Road 21ff96c6",
+            "language": "en"
+          },
+          "types": [
+            "https://schema.org/Book"
+          ],
+          "state": "published",
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          },
+          "chapterCountFieldPresent": false
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/main/v1/works/01a10a71-e9d6-75b0-bbfe-136c368ec0c4/maintainers",
+        "status": 200,
+        "browserRead": true,
+        "responsePrivatePath": ".temp/studio-review/maintainers-ssr/runtime-auth-recovery/private/browser-response-8.txt",
+        "responseSha256": "67b5e896c7d8478b3c5ce342b11a02ed99a3b296989009e81ee23da6417afa8f",
+        "answer": {
+          "work": "https://rezics.com/id/01a10a71-e9d6-75b0-bbfe-136c368ec0c4",
+          "generation": "0",
+          "maintainers": [
+            "https://rezics.com/id/0c0f9afd-168c-4826-97fa-5fb61eb8d605"
+          ],
+          "owner": "https://rezics.com/id/0c0f9afd-168c-4826-97fa-5fb61eb8d605"
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/main/v1/agents/0c0f9afd-168c-4826-97fa-5fb61eb8d605?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0c0f9afd-168c-4826-97fa-5fb61eb8d605",
+        "status": 200,
+        "browserRead": true,
+        "responsePrivatePath": ".temp/studio-review/maintainers-ssr/runtime-auth-recovery/private/browser-response-9.txt",
+        "responseSha256": "561ccafec4edabfab78fd63b70bd68c2859f75f900e6d11eaccc69bee1425b7a",
+        "answer": {
+          "profile": "agent-read-v1",
+          "id": "https://rezics.com/id/0c0f9afd-168c-4826-97fa-5fb61eb8d605",
+          "displayName": "Author Notes Writer",
+          "handle": null,
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          }
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/main/v1/works/01a10a71-e9d6-75b0-bbfe-136c368ec0c4/maintainers",
+        "status": 200,
+        "browserRead": true,
+        "responsePrivatePath": ".temp/studio-review/maintainers-ssr/runtime-auth-recovery/private/browser-response-14.txt",
+        "responseSha256": "67b5e896c7d8478b3c5ce342b11a02ed99a3b296989009e81ee23da6417afa8f",
+        "answer": {
+          "work": "https://rezics.com/id/01a10a71-e9d6-75b0-bbfe-136c368ec0c4",
+          "generation": "0",
+          "maintainers": [
+            "https://rezics.com/id/0c0f9afd-168c-4826-97fa-5fb61eb8d605"
+          ],
+          "owner": "https://rezics.com/id/0c0f9afd-168c-4826-97fa-5fb61eb8d605"
+        }
+      },
+      {
+        "method": "GET",
+        "path": "/api/main/v1/agents/0c0f9afd-168c-4826-97fa-5fb61eb8d605?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0c0f9afd-168c-4826-97fa-5fb61eb8d605",
+        "status": 200,
+        "browserRead": true,
+        "responsePrivatePath": ".temp/studio-review/maintainers-ssr/runtime-auth-recovery/private/browser-response-15.txt",
+        "responseSha256": "561ccafec4edabfab78fd63b70bd68c2859f75f900e6d11eaccc69bee1425b7a",
+        "answer": {
+          "profile": "agent-read-v1",
+          "id": "https://rezics.com/id/0c0f9afd-168c-4826-97fa-5fb61eb8d605",
+          "displayName": "Author Notes Writer",
+          "handle": null,
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          }
+        }
+      }
+    ],
+    "browserEvidence": {
+      "startedAtUtc": "2026-10-19T11:23:07.423Z",
+      "stoppedAtUtc": "2026-10-19T11:24:30.261Z",
+      "signIn": {
+        "reached": true,
+        "path": "/en",
+        "method": "Unchanged supported signInAtAccounts helper with same existing fixture after saved BFF session returned401; no account/authority/configuration preparation."
+      },
+      "authBoundary": "Existing Account session completed authorize/callback redirects; all recorded auth/identity request metadata is GET. No password/policy/role/authority preparation, new identity or fixture. Storage state remains private0600 under0700.",
+      "sessionPrivatePath": ".temp/studio-review/maintainers-ssr/runtime-auth-recovery/private/storage-state.json",
+      "executedJourneys": [
+        {
+          "case": "Details selected; actual keyboard focus ring at 390",
+          "viewport": {
+            "width": 390,
+            "height": 844
+          },
+          "url": "http://127.0.0.1:43149/en/studio/@2VP8qHKd2zVwqZcWY6FAPe/works/01a10a71-e9d6-75b0-bbfe-136c368ec0c4?tab=details",
+          "documentStatus": 200,
+          "assertionReached": true,
+          "status": "proved",
+          "journey": "Direct existing Work tab; focus Chapters then keyboard Tab to Introduction; no horizontal scrolling",
+          "nav": {
+            "x": 12,
+            "y": 465,
+            "right": 378,
+            "bottom": 511,
+            "width": 366,
+            "height": 46
+          },
+          "scrollLeft": 0,
+          "focused": {
+            "text": "Introduction",
+            "current": null,
+            "focused": true,
+            "focusVisible": true,
+            "rect": {
+              "x": 104,
+              "y": 469,
+              "right": 207,
+              "bottom": 507,
+              "width": 103,
+              "height": 38
+            },
+            "outline": "oklab(0.743933 -0.0203648 -0.0928012 / 0.5) auto 1px",
+            "outlineOffset": "1px",
+            "boxShadow": "none",
+            "outset": 2,
+            "painted": {
+              "left": 102,
+              "right": 209,
+              "top": 467,
+              "bottom": 509
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "bounds": {
+                  "left": 12,
+                  "right": 378,
+                  "top": 465,
+                  "bottom": 511
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          },
+          "selected": {
+            "text": "Details",
+            "current": "page",
+            "focused": false,
+            "focusVisible": false,
+            "rect": {
+              "x": 211,
+              "y": 469,
+              "right": 280,
+              "bottom": 507,
+              "width": 69,
+              "height": 38
+            },
+            "outline": "oklab(0.743933 -0.0203648 -0.0928012 / 0.5) none 3px",
+            "outlineOffset": "0px",
+            "boxShadow": "none",
+            "outset": 0,
+            "painted": {
+              "left": 211,
+              "right": 280,
+              "top": 469,
+              "bottom": 507
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "bounds": {
+                  "left": 12,
+                  "right": 378,
+                  "top": 465,
+                  "bottom": 511
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          },
+          "unobscuredHitTests": {
+            "pass": true,
+            "points": [
+              {
+                "x": 106,
+                "y": 471,
+                "tag": "A",
+                "text": "Introduction",
+                "pass": true
+              },
+              {
+                "x": 205,
+                "y": 471,
+                "tag": "A",
+                "text": "Introduction",
+                "pass": true
+              },
+              {
+                "x": 106,
+                "y": 505,
+                "tag": "A",
+                "text": "Introduction",
+                "pass": true
+              },
+              {
+                "x": 205,
+                "y": 505,
+                "tag": "A",
+                "text": "Introduction",
+                "pass": true
+              },
+              {
+                "x": 155.5,
+                "y": 488,
+                "tag": "A",
+                "text": "Introduction",
+                "pass": true
+              }
+            ]
+          },
+          "screenshot": ".temp/studio-review/maintainers-ssr/runtime-auth-recovery/work-details-390-focus.png",
+          "focusCrop": ".temp/studio-review/maintainers-ssr/runtime-auth-recovery/work-details-390-focus-crop.png",
+          "visualVerdict": "Actually viewed full document and focus crop. Complete top, bottom, left and right Introduction ring visible, Details selected underline fully visible; no SSR error overlay. Work title and Details content agree. Maintainer panel renders actual Author Notes Writer owner row after the profile response."
+        },
+        {
+          "case": "Details selected; actual keyboard focus ring at 1440",
+          "viewport": {
+            "width": 1440,
+            "height": 1000
+          },
+          "url": "http://127.0.0.1:43149/en/studio/@2VP8qHKd2zVwqZcWY6FAPe/works/01a10a71-e9d6-75b0-bbfe-136c368ec0c4?tab=details",
+          "documentStatus": 200,
+          "assertionReached": true,
+          "status": "proved",
+          "journey": "Direct existing Work tab; focus Chapters then keyboard Tab to Introduction; no horizontal scrolling",
+          "nav": {
+            "x": 308,
+            "y": 442,
+            "right": 1388,
+            "bottom": 488,
+            "width": 1080,
+            "height": 46
+          },
+          "scrollLeft": 0,
+          "focused": {
+            "text": "Introduction",
+            "current": null,
+            "focused": true,
+            "focusVisible": true,
+            "rect": {
+              "x": 400,
+              "y": 446,
+              "right": 503,
+              "bottom": 484,
+              "width": 103,
+              "height": 38
+            },
+            "outline": "oklab(0.743933 -0.0203648 -0.0928012 / 0.5) auto 1px",
+            "outlineOffset": "1px",
+            "boxShadow": "none",
+            "outset": 2,
+            "painted": {
+              "left": 398,
+              "right": 505,
+              "top": 444,
+              "bottom": 486
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "bounds": {
+                  "left": 308,
+                  "right": 1388,
+                  "top": 442,
+                  "bottom": 488
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          },
+          "selected": {
+            "text": "Details",
+            "current": "page",
+            "focused": false,
+            "focusVisible": false,
+            "rect": {
+              "x": 507,
+              "y": 446,
+              "right": 576,
+              "bottom": 484,
+              "width": 69,
+              "height": 38
+            },
+            "outline": "oklab(0.743933 -0.0203648 -0.0928012 / 0.5) none 3px",
+            "outlineOffset": "0px",
+            "boxShadow": "none",
+            "outset": 0,
+            "painted": {
+              "left": 507,
+              "right": 576,
+              "top": 446,
+              "bottom": 484
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "bounds": {
+                  "left": 308,
+                  "right": 1388,
+                  "top": 442,
+                  "bottom": 488
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          },
+          "unobscuredHitTests": {
+            "pass": true,
+            "points": [
+              {
+                "x": 402,
+                "y": 448,
+                "tag": "A",
+                "text": "Introduction",
+                "pass": true
+              },
+              {
+                "x": 501,
+                "y": 448,
+                "tag": "A",
+                "text": "Introduction",
+                "pass": true
+              },
+              {
+                "x": 402,
+                "y": 482,
+                "tag": "A",
+                "text": "Introduction",
+                "pass": true
+              },
+              {
+                "x": 501,
+                "y": 482,
+                "tag": "A",
+                "text": "Introduction",
+                "pass": true
+              },
+              {
+                "x": 451.5,
+                "y": 465,
+                "tag": "A",
+                "text": "Introduction",
+                "pass": true
+              }
+            ]
+          },
+          "screenshot": ".temp/studio-review/maintainers-ssr/runtime-auth-recovery/work-details-1440-focus.png",
+          "focusCrop": ".temp/studio-review/maintainers-ssr/runtime-auth-recovery/work-details-1440-focus-crop.png",
+          "visualVerdict": "Actually viewed full document and focus crop. Complete top, bottom, left and right Introduction ring visible, Details selected underline fully visible; no SSR error overlay. Work title and Details content agree. Maintainer panel renders actual Author Notes Writer owner row after the profile response."
+        }
+      ],
+      "screenshotsActuallyViewed": [
+        {
+          "path": ".temp/studio-review/maintainers-ssr/runtime-auth-recovery/work-details-390-focus.png",
+          "sha256": "866ef7a1e3bb4b121315307ac7621154e48d5f3c49c9ddc42c4159b37f4e6b0f",
+          "bytes": 125328,
+          "actuallyViewedByReviewer": true
+        },
+        {
+          "path": ".temp/studio-review/maintainers-ssr/runtime-auth-recovery/work-details-390-focus-crop.png",
+          "sha256": "53be4bc2129811bc9428a390ef9ef5bd800dab6f1dda5d16860525ad072fd854",
+          "bytes": 4190,
+          "actuallyViewedByReviewer": true
+        },
+        {
+          "path": ".temp/studio-review/maintainers-ssr/runtime-auth-recovery/work-details-1440-focus.png",
+          "sha256": "633f2cbe837ce727c1cb9164d7a8f1ae68990c5e9c590ad89fc8084bdc6ea953",
+          "bytes": 156612,
+          "actuallyViewedByReviewer": true
+        },
+        {
+          "path": ".temp/studio-review/maintainers-ssr/runtime-auth-recovery/work-details-1440-focus-crop.png",
+          "sha256": "4112792c6e0fdb528ba25ae232deebd53b19e51215404fed7a2275ef6ef4c262",
+          "bytes": 7003,
+          "actuallyViewedByReviewer": true
+        }
+      ],
+      "pageErrors": [],
+      "requestFailures": [],
+      "captureLimits": "Unrelated Home landing feed/follow200 response bodies were unavailable after navigation and retained as capture failures in raw evidence; they are not needed for either Details assertion. Relevant exact Work, two roster and two Agent profile response bodies were captured privately. Maintainer display initially used encoded ID before asynchronous profile resolution; screenshots show resolved Author Notes Writer. No unrelated wider author journey asserted."
+    },
+    "criterionCarryForward": [
+      {
+        "id": "AUD-011-top-level",
+        "status": "unproved",
+        "genuineProductAcceptance": "unproved",
+        "evidence": "Unchanged prior criterion and its exact source/story/genuine limits retained in runtimeCompatibilityVerification.currentOriginalCriteria."
+      },
+      {
+        "id": "AUD-011-volumes",
+        "status": "unproved",
+        "genuineProductAcceptance": "unproved",
+        "evidence": "Unchanged prior criterion and its exact source/story/genuine limits retained in runtimeCompatibilityVerification.currentOriginalCriteria."
+      },
+      {
+        "id": "AUD-011-extras",
+        "status": "unproved",
+        "genuineProductAcceptance": "unproved",
+        "evidence": "Unchanged prior criterion and its exact source/story/genuine limits retained in runtimeCompatibilityVerification.currentOriginalCriteria."
+      },
+      {
+        "id": "AUD-011-pagination",
+        "status": "unproved",
+        "genuineProductAcceptance": "unproved",
+        "evidence": "Unchanged prior criterion and its exact source/story/genuine limits retained in runtimeCompatibilityVerification.currentOriginalCriteria."
+      },
+      {
+        "id": "AUD-011-incomplete",
+        "status": "proved",
+        "genuineProductAcceptance": "unproved",
+        "evidence": "Unchanged prior criterion and its exact source/story/genuine limits retained in runtimeCompatibilityVerification.currentOriginalCriteria."
+      },
+      {
+        "id": "AUD-011-publication",
+        "status": "unproved",
+        "genuineProductAcceptance": "unproved",
+        "evidence": "Unchanged prior criterion and its exact source/story/genuine limits retained in runtimeCompatibilityVerification.currentOriginalCriteria."
+      },
+      {
+        "id": "D4-014-title",
+        "status": "unproved",
+        "genuineProductAcceptance": "unproved",
+        "evidence": "Unchanged prior criterion and its exact source/story/genuine limits retained in runtimeCompatibilityVerification.currentOriginalCriteria."
+      },
+      {
+        "id": "D4-014-order",
+        "status": "unproved",
+        "genuineProductAcceptance": "unproved",
+        "evidence": "Unchanged prior criterion and its exact source/story/genuine limits retained in runtimeCompatibilityVerification.currentOriginalCriteria."
+      },
+      {
+        "id": "D4-014-large",
+        "status": "unproved",
+        "genuineProductAcceptance": "unproved",
+        "evidence": "Unchanged prior criterion and its exact source/story/genuine limits retained in runtimeCompatibilityVerification.currentOriginalCriteria."
+      },
+      {
+        "id": "D4-014-return",
+        "status": "unproved",
+        "genuineProductAcceptance": "unproved",
+        "evidence": "Unchanged prior criterion and its exact source/story/genuine limits retained in runtimeCompatibilityVerification.currentOriginalCriteria."
+      },
+      {
+        "id": "D4-014-not-three-cards",
+        "status": "proved",
+        "genuineProductAcceptance": "unproved",
+        "evidence": "Unchanged prior criterion and its exact source/story/genuine limits retained in runtimeCompatibilityVerification.currentOriginalCriteria."
+      },
+      {
+        "id": "D4-014-layout",
+        "status": "proved",
+        "genuineProductAcceptance": "unproved",
+        "evidence": "Unchanged prior criterion and its exact source/story/genuine limits retained in runtimeCompatibilityVerification.currentOriginalCriteria."
+      },
+      {
+        "id": "D4-014-diversity",
+        "status": "unproved",
+        "genuineProductAcceptance": "unproved",
+        "evidence": "Unchanged prior criterion and its exact source/story/genuine limits retained in runtimeCompatibilityVerification.currentOriginalCriteria."
+      },
+      {
+        "id": "D4-002-Studio-home",
+        "status": "unproved",
+        "genuineProductAcceptance": "selected-marker visibility proved for the four assigned 390px histories; inventory content/complete original criterion unproved",
+        "evidence": "Four prior genuine Curated390 direct/reload/Back/Forward marker passes retained; not replayed. Current title/inventory behavior remains separate and unproved by these histories."
+      },
+      {
+        "id": "D4-002-Studio-work",
+        "status": "unproved",
+        "genuineProductAcceptance": "The two previously obscured Details390/1440 actual visible-ring assertions are now proved on acaf/75409. Six prior visible rings at c43 and unchanged selection/content proof are preserved without replay; all other c43 bytes are identical. This does not claim every original Studio navigation journey or the whole D4-002 class.",
+        "evidence": "Unchanged prior criterion and its exact source/story/genuine limits retained in runtimeCompatibilityVerification.currentOriginalCriteria."
+      },
+      {
+        "id": "D4-002-class-boundary",
+        "status": "proved",
+        "genuineProductAcceptance": "no closure claimed",
+        "evidence": "Unchanged prior criterion and its exact source/story/genuine limits retained in runtimeCompatibilityVerification.currentOriginalCriteria."
+      }
+    ],
+    "missingTwoOriginalAssertions": {
+      "Details390": "proved: actual unobscured focused Introduction ring and selected Details marker at correct retained Work",
+      "Details1440": "proved: actual unobscured focused Introduction ring and selected Details marker at correct retained Work",
+      "resultBoundary": "The prior two-assertion obstruction is repaired. Six prior Work rings and Curated390 histories are reused, without replay. This is same-principle Studio evidence only; no closure of three original Discover instances or whole D4-002 class."
+    },
+    "originalAcceptanceReach": {
+      "services/main/tests/studio-transfer-parity.test.ts": {
+        "executed": false,
+        "outcomeAssertionReached": false
+      },
+      "tests/qa/integration/outcomes/realm/studio-inventory.test.ts": {
+        "executed": false,
+        "sixPersonas": "all unproved",
+        "fourAdditionalFailingBodies": "all unproved; pending/failing declarations unchanged",
+        "outcomeAssertionReached": false
+      },
+      "tests/qa/integration/studio-heads.test.ts": {
+        "executed": false,
+        "outcomeAssertionReached": false
+      },
+      "tests/qa/integration/search-studio-chapter-content.test.ts": {
+        "executed": false,
+        "outcomeAssertionReached": false
+      },
+      "apps/web/tests/studio.e2e.ts": {
+        "executed": false,
+        "STUDIO01WiderAuthorJourney": "separate and unproved",
+        "outcomeAssertionReached": false
+      },
+      "originalFourChapterId": {
+        "id": "01a14a2f-2a17-770f-91a6-1a90b29fb32a",
+        "rerun": false
+      },
+      "independent23OccurrenceCorpusRerun": false,
+      "genuineLarge100PlusInventory": "unproved",
+      "genuineTitleCjkAllOrdersPaginationOpenBackNestedExtrasPrivateDisclosure": "not reached; no substituted fixture claimed"
+    },
+    "findings": [],
+    "remainingAcceptanceAndOwners": {
+      "SSRAndTwoDetailsRings": "No remaining blocker for this bounded two-file correction. Parent can integrate reviewed source normally.",
+      "StudioInventoryCountTitle": "Original applicable genuine Studio inventory/title/count/private-disclosure acceptance stays distinct and with G-2753. The unchanged75409 inventory mismatch recorded previously is not resolved by this source fix. No new catalogue, old baseline restore or full AMGT rerun prerequisite imposed on the two visual assertions.",
+      "SharedNavigation": "G-2747/G-2825 existing Discover/Site/Library ownership unchanged; no new failure observed in the assigned two probes.",
+      "OriginalFourChapterAnd23Corpus": "Neither rerun; no substitute claimed.",
+      "PendingAndFailingOutcomes": "Original six AMGT personas and four additional failing bodies unchanged/unexecuted; no passing wrapper or exit0 claimed as acceptance."
+    },
+    "resourcesAndScope": {
+      "ownedWebPort": 43149,
+      "bothOwnedServerGroupsStoppedAndAbsent": true,
+      "ownedBrowserClosed": true,
+      "manualProductWrites": false,
+      "reportOnlyTrackedChange": true,
+      "credentialsPrivate": true,
+      "noMainIndexLedgerOrRegistryMutation": true,
+      "sharedStackLifecycleOrManualDataMutation": false,
+      "normalBrowserEffects": "Supported OAuth renewal and ordinary UI reads; no Work/maintainer save/add/remove was invoked. Normal auth/session or Home landing effects are not represented as manual data preparation."
+    },
+    "completionBoundary": "Two-file SSR correction approved after actual independent source review, targeted10/58 units, valid retained affected checks and two actual genuine Details visible-ring assertions. All historical proof and failures preserved. Overall original Studio inventory audit acceptance remains partial; review/check/story/focus success closes no inventory/count/title finding and causes no automatic landing."
   }
 }
