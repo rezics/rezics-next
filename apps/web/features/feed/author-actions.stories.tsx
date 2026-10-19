@@ -231,7 +231,8 @@ export const StaleCorrection: Story = {
     await waitFor(() => expect(dialog.getByRole('button', { name: authorMessages.en.save })).toHaveFocus());
     await userEvent.keyboard('{Enter}');
     await expect(await dialog.findByText(authorMessages.en.corrected)).toBeVisible();
-    await waitFor(() => expect(dialog.getByRole('button', { name: authorMessages.en.close })).toHaveFocus());
+    await expect(dialog.queryByText(authorMessages.en.latest)).not.toBeInTheDocument();
+    await waitFor(() => expect(dialog.getByText(authorMessages.en.close, { selector: 'button' })).toHaveFocus());
   },
 };
 
@@ -243,8 +244,9 @@ async function selectedHeadRecovery(canvasElement: HTMLElement, locale: UiLocale
   await append(dialog.getByRole('textbox', { name: t.body }), ' Another published correction.');
   await userEvent.click(dialog.getByRole('button', { name: t.save }));
   await expect(await dialog.findByText(t.corrected)).toBeVisible();
-  await waitFor(() => expect(dialog.getByRole('button', { name: t.close })).toHaveFocus());
-  await userEvent.click(dialog.getByRole('button', { name: t.close }));
+  const close = dialog.getByText(t.close, { selector: 'button' });
+  await waitFor(() => expect(close).toHaveFocus());
+  await userEvent.click(close);
   await waitFor(() => expect(within(canvasElement).getByRole('button', { name: t.menu })).toHaveFocus());
   await userEvent.click(within(canvasElement).getByRole('button', { name: 'Reload selected object' }));
   dialog = await open(canvasElement, 'edit', locale);

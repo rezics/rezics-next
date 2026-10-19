@@ -173,6 +173,7 @@ function OwnedAuthorActions({ target, actingSubject, locale, signInHref, api, on
         if (result.kind !== 'done') { setFailure(result.kind); return; }
         setReceipt({ kind: 'withdraw', id: result.value.withdrawal });
       }
+      setNotice(null);
       correction.current = null;
       withdrawal.current = null;
       try { browserStorage()?.removeItem(memoryKey(actingSubject, target)); } catch { /* The acknowledged API result remains visible. */ }
