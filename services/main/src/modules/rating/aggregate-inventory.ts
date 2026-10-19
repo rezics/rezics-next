@@ -278,6 +278,8 @@ export async function readRatingContextPolicyWitness(pool: Pool, context: string
 // origin joins, then sorts at most 2(k+1) rows. If native votes mask candidates,
 // they also count toward the population: truncation cannot hide an overflow.
 // Every origin, precedence and admission lookup is an exact indexed probe.
+// Head LIMITs precede identity filters; admission OFFSET 0 retains correlated
+// primary-key probes rather than a hash join over unrelated admissions.
 // https://www.postgresql.org/docs/18/indexes-ordering.html
 function inventorySql(release: boolean | 'target', reconstruction = false): string { return `SELECT c.realm, c.revision AS context_revision,
     c.policy_revision,
