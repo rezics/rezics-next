@@ -65,7 +65,7 @@ function ShelfNav({ state, overview, locale, messages, loansCurrent = false }: {
       label: statusLabel(status, t), count: overview.counts[status] })),
   ];
   return <nav aria-label={t.shelves} className="-mx-4 min-w-0 px-4 lg:mx-0 lg:px-0">
-    <div className="flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none] lg:grid lg:gap-6 lg:overflow-visible">
+    <div className="flex gap-2 overflow-x-auto p-1 [scrollbar-width:none] lg:grid lg:gap-6 lg:overflow-visible lg:p-0">
       <ul className="flex gap-2 lg:grid lg:gap-0.5">
         {entries.map(entry => <li key={entry.key}>
           <Link documentNavigation href={href(entry.shelf)} aria-current={current === entry.key ? 'page' : undefined} className={navItem}>

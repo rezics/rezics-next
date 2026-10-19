@@ -9,7 +9,7 @@ export function BrowseTabs({ state, locale }: { state: BrowseState; locale: UiLo
   const t = browseMessages[locale];
   const tabs = [{ id: 'all', label: t.all }, ...browseCategories().map(category => ({ id: category.id,
     label: category.labels[locale] }))];
-  return <nav aria-label={t.type} className="flex min-w-0 max-w-full gap-1 overflow-x-auto pb-1">
+  return <nav aria-label={t.type} className="flex min-w-0 max-w-full gap-1 overflow-x-auto p-1">
     {tabs.map(({ id: tab, label }) => <Link key={tab} documentNavigation prefetch={false}
       href={browseHref(changeBrowse(state, { tab }))} aria-current={state.tab === tab && !state.section ? 'page' : undefined}
       className="inline-flex h-9 shrink-0 items-center rounded-full px-4 font-medium text-sm outline-none

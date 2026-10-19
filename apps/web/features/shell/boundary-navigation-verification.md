@@ -90,6 +90,46 @@ These bounded startup and anonymous page checks do not complete the repeated
 AUD-006 matrix above, the signed-in Proposals matrix, or the navigation proof
 matrix below. Preserve those independent acceptance checks on the final wave.
 
+## Navigation focus verification
+
+The original retained Topics report at `b79c8be7c` describes wave revision
+`92b8a78f1cb06fb4a02703f2b471b80d1d069199`; its evidence remains unchanged.
+The rightmost link's border box fit inside the row, while its painted focus
+ring extended beyond the clipping edge. Discover, Studio views and work tabs,
+and Library shelves now reserve padding around their scrolling contents. The
+shared reveal owner also exposes keyboard focus, preserving it through resize
+and history restoration instead of scrolling back to the selected destination.
+Public Site navigation uses that owner with its existing edge padding.
+
+`navigation-focus.stories.tsx` measures the actual computed outline and outer
+box shadows against the viewport and every clipping ancestor, independently of
+the production reveal gutter. It covers forward and reverse keyboard traversal
+for Discover's seven links, Studio views and work tabs, a 52-link public Site,
+and Library custom shelves and Loans. Initial selected-link geometry, accessible
+names, link counts and the selected marker have separate assertions. A resize
+and persisted `pageshow` case checks that focused All stays visible while Topics
+remains selected. These events do not prove actual browser history transitions.
+
+The 24 surface / viewport / theme cases and the resize case passed, together
+with the six existing selection stories, in recorded job
+`5516d855-d1f7-4d3f-b7bc-2da6dfe34174`. All 25 new screenshots were viewed at
+390×844 or 1440×1000 in light and dark themes. The retained directory is
+`.artifacts/qa/20261019t053432-4223af/story-screenshots/apps-web-features-shell-navigation-focus.stories.tsx/`.
+Before the repair, the new assertion reached a clipped left focus ring; after
+padding alone it exposed a resize callback that moved focus offscreen. Both
+regressions are covered by the final stories. Recorded job
+`5d5c23c9-38a3-4e13-9a69-315e26331701` subsequently passed all 25 stories with
+the independent initial-selection assertion and all nine bottom-navigation
+stories; its targeted unit step passed 99 cases with 1,184 assertions.
+
+The continuation guard fingerprints the enclosing function. Only the existing
+StudioHome context was refreshed for its padding change; the continuation
+expressions, exceptions and guard rules remain unchanged. Discover's padding
+lives in the extracted BrowseTabs owner after integration with the wave.
+Its mutation assertions must still reject removal of Studio's owner continuation
+or More link. Real signed-in routes, document navigation, history and activation
+of each destination remain in the browser matrix below.
+
 ## Browser proof matrix
 
 | Finding | Required journeys and assertions |
@@ -122,6 +162,7 @@ Focused Storybook interaction, accessibility and screenshot review:
 
 - `apps/web/features/shell/bottom-nav.stories.tsx`
 - `apps/web/features/shell/current-page-visibility.stories.tsx`
+- `apps/web/features/shell/navigation-focus.stories.tsx`
 - `apps/web/features/shell/app-shell.stories.tsx`
 - `apps/web/features/proposals/list.stories.tsx`
 - `apps/web/features/studio/studio-home.stories.tsx`
