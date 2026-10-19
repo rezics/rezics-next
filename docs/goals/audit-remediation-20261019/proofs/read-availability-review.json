@@ -1240,5 +1240,543 @@
       },
       "receiptFinalization": "Only receipt metadata and preservation of original JSON formatting were finalized after checks; no review conclusions, product bytes or test assertions changed."
     }
+  },
+  "notificationRepairReview": {
+    "reviewedAt": "2026-10-19T09:44:47.619734+00:00",
+    "authority": "Manager continuation authorizes review of final G-2763 sanitization repair and retained counterexample plus affected notification checks only. Unchanged discovery/native/migration reviews are reused; genuine-workload residuals are separate from this source verdict.",
+    "reviewer": {
+      "worker": "G-2846",
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independentOfAuthor": true,
+      "nestedAgents": false
+    },
+    "decision": {
+      "verdict": "approve",
+      "owner": "G-2763",
+      "exactCommit": "469b47d9dbe676b5a8ad04068f6087a719e19347",
+      "scope": "The two-path final sanitization repair, reviewed against parent c564bfdfda40d4cee042f7deb54f017d73347121 and the retained review-source-1 counterexample. This does not approve unrelated changes in the execution commit ancestry.",
+      "canLandChangedSource": true,
+      "sourceFinding": "review-source-1",
+      "sourceFindingDisposition": "Repaired and confirmed by current owner-composition assertions.",
+      "blockingFindings": [],
+      "reason": "Inbox presentation is built from checked[index].subject.fields after the final disclosure and recipient fences. Optional hidden target fields and grouping identities are withheld while process-notice availability, recipient isolation, visible context, recipient-owned case grouping, cursor and unread behavior are retained. The exact clean source passes the retained counterexample and affected checks.",
+      "publicReproductionConfirmed": false,
+      "originalFullAcceptanceClosed": false,
+      "originalWorkloadGapsAreNotSourceVerdictPreconditions": true
+    },
+    "source": {
+      "commit": "469b47d9dbe676b5a8ad04068f6087a719e19347",
+      "parent": "c564bfdfda40d4cee042f7deb54f017d73347121",
+      "headVerifiedBeforeAndAfterExecution": true,
+      "cleanBeforeAndAfterExecution": true,
+      "changedPaths": [
+        {
+          "path": "services/main/src/modules/notification/store.ts",
+          "sha256": "724b86e6691f977fe9676b22857327976ae125ec81ff24a4ba6af1062b70dbcf"
+        },
+        {
+          "path": "services/main/tests/notification-request-budget-disclosure.test.ts",
+          "sha256": "dc4a402fd1e67c9a801f033603ef5d7d1d33cdbcc3b5119dc9439e1f76bc2fd0"
+        }
+      ],
+      "executionRoot": ".temp/read-availability-repair-execution",
+      "executionKind": "Disposable detached exact-full-commit checkout; only report published, no wave ancestry imported into worker branch.",
+      "checkSelectionBase": "Private disposable clone refs/heads/main pinned to repair parent c564bfdfda40d4cee042f7deb54f017d73347121 so the supported Task check selects exactly the two changed paths. No main checkout ref was changed.",
+      "qaSource": {
+        "head": "469b47d9dbe676b5a8ad04068f6087a719e19347",
+        "fingerprint": "76af8c34a63bed7003a4c9dd584532fdf389fd011d6336e8d0b5de092cbadc5a",
+        "clean": true
+      },
+      "sourceStable": true,
+      "runnerAndHarnessPin": "469b47d9dbe676b5a8ad04068f6087a719e19347",
+      "frozenIndependentPublicTestBytesChanged": false,
+      "testPins": [
+        {
+          "path": "services/main/tests/g-966-notification-display.test.ts",
+          "executed": 7,
+          "pass": 7,
+          "fail": 0,
+          "error": 0,
+          "skip": 0,
+          "assertions": 20,
+          "sha256": "a39cf2b3fbfc95e4afe540bb0461c92f9690b0c88383e014fa238a0583446044"
+        },
+        {
+          "path": "services/main/tests/notification-actor-name.test.ts",
+          "executed": 5,
+          "pass": 5,
+          "fail": 0,
+          "error": 0,
+          "skip": 0,
+          "assertions": 87,
+          "sha256": "eefc351a7927e1d25244adabdc982d2f412386af955c2b1a84670036a6472837"
+        },
+        {
+          "path": "services/main/tests/notification-display.test.ts",
+          "executed": 2,
+          "pass": 2,
+          "fail": 0,
+          "error": 0,
+          "skip": 0,
+          "assertions": 6,
+          "sha256": "5c0bba2f72955c78dd91917021a93c8a66e6d609aa325e22fdc621327fc2ac5a"
+        },
+        {
+          "path": "services/main/tests/notification-presentation.test.ts",
+          "executed": 1,
+          "pass": 1,
+          "fail": 0,
+          "error": 0,
+          "skip": 0,
+          "assertions": 1,
+          "sha256": "244ac21895ff4f05323f7c154ce50f174644b408d39ebff0eedea1277ffd1652"
+        },
+        {
+          "path": "services/main/tests/notification-producer.test.ts",
+          "executed": 3,
+          "pass": 3,
+          "fail": 0,
+          "error": 0,
+          "skip": 0,
+          "assertions": 7,
+          "sha256": "0da5270c00b5501b5d7af45a51db4b63af204e04402b26611476856ffbc85b92"
+        },
+        {
+          "path": "services/main/tests/notification-request-budget-disclosure.test.ts",
+          "executed": 10,
+          "pass": 10,
+          "fail": 0,
+          "error": 0,
+          "skip": 0,
+          "assertions": 83,
+          "sha256": "dc4a402fd1e67c9a801f033603ef5d7d1d33cdbcc3b5119dc9439e1f76bc2fd0"
+        },
+        {
+          "path": "services/main/tests/notification-request-budget.test.ts",
+          "executed": 18,
+          "pass": 18,
+          "fail": 0,
+          "error": 0,
+          "skip": 0,
+          "assertions": 48,
+          "sha256": "8e02afebbb2f8bc521bf69a5717b072850fccbbd5d8ee167369ec3a6ffa37a3f"
+        },
+        {
+          "path": "services/main/tests/notification-stream-position.test.ts",
+          "executed": 4,
+          "pass": 4,
+          "fail": 0,
+          "error": 0,
+          "skip": 0,
+          "assertions": 10,
+          "sha256": "604704bd48c91f9f8f23a74d7f63c55f604e681452a101926852e6968d401351"
+        },
+        {
+          "path": "services/main/tests/settings-notifications.test.ts",
+          "executed": 6,
+          "pass": 6,
+          "fail": 0,
+          "error": 0,
+          "skip": 0,
+          "assertions": 21,
+          "sha256": "172d7e74656e81983bfd922be2af997b9fe278f9e5ff030a30b0f4d80a504a79"
+        }
+      ],
+      "historicalBaselineSource": {
+        "head": "3f745020e6820fb39fba7c9a229014bc8b5f4d23",
+        "fingerprint": "4a7e78c0468c896f76ab8e6c0171a228085e33aa7c08a2ce4dedbada562c389c",
+        "clean": false
+      },
+      "historicalProductionBytesMatchOriginalCandidate": {
+        "services/main/src/modules/notification/store.ts": true,
+        "services/main/src/modules/disclosure/notifications.ts": true
+      }
+    },
+    "materialChangedSourceReview": [
+      {
+        "path": "services/main/src/modules/notification/store.ts",
+        "lines": "753-806",
+        "finding": "The first resolution now collects only available subject identities, actor IDs and eligible new-Work summaries. It does not construct a display that could survive a later sanitization unchanged. Existing budget wrappers and owner-failure behavior are preserved."
+      },
+      {
+        "path": "services/main/src/modules/notification/store.ts",
+        "lines": "807-815",
+        "finding": "Final disclosure still runs for the inbox viewer, followed by current recipient eligibility and active-principal checks. An unavailable/denied result cannot reuse the earlier display."
+      },
+      {
+        "path": "services/main/src/modules/notification/store.ts",
+        "lines": "817-853",
+        "finding": "Every final target/Realm/presentation field is reconstructed from the checked sanitized subject. If a stored grouping key equals a Realm or optional Work removed by that fence, it is cleared before groupNotifications; unrelated recipient-owned case keys remain. A cached new-Work summary is reused only if its target equals the final link target. Final recipient denial clears subject, display, reason and proposal as before."
+      },
+      {
+        "path": "services/main/src/modules/disclosure/notifications.ts",
+        "lines": "52-63",
+        "finding": "The existing four access-owned process-notice bases can remain available with hidden optional fields removed. This unchanged contract is now consumed by the inbox renderer, matching the prior digest/delivery approach."
+      },
+      {
+        "path": "services/main/tests/notification-request-budget-disclosure.test.ts",
+        "lines": "14-137",
+        "finding": "The author retained the original five failing cases and three controls, adding Work-key withholding and recipient-owned case-key grouping controls. Tests invoke actual NotificationStore and process-notice disclosure/sanitization with SQL-row and target-decision adapters. They are owner composition, not public-persona outcomes. Reviewer changed no assertion."
+      }
+    ],
+    "historicalCounterexample": {
+      "qaRun": "20261019t073642-fd126d",
+      "source": {
+        "head": "3f745020e6820fb39fba7c9a229014bc8b5f4d23",
+        "fingerprint": "4a7e78c0468c896f76ab8e6c0171a228085e33aa7c08a2ce4dedbada562c389c",
+        "clean": false
+      },
+      "sourceStable": true,
+      "relevantProductionBytesMatchReviewedOriginal1add": {
+        "services/main/src/modules/notification/store.ts": true,
+        "services/main/src/modules/disclosure/notifications.ts": true
+      },
+      "counts": {
+        "executed": 8,
+        "pass": 3,
+        "fail": 5,
+        "error": 0,
+        "skip": 0,
+        "assertions": 29
+      },
+      "cases": [
+        {
+          "name": "realm-invitation-v1: inbox keeps the process notice and uses the final sanitized subject",
+          "result": "fail",
+          "assertionReached": true
+        },
+        {
+          "name": "realm-role-change-v1: inbox keeps the process notice and uses the final sanitized subject",
+          "result": "fail",
+          "assertionReached": true
+        },
+        {
+          "name": "moderation-outcome-v1: inbox keeps the process notice and uses the final sanitized subject",
+          "result": "fail",
+          "assertionReached": true
+        },
+        {
+          "name": "submission-decision-v1: inbox keeps the process notice and uses the final sanitized subject",
+          "result": "fail",
+          "assertionReached": true
+        },
+        {
+          "name": "a hidden Realm removes optional context from an otherwise available process notice",
+          "result": "fail",
+          "assertionReached": true
+        },
+        {
+          "name": "visible process notice context, grouping, cursor and unread semantics are preserved",
+          "result": "pass",
+          "assertionReached": true
+        },
+        {
+          "name": "final recipient denial still withholds an otherwise available process notice",
+          "result": "pass",
+          "assertionReached": true
+        },
+        {
+          "name": "another principal receives no process notice or subject resolution",
+          "result": "pass",
+          "assertionReached": true
+        }
+      ],
+      "reuse": "Retained producer failure receipt inspected and preserved; unchanged baseline not rerun. This is a reached owner-composition assertion failure, not a public-persona reproduction.",
+      "evidence": ".temp/read-availability-review/notification-repair/historical-baseline/owner.xml",
+      "productionByteComparisonQualification": "Committed baseline source objects at 3f745020e6820fb39fba7c9a229014bc8b5f4d23 match original candidate 1add for store.ts and disclosure/notifications.ts. The retained QA receipt records a dirty stable fingerprint; its entire precommit tree was not reconstructed here. Five reached failures are retained producer evidence, not a new G-2846 baseline/public execution."
+    },
+    "currentExecution": {
+      "recordedJob": "6c0388f8-a6f5-4a59-b5b5-7c98d52da175",
+      "recordingCommandPrefix": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --",
+      "normalAdmission": true,
+      "steps": [
+        {
+          "command": "bun scripts/goal/goalctl.ts slot -- task --dir .temp/read-availability-repair-execution install",
+          "exitCode": 0,
+          "result": "Pinned Yarn immutable install; no package manifest or lockfile changed."
+        },
+        {
+          "command": "bun scripts/goal/goalctl.ts slot -- bun --cwd .temp/read-availability-repair-execution scripts/goal/goalctl.ts test services/main/tests/g-966-notification-display.test.ts services/main/tests/notification-actor-name.test.ts services/main/tests/notification-display.test.ts services/main/tests/notification-presentation.test.ts services/main/tests/notification-producer.test.ts services/main/tests/notification-request-budget-disclosure.test.ts services/main/tests/notification-request-budget.test.ts services/main/tests/notification-stream-position.test.ts services/main/tests/settings-notifications.test.ts",
+          "exitCode": 0,
+          "qaRun": "20261019t093633-e1cf4d",
+          "tier": "owner",
+          "counts": {
+            "executed": 56,
+            "pass": 56,
+            "fail": 0,
+            "error": 0,
+            "skip": 0,
+            "assertions": 283,
+            "elapsedMs": 12162
+          },
+          "files": [
+            {
+              "path": "services/main/tests/g-966-notification-display.test.ts",
+              "executed": 7,
+              "pass": 7,
+              "fail": 0,
+              "error": 0,
+              "skip": 0,
+              "assertions": 20,
+              "sha256": "a39cf2b3fbfc95e4afe540bb0461c92f9690b0c88383e014fa238a0583446044"
+            },
+            {
+              "path": "services/main/tests/notification-actor-name.test.ts",
+              "executed": 5,
+              "pass": 5,
+              "fail": 0,
+              "error": 0,
+              "skip": 0,
+              "assertions": 87,
+              "sha256": "eefc351a7927e1d25244adabdc982d2f412386af955c2b1a84670036a6472837"
+            },
+            {
+              "path": "services/main/tests/notification-display.test.ts",
+              "executed": 2,
+              "pass": 2,
+              "fail": 0,
+              "error": 0,
+              "skip": 0,
+              "assertions": 6,
+              "sha256": "5c0bba2f72955c78dd91917021a93c8a66e6d609aa325e22fdc621327fc2ac5a"
+            },
+            {
+              "path": "services/main/tests/notification-presentation.test.ts",
+              "executed": 1,
+              "pass": 1,
+              "fail": 0,
+              "error": 0,
+              "skip": 0,
+              "assertions": 1,
+              "sha256": "244ac21895ff4f05323f7c154ce50f174644b408d39ebff0eedea1277ffd1652"
+            },
+            {
+              "path": "services/main/tests/notification-producer.test.ts",
+              "executed": 3,
+              "pass": 3,
+              "fail": 0,
+              "error": 0,
+              "skip": 0,
+              "assertions": 7,
+              "sha256": "0da5270c00b5501b5d7af45a51db4b63af204e04402b26611476856ffbc85b92"
+            },
+            {
+              "path": "services/main/tests/notification-request-budget-disclosure.test.ts",
+              "executed": 10,
+              "pass": 10,
+              "fail": 0,
+              "error": 0,
+              "skip": 0,
+              "assertions": 83,
+              "sha256": "dc4a402fd1e67c9a801f033603ef5d7d1d33cdbcc3b5119dc9439e1f76bc2fd0"
+            },
+            {
+              "path": "services/main/tests/notification-request-budget.test.ts",
+              "executed": 18,
+              "pass": 18,
+              "fail": 0,
+              "error": 0,
+              "skip": 0,
+              "assertions": 48,
+              "sha256": "8e02afebbb2f8bc521bf69a5717b072850fccbbd5d8ee167369ec3a6ffa37a3f"
+            },
+            {
+              "path": "services/main/tests/notification-stream-position.test.ts",
+              "executed": 4,
+              "pass": 4,
+              "fail": 0,
+              "error": 0,
+              "skip": 0,
+              "assertions": 10,
+              "sha256": "604704bd48c91f9f8f23a74d7f63c55f604e681452a101926852e6968d401351"
+            },
+            {
+              "path": "services/main/tests/settings-notifications.test.ts",
+              "executed": 6,
+              "pass": 6,
+              "fail": 0,
+              "error": 0,
+              "skip": 0,
+              "assertions": 21,
+              "sha256": "172d7e74656e81983bfd922be2af997b9fe278f9e5ff030a30b0f4d80a504a79"
+            }
+          ],
+          "regressionCases": [
+            {
+              "name": "realm-invitation-v1: inbox keeps the process notice and uses the final sanitized subject",
+              "line": 71,
+              "assertions": 14,
+              "result": "pass"
+            },
+            {
+              "name": "realm-role-change-v1: inbox keeps the process notice and uses the final sanitized subject",
+              "line": 71,
+              "assertions": 14,
+              "result": "pass"
+            },
+            {
+              "name": "moderation-outcome-v1: inbox keeps the process notice and uses the final sanitized subject",
+              "line": 71,
+              "assertions": 14,
+              "result": "pass"
+            },
+            {
+              "name": "submission-decision-v1: inbox keeps the process notice and uses the final sanitized subject",
+              "line": 71,
+              "assertions": 14,
+              "result": "pass"
+            },
+            {
+              "name": "a hidden Realm removes optional context from an otherwise available process notice",
+              "line": 89,
+              "assertions": 5,
+              "result": "pass"
+            },
+            {
+              "name": "a hidden optional Work is withheld from the process notice grouping identity",
+              "line": 98,
+              "assertions": 5,
+              "result": "pass"
+            },
+            {
+              "name": "sanitized process notices can still group by their recipient-owned case identity",
+              "line": 106,
+              "assertions": 4,
+              "result": "pass"
+            },
+            {
+              "name": "visible process notice context, grouping, cursor and unread semantics are preserved",
+              "line": 114,
+              "assertions": 7,
+              "result": "pass"
+            },
+            {
+              "name": "final recipient denial still withholds an otherwise available process notice",
+              "line": 124,
+              "assertions": 3,
+              "result": "pass"
+            },
+            {
+              "name": "another principal receives no process notice or subject resolution",
+              "line": 131,
+              "assertions": 3,
+              "result": "pass"
+            }
+          ],
+          "personaJourney": false
+        },
+        {
+          "command": "bun scripts/goal/goalctl.ts slot -- task --dir .temp/read-availability-repair-execution goal -- check --only types,lint,guards",
+          "exitCode": 0,
+          "changedPaths": [
+            "services/main/src/modules/notification/store.ts",
+            "services/main/tests/notification-request-budget-disclosure.test.ts"
+          ],
+          "results": {
+            "types": "pass (105.2s)",
+            "inference": "pass (206.0s)",
+            "lint": "pass (2.8s)",
+            "ast": "pass (0.5s)",
+            "guards": "pass after supported targeted timeout retries (40.7s)"
+          },
+          "guards": {
+            "selectedFiles": 24,
+            "availableFiles": 45,
+            "initialRunnerReported": {
+              "executed": 172,
+              "pass": 170,
+              "timeoutFailures": 2,
+              "skip": 0
+            },
+            "retryFiles": [
+              {
+                "path": "services/main/tests/platform-exposure.test.ts",
+                "executed": 15,
+                "pass": 15,
+                "fail": 0,
+                "error": 0,
+                "skip": 0
+              },
+              {
+                "path": "tests/qa/unit/acceptance.test.ts",
+                "executed": 16,
+                "pass": 16,
+                "fail": 0,
+                "error": 0,
+                "skip": 0
+              }
+            ],
+            "recoveredCases": [
+              "the complete lockout foundation remains public on a stack with no platform-use grants",
+              "QA06: failure rerun selects failed names without borrowing prior passes"
+            ],
+            "initialMergedXml": "Malformed (mismatched tag at line 224); initial totals above are runner-reported, not independently parsed. Both retry XML reports parse and pass. Raw logs/XML retained."
+          },
+          "log": ".temp/read-availability-review/notification-repair/affected-check/output.log"
+        }
+      ],
+      "harnessObservation": "The enclosing worker wrapper warned that it is one harness commit behind main. The detached execution source stayed clean and stable at 469b47d9dbe676b5a8ad04068f6087a719e19347; all requested checks passed. No harness fallback or source rebase occurred."
+    },
+    "originalCriteriaAndEvidencePreserved": {
+      "oldReportValuesUnchanged": true,
+      "historicalCandidate1addVerdictUnchanged": true,
+      "newSourceVerdictSupersedesOnlyOldStaticConcernAtNewPin": true,
+      "originalDiscoveryCreditAssertionFailureRetained": true,
+      "discoveryOwnerCompositionProofReused": true,
+      "transitionDependencyB0b3ReviewReused": true,
+      "nativeImageAndMigrationObservationsReused": true,
+      "unexecutedOriginalPublicPersonas": "All original six-persona dispositions retained unchanged.",
+      "publicPersonaTierRepeated": false,
+      "frozenPublicAssertionsChanged": false
+    },
+    "residuals": [
+      "Original six-persona complete allocation/admission/isolation assertions and five signed-in public cancellation/fresh-retry assertions remain unexecuted; this owner-composition pass does not replace them.",
+      "Fifty real active target notifications, genuine mixed 1/2/4/8 notification/Work/Discover/chapter-search readers and pending returning to zero remain open. The retained 24-notice control is not relabeled as full acceptance.",
+      "Public disclosure-transition reproduction, native SQL/engine work, physical resource drain and mixed-load availability remain unproved.",
+      "The original discovery credit-shape assertion failure and unreached later discovery assertions remain historical open qualification items. No discovery/native/migration check was repeated for this store-only repair."
+    ],
+    "evidence": {
+      "directory": ".temp/read-availability-review/notification-repair",
+      "pins": ".temp/read-availability-review/notification-repair/pins.json",
+      "diff": ".temp/read-availability-review/notification-repair/candidate.diff",
+      "currentRawQa": ".temp/read-availability-review/notification-repair/current-run",
+      "historicalRawCounterexample": ".temp/read-availability-review/notification-repair/historical-baseline",
+      "affectedChecks": ".temp/read-availability-review/notification-repair/affected-check"
+    },
+    "ownedReportChecks": {
+      "job": "9e56ff0d-b550-457e-a74c-1c709b87c6ee",
+      "docsCheck": {
+        "command": "task docs:check",
+        "exitCode": 0,
+        "executed": 13,
+        "pass": 13,
+        "fail": 0,
+        "error": 0,
+        "skip": 0,
+        "coverage": "249 Markdown files; local links, fragments and navigation",
+        "log": ".temp/read-availability-review/notification-repair/9e56ff0d-b550-457e-a74c-1c709b87c6ee.1.log"
+      },
+      "workerCheck": {
+        "command": "task goal -- check",
+        "exitCode": 0,
+        "selection": "Owned report only; 1/44 repository guard files selected.",
+        "types": "pass; no TypeScript workspace changed",
+        "tests": "pass; no test files named in brief",
+        "lint": "pass; no source file changed",
+        "ast": "pass (0.4s)",
+        "guards": {
+          "executed": 2,
+          "pass": 2,
+          "fail": 0,
+          "error": 0,
+          "skip": 0,
+          "elapsedSeconds": 2.8
+        },
+        "log": ".temp/read-availability-review/notification-repair/9e56ff0d-b550-457e-a74c-1c709b87c6ee.2.log"
+      },
+      "receiptFinalization": "Only check receipt metadata was finalized after checks; reviewed source, assertions, verdict and historical evidence remained unchanged."
+    }
   }
 }
