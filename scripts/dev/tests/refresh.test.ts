@@ -1669,6 +1669,7 @@ throw new Error('Pending migration completed before cancellation');
       const executable = join(dir, 'docker');
       const script = join(dir, 'copy.ts');
       const realDocker = spawnSync('which', ['docker'], { encoding: 'utf8' }).stdout.trim();
+      const originalPath = process.env.PATH;
       // Substitute only the external Docker boundary. Real create/drop and
       // cancellation execute against this isolated PostgreSQL container.
       writeFileSync(executable, `#!/usr/bin/env bun
@@ -1685,7 +1686,9 @@ if (index >= 0) {
     process.exit(${failure === 'timeout' ? 124 : 1});
   }
 }
-const child = Bun.spawn([${JSON.stringify(realDocker)}, ...args], {stdin:'inherit', stdout:'inherit', stderr:'inherit'});
+// A QA Docker shim resolves the next executable through PATH. Exclude this
+// injected wrapper while forwarding, retaining the original QA scope labels.
+const child = Bun.spawn([${JSON.stringify(realDocker)}, ...args], {env:{...process.env,PATH:${JSON.stringify(originalPath)}},stdin:'inherit', stdout:'inherit', stderr:'inherit'});
 process.exit(await child.exited);
 `);
       chmodSync(executable, 0o700);
