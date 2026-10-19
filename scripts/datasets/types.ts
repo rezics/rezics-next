@@ -1,8 +1,8 @@
+import type { Capture } from './network.ts';
 import type { DatasetSelectionManifest } from './selection.ts';
 import type { ManualSourceIntake } from '../../services/main/src/modules/source/intake.ts';
 import type { RetainedConversionRequest } from '../../services/main/src/modules/source/field-support-contract.ts';
 import type { RetainedConversion } from '../../services/main/src/modules/source/retained-record.ts';
-import type { Capture } from './network.ts';
 
 export type Provider = 'vndb' | 'bangumi' | 'musicbrainz';
 export interface DatasetRecord {
@@ -33,27 +33,39 @@ export interface DatasetEdge {
   kind: string;
   data: Record<string, unknown>;
 }
-export interface DatasetCoverEvidence {
+export type DatasetCaptureRole = 'cover' | 'portrait' | 'screenshot' | 'other';
+
+export interface DatasetMediaEvidence {
   /** Normalized source identity. The source may not have a reviewed version yet. */
   provider: string;
   namespace: string;
   externalId: string;
   revision: string | null;
-  /** HTTPS URL of the captured source record JSON paired with recordDigest. */
+  /** HTTPS URL of the captured source. JSON uses recordDigest directly. */
   captureUrl: string;
+  /** SHA-256 of source JSON bytes, or of the canonical decoded COPY row. */
   recordDigest: string;
-  /** RFC 6901 JSON Pointer into the captured record. */
+  /** RFC 6901 JSON Pointer into source JSON or the decoded COPY row. */
   field: string;
   sourceName: string;
   sourceUrl: string;
   holder: { name: string; field: string } | null;
+  /** Explicit derivation from retained archive bytes; never a fabricated JSON capture. */
+  derivation?: {
+    format: 'vndb-copy-image-v1';
+    archiveDigest: string;
+    table: 'vn' | 'chars' | 'vn_screenshots' | 'releases_images' | 'vn_image_votes';
+    imageId: string;
+  };
 }
+/** Compatibility name for the original cover-only producer. */
+export type DatasetCoverEvidence = DatasetMediaEvidence;
 export interface DatasetImage {
   record: string;
   /** Provider supplied role, retained for audit. */
   role: string;
   url: string;
-  sourceEvidence?: DatasetCoverEvidence;
+  sourceEvidence?: DatasetMediaEvidence;
 }
 export interface DatasetSource {
   provider: Provider;
@@ -66,7 +78,7 @@ export interface DatasetSource {
 }
 export interface StoredImage extends DatasetImage {
   /** Normalized role for capture admission; `all` never promotes an image. */
-  captureRole?: 'cover' | 'other';
+  captureRole?: DatasetCaptureRole;
   /** Frozen provider image response; its URL is the image URL, not evidence.captureUrl. */
   capture: Capture | null;
   missing: boolean;
