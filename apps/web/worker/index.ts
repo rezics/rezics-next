@@ -1,6 +1,7 @@
 import handler from 'vinext/server/fetch-handler';
 import { addressFailureResponse, beforePathNormalization } from '../features/address/edge.ts';
 import { addressPath } from '../features/address/path.ts';
+import { isZonePage } from '../features/zones/csp.ts';
 import { pathLocale, resolveLocale } from '../i18n/locale.ts';
 import { serverDocumentResponse, withServerRequest } from '../features/api/server-read.ts';
 
@@ -12,7 +13,7 @@ export default {
       if (redirected) return redirected;
       const response = await handler.fetch(request, env, context);
       const url = new URL(request.url);
-      if (addressPath(url.pathname)?.lookup.scope !== 'resource') return response;
+      if (addressPath(url.pathname)?.lookup.scope !== 'resource' && !isZonePage(url.pathname)) return response;
       try { return await serverDocumentResponse(request, response); }
       catch {
         return addressFailureResponse(url,
