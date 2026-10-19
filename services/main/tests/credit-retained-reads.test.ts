@@ -177,6 +177,7 @@ function fixture(
     nativeOrdinal: 2,
     provider,
     namespace,
+    ...(role === 'performer' ? { modelRevision: `https://rezics.com/definition/${agent ? 'native-agent-credit' : 'work-author-credit'}-v2` } : {}),
     ...(agent ? { agent: id(6) } : {}),
   };
   const state: RetainedCreditAssociationState = {
@@ -398,6 +399,9 @@ function fixture(
             head: value.expectedHead,
             agent: value.agent!,
             role: value.role!,
+            model: value.modelRevision ?? 'https://rezics.com/definition/native-agent-credit-v1',
+            shape: value.modelRevision ?? 'https://rezics.com/definition/native-agent-credit-v1',
+            ...(value.modelRevision ? { currentModel: value.modelRevision } : {}),
             actor: value.actingSubject,
             epoch: 'credit-epoch',
             sequence: '12',
@@ -410,6 +414,9 @@ function fixture(
             head: value.expectedHead,
             key: value.sourceKey,
             creditRole: value.role!,
+            model: value.modelRevision ?? 'https://rezics.com/definition/work-author-credit-v1',
+            shape: value.modelRevision ?? 'https://rezics.com/definition/work-author-credit-v1',
+            ...(value.modelRevision ? { currentModel: value.modelRevision } : {}),
             provider: value.provider!,
             namespace: value.namespace!,
             ordinal: String(value.nativeOrdinal),

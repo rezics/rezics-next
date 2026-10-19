@@ -547,7 +547,8 @@ final class CommandService extends ActionService {
                 && shape.equals("https://rezics.com/definition/work-derivation-v1/derivation-shape");
             boolean fixedReleaseShape = profileId.equals("fixed-native-text-release-v1")
                 && shape.equals("https://rezics.com/definition/fixed-native-text-release-v1/release-shape");
-            boolean authorCreditShape = profileId.equals("work-author-credit-v1");
+            boolean authorCreditShape = profileId.equals("work-author-credit-v1")
+                || profileId.equals("work-author-credit-v2");
             if (graphs.stream().anyMatch(graph -> !graph.equals(CommandPolicy.CURRENT)
                 && !graph.equals(CommandPolicy.REVISIONS)
                 && !((translationLinkShape || workDerivationShape || fixedReleaseShape || authorCreditShape) && (graph.equals(CommandPolicy.RECEIPTS)
