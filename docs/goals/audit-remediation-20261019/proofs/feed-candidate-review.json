@@ -1,4 +1,1121 @@
 {
+  "d4PreviewVerdict": {
+    "result": "candidate-reviewed-and-checked-original-d4-016-ready-for-manager-closure-at-stated-tiers",
+    "scope": "Only the missing five original Recipe rendered captures and genuine original mixed Book/Guide public samples at 1440/390, plus cumulative mapping to retained unchanged unit/story/source proof. No product edit, second source review or new full matrix.",
+    "summary": "Two actual-browser cases pass 148 assertions with fourteen screenshots actually viewed. All five remaining original Recipe item UUIDs display real ingredient/body clues without a repeated title or Ingredients opening. The original Book and Guide public discussion samples display real post-body clues and their real attached works at both widths. Together with the previously viewed first Recipe and unchanged unit/story assertions for honest omission/fallback and meaningful same-name sentences, the original D4-016 clauses are supported at their applicable tiers.",
+    "blockingFindings": [],
+    "missingOriginalD4AssertionsAtStatedTiers": [],
+    "findingDisposition": "No reproduced public D4-016 failure remains in the selected original samples. Ready for the manager to judge and record D4-016 closure against its original acceptance; this reviewer changes no finding status, index or ledger.",
+    "originalFindingsClosed": [],
+    "otherOriginalClasses": "D3-001 genuine authenticated persona/identity/generation and the wider locale/theme matrix remain open exactly as retained. Completed FEED-RSC-01 / AUD-005 proof is unchanged and was not rerun. Those classes are not prerequisites newly imposed on D4-016.",
+    "next": "Normal landing of this claimed cumulative report only. Ordinary preview source is already main at 2b1bd0c675; no implementation import is queued by this handoff."
+  },
+  "d4PreviewSemantics": "This continuation supersedes only historical D4-016 missing-capture/sample statements at the explicitly mapped tiers. Every prior field remains retained verbatim by value. It does not alter completed RSC proof or close D3-001, AUD-005, or any full audit finding in a registry.",
+  "d4PreviewConfirmation": {
+    "recordedAt": "2026-10-19T12:54:26.135443Z",
+    "authority": "Latest manager continuation: run ONLY the missing original D4-016 assertions; preserve completed FEED-RSC-01 at 685fc9d3 and root capture; read-only Book/Guide/feed while another owner holds the Book status lease.",
+    "reviewer": {
+      "worker": "G-2836",
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "soleActualIndependentReviewer": true,
+      "candidateAuthor": false,
+      "accountFallback": false,
+      "nestedAgents": false
+    },
+    "source": {
+      "head": "32400992a4879132812a83d9e6a0bd1cd5d996bf",
+      "tree": "9751a167c5d9928157667e5ba1fa5d4aaa2c6e22",
+      "cleanBefore": true,
+      "snapshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-preview-candidate",
+      "approvedPreviewSource": "2b1bd0c675df504b9610a44dcdcbc2a6e4860f6b",
+      "materialConsumersUnchanged": true,
+      "sourceBlobs": {
+        "apps/web/features/feed/preview.ts": "fd5ed1b9aed59f71c33b3b0d0e6dea8b0dc14bbb",
+        "apps/web/features/feed/card.tsx": "6b661992860176f78eab0ae164c1b09513b4e02b",
+        "apps/web/features/feed/post-row.tsx": "fa45522092d60a0d6d86770414dcab9472367028",
+        "apps/web/features/feed/feed-list.tsx": "127eddc9eabc0c1dd0ae16406bc78c1d8fdd23d6",
+        "apps/web/features/feed/feed-context.tsx": "e97de6dff0da2c4ee03cdf1cc13f5c4a297b2b43",
+        "apps/web/features/feed/preview.test.ts": "12434e4203a7dcf256a0f170db81102fc97fe77f",
+        "apps/web/features/feed/feed.stories.tsx": "61ba4abd075575c1a6dbe45aea16f84d25624563"
+      },
+      "dependenciesReusedFromExactInstalledSnapshot": "f82754944dc7ba505f7d806232ad33d142761075",
+      "dependencyInputDiffEmpty": true,
+      "dependencyStamp": "23223c2822cb3c121e46d70fff8a4d490b1e293ed078f8d2c626a1dee58d71eb",
+      "vinextModuleSha256": "496abcdede37434faa54443e4bd90d6ca8aef076e371fefe7f19cab701a14998",
+      "runnerHead": "685fc9d3faf18421fd32731956e6617ffccf9f55",
+      "originalReportSha256": "1e721661924cdf1056c76c47b62395f95f32dcc9ecea4d19c331de7b22f4d65f",
+      "ordinaryPreviewAlreadyMain": true,
+      "backendSelected": "http://127.0.0.1:3001",
+      "backendReadOnlyHead": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "fallbackRequiredBlobs": [],
+      "cleanAfter": true,
+      "originalReviewBase": "18e1308c6371936b629ae921490483ef486aae5c",
+      "originalReviewedHead": "79a8d1b1c7c55a05525942200939200ac75c2d6b",
+      "originalReviewedDiffPathCount": 20,
+      "previewBlobContinuity": [
+        {
+          "path": "apps/web/features/feed/preview.ts",
+          "blob": "fd5ed1b9aed59f71c33b3b0d0e6dea8b0dc14bbb",
+          "identicalFromOriginalReviewedHeadThroughCheckedFrontend": true
+        },
+        {
+          "path": "apps/web/features/feed/preview.test.ts",
+          "blob": "12434e4203a7dcf256a0f170db81102fc97fe77f",
+          "identicalFromOriginalReviewedHeadThroughCheckedFrontend": true
+        }
+      ],
+      "setupComposition": "None required. Exact captured main source ran without Studio fallback blobs. Reused only our own already immutable-installed dependency tree with byte-identical dependency inputs, matching dependency stamp and patched runtime module hash. No manual installed module edits.",
+      "backendProvenance": "Main3001 with manager-declared compatible source 75409ac3c379a9f84212e48a8abdc6540c5c44a2 and existing genuine corpus; no deployment, import, reset, restart or mutations by this worker. Runtime response projection/source position is recorded separately below."
+    },
+    "originalFinding": {
+      "path": ".temp/site-audit-2026-10-18/round-3/all-findings.json",
+      "field": "issues[id=D4-016]",
+      "retainedCopy": ".temp/feed-preview-evidence/original-d4-016.json",
+      "acceptance": [
+        "对六个现有recipe样本及book/guide混合样本，标题后的预览提供新增且真实的内容线索；重复开头不再次耗尽有限预览行数。",
+        "无新增正文时使用真实类型相关信息或省略无效预览，不编造简介、不误删正文中有意义的同名句子。",
+        "1440/390中仅靠当前行即可判断是否值得打开，修复不依赖拉高所有卡片。"
+      ],
+      "originalSampleEvidence": [
+        ".temp/feed-preview-evidence/original-home-preview-audit.json",
+        ".temp/feed-preview-evidence/original-home-1440.json",
+        ".temp/feed-preview-evidence/original-home-390.json"
+      ],
+      "sampleInterpretation": "The original public Home mixed Book/Guide sample is a discussion post with an attached Work. The Book is Pride and Prejudice; Guide is the human classification for Mod setup checklist, whose actual type is https://schema.org/DigitalDocument. These captures prove genuine DiscussionCard post previews, not genuine ordinary Book/Guide FeedPost work-body integration. Work-body Book/Guide cleanup and same-name behavior retain their unchanged unit and authored-story proof."
+    },
+    "checks": [
+      {
+        "job": "06d263ae-2ce0-402a-8665-eabdf9e344a1",
+        "command": "task --taskfile .temp/feed-preview.Taskfile.yml data",
+        "exit": 201,
+        "classification": "setup-required-record-selection-failure",
+        "assertionReached": false,
+        "log": ".temp/goal/jobs/06d263ae-2ce0-402a-8665-eabdf9e344a1.log",
+        "detail": "A read-only lookup retained 34 genuine pages / 120 existing feed records. All six original Recipe IDs were present. Requiring kind=work wrongly excluded the original Book/Guide discussion samples, so this setup script stopped before a UI outcome assertion. Corrected selection uses the already retained actual discussion records; no new/fabricated item or corpus acquisition."
+      },
+      {
+        "job": "bd1d20ae-d85c-4622-ac94-f0dd1c168ba7",
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/feed-preview-live.test.ts",
+        "exit": 1,
+        "classification": "review-probe-geometry-premise-error",
+        "assertionReached": true,
+        "passed": 0,
+        "failed": 2,
+        "expectCalls": 16,
+        "log": ".temp/goal/jobs/bd1d20ae-d85c-4622-ac94-f0dd1c168ba7.log",
+        "failedAssertion": "expect(geometry.clipHeight).toBeLessThanOrEqual(geometry.lineHeight * 3 + 1)",
+        "expected": "<=61 px for the whole preview container",
+        "actual": "84 px: author byline plus three 20px body lines",
+        "correction": {
+          "job": "job:bd1d20ae-d85c-4622-ac94-f0dd1c168ba7",
+          "exitCode": 1,
+          "classification": "probe-premise error at geometry assertion, not reproduced D4 failure",
+          "sourceUnchanged": true,
+          "beforeSha256": "1fb665a3b172f6f23509db3a04f2914faf8cdc468ff1eb300a8a6c4064bd7b78",
+          "afterSha256": "1da30d41c6de8483353d9f8b333cc6c7eadc64f234a3f65e5430ebe6efaf2092",
+          "correction": "The shared preview container includes a separate 24px author byline before its three visible body lines. Compare actual text Range line boxes with the clipping box rather than limiting the whole byline-plus-body container to 3*parent line-height. Original title/body/ID/visibility/overflow assertions unchanged.",
+          "originalExpectedHeight": 61,
+          "actualContainerHeight": 84,
+          "actualVisibleScreenshot": "byline24 plus 3 body lines20, neither title echo nor Ingredients label"
+        },
+        "retainedArtifacts": ".temp/feed-preview-evidence/first-geometry-probe/",
+        "distinction": "The original UUID/title/body/first-clue assertions reached and passed. Actual failed-run screenshots were viewed at both widths and show three useful body lines. This is an incorrect byline-inclusive geometry premise, not a reproduced public title-echo failure. Changed only that measurement to count actual visible text Range line boxes. No frozen RSC assertion or candidate assertion changed."
+      },
+      {
+        "job": "740625bd-6f71-4890-9808-f9ea4be00cf6",
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/feed-preview-live.test.ts",
+        "exit": 0,
+        "classification": "genuine-public-browser-original-preview-assertions",
+        "passed": 2,
+        "failed": 0,
+        "expectCalls": 148,
+        "seconds": 97.75,
+        "cases": [
+          "D4-016 original five remaining Recipe and mixed Book/Guide rows at 1440",
+          "D4-016 original five remaining Recipe and mixed Book/Guide rows at 390"
+        ],
+        "assertions": [
+          "Original sample item UUID targets arrive through real SSR/pagination; each rendered heading equals the genuine source title.",
+          "Each complete preview equals its retained genuine body excerpt, is a substring of that real source, and starts with neither its own repeated title nor Ingredients.",
+          "The first body clue is actually within the clipping box and viewport; CSS line-clamp remains 3 and visible text Range line boxes are at most three. Full unclipped span height is not substituted for visible content height.",
+          "The selected row is wholly in the viewport, without horizontal document overflow. Original Book/Guide work title is visible in the real discussion row.",
+          "All observed browser feed responses are real unmodified 200s, with no observed Main write request."
+        ],
+        "log": ".temp/goal/jobs/740625bd-6f71-4890-9808-f9ea4be00cf6.log",
+        "privateRunner": ".temp/feed-preview-live.test.ts",
+        "runnerSha256": "1da30d41c6de8483353d9f8b333cc6c7eadc64f234a3f65e5430ebe6efaf2092"
+      }
+    ],
+    "recordedJobLauncher": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- <command>; all recorded jobs launched from G-2836; local goalctl test handles QA admission.",
+    "reusedChecks": {
+      "rerun": false,
+      "reason": "No product or dependency input changed in this continuation; affected preview and Home consumers match already approved source exactly. Manager expressly limits work to missing original captures.",
+      "previewUnits": {
+        "job": "4c425950-dd54-4579-a870-df9d5863625c",
+        "qaRun": "20261019t062853-46c2a8",
+        "source": "79a8d1b1c7c55a05525942200939200ac75c2d6b",
+        "file": "apps/web/features/feed/preview.test.ts",
+        "passingCases": [
+          "recipe previews spend their lines on supplied ingredients rather than the repeated heading",
+          "a heading without body can be omitted without manufacturing a description",
+          "books and guides retain new information and meaningful sentences that begin with their title",
+          "chapter and release excerpts describe their own events, even when they name the Work"
+        ],
+        "tier": "4 unit cases within the previously passing 66 units / 437 expectations; authored specimen input, not genuine API observations"
+      },
+      "renderedStories": {
+        "job": "dfdd5116-1c90-4566-acb7-1d9d8283832f",
+        "qaRun": "20261019t094056-746fe8",
+        "source": "c3c84ef50757a2d5b5915dac7312175f7b61adc8",
+        "file": "apps/web/features/feed/feed.stories.tsx",
+        "result": "36/36 changed-file stories passed with repository interaction/a11y setup; relevant UsefulWorkPreviews and UsefulWorkPreviewsPhone also passed/viewed in original 52/55 story run, whose three unrelated historical failures remain preserved.",
+        "tier": "Existing recipe/book/guide/facts-only authored harness inputs; do not relabel them genuine signed-in or live API proof."
+      },
+      "static": {
+        "jobs": [
+          "7a3614f2-5357-4682-8d2d-2df2d0f16691",
+          "dfdd5116-1c90-4566-acb7-1d9d8283832f"
+        ],
+        "result": "Affected original types/lint/AST/guards/inference and later two-file focus static checks passed as retained in this report."
+      },
+      "completedRsc": "685fc9d3 frozen22 correction proof is preserved byte-for-byte by field; no rerun/alteration."
+    },
+    "originalAcceptanceMapping": [
+      {
+        "criterion": "对六个现有recipe样本及book/guide混合样本，标题后的预览提供新增且真实的内容线索；重复开头不再次耗尽有限预览行数。",
+        "status": "verified-at-stated-tiers",
+        "genuineApiTier": "Six original retained Recipe IDs/titles/excerpts are unchanged. Previously captured Recipe25 plus this five-Recipe run cover all six. Genuine original Home Book/Guide discussion samples retain their original item/target/work UUIDs, post titles, excerpts and actual types.",
+        "actualBrowserTier": "14 newly viewed 1440/390 screenshots show useful Recipe body clues and real Book/Guide post-body previews. No title echo or structural Ingredients opening consumes the visible lines.",
+        "componentUnitTier": "Unchanged 4 preview unit cases and UsefulWorkPreviews stories additionally cover ordinary Book/Guide work-body preview composition."
+      },
+      {
+        "criterion": "无新增正文时使用真实类型相关信息或省略无效预览，不编造简介、不误删正文中有意义的同名句子。",
+        "status": "verified-by-retained-unit-and-rendered-component-proof",
+        "unitTier": "Empty/null/title-only/Ingredients-only excerpts return null, without an invented summary; genuine same-name sentences such as Middlemarch explores provincial life, recipe-title is served in broth, and Ingredients are measured by weight are retained. Book/Guide heading-only prefixes and Chinese heading/body cases are tested explicitly.",
+        "componentTier": "Previously viewed UsefulWorkPreviews and phone story cover Recipe/Book/Guide/facts-only rows using real type-related facts or omission. Card/PostRow and preview test blobs/consumers remain unchanged.",
+        "genuineApiTier": "Newly rendered bodies equal real retained source text. This does not claim the corpus naturally supplied every empty/fallback/same-name edge case."
+      },
+      {
+        "criterion": "1440/390中仅靠当前行即可判断是否值得打开，修复不依赖拉高所有卡片。",
+        "status": "verified-in-genuine-public-ui-at-both-widths",
+        "actualBrowserTier": "Each of seven selected rows is fully visible, its first real body clue is visible, and the document has no horizontal overflow. Recipe body is capped at three actual visible lines. Desktop Recipe rows are 221px; phone rows are 221px or 245px where the title wraps. No card-height/style implementation changed. Book/Guide discussion body is two lines at desktop and three at phone, with actual attached-work context.",
+        "visualJudgment": "Viewed all 14 captures: title/content hierarchy, compact covers, body clues and actions remain readable with no selected-row overlap. Ingredient quantities, the Austen reader question and mod backup/recovery account each add a reason to open the row."
+      }
+    ],
+    "actualBrowserEvidence": {
+      "url": "http://127.0.0.1:62840/en",
+      "reader": "anonymous public Home; no sign-in or actingSubject/reader-status/progress write",
+      "theme": "Browser light preference; English UI with original Italian/English/Chinese body languages. No persisted theme or full locale matrix claimed.",
+      "interception": "None. No API response replacement, synthetic item, transport fault or fake success in this D4 run. Historical controlled409/RSC-abort proof remains separately classified.",
+      "pageErrors": [],
+      "qualifiedClientSourceModules": [
+        {
+          "url": "http://127.0.0.1:62840/@vite/client",
+          "method": "GET",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:62840/@id/__x00__virtual:vite-rsc/client-references",
+          "method": "GET",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:62840/@id/__x00__virtual:vite-rsc/client-in-server-package-proxy/%2Fhome%2Fedge%2Fprojects%2Frezics%2Frezics-next%2F.temp%2Fworktrees%2Fg-2836%2F.temp%2Ffeed-preview-candidate%2Fnode_modules%2Fvinext%2Fdist%2Fshims%2Fstreamed-icons.js",
+          "method": "GET",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:62840/@id/__x00__virtual:vite-rsc/client-in-server-package-proxy/%2Fhome%2Fedge%2Fprojects%2Frezics%2Frezics-next%2F.temp%2Fworktrees%2Fg-2836%2F.temp%2Ffeed-preview-candidate%2Fnode_modules%2Fvinext%2Fdist%2Fshims%2Fdefault-global-error.js",
+          "method": "GET",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:62840/@id/__x00__virtual:vite-rsc/client-in-server-package-proxy/%2Fhome%2Fedge%2Fprojects%2Frezics%2Frezics-next%2F.temp%2Fworktrees%2Fg-2836%2F.temp%2Ffeed-preview-candidate%2Fnode_modules%2Fvinext%2Fdist%2Fshims%2Ferror-boundary.js",
+          "method": "GET",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:62840/@id/__x00__virtual:vite-rsc/client-in-server-package-proxy/%2Fhome%2Fedge%2Fprojects%2Frezics%2Frezics-next%2F.temp%2Fworktrees%2Fg-2836%2F.temp%2Ffeed-preview-candidate%2Fnode_modules%2Fvinext%2Fdist%2Fshims%2Flayout-segment-context.js",
+          "method": "GET",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:62840/@id/__x00__virtual:vite-rsc/client-in-server-package-proxy/%2Fhome%2Fedge%2Fprojects%2Frezics%2Frezics-next%2F.temp%2Fworktrees%2Fg-2836%2F.temp%2Ffeed-preview-candidate%2Fnode_modules%2Fvinext%2Fdist%2Fshims%2Fslot.js",
+          "method": "GET",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:62840/@id/__x00__virtual:vite-rsc/client-in-server-package-proxy/%2Fhome%2Fedge%2Fprojects%2Frezics%2Frezics-next%2F.temp%2Fworktrees%2Fg-2836%2F.temp%2Ffeed-preview-candidate%2Fnode_modules%2Fvinext%2Fdist%2Fshims%2Fapp-router-scroll.js",
+          "method": "GET",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:62840/@id/__x00__virtual:vite-rsc/client-package-proxy/next/link",
+          "method": "GET",
+          "status": 200
+        },
+        {
+          "url": "http://127.0.0.1:62840/@id/__x00__virtual:vite-rsc/client-in-server-package-proxy/%2Fhome%2Fedge%2Fprojects%2Frezics%2Frezics-next%2F.temp%2Fworktrees%2Fg-2836%2F.temp%2Ffeed-preview-candidate%2Fnode_modules%2Flucide-react%2Fdist%2Fesm%2FIcon.mjs",
+          "method": "GET",
+          "status": 200
+        }
+      ],
+      "genuineBrowserPages": [
+        {
+          "url": "http://127.0.0.1:62840/api/main/v1/feed?scope=all&sort=best&cursor=sW6CoAvVMuRvrIb7UAT9-fxfCmiOplhTgzORaC30naVLKZZzScVWmep32fufuVanhbtriu_aYt0XT1oy_Mho2DPFlJgNehYEd56m1JoIKjJopGJONTHg6AHZb75qjHdNAwW594bl_Ge-kpsI0yfilD3JOLwA-doUECTrXDl4VZO53hSlcaDs0gKtyrUCiSjypyzQYoe5Chxlya-ad-mUAmxzlYx3NMrnYXoc-WXDIiPf5h3exqj0pE2HUY1v0ec-KOJD2AVH3W6wEX6d1TGDllXDb1Kpr4PBeT1PQG2ggWgrNK7YLh1QSL6ubwzZKfW1oJrEp1B-P76I15UtSoY3vBZt0BJaK5536OWcuvqFpdSdcAwzh3i6nU2HNjK0YNFOXpRTZ6waMX5jRTohEyFDqtl6Y65TGEMnzYiwzXaCAu2GUDhB8tFiR6IDiMx1_opKTd5W-B4KMvYYgfCRKGCwFgqzqU62FT-ljfDb7CPSJeuEkUKF2mLTD0Kkm3RYocl9ntYI4AZUHOlsoIpnJwdY0OjltgUkCcGX_MZap_o4-aVKbGVqsA8Htk2VqAP9XMI7purc88-NZ8qniOe_mNd6HpsBckVIOYdfttndublzQhpvdNZYcUmCeuB176tnATO6ceQ78s--RMwiT8xRjRT-OBmKld9VgTmoaP3iwXP8oulB2A3yEC2ruz-vL0-m-DMxGMjhtCgEuM1RNc4PlzH7GnzL0XnaSj8u6Vanbl7GxHBCdXt4FYsrQwekRrGRcTZQj28ekDmTr4x0-UkEdBBW7Qj16aHaCh5Suf1fmB_yG5-mGhZHv2582pTmO2zLthD2KF60ABozNIGyeU8fzR6y0a6slBU9xwCqKML56YNYK7Dp9nt_41SRN0uCOtddW1OHQIO6fbIIP6rPpjoGPnn57EIKHJAxD0sAdUljcFywawDFjaxzkV-qNPQa97P5iYLv1laXjQFl5yIKGb1J8A",
+          "method": "GET",
+          "status": 200,
+          "path": ".temp/feed-preview-evidence/browser-feed-1.json",
+          "sha256": "07dd271e685b7afa63b606ace28503e9cd54b7e3a50953d76584bcf604f8bfa3",
+          "projection": {
+            "sequence": "11938",
+            "reviewSequence": "67",
+            "status": "current"
+          },
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          },
+          "itemIds": [
+            "https://rezics.com/id/01a0e915-19cf-701d-8c1a-c1d0c7bf0b19",
+            "https://rezics.com/id/01a0e915-0bec-7730-8a55-a2195d948288",
+            "https://rezics.com/id/01a0e915-0296-756e-a8ea-96f4c5ecd63e",
+            "urn:rezics:content-search-eligibility:b5beb804514337b104a66a4a113d2738ed64ec69d81414ebf068edd5ec42e645",
+            "https://rezics.com/id/01a130a5-eab5-7149-a082-8e69110dc65a",
+            "https://rezics.com/id/01a130a5-d7ca-7704-8bed-0a88c5ae5d8f",
+            "https://rezics.com/id/01a130a5-b435-7457-b7a5-b33358004d4e"
+          ],
+          "nextCursorPresent": true
+        },
+        {
+          "url": "http://127.0.0.1:62840/api/main/v1/feed?scope=all&sort=best&cursor=owCQWWlJjBSGxjZaMfIf8-cgIFWSB379rx1CwbCFONIQuskj8IVgmNlu72vFcywSf0oOWawJVqGIrwG4yd-cR8re0qUOKiipmk68Soi-ekduIR-IbNm8u9374w7kG93_06PepEN7NjqRTaDRBynZhTTstVc5G0IRhRLY857Iy_kyMNtIuZM0_6RWlXEMIf_GzzuZcfQc7SLE60DFVXNGkHtQwzWv3mMb1YlLE4902PWv2WdNVk4P4BVZV0UCzeTkwqSIApFAuhZDAN0XPIQWdFCLnBMNvn4zkcBSKiLbRcK58574ON__Qh1CQtvpGJ5PUxR3A5873piDzOQPfUvNvHsOjS-VSmAKzGIojidz5NxIXif2_x18p79HIJHdL7-2NEbpaHC8gJFD5m2Gin-Y1JpPCSLqTyTN7PSreCNV_1cqiqYRRHUjJJL7s4a3gaxWCu5HkeWhjeEzHReuKybvxhxc56-ix56tonGeRbwhnMRudk5hs71s0u-G-jmww-t54ir1FA8aIZ8Ubr6CCRAdl5ckauyVO-GhPorWKECiGPxIuSCO0kx92O4d6pPiqejFRtGtJoO8SZHgqLEZeh8XCGV3v09EMF83Fr9NhuxiY44V686Y6QKl-KUp1NZjbyyR-oreNrNAhUq_7KFjqhZVYinSXkO2Kwq0DP8E3pR0Nh-zk_D8EPrE1QP0jM8jD_ftgfOWkdAYR67oUxM73Jtki_Gl0SGG7viDak-yEbLmVFuna2SP2pEnUCes9MGojHdn_BKIOTRFxf71SW5DOz9QMxcvCRysvd1Z7ycZCHyMnAeNd_3LCUV9LQ8M_LkJVKsQ-lbNvXccol5wrKZtLaF1rn9sK3PufvHB9fqT4WnKPB0LJF8gtJrBjlXFwtQ-O0WJUwOhdGqrA03cla13aZoFoCGHY4R_A31JYpazjawp0Y5rTFBGBg-OHtBHIgUzlFzbXmTFiSl3xvlh7LCvGA_c326H-nC9QTtLN7GDTusCGuCX4ZVmYIoc6gAqdPkqFUZA3rZzEWdOCk1_OOCwkK7_LbXulbC0RfN9GqH_9zDxz0ndsd1E9CcDCiAIgPbpiFmCvU6wuAvD9GNIrl1HjshF9YYAAgpJLooN1Cr-RBYFB3Pj4NgMtJmKPnDhxo-huXjBzERC1gUVsTt7PnSUC6_GcBLrfy3KSrBex3KCPa9HIknQWonxwEl7xLsXBogUfHhd4mFmxyOD32JfWtbKZS7YonXquMvByhqV6fkua6M_ZS3yesgF4w",
+          "method": "GET",
+          "status": 200,
+          "path": ".temp/feed-preview-evidence/browser-feed-2.json",
+          "sha256": "16868941d2ae9c0e0377dfec0c179b234b20ab2acecfde4b40355258160ff808",
+          "projection": {
+            "sequence": "11938",
+            "reviewSequence": "67",
+            "status": "current"
+          },
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          },
+          "itemIds": [
+            "https://rezics.com/id/01a130a5-8c8e-74c3-b0d6-324354bb0d77",
+            "https://rezics.com/id/01a130a5-7691-7557-8888-d0e2a55e04fe",
+            "https://rezics.com/id/01a130a5-5e28-7775-b3fd-a6a225579f2d",
+            "https://rezics.com/id/01a130a5-4418-7218-8fde-8ff1ac24c273",
+            "https://rezics.com/id/01a0e915-1b15-7360-993c-ef5beaf798f3",
+            "https://rezics.com/id/01a130a5-2e72-7446-8ae8-8d22807cbe2b",
+            "https://rezics.com/id/01a130a5-bc1b-7703-ae2d-1d3d606981ed",
+            "https://rezics.com/id/01a0e914-e079-7077-a337-a5414758e621"
+          ],
+          "nextCursorPresent": true
+        },
+        {
+          "url": "http://127.0.0.1:62840/api/main/v1/feed?scope=all&sort=best&cursor=tgor2igtMwhozEZa2UvL1waJuoaFtGQliVCoFwf7q67zr48fpMPOGMgHwFCjInLnNUjxmCbjHbsrLYuQ6XHPetHTkjeWUfWGBSFDKkCfxUXcqm4mdMyUwM_bj2SWoBmjKQMZAylEU9-0YjaK9F2MxbYYIDzyXyJXBmPuQ4cxwjeBQGvIuI0Z3IX6f9aRDtW2M_1BC_cHWdPPK9n-tF3avjnrcsKnSbb053AvOB2GnAU32F_ATexjUCp2CuhJ3ftA-KvDuuZkDghKcX7lR6xhbIMLdKX_uE619u9erBIeJBGwJQLpm8AKvCOMnYNfhntURyoSO-9UXJXVdEhbd0wQh2ZFvMYKVitmHEXJhwew_6ovu87lQeU70cCoSK46SusmpVLalJMY30v9n5RxQnO6NSklZtVJadzmCfX-EYZPyjIOxWIyFCPRmy6SQ1taVk4hHZQW-S4Z8jAlhzLohVJ0zUN8rRAMpLryyrylQIlHIQAl3o4aUpO2boxByNc_3MZ3C3274iZ057wHBfyYBoU86vn1NvQGGh00vI6MUJwWsdPWPhaNPdjCxiL6RC4gGgdddiEw3hWVzYsxeR4UAU-vnYctnRcf3xSofhbheinlhLhSAZHAdiLsJ1kYKb1Y5el2xj9EuL3H7JJoMrd35FXxOVraIqdLSch7yU0jUGajEBOMHv_NV4N5yYLO1uquWhA31xIjq2CFXdmlsURAGol_ih7qj-fMfjQ2YNyLTAtpih7DKaItXCyMGsF9UDat4WU5OHsPJB-emMktz5r2sNLSRAslpblGksSPzfHIvkBVoCDydk8TyVsWBQ9ngh0spspkqCNNiDGMv5XYuVi08T23lZLVuJP1-9gGtmUuJHfFVSdRKHJEJitLlhHNpfU7KTVUkCChYVq278GhaD2MHXI66OJkLv2dFD2NhKOjhXzNuCTzc6eRk3PkVMbK1j61XPwVMqDqJc3HE-4iwW9wBXg85nYPj1rTeKBSgQv45LYg3uuT9Ot2pn-oj_dCK4pclzwuYgVKbur7AA",
+          "method": "GET",
+          "status": 200,
+          "path": ".temp/feed-preview-evidence/browser-feed-3.json",
+          "sha256": "8fa2317f513621335edc7167085a7e680aa2449f73ee8c046ce49baddc7cda7b",
+          "projection": {
+            "sequence": "11938",
+            "reviewSequence": "67",
+            "status": "current"
+          },
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          },
+          "itemIds": [
+            "https://rezics.com/id/01a130a3-1e04-72b5-aaf7-7f172b71bc5d",
+            "https://rezics.com/id/01a0e914-ca71-728c-b241-1817119c51d3",
+            "https://rezics.com/id/01a130a2-d6b8-701e-b0aa-538915958cf8",
+            "https://rezics.com/id/01a130a2-acc5-7604-98ae-87b135de6ce0",
+            "https://rezics.com/id/01a0e915-0378-721d-8999-30c89eb10d2a",
+            "https://rezics.com/id/01a130a2-8df4-7394-8f1b-b95e2b907d7b",
+            "https://rezics.com/id/01a130a2-6640-7797-9c19-b2c4dde473ca",
+            "https://rezics.com/id/01a130a5-9041-7678-94ab-de5d7b669398"
+          ],
+          "nextCursorPresent": true
+        }
+      ],
+      "targets": [
+        {
+          "sample": "Recipe 23",
+          "id": "https://rezics.com/id/01a130a5-d7ca-7704-8bed-0a88c5ae5d8f",
+          "targetId": "https://rezics.com/id/01a130a5-bf60-737c-9b99-a7db024937a0",
+          "work": "https://rezics.com/id/01a130a5-bf60-737c-9b99-a7db024937a0",
+          "title": "23. Minestra di nocciuole di semolino",
+          "workTitle": "23. Minestra di nocciuole di semolino",
+          "types": [
+            "https://schema.org/Recipe"
+          ],
+          "kind": "adoption",
+          "originalExcerpt": "23. Minestra di nocciuole di semolino\n\nIngredients:\nLatte, decilitri 3.\nSemolino, grammi 100.\nParmigiano grattato, grammi 20.\nUova, uno intero e un torlo.\nBurro, quanto una noce.\nSale, quanto basta.\nFarina, idem.\nOdore di noce moscata.\n\nMethod:\nMettete il latte al fuoco col burro e quando bolle versate il semolino\na poco a poco. Salatelo; quando è cotto e caldo ancora, ma non\nbollente, scocciategl",
+          "expectedPreview": "Latte, decilitri 3.\nSemolino, grammi 100.\nParmigiano grattato, grammi 20.\nUova, uno intero e un torlo.\nBurro, quanto una noce.\nSale, quanto basta.\nFarina, idem.\nOdore di noce moscata.\n\nMethod:\nMettete il latte al fuoco col burro e quando bolle versate il semolino\na poco a poco. Salatelo; quando è cotto e caldo ancora, ma non\nbollente, scocciategl",
+          "tier": "genuine public FeedPost work preview"
+        },
+        {
+          "sample": "Recipe 21",
+          "id": "https://rezics.com/id/01a130a5-bc1b-7703-ae2d-1d3d606981ed",
+          "targetId": "https://rezics.com/id/01a130a5-93f8-7134-bc60-abfb00a58c44",
+          "work": "https://rezics.com/id/01a130a5-93f8-7134-bc60-abfb00a58c44",
+          "title": "21. Minestra di passatelli di carne",
+          "workTitle": "21. Minestra di passatelli di carne",
+          "types": [
+            "https://schema.org/Recipe"
+          ],
+          "kind": "adoption",
+          "originalExcerpt": "21. Minestra di passatelli di carne\n\nIngredients:\nFiletto di manzo, grammi 150.\nPangrattato, grammi 50.\nParmigiano grattato, grammi 30.\nMidollo di bue, grammi 15.\nBurro, grammi 15.\nRossi d'uovo, N. 2.\nSale, quanto basta.\nOdore di noce moscata.\n\nMethod:\nIl filetto pestatelo nel mortaio e passatelo dallo staccio.\nIl midollo e il burro stiacciateli insieme con la lama di un coltello\ne uniteli alla ca",
+          "expectedPreview": "Filetto di manzo, grammi 150.\nPangrattato, grammi 50.\nParmigiano grattato, grammi 30.\nMidollo di bue, grammi 15.\nBurro, grammi 15.\nRossi d'uovo, N. 2.\nSale, quanto basta.\nOdore di noce moscata.\n\nMethod:\nIl filetto pestatelo nel mortaio e passatelo dallo staccio.\nIl midollo e il burro stiacciateli insieme con la lama di un coltello\ne uniteli alla ca",
+          "tier": "genuine public FeedPost work preview"
+        },
+        {
+          "sample": "Recipe 17",
+          "id": "https://rezics.com/id/01a130a5-8c8e-74c3-b0d6-324354bb0d77",
+          "targetId": "https://rezics.com/id/01a130a5-7d5b-729a-9b69-4db839104531",
+          "work": "https://rezics.com/id/01a130a5-7d5b-729a-9b69-4db839104531",
+          "title": "17. Minestra di Krapfen",
+          "workTitle": "17. Minestra di Krapfen",
+          "types": [
+            "https://schema.org/Recipe"
+          ],
+          "kind": "work",
+          "originalExcerpt": "17. Minestra di Krapfen\n\nIngredients:\nFarina d'Ungheria, grammi 100.\nBurro, grammi 20.\nLievito di birra, quanto una noce.\nUova, N. 1\nSale, una presa.\n\nMethod:\nTirato il pastone a stiacciata della grossezza alquanto meno di mezzo\ndito, tagliatelo con un cannello di latta del diametro segnato per\nfarne come tante pasticche che porrete a lievitare. Le vedrete crescere\nin forma di pallottole e allora ",
+          "expectedPreview": "Farina d'Ungheria, grammi 100.\nBurro, grammi 20.\nLievito di birra, quanto una noce.\nUova, N. 1\nSale, una presa.\n\nMethod:\nTirato il pastone a stiacciata della grossezza alquanto meno di mezzo\ndito, tagliatelo con un cannello di latta del diametro segnato per\nfarne come tante pasticche che porrete a lievitare. Le vedrete crescere\nin forma di pallottole e allora",
+          "tier": "genuine public FeedPost work preview"
+        },
+        {
+          "sample": "Recipe 16",
+          "id": "https://rezics.com/id/01a130a5-7691-7557-8888-d0e2a55e04fe",
+          "targetId": "https://rezics.com/id/01a130a5-6597-7448-9f4a-9717221997c8",
+          "work": "https://rezics.com/id/01a130a5-6597-7448-9f4a-9717221997c8",
+          "title": "16. Minestra di semolino composta II",
+          "workTitle": "16. Minestra di semolino composta II",
+          "types": [
+            "https://schema.org/Recipe"
+          ],
+          "kind": "work",
+          "originalExcerpt": "16. Minestra di semolino composta II\n\nIngredients:\nPer ogni uovo:\nSemolino, grammi 30.\nParmigiano grattato, grammi 20.\nBurro, grammi 20.\nSale, una presa.\nOdore di noce moscata.\n\nMethod:\nIl burro scioglietelo al fuoco e, tolto via dal fuoco, versateci sopra\nil semolino e il parmigiano, sciogliendo bene il composto colle uova.\nPoi versatelo in una cazzaruola con un foglio imburrato sotto per\nassodar",
+          "expectedPreview": "Per ogni uovo:\nSemolino, grammi 30.\nParmigiano grattato, grammi 20.\nBurro, grammi 20.\nSale, una presa.\nOdore di noce moscata.\n\nMethod:\nIl burro scioglietelo al fuoco e, tolto via dal fuoco, versateci sopra\nil semolino e il parmigiano, sciogliendo bene il composto colle uova.\nPoi versatelo in una cazzaruola con un foglio imburrato sotto per\nassodar",
+          "tier": "genuine public FeedPost work preview"
+        },
+        {
+          "sample": "Recipe 11",
+          "id": "https://rezics.com/id/01a130a5-5e28-7775-b3fd-a6a225579f2d",
+          "targetId": "https://rezics.com/id/01a130a5-4c24-729f-be64-e162ddb173c4",
+          "work": "https://rezics.com/id/01a130a5-4c24-729f-be64-e162ddb173c4",
+          "title": "11. Panata",
+          "workTitle": "11. Panata",
+          "types": [
+            "https://schema.org/Recipe"
+          ],
+          "kind": "work",
+          "originalExcerpt": "11. Panata\n\nIngredients:\nPane del giorno avanti, grattato, non pestato, gr. 130.\nUova, N. 4.\nCacio parmigiano, grammi 50.\nOdore di noce moscata.\nSale, un pizzico.\n\nMethod:\nPrendete una cazzaruola larga e formate in essa un composto non tanto\nsodo con gl'ingredienti suddetti, aggiungendo del pangrattato se\noccorre. Stemperatelo con brodo caldo, ma non bollente, e lasciatene\naddietro alquanto per ag",
+          "expectedPreview": "Pane del giorno avanti, grattato, non pestato, gr. 130.\nUova, N. 4.\nCacio parmigiano, grammi 50.\nOdore di noce moscata.\nSale, un pizzico.\n\nMethod:\nPrendete una cazzaruola larga e formate in essa un composto non tanto\nsodo con gl'ingredienti suddetti, aggiungendo del pangrattato se\noccorre. Stemperatelo con brodo caldo, ma non bollente, e lasciatene\naddietro alquanto per ag",
+          "tier": "genuine public FeedPost work preview"
+        },
+        {
+          "sample": "Book",
+          "id": "https://rezics.com/id/01a0e915-0bec-7730-8a55-a2195d948288",
+          "targetId": "https://rezics.com/id/bc9a25ec-27f0-4cdc-a8f0-869316104ecd",
+          "work": "https://rezics.com/id/01a0e909-2857-70fc-b300-8091dc9a973f",
+          "title": "First time reading Austen in English: any tips?",
+          "workTitle": "Pride and Prejudice",
+          "types": [
+            "https://schema.org/Book"
+          ],
+          "kind": "discussion",
+          "originalExcerpt": "First time reading Austen in English: any tips?\nEnglish is my third language, and the sentences are long and ironic. Should I read with a dictionary or just keep going?",
+          "expectedPreview": "English is my third language, and the sentences are long and ironic. Should I read with a dictionary or just keep going?",
+          "tier": "genuine original public DiscussionCard post preview with attached work; not ordinary work-body integration"
+        },
+        {
+          "sample": "Guide",
+          "id": "https://rezics.com/id/01a0e915-19cf-701d-8c1a-c1d0c7bf0b19",
+          "targetId": "https://rezics.com/id/1dc89ab3-7389-407b-a662-4263e9dfce13",
+          "work": "https://rezics.com/id/01a0e90a-d0ce-7480-a1af-e9ffc90f537e",
+          "title": "【经验】装模组之前一定要备份存档",
+          "workTitle": "Mod setup checklist",
+          "types": [
+            "https://schema.org/DigitalDocument"
+          ],
+          "kind": "discussion",
+          "originalExcerpt": "【经验】装模组之前一定要备份存档\n上周一次往 1.20.1 整合包里加了二十个模组，结果存档打不开。后来按照“模组安装清单”一步步回退才救回来。建议大家一次只加几个模组，每次都先备份。",
+          "expectedPreview": "上周一次往 1.20.1 整合包里加了二十个模组，结果存档打不开。后来按照“模组安装清单”一步步回退才救回来。建议大家一次只加几个模组，每次都先备份。",
+          "tier": "genuine original public DiscussionCard post preview with attached work; not ordinary work-body integration"
+        }
+      ],
+      "rowObservations": [
+        {
+          "width": 1440,
+          "sample": "Recipe 23",
+          "id": "https://rezics.com/id/01a130a5-d7ca-7704-8bed-0a88c5ae5d8f",
+          "targetId": "https://rezics.com/id/01a130a5-bf60-737c-9b99-a7db024937a0",
+          "work": "https://rezics.com/id/01a130a5-bf60-737c-9b99-a7db024937a0",
+          "title": "23. Minestra di nocciuole di semolino",
+          "workTitle": "23. Minestra di nocciuole di semolino",
+          "types": [
+            "https://schema.org/Recipe"
+          ],
+          "kind": "adoption",
+          "tier": "genuine public FeedPost work preview",
+          "heading": "23. Minestra di nocciuole di semolino",
+          "preview": "Latte, decilitri 3.\nSemolino, grammi 100.\nParmigiano grattato, grammi 20.\nUova, uno intero e un torlo.\nBurro, quanto una noce.\nSale, quanto basta.\nFarina, idem.\nOdore di noce moscata.\n\nMethod:\nMettete il latte al fuoco col burro e quando bolle versate il semolino\na poco a poco. Salatelo; quando è cotto e caldo ancora, ma non\nbollente, scocciategl",
+          "geometry": {
+            "clamp": "3",
+            "lineHeight": 20,
+            "clipHeight": 84,
+            "fullSpanHeight": 261,
+            "visibleBodyLines": 3,
+            "firstClueVisible": true,
+            "rowHeight": 221,
+            "rowInViewport": true,
+            "overflow": false,
+            "titleLang": "it",
+            "bodyLang": "it"
+          },
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-preview-evidence/d4-1-recipe-23-1440.png",
+          "url": "http://127.0.0.1:62840/en"
+        },
+        {
+          "width": 1440,
+          "sample": "Recipe 21",
+          "id": "https://rezics.com/id/01a130a5-bc1b-7703-ae2d-1d3d606981ed",
+          "targetId": "https://rezics.com/id/01a130a5-93f8-7134-bc60-abfb00a58c44",
+          "work": "https://rezics.com/id/01a130a5-93f8-7134-bc60-abfb00a58c44",
+          "title": "21. Minestra di passatelli di carne",
+          "workTitle": "21. Minestra di passatelli di carne",
+          "types": [
+            "https://schema.org/Recipe"
+          ],
+          "kind": "adoption",
+          "tier": "genuine public FeedPost work preview",
+          "heading": "21. Minestra di passatelli di carne",
+          "preview": "Filetto di manzo, grammi 150.\nPangrattato, grammi 50.\nParmigiano grattato, grammi 30.\nMidollo di bue, grammi 15.\nBurro, grammi 15.\nRossi d'uovo, N. 2.\nSale, quanto basta.\nOdore di noce moscata.\n\nMethod:\nIl filetto pestatelo nel mortaio e passatelo dallo staccio.\nIl midollo e il burro stiacciateli insieme con la lama di un coltello\ne uniteli alla ca",
+          "geometry": {
+            "clamp": "3",
+            "lineHeight": 20,
+            "clipHeight": 84,
+            "fullSpanHeight": 261,
+            "visibleBodyLines": 3,
+            "firstClueVisible": true,
+            "rowHeight": 221,
+            "rowInViewport": true,
+            "overflow": false,
+            "titleLang": "it",
+            "bodyLang": "it"
+          },
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-preview-evidence/d4-2-recipe-21-1440.png",
+          "url": "http://127.0.0.1:62840/en"
+        },
+        {
+          "width": 1440,
+          "sample": "Recipe 17",
+          "id": "https://rezics.com/id/01a130a5-8c8e-74c3-b0d6-324354bb0d77",
+          "targetId": "https://rezics.com/id/01a130a5-7d5b-729a-9b69-4db839104531",
+          "work": "https://rezics.com/id/01a130a5-7d5b-729a-9b69-4db839104531",
+          "title": "17. Minestra di Krapfen",
+          "workTitle": "17. Minestra di Krapfen",
+          "types": [
+            "https://schema.org/Recipe"
+          ],
+          "kind": "work",
+          "tier": "genuine public FeedPost work preview",
+          "heading": "17. Minestra di Krapfen",
+          "preview": "Farina d'Ungheria, grammi 100.\nBurro, grammi 20.\nLievito di birra, quanto una noce.\nUova, N. 1\nSale, una presa.\n\nMethod:\nTirato il pastone a stiacciata della grossezza alquanto meno di mezzo\ndito, tagliatelo con un cannello di latta del diametro segnato per\nfarne come tante pasticche che porrete a lievitare. Le vedrete crescere\nin forma di pallottole e allora",
+          "geometry": {
+            "clamp": "3",
+            "lineHeight": 20,
+            "clipHeight": 84,
+            "fullSpanHeight": 221,
+            "visibleBodyLines": 3,
+            "firstClueVisible": true,
+            "rowHeight": 221,
+            "rowInViewport": true,
+            "overflow": false,
+            "titleLang": "it",
+            "bodyLang": "it"
+          },
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-preview-evidence/d4-3-recipe-17-1440.png",
+          "url": "http://127.0.0.1:62840/en"
+        },
+        {
+          "width": 1440,
+          "sample": "Recipe 16",
+          "id": "https://rezics.com/id/01a130a5-7691-7557-8888-d0e2a55e04fe",
+          "targetId": "https://rezics.com/id/01a130a5-6597-7448-9f4a-9717221997c8",
+          "work": "https://rezics.com/id/01a130a5-6597-7448-9f4a-9717221997c8",
+          "title": "16. Minestra di semolino composta II",
+          "workTitle": "16. Minestra di semolino composta II",
+          "types": [
+            "https://schema.org/Recipe"
+          ],
+          "kind": "work",
+          "tier": "genuine public FeedPost work preview",
+          "heading": "16. Minestra di semolino composta II",
+          "preview": "Per ogni uovo:\nSemolino, grammi 30.\nParmigiano grattato, grammi 20.\nBurro, grammi 20.\nSale, una presa.\nOdore di noce moscata.\n\nMethod:\nIl burro scioglietelo al fuoco e, tolto via dal fuoco, versateci sopra\nil semolino e il parmigiano, sciogliendo bene il composto colle uova.\nPoi versatelo in una cazzaruola con un foglio imburrato sotto per\nassodar",
+          "geometry": {
+            "clamp": "3",
+            "lineHeight": 20,
+            "clipHeight": 84,
+            "fullSpanHeight": 241,
+            "visibleBodyLines": 3,
+            "firstClueVisible": true,
+            "rowHeight": 221,
+            "rowInViewport": true,
+            "overflow": false,
+            "titleLang": "it",
+            "bodyLang": "it"
+          },
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-preview-evidence/d4-4-recipe-16-1440.png",
+          "url": "http://127.0.0.1:62840/en"
+        },
+        {
+          "width": 1440,
+          "sample": "Recipe 11",
+          "id": "https://rezics.com/id/01a130a5-5e28-7775-b3fd-a6a225579f2d",
+          "targetId": "https://rezics.com/id/01a130a5-4c24-729f-be64-e162ddb173c4",
+          "work": "https://rezics.com/id/01a130a5-4c24-729f-be64-e162ddb173c4",
+          "title": "11. Panata",
+          "workTitle": "11. Panata",
+          "types": [
+            "https://schema.org/Recipe"
+          ],
+          "kind": "work",
+          "tier": "genuine public FeedPost work preview",
+          "heading": "11. Panata",
+          "preview": "Pane del giorno avanti, grattato, non pestato, gr. 130.\nUova, N. 4.\nCacio parmigiano, grammi 50.\nOdore di noce moscata.\nSale, un pizzico.\n\nMethod:\nPrendete una cazzaruola larga e formate in essa un composto non tanto\nsodo con gl'ingredienti suddetti, aggiungendo del pangrattato se\noccorre. Stemperatelo con brodo caldo, ma non bollente, e lasciatene\naddietro alquanto per ag",
+          "geometry": {
+            "clamp": "3",
+            "lineHeight": 20,
+            "clipHeight": 84,
+            "fullSpanHeight": 221,
+            "visibleBodyLines": 3,
+            "firstClueVisible": true,
+            "rowHeight": 221,
+            "rowInViewport": true,
+            "overflow": false,
+            "titleLang": "it",
+            "bodyLang": "it"
+          },
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-preview-evidence/d4-5-recipe-11-1440.png",
+          "url": "http://127.0.0.1:62840/en"
+        },
+        {
+          "width": 1440,
+          "sample": "Book",
+          "id": "https://rezics.com/id/01a0e915-0bec-7730-8a55-a2195d948288",
+          "targetId": "https://rezics.com/id/bc9a25ec-27f0-4cdc-a8f0-869316104ecd",
+          "work": "https://rezics.com/id/01a0e909-2857-70fc-b300-8091dc9a973f",
+          "title": "First time reading Austen in English: any tips?",
+          "workTitle": "Pride and Prejudice",
+          "types": [
+            "https://schema.org/Book"
+          ],
+          "kind": "discussion",
+          "tier": "genuine original public DiscussionCard post preview with attached work; not ordinary work-body integration",
+          "heading": "First time reading Austen in English: any tips?",
+          "preview": "English is my third language, and the sentences are long and ironic. Should I read with a dictionary or just keep going?",
+          "geometry": {
+            "clamp": "3",
+            "lineHeight": 20,
+            "clipHeight": 40,
+            "fullSpanHeight": 41,
+            "visibleBodyLines": 2,
+            "firstClueVisible": true,
+            "rowHeight": 227,
+            "rowInViewport": true,
+            "overflow": false,
+            "titleLang": "en",
+            "bodyLang": "en"
+          },
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-preview-evidence/d4-6-book-1440.png",
+          "url": "http://127.0.0.1:62840/en"
+        },
+        {
+          "width": 1440,
+          "sample": "Guide",
+          "id": "https://rezics.com/id/01a0e915-19cf-701d-8c1a-c1d0c7bf0b19",
+          "targetId": "https://rezics.com/id/1dc89ab3-7389-407b-a662-4263e9dfce13",
+          "work": "https://rezics.com/id/01a0e90a-d0ce-7480-a1af-e9ffc90f537e",
+          "title": "【经验】装模组之前一定要备份存档",
+          "workTitle": "Mod setup checklist",
+          "types": [
+            "https://schema.org/DigitalDocument"
+          ],
+          "kind": "discussion",
+          "tier": "genuine original public DiscussionCard post preview with attached work; not ordinary work-body integration",
+          "heading": "【经验】装模组之前一定要备份存档",
+          "preview": "上周一次往 1.20.1 整合包里加了二十个模组，结果存档打不开。后来按照“模组安装清单”一步步回退才救回来。建议大家一次只加几个模组，每次都先备份。",
+          "geometry": {
+            "clamp": "3",
+            "lineHeight": 20,
+            "clipHeight": 54,
+            "fullSpanHeight": 48,
+            "visibleBodyLines": 2,
+            "firstClueVisible": true,
+            "rowHeight": 241,
+            "rowInViewport": true,
+            "overflow": false,
+            "titleLang": "zh-Hans",
+            "bodyLang": "zh-Hans"
+          },
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-preview-evidence/d4-7-guide-1440.png",
+          "url": "http://127.0.0.1:62840/en"
+        },
+        {
+          "width": 390,
+          "sample": "Recipe 23",
+          "id": "https://rezics.com/id/01a130a5-d7ca-7704-8bed-0a88c5ae5d8f",
+          "targetId": "https://rezics.com/id/01a130a5-bf60-737c-9b99-a7db024937a0",
+          "work": "https://rezics.com/id/01a130a5-bf60-737c-9b99-a7db024937a0",
+          "title": "23. Minestra di nocciuole di semolino",
+          "workTitle": "23. Minestra di nocciuole di semolino",
+          "types": [
+            "https://schema.org/Recipe"
+          ],
+          "kind": "adoption",
+          "tier": "genuine public FeedPost work preview",
+          "heading": "23. Minestra di nocciuole di semolino",
+          "preview": "Latte, decilitri 3.\nSemolino, grammi 100.\nParmigiano grattato, grammi 20.\nUova, uno intero e un torlo.\nBurro, quanto una noce.\nSale, quanto basta.\nFarina, idem.\nOdore di noce moscata.\n\nMethod:\nMettete il latte al fuoco col burro e quando bolle versate il semolino\na poco a poco. Salatelo; quando è cotto e caldo ancora, ma non\nbollente, scocciategl",
+          "geometry": {
+            "clamp": "3",
+            "lineHeight": 20,
+            "clipHeight": 84,
+            "fullSpanHeight": 301,
+            "visibleBodyLines": 3,
+            "firstClueVisible": true,
+            "rowHeight": 245,
+            "rowInViewport": true,
+            "overflow": false,
+            "titleLang": "it",
+            "bodyLang": "it"
+          },
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-preview-evidence/d4-1-recipe-23-390.png",
+          "url": "http://127.0.0.1:62840/en"
+        },
+        {
+          "width": 390,
+          "sample": "Recipe 21",
+          "id": "https://rezics.com/id/01a130a5-bc1b-7703-ae2d-1d3d606981ed",
+          "targetId": "https://rezics.com/id/01a130a5-93f8-7134-bc60-abfb00a58c44",
+          "work": "https://rezics.com/id/01a130a5-93f8-7134-bc60-abfb00a58c44",
+          "title": "21. Minestra di passatelli di carne",
+          "workTitle": "21. Minestra di passatelli di carne",
+          "types": [
+            "https://schema.org/Recipe"
+          ],
+          "kind": "adoption",
+          "tier": "genuine public FeedPost work preview",
+          "heading": "21. Minestra di passatelli di carne",
+          "preview": "Filetto di manzo, grammi 150.\nPangrattato, grammi 50.\nParmigiano grattato, grammi 30.\nMidollo di bue, grammi 15.\nBurro, grammi 15.\nRossi d'uovo, N. 2.\nSale, quanto basta.\nOdore di noce moscata.\n\nMethod:\nIl filetto pestatelo nel mortaio e passatelo dallo staccio.\nIl midollo e il burro stiacciateli insieme con la lama di un coltello\ne uniteli alla ca",
+          "geometry": {
+            "clamp": "3",
+            "lineHeight": 20,
+            "clipHeight": 84,
+            "fullSpanHeight": 301,
+            "visibleBodyLines": 3,
+            "firstClueVisible": true,
+            "rowHeight": 221,
+            "rowInViewport": true,
+            "overflow": false,
+            "titleLang": "it",
+            "bodyLang": "it"
+          },
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-preview-evidence/d4-2-recipe-21-390.png",
+          "url": "http://127.0.0.1:62840/en"
+        },
+        {
+          "width": 390,
+          "sample": "Recipe 17",
+          "id": "https://rezics.com/id/01a130a5-8c8e-74c3-b0d6-324354bb0d77",
+          "targetId": "https://rezics.com/id/01a130a5-7d5b-729a-9b69-4db839104531",
+          "work": "https://rezics.com/id/01a130a5-7d5b-729a-9b69-4db839104531",
+          "title": "17. Minestra di Krapfen",
+          "workTitle": "17. Minestra di Krapfen",
+          "types": [
+            "https://schema.org/Recipe"
+          ],
+          "kind": "work",
+          "tier": "genuine public FeedPost work preview",
+          "heading": "17. Minestra di Krapfen",
+          "preview": "Farina d'Ungheria, grammi 100.\nBurro, grammi 20.\nLievito di birra, quanto una noce.\nUova, N. 1\nSale, una presa.\n\nMethod:\nTirato il pastone a stiacciata della grossezza alquanto meno di mezzo\ndito, tagliatelo con un cannello di latta del diametro segnato per\nfarne come tante pasticche che porrete a lievitare. Le vedrete crescere\nin forma di pallottole e allora",
+          "geometry": {
+            "clamp": "3",
+            "lineHeight": 20,
+            "clipHeight": 84,
+            "fullSpanHeight": 281,
+            "visibleBodyLines": 3,
+            "firstClueVisible": true,
+            "rowHeight": 221,
+            "rowInViewport": true,
+            "overflow": false,
+            "titleLang": "it",
+            "bodyLang": "it"
+          },
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-preview-evidence/d4-3-recipe-17-390.png",
+          "url": "http://127.0.0.1:62840/en"
+        },
+        {
+          "width": 390,
+          "sample": "Recipe 16",
+          "id": "https://rezics.com/id/01a130a5-7691-7557-8888-d0e2a55e04fe",
+          "targetId": "https://rezics.com/id/01a130a5-6597-7448-9f4a-9717221997c8",
+          "work": "https://rezics.com/id/01a130a5-6597-7448-9f4a-9717221997c8",
+          "title": "16. Minestra di semolino composta II",
+          "workTitle": "16. Minestra di semolino composta II",
+          "types": [
+            "https://schema.org/Recipe"
+          ],
+          "kind": "work",
+          "tier": "genuine public FeedPost work preview",
+          "heading": "16. Minestra di semolino composta II",
+          "preview": "Per ogni uovo:\nSemolino, grammi 30.\nParmigiano grattato, grammi 20.\nBurro, grammi 20.\nSale, una presa.\nOdore di noce moscata.\n\nMethod:\nIl burro scioglietelo al fuoco e, tolto via dal fuoco, versateci sopra\nil semolino e il parmigiano, sciogliendo bene il composto colle uova.\nPoi versatelo in una cazzaruola con un foglio imburrato sotto per\nassodar",
+          "geometry": {
+            "clamp": "3",
+            "lineHeight": 20,
+            "clipHeight": 84,
+            "fullSpanHeight": 301,
+            "visibleBodyLines": 3,
+            "firstClueVisible": true,
+            "rowHeight": 245,
+            "rowInViewport": true,
+            "overflow": false,
+            "titleLang": "it",
+            "bodyLang": "it"
+          },
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-preview-evidence/d4-4-recipe-16-390.png",
+          "url": "http://127.0.0.1:62840/en"
+        },
+        {
+          "width": 390,
+          "sample": "Recipe 11",
+          "id": "https://rezics.com/id/01a130a5-5e28-7775-b3fd-a6a225579f2d",
+          "targetId": "https://rezics.com/id/01a130a5-4c24-729f-be64-e162ddb173c4",
+          "work": "https://rezics.com/id/01a130a5-4c24-729f-be64-e162ddb173c4",
+          "title": "11. Panata",
+          "workTitle": "11. Panata",
+          "types": [
+            "https://schema.org/Recipe"
+          ],
+          "kind": "work",
+          "tier": "genuine public FeedPost work preview",
+          "heading": "11. Panata",
+          "preview": "Pane del giorno avanti, grattato, non pestato, gr. 130.\nUova, N. 4.\nCacio parmigiano, grammi 50.\nOdore di noce moscata.\nSale, un pizzico.\n\nMethod:\nPrendete una cazzaruola larga e formate in essa un composto non tanto\nsodo con gl'ingredienti suddetti, aggiungendo del pangrattato se\noccorre. Stemperatelo con brodo caldo, ma non bollente, e lasciatene\naddietro alquanto per ag",
+          "geometry": {
+            "clamp": "3",
+            "lineHeight": 20,
+            "clipHeight": 84,
+            "fullSpanHeight": 301,
+            "visibleBodyLines": 3,
+            "firstClueVisible": true,
+            "rowHeight": 221,
+            "rowInViewport": true,
+            "overflow": false,
+            "titleLang": "it",
+            "bodyLang": "it"
+          },
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-preview-evidence/d4-5-recipe-11-390.png",
+          "url": "http://127.0.0.1:62840/en"
+        },
+        {
+          "width": 390,
+          "sample": "Book",
+          "id": "https://rezics.com/id/01a0e915-0bec-7730-8a55-a2195d948288",
+          "targetId": "https://rezics.com/id/bc9a25ec-27f0-4cdc-a8f0-869316104ecd",
+          "work": "https://rezics.com/id/01a0e909-2857-70fc-b300-8091dc9a973f",
+          "title": "First time reading Austen in English: any tips?",
+          "workTitle": "Pride and Prejudice",
+          "types": [
+            "https://schema.org/Book"
+          ],
+          "kind": "discussion",
+          "tier": "genuine original public DiscussionCard post preview with attached work; not ordinary work-body integration",
+          "heading": "First time reading Austen in English: any tips?",
+          "preview": "English is my third language, and the sentences are long and ironic. Should I read with a dictionary or just keep going?",
+          "geometry": {
+            "clamp": "3",
+            "lineHeight": 20,
+            "clipHeight": 60,
+            "fullSpanHeight": 61,
+            "visibleBodyLines": 3,
+            "firstClueVisible": true,
+            "rowHeight": 271,
+            "rowInViewport": true,
+            "overflow": false,
+            "titleLang": "en",
+            "bodyLang": "en"
+          },
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-preview-evidence/d4-6-book-390.png",
+          "url": "http://127.0.0.1:62840/en"
+        },
+        {
+          "width": 390,
+          "sample": "Guide",
+          "id": "https://rezics.com/id/01a0e915-19cf-701d-8c1a-c1d0c7bf0b19",
+          "targetId": "https://rezics.com/id/1dc89ab3-7389-407b-a662-4263e9dfce13",
+          "work": "https://rezics.com/id/01a0e90a-d0ce-7480-a1af-e9ffc90f537e",
+          "title": "【经验】装模组之前一定要备份存档",
+          "workTitle": "Mod setup checklist",
+          "types": [
+            "https://schema.org/DigitalDocument"
+          ],
+          "kind": "discussion",
+          "tier": "genuine original public DiscussionCard post preview with attached work; not ordinary work-body integration",
+          "heading": "【经验】装模组之前一定要备份存档",
+          "preview": "上周一次往 1.20.1 整合包里加了二十个模组，结果存档打不开。后来按照“模组安装清单”一步步回退才救回来。建议大家一次只加几个模组，每次都先备份。",
+          "geometry": {
+            "clamp": "3",
+            "lineHeight": 20,
+            "clipHeight": 81,
+            "fullSpanHeight": 75,
+            "visibleBodyLines": 3,
+            "firstClueVisible": true,
+            "rowHeight": 268,
+            "rowInViewport": true,
+            "overflow": false,
+            "titleLang": "zh-Hans",
+            "bodyLang": "zh-Hans"
+          },
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-preview-evidence/d4-7-guide-390.png",
+          "url": "http://127.0.0.1:62840/en"
+        }
+      ],
+      "lifecycle": "One own Task web:dev frontend, stopped by its process group in afterAll; private port62840 confirmed not listening. No peer backend/stack lifecycle or data mutation."
+    },
+    "screenshotsActuallyViewed": [
+      {
+        "path": ".temp/feed-preview-evidence/d4-1-recipe-23-1440.png",
+        "viewport": [
+          1440,
+          1000
+        ],
+        "sha256": "8c25663e1b5eb280087b0b8492cf17c82176f55000051e64c9d3b8f21512c16c",
+        "sample": "Recipe 23",
+        "itemId": "https://rezics.com/id/01a130a5-d7ca-7704-8bed-0a88c5ae5d8f",
+        "viewedWith": "view_image",
+        "observation": "Latte and semolino quantities replace the repeated title/Ingredients heading; full Italian title and useful ingredients fit. No overlap or horizontal overflow in this selected row; its title, body and actions remain legible."
+      },
+      {
+        "path": ".temp/feed-preview-evidence/d4-2-recipe-21-1440.png",
+        "viewport": [
+          1440,
+          1000
+        ],
+        "sha256": "1c3df75355fa7ba749ffca4fe97ae8233e9a22c4d5a1a69863b05d8aff23307f",
+        "sample": "Recipe 21",
+        "itemId": "https://rezics.com/id/01a130a5-bc1b-7703-ae2d-1d3d606981ed",
+        "viewedWith": "view_image",
+        "observation": "Original picked/adoption UUID retained (not substituted with the other published event for this Work). Filetto di manzo and Pangrattato quantities provide body clues. No overlap or horizontal overflow in this selected row; its title, body and actions remain legible."
+      },
+      {
+        "path": ".temp/feed-preview-evidence/d4-3-recipe-17-1440.png",
+        "viewport": [
+          1440,
+          1000
+        ],
+        "sha256": "219f900fe2c6212c326285aa613f4e20d17c5c6aad52715a5cd13d48e0835da1",
+        "sample": "Recipe 17",
+        "itemId": "https://rezics.com/id/01a130a5-8c8e-74c3-b0d6-324354bb0d77",
+        "viewedWith": "view_image",
+        "observation": "Farina d’Ungheria, butter and yeast quantities are visible; title and compact cover remain separate. No overlap or horizontal overflow in this selected row; its title, body and actions remain legible."
+      },
+      {
+        "path": ".temp/feed-preview-evidence/d4-4-recipe-16-1440.png",
+        "viewport": [
+          1440,
+          1000
+        ],
+        "sha256": "f875ca775e212adfddac956980eb523cf16b3f1c8063338f143c544384495cb5",
+        "sample": "Recipe 16",
+        "itemId": "https://rezics.com/id/01a130a5-7691-7557-8888-d0e2a55e04fe",
+        "viewedWith": "view_image",
+        "observation": "Per ogni uovo remains meaningful introductory context, followed by semolino and parmesan quantities; no mechanical deletion of this body phrase. No overlap or horizontal overflow in this selected row; its title, body and actions remain legible."
+      },
+      {
+        "path": ".temp/feed-preview-evidence/d4-5-recipe-11-1440.png",
+        "viewport": [
+          1440,
+          1000
+        ],
+        "sha256": "2069edd9ea49d8c6ae700ecc1ba063f2589574f3eff0646b517feb73cac7c659",
+        "sample": "Recipe 11",
+        "itemId": "https://rezics.com/id/01a130a5-5e28-7775-b3fd-a6a225579f2d",
+        "viewedWith": "view_image",
+        "observation": "Pane del giorno avanti and its amount provide a real opening clue; on the phone it wraps before the eggs line rather than repeating Panata. No overlap or horizontal overflow in this selected row; its title, body and actions remain legible."
+      },
+      {
+        "path": ".temp/feed-preview-evidence/d4-6-book-1440.png",
+        "viewport": [
+          1440,
+          1000
+        ],
+        "sha256": "f82740b61ba65e2e4d76110a398ebfa1c1623c58df75a0b6f49264dcc0ca3b86",
+        "sample": "Book",
+        "itemId": "https://rezics.com/id/01a0e915-0bec-7730-8a55-a2195d948288",
+        "viewedWith": "view_image",
+        "observation": "Austen discussion title is followed by the real third-language/dictionary question. Pride and Prejudice and Jane Austen remain visible in its attached-work chip. No overlap or horizontal overflow in this selected row; its title, body and actions remain legible."
+      },
+      {
+        "path": ".temp/feed-preview-evidence/d4-7-guide-1440.png",
+        "viewport": [
+          1440,
+          1000
+        ],
+        "sha256": "494ccd6bc96ebeb2394313eb5989f10083de6013c7e7b6db7f031295174909e0",
+        "sample": "Guide",
+        "itemId": "https://rezics.com/id/01a0e915-19cf-701d-8c1a-c1d0c7bf0b19",
+        "viewedWith": "view_image",
+        "observation": "Chinese backup discussion is followed by the real failed mod-pack/save recovery account. Mod setup checklist and 林梅 remain visible in its attached-work chip; genuine DigitalDocument type retained. No overlap or horizontal overflow in this selected row; its title, body and actions remain legible."
+      },
+      {
+        "path": ".temp/feed-preview-evidence/d4-1-recipe-23-390.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "50cee741f22d98a11d436e26c1cc4b7783b975e2f3e6cf40239132465b37ed8a",
+        "sample": "Recipe 23",
+        "itemId": "https://rezics.com/id/01a130a5-d7ca-7704-8bed-0a88c5ae5d8f",
+        "viewedWith": "view_image",
+        "observation": "Latte and semolino quantities replace the repeated title/Ingredients heading; full Italian title and useful ingredients fit. No overlap or horizontal overflow in this selected row; its title, body and actions remain legible."
+      },
+      {
+        "path": ".temp/feed-preview-evidence/d4-2-recipe-21-390.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "96d44412f1ece944570bafd76aab06cce8c6060ddfa907c233af8573ef2f97e1",
+        "sample": "Recipe 21",
+        "itemId": "https://rezics.com/id/01a130a5-bc1b-7703-ae2d-1d3d606981ed",
+        "viewedWith": "view_image",
+        "observation": "Original picked/adoption UUID retained (not substituted with the other published event for this Work). Filetto di manzo and Pangrattato quantities provide body clues. No overlap or horizontal overflow in this selected row; its title, body and actions remain legible."
+      },
+      {
+        "path": ".temp/feed-preview-evidence/d4-3-recipe-17-390.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "509b2ec41b2576543cc0ff62baadaa0bcb3a6acee4258009271d25fa5234ccb1",
+        "sample": "Recipe 17",
+        "itemId": "https://rezics.com/id/01a130a5-8c8e-74c3-b0d6-324354bb0d77",
+        "viewedWith": "view_image",
+        "observation": "Farina d’Ungheria, butter and yeast quantities are visible; title and compact cover remain separate. No overlap or horizontal overflow in this selected row; its title, body and actions remain legible."
+      },
+      {
+        "path": ".temp/feed-preview-evidence/d4-4-recipe-16-390.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "4bf10f11e3da3685d12c3848ec793481c1743ffb0e2c8e1595345ed679ed073f",
+        "sample": "Recipe 16",
+        "itemId": "https://rezics.com/id/01a130a5-7691-7557-8888-d0e2a55e04fe",
+        "viewedWith": "view_image",
+        "observation": "Per ogni uovo remains meaningful introductory context, followed by semolino and parmesan quantities; no mechanical deletion of this body phrase. No overlap or horizontal overflow in this selected row; its title, body and actions remain legible."
+      },
+      {
+        "path": ".temp/feed-preview-evidence/d4-5-recipe-11-390.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "9b888d96ece2bb6bbd7ed9533e327c4a8e2888764ee08a336dc80d054ffc754e",
+        "sample": "Recipe 11",
+        "itemId": "https://rezics.com/id/01a130a5-5e28-7775-b3fd-a6a225579f2d",
+        "viewedWith": "view_image",
+        "observation": "Pane del giorno avanti and its amount provide a real opening clue; on the phone it wraps before the eggs line rather than repeating Panata. No overlap or horizontal overflow in this selected row; its title, body and actions remain legible."
+      },
+      {
+        "path": ".temp/feed-preview-evidence/d4-6-book-390.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "9df36bb3fa0a1c0325814e6b946f67ea07bb2c789b6fee416b76d7167a52fcfd",
+        "sample": "Book",
+        "itemId": "https://rezics.com/id/01a0e915-0bec-7730-8a55-a2195d948288",
+        "viewedWith": "view_image",
+        "observation": "Austen discussion title is followed by the real third-language/dictionary question. Pride and Prejudice and Jane Austen remain visible in its attached-work chip. No overlap or horizontal overflow in this selected row; its title, body and actions remain legible."
+      },
+      {
+        "path": ".temp/feed-preview-evidence/d4-7-guide-390.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "03568130458c74e2955ebb2c375e804b9745d45c5d0b19ac44403a24b64a14bd",
+        "sample": "Guide",
+        "itemId": "https://rezics.com/id/01a0e915-19cf-701d-8c1a-c1d0c7bf0b19",
+        "viewedWith": "view_image",
+        "observation": "Chinese backup discussion is followed by the real failed mod-pack/save recovery account. Mod setup checklist and 林梅 remain visible in its attached-work chip; genuine DigitalDocument type retained. No overlap or horizontal overflow in this selected row; its title, body and actions remain legible."
+      }
+    ],
+    "preservedHistory": {
+      "priorReportCommit": "685fc9d3faf18421fd32731956e6617ffccf9f55",
+      "priorReportSha256": "1e721661924cdf1056c76c47b62395f95f32dcc9ecea4d19c331de7b22f4d65f",
+      "allPriorFieldsUnchanged": true,
+      "priorRscAndFocusFailures": "Every original public/component focus failure, two-document interrupted-RSC failure, setup failure and correction remains in the prior fields and private artifacts. No full failure history was replaced by passing evidence.",
+      "latestFailedPreviewProbe": "Both failed-geometry screenshots also actually viewed and retained in .temp/feed-preview-evidence/first-geometry-probe/; not counted among the 14 passing-run views."
+    },
+    "evidenceBoundaries": [
+      "Genuine original mixed Book/Guide samples are discussion post previews with attached Work titles. No genuine ordinary Guide work-event body preview is claimed; ordinary Work fallback/title handling is covered by retained unit/component stories.",
+      "The full D3-001 authenticated persona/generation matrix and persisted locale/theme behavior remain missing separately. They are not original D4-016 prerequisites.",
+      "Original finding closure remains a manager decision; review alone does not mutate or close the audit finding."
+    ],
+    "privateEvidence": {
+      "root": ".temp/feed-preview-evidence/",
+      "sha256": {
+        ".temp/feed-preview-live.test.ts": "1da30d41c6de8483353d9f8b333cc6c7eadc64f234a3f65e5430ebe6efaf2092",
+        ".temp/feed-preview-data.ts": "455fa361cc787888be33fe69886717067d7fb8896fb621e5efb5df8ea527e827",
+        ".temp/feed-preview-evidence/source.json": "860b22cb8b6d25c4e58f6c09f4ee5384fe135481acc616ec5dc0a8d97ba1c512",
+        ".temp/feed-preview-evidence/render-targets.json": "b483f49c54d34ae10c3dd109a28af06611bd4191e44633591a58a481e906002e",
+        ".temp/feed-preview-evidence/original-d4-016.json": "25c3acdd6b136f2112019e88f5916be47eb0ee8dc5f3565d42281e96e1c3d798",
+        ".temp/feed-preview-evidence/original-home-preview-audit.json": "bc43ab5b683dfcc2434f4e7cc8ddd18dacc519b3f9797358b5eee95564422099",
+        ".temp/feed-preview-evidence/original-home-1440.json": "a254d218eecd45c394198bcc54671dbc3a1a57409727c7b7620653a99f5bc38a",
+        ".temp/feed-preview-evidence/original-home-390.json": "7704a4b34e03aadd623824ebd857df7051ad7aae710fe71807bf719ae909b7dc",
+        ".temp/feed-preview-evidence/live-observations.json": "7591c85bc5c7a1c6e26d099f300e8df38a91d092df69fcba4acc86e221e50b6e"
+      },
+      "initialReadOnlyLookup": {
+        "pages": 34,
+        "records": 120,
+        "path": ".temp/feed-preview-evidence/selected-records.json",
+        "detail": "Reused existing data only. No catalogue import or new records."
+      }
+    },
+    "administrativeReportChecks": {
+      "job": "a0e239ed-afc8-49ab-9d84-e0c749911e75",
+      "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "exit": 0,
+      "steps": [
+        {
+          "command": "task docs:check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/a0e239ed-afc8-49ab-9d84-e0c749911e75.1.log",
+          "result": "13 checker tests pass; 250 Markdown files pass local links, fragments and design-navigation checks."
+        },
+        {
+          "command": "task goal -- check",
+          "exit": 0,
+          "run": "run-yDLAEG",
+          "log": ".temp/goal/jobs/a0e239ed-afc8-49ab-9d84-e0c749911e75.2.log",
+          "fullOutput": ".temp/goal/check/run-yDLAEG/output.log",
+          "result": "Report-only check: AST and the 1 selected repository guard pass. Types/lint skip because no source changed; tests skip because the brief names none. This does not relabel administrative checks as additional product-runtime proof."
+        }
+      ]
+    },
+    "ownerChanges": [],
+    "proposedTasks": [],
+    "next": "Normal landing of this claimed cumulative report only. Ordinary preview source is already main at 2b1bd0c675; no implementation import is queued by this handoff."
+  },
   "dependencyCorrectionVerdict": {
     "result": "candidate-reviewed-and-checked-ready-for-normal-scoped-landing",
     "source": "f82754944dc7ba505f7d806232ad33d142761075",
