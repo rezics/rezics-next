@@ -2,6 +2,25 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkPageMessages } from '../messages.ts';
 
 export default {
+  editionsView: '版',
+  connectionsView: '関連',
+  sourcesAndEvidence: '出典・ライセンス・根拠',
+  sourceRecord: '出典レコード',
+  fieldEvidence: '項目ごとの根拠',
+  recordRevision: 'レコードのリビジョン',
+  evidence: '根拠',
+  evidenceSource: '出典作品',
+  evidenceRepresentation: '出典の正確な表現（SHA-256）',
+  evidenceLocation: '出典内の位置',
+  evidenceMethod: '根拠の方法',
+  evidenceModality: '出典の形式',
+  evidenceSubmitter: '提出者',
+  evidenceRights: '権利の根拠',
+  evidenceQuoteWithheld: '出典の引用は表示できません。',
+  recipeCookNeedsMore: '調理モードを始める前に、残りの手順を読み込んでください。',
+  fieldEvidenceUnavailable: 'この項目の根拠は提供されていません。',
+  sourceFacts: '作品情報',
+  sourceDescription: '紹介文',
   openRecording: "録音・動画を開く",
   recordingMasked: "この録音・動画は非表示です。開くと再生できます。",
   instructionTransformation: "変換",
@@ -229,6 +248,7 @@ export default {
   closeCookMode: '調理モードを閉じる', startTimer: 'タイマーを開始', pauseTimer: 'タイマーを一時停止',
   restartTimer: 'タイマーをリセット', recipeNotes: 'メモ',
   recipeUnstructured: 'このレシピには、換算できる材料の分量がまだありません。',
+  cookUnavailableAction: '調理する', recipeUnavailable: '調理手順を表示できません。',
   // Machine-drafted; needs native review.
   showMoreRecipe: 'このレシピの続きを表示', loadingMoreRecipe: '続きを読み込み中…',
   recipeContinueFailed: 'このレシピの続きを読み込めませんでした。表示中の内容はそのままです。',

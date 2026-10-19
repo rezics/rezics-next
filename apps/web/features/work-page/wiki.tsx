@@ -40,9 +40,9 @@ export function WikiSectionView({ wiki, locale, messages }: {
   }
   const realm = wiki.zone.data;
   if (!realm) {
-    return <Region id="work-wiki" title={title}>
-      <p className="text-muted-foreground text-sm">{t.wikiNone}</p>
-    </Region>;
+    return <section id="work-wiki" aria-label={title} data-hub-empty className="text-muted-foreground text-sm">
+      <p>{t.wikiNone}</p>
+    </section>;
   }
   const characters = wiki.characters?.ok ? mainCharacters(wiki.characters.data, MAIN_CHARACTERS) : [];
   const levels = copyOf(locale);

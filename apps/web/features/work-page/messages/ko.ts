@@ -2,6 +2,25 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkPageMessages } from '../messages.ts';
 
 export default {
+  editionsView: '판본',
+  connectionsView: '관련 항목',
+  sourcesAndEvidence: '출처, 라이선스 및 근거',
+  sourceRecord: '출처 기록',
+  fieldEvidence: '항목별 근거',
+  recordRevision: '기록 수정본',
+  evidence: '근거',
+  evidenceSource: '출처 작품',
+  evidenceRepresentation: '정확한 출처 표현 (SHA-256)',
+  evidenceLocation: '출처 위치',
+  evidenceMethod: '근거 방법',
+  evidenceModality: '출처 형식',
+  evidenceSubmitter: '제출자',
+  evidenceRights: '권리 근거',
+  evidenceQuoteWithheld: '출처 인용문을 표시할 수 없습니다.',
+  recipeCookNeedsMore: '요리 모드를 시작하기 전에 나머지 조리법을 불러오세요.',
+  fieldEvidenceUnavailable: '이 항목의 근거가 제공되지 않았습니다.',
+  sourceFacts: '작품 정보',
+  sourceDescription: '소개',
   openRecording: "녹음·동영상 열기",
   recordingMasked: "이 녹음·동영상은 가려져 있습니다. 열어서 재생하세요.",
   instructionTransformation: "변환",
@@ -230,6 +249,7 @@ export default {
   closeCookMode: '요리 모드 닫기', startTimer: '타이머 시작', pauseTimer: '타이머 일시 정지',
   restartTimer: '타이머 다시 시작', recipeNotes: '메모',
   recipeUnstructured: '아직 환산할 수 있는 재료 분량이 없는 레시피예요.',
+  cookUnavailableAction: '요리하기', recipeUnavailable: '조리 방법을 표시할 수 없습니다.',
   // Machine-drafted; needs native review.
   showMoreRecipe: '이 레시피의 나머지 보기', loadingMoreRecipe: '더 불러오는 중…',
   recipeContinueFailed: '이 레시피의 나머지를 불러오지 못했습니다. 이미 보이는 내용은 그대로입니다.',

@@ -2,6 +2,25 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkPageMessages } from '../messages.ts';
 
 export default {
+  editionsView: '版本與發行',
+  connectionsView: '關聯',
+  sourcesAndEvidence: '來源、授權與證據',
+  sourceRecord: '來源紀錄',
+  fieldEvidence: '欄位證據',
+  recordRevision: '紀錄修訂',
+  evidence: '證據',
+  evidenceSource: '來源作品',
+  evidenceRepresentation: '來源的確切表示（SHA-256）',
+  evidenceLocation: '來源位置',
+  evidenceMethod: '證據方法',
+  evidenceModality: '來源形式',
+  evidenceSubmitter: '提交者',
+  evidenceRights: '權利依據',
+  evidenceQuoteWithheld: '來源引文無法顯示。',
+  recipeCookNeedsMore: '請先載入其餘步驟，再開始烹飪模式。',
+  fieldEvidenceUnavailable: '此項資料未提供欄位層級的證據。',
+  sourceFacts: '作品資料',
+  sourceDescription: '簡介',
   openRecording: "開啟錄製內容",
   recordingMasked: "此錄製內容已遮蔽。開啟後即可播放。",
   instructionTransformation: "轉換",
@@ -228,6 +247,7 @@ export default {
   unitSystem: '單位', unitWritten: '照原寫法', unitUs: '美制', unitMetric: '公制', cookThis: '開始烹調', cookMode: '烹調模式',
   closeCookMode: '結束烹調模式', startTimer: '開始計時', pauseTimer: '暫停計時', restartTimer: '重新計時',
   recipeNotes: '備註', recipeUnstructured: '這份食譜尚未提供可換算的食材用量。',
+  cookUnavailableAction: '烹調', recipeUnavailable: '暫時無法提供烹調步驟。',
   // Machine-drafted; needs native review.
   showMoreRecipe: '顯示這道食譜的其餘部分', loadingMoreRecipe: '正在載入更多…',
   recipeContinueFailed: '無法載入這道食譜的其餘部分。已顯示的內容仍在。',

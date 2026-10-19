@@ -2,6 +2,7 @@ import { insert } from 'native-i18n';
 import type { EntityPageMessages } from '../messages.ts';
 
 export default {
+  sources: "Quellen, Lizenzen und Belege",
   alternateSelf: "Anderes Ich",
   otherWorldCounterpart: "Gegenstück aus einer anderen Welt",
   identityGlobal: "Global",

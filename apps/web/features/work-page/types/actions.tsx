@@ -2,15 +2,38 @@
 
 import { Button, buttonVariants } from '@rezics/ui/button';
 import { CookingPotIcon } from 'lucide-react';
+import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { RECIPE_METHOD_STATE } from '../../recipe-editor/instructions.ts';
 import { CopyTextButton } from '../../catalogue/copy-button.tsx';
-import { ShelfButton, type StatusWords } from '../../catalogue/reader-actions.tsx';
+import type { StatusWords } from '../../catalogue/reader-actions.tsx';
 import type { UiLocale } from '../../../i18n/define.ts';
 import type { WorkPageMessages } from '../messages.ts';
 import type { ExperienceKind } from '../../entity-page/experience.ts';
+import { ACTION_ATTRIBUTE } from '../hub.ts';
+import { idOf, tabOf, type WorkAt } from '../route.ts';
+import { WorkTaskLink } from '../work-nav.tsx';
 
 /** Opens cooking mode on the recipe already on this page. */
-export function CookThisButton({ label }: { label: string }) {
-  return <Button type="button" size="lg" pill onClick={() => {
+export function CookThisButton({ label, unavailableLabel = label, workRef, disabled = false, recipeHref }: {
+  label: string; unavailableLabel?: string; workRef: WorkAt; disabled?: boolean; recipeHref?: string;
+}) {
+  const current = tabOf(usePathname(), workRef);
+  const [ready, setReady] = useState(!disabled);
+  useEffect(() => { setReady(!disabled); }, [disabled, recipeHref]);
+  useEffect(() => {
+    const update = (event: Event) => {
+      const state = (event as CustomEvent<{ href: string; ready: boolean }>).detail;
+      if (recipeHref && state.href === recipeHref) setReady(state.ready);
+    };
+    window.addEventListener(RECIPE_METHOD_STATE, update);
+    return () => window.removeEventListener(RECIPE_METHOD_STATE, update);
+  }, [recipeHref]);
+  if (!ready) return <Button type="button" size="lg" pill disabled {...{ [ACTION_ATTRIBUTE]: '' }}>
+    <CookingPotIcon aria-hidden="true" />{unavailableLabel}</Button>;
+  if (current !== 'overview') return <WorkTaskLink workRef={workRef} anchor="cook"
+    className={buttonVariants({ size: 'lg', pill: true })}><CookingPotIcon aria-hidden="true" />{label}</WorkTaskLink>;
+  return <Button type="button" size="lg" pill {...{ [ACTION_ATTRIBUTE]: '' }} onClick={() => {
     document.getElementById('recipe-experience')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     window.dispatchEvent(new Event('rezics-cook'));
   }}><CookingPotIcon aria-hidden="true" />{label}</Button>;
@@ -18,28 +41,33 @@ export function CookThisButton({ label }: { label: string }) {
 
 /**
  * The header action for the page the reader is already on: cook a recipe,
- * copy a prompt, or install a skill. A book keeps Read, drawn by the frame.
+ * copy the published prompt or skill. A book keeps Read, drawn by the frame.
  */
-export function WorkKindActions({ kind, workId, title, locale, messages: t, hubText, words }: {
+export function WorkKindActions({ kind, workId, workRef = idOf(workId) ?? workId, messages: t, hubText, canCook = true, recipeHref }: {
   kind: ExperienceKind; workId: string; title: string; locale: UiLocale; messages: WorkPageMessages;
+  workRef?: WorkAt;
   /** The shelf words in the Work's own verb (`shelfWords`); the reading words when left out. */
   words?: StatusWords;
   /** Published prompt or SKILL.md, when the header can copy it. */
   hubText?: string | null;
+  /** The exact loaded native method can be presented completely in cooking mode. */
+  canCook?: boolean;
+  recipeHref?: string;
 }) {
   if (kind === 'book') return null;
   if (kind === 'guide') {
-    return <a className={buttonVariants({ size: 'lg', pill: true })} href="#guide-experience">{t.viewGuide}</a>;
+    return <WorkTaskLink workRef={workRef} anchor="guide-experience"
+      className={buttonVariants({ size: 'lg', pill: true })}>{t.viewGuide}</WorkTaskLink>;
   }
-  const save = <ShelfButton work={workId} title={title} locale={locale} size="lg" variant="outline" words={words} />;
-  if (kind === 'recipe') return <><CookThisButton label={t.cookThis} />{save}</>;
+  if (kind === 'recipe') return <CookThisButton label={t.cookThis} unavailableLabel={t.cookUnavailableAction}
+    workRef={workRef} disabled={!canCook} recipeHref={recipeHref} />;
   if (kind === 'prompt' && hubText) {
-    return <><CopyTextButton text={hubText} label={t.copyPrompt} copied={t.copied} failed={t.copyFailed}
-      size="lg" className="rounded-full" />{save}</>;
+    return <div {...{ [ACTION_ATTRIBUTE]: '' }}><CopyTextButton text={hubText} label={t.copyPrompt} copied={t.copied} failed={t.copyFailed}
+      size="lg" className="rounded-full" /></div>;
   }
   if (kind === 'skill' && hubText) {
-    return <><CopyTextButton text={hubText} label={t.installSkill} copied={t.copied}
-      failed={t.copyFailed} size="lg" className="rounded-full" />{save}</>;
+    return <div {...{ [ACTION_ATTRIBUTE]: '' }}><CopyTextButton text={hubText} label={t.copySkill} copied={t.copied}
+      failed={t.copyFailed} size="lg" className="rounded-full" /></div>;
   }
-  return save;
+  return null;
 }

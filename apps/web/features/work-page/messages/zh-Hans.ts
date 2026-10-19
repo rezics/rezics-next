@@ -2,6 +2,25 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkPageMessages } from '../messages.ts';
 
 export default {
+  editionsView: '版本与发行',
+  connectionsView: '关联',
+  sourcesAndEvidence: '来源、许可与证据',
+  sourceRecord: '来源记录',
+  fieldEvidence: '字段证据',
+  recordRevision: '记录修订',
+  evidence: '证据',
+  evidenceSource: '来源作品',
+  evidenceRepresentation: '来源的确切表示（SHA-256）',
+  evidenceLocation: '来源位置',
+  evidenceMethod: '证据方法',
+  evidenceModality: '来源形式',
+  evidenceSubmitter: '提交者',
+  evidenceRights: '权利依据',
+  evidenceQuoteWithheld: '来源引文不可显示。',
+  recipeCookNeedsMore: '请先加载剩余步骤，再开始烹饪模式。',
+  fieldEvidenceUnavailable: '此项资料未提供字段级证据。',
+  sourceFacts: '作品资料',
+  sourceDescription: '简介',
   openRecording: "打开录制内容",
   recordingMasked: "此录制内容已遮蔽。打开后即可播放。",
   instructionTransformation: "转换",
@@ -25,6 +44,7 @@ export default {
   scaleHeld: '此用量保持原文。',
   unitSystem: '单位', unitWritten: '照原写法', unitUs: '美制', unitMetric: '公制',
   cookThis: '开始烹饪', cookMode: '烹饪模式', closeCookMode: '退出烹饪模式',
+  cookUnavailableAction: '烹饪', recipeUnavailable: '暂时无法提供烹饪步骤。',
   startTimer: '开始计时', pauseTimer: '暂停计时', restartTimer: '重新计时',
   recipeNotes: '备注', recipeUnstructured: '此食谱尚未添加可换算的食材用量。',
   // Machine-drafted; needs native review.

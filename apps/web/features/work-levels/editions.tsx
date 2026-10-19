@@ -1,3 +1,4 @@
+import type { WorkAt } from '../work-page/route.ts';
 import { Badge } from '@rezics/ui/badge';
 import { buttonVariants } from '@rezics/ui/button';
 import { LocalizedText } from '@rezics/ui/localized-text';
@@ -208,7 +209,7 @@ function Pager({ label, first, next, t }: { label: string; first: string | null;
  */
 export function EditionsSection({ realizations, sources, releases, names, workRef, query, locale, t, pageMessages }: {
   realizations: Loaded<RealizationPage>; /** Realizations the listed ones follow that are not on this page. */ sources: readonly Realization[];
-  releases: Loaded<ReleasePage>; names: Names; workRef: string;
+  releases: Loaded<ReleasePage>; names: Names; workRef: WorkAt;
   query: EditionsQuery; locale: UiLocale; t: Copy; pageMessages: WorkPageMessages;
 }) {
   const knownReleases = releases.ok ? releases.data.items : [];

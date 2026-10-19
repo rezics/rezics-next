@@ -9,7 +9,7 @@ import { type CatalogueAuthor, authorSeparator } from '../catalogue/work.ts';
 import { contentText } from '../language/untagged.ts';
 import Link from '../shell/localized-link.tsx';
 import type { WorkPageMessages } from './messages.ts';
-import { PublicationSource, type PublicDomainSource } from './publication-source.tsx';
+import type { PublicDomainSource } from './publication-source.tsx';
 import { RetryButton } from './retry-button.tsx';
 import type { AgentCreditPage, Credit, CreditPage, Loaded } from './types.ts';
 
@@ -70,9 +70,11 @@ export function WorkCredits({ agentCredits, credits, source = null, locale, mess
       {!agentCredits.ok && !credits.ok ? t.creditsUnavailable : t.someCreditsUnavailable}</span>
     <RetryButton label={t.retry} pendingLabel={t.retrying} />
   </div> : null;
+  const native = agentCredits.ok ? { entries: agentCredits.data.items, nextCursor: agentCredits.data.nextCursor } : null;
+  const external = credits.ok ? { entries: credits.data.items, nextCursor: credits.data.nextCursor } : null;
   const all = new Map<string, BylineCredit>();
-  for (const credit of agentCredits.ok ? agentCredits.data.items : []) all.set(credit.id, credit);
-  for (const credit of credits.ok ? credits.data.items : []) if (!all.has(credit.id)) all.set(credit.id, credit);
+  for (const credit of native?.entries ?? []) all.set(credit.id, credit);
+  for (const credit of external?.entries ?? []) if (!all.has(credit.id)) all.set(credit.id, credit);
   const ordered = [...all.values()].sort((a, b) => (a.ordinal ?? 0) - (b.ordinal ?? 0));
   const nameOf = (credit: BylineCredit) => credit.displayName
     ?? (credit.provider === 'open-library' && credit.key ? t.openLibraryAuthor({ key: openLibraryAuthorKey(credit.key) })
@@ -94,7 +96,7 @@ export function WorkCredits({ agentCredits, credits, source = null, locale, mess
   };
   const others = Object.entries(roleLabels).map(([role, label]) => ({ role, label,
     people: ordered.filter(credit => credit.role === role && nameOf(credit)) })).filter(group => group.people.length);
-  const more = (agentCredits.ok && agentCredits.data.nextCursor) || (credits.ok && credits.data.nextCursor);
+  const more = native?.nextCursor || external?.nextCursor;
   return <div className="grid gap-1.5">
     {authors.length ? <p className="flex flex-wrap items-baseline justify-start gap-y-1
       font-work-title text-foreground/85 text-lg sm:text-2xl">
@@ -108,7 +110,6 @@ export function WorkCredits({ agentCredits, credits, source = null, locale, mess
         {group.people.map((credit, index) => <span key={credit.id}>{index ? ', ' : ''}{name(credit)}</span>)}
       </p>)}
     </div> : null}
-    <PublicationSource source={source} messages={messages} />
     {more ? <p className="text-muted-foreground text-xs">{t.moreCredits}</p> : null}
     {retry}
   </div>;

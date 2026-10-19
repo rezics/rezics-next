@@ -12,6 +12,7 @@ import zhHant from './messages/zh-Hant.ts';
 // from the type registry, and relation labels from Main's lexicon; neither is
 // written here.
 const en = {
+  sources: "Sources, licences and evidence",
   alternateSelf: "Alternate self",
   otherWorldCounterpart: "Counterpart from another world",
   identityGlobal: "Global",
