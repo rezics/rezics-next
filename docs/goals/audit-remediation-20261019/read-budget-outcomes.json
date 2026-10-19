@@ -4612,10 +4612,17 @@
       "publicSmokeBudgetMeasured": false
     },
     "nextWitness": {
-      "executionStatus": "Both qualified derivatives are ready. No preparation rerun or source mutation is needed. Assemble exact immutable runtime, frozen tests and retained helper/corpus selection for root to delegate to G-2826.",
-      "originalSuitesReservedFor": "G-2826 independent owner",
-      "preparationCommandToRepeat": null,
-      "originalOutcomeAssertionReached": false
+      "executionStatus": "Both environments and relocatable execution selection are ready. Root can delegate the exact existing two-file proof to G-2826 using independentExecutionHandoff. No further environment preparation is required here.",
+      "owner": "G-2826",
+      "testArgv": [
+        "bun",
+        "scripts/goal/goalctl.ts",
+        "test",
+        "tests/qa/integration/official-zone-read-budget.test.ts",
+        "tests/qa/integration/rating-population-read-budget.test.ts"
+      ],
+      "originalOutcomeAssertionReached": false,
+      "newRequirementTree": false
     },
     "qualifiedManifest": {
       "zones": {
@@ -4644,7 +4651,7 @@
       }
     },
     "independentOriginalSuiteCommandAuthorizedNow": false,
-    "handoffAfterReady": "Supply root the actual qualified derivative/corpus digests, stopped-owner lifecycle, exact immutable source and frozen fixture/test selection for G-2826; do not execute the original suites in parallel.",
+    "handoffAfterReady": "Completed: genuine qualified manifests, corpus/parent digests, timings, lifecycle and exact relocatable immutable product/fixture selection/test argv are in independentExecutionHandoff. Root delegates the original frozen two-file run to existing G-2826; outcome and review remain pending.",
     "peerSafety": "G-2791 peer stack46775 remained read-only; no global stack reaper invoked; cleanup only owned disposable projects; original backup/corpus bytes unchanged.",
     "admittedAuthorCorrection": {
       "claim": "The earlier c6bd0a113 environment metadata incorrectly said the approved candidate lacked standing CLI selection/listing/checkpoint support.",
@@ -4672,6 +4679,12 @@
         "nextPreparationCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task --taskfile .temp/read-budget-migration/Taskfile.yml qualify -- ratings' -- task --taskfile .temp/read-budget-migration/Taskfile.yml syntax",
         "originalSuitesReservedFor": "G-2826 independent owner",
         "preflight": ".temp/read-budget-migration/ratings-attempt5-preflight.json"
+      },
+      {
+        "executionStatus": "Both qualified derivatives are ready. No preparation rerun or source mutation is needed. Assemble exact immutable runtime, frozen tests and retained helper/corpus selection for root to delegate to G-2826.",
+        "originalSuitesReservedFor": "G-2826 independent owner",
+        "preparationCommandToRepeat": null,
+        "originalOutcomeAssertionReached": false
       }
     ],
     "previousRatingsDispositions": [
@@ -4723,6 +4736,197 @@
         "identityAndAuthorityPreservationVerified": true,
         "initialRatingPublicReadReached": false
       }
-    ]
+    ],
+    "independentExecutionHandoff": {
+      "readyForDelegatedOwner": true,
+      "owner": "G-2826",
+      "originalOutcomeAssertionReached": false,
+      "originalSuitesExecutedByThisWorker": false,
+      "classification": "Environment qualification and source/fixture linking only; original 8/9/10-Zone and 100/101/102-rating assertions and independent review remain pending.",
+      "preparedExecution": {
+        "path": ".temp/read-budget-independent/execution.json",
+        "sha256": "fc749ad64544c28e6a8313891706fbfbdf5e653e2747a3dedd019ed8085e8bc7",
+        "directory": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-independent/source",
+        "verifiedSourceFiles": 9904
+      },
+      "checkedPreparationJob": {
+        "job": "2c20f2d5-7ae8-4c4f-9dd4-4b83e3c24bb4",
+        "result": "passed",
+        "commands": [
+          "stage",
+          "compile",
+          "verify"
+        ],
+        "compilation": "Bun linked both unmodified frozen files, 1592 modules in 449ms; no test or owner execution.",
+        "sourceVerification": "All 9904 staged tracked/additional source file digests, all source/qualified/relocated corpus and manifest digests, and both exact frozen test digests passed. Corpus recipe differs only in the relocated backup pointer."
+      },
+      "relocation": {
+        "reason": "The independent worker writes only in its own worktree. Do not run in, alter or clean G-2750 source/qualified backups; stage a disposable private copy into the independent worker worktree instead.",
+        "sourceRoot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750",
+        "destinationWorktree": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2826",
+        "destinationSource": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2826/.temp/read-budget-independent/source",
+        "destinationReceipt": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2826/.temp/read-budget-independent/execution.json",
+        "driver": {
+          "path": ".temp/read-budget-migration/stage-independent.py",
+          "sha256": "d21265541ba83d6f247bab5792dab8200026163539c93c367a4421255da7cf05"
+        },
+        "taskfile": {
+          "path": ".temp/read-budget-migration/IndependentTaskfile.yml",
+          "sha256": "35e0e799e62794c58ad35b2dc144ddea1cb73caff17633832698ac9dda515296"
+        },
+        "existingDestination": "Stage refuses an existing destination; never overwrite or reset an existing peer-owned copy. Existing matching staged custody can instead be verified.",
+        "parentManifestsUnchanged": true,
+        "credentials": "Private corpus and owner environment files stay local; do not print their contents."
+      },
+      "product": {
+        "pin": "79aa206d48b218e0955618f425886e0cd591df87",
+        "tree": "b290d342a2df90bd97992e69789ad9cac389a7c1",
+        "corrections": {
+          "services/main/src/infrastructure/fuseki.ts": {
+            "pin": "b8ec0159dfd3b4f38d210bead790757222f8871f",
+            "sha256": "913bd1d766a215932a0efd88e0362b083b2e0a0843d0f2f19b7ad47c9171de13"
+          },
+          "services/main/tests/request-read-budget.test.ts": {
+            "pin": "b8ec0159dfd3b4f38d210bead790757222f8871f",
+            "sha256": "4b7038acc0d5fb00609b90b6505311da54d2dab6e5d6d22eb588bdaa7efcfdf1"
+          }
+        },
+        "qualifiedRuntimeSourceDigest": "3972cdc0ed9223b36e6dd7dea5f2874606f08d6515467c2042780650e600bc52",
+        "otherProductionChanges": []
+      },
+      "testFixtureLayer": {
+        "pin": "505ab6643aeb199816eca9fb3e26f65209b1a312",
+        "files": {
+          "tests/qa/integration/official-zone-read-budget.test.ts": "490e09a5dba826239bfeaa4d80d336856b7679ae574dc1fba6dab33b00860d23",
+          "tests/qa/support/personas.ts": "e38b4eff624b971ab4f6c58b028a66e4c7fe4017f83e47fbc2ce39bbb57c502b",
+          "tests/qa/support/joining-auth.ts": "75a589feff7afc2fb6766438328511a8af6a3530af81247a323b6ad1ba37ae81",
+          "tests/qa/support/outcome-response.ts": "a90f459d3b78eb6c5cd63f6e7bbca49a707072278274118fc118774e151e3f54",
+          "tests/qa/support/provisioned-agent.ts": "6d9476993fa270fc3ccb89daa3d6eb9f382135ca3681f87b6683c0cc939cb441",
+          "tests/qa/support/proof-phase.ts": "5a4a37c1655cbcdfe10d0a223d9fe1df622e43ab6cc381201d33253a6ccc45dc",
+          "tests/qa/support/settled-write.ts": "cdbbbde9c406f4638ee75603af7fbac5a72c1128dbb6a3c0884aa050b1e15409",
+          "tests/qa/support/command-race.ts": "9a5ca99363437d8c33ced50fbebcc8773183bede43c818e13950a10f68b78f77",
+          "tests/qa/support/request-watch.ts": "066eed949f90cf9c375df2cf5cb8ec78da39dc907d615277638e1ea3a79a1e53",
+          "tests/qa/support/bounded-read-corpus.ts": "22b736942522a2915b25603908f8ef8b0ce4d2c1b187e87d3a7dc0b7a8374a79",
+          "tests/qa/support/work-profile.ts": "a950846b08f32e1e74573518cacd473629686cd26318bd28c895e45a111a707b",
+          "packages/observability/tests/otlp.ts": "5a6715bcab3808d75b4e0b6cdda881f1245a2881a86cdc74e559be6c89462ec1",
+          "tests/qa/support/persona-fixture-authority.ts": "02a60db426f311e024a8448e8f1c2a17e9fe809e89bfc0ca27aeaa25e3ed9e69",
+          "tests/qa/integration/rating-population-read-budget.test.ts": "7a70561d2f59fa031953bfc1dbdaf1305291d3bff17aaa6686b8e9e2104ce168"
+        },
+        "harnessRegistration": {
+          "path": "scripts/qa/resource-classes.ts",
+          "pin": "505ab6643aeb199816eca9fb3e26f65209b1a312",
+          "sha256": "ccbeac9d7c6a4fcd6451451e16771f6656cfecbae8aaffc3d0b872cba7578420",
+          "reason": "Retain catalogue-disk allocation and existing 480s budget for the two explicit frozen suites"
+        },
+        "reason": "The approved runtime predates these two authored files/helper and their QA registration. Exact retained test-side fixtures preserve raw retry:false first-response observations. This temporary selection changes neither tracked fixtures nor any product owner.",
+        "frozenBodiesAndAssertionsChanged": false,
+        "newTestMechanism": false,
+        "newProducer": false,
+        "resourceClass": "catalogue-disk",
+        "fileBudgetMs": 480000,
+        "restoreBudgetMs": 600000,
+        "candidateLimitsOrTimeoutsRaised": false,
+        "dependencyMethod": "Private reflink/copy of the already qualified, lockfile-matched fixed source dependencies; no mutable peer symlink"
+      },
+      "qualifiedInputs": {
+        "zones": {
+          "manifestSha256": "81c40acf12d49b07a524211a73773d054ff4f7a78b17da06db2c3c8af32a61cb",
+          "backupProject": "rezics-catalogue-corpus-budget-zone-7a1305717b-bounded-reads-zones-6b500023d9273076",
+          "compatibilityDigest": "6b500023d92730766795edd9771f36b3550e60095d6cd748273eb38e99076264",
+          "qualificationReceipt": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/zones-attempt3/environment-qualification.json",
+          "qualificationReceiptSha256": "8d273af63a3947c2fb48fbaa3582fe1ff78aa7fa156883ff5c17d1d46bff51be",
+          "qualifiedCorpus": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/zones-attempt3/corpus.json",
+          "qualifiedCorpusSha256": "169b7dde39f3c9719001c1a5e0674b5b3c7ef6b4c0beff16b01b4983dd57e016",
+          "qualifiedManifest": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/source-fixed/.temp/read-budget-derivatives/zones/owners/backup.json",
+          "qualifiedManifestSha256": "81c40acf12d49b07a524211a73773d054ff4f7a78b17da06db2c3c8af32a61cb",
+          "originalCorpus": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/audit-bounded-reads/zones/corpus.json",
+          "originalCorpusSha256": "3952475b80ef71fea7bbb68639a4e334cda5909c2035df760e894a4688e72b24",
+          "originalManifest": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/audit-bounded-reads/zones/owners/backup.json",
+          "originalManifestSha256": "89331d2a132d937b34a975668ae92dc250b09b09edc918e253ee113f20d4f9ba",
+          "onlyRecipeChange": "backup pointer relocated into destination temporary tree; producer baseline and every other recipe field unchanged"
+        },
+        "ratings": {
+          "manifestSha256": "d7591eb25339e8ff0c87463414031c22d6d7c6ff6bae9a27a68dd8d925d82bd9",
+          "backupProject": "rezics-catalogue-corpus-budget-rating-f55fbeb639-bounded-reads-ratings-6b500023d9273076",
+          "compatibilityDigest": "6b500023d92730766795edd9771f36b3550e60095d6cd748273eb38e99076264",
+          "qualificationReceipt": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/ratings-attempt5/environment-qualification.json",
+          "qualificationReceiptSha256": "5423802875542e2fc5c468b243a8ac8901d5cdd90ce8ea94157823156ee7e52a",
+          "qualifiedCorpus": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/ratings-attempt5/corpus.json",
+          "qualifiedCorpusSha256": "e2f6d27d756c78cc20b08a8e731610633f550d59d412d8c174f79c42af687513",
+          "qualifiedManifest": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/source-fixed/.temp/read-budget-derivatives/ratings/owners/backup.json",
+          "qualifiedManifestSha256": "d7591eb25339e8ff0c87463414031c22d6d7c6ff6bae9a27a68dd8d925d82bd9",
+          "originalCorpus": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/audit-bounded-reads/ratings/corpus.json",
+          "originalCorpusSha256": "589e2199cb4f86aa456d6d401972c0a5ad179e647c019ff09e8ee9e57b9ae5c5",
+          "originalManifest": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/audit-bounded-reads/ratings/owners/backup.json",
+          "originalManifestSha256": "36d9c6a5e66a802f2d45cee36810915c9dbd89a56431a8ed8b5de2ab48ceb567",
+          "onlyRecipeChange": "backup pointer relocated into destination temporary tree; producer baseline and every other recipe field unchanged"
+        }
+      },
+      "exactNextCommandsForRootToDelegate": {
+        "cwd": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2826",
+        "recordingPrefix": [
+          "bun",
+          "/home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts",
+          "job"
+        ],
+        "orderedTaskArgv": [
+          [
+            "task",
+            "--taskfile",
+            "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/IndependentTaskfile.yml",
+            "stage",
+            "PROOF_ROOT=/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2826"
+          ],
+          [
+            "task",
+            "--taskfile",
+            "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/IndependentTaskfile.yml",
+            "compile",
+            "PROOF_ROOT=/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2826"
+          ],
+          [
+            "task",
+            "--taskfile",
+            "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/IndependentTaskfile.yml",
+            "verify",
+            "PROOF_ROOT=/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2826"
+          ],
+          [
+            "task",
+            "--taskfile",
+            "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/IndependentTaskfile.yml",
+            "prove",
+            "PROOF_ROOT=/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2826"
+          ]
+        ],
+        "recordAs": "Use one normal recorded Goal job with stage first and each subsequent Task command as --then; stop on the first failure. G-2750 has executed only stage/compile/verify on its own private copy. Only the already delegated independent G-2826 executes prove.",
+        "underlyingTestCwd": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2826/.temp/read-budget-independent/source",
+        "underlyingTestArgv": [
+          "bun",
+          "scripts/goal/goalctl.ts",
+          "test",
+          "tests/qa/integration/official-zone-read-budget.test.ts",
+          "tests/qa/integration/rating-population-read-budget.test.ts"
+        ],
+        "selection": "Exactly the two frozen files; no audit-file workaround, full tier, acceptance-ID rewrite or independent parallel original-suite run."
+      },
+      "ownerLifecycle": {
+        "qualifiedSequence": "Original compatible-source restore -> verified history adoption -> stop owned copy writers -> ordinary fixed-source native startup/migrations -> rating standing reconstruction/projection refresh where required -> public readiness/smoke -> stop owned writers -> derivative backup -> disposable fixed-source fresh restore -> ordinary dev:prepare/readiness/smoke -> cleanup only owned copies.",
+        "nextExecution": "Each untouched suite calls its frozen retained-corpus helper once. That helper restores its relocated qualified stopped-owner backup under normal QA slot/memory admission into a distinct project, then restores actual retained persona sessions through composeMain, and closes its own writers/project in finally. Do not repeat producer, history adoption or reconstruction. Backup guards enforce compatibility and stopped source. No G-2750 original-suite execution is authorized.",
+        "freshRestoreQualificationLimitation": "Qualification explicitly ran ordinary dev:prepare before smoke. The frozen helper uses its unchanged restore and actual composeMain lifecycle; its full setup and outcome assertions remain for independent execution. Compilation does not certify that run.",
+        "neverRepeatForQualifiedDerivative": [
+          "original-baseline restore",
+          "history adoption",
+          "standing reconstruction",
+          "producer",
+          "full catalogue preparation"
+        ],
+        "sharedPeer46775": "G-2791 remains read-only; never reset, repin, import into, stop or use it as the writable fixture.",
+        "backupGuard": "Existing restore checks require exact storage compatibility and stopped backup project; no bypass, relabel or unsupported engine override."
+      },
+      "remainingAcceptance": "Independent execution of all unchanged six-persona public assertions at 8/9/10 Zones and 100/101/102 independent Account ratings, including admission, privacy, numeric shape and unchanged budget; retain actual assertion reach and logs, then existing independent review. No canonical class closure or landing is certified here.",
+      "minimalUnclaimedTrackedOwnerChanges": []
+    },
+    "independentOriginalSuiteCommandAuthority": "The existing false independentOriginalSuiteCommandAuthorizedNow flag applies to this G-2750 environment-only continuation. The maintained authorization reserves original-suite execution for the already delegated G-2826, using the exact handoff; G-2750 does not launch it."
   }
 }
