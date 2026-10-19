@@ -1,9 +1,13 @@
 # Product completeness state
 
-Checkpoint 2bddb63f retains the previous checkpoint and covers handled
-mail:ffb49a9e-c532-43bc-8c99-a87404cbe77c, task:G-2826:13 and task:G-2823:29.
-The mail is acknowledged. Decisions are recorded through 05:54Z; measures
-were read at this checkpoint. Other event turns retain their own dispositions.
+Checkpoint 2c6b6a7a retains the previous checkpoint and covers handled
+mail:76c28496-a567-456b-8968-090359f91600,
+mail:1af0151c-09c5-468a-96fb-924dfaf646ce,
+mail:overdue:mail:c7dfe475-f221-4b9b-99cb-fb3bb84b6224:product-completion-20261019,
+task:G-2826:15, mail:e69774b2-147c-46a1-bab2-ebfdc9ce59d5 and
+mail:01c63ef0-e86f-4c9a-8095-4d1086606161. All five underlying mail deliveries
+are acknowledged. Covered decisions run through 06:32Z; measures were read
+at this checkpoint. Other event turns retain their own dispositions.
 
 Scope remains domain-leading completeness across supported domains, including
 specialist jobs, with API outcomes first and actual rendered/interaction proof.
@@ -28,34 +32,48 @@ assertions, 15 story passes, 32 mobile samples, 24 selected/focus samples,
 six seven-link focus samples and 24 viewed PNGs close no finding. Component
 signed-in states are synthetic; AUD-012 axe had zero applicable nodes.
 
-Development startup failed in the RSC optimizer on react-dom/server; production
-failed at features/address/edge.ts:3 because renderToReadableStream is absent
-from server.react-server.js. These neither reproduce nor clear intermittent
-AUD-006. Startup blockers were documented by 04:59Z and remain unresolved at
-05:15Z (at least 16 minutes; first onset unknown). Viewed 390px Topics evidence
+Original startup evidence records an RSC optimizer failure on react-dom/server
+and production's missing renderToReadableStream at features/address/edge.ts:3.
+Neither reproduces nor clears intermittent AUD-006. Viewed 390px Topics evidence
 shows the actual 2px focus ring clipped; the helper's conservative 4px
-outlineWithinRow flag is not acceptance.
+outlineWithinRow flag is not acceptance. G-2747 retains startup/navigation repair
+ownership across Discover/Studio/Site/Library.
 
-Audit's existing G-2747 owns both startup witnesses and the navigation principle
-across Discover/Studio/Site/Library. Its routing decision was committed and the
-worker resumed; a repaired published wave SHA is still due. Resume G-2825 only
-after that full SHA and actual development/production readiness receipts on a
-containing immutable isolated pin: commands, credential-free environment
-identity, checked SHAs, logs, exits and assertion reach. Preserve old evidence;
-append a separately identified run. Establish genuine supported sign-in, then
-run D3-002's 128 combinations, repeated AUD-006 home/Discover/search/back in both
-builds, real eight-locale AUD-012 names/unread/axe checks and D4-002 route/history/
-filter/focus checks at both widths. Program was mailed for a voice/screen-reader
-operator/device; that acceptance remains due without blocking other ready checks.
-Audit retains finding closure and wave integration; Settings still needs proof.
+The maintainer's sprint delegates G-2825 proof and G-2826 inspection needed by
+original audit assertions to site under GOAL_ID=product-completion-20261019.
+Coordinate directly through
+`.temp/audit-remediation-20261019/two-hour-sprint/product-to-site.md`; do not
+duplicate or reassign its workers, proof, review or landing. The current G-2825
+brief and site handoff own the repaired immutable pin, actual dev/production
+readiness and continuation. Preserve original evidence and append separate runs.
+Acceptance still needs supported sign-in, D3-002's 128 combinations, repeated
+AUD-006 home/Discover/search/back in both builds, real eight-locale AUD-012
+names/unread/axe checks and D4-002 route/history/filter/focus at both widths.
+Heard voice/screen-reader acceptance remains due; Program received the operator
+request. Audit retains finding closure and wave integration.
 
-Program's 05:06Z priority is original 61-class acceptance, targeting the first
-independently accepted site findings by about 07:06Z. Additional frontend
-completeness, library exploration and rating UX are not dependencies; original
-audit checks take scarce QA/memory/admission. The original-audit estimate is
-12–24 hours, medium-low confidence: site fixes/verification 4–8 hours and
-Source/native/corpus 8–16 hours in parallel, then integration/regression 2–4
-hours. These are scheduling estimates, not guarantees or reduced acceptance.
+G-2829's report-only partial Settings proof is accepted, with report source
+41e1aeef56eccababa64d672e622789a1b220844 and original product pin 92b8a78f.
+All 159 retained bundle entries were verified before/after copying. Original
+stories reached assertions: ten passed, 22 failed. G-2751 owns mobile overflow,
+clipped last-row conflict feedback, busy-notice overlap and LanguagePicker
+visible-name repair, retaining width/axe assertions. Rendered channels establish
+neither persistence nor heard announcements; D2-005/D4-004/D4-005 remain open.
+The committed G-2825 decision requires the existing isolated signed-in/OAuth
+fixture's owner, private browser/session state, configured Main/Auth/Web
+identities, immutable ready product pin and actual sign-in receipts for audit.
+No duplicate account/corpus/importer or shared refresh/reset/import is authorized.
+G-2829 needs that tuple and G-2751's repair pin before continuation.
+
+The maintainer's current instruction supersedes earlier estimates: complete
+both retained original audits by 08:00Z / 16:00 Asia/Shanghai on 2026-10-19.
+Program launched continuous site/catalogue codex-2/GPT-6.1 Sol/ultra managers;
+automatic per-event audit enrollment retired, worker coordination preserved.
+Original audit code/proof takes scarce QA/memory/admission over additional
+frontend completeness/research; nonconflicting work remains authorized. The old
+baseline-compatible rich-fixture prerequisite is removed for current repaired
+product acceptance. Preserve original evidence, independent assertions, source
+identity and real owner receipts; the deadline changes no acceptance standard.
 
 The [execution reset](../audit-remediation-20261019/execution-reset.md) supersedes
 internal Program-reading, all-builds-first and one-big-merge holds. Audit decides
@@ -66,9 +84,9 @@ Preserve independent assertions, actual authority, exact retained bytes/values/
 rights and real receipts. G-2786 must scope refusal to affected cuts, preserving
 revocation and availability.
 
-Observed product status: one live worker, three open tasks. G-2825 remains open
-for the readiness-gated matrix above. G-2823's partial landing has started and
-its lock is present; do not repeat it, edit its brief or close its runtime work.
+Product retains G-2823 host repair and runtime acceptance. G-2825 proof remains
+with the delegated site manager; G-2826 remains exited on its setup prerequisite.
+Do not duplicate a landing or edit any brief with a live landing lock.
 
 G-2826's additional inventory/selection baseline
 759244e365ad64bcb97fac0ea7d7b9caebe144b2 passed six personas/438 assertions.
@@ -79,19 +97,34 @@ bd8192f401cdeac28b1f603c1d1730eaf8fa94ce239b7ebdbaa43fe151795213.
 Wave 92b8a78f1cb06fb4a02703f2b471b80d1d069199 reached zero bodies: migration
 2045's untyped UNION NULL caused SQL 42804. Preserve both runs independently.
 
-The G-2826 decision was committed and its worker resumed for one environment
-continuation on f84fbee119888f0b880badfd7eeb351543615908, containing numeric-cast
-repair 71b15c41878ac8120a2845a512a29b7737a39719. Actual readiness remains due.
-The backup refusal is valid: migrations 2045/2077/2605 and the Fuseki command
-image differ. The brief permits only a supported upgrade of a compatible
-baseline restore through existing owner lifecycle, then a truthful compatible
-derivative backup with parent lineage and exact native facts/rights preserved.
-Establish migration/engine-transition support first; retain the original backup,
-600-second preparation/restore ceiling and frozen assertions. No guard/manifest
-bypass, fixture rebuild or new corpus is authorized. Missing supported upgrade
-evidence returns blocked once. Append separate fixed-pin receipts; G-2786 owns
-further standing-rating migration repair. Codex-1/xhigh review remains due;
-no rating landing, proved row or original finding closure is accepted.
+G-2826's one environment continuation ended blocked, as its unchanged brief
+requires. Report b5518adf98c2ed02e52e5add67dd23a2a5ebc17c records job
+3a5ff6aa-f402-4b3c-8d64-a4be71c1a1a0: exact baseline storage restore succeeded,
+but untracked QA history left 299 Access and 23 relay migrations pending. The
+owner runner replayed historical CREATE SCHEMA access and failed with schema
+already exists. SQLSTATE was omitted; 42P06 is inferred only. All six personas
+reached zero bodies. Fixed wave f84fbee119888f0b880badfd7eeb351543615908, containing
+numeric-cast repair 71b15c41878ac8120a2845a512a29b7737a39719, never started;
+no compatible derivative backup was created. Preserve this run separately.
+
+Program received the supported-transition owner question and site received the
+blocker. Site subsequently assigned the verified unclaimed QA-history transition
+to G-2842 on isolated current main, codex-2/max. Product checked for overlap,
+acknowledged this sole owner and requested its landed source pin and supported
+operation receipts; no duplicate task or brief change was needed. G-2842 must
+verify pinned lineage/actual schema before receipts, refuse drift and preserve
+ordinary production behavior. It owns QA bootstrap/history transition with
+existing ops/fixture migration owners, not scheduler/capacity, G-2823 host repair,
+G-2786 standing-rating or corpus/importer work. G-2826 stays exited until that
+prerequisite passes, then needs a separate continuation decision.
+
+The original backup refusal remains valid: migrations 2045/2077/2605 and Fuseki's
+command image differ. Retain the original backup, frozen assertions and
+600-second preparation/restore ceiling. Only supported owner lifecycle can
+produce a truthful compatible derivative backup with parent lineage and exact
+native facts/rights. No guard/manifest bypass, fixture rebuild, new corpus or
+repeated failed startup is authorized. Codex-1/xhigh review remains due; no
+rating failure, landing, proved row or original finding closure is accepted.
 
 Audit retains G-2822's frozen native proof at 92b8a78f: initially six
 ConsistentReadCapture passes, two RequestReadBoundary failures and four
@@ -122,29 +155,48 @@ evidence, in-flight headroom, at least one-third about reserve and no paid Claud
 fallback. Unknown capacity admits nothing; no arbitrary worker cap or live-PID
 replacement is authorized.
 
-G-2823 retains shared refresh recovery ownership without blocking unrelated work.
-Its committed decision accepts nine commits ending at
-3010e2cde73b226fe94db8f9a33b38775294d454 for the partial landing already started,
-including aspire.config.json review. Recorded sequence
+G-2823's partial implementation landing succeeded at
+dacacd7ae871c4a67f56eeb2eea71b76e053c4ee; do not repeat or close it. It includes
+nine commits ending at 3010e2cde73b226fe94db8f9a33b38775294d454 and
+aspire.config.json review. Recorded sequence
 a38ffcdc-574d-4743-98bf-f800c241568c reports 112 refresh tests passed, one skipped,
 passing Goal/AppHost/script checks and a 45,378 ms isolated copy within the
 unchanged 90-second wall, with checkpoint digest unchanged. This does not
 exclude recurrent host latency or prove live telemetry limits.
 
+Decision 1347f62e20 requires both retained review fixes before normal refresh:
+cancellation before the container PID acknowledgement must prevent owned copy
+work starting or surviving, and smoke timeout must terminate the exact owned
+native CLI/launcher and close or drain inherited streams within the existing
+wall. Prove delayed-start cancellation, no surviving copy/artifact/source lock,
+stalled-child bounded exit and sibling/checkpoint/writer preservation. Keep the
+existing owners, affected behavior/script/AppHost checks and reviewed landing;
+no broad termination or longer wall. The worker resumed for this follow-up;
+the later recovery-mail event retained recorded repair/check job ded1ef57 without
+starting another worker, job or landing.
+
+Program completed supported `task dev:stop` and `task dev`, both exit 0, with
+AppHost PID 1363725 and reported healthy Account/Accounts/Main/relay/Web/Storybook.
+Data and the prior checkpoint were preserved; no reset or normal refresh ran.
+Retain the actual backend pointer: restart alone proves no newly served revision.
+Committed decision 5b80beb702 delegates post-repair refresh to product without
+another Program reading/scheduling turn. After both fixes are reviewed and
+landed, verify clean containing main and normal lifecycle admission/locks,
+inspect `task dev:refresh -- --dry-run`, then run `task dev:refresh -- --wait`.
+Do not repeat stop/start; coordinate any further interruption through the two
+sprint peer receipts. The worker may not interrupt healthy resources.
+
 Retain checkpoint 75409ac3c379 and digest
 9dce95096691f3781d0c20cf75b7f0f7c0de7bd7fe819ccc0b8d157b0adfed70;
 failed retry 59e6959cceed remains access-copy evidence before writer stop/SQL.
-After successful landing mail, verify clean containing main, checkpoint and
-lifecycle admission/locks; inspect `task dev:refresh -- --dry-run`, then run
-`task dev:refresh -- --wait`. Preserve redacted diagnostics, disposable-only
-cleanup and the 600-second preparation budget; no blind retry or budget bypass.
-Program was mailed to schedule the supported `task dev:stop`, `task dev`, then
-normal refresh with affected Goals: built-in Dashboard has no independent
-restart. The worker may not interrupt healthy resources. After recovery, resume
-G-2823 for its finite 120-second admitted retention observation: useful
-authenticated logs/traces, eviction/recent retention, inherited limits and RSS,
-with exact landed/served pins, commands, times, exits and sanitized receipts.
-Normal refresh and that runtime proof remain due; G-2759/G-2767 stay closed.
+Preserve rehearsal before writer stop, redacted diagnostics, disposable-only
+cleanup and the 600-second preparation budget; diagnose named failures, no blind
+retry. After normal refresh, resume G-2823 for finite 120-second admitted proof
+of useful authenticated logs/traces, old eviction/recent retention, inherited
+limits and RSS, with exact landed/served pins, commands, times, exits and
+sanitized receipts. Normal refresh and runtime proof remain due; independent
+current-source isolated audit proof does not wait for them. G-2759/G-2767 stay
+closed. The module design review remains a proposal, changing no authority.
 
 Proof uses isolated immutable pins and genuine fixtures, preserving audit's
 69eac3ceea baseline. G-2791 remains the sole faithful corpus producer and G-2778
@@ -153,22 +205,27 @@ restore isolated copies. Corpus prerequisites do not block independent site
 proof. Small main batches need affected checks and codex-1/xhigh review;
 coordinate publication. Final full regression/confirmation precedes wave merge.
 
-Checkpoint measures: first attempts 9/9; landed median two attempts, maximum
-nine (G-2825); 68.8M input/610.2k output; tokens per proved row unavailable.
-Two environment attempts; 61 job wakes: 19 passes, 29 assertion failures, two
-environment failures and 11 harness failures. One retained other-kind refusal
-still needs disposition. The three covered manager turns used 4.47M input and
-35.7k output tokens; this is not a comparable manager/worker share.
+Checkpoint measures: first attempts 9/10 (90%; today 3/4, 75%); landed median
+4.5 attempts, maximum 34 (G-2823); 75.11M input/660.1k output; tokens per proved
+row unavailable. Tool counts include job wakes and open partial-landing
+continuations. Two environment attempts, one step continuation and one fix;
+68 job wakes: 20 passes, 33 assertion failures, two environment failures and
+13 harness failures. The common setup cause is routed to G-2842; G-2823 owns
+the bounded lifecycle fixes. One retained other-kind refusal still needs tooling
+disposition. The six covered manager turns used 3.00M input/37.6k
+output tokens, excluding this checkpoint; this is not a comparable
+manager/worker share.
 Latest recorded efficiency window remains 2026-10-18T08:36:08Z–20:36:08Z:
 552.47M processed input, 527.63M cached; 37% other-session share cannot establish
 manager-only share and omits older-started sessions. No comparable savings or
 spending claim follows. Audit owns shared scheduling; verified hourly coverage,
 later full-window comparison and instrumentation attribution remain due.
 
-Next event owners: consume G-2823's landing result, schedule recovery and finish
-runtime proof; consume G-2826's environment continuation; obtain G-2747 readiness,
-resume G-2825 and verify Settings; classify native failures and run focused fixes,
-then accept independently checked small main batches. Audit completes tooling
-gates; Program's existing controller owner returns reviewed fingerprint and
-activation receipts. No watcher, duplicate landing or worker/landing wait
-belongs to this checkpoint.
+Next event owners: product consumes G-2823's repair handoff, obtains its reviewed
+landing, executes delegated normal refresh and finishes runtime proof. Site
+continues G-2825/Settings proof under its latest brief and direct handoff, and
+returns G-2842's supported transition receipts before a separate G-2826
+continuation decision. Audit retains finding closure, focused native fixes and
+tooling gates; Program's existing controller owner owes reviewed fingerprint and
+activation receipts. No watcher, duplicate assignment/landing or worker/landing
+wait belongs to this checkpoint.
