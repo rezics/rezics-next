@@ -8,12 +8,41 @@ during preparation; collection with `--list` is static. Product acceptance and
 C17/other C31 coverage remain open.
 
 The prepared package is
-`.temp/goal/recipe-recovery-original-v1/` in the existing G-2774 worktree. Its
-[freeze manifest](../../../.temp/goal/recipe-recovery-original-v1/runner-freeze.json)
+`.temp/goal/recipe-recovery-original-v2/` in the existing G-2774 worktree. Its
+[freeze manifest](../../../.temp/goal/recipe-recovery-original-v2/runner-freeze.json)
 has SHA-256
-`4e2aa3b3f2d7a1a12a4f045c08e91d5a4889d913c3e00b7a0d616a95010f79e2`.
-The manifest freezes 37 files, including Task, runner, selected literals, source
-receipts, assertion ledger, compiled runner/spec and four-cell collection.
+`7640f8b2d04969155065f2297be2e6c7a12e43c6ffd207b2f2b16a3e126ce66c`.
+The manifest freezes 45 files: all 37 guarded V1 files with current V2 paths and
+hashes, plus font preparation evidence, V1 custody and the saved setup failure.
+V1 remains unmodified.
+
+## Observed setup failure and bounded correction
+
+Root executed V1 at 14:44 UTC on 2026-10-19. Its
+[actual receipt](../../../.temp/goal/recipe-recovery-original-v1/run-1792421093448/run-receipt.json)
+records native header200 and Recipe200, then four canonical500 setup failures.
+Every cell has `reads: []`, no browser result and successful owned-process
+cleanup. The frontend logs identify the denied dependency realpath for
+`@fontsource-variable/manrope/files/manrope-latin-wght-normal.woff2?url` outside
+the frozen source root. No original browser assertion was reached; this receipt
+establishes a dependency preparation failure without a product recovery verdict.
+
+V2 copies the same tracked product and installed dependencies into a sibling
+owned snapshot and rewires its derived workspace links to V2. It copies the
+three actual font packages `geist-mono`, `manrope` and `source-serif-4` into
+`source/node_modules/@fontsource-variable/`, following the manager's existing
+font materialization correction. The 93 files total 2,472,200 bytes. The
+[correction receipt](../../../.temp/goal/recipe-recovery-original-v2/dependency-preparation-correction.json)
+records every dependency/local SHA-256 and local realpath. The source guard
+requires the exact file set, byte counts, hashes and local paths, and compares
+each file with its retained dependency byte. The original dependency digest
+remains unchanged. Vite configuration, product source, accepted transport,
+selected callback, assertion ledger and timeouts remain unchanged.
+
+Preparation took 23.9 seconds. V2 retains the raw V1 failed run receipt and four
+frontend logs, and its [custody record](../../../.temp/goal/recipe-recovery-original-v2/v1-custody.json)
+confirms the same V1 freeze, all 37 guarded files, tracked source, dependency
+links, critical dependency/font bytes and failure receipts before and after.
 
 ## Exact runtime bindings
 
@@ -45,8 +74,8 @@ producer pins, not a revision independently verified through those reads.
 
 The original three acceptance files remain byte-identical, as does the accepted
 fault relay. The full helper and original lines428–474 are retained. The
-[delta](../../../.temp/goal/recipe-recovery-original-v1/literal-delta.patch) and
-[assertion ledger](../../../.temp/goal/recipe-recovery-original-v1/assertion-ledger.json)
+[delta](../../../.temp/goal/recipe-recovery-original-v2/literal-delta.patch) and
+[assertion ledger](../../../.temp/goal/recipe-recovery-original-v2/assertion-ledger.json)
 account for every selected callback assertion: 17 are byte-identical; the
 remaining GET-method assertion observes `read.method` instead of
 `route.request().method()`. No expected value, matcher or outcome assertion is
@@ -76,23 +105,30 @@ control or route is introduced.
 The frontend archive verifies all 9,969 tracked files against the exact pin.
 Dependency inputs match digest
 `23223c2822cb3c121e46d70fff8a4d490b1e293ed078f8d2c626a1dee58d71eb`.
-Main's moving install was caught by the guard, so the package instead copied an
-already installed matching tree from G-2851 read-only into its own `dependencies/`.
-Workspace links resolve into the frozen frontend; foreign runtime cache links
-were removed. No install, global configuration change or network operation was
-needed. The product Vite configuration is unchanged. The existing 90s listen and
+V1 obtained its matching installed tree from G-2851 read-only after the guard
+caught Main's moving install. V2 snapshots those owned dependency bytes and
+preserves the digest. Workspace links resolve into V2's frozen frontend; generated
+V1 caches are not copied into the source. No install, global configuration change
+or network operation was needed. The product Vite configuration is unchanged.
+The existing 90s listen and
 90s document warm-up limits and 45s test timeout remain unchanged. Root's existing
 setup-only Vite pretransform helper can be coordinated if cold client graph
 readiness requires it; no new pretransform prerequisite is asserted here.
 
 ## Root execution and remaining proof
 
-After host admission, root runs this command once from
+Root runs this command directly in its manager session, from
 `/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2774`:
 
 ```sh
-bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --taskfile .temp/goal/recipe-recovery-original-v1/Taskfile.yml run
+GOAL_ID=audit-remediation-20261019 task --taskfile .temp/goal/recipe-recovery-original-v2/Taskfile.yml run
 ```
+
+The embedded `browser` Task still invokes `bun scripts/goal/admission.ts` before
+Playwright. This direct manager invocation preserves ordinary browser admission
+and does not attach a new job to an exited worker attempt. V1's runner actually
+completed all four setup failures; the later job-watcher classification is not
+evidence of a browser outcome.
 
 The runner executes `recipe network failure retries the same object and task`
 and `recipe unavailable failure retries the same object and task`, each under
@@ -109,13 +145,10 @@ of only owned frontend/browser process groups and relay. Setup errors remain
 explicit; they are not asserted to be product failures. Every browser outcome is
 currently **unexecuted**.
 
-Recorded job `436f0599-8967-401f-9679-9f1bbc74bee3` passed
-`task goal:type-files -- --project .temp/goal/recipe-recovery-original-v1/tsconfig.json`
-(2,785 files) and
-`task --taskfile .temp/goal/recipe-recovery-original-v1/Taskfile.yml freeze`:
-source/literal verification, runner/spec builds, exact four-test collection and
-the final manifest freeze. The earlier dependency snapshot completion passed in
-job `08b9d015-2a51-454d-8c87-eb6312252f06`. Earlier temporary scaffold failures,
-including the corrected optional assertion-message type error, and the
-donor-change receipt remain in `.temp/goal/jobs/`; none reached a product
-assertion.
+Recorded job `0ff46d1e-8458-4f2f-8e6e-017d9d4c6a65` passed V2 preparation,
+`task goal:type-files -- --project .temp/goal/recipe-recovery-original-v2/tsconfig.json`
+(2,787 files) and
+`task --taskfile .temp/goal/recipe-recovery-original-v2/Taskfile.yml freeze`:
+source/local-font/literal verification, runner/spec builds, exact four-test
+collection and the final manifest freeze. The original 18-assertion ledger is
+byte-identical to V1. Every V2 browser outcome remains unexecuted.
