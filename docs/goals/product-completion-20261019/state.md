@@ -1,8 +1,7 @@
 # Product completeness state
 
-Checkpoint 0b42f006 retains checkpoint be84a80b and covers handled
-task:G-2825:17 and mail:96fdb2d6-f260-40b3-8d6d-90698193524d. The landing mail
-is acknowledged. Covered decisions run through 08:58Z; measures were read at
+Checkpoint 75536914 retains checkpoint 0b42f006 and covers handled
+task:G-2826:20. The covered decision turn ended at 10:16Z; measures were read at
 this checkpoint and may include later activity. Other event turns retain their
 own dispositions.
 
@@ -140,8 +139,8 @@ bd8192f401cdeac28b1f603c1d1730eaf8fa94ce239b7ebdbaa43fe151795213.
 Wave 92b8a78f1cb06fb4a02703f2b471b80d1d069199 reached zero bodies: migration
 2045's untyped UNION NULL caused SQL 42804. Preserve both runs independently.
 
-G-2826's retained environment continuation ended blocked, as its unchanged brief
-requires. Report b5518adf98c2ed02e52e5add67dd23a2a5ebc17c records job
+G-2826's earlier retained environment continuation ended blocked, as its brief
+required. Report b5518adf98c2ed02e52e5add67dd23a2a5ebc17c records job
 3a5ff6aa-f402-4b3c-8d64-a4be71c1a1a0: exact baseline storage restore succeeded,
 but untracked QA history left 299 Access and 23 relay migrations pending. The
 owner runner replayed historical CREATE SCHEMA access and failed with schema
@@ -178,8 +177,44 @@ command image differ. Retain the original backup, frozen assertions and
 600-second preparation/restore ceiling. Only supported owner lifecycle can
 produce a truthful compatible derivative backup with parent lineage and exact
 native facts/rights. No guard/manifest bypass, fixture rebuild, new corpus or
-repeated failed startup is authorized. Codex-1/xhigh review remains due; no
-rating failure, landing, proved row or original finding closure is accepted.
+repeated failed startup is authorized. These original failed runs establish no
+rating failure, proved row or original finding closure.
+
+Decision 36ec3acf02 accepts G-2826's frozen test and report at b0d6c6289109
+for a partial evidence landing only, through affected gates and one independent
+codex-1/xhigh review. The event turn queued the decision and mailed Program
+3ae0364b to unblock the stalled commit train and execute
+`GOAL_ID=product-completion-20261019 task goal -- land G-2826 --step` once it
+was on main. The decision is now on main; the covered event establishes no
+completed review or partial landing. Preserve that existing request without a
+duplicate landing. The task remains open for preservation proof.
+
+Baseline 759244e365ad64bcb97fac0ea7d7b9caebe144b2 and fixed wave
+f84fbee119888f0b880badfd7eeb351543615908 each reached six passing persona bodies
+and 438 assertions with the same frozen assertion digest. Fixed-wave QA
+20261019t094321-9c84c2 records 196 public reads; one/three/ten community
+composition remains nine/15/36 existing reads. Retain the verified receipt and
+migration-state digests, exact source/tooling/image pins and parent backup
+lineage. This supplies no missing operation, new rating API, production change,
+proved row, original finding closure or frontend acceptance.
+
+History adoption and owner migrations succeeded, but their original preparation
+exceeded 600 seconds and reached no outcome assertion. Separately authorized
+151,986 ms recovery and 41,968 ms fresh derivative restore do not retrospectively
+qualify it. SQL comparisons and 102 unchanged immutable objects supply partial
+preservation evidence; an empty generic graph query proves no RDF preservation,
+and complete native publication/rights-metadata equivalence remains unproved.
+
+After successful partial-landing mail, resume this same worker for one finite
+preservation follow-up using the original backup, compatible derivative and
+supported owner/public reads. Compare actual nonempty native identities/revisions,
+question scales, observations, follows, authority/revocation and publication
+decisions/rights metadata and bytes; justify migration-derived differences.
+A missing observable field or supported comparison returns blocked once with
+the exact missing evidence/operation. Append only the report, preserve frozen
+assertions and earlier failures, and retain recorded QA admission and the
+600-second preparation/restore ceiling. No repeated outcome run, new fixture,
+corpus, grant, guard bypass, production change or shared lifecycle operation.
 
 Audit retains G-2822's frozen native proof at 92b8a78f: initially six
 ConsistentReadCapture passes, two RequestReadBoundary failures and four
@@ -291,17 +326,17 @@ proof. Small main batches need affected checks and codex-1/xhigh review;
 coordinate publication. Final full regression/confirmation precedes wave merge.
 
 Checkpoint measures: first attempts 9/12 (75%; today 3/6, 50%); landed median
-4.5 attempts, maximum 41 (G-2823); 85.5M input/745.4k output; tokens per proved
+4.5 attempts, maximum 41 (G-2823); 89M input/770k output; tokens per proved
 row unavailable. Tool counts include job wakes and open partial-landing
 continuations. Three environment attempts, one step continuation and three fixes;
-77 job wakes: 25 passes, 35 assertion failures, two environment failures,
-14 harness failures and one unclassified. The common setup cause is routed to
+81 job wakes: 27 passes, 35 assertion failures, two environment failures,
+15 harness failures and two unclassified. The common setup cause is routed to
 G-2842; G-2823 owns bounded fixture recovery and causal cleanup repair. The
-unclassified wake and one retained other-kind refusal still need tooling
-disposition. Of six manager attempts for the covered events, two successful
-attempts recorded 835,605 input/8,239 output tokens, including 766,720 cached
-input. Two cut attempts and two other failed attempts have no recorded token
-totals. These exclude this checkpoint and do not establish a comparable
+unclassified wakes and one retained other-kind refusal still need tooling
+disposition. Of two manager attempts for the covered event, one successful
+attempt recorded 1,991,135 input/12,495 output tokens, including 1,909,888 cached
+input; the cut attempt has no recorded token totals. These exclude this
+checkpoint and do not establish a comparable
 manager/worker share. Product has zero live workers and two open tasks.
 Latest recorded efficiency window remains 2026-10-18T08:36:08Z–20:36:08Z:
 552.47M processed input, 527.63M cached; 37% other-session share cannot establish
@@ -313,9 +348,11 @@ Next event owners: product consumes G-2823's identified-fixture/causal handoff,
 requires demonstrated cleanup repair and reviewed follow-up landing, then
 executes delegated normal refresh and finishes runtime proof. Audit consumes
 G-2825's landed report and fixture through G-2829's separate Settings repair
-prerequisite and routes residual site acceptance to existing owners. Site returns
-G-2842's landed identity plus G-2826's supported-transition/runtime receipts from
-its existing continuation.
+prerequisite and routes residual site acceptance to existing owners. Program has
+the existing G-2826 train/partial-landing request; after successful landing mail,
+product resumes the same worker for the finite preservation comparison before
+final acceptance. Site still owes G-2842's landed identity. Preserve G-2826's
+accepted runtime evidence and its distinct over-budget preparation failure.
 Audit retains finding closure, focused native fixes and
 tooling gates; Program's existing controller owner owes reviewed fingerprint and
 activation receipts. No watcher, duplicate assignment/landing or worker/landing
