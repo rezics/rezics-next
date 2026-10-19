@@ -30,6 +30,8 @@ export const BUILD_ADMISSION_GIB = 4;
 const SERIAL_ADMISSION_MARK = 'REZICS_QA_SERIAL_ADMISSION';
 /** Consumed by this wrapper so nested admissions cannot restart the proof's clock. */
 export const admittedCommandBudgetEnv = 'REZICS_QA_ADMITTED_COMMAND_BUDGET_MS';
+/** A caller-owned token makes the final admission boundary distinguishable from command output. */
+export const admittedCommandTokenEnv = 'REZICS_QA_ADMITTED_COMMAND_TOKEN';
 
 export interface HostAdmissionOptions {
   cpu?: boolean;
@@ -52,13 +54,28 @@ async function spawnInherited(command: readonly string[], env: NodeJS.ProcessEnv
   const budgetMs = rawBudget === undefined ? undefined : Number(rawBudget);
   if (budgetMs !== undefined && (!Number.isSafeInteger(budgetMs) || budgetMs < 1))
     throw new Error(`${admittedCommandBudgetEnv} must be a positive integer`);
+  const token = admitted ? env[admittedCommandTokenEnv] : undefined;
+  if (token !== undefined && !/^[a-zA-Z0-9-]{1,128}$/.test(token))
+    throw new Error(`Invalid ${admittedCommandTokenEnv}`);
+  const report = (event: string) => {
+    if (token) writeSync(Number(env.REZICS_QA_ADMISSION_LOG_FD ?? 2), `QA_ADMITTED_COMMAND ${token} ${event}\n`);
+  };
   const childEnv = { ...env };
-  delete childEnv.REZICS_QA_ADMISSION_LOG_FD;
-  if (admitted) delete childEnv[admittedCommandBudgetEnv];
+  // A flock relay has not admitted the command yet: retain its budget and reporting channel.
+  if (admitted) {
+    delete childEnv.REZICS_QA_ADMISSION_LOG_FD;
+    delete childEnv[admittedCommandBudgetEnv];
+    delete childEnv[admittedCommandTokenEnv];
+  }
+  report(`BEGIN ${Date.now()}`);
   const child = spawn(command[0]!, command.slice(1), { detached: true, stdio: 'inherit', env: childEnv });
+  let signalled = false;
+  let endedAt = 0;
   const exited = new Promise<number>((resolve, reject) => {
     child.once('error', reject);
     child.once('exit', (code, signal) => {
+      signalled = signal !== null;
+      endedAt = Date.now();
       if (signal) console.error(`Command failed: exit status ${code}; signal ${signal}`);
       resolve(code ?? 1);
     });
@@ -79,6 +96,7 @@ async function spawnInherited(command: readonly string[], env: NodeJS.ProcessEnv
     const code = await exited;
     if (stopping) await stopping;
     if (timedOut) console.error('Command deadline exceeded');
+    report(`END ${endedAt} ${signalled ? 'signal' : code} ${timedOut ? 'timeout' : 'exit'}`);
     return timedOut ? 124 : code;
   } finally {
     clearTimeout(timer);
