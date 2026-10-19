@@ -426,5 +426,5 @@
     "Failed to resolve dependency: @storybook/react-dom-shim, present in client optimizeDeps.include (persists as warning after successful local install; not itself the later assertion failure).",
     "QA acceptance coverage remains unqualified; targeted pass is not full regression or durable backend acceptance."
   ],
-  "recordedAt": "2026-10-19T05:24:00Z"
+  "recordedAt": "2026-10-19T05:17:06Z"
 }
