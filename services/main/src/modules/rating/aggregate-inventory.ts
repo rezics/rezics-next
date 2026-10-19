@@ -302,20 +302,23 @@ function inventorySql(release: boolean | 'target', reconstruction = false): stri
     UNION ALL (SELECT h.*,s.work AS effective_work,s.main_version AS effective_main_version
       FROM (SELECT * FROM access.rating_merge_selection
         WHERE context=c.context AND main_version=$2 ORDER BY principal_id LIMIT 101) s
-      LEFT JOIN LATERAL (SELECT 1 AS present FROM access.rating_aggregate_head native
+      LEFT JOIN LATERAL (SELECT 1 AS present FROM (
+        SELECT principal_id,target_release FROM access.rating_aggregate_head native
         WHERE native.context=s.context AND native.main_version=s.main_version
-          AND native.principal_id=s.principal_id AND native.target_release IS NULL LIMIT 1) native ON true
-      LEFT JOIN LATERAL (SELECT * FROM access.rating_aggregate_head origin
+          AND native.slot=access.rating_standing_slot(s.principal_id,s.context,s.main_version) LIMIT 1
+        ) native WHERE native.principal_id=s.principal_id AND native.target_release IS NULL) native ON true
+      LEFT JOIN LATERAL (SELECT origin.* FROM (
+        SELECT * FROM access.rating_aggregate_head origin
         WHERE origin.context=s.context AND origin.main_version=s.origin_main_version
-          AND origin.slot=s.origin_slot AND origin.principal_id=s.principal_id
-          AND origin.target_release IS NULL LIMIT 1) h ON native.present IS NULL
+          AND origin.slot=s.origin_slot LIMIT 1
+        ) origin WHERE origin.principal_id=s.principal_id AND origin.target_release IS NULL) h ON native.present IS NULL
       WHERE native.present IS NULL ORDER BY h.slot)
     ) selected ORDER BY slot LIMIT 101`
       : `SELECT * FROM access.${release === 'target' ? 'target_rating_head' : 'rating_aggregate_head'}
     WHERE context=c.context AND ${release === 'target' ? 'target=$2' : 'target_release=$2'} ${reconstruction ? 'AND NOT value_known AND slot > $3' : ''} ORDER BY slot LIMIT ${reconstruction ? '$4' : '101'}`
   }) h ON true
-  LEFT JOIN access.admission a ON a.id = h.admission_id
-  LEFT JOIN access.admission original ON original.id = h.original_admission_id
+  LEFT JOIN LATERAL (SELECT * FROM access.admission WHERE id = h.admission_id OFFSET 0) a ON true
+  LEFT JOIN LATERAL (SELECT * FROM access.admission WHERE id = h.original_admission_id OFFSET 0) original ON true
   WHERE c.context = $1 AND f.id = true`; }
 export const RATING_INVENTORY_SQL = inventorySql(false);
 export const RELEASE_RATING_INVENTORY_SQL = inventorySql(true);

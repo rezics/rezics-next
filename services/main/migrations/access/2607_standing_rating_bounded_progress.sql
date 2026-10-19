@@ -15,12 +15,9 @@ CREATE INDEX rating_standing_dependency_inherited ON access.rating_standing_depe
   WHERE kind='origin' AND inherited_slots>0;
 CREATE INDEX rating_standing_refresh_delivery ON access.rating_standing_refresh(context,origin_main_version,after_main_version);
 CREATE INDEX rating_standing_transition_open_origin ON access.rating_standing_transition(source_main_version,task_key) WHERE NOT finished;
--- Preserve the principal-prefix access path while making native/origin probes
--- exact. A principal-only lookup otherwise filters this person's other Works
--- before LIMIT, hiding that work from a returned-candidate bound.
-DROP INDEX access.rating_aggregate_head_principal;
-CREATE INDEX rating_aggregate_head_principal ON access.rating_aggregate_head
-  (principal_id,context,main_version,target_release,slot);
+-- Standing candidates exclude release heads before the ordered page bound.
+CREATE INDEX rating_aggregate_standing_page ON access.rating_aggregate_head
+  (context,main_version,slot) WHERE target_release IS NULL;
 
 CREATE TABLE access.rating_standing_cut (
   context text NOT NULL, main_version text NOT NULL,
