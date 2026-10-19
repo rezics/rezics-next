@@ -7,6 +7,7 @@ import { browserMainApi, BFF_PREFIX } from '../api/browser.ts';
 import { recordedFetch } from '../stories/recorded-fetch.ts';
 import { recipePageReader } from './recipe-reading-recorded-page.ts';
 import { messages } from './messages.ts';
+import { iriOf } from './route.ts';
 import { RecipeExperience } from './types/recipe.tsx';
 import type { RecipeWorkPage } from './types.ts';
 
@@ -22,7 +23,7 @@ function LongRecipe({ locale }: { locale: 'en' | 'ja' }) {
   useEffect(() => () => replay.dispose(), [replay]);
   const main = browserMainApi(window.location.origin, { fetcher: replay.fetcher });
   return <main className="mx-auto min-w-0 max-w-6xl p-4 sm:p-8">
-    <RecipeExperience initial={first.answer as RecipeWorkPage} href={href} actingSubject={actingSubject}
+    <RecipeExperience resource={iriOf(href.split('/').at(-1)!)} initial={first.answer as RecipeWorkPage} href={href} actingSubject={actingSubject}
       text={null} locale={locale} messages={messages[locale]}
       readPage={recipePageReader({ main, actingSubject }, href)} />
   </main>;

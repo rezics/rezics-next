@@ -97,7 +97,7 @@ export function WorkCredits({ agentCredits, credits, source = null, locale, mess
   const others = Object.entries(roleLabels).map(([role, label]) => ({ role, label,
     people: ordered.filter(credit => credit.role === role && nameOf(credit)) })).filter(group => group.people.length);
   const more = native?.nextCursor || external?.nextCursor;
-  return <div className="grid gap-1.5">
+  return <div role="region" aria-label={t.credits} className="grid gap-1.5">
     {authors.length ? <p className="flex flex-wrap items-baseline justify-start gap-y-1
       font-work-title text-foreground/85 text-lg sm:text-2xl">
       <span className="sr-only">{authors.length > 1 ? t.authors : t.author}: </span>

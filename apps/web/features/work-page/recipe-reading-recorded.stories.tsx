@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, spyOn, userEvent, waitFor, within } from 'storybook/test';
+import { materializeData } from 'native-i18n';
 import type { AnswerPersona, AnswerRecord, AnswerSample } from '../../../../scripts/api/answer-record.ts';
 import recipes from '../../../../tests/qa/fixtures/outcomes/recipes/read-a-recipe.json';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
@@ -254,6 +255,8 @@ async function expectPublished(canvasElement: HTMLElement, persona: Persona, loc
   const acting = actingSubjectOf(sample(persona, 'work-header').path);
   await expect(canvas.getByText(`· ${acting ?? 'none'}`)).toBeVisible();
   await expect(canvas.getAllByRole('link', { name: 'Outcome owner' }).length).toBeGreaterThan(0);
+  await expect(within(canvas.getByRole('region', { name: copy.credits }))
+    .getByRole('link', { name: 'Outcome owner' })).toBeVisible();
   await expect(canvas.getByRole('heading', { name: copy.recipeMethod })).toBeVisible();
   await expect(canvas.getByText(shownLine(page.ingredients[0]!, 'written', page))).toBeVisible();
   const yieldRow = within(canvas.getByRole('region', { name: copy.recipeMethod }))
@@ -292,9 +295,11 @@ function published(persona: Persona, locale: Locale, viewport: 'desktop' | 'phon
   };
 }
 
-async function showMore(canvasElement: HTMLElement, locale: Locale) {
+async function showMore(canvasElement: HTMLElement, locale: Locale, persona: Persona = 'visitor',
+  stop: 'closed' | 'step' | 'complete' = 'closed') {
   const canvas = within(canvasElement);
   const copy = messages[locale];
+  const progress = materializeData(copy, { locale }).cookStep;
   const button = await canvas.findByRole('button', { name: copy.showMoreRecipe });
   button.scrollIntoView();
   await userEvent.click(button);
@@ -305,15 +310,44 @@ async function showMore(canvasElement: HTMLElement, locale: Locale) {
   await expect(canvas.getByText('Cook for five minutes.')).toBeVisible();
   await expect(canvas.queryByText('PRIVATE DRAFT')).toBeNull();
   await expect(canvas.queryByRole('alert')).toBeNull();
-  const cook = canvas.getByRole('button', { name: copy.cookThis });
+  const region = canvas.getByRole('region', { name: copy.recipeMethod });
+  const ingredients = [...region.querySelectorAll('[data-ingredient]')].map(item => item.textContent);
+  await expect([...region.querySelectorAll('[data-step-text]')].map(item => item.textContent))
+    .toEqual(['Mix the sauce.', 'Cook for five minutes.']);
+  const header = canvasElement.querySelector<HTMLElement>('[data-subject-header]');
+  if (!header) throw new Error('Recipe identity header is missing');
+  const cook = within(header).getByRole('button', { name: new RegExp(`^${copy.cookThis}$`) });
   cook.scrollIntoView();
   await expect(cook).toBeEnabled();
   await userEvent.click(cook);
   const dialog = canvas.getByRole('dialog', { name: copy.cookMode });
   await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveAttribute('data-resource', asHeader(sample(persona, 'work-header').answer).id);
+  await expect(dialog).toHaveAttribute('data-revision', asRecipe(sample(persona, 'recipe-continuation').answer).revision);
+  await expect(within(dialog).getByRole('button', { name: copy.closeCookMode })).toHaveFocus();
+  await expect(within(dialog).getByText(progress({ current: '1', total: '2' }))).toBeVisible();
   await expect(within(dialog).getByText('Mix the sauce.')).toBeVisible();
+  await expect(within(dialog).getByText('Cook for five minutes.')).not.toBeVisible();
+  if (stop === 'step') return;
+  await userEvent.click(within(dialog).getByRole('button', { name: copy.cookNextStep }));
+  await expect(within(dialog).getByText(progress({ current: '2', total: '2' }))).toBeVisible();
+  await expect(within(dialog).getByText('Mix the sauce.')).not.toBeVisible();
   await expect(within(dialog).getByText('Cook for five minutes.')).toBeVisible();
+  await userEvent.click(within(dialog).getByRole('button', { name: copy.cookFinish }));
+  await expect(within(dialog).getByRole('status')).toHaveTextContent(copy.cookComplete);
+  await expect(within(dialog).getByRole('status')).toHaveFocus();
+  await expect(within(dialog).queryByRole('button', { name: copy.cookFinish })).toBeNull();
+  if (stop === 'complete') return;
   await userEvent.click(within(dialog).getByRole('button', { name: copy.closeCookMode }));
+  await expect(cook).toHaveFocus();
+  await expect([...region.querySelectorAll('[data-ingredient]')].map(item => item.textContent)).toEqual(ingredients);
+  await userEvent.click(cook);
+  const reopened = canvas.getByRole('dialog', { name: copy.cookMode });
+  await expect(within(reopened).getByText(progress({ current: '1', total: '2' }))).toBeVisible();
+  await expect(within(reopened).getByText('Mix the sauce.')).toBeVisible();
+  await userEvent.keyboard('{Escape}');
+  await expect(canvas.queryByRole('dialog', { name: copy.cookMode })).toBeNull();
+  await expect(cook).toHaveFocus();
   await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
 }
 
@@ -432,6 +466,32 @@ export const Continuation: Story = {
   },
 };
 
+export const CookingStepPhone: Story = {
+  args: { phase: 'continuation' },
+  globals: { locale: 'en', viewport: { value: 'phone' } },
+  play: async ({ canvasElement }) => {
+    await expectPublished(canvasElement, 'visitor', 'en');
+    await showMore(canvasElement, 'en', 'visitor', 'step');
+  },
+};
+
+export const CookingComplete: Story = {
+  args: { phase: 'continuation' },
+  play: async ({ canvasElement }) => {
+    await expectPublished(canvasElement, 'visitor', 'en');
+    await showMore(canvasElement, 'en', 'visitor', 'complete');
+  },
+};
+
+export const ChineseCookingPhone: Story = {
+  args: { phase: 'continuation', locale: 'zh-Hans' },
+  globals: { locale: 'zh-Hans', viewport: { value: 'phone' } },
+  play: async ({ canvasElement }) => {
+    await expectPublished(canvasElement, 'visitor', 'zh-Hans');
+    await showMore(canvasElement, 'zh-Hans', 'visitor', 'step');
+  },
+};
+
 export const Scaled: Story = {
   args: { phase: 'scale' },
   play: async ({ canvasElement }) => {
@@ -463,7 +523,7 @@ export const ScaledPhone: Story = {
     await userEvent.click(canvas.getByRole('button', { name: messages.en.scaleRecipe }));
     await waitFor(() => expect(canvas.getByRole('button', { name: messages.en.scaleRecipe })).toBeEnabled());
     await expect(canvas.queryByRole('alert')).toBeNull();
-    await showMore(canvasElement, 'en');
+    await showMore(canvasElement, 'en', 'owner');
   },
 };
 
