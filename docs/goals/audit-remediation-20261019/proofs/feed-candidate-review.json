@@ -1,4 +1,441 @@
 {
+  "dependencyCorrectionVerdict": {
+    "result": "candidate-reviewed-and-checked-ready-for-normal-scoped-landing",
+    "source": "f82754944dc7ba505f7d806232ad33d142761075",
+    "scope": "Only the three-file Vinext dependency correction over 18ded18d30beee1183a51ca05f43625b3224e651; no second feed source review or wider matrix.",
+    "summary": "The original frozen FEED-RSC-01 case passes all 22 unchanged assertions after an immutable install of the committed Yarn resolution. One explicitly concurrent actual router RSC request is held and aborted before delivery while one transport-injected cursor 409 is recovered by one native Enter on feed Refresh. The original document, URL, language and named Posts focus survive; four genuine 200 pages form a fresh linked cursor chain and render 11 unique rows.",
+    "blockingFindings": [],
+    "findingDisposition": "FEED-RSC-01 correction confirmed on f82754944dc7ba505f7d806232ad33d142761075. The reached two-document failure on the previous runtime remains recorded verbatim. No new actionable finding in this bounded delta.",
+    "originalAUD005Disposition": "Original applicable acceptance clauses are mapped below to retained accepted generation proof plus the actual-browser public/RSC proof. No additional missing original AUD-005 assertion is identified at those stated evidence tiers. Manager owns the original finding closure; this worker does not mark any full audit finding closed.",
+    "originalFindingsClosed": [],
+    "otherOriginalClasses": "D3-001 identity/authenticated persona evidence and D4-016 genuine preview mapping remain open. Their gaps, Top-sort work and the wider locale/theme/persona matrix are separate from this bounded AUD-005 correction.",
+    "next": "Ready for normal landing of exactly the three-file dependency correction f82754944dc7ba505f7d806232ad33d142761075 plus this report. Ordinary feed source is already on main at 2b1bd0c675; it is not queued by this handoff. No main import or index/ledger edit was performed."
+  },
+  "dependencyCorrectionSemantics": "This appended confirmation is the current scoped dependency-correction verdict. Every prior field retains its historical value, including old missing-evidence lists and the original reached failure. Those old lists are not new requirements: original AUD-005 applicability is mapped explicitly in dependencyCorrectionConfirmation.originalAUD005AcceptanceMapping. Other original classes remain open.",
+  "dependencyCorrectionConfirmation": {
+    "recordedAt": "2026-10-19T11:31:02.149082Z",
+    "authority": "Latest manager instruction: same sole codex-1/GPT-6.1 Sol/xhigh reviewer; inspect exact dependency delta once, rerun only the original frozen FEED-RSC-01 with unchanged 22 assertions, reuse unchanged accepted checks, and view actual pending/recovered PNGs.",
+    "reviewer": {
+      "worker": "G-2836",
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "candidateAuthor": false,
+      "fallback": false,
+      "nestedAgents": false
+    },
+    "source": {
+      "base": "18ded18d30beee1183a51ca05f43625b3224e651",
+      "head": "f82754944dc7ba505f7d806232ad33d142761075",
+      "tree": "1395effb685c67547114fb1e658d6223c4785813",
+      "changedPaths": [
+        ".yarn/patches/vinext-refresh-retain-document.patch",
+        "package.json",
+        "yarn.lock"
+      ],
+      "cleanBeforeAndAfter": true,
+      "privateSnapshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-rsc-patch-candidate",
+      "runnerHead": "864f2c69cc18272b1555f9a0fca9d8ef741e14db",
+      "backendHead": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "originalReviewedHead": "79a8d1b1c7c55a05525942200939200ac75c2d6b",
+      "acceptedFocusHead": "c3c84ef50757a2d5b5915dac7312175f7b61adc8",
+      "acceptedFeedBlobs": {
+        "apps/web/features/feed/feed-list.tsx": "127eddc9eabc0c1dd0ae16406bc78c1d8fdd23d6",
+        "apps/web/features/feed/feed.stories.tsx": "61ba4abd075575c1a6dbe45aea16f84d25624563"
+      },
+      "originalFailedReportHead": "864f2c69cc18272b1555f9a0fca9d8ef741e14db",
+      "ordinaryFeedAlreadyOnMain": "2b1bd0c675"
+    },
+    "changedSourceReview": {
+      "comparison": "git diff 18ded18d30beee1183a51ca05f43625b3224e651 f82754944dc7ba505f7d806232ad33d142761075 -- .yarn/patches/vinext-refresh-retain-document.patch package.json yarn.lock",
+      "extent": "Exactly three paths, 46 inserted and one removed line. The patch adds two runtime lines: a comment and a refresh-only return.",
+      "behavior": "For the current navigation only, the existing catch still logs a real RSC failure when the page is not unloading. navigationKind === refresh returns before the existing hard-navigation fallback. JavaScript finally still releases the abort handle, finalizes the pending navigation and marks the scheduler settled. Non-refresh navigation continues through the unchanged fallback; stale-navigation and redirect handling are untouched.",
+      "resolution": "package.json adds the exact vinext 1.0.0-beta.13 patch resolution; yarn.lock adds that patched locator and checksum. No version or unrelated dependency update.",
+      "independentInstalledByteCheck": "Installed app-browser-entry.js equals the preserved pre-correction installed file with only the checked-in two-line insertion. All five causal package/module hashes, all six installed package manifests, all three dependency inputs, dependency stamp and accepted feed blobs match the producer manifest.",
+      "newActionableFindings": [],
+      "notClaimed": "The unchanged ordinary-navigation fallback/pending controller is supported by this catch/finally inspection and the reused owner package tests. This reviewer did not rerun those owner units or a second product/browser matrix."
+    },
+    "dependencyResolution": {
+      "sourceHead": "f82754944dc7ba505f7d806232ad33d142761075",
+      "sourceTree": "1395effb685c67547114fb1e658d6223c4785813",
+      "clean": true,
+      "dependencyInputs": {
+        "package.json": "487061c605dc753c9e60c657ecaa4dd7cf417a213ac65c2e906380367b98acaf",
+        "yarn.lock": "026c93ddc3085e43b1ff6727a42f7c55b03a03cc1aa4c11cbf57438ce5b9d391",
+        ".yarn/patches/vinext-refresh-retain-document.patch": "3c1f008b04ed3d37b42afcc007ef479de7405bc787bde671afa284fa1b7aecaf"
+      },
+      "dependencyStamp": "23223c2822cb3c121e46d70fff8a4d490b1e293ed078f8d2c626a1dee58d71eb",
+      "installedPackages": [
+        {
+          "name": "vinext",
+          "version": "1.0.0-beta.13",
+          "packageJsonSha256": "0c2a580d880166b94bbad71bdee9e35b418c8804152ca7c0cc28355a509b7082"
+        },
+        {
+          "name": "react",
+          "version": "19.3.1",
+          "packageJsonSha256": "9cc9c3de5441a2eea7f41f52f3f2a15a4fc51f90c0b72741f0d7638643a85e67"
+        },
+        {
+          "name": "react-dom",
+          "version": "19.3.1",
+          "packageJsonSha256": "89d54f11575c9b0f7819962d9d72a31970dfb4d103f07e8b1d1b37e6d1fc3258"
+        },
+        {
+          "name": "react-server-dom-webpack",
+          "version": "19.3.1",
+          "packageJsonSha256": "81d1ad491396fe14179806a1f54da087fe5ae968d4830e6b7336a960074a9015"
+        },
+        {
+          "name": "vite",
+          "version": "8.3.4",
+          "packageJsonSha256": "260a0a7a96a35e1b657480014c0f3b592b70061e42099edefc8fe97972f05fd4"
+        },
+        {
+          "name": "@vitejs/plugin-rsc",
+          "version": "0.5.38",
+          "packageJsonSha256": "c8284b323d4c00f69a0dca1da722797a3c71eb2a93ceff939486385787a124ec"
+        }
+      ],
+      "causalRouterModules": {
+        "node_modules/vinext/package.json": "0c2a580d880166b94bbad71bdee9e35b418c8804152ca7c0cc28355a509b7082",
+        "node_modules/vinext/dist/shims/navigation.js": "20c015b5ec308bcf3c2ab8262fb0a2724144904bd08ea587a8dedb91295c4c14",
+        "node_modules/vinext/dist/server/app-browser-entry.js": "496abcdede37434faa54443e4bd90d6ca8aef076e371fefe7f19cab701a14998",
+        "node_modules/vinext/dist/server/app-browser-navigation-controller.js": "384520691d20b8099273ab0dd42e6e6e77767a624fe48574a479eb1b62a411e4",
+        "node_modules/vinext/dist/server/navigation-planner.js": "4fc37e6d3149fa0455afd479951fb26c8e238e903575817dff3560ac874a97d7"
+      },
+      "installedChangeExactlyPatch": true,
+      "manualNodeModulesEdit": false,
+      "acceptedFeedBlobs": {
+        "apps/web/features/feed/feed-list.tsx": "127eddc9eabc0c1dd0ae16406bc78c1d8fdd23d6",
+        "apps/web/features/feed/feed.stories.tsx": "61ba4abd075575c1a6dbe45aea16f84d25624563"
+      },
+      "patchedLocator": "vinext@patch:vinext@npm%3A1.0.0-beta.13#./.yarn/patches/vinext-refresh-retain-document.patch::version=1.0.0-beta.13&hash=db61fd&locator=rezics%40workspace%3A.",
+      "lockChecksum": "10c0/94911dc97a48c1b49a743cc2553a85962296e35effcc168bce2150070b499682d008e3c238a875b25e28aa12c89a28664c3586400f4925fb270f3d1a8fa38afa"
+    },
+    "frozenProbe": {
+      "originalProbeSha256": "1f059d9254711f79370c7a601877be60efb7668ca044db9561910b940104f979",
+      "preparedProbeSha256": "0d2d4ad3b8674d36eba41221cd810c464bc0adc772b737eb77d2af6807a3b74d",
+      "testBodySha256": "3c377a6ee6856bb500d3db49e7c039575e0c372cbe7b1fc2cd07b3623486cbe1",
+      "testBodyByteIdentical": true,
+      "expectationLinesByteIdentical": true,
+      "expectationCount": 22,
+      "setupOnlyChanges": [
+        "snapshot path",
+        "evidence path",
+        "clean source pin"
+      ],
+      "runnerHead": "864f2c69cc18272b1555f9a0fca9d8ef741e14db",
+      "sourceHead": "f82754944dc7ba505f7d806232ad33d142761075",
+      "privateSnapshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-rsc-patch-candidate",
+      "frozenOriginalReportSha256": "9ca828df49bf228b5c84c010d1ad811bc587656b77b71f8c94366389829ba5c0",
+      "originalProbe": ".temp/feed-rsc-interruption.test.ts",
+      "executedProbe": ".temp/feed-rsc-patch.test.ts",
+      "testBodyAndAllExpectationsUnchanged": true,
+      "originalAssertionLines": [
+        "expect(!!rscRoute).toBe(true);",
+        "expect(result.rsc.headers.rsc).toBe('1');",
+        "expect(result.rsc.headers.accept).toBe('text/x-component');",
+        "expect(new URL(result.rsc.url).pathname).toBe('/en');",
+        "expect(new URL(result.rsc.url).searchParams.get('lang')).toBe('en');",
+        "expect(initiators.some(entry => entry.url === result.rsc.url && entry.initiator.stack?.callFrames.some((frame: any) => frame.functionName === 'navigateRsc' && frame.url.includes('/vinext/dist/server/app-browser-entry.js')))).toBe(true);",
+        "expect(result.rsc.isNavigationRequest).toBe(false);",
+        "expect(result.pending).toEqual({ tag: 'DIV', role: 'group', name: 'Posts', busy: 'true', token: before.token });",
+        "expect(events.some(event => event.event === 'rsc-requestfailed')).toBe(true);",
+        "expect(injectCount).toBe(1);",
+        "expect(refreshCount).toBe(1);",
+        "expect(documents).toHaveLength(1);",
+        "expect(after.token).toBe(before.token);",
+        "expect(after.url).toBe(before.url);",
+        "expect(after.language).toBe(before.language);",
+        "expect(after.ids.length).toBeGreaterThanOrEqual(6);",
+        "expect(new Set(after.ids).size).toBe(after.ids.length);",
+        "expect(result.remainingAlerts).toBe(0);",
+        "expect(after.requests.every((request: any) => request.credentials === 'omit' && !new URL(request.url, origin).searchParams.has('actingSubject'))).toBe(true);",
+        "expect(feed.filter(entry => !entry.injected).every(entry => entry.status === 200)).toBe(true);",
+        "expect(feed.filter(entry => !entry.injected).length).toBeGreaterThanOrEqual(3);",
+        "expect(after.focus).toEqual({ same: true, tag: 'DIV', role: 'group', name: 'Posts', busy: 'false' });"
+      ],
+      "sourceSetupChange": "Only snapshot/evidence paths and the clean source pin changed. The original port, browser interaction, interception, delays, observation order and all 22 assertions remain byte-identical in the test body."
+    },
+    "checks": [
+      {
+        "job": "68390fb6-4df1-4660-930d-a1e18a01eb86",
+        "command": "task --taskfile .temp/feed-rsc-patch.Taskfile.yml install",
+        "exitCode": 201,
+        "resultClass": "setup-harness",
+        "outcomeAssertionsReached": false,
+        "reason": "The temporary Taskfile defaulted to its .temp directory, so its relative scripts/qa/host-admission.ts path did not resolve. Set the temporary install task directory to this worker root. No browser assertion or product failure occurred.",
+        "log": ".temp/goal/jobs/68390fb6-4df1-4660-930d-a1e18a01eb86.1.log"
+      },
+      {
+        "job": "924a8b8e-bdb7-4dfe-9ad2-ff76e211879f",
+        "step": 1,
+        "command": "task --taskfile .temp/feed-rsc-patch.Taskfile.yml install",
+        "innerCommand": "bun scripts/qa/host-admission.ts --cpu --gib 3 -- task --dir /home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-rsc-patch-candidate install",
+        "installCommand": "corepack yarn install --immutable",
+        "exitCode": 0,
+        "result": "Passed with Yarn 4.18.0 under CPU/memory admission, using a private reflink copy of the existing Yarn cache. Tracked dependency inputs stayed unchanged. Peer dependency/build-script warnings were retained in the log.",
+        "log": ".temp/goal/jobs/924a8b8e-bdb7-4dfe-9ad2-ff76e211879f.1.log"
+      },
+      {
+        "job": "924a8b8e-bdb7-4dfe-9ad2-ff76e211879f",
+        "step": 2,
+        "command": "python3 .temp/verify-feed-rsc-patch.py",
+        "exitCode": 0,
+        "result": "Exact clean source, dependency/module/package hashes, stamp, accepted feed blobs and installed delta verified before QA.",
+        "log": ".temp/goal/jobs/924a8b8e-bdb7-4dfe-9ad2-ff76e211879f.2.log"
+      },
+      {
+        "job": "924a8b8e-bdb7-4dfe-9ad2-ff76e211879f",
+        "step": 3,
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/feed-rsc-patch.test.ts",
+        "exitCode": 0,
+        "tests": 1,
+        "passed": 1,
+        "failed": 0,
+        "expectCalls": 22,
+        "durationSeconds": 80.52,
+        "case": "one Refresh recovers genuine cursor pages when an actual Next router RSC request is held and aborted",
+        "outcomeAssertionReached": true,
+        "result": "All 22 original assertions passed, including the original line-174 one-document assertion that failed previously. Normal Goal QA admission was retained; no a11y setting or expectation was disabled.",
+        "log": ".temp/goal/jobs/924a8b8e-bdb7-4dfe-9ad2-ff76e211879f.3.log"
+      }
+    ],
+    "recordedJobLauncher": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'python3 .temp/verify-feed-rsc-patch.py' --then 'bun scripts/goal/goalctl.ts test ./.temp/feed-rsc-patch.test.ts' -- task --taskfile .temp/feed-rsc-patch.Taskfile.yml install",
+    "reusedChecks": {
+      "evidencePolicy": "These are retained or owner-executed checks, not additional independent reruns in this continuation.",
+      "acceptedIndependentFeedEvidence": "Original source/unit/generation/preview checks and focusCorrectionConfirmation remain unchanged in this report. Job dfdd5116-1c90-4566-acb7-1d9d8283832f passed the two DOM focus cases, public recovery, 36 changed stories and scoped static checks at c3c84ef; source proof report 59404fe48fb6ce34f99bd90474de8c610eea8b81 is accepted.",
+      "ownerPackageUnit": {
+        "job": "334c2f76-7c44-45e1-95bd-1eb617c43c11",
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/vinext-refresh-owner.test.ts",
+        "exitCode": 0,
+        "tests": 2,
+        "expectCalls": 26,
+        "coverage": "Interrupted refresh retains document and settles pending/log/cleanup; ordinary native navigation still hard-navigates on error."
+      },
+      "ownerStatic": {
+        "job": "eaab3fd3-22e4-471f-80a0-ae9319b58ddd",
+        "command": "task goal -- check --only types,lint,guards",
+        "exitCode": 0,
+        "checkRun": "run-Gy7aub",
+        "result": "Types, inference, lint, AST and 16 selected guards passed at the candidate dependency inputs, per manifest and retained log. Broader affected tests were listed, not run."
+      },
+      "ownerBrowser": {
+        "job": "c20833e3-0a77-4d84-ac63-99b0144c9fc8",
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/feed-rsc-interruption.test.ts",
+        "exitCode": 0,
+        "expectCalls": 22,
+        "classification": "Owner proof only; independently confirmed by this worker job 924a8b8e-bdb7-4dfe-9ad2-ff76e211879f"
+      },
+      "manifest": ".temp/feed-rsc-patch-evidence/producer-manifest.json",
+      "manifestSha256": "37f63216630d9276c18e8d92a063c3cb4746ce668547940987d83e347200697c"
+    },
+    "actualBrowserEvidence": {
+      "faultClassification": "Controlled transport/network fault, not a naturally reproduced business conflict. Exactly the first successor cursor request is fulfilled with 409/cursor_conflict. The test deliberately invokes mounted window.next.router.refresh once as a separate concurrent action, holds its actual RSC request without route.fetch/upstream delivery, and aborts it with failed. The native feed Refresh requests API data directly; it did not naturally initiate this RSC request.",
+      "actualRouterRequest": {
+        "url": "http://127.0.0.1:62839/en?lang=en&_rsc=2tNzm4N15ZYtRVjY",
+        "method": "GET",
+        "resourceType": "fetch",
+        "isNavigationRequest": false,
+        "headers": {
+          "accept": "text/x-component",
+          "rsc": "1"
+        }
+      },
+      "provenance": "CDP Network.requestWillBeSent records the navigateRsc stack in the installed vinext/dist/server/app-browser-entry.js. The browser observes net::ERR_FAILED and the existing [vinext] RSC navigation error log. No document request is intercepted or suppressed.",
+      "summary": {
+        "documentRequests": 1,
+        "documentTokenRetained": true,
+        "urlRetained": true,
+        "languageRetained": true,
+        "injected409": 1,
+        "feedRefreshes": 1,
+        "genuine200Pages": 4,
+        "cursorChainLinked": true,
+        "queryUnchanged": true,
+        "freshRecoveryStartsWithoutCursor": true,
+        "freshRecoveryCursorDiffersFromFailedCursor": true,
+        "projections": [
+          {
+            "sequence": "11938",
+            "reviewSequence": "67",
+            "status": "current"
+          },
+          {
+            "sequence": "11938",
+            "reviewSequence": "67",
+            "status": "current"
+          },
+          {
+            "sequence": "11938",
+            "reviewSequence": "67",
+            "status": "current"
+          },
+          {
+            "sequence": "11938",
+            "reviewSequence": "67",
+            "status": "current"
+          }
+        ],
+        "uniqueRows": 11,
+        "renderedRows": 11,
+        "remainingAlerts": 0,
+        "pending": {
+          "tag": "DIV",
+          "role": "group",
+          "name": "Posts",
+          "busy": "true",
+          "token": "94388932-2a71-4f2e-b4a7-d5c9300cb244"
+        },
+        "recoveredFocus": {
+          "same": true,
+          "tag": "DIV",
+          "role": "group",
+          "name": "Posts",
+          "busy": "false"
+        },
+        "controlledRscAbortBeforeUpstreamDelivery": true,
+        "rscRequestFailedObserved": true,
+        "rscErrorLoggingRetained": true,
+        "sourceBefore": {
+          "head": "f82754944dc7ba505f7d806232ad33d142761075",
+          "tree": "1395effb685c67547114fb1e658d6223c4785813",
+          "clean": true,
+          "snapshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-rsc-patch-candidate",
+          "harness": "864f2c69cc18272b1555f9a0fca9d8ef741e14db",
+          "backend": "75409ac3c379a9f84212e48a8abdc6540c5c44a2"
+        },
+        "sourceAfter": {
+          "head": "f82754944dc7ba505f7d806232ad33d142761075",
+          "tree": "1395effb685c67547114fb1e658d6223c4785813",
+          "clean": true
+        },
+        "requestCredentialsOmitAndNoActor": true
+      },
+      "genuineData": "All four successful responses use route.fetch against the unchanged genuine shared Main backend and are retained as genuine-page-1.json through genuine-page-4.json. Existing audit/imported records are reused; this worker created no product items or successful API fixtures and changed no corpus, backend, live jobs or shared stack lifecycle.",
+      "scopeLimits": [
+        "The interruption occurs before the RSC response is delivered. No after-headers or mid-stream decode interruption was executed.",
+        "The initial SSR projection is not retained in this trace. All four captured genuine recovery/successor responses have sequence 11938 and reviewSequence 67. Same-sequence changed-review/personal assertions use the accepted scoped story proof below.",
+        "No genuine signed-in persona journey or backend review/personal mutation is claimed.",
+        "This selected browser run is en / 1440x1000 / light; it does not claim the wider theme/locale/persona matrix."
+      ],
+      "newPublicFailures": [],
+      "newSourceCounterexamples": [],
+      "privateFrontendStopped": true
+    },
+    "originalAUD005AcceptanceMapping": {
+      "origin": ".temp/ref/feed-candidate-findings.json AUD-005.acceptance[0]",
+      "originalAcceptance": "保持 query、projection.sequence 均相同，仅首次续页返回 409；随后服务器可正常读取。点击一次 Refresh 应清除旧失败并开始一条新的可继续游标链，语言筛选与 URL 保留，显示可感知的进行中状态。分别覆盖同 sequence 下 reviewSequence 或个人条件变化，以及慢/中断 RSC，禁止依赖浏览器整页刷新。",
+      "status": "original-applicable-clauses-mapped-manager-closure-pending",
+      "clauses": [
+        {
+          "assertion": "Keep query and projection.sequence unchanged; inject only the first successor 409 and let later server reads succeed.",
+          "evidence": "Retained accepted same-query/same-sequence stories cover unchanged sequence, changed reviewSequence=8 and personal-membership modes. This real-browser run injects exactly one successor 409 and then records four genuine 200 responses, identical query excluding cursor, sequence 11938/reviewSequence 67 for all captured API pages.",
+          "tier": "accepted scoped generation stories plus genuine public API transport"
+        },
+        {
+          "assertion": "One Refresh clears the old failure and establishes a new resumable cursor chain.",
+          "evidence": "One native Enter on the real Refresh control; no-cursor recovery page followed by three genuine successors, every successor cursor equals the preceding nextCursor, and the new recovery cursor differs from the failed cursor. The conflict alert is gone and 11 rendered row IDs are unique.",
+          "tier": "actual browser and genuine retained API responses"
+        },
+        {
+          "assertion": "Retain URL and language filter and display observable pending state.",
+          "evidence": "The same /en?lang=en URL, document language and contentLanguages=en query survive. The pending screenshot visibly shows Refreshing posts… and retained rows; the named Posts group has aria-busy=true. Recovered focus stays on that exact group with aria-busy=false.",
+          "tier": "actual DOM and both actually viewed screenshots"
+        },
+        {
+          "assertion": "Cover changed reviewSequence or personal conditions at unchanged sequence.",
+          "evidence": "Retain the already accepted RecoverChangedReviewsAtSameSequence and RecoverChangedPersonalConditionsAtSameSequence story assertions and corresponding captured/rendered proof. Their controlled reviewSequence=8 and personal-membership mode inputs are scoped harness proof; they are not relabelled as genuine signed-in or backend-mutating API evidence. No generation behavior changed in this dependency delta.",
+          "tier": "retained accepted scoped harness proof"
+        },
+        {
+          "assertion": "Recover with slow/interrupted RSC without relying on a whole-page refresh.",
+          "evidence": "The actual router RSC request is boundedly held, concurrent with observable feed recovery pending, and explicitly aborted before delivery. All 22 frozen assertions pass: exactly one document request, original document token, same URL/language/focus, fresh genuine cursor chain. Existing slow/absent-RSC stand-in evidence remains separately labelled.",
+          "tier": "actual controlled browser network interruption plus retained scoped slow/absent proof"
+        }
+      ],
+      "missingOriginalAssertions": [],
+      "interpretation": "The original quoted acceptance asks for same-sequence review/personal coverage and slow/interrupted RSC; it does not separately require a naturally arising 409, a natural RSC interruption, an interruption after response-stream receipt, a new backend mutation, Top-sort, D3-001 signed-in identity coverage, D4-016 preview mapping or the full persona/theme matrix as gates for this correction. The accepted scoped generation proof is retained at its actual tier. Those additional unexecuted journeys stay explicit as evidence limits and other-class work; none is silently claimed complete.",
+      "closureAuthority": "No finding status/index/ledger was changed. Original AUD-005 closure remains the manager decision against the mapping above; this review confirms the bounded FEED-RSC-01 repair."
+    },
+    "screenshotsActuallyViewed": [
+      {
+        "path": ".temp/feed-rsc-patch-evidence/pending-rsc-held-1440.png",
+        "sha256": "7800610a39801bc3e05d72c0d0df9168abd94d3782cafe07807636ae34fbcb08",
+        "viewport": "1440x1000",
+        "locale": "en",
+        "theme": "light",
+        "viewed": true,
+        "observation": "The original Home document retains real rows and surrounding geometry. A continuous blue focus ring encloses Posts; Refreshing posts… is visibly present below the two retained rows."
+      },
+      {
+        "path": ".temp/feed-rsc-patch-evidence/after-rsc-abort-1440.png",
+        "sha256": "a13c3d69df6b06bf9d44f252e2a1a3a4ba94e94f63acf24cb6515fc188ed4f0f",
+        "viewport": "1440x1000",
+        "locale": "en",
+        "theme": "light",
+        "viewed": true,
+        "observation": "The same Home document and Posts focus ring remain after the RSC abort; recovered rows continue below the viewport. The first four rows are visible; the 11-row count comes from DOM observations, not a claim that all rows fit in this screenshot."
+      }
+    ],
+    "preservedHistory": {
+      "reportHead": "864f2c69cc18272b1555f9a0fca9d8ef741e14db",
+      "reportSha256": "9ca828df49bf228b5c84c010d1ad811bc587656b77b71f8c94366389829ba5c0",
+      "allHistoricalFieldValuesUnchanged": true,
+      "originalFailure": "Job 1a1afa6e-3d1e-4b37-ad7c-7148be1fd14a failed the reached frozen line-174 assertion: expected one document, observed two. Original c3c84ef traces, two PNGs, installed unpatched bytes and setup correction are retained under .temp/feed-rsc-evidence and rscInterruptionFollowUp. This pass supersedes that failure only at corrected source.",
+      "ordinaryFocusAndGeneration": "Accepted focus/report59404fe and same-query/review/personal coverage remain unchanged. No second source review, wider feed run, old baseline rerun or new corpus was used."
+    },
+    "privateEvidence": {
+      "directory": ".temp/feed-rsc-patch-evidence",
+      "artifactChecksums": {
+        "observations.json": "7c9bef60bd98898d2f70e1a89814c7cdd1d368cb3bab984cfd88ba10e4103408",
+        "runtime-summary.json": "c904dd65495a97e5ba32989d13b59191c9f265b8df58fc29e9c2f3dbceede773",
+        "probe-integrity.json": "96306caa7e2c90e4fb1f061805e26a6a272af14e776f38cc1c0332ab2773d252",
+        "resolution-verification.json": "08add2a8597f989e893ea3fa93c9e7224c2c4eb4da79185f900e37becdc57de5",
+        "pending-rsc-held-1440.png": "7800610a39801bc3e05d72c0d0df9168abd94d3782cafe07807636ae34fbcb08",
+        "after-rsc-abort-1440.png": "a13c3d69df6b06bf9d44f252e2a1a3a4ba94e94f63acf24cb6515fc188ed4f0f",
+        "producer-manifest.json": "37f63216630d9276c18e8d92a063c3cb4746ce668547940987d83e347200697c",
+        "genuine-page-1.json": "f3f1dd0188da8707c320c7d19784230d7fb2751b835cab68e448e1c2b9029e9f",
+        "genuine-page-2.json": "de0b7decef9b47656969d9733be3ebb5e66fe33bcdd1e0934e20cae81a69f16f",
+        "genuine-page-3.json": "968c7c9af3780b21ebc377c9cf8eff1bbb46e2627c05331ad8ad8f530c389532",
+        "genuine-page-4.json": "23eb3cbac64d284bb1b12e2b1bb63ec597ec93b14db7e34603c177edae76bd04"
+      },
+      "taskfile": ".temp/feed-rsc-patch.Taskfile.yml",
+      "taskfileSha256": "b62ffc5bc3b757962a36cf839f103b4c607b158e0eda6f1cd4a2eb3a6aa2d6ca",
+      "resolutionVerifier": ".temp/verify-feed-rsc-patch.py",
+      "resolutionVerifierSha256": "8fdf8e75a76073a28a42ad444c0f788cd0b3a1b86aec8e52e2faabd71a2585e7",
+      "originalReport": "git show 864f2c69cc18272b1555f9a0fca9d8ef741e14db:docs/goals/audit-remediation-20261019/proofs/feed-candidate-review.json"
+    },
+    "administrativeReportChecks": {
+      "job": "d266f1c0-a999-413c-88bf-1497dca1f221",
+      "recordedLauncher": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "checks": [
+        {
+          "command": "task docs:check",
+          "exitCode": 0,
+          "result": "13 tests passed; documentation checks passed for 250 Markdown files.",
+          "log": ".temp/goal/jobs/d266f1c0-a999-413c-88bf-1497dca1f221.1.log"
+        },
+        {
+          "command": "task goal -- check",
+          "exitCode": 0,
+          "checkRun": "run-pCbxAi",
+          "result": "Report-only delta: types/tests/lint correctly skipped for no applicable source/test change; AST and 1/45 selected repository guards passed. No product acceptance is inferred from this administrative gate.",
+          "log": ".temp/goal/jobs/d266f1c0-a999-413c-88bf-1497dca1f221.2.log",
+          "fullOutput": ".temp/goal/check/run-pCbxAi/output.log"
+        }
+      ],
+      "worktreeHeadDuringChecks": "864f2c69cc18272b1555f9a0fca9d8ef741e14db",
+      "diffCheck": "git diff --check passed"
+    },
+    "ownerChanges": [],
+    "proposedTasks": [
+      "Manager considers the exact dependency patch plus report for normal landing; owns any original AUD-005 status decision.",
+      "Retain separate open D3-001 genuine identity/persona and D4-016 retained-preview journeys and existing wider matrix limits. No additional AUD-005 gate is proposed by this review."
+    ],
+    "next": "Ready for normal landing of exactly the three-file dependency correction f82754944dc7ba505f7d806232ad33d142761075 plus this report. Ordinary feed source is already on main at 2b1bd0c675; it is not queued by this handoff. No main import or index/ledger edit was performed."
+  },
   "goal": "audit-remediation-20261019",
   "worker": "G-2836",
   "managerSession": "goal-audit-remediation-20261019",
