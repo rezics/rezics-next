@@ -3011,7 +3011,7 @@
   "populationEnvironmentContinuation": {
     "authority": "Latest maintainer continuation: qualify only the two original frozen D5-006 populations on disposable migrated copies of the retained command-created corpora; G-2826 performs independent original-suite execution after qualification.",
     "scope": "Environment preparation and existing matrix metadata only. No baseline product rerun, catalogue build, production/helper/frozen-test edit, peer mutation, new producer, new fault mechanism or finding closure.",
-    "status": "partial: Zone derivative qualified. Rating migration/reconstruction preserved all110 principal identities and authority, exactly100 inventory-position increments, immutable graph/objects and original source columns apart from exact classified signals. Public readiness passed, but a Zone-specific environment smoke premise stopped before the rating aggregate; correction remains to execute.",
+    "status": "partial: both retained derivatives qualified by genuine migration, public smoke, clean stopped-owner backup and fresh restore within existing preparation budgets. Independent original frozen suites remain unrun and uncertified.",
     "originalOutcomeAssertionReached": false,
     "canonicalFindingClosed": false,
     "fixedProductPassCertified": false,
@@ -4119,62 +4119,503 @@
           "sourceEvidence": "tests/qa/support/bounded-read-corpus.ts builds official Zones only for capability zones; the retained ratings corpus zones array is empty.",
           "correction": "Environment smoke must capture item-array/count/private-Realm status before checking it, retain privacy refusal for every corpus, and require nonempty Zone suggestions only for the actual Zone corpus. The ratings positive smoke is its real100-vote public aggregate. No frozen assertion or helper changes."
         }
+      },
+      {
+        "job": "566d513d-d7df-4458-8c66-f26b75d8a70e",
+        "commands": [
+          "task --taskfile .temp/read-budget-migration/Taskfile.yml syntax",
+          "task --taskfile .temp/read-budget-migration/Taskfile.yml qualify -- ratings"
+        ],
+        "receipt": {
+          "path": ".temp/read-budget-migration/ratings-attempt5/environment-qualification.json",
+          "sha256": "5423802875542e2fc5c468b243a8ac8901d5cdd90ce8ea94157823156ee7e52a"
+        },
+        "classification": "Passed environment qualification only. Initial 100-vote public smoke is not the original six-persona 100/101/102 budget outcome. No original frozen-suite execution or finding closure.",
+        "startedAt": "2026-10-19T13:04:40.931Z",
+        "finishedAt": "2026-10-19T13:08:25.661Z",
+        "ready": true,
+        "originalOutcomeAssertionReached": false,
+        "originalRestore": {
+          "restoreMs": 29520,
+          "volumeCopyMs": {
+            "postgres_data": 21921,
+            "fuseki_data": 3824,
+            "rustfs_data": 1917
+          },
+          "objectCopyMs": 65,
+          "startupMs": 20200,
+          "readinessMs": 1686,
+          "totalMs": 51406,
+          "admissionWaitMs": 2332,
+          "collationRepairs": []
+        },
+        "preparationThroughSmokeMs": 135344,
+        "derivative": {
+          "manifest": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/source-fixed/.temp/read-budget-derivatives/ratings/owners/backup.json",
+          "sha256": "d7591eb25339e8ff0c87463414031c22d6d7c6ff6bae9a27a68dd8d925d82bd9",
+          "project": "rezics-catalogue-corpus-budget-rating-f55fbeb639-bounded-reads-ratings-6b500023d9273076",
+          "compatibilityDigest": "6b500023d92730766795edd9771f36b3550e60095d6cd748273eb38e99076264",
+          "preparationMs": 157357,
+          "corpus": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/ratings-attempt5/corpus.json",
+          "corpusSha256": "e2f6d27d756c78cc20b08a8e731610633f550d59d412d8c174f79c42af687513",
+          "parentManifest": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/audit-bounded-reads/ratings/owners/backup.json",
+          "parentManifestSha256": "36d9c6a5e66a802f2d45cee36810915c9dbd89a56431a8ed8b5de2ab48ceb567",
+          "parentCompatibilityDigest": "79c3488519b38ec7f919d85713c4027c4226fc582f4afb19f1f4a7d2f1b1b056"
+        },
+        "smoke": {
+          "kind": "retained-identity-environment-smoke",
+          "capability": "ratings",
+          "originalOutcomeAssertionReached": false,
+          "recreatedIdentities": false,
+          "publicChecks": [
+            {
+              "path": "/health/ready",
+              "status": 200
+            },
+            {
+              "path": "/v1/onboarding/suggested-follows?languages=en",
+              "status": 200,
+              "itemsAreArray": true,
+              "items": 0,
+              "privateRealmAbsent": true
+            },
+            {
+              "path": "/v1/global-rating-aggregates",
+              "status": 200,
+              "body": {
+                "profile": "global-rating-standing-latest-mean-v1",
+                "complete": true,
+                "work": "https://rezics.com/id/01a150b1-050e-73e7-88cb-86403da648b8",
+                "mainVersion": "https://rezics.com/id/01a150b1-050e-73e8-916e-24de26a33bab",
+                "targetGrain": "mainVersion",
+                "context": "https://rezics.com/id/01a150b1-109e-72b2-80c1-68774f09b812",
+                "populationOwner": "https://rezics.com/id/00000000-0000-8000-8000-676c6f62616c",
+                "contextProfile": "global-rating-standing-context-v1",
+                "populationPolicy": "global-account-principal",
+                "cadence": "standing",
+                "aggregationPolicy": "latest-per-rater-mean",
+                "contextRevision": "https://rezics.com/id/01a150b1-109e-72b3-93ae-5125b3034ef6",
+                "scale": {
+                  "min": 1,
+                  "max": 5,
+                  "step": 1
+                },
+                "population": 100,
+                "count": 100,
+                "withdrawnCount": 0,
+                "histogram": [
+                  0,
+                  0,
+                  0,
+                  0,
+                  100
+                ],
+                "sum": 500,
+                "mean": 5,
+                "precision": {
+                  "kind": "exact-rational",
+                  "numerator": "5",
+                  "denominator": "1"
+                },
+                "unitMean": {
+                  "numerator": "1",
+                  "denominator": "1"
+                },
+                "sourcePosition": {
+                  "datasetId": "product",
+                  "dataEpoch": "7a939a09-51e1-4888-a991-27846bdd4b48",
+                  "sequence": "225"
+                }
+              },
+              "independentSuiteExecuted": false
+            }
+          ],
+          "retainedRealms": 3,
+          "retainedPersonaSessions": 15,
+          "ready": true,
+          "elapsedMs": 5802
+        },
+        "appliedMigrations": [
+          "services/main/migrations/access/2045_standing_rating_components.sql",
+          "services/main/migrations/access/2077_standing_rating_publication.sql",
+          "services/main/migrations/access/2605_discovery_refresh_disposition.sql",
+          "services/main/migrations/access/2606_standing_rating_affected_cuts.sql",
+          "services/main/migrations/access/2607_standing_rating_bounded_progress.sql"
+        ],
+        "appliedContentMigrations": [
+          2603
+        ],
+        "cleanupErrors": [],
+        "run": "budget-rating-f55fbeb639",
+        "derivativeRestoreRun": "budget-check-8d2e44c3c3",
+        "preservation": {
+          "originalSqlTableCount": 714,
+          "changedDerivedTables": [
+            "alias_graph_import",
+            "also_enjoyed_source_change",
+            "discovery_source_change",
+            "recovery_fence"
+          ],
+          "unexpectedSql": [],
+          "recoveryValid": true,
+          "aliasValid": true,
+          "discoveryValid": true,
+          "enjoyedValid": true,
+          "enjoyedRowsRetained": true,
+          "enjoyedBefore": 24,
+          "enjoyedAdded": [
+            {
+              "id": "530",
+              "privacy": true
+            },
+            {
+              "id": "531",
+              "privacy": true
+            }
+          ],
+          "exactUpgradeReceipts": [
+            "urn:rezics:name-migration:statement-upgrade:acquire:0e74f9c675e84db07bdef2e7fc9734007f74a9e72feb78a537a0928d59d1de4c",
+            "urn:rezics:name-migration:statement-upgrade:complete:ca186d927d70ef710e9f18a36b93c04dd148bfd8f6a11a0f3a001917e5724e40",
+            "urn:rezics:name-migration:statement-upgrade:release:4b602d67f2feca648b231d10d0267bed9ab4cfa82c222d0620a2b6e34b87e13a"
+          ],
+          "onlyExactUpgradeReceipts": true,
+          "immutableGraphFactsUnchanged": true,
+          "objectsUnchanged": true,
+          "originalCorpusUnchanged": true,
+          "originalBackupUnchanged": true,
+          "ready": true
+        },
+        "graphDelta": {
+          "removed": 0,
+          "added": 27
+        },
+        "objectCounts": {
+          "local": 238,
+          "s3": 232
+        },
+        "standingReconstruction": {
+          "before": {
+            "heads": {
+              "heads": 100,
+              "independent_accounts": 100,
+              "known": 0,
+              "five": 0,
+              "withdrawn": 0
+            },
+            "component": {
+              "slots": 100,
+              "unvalued": 100,
+              "histogram": {}
+            },
+            "publication": {
+              "generation": "bb79dcb8daa4d490a7af7e2b89232b8118481af41410a662898d51f0089523bf",
+              "pending": "0"
+            }
+          },
+          "firstPage": {
+            "complete": false,
+            "scanned": 100,
+            "recorded": 100,
+            "cursor": {
+              "context": "https://rezics.com/id/01a150b1-109e-72b2-80c1-68774f09b812",
+              "target": "https://rezics.com/id/01a150b1-050e-73e8-916e-24de26a33bab",
+              "contextRevision": "https://rezics.com/id/01a150b1-109e-72b3-93ae-5125b3034ef6",
+              "recoveryGeneration": "2",
+              "afterSlot": "urn:rezics:rating-slot:ff92ef034ca7a092156f168fac02750e82f01579148220c7bc35bf2e4eecc173",
+              "standing": true
+            },
+            "checkpoint": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/source-fixed/.temp/rating-reconstruction/1cf4b5cb29c97d28478ee71973c29e3c359e8b80e8f854b60fe182426b4df1fb.json"
+          },
+          "checkpointAfterFirstPage": {
+            "sha256": "8df8d69352ee405825740fc711d337747f27a233c0a28390a52d57a5561fe740",
+            "cursor": {
+              "cursor": {
+                "context": "https://rezics.com/id/01a150b1-109e-72b2-80c1-68774f09b812",
+                "target": "https://rezics.com/id/01a150b1-050e-73e8-916e-24de26a33bab",
+                "contextRevision": "https://rezics.com/id/01a150b1-109e-72b3-93ae-5125b3034ef6",
+                "recoveryGeneration": "2",
+                "afterSlot": "urn:rezics:rating-slot:ff92ef034ca7a092156f168fac02750e82f01579148220c7bc35bf2e4eecc173",
+                "standing": true
+              },
+              "complete": false
+            }
+          },
+          "reconstructed": {
+            "complete": true,
+            "scanned": 0,
+            "recorded": 0,
+            "cursor": null,
+            "checkpoint": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/source-fixed/.temp/rating-reconstruction/1cf4b5cb29c97d28478ee71973c29e3c359e8b80e8f854b60fe182426b4df1fb.json"
+          },
+          "checkpoint": {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/source-fixed/.temp/rating-reconstruction/1cf4b5cb29c97d28478ee71973c29e3c359e8b80e8f854b60fe182426b4df1fb.json",
+            "sha256": "037a12a82dccd634b463a6c96489b7c899709fde1324c533a27956bf5cdc2aaa"
+          },
+          "refreshed": {
+            "refreshed": 0,
+            "complete": true,
+            "recoveryGeneration": "2"
+          },
+          "after": {
+            "heads": {
+              "heads": 100,
+              "independent_accounts": 100,
+              "known": 100,
+              "five": 100,
+              "withdrawn": 0
+            },
+            "component": {
+              "slots": 100,
+              "unvalued": 0,
+              "histogram": {
+                "5": 100
+              }
+            },
+            "publication": {
+              "generation": "d10d93a9a20df58439baa092821f91042a7f067bdd5f89661a0135e81373658d",
+              "pending": "0"
+            }
+          },
+          "preservation": {
+            "originalSourceColumnsUnchanged": true,
+            "graphUnchanged": true,
+            "objectsUnchanged": true,
+            "unexpected": [],
+            "discoverySignal": {
+              "retained": true,
+              "added": [
+                {
+                  "id": "3",
+                  "context_key": "",
+                  "statement": ""
+                }
+              ],
+              "ready": true
+            },
+            "enjoyedSignal": {
+              "retained": true,
+              "added": [
+                {
+                  "id": "532",
+                  "privacy": false
+                },
+                {
+                  "id": "533",
+                  "privacy": true
+                }
+              ],
+              "ready": true
+            },
+            "unchangedMetadata": true,
+            "principalPosition": {
+              "principals": 110,
+              "retainedVoters": 100,
+              "principalIdentityUnchanged": true,
+              "inventoryVersionsValid": true
+            },
+            "sourceBasis": "Existing trigger2163 advances only each updated voter library_rating_version;2604 preserves enforcement_epoch for that inventory-only change. Head/principal triggers1060/1160 and785/1200 append exactly one discovery invalidation and one each privacy=false/true also-enjoyed signal per transaction. All identities/authority and remaining original columns must remain exact."
+          },
+          "commands": [
+            [
+              "task",
+              "--dir",
+              "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/source-fixed",
+              "rating:reconstruct",
+              "--",
+              "--env",
+              "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/source-fixed/.temp/stack/rezics-qa-budget-rating-f55fbeb639/apps.env",
+              "--list",
+              "--standing",
+              "--context",
+              "https://rezics.com/id/01a150b1-109e-72b2-80c1-68774f09b812",
+              "--batch-size",
+              "100"
+            ],
+            [
+              "task",
+              "--dir",
+              "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/source-fixed",
+              "rating:reconstruct",
+              "--",
+              "--env",
+              "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/source-fixed/.temp/stack/rezics-qa-budget-rating-f55fbeb639/apps.env",
+              "--context",
+              "https://rezics.com/id/01a150b1-109e-72b2-80c1-68774f09b812",
+              "--target",
+              "https://rezics.com/id/01a150b1-050e-73e8-916e-24de26a33bab",
+              "--standing",
+              "--restart",
+              "--batches",
+              "1",
+              "--batch-size",
+              "100"
+            ],
+            [
+              "task",
+              "--dir",
+              "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/source-fixed",
+              "rating:reconstruct",
+              "--",
+              "--env",
+              "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/source-fixed/.temp/stack/rezics-qa-budget-rating-f55fbeb639/apps.env",
+              "--context",
+              "https://rezics.com/id/01a150b1-109e-72b2-80c1-68774f09b812",
+              "--target",
+              "https://rezics.com/id/01a150b1-050e-73e8-916e-24de26a33bab",
+              "--standing",
+              "--batches",
+              "1",
+              "--batch-size",
+              "100"
+            ],
+            [
+              "task",
+              "--dir",
+              "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/source-fixed",
+              "rating:reconstruct",
+              "--",
+              "--env",
+              "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/source-fixed/.temp/stack/rezics-qa-budget-rating-f55fbeb639/apps.env",
+              "--refresh-standing-projections",
+              "--context",
+              "https://rezics.com/id/01a150b1-109e-72b2-80c1-68774f09b812",
+              "--batches",
+              "4",
+              "--batch-size",
+              "100"
+            ]
+          ]
+        },
+        "freshRestore": {
+          "restoreMs": 9610,
+          "volumeCopyMs": {
+            "postgres_data": 4704,
+            "fuseki_data": 2088,
+            "rustfs_data": 2125
+          },
+          "objectCopyMs": 20,
+          "startupMs": 18008,
+          "readinessMs": 1313,
+          "totalMs": 28931,
+          "admissionWaitMs": 2209,
+          "changedSourceTables": [
+            "access.access.owner_partition_route"
+          ],
+          "unexpectedSourceTables": [],
+          "routeRewriteValid": true,
+          "objectsUnchanged": true,
+          "smoke": {
+            "kind": "retained-identity-environment-smoke",
+            "capability": "ratings",
+            "originalOutcomeAssertionReached": false,
+            "recreatedIdentities": false,
+            "publicChecks": [
+              {
+                "path": "/health/ready",
+                "status": 200
+              },
+              {
+                "path": "/v1/onboarding/suggested-follows?languages=en",
+                "status": 200,
+                "itemsAreArray": true,
+                "items": 0,
+                "privateRealmAbsent": true
+              },
+              {
+                "path": "/v1/global-rating-aggregates",
+                "status": 200,
+                "body": {
+                  "profile": "global-rating-standing-latest-mean-v1",
+                  "complete": true,
+                  "work": "https://rezics.com/id/01a150b1-050e-73e7-88cb-86403da648b8",
+                  "mainVersion": "https://rezics.com/id/01a150b1-050e-73e8-916e-24de26a33bab",
+                  "targetGrain": "mainVersion",
+                  "context": "https://rezics.com/id/01a150b1-109e-72b2-80c1-68774f09b812",
+                  "populationOwner": "https://rezics.com/id/00000000-0000-8000-8000-676c6f62616c",
+                  "contextProfile": "global-rating-standing-context-v1",
+                  "populationPolicy": "global-account-principal",
+                  "cadence": "standing",
+                  "aggregationPolicy": "latest-per-rater-mean",
+                  "contextRevision": "https://rezics.com/id/01a150b1-109e-72b3-93ae-5125b3034ef6",
+                  "scale": {
+                    "min": 1,
+                    "max": 5,
+                    "step": 1
+                  },
+                  "population": 100,
+                  "count": 100,
+                  "withdrawnCount": 0,
+                  "histogram": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    100
+                  ],
+                  "sum": 500,
+                  "mean": 5,
+                  "precision": {
+                    "kind": "exact-rational",
+                    "numerator": "5",
+                    "denominator": "1"
+                  },
+                  "unitMean": {
+                    "numerator": "1",
+                    "denominator": "1"
+                  },
+                  "sourcePosition": {
+                    "datasetId": "product",
+                    "dataEpoch": "7a939a09-51e1-4888-a991-27846bdd4b48",
+                    "sequence": "225"
+                  }
+                },
+                "independentSuiteExecuted": false
+              }
+            ],
+            "retainedRealms": 3,
+            "retainedPersonaSessions": 15,
+            "ready": true,
+            "elapsedMs": 9420
+          },
+          "preparationThroughSmokeMs": 49291
+        },
+        "freshRestoreGraphUnchanged": true,
+        "history": {
+          "verify": {
+            "receipt": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/ratings-attempt5/qa-history-verify.json",
+            "sha256": "699308ffe3a8467294ca3438d554fa3016ed3e30c7a5ed8211cf878bbd33ca24"
+          },
+          "adopt": {
+            "receipt": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/ratings-attempt5/qa-history-adopt.json",
+            "sha256": "8b752b702112e05ddeed0aac363a9a344a893aa40500876da7c00402461ebfc6"
+          }
+        },
+        "previousAttemptsUnchanged": true,
+        "smokePremise": "This rating corpus contains no official Zones. The supported suggestions response is an array, which may be empty, with private Realm absent. Both actual responses contained zero items and no private Realm. The untouched Zone suite retains its nonempty suggestions assertion. The prior attempt4 combined-guard failure remains recorded without inferring its unretained response branch."
       }
     ],
     "ratingsDisposition": {
-      "ready": false,
-      "assertionReached": false,
-      "reason": "Identity/authority and immutable-source preservation passed after genuine reconstruction. Environment smoke readiness200 and suggested-follows200 reached; inherited Zone positive-suggestion premise refused before rating read.",
-      "ownerFunction": "services/main/src/modules/rating/legacy-reconstruction.ts:reconstructLegacyTargetRatings(input.standing=true)",
-      "missingCommandPath": null,
-      "operationRequired": "No owner operation missing. Execute capability-correct public rating smoke and privacy guard, stopped-owner backup and fresh restore.",
-      "sourceInspectionOnly": false,
-      "nativeExecutionAttempted": true,
+      "ready": true,
       "originalOutcomeAssertionReached": false,
+      "reason": "Genuine standing reconstruction and projection refresh preserved all retained identities, authority, source observations and immutable graph/object bytes. Initial public 100-vote smoke, stopped-owner backup and independent disposable fresh restore passed.",
+      "receipt": {
+        "path": ".temp/read-budget-migration/ratings-attempt5/environment-qualification.json",
+        "sha256": "5423802875542e2fc5c468b243a8ac8901d5cdd90ce8ea94157823156ee7e52a"
+      },
       "producerOrRawSeedingRequired": false,
-      "smallestMissingOperation": null,
-      "noOwnerEditHere": true,
-      "supersededSourceOnlyGap": {
-        "reason": "Migration 2045 retains unverified legacy standing values as unknown, distinct from zero/withdrawn. The existing owner supports reconstruction with standing:true, but task rating:reconstruct does not expose that mode or its listing/checkpoint identity. Ordinary preparation does not invoke it.",
-        "smallestMissingOperation": "Existing services/main/src/rating-reconstruction.ts Task CLI needs the already-owned standing reconstruction selection/listing/checkpoint mode, through the existing bounded owner. No shared API, new producer or direct value writes selected here.",
-        "operationRequired": "supported standing selection, listing and checkpoint kind for the existing reconstruction owner; no raw value writes",
-        "missingCommandPath": "services/main/src/rating-reconstruction.ts"
-      },
-      "lastAttemptReceipt": {
-        "path": ".temp/read-budget-migration/ratings-attempt4/environment-qualification.json",
-        "sha256": "a99667c36e7cdb63c8fc9a1a64153361e53befc915f1449f55afd60a756e02c5"
-      },
-      "ownerCommandCompleted": true,
-      "publicSmokeReached": true,
-      "verifiedInitialValues": {
-        "heads": {
-          "heads": 100,
-          "independent_accounts": 100,
-          "known": 100,
-          "five": 100,
-          "withdrawn": 0
-        },
-        "component": {
-          "slots": 100,
-          "unvalued": 0,
-          "histogram": {
-            "5": 100
-          }
-        },
-        "publication": {
-          "generation": "d10d93a9a20df58439baa092821f91042a7f067bdd5f89661a0135e81373658d",
-          "pending": "0"
-        }
-      },
-      "identityAndAuthorityPreservationVerified": true,
-      "initialRatingPublicReadReached": false
+      "missingOwnerOperation": null,
+      "reconstructedAccounts": 100,
+      "retainedPrincipals": 110,
+      "principalInventoryVersionChange": "Exactly each of the 100 retained voter library_rating_version values advanced by one; the other ten principals and all authority/enforcement fields stayed exact.",
+      "initialRatingPublicReadReached": true,
+      "independentFrozenSuiteExecuted": false,
+      "publicSmokeBudgetMeasured": false
     },
     "nextWitness": {
-      "driver": ".temp/read-budget-migration/qualify.ts",
-      "executionStatus": "Rating attempt4 genuine preservation passed. Capability-correct public smoke now authored; prior combined-guard failure remains unchanged.",
-      "nextPreparationCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task --taskfile .temp/read-budget-migration/Taskfile.yml qualify -- ratings' -- task --taskfile .temp/read-budget-migration/Taskfile.yml syntax",
+      "executionStatus": "Both qualified derivatives are ready. No preparation rerun or source mutation is needed. Assemble exact immutable runtime, frozen tests and retained helper/corpus selection for root to delegate to G-2826.",
       "originalSuitesReservedFor": "G-2826 independent owner",
-      "preflight": ".temp/read-budget-migration/ratings-attempt5-preflight.json"
+      "preparationCommandToRepeat": null,
+      "originalOutcomeAssertionReached": false
     },
     "qualifiedManifest": {
       "zones": {
@@ -4189,7 +4630,18 @@
         "parentManifestSha256": "89331d2a132d937b34a975668ae92dc250b09b09edc918e253ee113f20d4f9ba",
         "parentCompatibilityDigest": "79c3488519b38ec7f919d85713c4027c4226fc582f4afb19f1f4a7d2f1b1b056"
       },
-      "ratings": null
+      "ratings": {
+        "manifest": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/source-fixed/.temp/read-budget-derivatives/ratings/owners/backup.json",
+        "sha256": "d7591eb25339e8ff0c87463414031c22d6d7c6ff6bae9a27a68dd8d925d82bd9",
+        "project": "rezics-catalogue-corpus-budget-rating-f55fbeb639-bounded-reads-ratings-6b500023d9273076",
+        "compatibilityDigest": "6b500023d92730766795edd9771f36b3550e60095d6cd748273eb38e99076264",
+        "preparationMs": 157357,
+        "corpus": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/ratings-attempt5/corpus.json",
+        "corpusSha256": "e2f6d27d756c78cc20b08a8e731610633f550d59d412d8c174f79c42af687513",
+        "parentManifest": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/audit-bounded-reads/ratings/owners/backup.json",
+        "parentManifestSha256": "36d9c6a5e66a802f2d45cee36810915c9dbd89a56431a8ed8b5de2ab48ceb567",
+        "parentCompatibilityDigest": "79c3488519b38ec7f919d85713c4027c4226fc582f4afb19f1f4a7d2f1b1b056"
+      }
     },
     "independentOriginalSuiteCommandAuthorizedNow": false,
     "handoffAfterReady": "Supply root the actual qualified derivative/corpus digests, stopped-owner lifecycle, exact immutable source and frozen fixture/test selection for G-2826; do not execute the original suites in parallel.",
@@ -4213,6 +4665,63 @@
         "syntaxResult": "passed; Bun compiled both temporary drivers in 8 ms",
         "executionStatus": "authored and syntax checked; separate zones-attempt3 receipt pending execution",
         "nextPreparationCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --taskfile .temp/read-budget-migration/Taskfile.yml qualify -- zones"
+      },
+      {
+        "driver": ".temp/read-budget-migration/qualify.ts",
+        "executionStatus": "Rating attempt4 genuine preservation passed. Capability-correct public smoke now authored; prior combined-guard failure remains unchanged.",
+        "nextPreparationCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task --taskfile .temp/read-budget-migration/Taskfile.yml qualify -- ratings' -- task --taskfile .temp/read-budget-migration/Taskfile.yml syntax",
+        "originalSuitesReservedFor": "G-2826 independent owner",
+        "preflight": ".temp/read-budget-migration/ratings-attempt5-preflight.json"
+      }
+    ],
+    "previousRatingsDispositions": [
+      {
+        "ready": false,
+        "assertionReached": false,
+        "reason": "Identity/authority and immutable-source preservation passed after genuine reconstruction. Environment smoke readiness200 and suggested-follows200 reached; inherited Zone positive-suggestion premise refused before rating read.",
+        "ownerFunction": "services/main/src/modules/rating/legacy-reconstruction.ts:reconstructLegacyTargetRatings(input.standing=true)",
+        "missingCommandPath": null,
+        "operationRequired": "No owner operation missing. Execute capability-correct public rating smoke and privacy guard, stopped-owner backup and fresh restore.",
+        "sourceInspectionOnly": false,
+        "nativeExecutionAttempted": true,
+        "originalOutcomeAssertionReached": false,
+        "producerOrRawSeedingRequired": false,
+        "smallestMissingOperation": null,
+        "noOwnerEditHere": true,
+        "supersededSourceOnlyGap": {
+          "reason": "Migration 2045 retains unverified legacy standing values as unknown, distinct from zero/withdrawn. The existing owner supports reconstruction with standing:true, but task rating:reconstruct does not expose that mode or its listing/checkpoint identity. Ordinary preparation does not invoke it.",
+          "smallestMissingOperation": "Existing services/main/src/rating-reconstruction.ts Task CLI needs the already-owned standing reconstruction selection/listing/checkpoint mode, through the existing bounded owner. No shared API, new producer or direct value writes selected here.",
+          "operationRequired": "supported standing selection, listing and checkpoint kind for the existing reconstruction owner; no raw value writes",
+          "missingCommandPath": "services/main/src/rating-reconstruction.ts"
+        },
+        "lastAttemptReceipt": {
+          "path": ".temp/read-budget-migration/ratings-attempt4/environment-qualification.json",
+          "sha256": "a99667c36e7cdb63c8fc9a1a64153361e53befc915f1449f55afd60a756e02c5"
+        },
+        "ownerCommandCompleted": true,
+        "publicSmokeReached": true,
+        "verifiedInitialValues": {
+          "heads": {
+            "heads": 100,
+            "independent_accounts": 100,
+            "known": 100,
+            "five": 100,
+            "withdrawn": 0
+          },
+          "component": {
+            "slots": 100,
+            "unvalued": 0,
+            "histogram": {
+              "5": 100
+            }
+          },
+          "publication": {
+            "generation": "d10d93a9a20df58439baa092821f91042a7f067bdd5f89661a0135e81373658d",
+            "pending": "0"
+          }
+        },
+        "identityAndAuthorityPreservationVerified": true,
+        "initialRatingPublicReadReached": false
       }
     ]
   }
