@@ -1751,5 +1751,437 @@
         "docs/goals/audit-remediation-20261019/proofs/native-request-boundary.json"
       ]
     }
+  },
+  "d5003ContentRecoveryTerminationFirstReview": {
+    "status": "source-approved; original D5-003 public growth outcome remains open",
+    "reviewer": {
+      "worker": "G-2822",
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independentFirstReview": true,
+      "nestedAgents": false
+    },
+    "scope": "Only the two authored native recovery files and three generated image pins; unchanged landed native/request work and all earlier report fields preserved.",
+    "source": {
+      "candidate": "39c06567954bf64db8888178d283f15bce1e26b9",
+      "base": "27c4c7fd97d7df00fd8e5a587955d4baa2a572d5",
+      "authoredCommit": "43d40243abec12f58c8a2b92bc0fd3dc280f01b9",
+      "candidateLocation": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/d5003-original-proof/source-recovery",
+      "workerReportParent": "5f6f843220388445e33ba1a015fd5bbfde63908c",
+      "mainAtSourceComparison": "0a6e47a34238f5e04dc30b7cf4c342a6b46ea0ea",
+      "mainAtReportAppend": "ee32064fb70e0c79a294b704a388b915fd61395e",
+      "filePins": {
+        "docs/development/toolchain.md": {
+          "baseBlob": "4896c6f8bacaf6045dcfc33429c3a89f8ab63674",
+          "candidateBlob": "0ed308ab25ed91bdad039347be2642f3ed56b771",
+          "sha256": "ce607a495bbf3ea8b4fd20f4b732995712271d3a53d5b05e26a85139842438ae",
+          "mainBaseBlobMatches": false
+        },
+        "infra/dev/compose.yaml": {
+          "baseBlob": "f0c9d6ae17d570c57d92fe96454094dcf02a6f1f",
+          "candidateBlob": "e7c30483d69fe55501b441b176e9b7f76d6bde16",
+          "sha256": "50a227e738cdd3e88aa953d33b309072b1a53c775188f33aae2ab6b1fa051fb1",
+          "mainBaseBlobMatches": false
+        },
+        "infra/jena/command-module/src/main/java/com/rezics/jena/SearchDeltaJournal.java": {
+          "baseBlob": "832cf41b2921c87aea96a0f65c2fcc064bd743e0",
+          "candidateBlob": "cf642b3536aa344abc416e86203f05f140b6047e",
+          "sha256": "45f15213d26830a119d03769d265717e293735338352a5862f754d33cc498e50",
+          "mainBaseBlobMatches": true
+        },
+        "infra/jena/command-module/src/test/java/com/rezics/jena/ContentQualificationMaintenanceTest.java": {
+          "baseBlob": "b32a83da8545a5f34f6dfd7acb1d4136980a953e",
+          "candidateBlob": "279e71758c24b0079924ad6ce03608c11bd5fa6c",
+          "sha256": "9f12a1df90644386ca21eb39b5ab8d86a319ef8958513864e5273ca34b0983fd",
+          "mainBaseBlobMatches": true
+        },
+        "scripts/dev/release-manifest.ts": {
+          "baseBlob": "05afac0b5deadf1a03755e410a376325c48cfaa9",
+          "candidateBlob": "7a82e820d9f1484155234bc8d9498e206ae08120",
+          "sha256": "9163bca28b3aa08abce590adda07a736a55cb8b15c73264e37d2a16643f601ff",
+          "mainBaseBlobMatches": false
+        }
+      },
+      "exactFivePathDiff": true,
+      "authoredPairEqualsOuterCommit": true,
+      "authoredParentBlobsMatchObservedMain": true,
+      "newTestAddedLines": 33,
+      "oldAssertionsOrFixturesChanged": false
+    },
+    "sourceReview": {
+      "verdict": "approved",
+      "blockingFindings": [],
+      "productOrAssertionEditsByReviewer": false,
+      "reason": "Recovery now stops only after both physical and genuine Content qualification exist, including after permitted rebuild. Missing owner evidence continues existing maintenance instead of inventing a witness.",
+      "preserved": [
+        "existing single-flight owner and capped retry scheduling",
+        "dataset monitor and publication fence",
+        "exclusive-startup/restore-hold rebuild gates and rebuild deadline",
+        "fail-closed missing-witness semantics and RuntimeException logging/retry",
+        "request cancellation/deadline boundaries and independent captured-reader leases"
+      ],
+      "newRegression": "incompleteContentAuditRetriesWithoutInventingCompletenessOrLosingPhysicalProof",
+      "regressionChecks": "A second real maintenance attempt occurs without owner receipts; physical proof and the same captured generation survive; no Content envelope is invented. Finally restores sink; fixture stops its owned recovery before dataset teardown.",
+      "detailedReview": ".temp/native-request-boundary/recovery/first-review.md"
+    },
+    "imageAndRunner": {
+      "image": {
+        "tag": "rezics/fuseki:6.2.0-cmd0.5.43-94baaa3160a2",
+        "id": "sha256:12a7295ba2643234d67c287851f55db8a02c090dc0402f0d53f2ae017e361936",
+        "created": "2026-10-19T22:37:55.862287548+08:00"
+      },
+      "inputCount": 457,
+      "fullInputDigest": "94baaa3160a2ac6e144a82b3727c2fc06a9bdc5c153f74bada6c3798c2cc4c42",
+      "allInputsVerifiedAgainstImmutableCandidate": true,
+      "localImageIdInspected": true,
+      "dockerfile": {
+        "path": "infra/jena/Dockerfile",
+        "sha256": "3e80fae08ed7b680c1340225f2f7d483af8949195e90ce13d22b6d1c873dd64f",
+        "changedFromBase": false
+      },
+      "supportedRunner": "scripts/qa/native-module-suite.ts",
+      "admission": "task jena:test -> host-admission.ts --gib 4 -> native module-test",
+      "runnerFilesRetainedUnder": ".temp/native-request-boundary/recovery/source/",
+      "mainInputDifferencesFromCandidateManifest": [
+        "generated/model/manifest.json",
+        "infra/jena/command-module/src/main/java/com/rezics/jena/CommandService.java",
+        "infra/jena/command-module/src/main/java/com/rezics/jena/ContentSearchQualification.java",
+        "infra/jena/command-module/src/main/java/com/rezics/jena/SearchDeltaJournal.java",
+        "infra/jena/command-module/src/test/java/com/rezics/jena/ContentQualificationMaintenanceTest.java",
+        "infra/jena/command-module/src/test/java/com/rezics/jena/ContentSearchQualificationTest.java"
+      ],
+      "mainImageAtSourceComparison": "rezics/fuseki:6.2.0-cmd0.5.43-f59c5c63e7b2",
+      "limitation": "94ba image and reused executions are exact for candidate on 27c4, not a current-Main image. Current Main generated pins and other native inputs differ; do not overwrite its generated files with this older candidate."
+    },
+    "reusedNativeExecution": {
+      "newExecutionByReviewer": false,
+      "fullSuiteRerun": false,
+      "baseline": {
+        "job": "b9e7d8ba-7ebf-4e63-bac4-1068500a4867",
+        "record": "594e7d55-3dbd-4544-b67b-d5f1dd8e304e",
+        "source": "27c4 + new own regression only",
+        "executed": 1,
+        "passed": 0,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0,
+        "assertion": "general text qualification stopped recovery before a Content witness existed",
+        "line": 25,
+        "command": "task jena:test -- --tests 'ContentQualificationMaintenanceTest#incompleteContentAuditRetriesWithoutInventingCompletenessOrLosingPhysicalProof'",
+        "log": ".temp/native-request-boundary/recovery/producer/.temp/d5003-original-proof/post-growth-diagnosis/native-regression-baseline/native.log",
+        "classification": "Reached native JUnit assertion failure, not container/setup/compile failure"
+      },
+      "fixed": {
+        "job": "ffc07e21-b98f-42f1-a538-691f3c46a927",
+        "step": 2,
+        "record": "fa91dbcc-3be3-4cb7-94ed-3f62c47b32e4",
+        "sourceAtExecution": "27c4 + exact native repair/test and generated pins, subsequently committed without native changes as39c0656",
+        "inputTag": "rezics/fuseki:6.2.0-cmd0.5.43-94baaa3160a2",
+        "executed": 48,
+        "passed": 48,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "classes": {
+          "ContentSearchQualificationTest": 5,
+          "PublicTextRestartTest": 10,
+          "QueryCutQualificationTest": 7,
+          "SearchDeltaJournalTest": 23,
+          "ContentQualificationMaintenanceTest": 3
+        },
+        "includesOriginalSixMethods": true,
+        "fullNativeSuite": false,
+        "command": "task jena:test -- --tests ContentSearchQualificationTest,PublicTextRestartTest,QueryCutQualificationTest,SearchDeltaJournalTest,ContentQualificationMaintenanceTest",
+        "log": ".temp/native-request-boundary/recovery/producer/.temp/d5003-original-proof/post-growth-diagnosis/native-recovery-fixed/native.log",
+        "nativeRecord": ".temp/native-request-boundary/recovery/producer/.temp/d5003-original-proof/post-growth-diagnosis/native-recovery-fixed/native.json",
+        "classCountsIndependentlyParsed": {
+          "ContentQualificationMaintenanceTest": {
+            "executed": 3,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          "ContentSearchQualificationTest": {
+            "executed": 5,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          "PublicTextRestartTest": {
+            "executed": 10,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          "QueryCutQualificationTest": {
+            "executed": 7,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          },
+          "SearchDeltaJournalTest": {
+            "executed": 23,
+            "failures": 0,
+            "errors": 0,
+            "skipped": 0
+          }
+        },
+        "countEvidence": "Completed Maven class/aggregate summaries and native runner record; individual assertion counts are not reported by these logs."
+      },
+      "originalSixUnchangedMethods": [
+        "ContentSearchQualificationTest.qualifiesCanonicalAndRetainedOwnerDigestsWithoutAdmittingMissingCoverage",
+        "ContentSearchQualificationTest.closedPredecessorApprovalAndLargeClosedInventoryRemainComplete",
+        "PublicTextRestartTest.transientContentVerificationFailureRetriesWithoutReplacingItsCommittedSource",
+        "QueryCutQualificationTest.scopedSourceHeadRemovalDeletesOnlyItsCandidateAndKeepsQualifiedSibling",
+        "SearchDeltaJournalTest.nativePhysicalCopiesCancelAcrossOrdinarySlimAndCatalogueBulkWriters",
+        "SearchDeltaJournalTest.nativeFinalPrecommitCancellationRollsBackEveryBulkOutcomeAndKeepsContentProof"
+      ],
+      "newRegressionBytesIdenticalInRedAndGreen": true,
+      "executionSourceQualification": "Producer ran dirty 27c4 with exact native repair/test and generated pins subsequently committed unchanged as 39c. Main diagnostic overlays were separate. Immutable 457-input verification establishes native identity; no claim of a clean entire runtime checkout.",
+      "producerChecks": {
+        "job": "3a69a28c-73ae-48d7-ac08-81066991fe3e",
+        "types": "passed",
+        "inference": "passed",
+        "lint": "passed",
+        "guards": "passed25/45selected",
+        "docs": "passed",
+        "generation": {
+          "job": "ffc07e21-b98f-42f1-a538-691f3c46a927",
+          "step": 1,
+          "result": "passed source-exact image built"
+        },
+        "historicalFailures": [
+          "ffc07e21 step3: private clone lacked main ref, no checks reached",
+          "b56bd6b0 step1: ignored persona overlay passed unsupported second argument; guards/lint passed; types/inference failed. Corrected overlay only; retained-auth path never invoked that branch."
+        ],
+        "assertionsChanged": false
+      }
+    },
+    "originalPublicFailureDiagnosis": {
+      "qa": "20261019t151722-38fdd8",
+      "job": "8002eca4-b8bc-4692-bc0e-3bea60b759d4",
+      "executed": 1,
+      "passed": 0,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 0,
+      "assertions": 10,
+      "passedCheckpointAssertions": 9,
+      "request": {
+        "trace": "929424aa4d1fe35ae78ef37560b1540e",
+        "stage": "one-public-content-addition",
+        "persona": "visitor",
+        "concurrency": 1,
+        "wave": 0,
+        "status": 503,
+        "elapsedMs": 144.66857300000265,
+        "graphCalls": 4,
+        "graphBytes": 31194,
+        "populationAudits": 0
+      },
+      "physicalProof": {
+        "available": true,
+        "dataEpoch": "a2673290-d5cb-4721-874b-798a6add8f71",
+        "sequence": "30",
+        "generation": "urn:rezics:text-index-generation:01a1509d-3e81-75c2-a201-624c56e75368",
+        "ordinal": "38",
+        "writeEpoch": "6",
+        "luceneGeneration": "26",
+        "qualifiedPopulation": "2",
+        "contentQualification": null
+      },
+      "contentOwner": {
+        "owner": "content",
+        "dataEpoch": "6640c58e-bdb3-4dfb-9b2c-49029ecc1990",
+        "sequence": "8"
+      },
+      "contentCursor": {
+        "owner": "content",
+        "dataEpoch": "6640c58e-bdb3-4dfb-9b2c-49029ecc1990",
+        "sequence": "8"
+      },
+      "laterOwner": {
+        "owner": "content",
+        "dataEpoch": "6640c58e-bdb3-4dfb-9b2c-49029ecc1990",
+        "sequence": "9"
+      },
+      "laterOwnerDelayMs": 1133.8373659999997,
+      "laterOwnerEventTypeAndDeliveryFrontierRead": false,
+      "laterNativeWitnessRead": false,
+      "expectedStatus": 200,
+      "actualCode": "content_projection_unavailable",
+      "assertion": "tests/qa/integration/d5003-post-growth-readiness-proof.test.ts:70",
+      "outcomeAssertionReached": true,
+      "classification": "reached public acceptance assertion failure; preserved",
+      "limitsUnchanged": {
+        "requestMs": 1500,
+        "graphCalls": 72,
+        "graphBytes": 8388608,
+        "populationAudits": 0
+      },
+      "eligibilityCommandGraphSequence": "30",
+      "eligibilityReceipt": "urn:rezics:receipt:8ba20e6d00d5a55ed19697064048e8aabab4fa2bd6f799f9ff826c65fa75d63f",
+      "failedPhase": "content-readiness-qualified-checkpoint",
+      "observed": "Physical proof is available at graph30/pop2 but Content witness is null. SQL owner=cursor8 does not establish delivery of Main eligibility frontier30. Population was already2 before growth. Later owner9 alone cannot identify its event or prove subsequent qualification.",
+      "sourceBackedInference": "Existing composition.ts649-656 delivers retained Main eligibility before Content projection in an asynchronous worker; core.ts verified ingestion appends content.publication.eligibility-delivered and retains its source receipt/frontier. Delayed delivery is consistent with these observations but not proven.",
+      "healthyContentGrowthPremiseAtFailure": "unresolved; not established by graph command success or equal SQL positions",
+      "causeDisposition": "Not observed budget exhaustion. Missing witness explains the fail-closed 503. Missing delivery/event/frontier observations prevent assigning the underlying cause to growth preparation versus producer qualification.",
+      "knownUnreached": [
+        "post-growth successful hit",
+        "post-growth exact no-match and private controls",
+        "remaining 2/4/8-reader waves",
+        "qualified population-growth assertion"
+      ],
+      "newConfirmedProductFinding": null,
+      "nextExecutableObservation": {
+        "owner": "G-2765",
+        "scope": "same original D5-003 outcome; no new claim or approval hold",
+        "sql": ".temp/native-request-boundary/recovery/next-observation.sql",
+        "executedByReviewer": false,
+        "read": "Once, identify outbox8/9 event types and correlate exact graph30 eligibility receipt with immutable delivery source and stream progress; record actual subsequent owner/cursor/native witness for the same cut through existing observer.",
+        "bound": "One finite observation under existing admitted owner/proof deadline; no polling forever, new stack/backup/restore, wider campaign or budget increase. If cleaned state is unavailable, preserve unknown and instrument only next owned affected slice.",
+        "interpretation": "Absent delivery means incomplete growth setup at that cut. Delivered exact source and caught-up projection with missing witness is a same-scope producer counterexample. Only a real matching witness establishes the premise for resuming the missing original bounded slice. Preserve this failed assertion in all cases."
+      }
+    },
+    "preservedEvidence": {
+      "workerAndObservedMainPriorFieldsIdentical": true,
+      "baselineCapacityReused": {
+        "qa": "20261019t134919-a2c0ce",
+        "requests": 75,
+        "status200": 75,
+        "passingAssertions": 675,
+        "populationAudits": 0,
+        "readerCounts": [
+          1,
+          2,
+          4,
+          8
+        ],
+        "rerun": false
+      },
+      "originalPublicTwelveReused": {
+        "qaRun": "20261019t133435-aa38c8",
+        "file": "tests/qa/integration/d5003-original-public-proof.test.ts",
+        "counts": {
+          "passed": 0,
+          "failed": 12,
+          "betweenTestErrors": 4,
+          "skipped": 0,
+          "expectCalls": 6
+        },
+        "hitAndAdvanceOutcomeAssertionReached": 0,
+        "privateControlStatusAssertionReached": 6,
+        "statusCounts": {
+          "503": 16,
+          "200": 8
+        },
+        "disposition": "Four unrelated work-activation setup timeouts and two setup500s prevent six post-advance outcomes. Six exact-absent status assertions received503 during health-read timeouts; empty/private assertions unreached. Healthy-index premise at these refusals is unresolved."
+      },
+      "earlierNativeAndMain": "Historical571 failure, c5 full566 pass, qualified Main39/181 plus original6/47 and readiness53/634, storage.exit correction and later accepted original native runs remain separate and unchanged; no full578 replay.",
+      "custodyVerified": {
+        "newStoppedBackupManifest": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/d5003-original-proof/source-recovery/.temp/read-budget-derivatives/queries-content-recovery/owners/backup.json",
+          "sha256": "83ba74b0a3eefcf5bee46ab5c2fa01fccb548fe29020e3aa5b3ee1b14efce79c",
+          "bytes": 73934
+        },
+        "newCorpusRecipe": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/d5003-original-proof/recovery-preparation-attempt2/corpus.json",
+          "sha256": "477a3aec53e8be40210210e63ff1a8f34c075782d2cb00ab9e494188473d6221",
+          "bytes": 9750
+        },
+        "installedRecipe": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2765/.temp/d5003-original-proof/source-recovery/.temp/audit-bounded-reads/queries/corpus.json",
+          "sha256": "477a3aec53e8be40210210e63ff1a8f34c075782d2cb00ab9e494188473d6221",
+          "bytes": 9750
+        }
+      },
+      "producerReportedPreparationPreservation": {
+        "job": "8002eca4-b8bc-4692-bc0e-3bea60b759d4",
+        "step": 1,
+        "ready": true,
+        "preservation": {
+          "changedSqlTables": [],
+          "graphUnchanged": true,
+          "objectsUnchanged": true,
+          "migrationsUnchanged": true,
+          "parentManifestUnchanged": true,
+          "parentRecipeUnchanged": true
+        },
+        "sqlTables": 730,
+        "preparedThroughSmokeMs": 220778,
+        "backupPreparationMs": 298409,
+        "freshRestoreThroughSmokeMs": 110789,
+        "freshRestoreUnexpectedSourceChanges": [],
+        "freshRestoreRouteRewriteValid": true,
+        "identityRealms": 2,
+        "retainedSessions": 10,
+        "newIdentities": false,
+        "newCorpus": false,
+        "cleanupErrors": []
+      },
+      "preparationLimitation": "Reviewed retained receipts and backup/recipe hashes; no new SQL inventory, object scan, restore, corpus or backup performed."
+    },
+    "cleanup": {
+      "ownedProjectContainerCountsIndependentlyInspected": {
+        "rezics-qa-d5003-recovery-fc6c7b9e": 0,
+        "rezics-qa-d5003-verify-08c0c8be": 0,
+        "rezics-qa-bounded-ba1f675fb93243b6": 0,
+        "rezics-qa-20261019t151722-38fdd8-1": 0
+      },
+      "reviewerResourcesStartedOrStopped": [],
+      "sharedOrPeerLifecycleChanges": false,
+      "stoppedBackupsAndBothArtifactLocationsPreserved": true
+    },
+    "artifacts": {
+      "producerReceipt": ".temp/worktrees/g-2765/.temp/d5003-original-proof/post-growth-diagnosis/recovery-retention.json",
+      "independentReceipt": ".temp/native-request-boundary/recovery/retention.json",
+      "verification": ".temp/native-request-boundary/recovery/verification.json",
+      "producerArtifactCountVerifiedAndCopied": 44,
+      "originalLocationsPreserved": true
+    },
+    "checks": {
+      "evidenceValidation": {
+        "job": "8db4b398-ea8b-4d6f-92a0-befa9e77d995",
+        "status": "passed",
+        "command": "task -t .temp/native-request-boundary/recovery/Taskfile.yml evidence:collect"
+      },
+      "localEvidencePreparationFailures": [
+        {
+          "job": "9a7a35a0-1a1a-4f98-9901-151be5ed7705",
+          "cause": "Private Taskfile working directory; collector did not start; corrected"
+        },
+        {
+          "job": "bfae5f1f-833f-4cae-8b67-039d04d344c9",
+          "cause": "Collector incorrectly required current-Main generated pins to match old candidate parent; narrowed assertion to authored pair, recorded generated/native input differences; corrected"
+        }
+      ],
+      "affectedReportAndDocs": {
+        "job": "d1a2a421-396d-4347-864f-4bd85b0608ff",
+        "status": "passed",
+        "steps": [
+          "task -t .temp/native-request-boundary/recovery/Taskfile.yml report:append",
+          "task -t .temp/native-request-boundary/recovery/Taskfile.yml report:validate",
+          "env GOAL_CHECK_PREPARED_TREE=/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2822 task goal -- check",
+          "task docs:check"
+        ],
+        "stepLogs": [
+          ".temp/goal/jobs/d1a2a421-396d-4347-864f-4bd85b0608ff.1.log",
+          ".temp/goal/jobs/d1a2a421-396d-4347-864f-4bd85b0608ff.2.log",
+          ".temp/goal/jobs/d1a2a421-396d-4347-864f-4bd85b0608ff.3.log",
+          ".temp/goal/jobs/d1a2a421-396d-4347-864f-4bd85b0608ff.4.log"
+        ],
+        "result": "All prior 15 report fields preserved; 44 producer artifacts copied and verified; 457 immutable image inputs matched; native48/pass and reached public1/fail counts matched. Prepared Goal check and docs check passed. No source workspace or brief test changed."
+      }
+    },
+    "landingDisposition": {
+      "source": "Approve exact bounded authored recovery correction independently of D5-003 public closure.",
+      "integration": "Authored pair composes onto observed Main without replacing whole files. Use normal generation for current-Main image pins; retained old-base five-path candidate and 48-test proof must not be relabelled as a current-Main integrated image run.",
+      "reportOnlyWorkerChange": true,
+      "D5001": "open",
+      "D5002": "open",
+      "D5003": "open",
+      "publicPersonaAndWorkloadObligations": "unchanged; no outcome waived or closed"
+    }
   }
 }
