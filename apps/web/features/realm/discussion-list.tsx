@@ -13,11 +13,13 @@ import LocalizedLink from '../shell/localized-link.tsx';
 const sortIcons: Record<ThreadSort, typeof FlameIcon> = { best: FlameIcon, new: ClockIcon, top: TrophyIcon };
 
 /** A listed thread as a post in the Realm's own list, where the Realm goes without saying. */
-export function threadPost(item: ThreadSummary, realmPath: string): DiscussionPost {
+export function threadPost(item: ThreadSummary, realmPath: string, realmId?: string): DiscussionPost {
   return { kind: 'discussion', href: threadPath(realmPath, item.reply),
     vote: { id: item.placement, vote: item.vote.value, score: item.vote.score, revision: item.vote.revision,
       open: item.vote.open },
     realm: null, author: item.author, time: item.time, title: item.title, body: item.excerpt,
+    ...(realmId && item.author ? { authorTarget: { reply: item.reply, realm: realmId, author: item.author.id,
+      placement: item.placement } } : {}),
     language: item.language, spoiler: item.spoiler,
     work: { ...item.work, types: [], byline: null }, comments: item.replies };
 }
@@ -27,10 +29,11 @@ export function threadPost(item: ThreadSummary, realmPath: string): DiscussionPo
  * Top's period) on one line, the threads as divided rows, and the next page.
  * Every choice is its own address.
  */
-export function DiscussionList({ items, realmPath, sort, window, hrefs, next, first, empty }: {
+export function DiscussionList({ items, realmPath, realmId, sort, window, hrefs, next, first, empty }: {
   items: readonly ThreadSummary[];
   /** The Realm's unlocalized `/r/{ref}`, which its threads live under. */
   realmPath: string;
+  realmId?: string;
   sort: ThreadSort; window: ThreadWindow;
   hrefs: { sorts: Record<ThreadSort, string>; windows: Record<ThreadWindow, string> };
   /** The next page and, past the first, the first; null where there is none. */
@@ -51,7 +54,7 @@ export function DiscussionList({ items, realmPath, sort, window, hrefs, next, fi
           href: hrefs.windows[option] }))} /> : null}
     </div>
     {items.length ? <div role="feed" aria-label={t.discussionsLabel}>
-      {items.map((item, index) => <DiscussionCard key={item.reply} post={threadPost(item, realmPath)}
+      {items.map((item, index) => <DiscussionCard key={item.reply} post={threadPost(item, realmPath, realmId)}
         position={index + 1} total={next ? undefined : items.length} />)}
     </div> : empty}
     {next || first ? <nav aria-label={t.discussionsLabel} className="flex flex-wrap justify-between gap-2 px-3 py-4

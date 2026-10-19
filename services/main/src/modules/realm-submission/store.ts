@@ -35,7 +35,7 @@ const stable = (value: unknown): string => {
  * (checked 2026-09-28). Graph mutations never occur in an uncommitted adoption attempt. */
 export class RealmSubmissionStore {
   constructor(private readonly pool: Pool,
-    private readonly access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>,
+    private readonly access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'fenceClaim' | 'recordGraphOutcome'>,
     private readonly env: WorkActivationEnvironment) {}
 
   private async transaction<T>(run: (client: PoolClient) => Promise<T>): Promise<T> {
@@ -70,7 +70,8 @@ export class RealmSubmissionStore {
 
   private async command(principal: VerifiedPrincipal, actor: string, action: string, scope: string,
     key: string, intent: unknown,
-    prepare: (client: PoolClient, admission: RegisteredAdmission) => Promise<Operation>, contribution?: string) {
+    prepare: (client: PoolClient, admission: RegisteredAdmission, adoption: Adoption | null) => Promise<Operation>,
+    contribution?: string, prepareAdoption?: (admission: RegisteredAdmission) => Promise<Adoption>) {
     return fusekiReadBudget.run({ signal: AbortSignal.timeout(SUBMISSION_COST.deadlineMs),
       callsLeft: SUBMISSION_COST.commandGraphCalls, bytesLeft: SUBMISSION_COST.commandGraphBytes }, async () => {
       await assertGraphAdmissionOpen(this.env.fuseki, this.env.lineage);
@@ -78,7 +79,31 @@ export class RealmSubmissionStore {
         hash(stable({ family: 'realm-submission-v1', action, scope, intent })), contribution);
       let operation: Operation;
       try {
+        let adoption: Adoption | null = null;
+        if (prepareAdoption && !(await this.pool.query(
+          'SELECT 1 FROM access.realm_submission_operation WHERE admission_id = $1', [admission.id])).rowCount) {
+          // Access registration and claim commit independently, with no
+          // submission client held. The locked revision is checked again below.
+          try { adoption = await prepareAdoption(admission); }
+          catch (error) {
+            // A concurrent request with this key may have committed while the
+            // preflight was reading. Its durable reservation owns settlement.
+            if (!(await this.pool.query('SELECT 1 FROM access.realm_submission_operation WHERE admission_id = $1',
+              [admission.id])).rowCount) throw error;
+          }
+        }
         operation = await this.transaction(async client => {
+          if (adoption) {
+            // Lock authority before the admission row, in Access's lock order.
+            try { await this.access.fenceClaim(client, admission.id, admission.requestDigest, principal); }
+            catch (error) {
+              if (!(error instanceof AdmissionExpired)) throw error;
+              const prior = (await client.query<Operation>(`SELECT submission_id, adoption, result
+                FROM access.realm_submission_operation WHERE admission_id = $1`, [admission.id])).rows[0];
+              if (prior) return prior;
+              throw error;
+            }
+          }
           const ticket = (await client.query<{ fresh: boolean }>(`SELECT
             (state = 'claimed' AND expires_at > clock_timestamp()) AS fresh
             FROM access.admission WHERE id = $1 FOR UPDATE`, [admission.id])).rows[0];
@@ -86,7 +111,7 @@ export class RealmSubmissionStore {
             FROM access.realm_submission_operation WHERE admission_id = $1`, [admission.id])).rows[0];
           if (prior) return prior;
           if (!ticket?.fresh) throw new SubmissionStale('Submission admission expired');
-          return prepare(client, admission);
+          return prepare(client, admission, adoption);
         });
       } catch (error) {
         // Only definite pre-commit domain refusals can be cancelled. A failed
@@ -197,12 +222,53 @@ export class RealmSubmissionStore {
     return row;
   }
 
+  private async prepareDecisionAdoption(principal: VerifiedPrincipal, realm: string, id: string,
+    input: DecisionInput, admission: RegisteredAdmission): Promise<Adoption> {
+    const row = (await this.pool.query<SubmissionRow>(`SELECT * FROM access.realm_submission
+      WHERE id = $1 AND realm = $2`, [id, realm])).rows[0];
+    if (!row) throw new SubmissionMissing('Submission is unavailable');
+    if (row.revision !== input.expectedRevision || row.state !== 'pending') {
+      throw new SubmissionStale('Submission revision changed or is not pending');
+    }
+    if (row.target) {
+      const intent: ResourceAdoption['input'] = { realm, target: row.target,
+        selection: `https://rezics.com/id/${admission.id}`, expectedHead: input.expectedSelectionHead, policy: null };
+      const digest = hash(stable({ family: 'realm-resource-adoption-v1', ...intent }));
+      const registered = await this.access.register({ principal, actingSubject: input.actingSubject,
+        action: 'publication.adopt', scope: `publication:adopt:${realm}`,
+        idempotencyKey: `submission:${admission.id}`, requestDigest: digest });
+      const claimed = registered.state === 'sealed' || !registered.dispatchEligible
+        ? registered : await this.access.claim(registered.id, digest, principal);
+      return { kind: 'resource', admission: claimed, input: intent };
+    }
+    if (row.correction_of && row.correction_of !== input.expectedSelectionHead) {
+      throw new SubmissionStale('Correction must replace its exact Realm selection');
+    }
+    const selection: SelectRealmLocalInput = { context: { kind: 'realm-local', id: realm },
+      work: row.work, mainVersion: row.main_version, contribution: row.contribution!,
+      publicationDecision: row.publication_decision!, expectedSelectionHead: input.expectedSelectionHead,
+      selectionBasis: 'realm-manager-review', actingSubject: input.actingSubject };
+    const digest = realmSelectionDigest(selection);
+    const registered = await this.access.register({ principal, actingSubject: input.actingSubject,
+      action: 'publication.adopt', scope: `publication:adopt:${realm}`,
+      idempotencyKey: `submission:${admission.id}`, requestDigest: digest });
+    const claimed = registered.state === 'sealed' || !registered.dispatchEligible
+      ? registered : await this.access.claim(registered.id, digest, principal);
+    return { admission: claimed, input: selection };
+  }
+
   decide(principal: VerifiedPrincipal, realm: string, id: string, input: DecisionInput, key: string) {
     if (input.outcome !== 'accept' && !input.publicReason?.trim()) {
       throw new SubmissionInvalid('Rejection and change requests require a public reason');
     }
     return this.command(principal, input.actingSubject, 'review.decide', `review:decide:${realm}`, key,
-      { id, ...input }, async (client, admission) => {
+      { id, ...input }, async (client, admission, adoption) => {
+        if (input.outcome === 'accept') {
+          if (!adoption) throw new SubmissionUnavailable('Adoption reservation is unavailable');
+          if (adoption.admission.dispatchEligible && adoption.admission.state === 'claimed') {
+            await this.access.fenceClaim(client, adoption.admission.id, adoption.admission.requestDigest, principal);
+          }
+        }
         const row = await this.lockSubmission(client, realm, id, input.expectedRevision);
         if (row.state !== 'pending') throw new SubmissionStale('Submission is not pending');
         if (input.outcome !== 'accept') {
@@ -215,33 +281,6 @@ export class RealmSubmissionStore {
             publicationDecision: row.publication_decision!, selectedDraft: row.selected_draft!,
             correctionOf: row.correction_of });
         }
-        let adoption: Adoption | null = null;
-        if (input.outcome === 'accept' && row.target) {
-          const intent: ResourceAdoption['input'] = { realm, target: row.target,
-            selection: `https://rezics.com/id/${admission.id}`, expectedHead: input.expectedSelectionHead, policy: null };
-          const digest = hash(stable({ family: 'realm-resource-adoption-v1', ...intent }));
-          const registered = await this.access.register({ principal, actingSubject: input.actingSubject,
-            action: 'publication.adopt', scope: `publication:adopt:${realm}`,
-            idempotencyKey: `submission:${admission.id}`, requestDigest: digest });
-          const claimed = registered.state === 'sealed' || !registered.dispatchEligible
-            ? registered : await this.access.claim(registered.id, digest, principal);
-          adoption = { kind: 'resource', admission: claimed, input: intent };
-        } else if (input.outcome === 'accept') {
-          if (row.correction_of && row.correction_of !== input.expectedSelectionHead) {
-            throw new SubmissionStale('Correction must replace its exact Realm selection');
-          }
-          const selection: SelectRealmLocalInput = { context: { kind: 'realm-local', id: realm },
-            work: row.work, mainVersion: row.main_version, contribution: row.contribution!,
-            publicationDecision: row.publication_decision!, expectedSelectionHead: input.expectedSelectionHead,
-            selectionBasis: 'realm-manager-review', actingSubject: input.actingSubject };
-          const digest = realmSelectionDigest(selection);
-          const registered = await this.access.register({ principal, actingSubject: input.actingSubject,
-            action: 'publication.adopt', scope: `publication:adopt:${realm}`,
-            idempotencyKey: `submission:${admission.id}`, requestDigest: digest });
-          const claimed = registered.state === 'sealed' || !registered.dispatchEligible
-            ? registered : await this.access.claim(registered.id, digest);
-          adoption = { admission: claimed, input: selection };
-        }
         const updated = (await client.query<SubmissionRow>(`UPDATE access.realm_submission SET
           state = $2, revision = $3, generation = generation + 1, decision_operation = $4,
           reviewer = $5, public_reason = $6, internal_note = $7, updated_at = clock_timestamp()
@@ -249,7 +288,8 @@ export class RealmSubmissionStore {
           : input.outcome === 'reject' ? 'rejected' : 'changes-requested', randomUUID(), admission.id,
         input.actingSubject, input.publicReason, input.internalNote])).rows[0]!;
         return this.save(client, admission, updated, adoption);
-      });
+      }, undefined, input.outcome === 'accept'
+        ? admission => this.prepareDecisionAdoption(principal, realm, id, input, admission) : undefined);
   }
 
   withdraw(principal: VerifiedPrincipal, realm: string, id: string, input: WithdrawalInput, key: string) {
