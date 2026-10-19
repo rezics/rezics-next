@@ -1467,7 +1467,7 @@ describe('isolated PostgreSQL migration rehearsal', () => {
         for (const row of result.rows) {
           active.add(row.pid);
           const prior = seen.get(row.pid);
-          if (prior?.phase === row.phase && prior.wait === row.wait) {
+          if (prior && prior.phase === row.phase && prior.wait === row.wait) {
             prior.last = now;
             prior.samples++;
             continue;
