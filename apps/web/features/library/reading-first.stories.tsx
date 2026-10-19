@@ -40,7 +40,8 @@ async function expectReadingInFirstScreen(canvasElement: HTMLElement) {
   await waitFor(() => {
     const headerBottom = canvasElement.querySelector('header')!.getBoundingClientRect().bottom;
     const fixedNav = [...canvasElement.querySelectorAll('nav')]
-      .find(nav => getComputedStyle(nav).position === 'fixed');
+      .find(nav => getComputedStyle(nav).position === 'fixed' && nav.checkVisibility()
+        && nav.getBoundingClientRect().height > 0);
     const bottom = fixedNav?.getBoundingClientRect().top ?? window.innerHeight;
     for (const item of [title, first]) {
       const box = item.getBoundingClientRect();
@@ -52,7 +53,7 @@ async function expectReadingInFirstScreen(canvasElement: HTMLElement) {
     expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   });
   await expect(first).toHaveAttribute('href', `/en${rows[0]!.progress!.next!.href}`);
-  await expect(canvas.queryByRole('heading', { name: 'Reading in 2026' })).toBeNull();
+  await expect(canvas.getByRole('heading', { name: 'Reading in 2026', hidden: true })).not.toBeVisible();
   await expect(canvas.getByText(messages.libraryTools, { selector: 'summary' }).closest('details'))
     .not.toHaveAttribute('open');
 }
@@ -62,15 +63,40 @@ export const InProgressPhone: Story = { ...InProgress, globals: { viewport: { va
 
 export const ToolsByKeyboard: Story = {
   async play({ canvasElement }) {
+    // Native disclosure activation needs trusted browser keys; synthetic Enter has no default action.
+    const { userEvent: keyboard } = await import('vitest/browser');
     const canvas = within(canvasElement);
     const tools = canvas.getByText(messages.libraryTools, { selector: 'summary' });
-    tools.focus();
+    const continuations = within(canvas.getByRole('region', { name: 'Currently reading' }))
+      .getAllByRole('link', { name: /^Continue/ });
+    continuations[0]!.focus();
+    const reached = new Set<Element>([continuations[0]!]);
+    for (let step = 0; step < 60 && document.activeElement !== tools; step++) {
+      await keyboard.tab();
+      if (continuations.includes(document.activeElement as HTMLElement)) reached.add(document.activeElement!);
+    }
+    await expect(reached.size).toBe(continuations.length);
     await expect(tools).toHaveFocus();
-    await userEvent.keyboard('{Enter}');
+    await keyboard.keyboard('{Enter}');
+    await waitFor(() => expect(tools.closest('details')).toHaveAttribute('open'));
     await expect(canvas.getByRole('heading', { name: 'Reading in 2026' })).toBeVisible();
     await expect(canvas.getByText('9 chapters completed')).toBeVisible();
     await expect(canvas.getByRole('list', { name: 'Reading in 2026' }).children).toHaveLength(12);
-    await userEvent.click(canvas.getByRole('button', { name: 'Edit goal' }));
+    await keyboard.tab();
+    await expect(canvas.getByRole('button', { name: 'Edit goal' })).toHaveFocus();
+    await keyboard.tab({ shift: true });
+    await expect(tools).toHaveFocus();
+    await keyboard.keyboard(' ');
+    await waitFor(() => expect(tools.closest('details')).not.toHaveAttribute('open'));
+    await keyboard.tab();
+    await expect(tools.closest('details')!.contains(document.activeElement)).toBe(false);
+    await keyboard.tab({ shift: true });
+    await expect(tools).toHaveFocus();
+    await keyboard.keyboard(' ');
+    await waitFor(() => expect(tools.closest('details')).toHaveAttribute('open'));
+    await keyboard.tab();
+    await expect(canvas.getByRole('button', { name: 'Edit goal' })).toHaveFocus();
+    await keyboard.keyboard('{Enter}');
     await userEvent.clear(canvas.getByLabelText('Books to read'));
     await userEvent.type(canvas.getByLabelText('Books to read'), '20');
     await userEvent.click(canvas.getByRole('button', { name: 'Save' }));
@@ -81,6 +107,7 @@ export const ToolsByKeyboard: Story = {
     await expect(canvas.getByRole('button', { name: 'Download library' })).toBeVisible();
   },
 };
+export const ToolsByKeyboardPhone: Story = { ...ToolsByKeyboard, globals: { viewport: { value: 'phone' } } };
 
 export const EmptyLibrary: Story = {
   args: { overview: { ok: true, data: storyOverview([], { customShelves: [] }) },
