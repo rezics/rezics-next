@@ -144,6 +144,38 @@ export async function withFusekiReadRequest<T>(request: Request, limits: ReadLim
   }
 }
 
+/** Join external work with the existing operation boundary. Shared work may
+ * retain its own lifetime; this waiter and any caller-owned transport cannot. */
+export async function withFusekiReadWait<T>(caller: AbortSignal,
+  read: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  assertFusekiReadActive();
+  const budget = fusekiReadBudget.getStore();
+  if (budget?.deadline !== undefined && Number.isFinite(budget.deadline)) {
+    // Plain/nested owners also publish monotonic deadlines. Arm the existing
+    // operation controller, rather than allowing a remote default to renew it.
+    shortenReadDeadline(readScopes.get(budget)?.request?.root ?? budget, budget.deadline);
+  }
+  const signal = budget ? AbortSignal.any([caller, budget.signal]) : caller;
+  signal.throwIfAborted();
+  let abort!: () => void;
+  const stopped = new Promise<never>((_, reject) => {
+    abort = () => reject(signal.reason);
+    signal.addEventListener('abort', abort, { once: true });
+  });
+  try {
+    const result = await Promise.race([stopped, Promise.resolve().then(() => {
+      assertFusekiReadActive();
+      signal.throwIfAborted();
+      return read(signal);
+    })]);
+    assertFusekiReadActive();
+    signal.throwIfAborted();
+    return result;
+  } finally {
+    signal.removeEventListener('abort', abort);
+  }
+}
+
 function budgetChain(): FusekiReadBudget[] {
   const chain: FusekiReadBudget[] = [];
   for (let budget = fusekiReadBudget.getStore(); budget; budget = readScopes.get(budget)?.parent) chain.push(budget);
