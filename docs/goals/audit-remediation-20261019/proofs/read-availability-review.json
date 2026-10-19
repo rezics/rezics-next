@@ -1778,5 +1778,579 @@
       },
       "receiptFinalization": "Only check receipt metadata was finalized after checks; reviewed source, assertions, verdict and historical evidence remained unchanged."
     }
+  },
+  "discoveryRefreshContinuation": {
+    "reviewedAt": "2026-10-19T10:31:45.163409+00:00",
+    "authority": "Manager continuation: only original D5-004 discovery-refresh slice; settle retained review accounting, provide a source-only ten-path verdict and inspect existing concurrency selectors. No new Task, source repair, independent assertion change or full prove campaign.",
+    "reviewer": {
+      "worker": "G-2846",
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "accountFallback": false,
+      "nestedAgents": false
+    },
+    "decision": {
+      "sourceOnlyVerdict": "approve",
+      "authoredTask": "G-2766",
+      "exactSource": "50f11211795621e95941719d745bfd3b3f381591",
+      "sourceParent": "044189e41b1f6fc26976d24885ea30c2fb6b2e6b",
+      "approvedChangedPathCount": 10,
+      "canLandTenPathSourceDelta": true,
+      "reason": "Reuse the completed independent review and byte-identical native owner-composition proof. No confirmed defect blocks this ten-path mechanism. SRC-D5-004-001 remains a plausible but unconfirmed refusal-witness race; the reached credit assertion is an inherited contract/expectation discrepancy rather than a change introduced by this delta. These are explicitly accounted for, not reported as passes.",
+      "approvalScope": "Only the normal ten-path delta from 044189e to 50f1121. No notification or whole-wave ancestry, automatic landing, new main-based execution candidate, unrelated source approval or original-finding closure is implied.",
+      "originalD5004Closed": false,
+      "originalCompleteCandidateDecisionChanged": false,
+      "notificationRepairReviewChanged": false,
+      "blockingConfirmedSourceFindings": 0,
+      "unconfirmedSourceInferences": 1,
+      "retainedRequiredIntegrationAssertionFailures": 1,
+      "noFixRoundConsumed": true
+    },
+    "sourcePins": {
+      "readinessAssessedMain": "82df58d2ba1d9d377b591126e7f4dfa42f27f02e",
+      "independentlyRecheckedMain": "ca43d9b8f19e4ba57c0d1460761d36b8c510bf68",
+      "mainMovedSinceReadiness": true,
+      "tenPathsStillEqualAuthoredParent": true,
+      "tenSourcePathsEqualPreviouslyReviewedCandidate": true,
+      "previousReviewedCombinedCandidate": "1addc28512baa56bbe940561646c693f8e9aba47",
+      "previousBase": "b25686eed5cf36e24b15088c4f34d11ef87417ec",
+      "changedPaths": [
+        {
+          "path": "services/main/migrations/access/2605_discovery_refresh_disposition.sql",
+          "sourceBlob": "43b36a41e6d3d3ea6ad540f8153098494cd59317",
+          "sha256": "ef134594fd78c03871e1fd18e7e9364b29deaa13c96df71f39ccf01e6414d90f",
+          "reviewedCandidateBlob": "43b36a41e6d3d3ea6ad540f8153098494cd59317",
+          "assessedMainBlob": null,
+          "sourceParentBlob": null,
+          "equalOriginalReview": true,
+          "mainEqualSourceParent": true
+        },
+        {
+          "path": "services/main/src/modules/discovery/credits.ts",
+          "sourceBlob": "27d564a9a981c2ec126cbd4ad9f961e03a450a29",
+          "sha256": "726af3efd432013d6a337abd94a03c76d4c04fd74e31402ae0fc3d6c69ac4289",
+          "reviewedCandidateBlob": "27d564a9a981c2ec126cbd4ad9f961e03a450a29",
+          "assessedMainBlob": "bb67c7c977d624df001fc8e5f9ea071c7cfb3e61",
+          "sourceParentBlob": "bb67c7c977d624df001fc8e5f9ea071c7cfb3e61",
+          "equalOriginalReview": true,
+          "mainEqualSourceParent": true
+        },
+        {
+          "path": "services/main/src/modules/discovery/lineage.ts",
+          "sourceBlob": "a5c0538508bac0b0f2996455f81cd1bccd976c85",
+          "sha256": "9ca45312e0ae102e816b2031b0f928c2e239c71bd84438808b028cfdbaf9f6d3",
+          "reviewedCandidateBlob": "a5c0538508bac0b0f2996455f81cd1bccd976c85",
+          "assessedMainBlob": "8fcc1f5564b5b25e55a58f5c97e0b27ce43d07b6",
+          "sourceParentBlob": "8fcc1f5564b5b25e55a58f5c97e0b27ce43d07b6",
+          "equalOriginalReview": true,
+          "mainEqualSourceParent": true
+        },
+        {
+          "path": "services/main/src/modules/discovery/refresh-store.ts",
+          "sourceBlob": "defc127b6c012f99cb27a1e8c49cbea2bf31d4bb",
+          "sha256": "b651003ce756022907de938b4de338daf3286994df36aefb8d08d5cf3f18b6d7",
+          "reviewedCandidateBlob": "defc127b6c012f99cb27a1e8c49cbea2bf31d4bb",
+          "assessedMainBlob": "00824b94768a7f9910380231054f9ad607a59e94",
+          "sourceParentBlob": "00824b94768a7f9910380231054f9ad607a59e94",
+          "equalOriginalReview": true,
+          "mainEqualSourceParent": true
+        },
+        {
+          "path": "services/main/src/modules/discovery/refresh.ts",
+          "sourceBlob": "f9f1ad773fd0f089b60af13cd3c27516d4d60e70",
+          "sha256": "02479ebd50095eb8abcbb76c153166abfeaf8ede1634ec02ca435865ca6b9106",
+          "reviewedCandidateBlob": "f9f1ad773fd0f089b60af13cd3c27516d4d60e70",
+          "assessedMainBlob": "cfb18312179619e0443ec4537d4b84cf836bc3f8",
+          "sourceParentBlob": "cfb18312179619e0443ec4537d4b84cf836bc3f8",
+          "equalOriginalReview": true,
+          "mainEqualSourceParent": true
+        },
+        {
+          "path": "services/main/src/modules/discovery/source.ts",
+          "sourceBlob": "50fe7da3b20f48105be6eb1ac9597bfb3c408aab",
+          "sha256": "114f6a6b7420664bc3429702be60f8c0265339a15bcb751fe1b180cd891dcc3b",
+          "reviewedCandidateBlob": "50fe7da3b20f48105be6eb1ac9597bfb3c408aab",
+          "assessedMainBlob": "69c8425d7b66960ea1b27f750a178263da3eacd7",
+          "sourceParentBlob": "69c8425d7b66960ea1b27f750a178263da3eacd7",
+          "equalOriginalReview": true,
+          "mainEqualSourceParent": true
+        },
+        {
+          "path": "services/main/src/modules/work/read-classifications.ts",
+          "sourceBlob": "1a7697b593cd187132ea5aa650b8daef9e3a902a",
+          "sha256": "683478a49188ab40465ce8cb72be2161754088a1b2d714ccd088432e99384f9a",
+          "reviewedCandidateBlob": "1a7697b593cd187132ea5aa650b8daef9e3a902a",
+          "assessedMainBlob": "e30d8c7dca67eb513095f8344c919de78bb85fa2",
+          "sourceParentBlob": "e30d8c7dca67eb513095f8344c919de78bb85fa2",
+          "equalOriginalReview": true,
+          "mainEqualSourceParent": true
+        },
+        {
+          "path": "services/main/src/modules/work/read-source-fault.ts",
+          "sourceBlob": "6f39dd70e3ccf55d658f1e3e4c5ef7d758012ac0",
+          "sha256": "e235a7180ad1aec3dd5c041f60df868163122c0922da9c27e188be06f203bd97",
+          "reviewedCandidateBlob": "6f39dd70e3ccf55d658f1e3e4c5ef7d758012ac0",
+          "assessedMainBlob": null,
+          "sourceParentBlob": null,
+          "equalOriginalReview": true,
+          "mainEqualSourceParent": true
+        },
+        {
+          "path": "services/main/tests/discovery-refresh.test.ts",
+          "sourceBlob": "3dba75c69ca60932cf86655059f4801b0752865d",
+          "sha256": "d3d72b945dcdf9f235242c1c512ad64010e03d35d77de65810154616101683fd",
+          "reviewedCandidateBlob": "3dba75c69ca60932cf86655059f4801b0752865d",
+          "assessedMainBlob": "5229afe76a53a88cca173e36ccf8dce48e70703b",
+          "sourceParentBlob": "5229afe76a53a88cca173e36ccf8dce48e70703b",
+          "equalOriginalReview": true,
+          "mainEqualSourceParent": true
+        },
+        {
+          "path": "tests/qa/integration/discovery-refresh.test.ts",
+          "sourceBlob": "15d57cabd5864dc506a7a55c4d3ad8040bef000a",
+          "sha256": "79c899dec0a23cffba10f4fc8eebd1c3edfc91f4789196cf051eaa73ab830889",
+          "reviewedCandidateBlob": "15d57cabd5864dc506a7a55c4d3ad8040bef000a",
+          "assessedMainBlob": "dd7daae19b295c614d4677b750519f13acac61d2",
+          "sourceParentBlob": "dd7daae19b295c614d4677b750519f13acac61d2",
+          "equalOriginalReview": true,
+          "mainEqualSourceParent": true
+        }
+      ],
+      "normalPatchSha256": "2e7fd94aea45073fc8c425fc810bdd3d3df4bb07bb42b74e3ed592b7d96f5d55",
+      "patchState": "Hash verified; patch not applied. This derivative is neither a new candidate nor a separate review verdict.",
+      "readSessionContext": {
+        "path": "services/main/src/modules/work/read-session.ts",
+        "sourceBlob": "936bf9993703b5070e22d924610c7c1a0713a898",
+        "originalCandidateBlob": "936bf9993703b5070e22d924610c7c1a0713a898",
+        "assessedMainBlob": "85381184a0704f74645f97e0b0327a2b13d0d27d",
+        "originalSourceBytesEqualReviewedCandidate": true
+      },
+      "mainReadSessionSameAsReadinessMain": true,
+      "mainBasedExecutionPinSupplied": false,
+      "newExecutionTreeCreated": false
+    },
+    "previousReviewCoverage": {
+      "G2846": "Actual independent codex-1 / GPT-6.1 Sol / xhigh review of all 19 paths at 1addc285, including these exact ten G-2766 source blobs, their callers and material integration. Reused without replay.",
+      "G2798": {
+        "source": "50f11211795621e95941719d745bfd3b3f381591",
+        "parent": "044189e41b1f6fc26976d24885ea30c2fb6b2e6b",
+        "profile": "codex-1 / gpt-6.1-sol / xhigh (assigned)",
+        "coverage": "All ten changed paths plus direct callers and supporting fences. Source only; no runtime outcome test in that review.",
+        "resultSha256": "89d328eee330ca87eea8d7c320f77f752a1bcf3a96193833294ee25593a6af3f"
+      },
+      "checksReused": "Original 60 focused units / 1033 assertions and affected candidate types, inference, lint, AST and guards, plus retained native run below; no repeat without relevant source or fixture change.",
+      "receiptScope": "Those executions used clean combined candidate 1addc285 and its runner. They are not represented as a standalone 50f1121 execution or as qualification of a future main-based application."
+    },
+    "retainedSourceConcernAccounting": {
+      "id": "SRC-D5-004-001",
+      "severity": "P2",
+      "owner": "G-2766",
+      "status": "unconfirmed source inference; unresolved by existing retained evidence",
+      "outcomeAssertionReached": false,
+      "actualFailingOutcomeAvailable": false,
+      "smallestUnexecutedTrigger": "Repair an ambiguous classification selection or an over-limit Context relation after its refusal but before the same refresh attempt closes its read fences, while other registered selected inputs stay unchanged.",
+      "sourceReasoning": [
+        {
+          "path": "services/main/src/modules/discovery/refresh.ts",
+          "line": 345,
+          "observation": "Typed invalid/limit refusals are caught and converted to tentative basis-invalid; a normally returning workRead can then persist the disposition."
+        },
+        {
+          "path": "services/main/src/modules/work/read-session.ts",
+          "line": 174,
+          "observation": "The selection probe disables dependency capture; the selected-result witness is registered after reread succeeds. A rejected selection does not reach that registration."
+        },
+        {
+          "path": "services/main/src/modules/work/read-session.ts",
+          "line": 297,
+          "observation": "An oversized relation throws before queryDependencies registration."
+        },
+        {
+          "path": "services/main/src/modules/work/read-classifications.ts",
+          "line": 65,
+          "observation": "Classification selection uses that probe; ambiguous candidate refusal is at line 137."
+        },
+        {
+          "path": "services/main/src/modules/discovery/source.ts",
+          "line": 349,
+          "observation": "Context admission reads LIMIT 2 with a one-row cap, the proposed second refusal path."
+        },
+        {
+          "path": "services/main/src/infrastructure/graph-read-fence.ts",
+          "line": 18,
+          "observation": "Capture caches graph reads for verification; it does not independently enumerate or validate a query that the session never registered. Changed-version closing verification rereads registered dependencies."
+        },
+        {
+          "path": "services/main/src/modules/discovery/refresh.ts",
+          "line": 434,
+          "observation": "An accepted basis-invalid disposition uses the normal five-minute delay; repair can later rearm on graph-version change, but the proposed same-attempt stale diagnosis is not ruled out."
+        }
+      ],
+      "linePin": "50f11211795621e95941719d745bfd3b3f381591",
+      "retainedEvidenceDoesNotResolve": [
+        "The moved-source unit at services/main/tests/discovery-refresh.test.ts:134 changes a successfully registered source query. Its passing closing fence does not exercise a failed selection or over-limit-before-registration.",
+        "The 32-assertion native case repairs contradictory revision sequence after quarantine has already committed, then starts a fresh worker/store. It confirms later rearming, not repair between refusal and the same attempt closing.",
+        "G-2798 reviewed read-session bytes equal the original 1add bytes. Assessed main adds read-budget/deadline handling, but selection and over-limit witness registration order remains."
+      ],
+      "disposition": "Nonblocking unconfirmed inference for this source-only verdict. No new reproducer, repair round or actual failing outcome returned to G-2766. If an existing authorized outcome later confirms it, return that assertion and exact source pin to G-2766.",
+      "qualificationOfEarlierReview": "Earlier discoveryReview.permanentAndTransient closing-fence wording describes the intended and covered registered-query path; it does not prove refusal-witness race safety."
+    },
+    "retainedNativeExecution": {
+      "job": "75646c07-cc40-4663-aa4c-a1c00b79e67c",
+      "step": 4,
+      "run": "20261019t070623-ce62e2",
+      "source": {
+        "head": "1addc28512baa56bbe940561646c693f8e9aba47",
+        "fingerprint": "73dab7bca819c9a3f7f65a5535f2ad29259b631baf36d2848c91009de158f93e",
+        "clean": true
+      },
+      "sourceStable": true,
+      "counts": {
+        "executed": 2,
+        "pass": 1,
+        "fail": 1,
+        "error": 0,
+        "skip": 0,
+        "assertions": 53
+      },
+      "xml": {
+        "name": "bun test",
+        "tests": "2",
+        "failures": "1",
+        "skipped": "0",
+        "time": "38.297"
+      },
+      "cases": [
+        {
+          "name": "Discovery scheduled refresh: native source proof, automatic enrollment, restart, leases, Mine isolation and bounded work",
+          "classname": "",
+          "time": "18.094599",
+          "file": "tests/qa/integration/discovery-refresh.test.ts",
+          "line": "33",
+          "assertions": "21",
+          "status": "fail",
+          "outcomeAssertionReached": true
+        },
+        {
+          "name": "refresh owners quarantine malformed source once, bound fleet probes, recover transient work and rearm repaired input",
+          "classname": "",
+          "time": "17.242892",
+          "file": "tests/qa/integration/discovery-refresh.test.ts",
+          "line": "220",
+          "assertions": "32",
+          "status": "pass",
+          "outcomeAssertionReached": true
+        }
+      ],
+      "counters": {
+        "capability": "discovery-refresh-maintenance",
+        "permanentFullClaims": 1,
+        "permanentPopulationReads": 1,
+        "unchangedPopulationReads": 0,
+        "parkedPopulations": 21,
+        "probesInOneAllowance": 1,
+        "transientAttempts": 2,
+        "personaJourney": false,
+        "queueClock": "injected; graph, Access, projection and leases use production owners"
+      },
+      "acceptanceCounts": {
+        "uncovered": 292,
+        "partial-pass": 0,
+        "passed": 0,
+        "failed": 0
+      },
+      "certifiesFull": false,
+      "command": "/bin/sh -c bun scripts/goal/goalctl.ts slot -- bun --cwd .temp/read-availability-execution scripts/goal/goalctl.ts test tests/qa/integration/discovery-refresh.test.ts",
+      "exitCode": 1,
+      "repeatedInThisContinuation": false,
+      "passingOwnerComposition": {
+        "assertions": 32,
+        "personaJourney": false,
+        "proved": [
+          "One full permanent claim/read and diagnosed quarantine; zero unchanged population rereads.",
+          "Twenty-one parked populations share one probe allowance.",
+          "Native graph version observes repair; fresh worker/store rearms and activates retained generation.",
+          "Transient 30/60-second backoff, no premature claim, retained generation/checkpoint and later activation."
+        ],
+        "limits": [
+          "Injected queue clock, transport failure seam and inherited media-support bearer-table authority.",
+          "Native durable owners and backup/restore are real; no public Account/persona or production-clock campaign.",
+          "The /v1/works request at line 354 is sequential after repair/activation; no concurrent core-read availability assertion."
+        ]
+      }
+    },
+    "retainedReachedFailure": {
+      "file": "tests/qa/integration/discovery-refresh.test.ts",
+      "line": 121,
+      "case": "Discovery scheduled refresh: native source proof, automatic enrollment, restart, leases, Mine isolation and bounded work",
+      "outcomeAssertionReached": true,
+      "actual": "Three external-reference author credits include namespace: author.",
+      "expected": "Exact objects omit namespace; the matcher for id is not the discrepancy.",
+      "inheritedExpectationAndProducer": [
+        {
+          "revision": "044189e41b1f6fc26976d24885ea30c2fb6b2e6b",
+          "expectationLine": 116,
+          "expectationSha256": "9ca1d0817c694165673f2aa1e4f501840ac6a8b7f4996277dae3d94583df3712",
+          "expectedNamespaceField": false,
+          "producerIncludesNamespace": true
+        },
+        {
+          "revision": "50f11211795621e95941719d745bfd3b3f381591",
+          "expectationLine": 121,
+          "expectationSha256": "9ca1d0817c694165673f2aa1e4f501840ac6a8b7f4996277dae3d94583df3712",
+          "expectedNamespaceField": false,
+          "producerIncludesNamespace": true
+        },
+        {
+          "revision": "1addc28512baa56bbe940561646c693f8e9aba47",
+          "expectationLine": 121,
+          "expectationSha256": "9ca1d0817c694165673f2aa1e4f501840ac6a8b7f4996277dae3d94583df3712",
+          "expectedNamespaceField": false,
+          "producerIncludesNamespace": true
+        },
+        {
+          "revision": "ca43d9b8f19e4ba57c0d1460761d36b8c510bf68",
+          "expectationLine": 116,
+          "expectationSha256": "9ca1d0817c694165673f2aa1e4f501840ac6a8b7f4996277dae3d94583df3712",
+          "expectedNamespaceField": false,
+          "producerIncludesNamespace": true
+        }
+      ],
+      "regressionIntroducedByTenPathDelta": false,
+      "assertionChanged": false,
+      "rerun": false,
+      "unreached": [
+        "Later current-state check",
+        "Later lease serialization and Mine-isolation assertions",
+        "Final whole-case counters"
+      ],
+      "nextOwnerAction": "Manager/original test owner resolves the inherited credit contract versus expectation before rerunning this failed case. G-2846 does not relax it."
+    },
+    "originalCriteria": [
+      {
+        "criterion": "持续非法输入终止/隔离且原因可诊断，无source变化不重做同一完整工作。",
+        "disposition": "proved for the actual current malformed-source owner path",
+        "closure": "partial for the original class; no public-persona or refusal-witness-race proof",
+        "evidence": "Retained native 32-assertion case and exact reviewed source: diagnosed basis-invalid, attempts reset, one full claim/read, zero unchanged rereads; source change rearms.",
+        "limits": "Historical invalid-media trigger is not hydrated today. SRC-D5-004-001 remains unconfirmed; frozen public diagnostic was not executed."
+      },
+      {
+        "criterion": "暂态故障退避并在恢复后推进checkpoint，维护总工作和scope公平性有预算。",
+        "disposition": "partial",
+        "evidence": "Retained real-owner 30/60-second transient backoff, generation/checkpoint preservation and successful activation; 21 parked scopes and one shared probe allowance. Source fairness/due-index bounds already reviewed.",
+        "limits": "Fixture bounds only. No retained assertion measures healthy core reads or scope progress concurrently with malformed/transient work; no additional benchmark or scale requirement added."
+      },
+      {
+        "criterion": "隔离fixture验证invalid media重试上界、修复后恢复及与核心读取并行可用。",
+        "disposition": "partial; concurrent core-read assertion unreached",
+        "evidence": "Actual contradictory-source quarantine and unreceipted repair/recovery passed.",
+        "limits": "Old invalid-media input is obsolete for this owner. The retained post-repair /v1/works read is sequential. No supported existing selector found for the original overlap assertion."
+      }
+    ],
+    "remainingCoreReadAssertion": {
+      "status": "unreached",
+      "newExecution": false,
+      "newExecuted": 0,
+      "newPass": 0,
+      "newFail": 0,
+      "newError": 0,
+      "newSkip": 0,
+      "capabilityInspectionMain": "ca43d9b8f19e4ba57c0d1460761d36b8c510bf68",
+      "inspectedSourcePins": [
+        {
+          "path": "tests/qa/integration/discovery-continuous-writes.test.ts",
+          "blob": "66644da11f44fcd90a8440293e9732dd3d7b4a7a",
+          "sha256": "975506852f37d0c2612ba9a528f2de992ba28a302418a61a81b784c593731702",
+          "testNames": [
+            {
+              "line": 21,
+              "text": "test('discovery activates under a steady stream of unrelated votes and shelf changes, and a vote on its Work reports it stale until a delta covers it', async () => {"
+            }
+          ]
+        },
+        {
+          "path": "tests/qa/integration/discovery-refresh-growth.test.ts",
+          "blob": "9c24f5ccafd249ba723cf9d5989235b03d31fa8b",
+          "sha256": "db297d8087e69a8af2202002a4414389415da052e638c9aadc382e5f500b2120",
+          "testNames": [
+            {
+              "line": 26,
+              "text": "test('discovery refresh activates within its deadline with 16,000 retained relay batches', async () => {"
+            }
+          ]
+        },
+        {
+          "path": "tests/qa/integration/discovery-refresh-retirement.test.ts",
+          "blob": "288912bcd051ab82ac0ecc688e994be6da8440b4",
+          "sha256": "a0df0749b0cddfbf63f66c97444491919ed4b28cd3c7ef8a8cc2f90da2983aa4",
+          "testNames": [
+            {
+              "line": 14,
+              "text": "test('Discovery refresh expires already purged superseded generations and resumes a ready checkpoint', async () => {"
+            }
+          ]
+        },
+        {
+          "path": "tests/qa/load/discovery-build.test.ts",
+          "blob": "93a7841d28ed26e84d20bee9cb0b02d79f7b32b4",
+          "sha256": "920f20868ad5cedde7e6748413e30118c710ac207a6dabe6ede12ddb6ab4b0c7",
+          "testNames": [
+            {
+              "line": 11,
+              "text": "test('Discovery build: 10,000 public Works below 60 seconds and one outbox delta within the recovery budget', async () => {"
+            }
+          ]
+        },
+        {
+          "path": "tests/qa/load/public-query.test.ts",
+          "blob": "5c6fb9e545143da9112df75c0c18508fdbbd3b78",
+          "sha256": "29759ed69eedc99091113edb9020bf50a03edfefcfbd7ce889d9d504ead6c876",
+          "testNames": [
+            {
+              "line": 75,
+              "text": "test('OPS05/SEARCH18/SEARCH19: bounded skewed Main, Realm and Content phrase load stays complete', async () => {"
+            }
+          ]
+        },
+        {
+          "path": "scripts/qa/test.ts",
+          "blob": "81c4fa2ae7770c68b359f86ae910069aca509c08",
+          "sha256": "3f57d88efe82ff83e300594443f5c8bb824711003525ff3db615ef15a2165a80",
+          "testNames": []
+        }
+      ],
+      "scopeOfSearch": "Original G-2766 discovery case, frozen G-2750 D5-004 diagnostic/specification and existing main discovery integration/load/support selectors; searches for malformed/quarantine/parallel/core-read combinations. No new workload constructed.",
+      "existingCapabilities": [
+        {
+          "path": "tests/qa/integration/discovery-refresh.test.ts",
+          "pin": "50f11211795621e95941719d745bfd3b3f381591",
+          "line": 354,
+          "limit": "The actual malformed producer is available, but public Work read occurs after repair and awaited activation, not during refresh."
+        },
+        {
+          "path": "tests/qa/integration/discovery-continuous-writes.test.ts",
+          "line": 21,
+          "limit": "Projection activation while unrelated votes/shelf writes occur; no permanent malformed refresh plus simultaneous core-read availability assertion."
+        },
+        {
+          "path": "tests/qa/integration/discovery-refresh-growth.test.ts",
+          "line": 26,
+          "limit": "Retained relay growth/deadline case; no malformed-source/concurrent core-read assertion."
+        },
+        {
+          "path": "tests/qa/integration/discovery-refresh-retirement.test.ts",
+          "line": 14,
+          "limit": "Superseded generation expiry/retry/checkpoint case; no concurrent core-read assertion."
+        },
+        {
+          "path": "tests/qa/load/discovery-build.test.ts",
+          "line": 11,
+          "limit": "10,000-Work native build/delta workload creates separate graph data and lacks the required overlapping faulty-refresh/core-read assertion. Not run."
+        },
+        {
+          "path": "tests/qa/load/public-query.test.ts",
+          "line": 75,
+          "limit": "Bounded Main/Realm/Content phrase-load assertion seeds its own corpus and has no faulty discovery-refresh/rearm assertion. Not a substitute; not run."
+        }
+      ],
+      "exactMissingSupportedPremise": "An existing isolated selector whose reached assertion overlaps a core public read with the current contradictory-source refresh/quarantine or transient recovery interval. The retained discovery-refresh selector has only the sequential line-354 read; no such selector/fixture is present in the inspected retained or main sources. A backup or a different concurrency test cannot supply that missing assertion.",
+      "noSubstitution": "No sequential read, owner counters, quiescent diagnostic, D5-002 run, notification threshold or unrelated mixed-load test counted as concurrent availability.",
+      "noFutureRunAdmissionClaim": "No concrete main-based execution pin supplied and no new stack admitted or started. Future execution remains under supported Task/Goal/Account/host/isolated preparation admission."
+    },
+    "frozenDiagnostic": {
+      "source": "8ac4136b19a82de3ff5e5aee23857e742a7751b4",
+      "path": "tests/qa/integration/audit-bounded-reads.test.ts",
+      "name": "D5-004 operator: quiescent refresh exposes deferred reasons without disclosing private scope identities",
+      "status": "unexecuted; original selector rejected before execution",
+      "outcomeAssertionReached": false,
+      "persistentInvalidMediaAssertionReached": false,
+      "currentRestriction": "Assessed main scripts/qa/test.ts:108-110 still permits only -t <acceptance ID>; this case name is not an admitted acceptance ID.",
+      "rerun": false,
+      "wholeAuditFileRun": false,
+      "proofLimit": "Its own line-106 metadata says persistentInvalidMediaAssertionReached=false. A hypothetical diagnostic pass would not prove retry, repair or concurrent availability."
+    },
+    "migrationNativeAndData": {
+      "newMigrationOrDataWrites": false,
+      "newStackStarted": false,
+      "newCorpusProduced": false,
+      "soleCorpusProducer": "G-2791",
+      "migration": "services/main/migrations/access/2605_discovery_refresh_disposition.sql",
+      "nativeImage": "rezics/fuseki:6.2.0-cmd0.5.43-57fb53d598b7",
+      "nativeTagImageId": "sha256:04504ec386b5285d376224e4e3af83924e41faef40fdb3d9c6a35246c284da95",
+      "reusedEvidence": "Original isolated fresh bootstrap schema effects and native owner run retained; no new per-file applied migration or per-container image receipt invented.",
+      "retainedStoreRefusal": "Original incompatible command-catalogue restore remains a setup failure with zero product assertions, not a product failure. No backup manifest or SQL repair performed.",
+      "transitionDependency": "Existing separately pinned b0b3a5e7cbf47f03eda24f53ee7ca3a492436aff review unchanged; no adoption by G-2846.",
+      "futureExecutionPrerequisite": "Preparation owner must apply 2605 through supported isolated preparation/upgrade before changed refresh code runs, retaining image/backup/migration pins and any compatibility refusal."
+    },
+    "preservation": {
+      "originalReportValuesUnchanged": true,
+      "notificationRepairApprovalUnchanged": true,
+      "historicalFailuresUnchanged": true,
+      "independentAssertionsChanged": false,
+      "sourceChanged": false,
+      "mainOrLedgerChanged": false,
+      "workersOrJobsInterrupted": false,
+      "forceUsageOrAlternateAccount": false,
+      "mainReportCheck": "At assessed main, all common report keys match the pre-continuation worker report; main has no additional report keys. Worker retains its already-committed notificationRepairReview."
+    },
+    "evidence": {
+      "privateRoot": ".temp/read-availability-review/discovery-continuation",
+      "readinessSha256": "6691fcbcbf5bf7e12e12938e63ce9bbbf1cf820ad40789e8af12bfdf4d71e37e",
+      "reviewedSourceAndContext": "source/, context/, source.diff, pins.json",
+      "retainedRawRun": ".temp/read-availability-review/runs/20261019t070623-ce62e2/",
+      "rawRunFilesRead": [
+        "acceptance.json",
+        "integration.xml",
+        "logs/integration-1.log"
+      ],
+      "accounting": "retained-run-accounting.json",
+      "creditInheritance": "inherited-credit-contract.json",
+      "originalReport": "report-before.json"
+    },
+    "ownedReportChecks": {
+      "job": "ca5f19b3-3ac2-4fb2-a826-71bfced01526",
+      "status": "pass",
+      "newProductChecks": 0,
+      "docs": {
+        "command": "task docs:check",
+        "exitCode": 0,
+        "executed": 13,
+        "pass": 13,
+        "fail": 0,
+        "error": 0,
+        "skip": 0,
+        "scope": "249 Markdown files; local links, fragments and design navigation"
+      },
+      "worker": {
+        "command": "task goal -- check",
+        "exitCode": 0,
+        "selectedPaths": [
+          "docs/goals/audit-remediation-20261019/proofs/read-availability-review.json"
+        ],
+        "types": "not applicable; no TypeScript workspace changed",
+        "tests": "none named in brief",
+        "lint": "not applicable; no source changed",
+        "ast": "pass (0.3s)",
+        "guards": {
+          "selectedFiles": 1,
+          "availableFiles": 44,
+          "executed": 2,
+          "pass": 2,
+          "fail": 0,
+          "error": 0,
+          "skip": 0,
+          "assertions": 6,
+          "elapsedSeconds": 3.0
+        }
+      },
+      "harnessNotice": "Worker harness reported three commits behind main; no harness failure occurred and no rebase/fallback was used.",
+      "privateLogs": [
+        "ca5f19b3-3ac2-4fb2-a826-71bfced01526.1.log",
+        "ca5f19b3-3ac2-4fb2-a826-71bfced01526.2.log",
+        "owned-report-check/output.log"
+      ],
+      "receiptFinalization": "Only report receipt metadata finalized after these checks; source, assertions, decisions and historical evidence unchanged."
+    }
   }
 }
