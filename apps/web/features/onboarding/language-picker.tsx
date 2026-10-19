@@ -16,16 +16,21 @@ const suggestion = cn('flex min-h-12 w-full items-center gap-3 rounded-2xl borde
   'text-start font-medium outline-none transition-colors hover:border-primary/40 hover:bg-accent/40',
   'focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60');
 
-/** A language as its readers write it, with its name in the page's language beneath. */
-export function LanguageName({ tag, names }: { tag: string; names: Intl.DisplayNames }) {
+function languageNames(tag: string, names: Intl.DisplayNames) {
   // `Intl` refuses private-use (`x-…`) and grandfathered (`i-…`) tags, which Main keeps: show the tag itself.
   const named = (display: () => string | undefined) => { try { return display(); } catch { return undefined; } };
   const ownName = named(() => new Intl.DisplayNames([tag], { type: 'language', fallback: 'code' }).of(tag));
   const own = ownName ?? tag;
   const local = named(() => names.of(tag));
+  return { ownName, own, local: local && local !== own ? local : undefined };
+}
+
+/** A language as its readers write it, with its name in the page's language beneath. */
+export function LanguageName({ tag, names }: { tag: string; names: Intl.DisplayNames }) {
+  const { ownName, own, local } = languageNames(tag, names);
   return <span className="grid min-w-0 flex-1">
     <span lang={ownName ? tag : undefined} className="truncate">{own}</span>
-    {local && local !== own ? <span className="truncate font-normal text-muted-foreground text-xs">{local}</span> : null}
+    {local ? <span className="truncate font-normal text-muted-foreground text-xs">{local}</span> : null}
   </span>;
 }
 
@@ -44,6 +49,10 @@ export function LanguagePicker({ t, locale, suggested, value, onChange }: { t: T
   const full = value.length >= MAX_LANGUAGES;
   const listId = useId();
   const add = (tag: string) => { onChange(added(value, tag)); setQuery(''); };
+  const addLabel = (tag: string, showTag = false) => {
+    const { own, local } = languageNames(tag, names);
+    return t.addLanguageNamed({ language: [own, local, showTag ? tag : undefined].filter(Boolean).join(' ') });
+  };
   return <div className="grid gap-6">
     <section aria-labelledby={`${listId}-chosen`} className="grid gap-2">
       <h3 id={`${listId}-chosen`} className="font-semibold">{t.yourLanguages}</h3>
@@ -73,7 +82,7 @@ export function LanguagePicker({ t, locale, suggested, value, onChange }: { t: T
       <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {suggested.filter(tag => !value.includes(tag)).map(tag => <li key={tag}>
           <button type="button" disabled={full} className={suggestion} onClick={() => add(tag)}
-            aria-label={t.addLanguageNamed({ language: names.of(tag) ?? tag })}>
+            aria-label={addLabel(tag)}>
             <LanguageName tag={tag} names={names} />
             <PlusIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
           </button>
@@ -95,7 +104,7 @@ export function LanguagePicker({ t, locale, suggested, value, onChange }: { t: T
       </InputGroup>
       {query.trim() ? results.length ? <ul aria-label={t.addLanguage} className="grid gap-1">
         {results.map(tag => <li key={tag}><button type="button" className={cn(suggestion, 'min-h-11 rounded-xl')}
-          onClick={() => add(tag)} aria-label={t.addLanguageNamed({ language: names.of(tag) ?? tag })}>
+          onClick={() => add(tag)} aria-label={addLabel(tag, true)}>
           <LanguageName tag={tag} names={names} />
           <span className="font-normal text-muted-foreground text-xs">{tag}</span>
         </button></li>)}
