@@ -1,5 +1,20 @@
 # Source observations, support and native adoption
 
+## Conversion and independent source annotation
+
+The maintainer's 2026-10-19 direction places external-format conversion in a
+standalone library, usable by clients and import tools. A server may call that
+library through a separate explicit conversion interface. Ordinary native
+interfaces accept native contracts and perform no automatic source conversion.
+
+Source annotation is independent of conversion. Directly authored native data
+can receive a citation without a converter run, conversion ID or registered
+mapping. Conversion can likewise produce native data without adding citations.
+Annotation validates its own admitted target and reference; retained evidence,
+transformation lineage and verification are distinct optional meanings.
+Earlier built-in conversion paths are implementation to reconcile with this
+boundary, not a requirement that every citation reproduce a conversion.
+
 ## Basis for acquisition and reuse
 
 Preserve source evidence for inspection and correction. U.S. company status and a

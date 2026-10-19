@@ -3,6 +3,11 @@ areas: []
 ---
 # Audit remediation
 
+The latest [conversion and citation direction](conversion-citation-direction.md)
+settles standalone-library conversion, an optional separate conversion interface,
+native-only ordinary interfaces and independent source annotation. It supersedes
+the first design draft and conflicting older implementation instructions.
+
 The maintainer's latest [two-hour sprint](two-hour-sprint.md) assigns one
 codex-2 / GPT-6.1 Sol / ultra manager to each retained audit, with completion
 targeted for 16:00 Asia/Shanghai on 2026-10-19. It takes precedence over older

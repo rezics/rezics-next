@@ -2,6 +2,8 @@
 
 日期：2026-10-19。状态：供 maintainer review；本稿整合既有设计与当前代码，并标出建议调整，不代表这些调整已实现或审计已通过。
 
+> Maintainer 已纠正转换边界：转换属于独立 lib，服务器仅可通过单独接口显式调用，主要接口不做自动转换；来源标注与转换完全独立。下文关于“转换内置 Source”及“标注依赖转换”的建议已失效，按[最新指示](../goals/audit-remediation-20261019/conversion-citation-direction.md)修订。来源标注的学术与 Wikipedia 工程调研已交给独立研究员；本文将汇总其结果。
+
 核对基点：main `820e302816fcada42fd8bbfa360934be3d81d3da`；修复分支 `wave/audit-20261019` 的 `f14fae6aa6ab96344a444f73ff0f104204540371`。另核对了来源字段扩展工作区中的实现；未发布部分单独标注。
 
 本稿覆盖两份审计涉及的共同模块，重点是 Source、转换与 REZICS native 的边界。既有总体设计见[目标架构](target-architecture.md)、[已选架构](overview.md)和[来源生命周期](../contracts/source-lifecycle.md)。它们已经定义了主要方向，本次需要核对的是实现是否遵守这些边界、实际数据是否贯通。
