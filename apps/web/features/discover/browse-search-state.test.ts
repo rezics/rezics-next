@@ -81,6 +81,27 @@ test('one empty scan action is bounded and retains the next owner cursor', async
     data: { items: [], complete: false, nextCursor: `opaque-${BROWSE_SCAN_PAGES}` } } });
 });
 
+test.each([
+  [null, ['opaque:A', 'opaque:B', 'opaque:C', 'opaque:A']],
+  ['opaque:start', ['opaque:A', 'opaque:start']],
+  ['opaque:action', ['opaque:A', 'opaque:B', 'opaque:C', 'opaque:action']],
+] as const)('resource scans refuse opaque cycles, including the fourth page and action boundary: %s', async (cursor, next) => {
+  const calls: (string | null)[] = [];
+  const scan = await readBrowseScan(async input => {
+    calls.push(input);
+    return { ok: true, data: page([], next[calls.length - 1]!) };
+  }, cursor);
+  expect(calls).toEqual([cursor, ...next.slice(0, -1)]);
+  expect(scan.result).toMatchObject({ ok: false, failure: 'unavailable' });
+  expect(scan.checkedPages).toBe(next.length);
+});
+
+test('a resource match does not make a repeated next cursor safe to offer', async () => {
+  const scan = await readBrowseScan(async () => ({ ok: true, data: page(['match'], 'opaque:A') }), 'opaque:A');
+  expect(scan.result).toMatchObject({ ok: false, failure: 'unavailable' });
+  expect(scan.checkedPages).toBe(1);
+});
+
 test('exhaustion, backend refusal, temporary failure and a non-progressing cursor remain distinct', async () => {
   const exhausted = await readBrowseScan(async () => ({ ok: true, data: page([], null) }), null);
   expect(exhausted).toMatchObject({ checkedPages: 1, result: { ok: true, data: { complete: true } } });

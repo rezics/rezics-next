@@ -7,6 +7,7 @@ import { chapterHref, workHref } from '../work-page/route.ts';
 import type { SearchContinuation, SearchLoaded, SearchResultPage } from '../search/types.ts';
 import type { SearchLoader } from '../search/query.ts';
 import { Providers } from '../shell/providers.tsx';
+import { attributed, creditedOnly, unassessed } from '../rights-mark/fixtures.ts';
 import { chapterSearchState } from './chapter-text-read.ts';
 import { ChapterTextResults } from './chapter-text.tsx';
 import { chapterTextMessages } from './chapter-text-messages.ts';
@@ -124,12 +125,111 @@ export const RetryPreservesChapters: Story = {
     .mockResolvedValue({ ok: true, page: finalPage }); },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await userEvent.click(canvas.getByRole('button', { name: 'Show more chapter matches' }));
+    canvas.getByRole('button', { name: 'Show more chapter matches' }).focus();
+    await userEvent.keyboard('{Enter}');
     await expect(await canvas.findByRole('alert')).toBeVisible();
     await expect(canvas.getByRole('link', { name: 'At the harbour' })).toBeVisible();
-    await userEvent.click(canvas.getByRole('button', { name: 'Try again' }));
-    await expect(await canvas.findByRole('link', { name: 'The last lantern' })).toBeVisible();
+    canvas.getByRole('button', { name: 'Try again' }).focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(await canvas.findByRole('link', { name: 'The last lantern' })).toHaveFocus();
     await expect(unavailableLoad).toHaveBeenNthCalledWith(2, firstPage.next);
+    await expect(canvas.getAllByRole('link', { name: 'At the harbour' })).toHaveLength(1);
+  },
+};
+
+const emptyRetry = fn<SearchLoader>();
+export const RetryFocusesExhaustedStatus: Story = {
+  args: { read: { ok: true, page: firstPage }, load: emptyRetry },
+  beforeEach() { emptyRetry.mockReset().mockResolvedValueOnce({ ok: false, failure: 'unavailable' })
+    .mockResolvedValue({ ok: true, page: read.page }); },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Show more chapter matches' }));
+    const retry = await canvas.findByRole('button', { name: 'Try again' });
+    retry.focus(); await userEvent.keyboard('{Enter}');
+    await expect(await canvas.findByText('Showing the only chapter match')).toHaveFocus();
+    await expect(canvas.getAllByRole('link', { name: 'At the harbour' })).toHaveLength(1);
+    await expect(emptyRetry).toHaveBeenNthCalledWith(2, firstPage.next);
+  },
+};
+
+const restartLoad = fn<SearchLoader>();
+export const RestartFocusesFirstUsefulChapter: Story = {
+  args: { read: { ok: true, page: firstPage }, load: restartLoad },
+  beforeEach() { restartLoad.mockReset().mockResolvedValueOnce({ ok: false, failure: 'restart' })
+    .mockResolvedValue({ ok: true, page: read.page }); },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Show more chapter matches' }));
+    const restart = await canvas.findByRole('button', { name: 'Search again' });
+    restart.focus(); await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(canvas.queryByRole('button', { name: 'Search again' })).toBeNull());
+    await expect(canvas.getByRole('link', { name: 'At the harbour' })).toHaveFocus();
+    await expect(restartLoad).toHaveBeenNthCalledWith(2, undefined);
+    await expect(canvas.getAllByRole('link', { name: 'At the harbour' })).toHaveLength(1);
+  },
+};
+
+const repeatedLoad = fn<SearchLoader>();
+export const RepeatedChapterCursor: Story = {
+  args: { read: { ok: true, page: firstPage }, load: repeatedLoad },
+  beforeEach() { repeatedLoad.mockReset().mockResolvedValue({ ok: true, page: { ...firstPage, hits: [] } }); },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Show more chapter matches' }));
+    await expect(await canvas.findByText('Results changed since the first page')).toBeVisible();
+    await expect(repeatedLoad).toHaveBeenCalledTimes(1);
+    await expect(canvas.getAllByRole('link', { name: 'At the harbour' })).toHaveLength(1);
+    await expect(canvas.queryByRole('button', { name: 'Show more chapter matches' })).toBeNull();
+  },
+};
+
+const actionCycleLoad = fn<SearchLoader>();
+export const ChapterCycleAfterBoundedAction: Story = {
+  args: { read: { ok: true, page: firstPage }, load: actionCycleLoad },
+  globals: { viewport: { value: 'phone' }, theme: 'dark' },
+  beforeEach() {
+    actionCycleLoad.mockReset();
+    for (let offset = 2; offset <= 5; offset += 1) actionCycleLoad.mockResolvedValueOnce({ ok: true, page: emptyPage(offset) });
+    actionCycleLoad.mockResolvedValue({ ok: true, page: emptyPage(1) });
+  },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Show more chapter matches' }));
+    await waitFor(() => expect(actionCycleLoad).toHaveBeenCalledTimes(4));
+    await waitFor(() => expect(canvas.getByRole('button', { name: 'Show more chapter matches' })).toBeEnabled());
+    await userEvent.click(canvas.getByRole('button', { name: 'Show more chapter matches' }));
+    await expect(await canvas.findByText('Results changed since the first page')).toBeVisible();
+    await expect(actionCycleLoad).toHaveBeenCalledTimes(5);
+    await expect(canvas.getAllByRole('link', { name: 'At the harbour' })).toHaveLength(1);
+  },
+};
+
+const rightsFirst = { ...firstPage, hits: firstPage.hits.map(hit => ({ ...hit, factObligations: attributed })) };
+const rightsFinal = { ...finalPage, hits: [{ ...second, factObligations: creditedOnly }] };
+export const SuppliedFactObligations: Story = {
+  args: { read: { ok: true, page: rightsFirst }, load: pagesLoader(rightsFirst, [rightsFinal]) },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const first = within(canvas.getByRole('link', { name: 'At the harbour' }).closest('li')!);
+    await expect(first.getByRole('link', { name: 'Example' })).toHaveAttribute('href', 'https://example.test/records/1');
+    await expect(first.getByRole('link', { name: 'CC BY-SA 3.0' }))
+      .toHaveAttribute('href', 'https://creativecommons.org/licenses/by-sa/3.0/');
+    await expect(first.getByText('Adaptations stay under the same terms.')).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'Show more chapter matches' }));
+    const last = within((await canvas.findByRole('link', { name: 'The last lantern' })).closest('li')!);
+    await expect(last.getByRole('link', { name: 'Archive' })).toHaveAttribute('href', 'https://archive.example/works/2');
+    await expect(last.getByRole('link', { name: 'CC BY 4.0' }))
+      .toHaveAttribute('href', 'https://creativecommons.org/licenses/by/4.0/');
+    await expect(first.getByRole('link', { name: 'Example' })).toBeVisible();
+  },
+};
+
+export const UnassessedFactsStayUnassessed: Story = {
+  args: { read: { ok: true, page: { ...read.page, hits: read.page.hits.map(hit => ({ ...hit, factObligations: unassessed })) } } },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByRole('link', { name: 'At the harbour' })).toBeVisible();
+    await expect(canvasElement.querySelector('[data-rights-mark]')).toBeNull();
   },
 };
 

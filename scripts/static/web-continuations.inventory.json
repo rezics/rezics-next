@@ -1,6 +1,6 @@
 {
   "violations": [
-    {"path":"apps/web/features/discover/browse-read.ts","consumer":"readBrowseScan","operation":"<syntax>","rule":"dropped-continuation","expression":"result.data.items","context":"d9e849f077699e43870d5a0bc3a2f8ac155664e985e17921b7a1f9070af344f7"},
+    {"path":"apps/web/features/discover/browse-read.ts","consumer":"readBrowseScan","operation":"<syntax>","rule":"dropped-continuation","expression":"result.data.items","context":"12fce2192dd234fdef8c108d6bde06456a24901ce0c8362f9589362dc647fc2a"},
     {"path":"apps/web/features/discover/load.ts","consumer":"loadDiscoverState","operation":"<syntax>","rule":"dropped-continuation","expression":"scan.result.data.items","context":"c7f0d8fdbd7acb8ac0e48c2e5e19a45c4eed8fa0c496a0770ff71bf6de244fef"},
     {"path":"apps/web/features/discover/search-recovery-read.ts","consumer":"readBrowseSuggestions","operation":"<syntax>","rule":"dropped-continuation","expression":"page.data.items","context":"4de8da0776450bce8769a0024d9fb562a16be53a6866859c0dbe0ae028d5b1aa"},
 

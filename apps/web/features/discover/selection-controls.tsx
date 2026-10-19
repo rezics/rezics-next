@@ -6,11 +6,12 @@ import { ChoiceSelect } from '@rezics/ui/select';
 import { XIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import { useRouter } from 'next/navigation';
+import { useId, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { entryLabel } from '../catalogue/types.ts';
 import { messages as searchMessages } from '../search/messages.ts';
-import { normalizeLanguage } from '../search/state.ts';
+import { normalizeLanguage, phraseStatus } from '../search/state.ts';
 import Link from '../shell/localized-link.tsx';
 import { browseCategories } from '../catalogue/registry.ts';
 import { browseMessages } from './browse-messages.ts';
@@ -24,6 +25,9 @@ export function BrowseSelectionControls({ state, locale }: { state: BrowseState;
   const t = materializeData(searchMessages[locale], { locale });
   const copy = selectionMessages[locale], browse = browseMessages[locale];
   const exact = state.q.startsWith('"') && state.q.endsWith('"') && state.q.length > 2;
+  const [invalidExact, setInvalidExact] = useState<string | null>(null);
+  const exactHelp = useId();
+  const exactTooLong = invalidExact === state.q;
   const go = (patch: Partial<BrowseState>) => router.push(localizedPath(browseHref(changeBrowse(state, patch)), locale),
     { scroll: false });
   const name = (tag: string) => {
@@ -90,9 +94,16 @@ export function BrowseSelectionControls({ state, locale }: { state: BrowseState;
         </div>
         {state.q ? <div className="grid gap-2 sm:col-span-2">
           <Button variant="outline" size="sm" className="justify-self-start" aria-pressed={exact}
-            onClick={() => go({ q: exact ? state.q.slice(1, -1) : `"${state.q}"` })}>
+            aria-describedby={exactTooLong ? exactHelp : undefined}
+            onClick={() => {
+              const q = exact ? state.q.slice(1, -1) : `"${state.q}"`;
+              if (phraseStatus(q) === 'long') { setInvalidExact(state.q); return; }
+              setInvalidExact(null);
+              go({ q });
+            }}>
             {copy.phrase}
           </Button>
+          {exactTooLong ? <p id={exactHelp} role="alert" className="text-foreground text-sm">{copy.exactTooLong}</p> : null}
           <p className="text-muted-foreground text-xs">{copy.syntax}</p>
         </div> : null}
       </div>

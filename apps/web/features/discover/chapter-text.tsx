@@ -8,6 +8,7 @@ import { type ContractOf, materializeData } from 'native-i18n';
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { entryLabel, typeEntry } from '../catalogue/types.ts';
+import { RightsMark } from '../rights-mark/rights-mark.tsx';
 import { messages as searchMessages } from '../search/messages.ts';
 import { bffSearch, SearchError, type SearchLoader, searchPagesOptions } from '../search/query.ts';
 import type { SearchState } from '../search/state.ts';
@@ -85,41 +86,37 @@ function ChapterPages({ first, state, locale, actingSubject, signedIn = true, lo
   const failure = !failed ? null : pages.error instanceof SearchError ? pages.error.failure : 'unavailable';
   const list = useRef<HTMLOListElement>(null);
   const summary = useRef<HTMLParagraphElement>(null);
-  const loaded = pages.data?.pages.length ?? 1;
-  // One reader action: where its new matches begin, the page it waits for and how many more it may follow.
-  const [scan, setScan] = useState<{ from: number; loaded: number; pages: number } | null>(null);
-  const scanning = scan !== null && !failure;
+  const [scanning, setScanning] = useState(false);
+  const [focus, setFocus] = useState<{ from: number } | null>(null);
 
   useEffect(() => {
-    if (!scan) return;
-    if (failure) {
-      setScan(null);
-      return;
-    }
-    if (loaded <= scan.loaded || pages.isFetching) return;
-    if (progress.hits.length > scan.from) {
-      setScan(null);
-      list.current?.querySelectorAll<HTMLElement>('[data-chapter-link]')[scan.from]?.focus();
-    } else if (pages.hasNextPage && scan.pages > 0) {
-      setScan({ ...scan, loaded, pages: scan.pages - 1 });
-      void pages.fetchNextPage();
-    } else {
-      setScan(null);
-      // The button stays for a further action; at the end, focus moves to what the search found out.
-      if (!pages.hasNextPage) summary.current?.focus();
-    }
-  }, [scan, loaded, pages.isFetching, pages.hasNextPage, failure, progress.hits.length, pages.fetchNextPage]);
+    if (!focus) return;
+    const link = list.current?.querySelectorAll<HTMLElement>('[data-chapter-link]')[focus.from];
+    (link ?? summary.current)?.focus();
+    setFocus(null);
+  }, [focus]);
 
-  function more() {
+  async function scan(action: 'more' | 'retry' | 'restart') {
     if (scanning || pages.isFetching) return;
-    setScan({ from: progress.hits.length, loaded, pages: CHAPTER_SCAN_PAGES - 1 });
-    void pages.fetchNextPage();
-  }
-  function restart() {
-    setScan(null);
-    client.setQueryData(options.queryKey, data => data && { pages: data.pages.slice(0, 1),
-      pageParams: data.pageParams.slice(0, 1) });
-    void pages.refetch();
+    setScanning(true);
+    const from = action === 'restart' ? 0 : progress.hits.length;
+    try {
+      // Fetch page one atomically on restart; useful cached chapters survive a failed restart.
+      const initial = action === 'restart'
+        ? await client.fetchInfiniteQuery({ ...options, pages: 1, staleTime: 0 })
+        : (await (action === 'retry' && pages.isRefetchError
+          ? pages.refetch({ throwOnError: true }) : pages.fetchNextPage({ throwOnError: true }))).data;
+      let current = chapterProgress(initial?.pages ?? [first]);
+      for (let checked = 1; checked < CHAPTER_SCAN_PAGES && current.hits.length <= from && !current.complete; checked += 1) {
+        const next = await pages.fetchNextPage({ throwOnError: true });
+        current = chapterProgress(next.data?.pages ?? [first]);
+      }
+      setFocus({ from });
+    } catch {
+      // The query retains successful pages and the typed failure for the next recovery action.
+    } finally {
+      setScanning(false);
+    }
   }
 
   const format = new Intl.NumberFormat(locale);
@@ -145,17 +142,18 @@ function ChapterPages({ first, state, locale, actingSubject, signedIn = true, lo
               <bdi lang={hit.reasons.language}>{hit.reasons.chapter!.title}</bdi>
             </Link>
           </p>
+          {hit.factObligations ? <RightsMark rights={hit.factObligations} locale={locale} /> : null}
         </li>)}
       </ol>
     </> : null}
-    {failure ? <LaterFailure failure={failure} search={search} onRetry={() => void (pages.isRefetchError
-      ? pages.refetch() : pages.fetchNextPage())} onRestart={restart} /> : null}
+    {failure ? <LaterFailure failure={failure} search={search} onRetry={() => void scan('retry')}
+      onRestart={() => void scan('restart')} /> : null}
     <div className="flex flex-wrap items-center justify-between gap-3">
       <p ref={summary} tabIndex={-1} aria-live="polite" aria-atomic="true"
         className="rounded-sm text-muted-foreground text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
         {scanning ? t.checking : status}
       </p>
-      {pages.hasNextPage && !failure ? <Button variant="outline" size="sm" onClick={more} isLoading={scanning}>{scanning ? t.checking : progress.hits.length ? t.showMore : t.checkMore}</Button>
+      {pages.hasNextPage && !failure ? <Button variant="outline" size="sm" onClick={() => void scan('more')} isLoading={scanning}>{scanning ? t.checking : progress.hits.length ? t.showMore : t.checkMore}</Button>
         : null}
     </div>
   </>;

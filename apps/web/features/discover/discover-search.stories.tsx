@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { direction } from '@rezics/main/language';
 import { useState } from 'react';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { StoryRouteContext } from '../../.storybook/next-navigation.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { Providers } from '../shell/providers.tsx';
@@ -214,4 +214,62 @@ export const EditExactConditionsWithKeyboard: Story = {
     await expect(canvas.getByRole('searchbox')).toHaveValue('"night library"');
     await expect(canvas.getByRole('link', { name: 'Remove filter: Exclude Recipe' })).toBeVisible();
   },
+};
+
+const exactPush = fn();
+const exactState = (q: string): BrowseState => ({ ...state, q, excludeTypes: ['https://schema.org/Recipe'],
+  scope: { kind: 'realm', realm: '00000000-0000-4000-8000-000000000001' },
+  conditions: { ...state.conditions, match: 'any', exclude: ['00000000-0000-4000-8000-000000000002'] } });
+function ExactBoundaryTask(props: DiscoverPageProps) {
+  const selected = props.state ?? state;
+  return <StoryRouteContext value={{ pathname: '/en/discover',
+    search: new URL(browseHref(selected), 'https://example.test').search, onPush: exactPush }}>
+    <div className="mx-auto max-w-7xl px-4 pt-4"><SearchField /></div>
+    <DiscoverView {...props} state={selected} />
+  </StoryRouteContext>;
+}
+async function rejectQuotedBoundary(canvasElement: HTMLElement, q: string) {
+  const canvas = within(canvasElement);
+  await userEvent.click(canvas.getByText('Edit filters'));
+  const exact = canvas.getByRole('button', { name: 'Exact phrase' });
+  exact.focus(); await userEvent.keyboard('{Enter}');
+  await expect(exactPush).not.toHaveBeenCalled();
+  const alert = await canvas.findByRole('alert');
+  await expect(alert).toHaveTextContent('Shorten the query to 78 characters before adding quotation marks.');
+  await expect(canvas.getByRole('searchbox')).toHaveValue(q);
+  await expect(exact).toHaveFocus();
+  const removeLanguage = new URL(canvas.getByRole('link', { name: 'Remove filter: Only Japanese text' })
+    .getAttribute('href')!, 'https://example.test');
+  const retained = exactState(q);
+  delete retained.language;
+  await expect(parseBrowseState(Object.fromEntries(removeLanguage.searchParams))).toEqual(retained);
+  await expect(removeLanguage.searchParams.has('lang')).toBe(false);
+  alert.scrollIntoView({ block: 'center' });
+}
+export const ExactPhrase78Unicode: Story = {
+  args: { state: exactState('𠮷'.repeat(78)) }, render: props => <ExactBoundaryTask {...props} />,
+  beforeEach() { exactPush.mockClear(); },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByText('Edit filters'));
+    const exact = canvas.getByRole('button', { name: 'Exact phrase' });
+    exact.focus(); await userEvent.keyboard('{Enter}');
+    await expect(exactPush).toHaveBeenCalledTimes(1);
+    const next = new URL(exactPush.mock.calls[0]![0], 'https://example.test');
+    await expect(parseBrowseState(Object.fromEntries(next.searchParams))).toEqual({
+      ...exactState('𠮷'.repeat(78)), q: `"${'𠮷'.repeat(78)}"`,
+    });
+    await expect(canvas.queryByRole('alert')).toBeNull();
+  },
+};
+export const ExactPhrase79Unicode: Story = {
+  args: { state: exactState('界'.repeat(79)) }, render: props => <ExactBoundaryTask {...props} />,
+  globals: { viewport: { value: 'phone' }, theme: 'dark' },
+  beforeEach() { exactPush.mockClear(); },
+  async play({ canvasElement }) { await rejectQuotedBoundary(canvasElement, '界'.repeat(79)); },
+};
+export const ExactPhrase80Unicode: Story = {
+  args: { state: exactState('𠮷a'.repeat(40)) }, render: props => <ExactBoundaryTask {...props} />,
+  beforeEach() { exactPush.mockClear(); },
+  async play({ canvasElement }) { await rejectQuotedBoundary(canvasElement, '𠮷a'.repeat(40)); },
 };
