@@ -280,7 +280,7 @@ export class RightsStore {
       const result = await (client ?? this.content).query<{ assessment_head: string; basis: string; outcome: string }>(
         publicDomainAssessmentSelection(), [work, assessmentId]);
       return result.rows.some(row => supportedPublicDomainHead(row, assessmentId));
-    } catch { throw new RightsUnavailable('current public-domain assessment is unavailable'); }
+    } catch (cause) { throw new RightsUnavailable('current public-domain assessment is unavailable', { cause }); }
   }
 
   /** At most 512 phrase hits share one indexed rights probe, O(hits) input and result. */
@@ -299,7 +299,7 @@ export class RightsStore {
       [refs.map(ref => ref.work), refs.map(ref => ref.assessmentId)]);
       return new Set(result.rows.filter(row => supportedPublicDomainHead(row, row.assessment_id))
         .map(row => `${row.work_id}\0${row.assessment_id}`));
-    } catch { throw new RightsUnavailable('current public-domain search rights are unavailable'); }
+    } catch (cause) { throw new RightsUnavailable('current public-domain search rights are unavailable', { cause }); }
   }
 
   /** A source component fence follows its exact observation or the whole record. */

@@ -3,7 +3,7 @@ import { Elysia, t } from 'elysia';
 import { readChapter, readContents } from '../modules/work-contents/read.ts';
 import { chapterQuery, chapterRead, contentsPage, contentsQuery } from '../modules/work-contents/read-contract.ts';
 import { readUuid } from '../modules/work/read-contract.ts';
-import { workRead, type ReadOptions } from '../modules/work/read-session.ts';
+import { publicWorkRead, workRead } from '../modules/work/read-session.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 
@@ -20,7 +20,8 @@ export function workContentsRoutes(work: MainWorkDependencies) {
       query: contentsQuery, response: transportResponses(openApiOperations["/v1/works/{id}/contents"].get, { 200: contentsPage, ...workReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
-        return Response.json(await workRead(work, request, query as ReadOptions,
+        const read = query.actingSubject ? workRead : publicWorkRead;
+        return Response.json(await read(work, request, query,
           session => readContents(session, `https://rezics.com/id/${params.id}`, query)), { headers });
       } catch (error) { return workReadError(error); }
     })
@@ -28,7 +29,8 @@ export function workContentsRoutes(work: MainWorkDependencies) {
       query: chapterQuery, response: transportResponses(openApiOperations["/v1/chapters/{id}"].get, { 200: chapterRead, ...workReadProblems }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
-        return Response.json(await workRead(work, request, query,
+        const read = query.actingSubject ? workRead : publicWorkRead;
+        return Response.json(await read(work, request, query,
           session => readChapter(session, `https://rezics.com/id/${params.id}`, query)), { headers });
       } catch (error) { return workReadError(error); }
     });

@@ -1,6 +1,7 @@
 import { CompositionCorrupt, CompositionUnavailable, compositionForMainVersion,
   readCompositionHeader, type CompositionHeader } from '../structure/graph.ts';
-import { readCompositionPage, readCompositionSnapshot, type CompositionPage, type CompositionSnapshot } from '../structure/read.ts';
+import { publishedCompositionRevision, readCompositionPage, readCompositionSnapshot,
+  type CompositionPage, type CompositionSnapshot } from '../structure/read.ts';
 import { orderTree, recordTree, structureObjects } from '../structure/change.ts';
 import { seekChapter } from '../structure/reading-order.ts';
 import { ReadingOrderIndex } from '../reading-position/immutable-order.ts';
@@ -9,15 +10,20 @@ import { isCatalogTarget, isContainerRole, structureProfileFor } from '../struct
 import { compositionTargetBatchReader } from '../composition/disclosure-read.ts';
 import { orderTreeKey } from '../structure/graph.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable } from '../structure/tree.ts';
-import { ObjectIntegrityError, ObjectUnavailable } from '../../infrastructure/immutable-objects.ts';
+import { ObjectIntegrityError, ObjectNotFound, ObjectUnavailable } from '../../infrastructure/immutable-objects.ts';
+import { isOwnerTransientFailure } from '../../infrastructure/owner-failure.ts';
 import { GRAPHS, iri, lit } from '../work/activate.ts';
 import { readWorkBasis, fenceWorkBasis } from '../work/read-header.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadExpired, WorkReadInvalid,
   unerased, WorkReadLimit, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
   readDependencyToken, type WorkReadSession } from '../work/read-session.ts';
 import { WORK_CONTENTS_COST } from './read-contract.ts';
+import type { ExactReadResult } from '../../../../content/src/core.ts';
+import { publicDomainRevisionCurrent, publicDomainRevisionsCurrent } from '../content-publication/public-domain-read.ts';
+import { discloseInventory } from '../disclosure/read.ts';
 
 const contentPrefix = 'urn:rezics:content:revision:';
+const contentRevision = /^urn:rezics:content:revision:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const missing = () => new WorkReadMissing('Chapter is unavailable');
 const localizedLabel = (labels: readonly { value: string; language: string }[], language: string) =>
   labels.find(label => label.language.toLowerCase() === language.toLowerCase())
@@ -25,6 +31,58 @@ const localizedLabel = (labels: readonly { value: string; language: string }[], 
   ?? labels[0] ?? null;
 const missingTitle = (label: { value: string; language: string } | null) =>
   !label;
+
+type ChapterText = Pick<Extract<ExactReadResult, { status: 'available' }>, 'revisionId' | 'reference'>;
+
+/** Retain the exact bodies already hydrated, without reloading their bytes.
+ * Titles derived from those bodies carry the same live delivery dependencies. */
+async function chapterTextDelivery(session: WorkReadSession, work: string, texts: ChapterText[]) {
+  const rights = async () => {
+    session.checkDeadline();
+    try {
+      return texts.length === 1
+        ? [await publicDomainRevisionCurrent(texts[0]!.reference, session.deps.rights?.store)]
+        : await publicDomainRevisionsCurrent(texts.map(text => text.reference), session.deps.rights?.store);
+    } catch (cause) { throw new WorkReadUnavailable('Chapter rights unavailable', { cause }); }
+  };
+  const current = await rights();
+  session.observeDependency(`chapter-rights:${JSON.stringify(texts.map(text => text.revisionId))}`, current, rights);
+  const targets = texts.map(text => ({ owner: 'content' as const, resource: text.reference.resourceId,
+    component: 'body' as const, revision: text.revisionId, work }));
+  const decisions = await session.disclosure(targets, 'read')
+    .catch((cause: unknown) => { throw new WorkReadUnavailable('Chapter disclosure unavailable', { cause }); });
+  const admitted = texts.filter((_text, index) => current[index] && decisions[index] === 'visible');
+  const ids = admitted.map(text => text.revisionId);
+  const metadata = async () => {
+    session.checkDeadline();
+    if (!ids.length) return [];
+    const owner = session.deps.contentAuthoring;
+    if (!owner) throw new WorkReadUnavailable('Content metadata owner is unavailable');
+    const rows = await owner.readExactMetadataBatch(ids, async allowed => new Set(allowed))
+      .catch((cause: unknown) => { throw new WorkReadUnavailable('Content metadata owner is unavailable', { cause }); });
+    return admitted.map(text => {
+      const row = rows.get(text.revisionId);
+      if (!row) throw new WorkReadUnavailable('Published chapter object missing');
+      if (row.availability === 'erased') return false;
+      if (row.availability !== 'available') throw new WorkReadUnavailable('Chapter dependency unavailable');
+      if (row.byteDigest !== text.reference.byteDigest) throw new WorkReadUnavailable('Chapter integrity mismatch');
+      return true;
+    });
+  };
+  // The successful integrity-checked hydration establishes these exact digests.
+  // The enclosing Work read repeats only the bounded metadata lookup at close.
+  session.observeDependency(`chapter-representation:${JSON.stringify(ids)}`, ids.map(() => true), metadata);
+  return async () => {
+    const freshRights = await rights();
+    const visible = await discloseInventory(session.deps.environment, targets, session.viewer, 'read')
+      .catch((cause: unknown) => { throw new WorkReadUnavailable('Chapter disclosure unavailable', { cause }); });
+    const available = await metadata();
+    return new Set(admitted.filter((text, index) => {
+      const at = texts.indexOf(text);
+      return available[index] && freshRights[at] && visible[at] === 'visible';
+    }).map(text => text.revisionId));
+  };
+}
 
 /** Legacy imports put a chapter heading in the body but saved a placeholder label. */
 export function firstChapterHeading(body: Record<string, unknown>): string | null {
@@ -38,16 +96,17 @@ export function firstChapterHeading(body: Record<string, unknown>): string | nul
   return null;
 }
 
-async function legacyChapterLabels(session: WorkReadSession,
+async function legacyChapterLabels(session: WorkReadSession, work: string,
   candidates: Array<{ target: string; revision: string; variant: string; language: string }>) {
   const labels = new Map<string, { value: string; language: string }>();
+  const available: ChapterText[] = [];
   const unique = [...new Map(candidates.map(item => [item.revision, item])).values()];
   if (unique.length !== new Set(candidates.map(item => `${item.revision}\0${item.target}\0${item.variant}`)).size) {
     throw new WorkReadUnavailable('Chapter publication is ambiguous');
   }
   const content = session.deps.content;
   if (!content) {
-    if (!candidates.length) return labels;
+    if (!candidates.length) return { labels, fence: async () => {} };
     throw new WorkReadUnavailable('Content owner is unavailable');
   }
   // The Content owner caps a batch at 4 MiB; four bodies fit its per-body ceiling.
@@ -55,27 +114,61 @@ async function legacyChapterLabels(session: WorkReadSession,
     const batch = unique.slice(offset, offset + WORK_CONTENTS_COST.legacyTitleBatch);
     const revisions = batch.map(item => item.revision.slice(contentPrefix.length));
     const exacts = await content.readExactBatch(revisions, async ids => new Set(ids))
-      .catch(() => { throw new WorkReadUnavailable('Content owner is unavailable'); });
+      .catch((cause: unknown) => { throw new WorkReadUnavailable('Content owner is unavailable', { cause }); });
+    if (exacts.length !== batch.length) throw new WorkReadUnavailable('Content owner result is incomplete');
     for (const [index, exact] of exacts.entries()) {
       const item = batch[index]!;
-      if (exact?.status === 'denied') continue;
+      if (exact?.status === 'denied' || exact?.status === 'erased') continue;
+      if (exact?.status === 'corrupt') throw new WorkReadUnavailable('Chapter integrity mismatch');
+      if (exact?.status === 'unavailable') throw new WorkReadUnavailable('Chapter dependency unavailable');
+      if (exact?.status === 'missing') throw new WorkReadUnavailable('Published chapter object missing');
       if (exact?.status !== 'available' || exact.reference.resourceId !== item.target
         || exact.reference.variantId !== item.variant || exact.reference.language.kind !== 'tag'
-        || exact.reference.language.tag.toLowerCase() !== item.language) {
+        || exact.reference.language.tag.toLowerCase() !== item.language
+        || exact.revisionId !== revisions[index] || exact.reference.revisionId !== revisions[index]) {
         throw new WorkReadUnavailable('Chapter publication differs from its Content');
       }
+      available.push({ revisionId: exact.revisionId, reference: exact.reference });
       const value = firstChapterHeading(exact.body);
       if (value) labels.set(item.revision, { value, language: item.language });
     }
   }
-  return labels;
+  const deliver = available.length ? await chapterTextDelivery(session, work, available) : null;
+  return { labels, fence: async () => {
+    if (deliver) {
+      const current = await deliver();
+      for (const text of available) if (!current.has(text.revisionId)) labels.delete(`${contentPrefix}${text.revisionId}`);
+    }
+  } };
+}
+
+function causedBy(error: unknown, type: typeof ObjectUnavailable | typeof ObjectIntegrityError): boolean {
+  const seen = new Set<unknown>();
+  while (error instanceof Error && !seen.has(error)) {
+    if (error instanceof type) return true;
+    seen.add(error);
+    error = error.cause;
+  }
+  return false;
 }
 
 function structureError(error: unknown): never {
-  if (error instanceof CompositionUnavailable) throw missing();
-  if (error instanceof CompositionCorrupt || error instanceof StructureObjectCorrupt
-    || error instanceof StructureObjectUnavailable || error instanceof ObjectIntegrityError
-    || error instanceof ObjectUnavailable) throw new WorkReadUnavailable('Composition is unavailable');
+  if (causedBy(error, ObjectNotFound)) {
+    throw new WorkReadUnavailable('Composition object missing', { cause: error });
+  }
+  if (causedBy(error, ObjectIntegrityError)) {
+    throw new WorkReadUnavailable('Composition integrity mismatch', { cause: error });
+  }
+  if (error instanceof CompositionCorrupt || error instanceof StructureObjectCorrupt) {
+    throw new WorkReadUnavailable('Composition is corrupt', { cause: error });
+  }
+  if (error instanceof StructureObjectUnavailable || causedBy(error, ObjectUnavailable)) {
+    throw new WorkReadUnavailable('Composition dependency unavailable', { cause: error });
+  }
+  if (error instanceof CompositionUnavailable) throw new WorkReadMissing('Chapter is unavailable', { cause: error });
+  if (!(error instanceof WorkReadUnavailable) && isOwnerTransientFailure(error)) {
+    throw new WorkReadUnavailable('Composition graph unavailable', { cause: error });
+  }
   throw error;
 }
 
@@ -121,7 +214,11 @@ async function selectedContent(session: WorkReadSession, target: string, languag
   } LIMIT 2`, 2);
   if (rows.length > 1) throw new WorkReadUnavailable('Chapter language has ambiguous publications');
   const row = rows[0];
-  return row?.revision && row.variant ? { revision: row.revision.value, variant: row.variant.value } : null;
+  if (!row) return null;
+  if (!contentRevision.test(row.revision?.value ?? '') || !row.variant?.value) {
+    throw new WorkReadUnavailable('Chapter publication is corrupt');
+  }
+  return { revision: row.revision!.value, variant: row.variant.value };
 }
 
 async function composition(session: WorkReadSession, work: string, version?: string) {
@@ -132,7 +229,13 @@ async function composition(session: WorkReadSession, work: string, version?: str
   if (!selected) throw missing();
   const header = await readCompositionHeader(session.deps.environment, selected).catch(structureError);
   assertContentsCompositionMapping(header, work, basis.card.mainVersion);
-  return { basis, header };
+  // Catalogue visibility does not grant access to an unpublished or withheld
+  // Structure. Only explicit preview authority may select its moving head.
+  const preview = await session.canPreviewWork(work);
+  if (header.profile === 'book-composition' && !preview && !basis.selectedLanguage) throw missing();
+  const revision = structureProfileFor(header.profile).workPublication && !preview
+    ? publishedCompositionRevision(header, basis.structuredPublication) : header.head;
+  return { basis, header, revision };
 }
 
 /** Profile compatibility must never replace the independent identity checks. */
@@ -151,13 +254,18 @@ const recordDivision = (record: Pick<OccurrenceRecord, 'role' | 'qualifier'>): D
 const position = (segment: string, key: string) => `${segment}\u0001${key}`;
 
 /** One selected root, with request-local immutable page custody and a local head fence. */
-async function neighbourhood(session: WorkReadSession, header: CompositionHeader) {
+async function neighbourhood(session: WorkReadSession, header: CompositionHeader, revision = header.head) {
   session.checkDeadline();
   session.observeDependency(`composition:${header.structure}`, header,
     () => readCompositionHeader(session.deps.environment, header.structure));
   const cache = new ReadingOrderIndex(session, structureObjects(session.deps.environment));
   const snapshot = await readCompositionSnapshot(session.deps.environment, {
-    structure: header.structure, header, objects: cache.objects });
+    structure: header.structure, header, revision, objects: cache.objects }).catch((cause: unknown) => {
+    if (cause instanceof CompositionUnavailable) {
+      throw new CompositionCorrupt('Selected composition revision is missing', { cause });
+    }
+    throw cause;
+  });
   if (snapshot.sourcePosition.dataEpoch !== session.position.dataEpoch) {
     throw new WorkReadMoved('Composition belongs to another data epoch');
   }
@@ -191,7 +299,7 @@ async function topGroups(session: WorkReadSession, header: CompositionHeader, se
     }
     try { checkOccurrenceRecord(record, snapshot.manifest.profile); }
     catch (error) {
-      if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message);
+      if (error instanceof InvalidStructureObject) throw new StructureObjectCorrupt(error.message, { cause: error });
       throw error;
     }
     const chapters = await tree.countBefore(snapshot.manifest.order, `${record.occurrence}\u0002`, snapshot.cost)
@@ -252,20 +360,20 @@ export async function readContents(session: WorkReadSession, work: string,
   options: { version?: string; language?: string; parent?: string }) {
   try {
     session.options.localBasis = true;
-    const { basis, header } = await composition(session, work, options.version);
+    const { basis, header, revision } = await composition(session, work, options.version);
     const profile = structureProfileFor(header.profile);
     const chapters = profile.roles.includes('chapter');
     const partTargets = !chapters ? compositionTargetBatchReader(session, profile) : null;
-    const snapshot = await neighbourhood(session, header);
+    const snapshot = await neighbourhood(session, header, revision);
     const cursorPosition = { ...session.position, dependencyToken: readDependencyToken([
-      basis.dependencyToken, header.head, header.generation, header.manifest]) };
+      basis.dependencyToken, revision, snapshot.manifest.generation]) };
     const language = options.language ? contentLanguage(options.language, null)
       : basis.selectedLanguage?.toLowerCase() ?? null;
     const parent = options.parent ?? header.structure;
     const binding = ['contents', work, header.component, parent, language, session.cursorIdentity,
       session.options.actingSubject ?? null];
     const cursor = decodeReadCursor(session.options.cursor, binding, cursorPosition);
-    if (cursor && cursor.order !== header.head) throw new WorkReadMoved('Composition changed');
+    if (cursor && cursor.order !== revision) throw new WorkReadMoved('Composition changed');
     const page = await readCompositionPage(session.deps.environment, {
       structure: header.structure, header, snapshot, parent, limit: session.options.limit ?? WORK_CONTENTS_COST.pageSize,
       ...(cursor ? { after: cursor.after } : {}), outline: true,
@@ -273,7 +381,7 @@ export async function readContents(session: WorkReadSession, work: string,
         ? partTargets([target]).then(readable => readable.has(target)) : canReadChapterTarget(session, target),
       ...(partTargets ? { canReadTargets: partTargets } : {}),
     });
-    if (page.revision !== header.head) throw new WorkReadMoved('Composition changed');
+    if (page.revision !== revision) throw new WorkReadMoved('Composition changed');
     const groups = chapters ? await topGroups(session, header, snapshot) : null;
     const group = parent === header.structure ? null : groups?.find(item => item.occurrence === parent);
     const numbered = new Map<string, number | null>();
@@ -311,17 +419,14 @@ export async function readContents(session: WorkReadSession, work: string,
           && (!!record.target || !profile.targetRoles.includes(record.role)) || selected
           ? 'available' as const : 'unavailable' as const };
     }));
-    const derived = await legacyChapterLabels(session, legacy);
-    for (const item of items) if (item.selectedRevision && missingTitle(item.label)) {
-      item.label = derived.get(item.selectedRevision) ?? item.label;
-    }
+    const derived = await legacyChapterLabels(session, work, legacy);
     // Work uses and their labels have already passed the composition disclosure
     // owner inside the bounded scan, including lookahead. Text disclosure belongs
     // only to chapter contents; applying it to parts fabricates unavailable Works.
     const textItems = chapters ? items.filter(item => item.role !== 'part') : [];
     const decisions = await session.disclosure(textItems.map(item => ({ owner: 'graph',
       resource: item.target ?? item.occurrence, component: 'name',
-      work, ...(item.role === 'group' ? { revision: header.head } : {}) })), 'read');
+      work, ...(item.role === 'group' ? { revision } : {}) })), 'read');
     const bodyDecisions = await session.disclosure(textItems.map(item => ({ owner: 'content',
       resource: item.target ?? item.occurrence, component: 'body',
       revision: item.selectedRevision, work })), 'read');
@@ -329,10 +434,14 @@ export async function readContents(session: WorkReadSession, work: string,
       && bodyDecisions[index] === 'visible').map(item => item.occurrence));
     const visibleItems = items.filter(item => !textItems.includes(item) || visibleText.has(item.occurrence));
     await fenceWorkBasis(session, basis);
+    await derived.fence();
+    for (const item of visibleItems) if (item.selectedRevision && missingTitle(item.label)) {
+      item.label = derived.labels.get(item.selectedRevision) ?? item.label;
+    }
     return { profile: 'work-contents-v1' as const, work, version: header.component,
-      composition: header.structure, compositionRevision: header.head, language,
+      composition: header.structure, compositionRevision: revision, language,
       ...pageResult(session, visibleItems, page.next
-        ? encodeReadCursor(binding, cursorPosition, page.next, header.head) : null) };
+        ? encodeReadCursor(binding, cursorPosition, page.next, revision) : null) };
   } catch (error) { structureError(error); }
 }
 
@@ -441,12 +550,14 @@ export async function readChapter(session: WorkReadSession, occurrence: string,
     const revisionId = selected.revision.slice(contentPrefix.length);
     const [exact] = await session.deps.content.readExactBatch([revisionId], async ids =>
       new Set(ids.filter(id => id === revisionId)))
-      .catch(() => { throw new WorkReadUnavailable('Content owner is unavailable'); });
-    if (exact?.status === 'corrupt' || exact?.status === 'unavailable') {
-      throw new WorkReadUnavailable('Chapter bytes are unavailable');
-    }
+      .catch((cause: unknown) => { throw new WorkReadUnavailable('Content owner is unavailable', { cause }); });
+    if (exact?.status === 'corrupt') throw new WorkReadUnavailable('Chapter integrity mismatch');
+    if (exact?.status === 'unavailable') throw new WorkReadUnavailable('Chapter dependency unavailable');
+    if (exact?.status === 'missing') throw new WorkReadUnavailable('Published chapter object missing');
+    if (!exact) throw new WorkReadUnavailable('Content owner result is incomplete');
     if (exact?.status !== 'available') throw missing();
-    if (exact.reference.resourceId !== record.target || exact.reference.variantId !== selected.variant
+    if (exact.revisionId !== revisionId || exact.reference.revisionId !== revisionId
+      || exact.reference.resourceId !== record.target || exact.reference.variantId !== selected.variant
       || exact.reference.language.kind !== 'tag'
       || exact.reference.language.tag.toLowerCase() !== language) {
       throw new WorkReadUnavailable('Content and publication disagree');
@@ -455,6 +566,7 @@ export async function readChapter(session: WorkReadSession, occurrence: string,
       || Buffer.byteLength(exact.serializedJson) > WORK_CONTENTS_COST.bodyBytes) {
       throw new WorkReadLimit('Chapter body exceeds its byte budget');
     }
+    const delivery = await chapterTextDelivery(session, header.work, [exact]);
     const previous = await neighbor(session, header, snapshot, record, 'previous', language);
     const next = await neighbor(session, header, snapshot, record, 'next', language);
     // "Volume 2 · Chapter 3": volumes count among the Book's volumes, chapters through the Book.
@@ -464,6 +576,7 @@ export async function readChapter(session: WorkReadSession, occurrence: string,
     const again = await selectedContent(session, record.target, language,
       record.selection.mode === 'fixed-revision' ? record.selection.revision : null);
     if (!await canReadChapterTarget(session, record.target) || again?.revision !== selected.revision) throw missing();
+    if (!(await delivery()).has(revisionId)) throw missing();
     const savedLabel = localizedLabel(record.labels, language);
     const heading = missingTitle(savedLabel) ? firstChapterHeading(exact.body) : null;
     return { profile: 'work-chapter-v1' as const, work: header.work, version: header.component,
