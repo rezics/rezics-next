@@ -279,7 +279,8 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, lead,
       {(client ? ReadSlot({ workRef, id, work, experience, locale, messages, client }) : <ReadSlot workRef={workRef} id={id} work={work} experience={experience} locale={locale} messages={messages} />)}
     </Suspense>}
     status={showsEditionStatus(experience) ? <Suspense fallback={null}>
-      {(client ? Status({ id, locale, messages, client }) : <Status id={id} locale={locale} messages={messages} />)}</Suspense> : undefined}
+      {(client ? Status({ id, work: experience.kind === 'book' ? work : undefined, locale, messages, client })
+        : <Status id={id} work={experience.kind === 'book' ? work : undefined} locale={locale} messages={messages} />)}</Suspense> : undefined}
     shortcuts={<>
       <ProvisionalNotice verification={work.verification} provenance={work.fieldProvenance} locale={locale} />
       {plan.includes('wiki') ? <Suspense fallback={null}>

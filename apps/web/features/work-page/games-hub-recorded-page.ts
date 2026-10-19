@@ -22,6 +22,23 @@ export function readSuppliedContents(client: Host, id: string, query: ContentsQu
   query.cursor);
 }
 
+/** A Book's own resume is independent of Home's eligibility, ranking and page size. */
+export async function readSuppliedBookStart(client: Host, id: string, work: string, textLanguage: () => Promise<string | null>) {
+  if (idOf(work) !== id) return { kind: 'contents' as const };
+  const { main, actingSubject } = client;
+  if (!actingSubject) return readSuppliedStart(client, id, work, textLanguage);
+  const next = await settle(() => main.v1.me.continue({ work: id }).get({ query: { actingSubject } }));
+  if (!next.ok || next.data.work !== work) return { kind: 'contents' as const };
+  if (next.data.nextUnread) {
+    return { kind: next.data.lastPosition ? 'continue' as const : 'start' as const,
+      href: next.data.nextUnread.href, chapter: next.data.nextUnread.title };
+  }
+  // Saved progress without a readable successor does not authorize restarting at chapter one.
+  if (next.data.lastPosition) return { kind: 'contents' as const };
+  // Main found no chapter resume; the Work may still have its own standalone text.
+  return await textLanguage() ? { kind: 'start' as const, href: textHref(id), chapter: null } : null;
+}
+
 /**
  * Where Read leads, with the caller's client. A selected language is the one text;
  * the caller resolves an unselected language (the server reads versions, a story does not invent that read).

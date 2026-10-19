@@ -81,11 +81,13 @@ export function NextActionView({ action, workRef, locale, messages }: {
  * Where the reader stands, in Main's words: the edition they chose and their progress through the Work. Quiet
  * when Main has nothing to say, which is also the signed-out answer.
  */
-export function IdentityStatus({ progress, preference, editionName, locale, messages }: {
+export function IdentityStatus({ progress, preference, editionName, start, locale, messages }: {
   progress: { ok: true; data: ProgressSummary } | { ok: false } | null;
   preference: Loaded<EditionPreference | null> | null;
   /** The name of the chosen realization or release, when Main could name it. */
-  editionName: string | null; locale: UiLocale; messages: WorkPageMessages;
+  editionName: string | null;
+  /** Chapter progress is separate from the whole-Work mark; an unknown resume must stay unknown. */
+  start?: ReadStart; locale: UiLocale; messages: WorkPageMessages;
 }) {
   const t = materializeData(messages, { locale });
   const tracking = trackingCopy(locale);
@@ -101,7 +103,8 @@ export function IdentityStatus({ progress, preference, editionName, locale, mess
         lines.push(tracking.countsLine({ count: summary.counts.required,
           completedRequired: String(summary.counts.completedRequired) }));
       }
-    } else if (summary.status) {
+    } else if (summary.status && !(summary.status === 'not-started'
+      && (start?.kind === 'continue' || start?.kind === 'contents'))) {
       lines.push(summary.status === 'finished' ? tracking.stateFinished
         : summary.status === 'reading' ? tracking.stateActive
           : summary.status === 'dropped' ? tracking.workDropped : tracking.notStarted);
