@@ -72,13 +72,14 @@ export const SourcesAtPageEnd: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { level: 1, name: 'Example Studio' })).toBeVisible();
-    const sources = canvas.getByRole('region', { name: 'Sources, licences and evidence' });
+    const sources = canvas.getByRole('contentinfo', { name: 'Sources and licenses' });
     await expect(within(sources).getByRole('link', { name: 'Evidence 1' })).toHaveAttribute('href',
       'https://example.test/organizations/studio-42/revisions/3');
     await expect(sources.compareDocumentPosition(canvas.getByRole('heading', { name: 'Discussion' })) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     await expect(canvasElement.querySelectorAll('[data-rights-mark]')).toHaveLength(1);
     await expect(canvas.getByRole('link', { name: 'Next page' })).toHaveAttribute('href',
       `/en${hrefFor({ kind: 'continue', section: 'statements', cursor: sourcePage.nextCursor })}`);
+    sources.scrollIntoView({ block: 'start' });
   },
 };
 
@@ -118,7 +119,7 @@ export const FactsUnavailable: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByText('Example series')).toBeVisible();
-    await expect(canvas.queryByRole('region', { name: 'Sources, licences and evidence' })).toBeNull();
+    await expect(canvas.queryByRole('contentinfo', { name: 'Sources and licenses' })).toBeNull();
   },
 };
 
@@ -126,7 +127,7 @@ export const ClaimCitations: Story = {
   args: { claims: 'recorded' },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    const sources = canvas.getByRole('region', { name: 'Sources, licences and evidence' });
+    const sources = canvas.getByRole('contentinfo', { name: 'Sources and licenses' });
     const footer = within(sources);
     await expect(footer.getByText('Example Studio', { exact: true })).toBeVisible();
     const first = footer.getByText('24', { exact: true }).closest('li')!;
@@ -153,7 +154,7 @@ export const ClaimCitationsPhone: Story = { ...ClaimCitations, globals: { viewpo
 export const WithheldQuotation: Story = {
   args: { claims: 'withheld' },
   async play({ canvasElement }) {
-    const sources = within(canvasElement).getByRole('region', { name: 'Sources, licences and evidence' });
+    const sources = within(canvasElement).getByRole('contentinfo', { name: 'Sources and licenses' });
     await expect(within(sources).getByText('The quoted passage is not available. Its source is still recorded.')).toBeVisible();
     await expect(sources.querySelector('blockquote')).toBeNull();
     await expect(within(sources).queryByText('The studio employed 24 people in 1997.')).toBeNull();

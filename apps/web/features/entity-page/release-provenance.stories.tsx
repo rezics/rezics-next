@@ -43,7 +43,7 @@ type Story = StoryObj<typeof meta>;
 export const NativeEvidence: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    const sources = canvas.getByRole('region', { name: 'Sources, licences and evidence' });
+    const sources = canvas.getByRole('contentinfo', { name: 'Sources and licenses' });
     const footer = within(sources);
     await expect(footer.getByText(`${copyOf('en').releaseRevision}: ${release.revision}`)).toBeVisible();
     await expect(footer.getByText(`${copyOf('en').realizationRevision}: ${selected.revision}`)).toBeVisible();
@@ -52,13 +52,14 @@ export const NativeEvidence: Story = {
     await expect(canvasElement.querySelectorAll('[data-realization-record]')).toHaveLength(1);
     const coverage = canvasElement.querySelector('[data-coverage]')!;
     await expect(sources.compareDocumentPosition(coverage) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    sources.scrollIntoView({ block: 'start' });
   },
 };
 
 export const NullEvidence: Story = {
   args: { evidence: 'absent' },
   async play({ canvasElement }) {
-    const footer = within(within(canvasElement).getByRole('region', { name: 'Sources, licences and evidence' }));
+    const footer = within(within(canvasElement).getByRole('contentinfo', { name: 'Sources and licenses' }));
     await expect(footer.getByText(`${copyOf('en').realizationRevision}: ${selected.revision}`)).toBeVisible();
     await expect(footer.getByText(copyOf('en').noEvidence)).toBeVisible();
     await expect(footer.queryByText(evidenceId)).toBeNull();
@@ -68,7 +69,7 @@ export const NullEvidence: Story = {
 export const ExternalEvidence: Story = {
   args: { evidence: 'external' },
   async play({ canvasElement }) {
-    const footer = within(within(canvasElement).getByRole('region', { name: 'Sources, licences and evidence' }));
+    const footer = within(within(canvasElement).getByRole('contentinfo', { name: 'Sources and licenses' }));
     await expect(footer.getByRole('link', { name: 'https://example.test/source/revision/1' })).toHaveAttribute('href',
       'https://example.test/source/revision/1');
   },
@@ -111,7 +112,7 @@ export const WithheldCompoundLocator: Story = {
     hrefFor={standaloneHrefFor({}, resourceHref('/e/', selected.work))} /></div>,
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    const sources = canvas.getByRole('region', { name: 'Sources, licences and evidence' });
+    const sources = canvas.getByRole('contentinfo', { name: 'Sources and licenses' });
     await expect(within(sources).getByText(safeCfi, { exact: true })).toBeVisible();
     await expect(within(sources).getByText(copyOf('en').quotationWithheld)).toBeVisible();
     await expect(sources.textContent).not.toContain('WITHHELD');

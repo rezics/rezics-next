@@ -8,7 +8,7 @@ export default {
   noFurtherDetails: "ほかの詳細は掲載されていません。",
   showMore: "もっと見る",
   showLess: "折りたたむ",
-  sources: "出典・ライセンス・根拠",
+  sources: "出典とライセンス",
   sourceRecord: "出典の記録",
   sourceIdentity: "出典の識別情報",
   evidence: "根拠",

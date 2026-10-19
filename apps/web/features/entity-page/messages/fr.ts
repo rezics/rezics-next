@@ -8,7 +8,7 @@ export default {
   noFurtherDetails: "Aucun autre détail n’est indiqué.",
   showMore: "Afficher plus",
   showLess: "Réduire",
-  sources: "Sources, licences et preuves",
+  sources: "Sources et licences",
   sourceRecord: "Fiche source",
   sourceIdentity: "Identifiant de la source",
   evidence: "Preuve",

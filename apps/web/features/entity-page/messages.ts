@@ -18,7 +18,7 @@ const en = {
   noFurtherDetails: "No further details are listed.",
   showMore: "Show more",
   showLess: "Show less",
-  sources: "Sources, licences and evidence",
+  sources: "Sources and licenses",
   sourceRecord: "Source record",
   sourceIdentity: "Source identity",
   evidence: "Evidence",

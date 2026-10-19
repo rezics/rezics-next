@@ -8,7 +8,7 @@ export default {
   noFurtherDetails: "등록된 추가 정보가 없습니다.",
   showMore: "더 보기",
   showLess: "접기",
-  sources: "출처, 라이선스 및 근거",
+  sources: "출처 및 라이선스",
   sourceRecord: "출처 기록",
   sourceIdentity: "출처 식별 정보",
   evidence: "근거",

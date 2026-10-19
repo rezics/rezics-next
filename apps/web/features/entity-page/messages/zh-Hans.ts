@@ -8,7 +8,7 @@ export default {
   noFurtherDetails: "尚未列出其他详情。",
   showMore: "展开",
   showLess: "收起",
-  sources: "来源、许可与证据",
+  sources: "来源与许可",
   sourceRecord: "来源记录",
   sourceIdentity: "来源身份",
   evidence: "证据",

@@ -192,7 +192,7 @@ export const ReleasePage: Story = {
     await expect(canvas.getAllByText('Japanese')[0]).toBeVisible();
     // The release page lists what it covers once.
     await expect(canvas.queryByText('Covers 3 Works')).toBeNull();
-    const sources = canvas.getByRole('region', { name: 'Sources, licences and evidence' });
+    const sources = canvas.getByRole('contentinfo', { name: 'Sources and licenses' });
     await expect(sources.compareDocumentPosition(canvas.getByRole('region', { name: 'What it covers' })) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     await expect(canvasElement.querySelectorAll('[data-subject-actions]')).toHaveLength(1);
     const anchors = [...canvasElement.querySelectorAll('[id^="coverage-"]')].map(item => item.id);

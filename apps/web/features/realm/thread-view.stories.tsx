@@ -463,7 +463,7 @@ export const CurrentCoverCredit: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const initial = await canvas.findByText('© Current holder');
-    const sources = canvas.getByRole('region', { name: 'Sources, licences and evidence' });
+    const sources = canvas.getByRole('contentinfo', { name: 'Sources and licenses' });
     await expect(sources).toContainElement(initial);
     await expect(canvasElement.querySelectorAll('[data-cover-credit]')).toHaveLength(1);
     const comments = canvas.getByRole('heading', { name: 'Comments' });
@@ -473,9 +473,10 @@ export const CurrentCoverCredit: Story = {
     await expect(await canvas.findByText('© Corrected holder')).toBeVisible();
     await waitFor(() => expect(canvas.queryByText('© Current holder')).toBeNull());
     await expect(canvasElement.querySelectorAll('[data-cover-credit]')).toHaveLength(1);
-    const refreshedSources = canvas.getByRole('region', { name: 'Sources, licences and evidence' });
+    const refreshedSources = canvas.getByRole('contentinfo', { name: 'Sources and licenses' });
     await expect(refreshedSources).toContainElement(canvas.getByText('© Corrected holder'));
     await expect(within(refreshedSources).getByRole('link', { name: 'Current archive' })).toHaveAttribute('href', 'https://example.test/cover/corrected');
+    refreshedSources.scrollIntoView({ block: 'start' });
   },
 };
 

@@ -8,7 +8,7 @@ export default {
   noFurtherDetails: "Weitere Angaben sind nicht aufgeführt.",
   showMore: "Mehr anzeigen",
   showLess: "Weniger anzeigen",
-  sources: "Quellen, Lizenzen und Belege",
+  sources: "Quellen und Lizenzen",
   sourceRecord: "Quelldatensatz",
   sourceIdentity: "Quellenkennung",
   evidence: "Beleg",

@@ -81,6 +81,8 @@ describe('non-Work detail sources', () => {
     expect(facts).not.toContain('example · organization · studio-42');
     expect(facts).not.toContain('data-rights-mark');
     expect(html.indexOf('data-subject-sources')).toBeGreaterThan(html.indexOf('Discussion content'));
+    expect(html.match(/<footer role="contentinfo" aria-labelledby="sources"/g)).toHaveLength(1);
+    expect(html).toMatch(/<h2\b[^>]*\bid="sources"[^>]*>Sources and licenses<\/h2>/);
     expect(html).toContain('example · organization · studio-42');
     expect(html).toContain('href="https://example.test/organizations/studio-42/revisions/3"');
     expect(html).toContain('CC BY-SA 3.0');

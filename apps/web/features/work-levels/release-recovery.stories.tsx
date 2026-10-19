@@ -67,6 +67,6 @@ export const NamesRecoverInPlace: Story = {
     await expect(canvas.getByRole('button', { name: 'Retry' })).toHaveFocus();
     await expect(canvas.getByRole('status')).toHaveTextContent(copyOf('en').namesRestored);
     await expect(canvas.queryByRole('alert')).toBeNull();
-    await expect(canvas.getByRole('heading', { name: 'Sources, licences and evidence' })).toBeVisible();
+    await expect(canvas.getByRole('heading', { name: 'Sources and licenses' })).toBeVisible();
   },
 };
