@@ -94,8 +94,9 @@ export async function prepareLaunchBookReading(input: {
         ['content:publish', 'content.publish'], ['content:search-eligibility', 'content.search-eligibility']] as const)
         await authorize(`${prefix}:${work}`, action);
     } });
-  const header = await api.read(`/v1/works/${short(book.work)}?language=en`, signal);
-  const contents = await api.read(`/v1/works/${short(book.work)}/contents?language=en&limit=20`, signal);
+  const reader = `actingSubject=${encodeURIComponent(actor)}`;
+  const header = await api.read(`/v1/works/${short(book.work)}?language=en&${reader}`, signal);
+  const contents = await api.read(`/v1/works/${short(book.work)}/contents?language=en&limit=20&${reader}`, signal);
   return { description: { value: description, sourceValue: sourceDescription,
     transformation: 'collapse-whitespace', file: descriptionFile, sha256: descriptionDigest }, author,
     mainText: { introduction, draft, publication, selection }, source, fixture: { file: entry.seed, sha256: entry.sha256 },

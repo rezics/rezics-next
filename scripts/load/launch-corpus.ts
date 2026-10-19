@@ -772,7 +772,16 @@ async function buildRecipesApiBackup(withBook = false) {
       }, () => authorize('rights:assess', 'rights.assess'), signal, true);
       const { prepareLaunchBookReading } = await import('./launch-book-reading.ts');
       const reading = await prepareLaunchBookReading({ api, actor, token: '', book, authorize, signal });
-      writeFileSync(join(evidence, 'book.json'), JSON.stringify({ ...book, ...reading }, null, 2) + '\n', { mode: 0o600 });
+      const anonymous: Record<string, unknown> = {};
+      for (const [name, path] of Object.entries({ header: `/v1/works/${short(book.work)}?language=en`,
+        contents: `/v1/works/${short(book.work)}/contents?language=en&limit=20`,
+        releases: `/v1/works/${short(book.work)}/releases?limit=20` })) {
+        signal.throwIfAborted();
+        const response = await people.visitor.main('GET', path), raw = await response.text();
+        if (response.status !== 200) throw new Error(`Prepared public Book ${name} returned HTTP ${response.status}: ${raw}`);
+        anonymous[name] = JSON.parse(raw);
+      }
+      writeFileSync(join(evidence, 'book.json'), JSON.stringify({ ...book, ...reading, anonymous }, null, 2) + '\n', { mode: 0o600 });
     }
     corpus = await prepareLaunchRecipesCorpus({ api, actor, backups: driver,
       directory, preparationStartedAt, authorize,

@@ -14,7 +14,10 @@ function fixture(failPublication = false) {
   const grants = new Set<string>();
   let chapter = 0;
   const api: CorpusApi = {
-    async read<T>() { return { revision: 'https://rezics.com/id/44444444-4444-4444-a444-444444444444' } as T; },
+    async read<T>(path: `/v1/${string}`) {
+      expect(new URL(path, 'http://main.local').searchParams.get('actingSubject')).toBe(actor);
+      return { revision: 'https://rezics.com/id/44444444-4444-4444-a444-444444444444' } as T;
+    },
     async command<T>(key, command) {
       const body = command.body as Record<string, unknown>;
       commands.push({ key, path: command.path, body });
