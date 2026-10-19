@@ -57,8 +57,9 @@ async function prepare(): Promise<Source> {
     profile: 'global-rating-standing-context-v1', question: 'Overall quality?', scale: { min: 1, max: 10, step: 1 }, ...own(people.owner) }), 201);
   const communities: Source['communities'] = [];
   for (let n = 0; n < 10; n++) {
-    // Each real Account stays within the native three-Spaces-per-month quota.
-    const creator = n < 3 ? people.owner : n < 6 ? people.stranger : n < 9 ? privatePeople.stranger : privatePeople.owner;
+    // Persona owners already created a Realm Space and a Zone Space (quota: three/month).
+    const creator = n < 2 ? people.owner : n < 5 ? people.stranger : n < 8 ? privatePeople.stranger : n === 8 ? privatePeople.owner : people.member;
+    evidence.setup = { stage: `community-${n}` };
     const community = n === 0 ? { space: people.space, realm: people.realm } : await json<{ space: string; realm: string }>(
       creator.main('POST', '/v1/spaces', { profile: 'space-realm-v2', name: `Context community ${n}`,
         handle: `context-${randomUUID().slice(0, 12)}`, language: 'en', capabilities: ['realm'], ...own(creator),
@@ -77,12 +78,14 @@ async function prepare(): Promise<Source> {
     communities.push({ ...community, contexts: contexts.sort((a, b) => a.context.localeCompare(b.context)) });
   }
   // One real Account rates two overlapping populations; the tenth has no votes.
+  evidence.setup = { stage: 'native-observations' };
   for (const community of communities.slice(0, 2)) {
     const context = community.contexts[0]!;
     await grant(people.owner, `rating:observe:${context.context}`, 'rating.observation.set');
     await json(people.owner.main('POST', '/v1/rating-observations', { profile: 'realm-standing-rating-observation-v1',
-      context: context.context, ...work, value: context.scale.max, expectedRevisionHead: null, ...own(people.owner) }), 201);
+      context: context.context, work: work.work, mainVersion: work.mainVersion, value: context.scale.max, expectedRevisionHead: null, ...own(people.owner) }), 201);
   }
+  evidence.setup = { stage: 'follows-and-revocation' };
   for (const [person, count] of [[people.owner, 1], [people.moderator, 3], [people.member, 10]] as const)
     await json(person.main('POST', '/v1/me/follows/batch', { profile: 'follow-batch-v1', ...own(person),
       targets: communities.slice(0, count).map(item => ({ target: item.space })) }));
@@ -126,7 +129,7 @@ beforeAll(async () => {
     if (restoreMs >= 600_000) throw new Error(`Restore/startup/migrations/readiness/smoke exceeded 600s: ${restoreMs}ms`);
     evidence.setup = { reached: true, source: directory, restoreMs, totalMs: Date.now() - started, preparation: copy.preparation };
   } catch (error) {
-    evidence.setup = { reached: false, assertionReached: false, elapsedMs: Date.now() - started, failure: String(error) };
+    evidence.setup = { ...evidence.setup, reached: false, assertionReached: false, elapsedMs: Date.now() - started, failure: String(error) };
     throw error;
   }
 }, 600_000);
