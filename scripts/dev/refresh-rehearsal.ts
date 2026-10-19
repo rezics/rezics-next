@@ -10,6 +10,10 @@ export interface RehearsalDatabase {
 // concurrent maintenance memory while avoiding serial index reconstruction.
 const snapshotSeconds = 90;
 const restoreJobs = 2;
+// The owner has thousands of schema objects. Committing every restored SQL
+// command spends the copy wall waiting on WAL flushes. PostgreSQL 18 batches
+// objects without one unbounded transaction or changing shared durability.
+const restoreTransactionObjects = 128;
 
 /** Only classifications cross the diagnostic boundary. PostgreSQL stderr can
  * contain whole COPY rows, SQL, identifiers and credentials, even on success. */
@@ -60,7 +64,7 @@ async function copyDatabase(container: string, database: string, scratch: string
       [ "$status" = 0 ] || exit "$status"
       echo 'REHEARSAL restore start' >&2
       PGAPPNAME='${scratch}_restore' pg_restore --host=/var/run/postgresql --username=postgres --dbname="$2" \
-        --exit-on-error --verbose --jobs=${restoreJobs} "$4"
+        --exit-on-error --verbose --jobs=${restoreJobs} --transaction-size=${restoreTransactionObjects} "$4"
       status=$?; echo "REHEARSAL restore exit $status" >&2; exit "$status"
     `, '--', database, scratch, user, archive], { stdio: ['ignore', 'ignore', 'pipe'] });
   let last = 'copy: start';
@@ -97,12 +101,13 @@ async function copyDatabase(container: string, database: string, scratch: string
     const result = spawnSync('docker', dockerArgs(container, ['psql', '-XAt',
       '--host=/var/run/postgresql', '--username=postgres', '--dbname=postgres', '-c',
       `SELECT CASE WHEN application_name='${scratch}_dump' THEN 'dump' ELSE 'restore' END,
-        CASE wait_event_type WHEN 'Lock' THEN 'lock' WHEN 'IO' THEN 'io'
-          WHEN 'IPC' THEN 'ipc' WHEN 'Client' THEN 'client' ELSE 'running' END, count(*)
+        CASE WHEN wait_event IN ('WALSync','WALWrite','DataFileRead','DataFileWrite','DataFileExtend','DataFileSync')
+          THEN lower(wait_event) ELSE CASE wait_event_type WHEN 'Lock' THEN 'lock' WHEN 'IO' THEN 'io'
+          WHEN 'IPC' THEN 'ipc' WHEN 'Client' THEN 'client' ELSE 'running' END END, count(*)
         FROM pg_stat_activity WHERE application_name IN ('${scratch}_dump','${scratch}_restore')
         GROUP BY 1,2`], 2), { encoding: 'utf8', timeout: 3_000, maxBuffer: 4096 });
     for (const line of (result.stdout ?? '').trim().split('\n')) {
-      if (/^(dump|restore)\|(lock|io|ipc|client|running)\|[0-9]{1,3}$/.test(line))
+      if (/^(dump|restore)\|(lock|io|ipc|client|running|walsync|walwrite|datafileread|datafilewrite|datafileextend|datafilesync)\|[0-9]{1,3}$/.test(line))
         console.log(`Rehearsal copy +${Date.now() - started}ms wait=${line}`);
     }
   }, 5_000);
