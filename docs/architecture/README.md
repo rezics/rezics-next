@@ -15,6 +15,7 @@
 - [Target architecture](target-architecture.md): cross-domain decisions and links to their owning contracts.
 - [Shared capability exceptions](shared-capabilities.md): shared owners that still recognise a vertical or source, their repairs and required proof.
 - [Audit module design review](audit-module-design-review-20261019.md): review draft of Source, conversion, native capability and consuming-module boundaries, with current implementation evidence and alternatives.
+- [Independent source citation research](source-citations-review-20261019.md): manager consolidation of academic, Wikipedia/Cite and repository research under the standalone conversion-library boundary.
 
 ## Domain contracts
 

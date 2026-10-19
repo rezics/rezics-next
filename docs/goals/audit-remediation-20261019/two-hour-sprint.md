@@ -56,3 +56,18 @@ Each manager writes a short local progress receipt every twenty minutes: finding
 IDs actually closed with code/proof pins, current executable blocker, and next
 action. At the deadline report exact completed and remaining findings. A deadline
 never supplies evidence of completion. Program actively follows both managers.
+
+## Deterministic repair delivery
+
+The maintainer explicitly rejects research as an explanation for the delay of
+ordinary fixes. Reuse their existing outcomes and owners; batch routine brief
+and documentation changes coherently rather than placing a fresh documentation
+installation/gate on every handoff. Prioritize ready reviewed product batches.
+
+A frontend-only defect may use a pinned repaired frontend with existing genuine
+data and an explicitly recorded compatible backend pin when that backend behavior
+is unchanged. A complete new catalogue corpus, historical restore or full backend
+rebuild is not a prerequisite for a control, label, draft interaction or layout
+repair. Backend changes retain their affected runtime proof. Preserve original
+assertions and one codex-1/xhigh review; do not add review-report chains or repeat
+unchanged whole tiers. Extra domain completeness remains outside these closures.
