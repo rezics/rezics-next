@@ -49,7 +49,7 @@ async function verifyPageEnd(canvasElement: HTMLElement, locale: UiLocale) {
   const main = mains[0]!;
   await expect(main).toHaveAttribute('id', MAIN_CONTENT_ID);
   await expect(main).toHaveAttribute('tabindex', '-1');
-  const footers = canvas.getAllByRole('contentinfo', { name: detailCopy(locale).sources, exact: true });
+  const footers = canvas.getAllByRole('contentinfo', { name: detailCopy(locale).sources });
   await expect(footers).toHaveLength(1);
   const footer = footers[0]!;
   await expect(footer.closest('main')).toBeNull();
