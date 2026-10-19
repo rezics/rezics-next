@@ -32,6 +32,14 @@ const meta = {
     </PageContainer>,
   },
   globals: { viewport: { value: 'desktop1440' } },
+  beforeEach() {
+    // Storybook's preview template targets the parent by default. Keep native skip-link
+    // navigation in this document, as in the app, without replacing its browser behavior.
+    const base = document.querySelector<HTMLBaseElement>('base[target="_parent"]');
+    if (!base) return;
+    base.target = '_self';
+    return () => { base.target = '_parent'; };
+  },
 } satisfies Meta<typeof AppShell>;
 export default meta;
 type Story = StoryObj<typeof meta>;
