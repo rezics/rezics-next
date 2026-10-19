@@ -1,4 +1,860 @@
 {
+  "d3ReaderAuthorityCompiledVerdict": {
+    "result": "partial-original-d3-001-compiled-Web-reaches-Accounts; Accounts-hydration-setup-blocked",
+    "summary": "Supported local compiled Worker build passed at exact frontend6cf460b2. Owned Web served compiled chunks from dist/client, executed real auth/start redirect, and reached actual Accounts3004 /sign-in. Accounts failed42 actual module requests net::ERR_NETWORK_CHANGED/no HTTP, so its hydration marker never appeared. Frozen Feed callback and every original Feed outcome remain unexecuted. Screenshot shows the real sign-in form, not successful hydration.",
+    "independentCaptureLimitation": "Four Web HTTP200/requestfinished responses lost Playwright body access after actual cross-origin navigation.116 other Web bodies exactly match compiled outputs. The full module-completeness gate did not pass; no assertion or capture requirement was weakened.",
+    "classification": "setup/premise failure; no reproduced Feed reader-authority product counterexample",
+    "classClosed": false,
+    "reportLanding": "Report-only ready; product changes none. Accepted preview148/RSC22/focus/source/adapter/story/static and genuine anonymous evidence remain unchanged.",
+    "next": "Root routes exact Accounts request chain plus distinct body-capture limitation to existing startup/runtime owner. No repeated browser attempt, Accounts switch/restart, backend/account fallback or source/config mutation. Genuine nonnull/ineligible premise remains separately pending existing G2775 lawful invitation plan."
+  },
+  "d3ReaderAuthorityCompiledContinuation": {
+    "recordedAt": "2026-10-19T15:17:38.942123+00:00",
+    "authority": "Same original Feed outcome/claims and sole G-2836 report claim. Manager authorized ignored build adapter and ONLY server-launch argv/cwd replacement; original acceptance/callbacks, browser bounds, warmup/hydration and body-completeness requirements unchanged. Local compiled Worker execution; no production deployment or QA profile override.",
+    "reviewer": {
+      "worker": "G-2836",
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independent": true,
+      "candidateAuthor": false,
+      "fallback": false,
+      "nestedAgents": false
+    },
+    "preservedHistory": {
+      "previousReportCommit": "e7966740ca0decc73be1a309dec19702217b387a",
+      "allPreviousFieldsUnchangedByValue": true,
+      "previousReportSnapshot": {
+        "path": ".temp/feed-authority-evidence/report-before-compiled.json",
+        "sha256": "cb1d057e554a3f5483e1522ff25b60d270bf4d5af3c873d692e7a82dac605c39",
+        "bytes": 360782
+      },
+      "archive": ".temp/feed-authority-evidence/setup-module-readiness-dev/",
+      "archiveMeaning": "All prior root-level evidence files and exact36220544 driver copied before the compiled run renewed observations/server log/PNG. Previous3f6e1029 module-readiness failure141complete/15transport failures and preceding failures retained. Historical artifact references whose root-level name was renewed resolve to identical files/hashes in this archive.",
+      "completedProof": "Preview148, frozenRSC22, focus, unchanged adapter/story/static and actual anonymous callbacks retained; none rerun."
+    },
+    "sourceAndCompiledGeneration": {
+      "frontend": {
+        "head": "6cf460b284cca8677a9b696f8f842fea9fac5321",
+        "tree": "b98454fc990705e15d704031471dabab13e2ba29",
+        "statusBefore": "",
+        "statusAfter": ""
+      },
+      "frontendDirectory": ".temp/feed-authority-candidate",
+      "backendSource": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "backendOrigin": "http://127.0.0.1:3001",
+      "observerOrigin": "http://127.0.0.1:62842",
+      "accountOrigin": "http://127.0.0.1:3004",
+      "accountService": "http://127.0.0.1:3002",
+      "backendQualification": "Explicitly compatible retained Main754 Web-consumer runtime and real existing data. This run reached only18 pre-auth MainGET200; no Feed request or new signed-in runtime success. No current-main native identity, Realm-disclosure, rating, privacy or class claim. Prior exact native differences remain.",
+      "materialBlobComparison": {
+        "observedMain": "eade69c812b1d0c797726f6653e8d5d0a44be94e",
+        "all38Equal": true,
+        "comparisonArtifact": {
+          "path": ".temp/feed-authority-evidence/compiled-launcher-change.json",
+          "sha256": "e044ec2ce994277b76322176ceae967fd8cd41a1402bbc766c27430898f496f3",
+          "bytes": 2915
+        },
+        "originalHashes": ".temp/feed-authority-evidence/resume-input/source-manifest.json"
+      },
+      "generation": "g-2836-compiled-2026-10-19T15:11:55.063Z",
+      "startedAt": "2026-10-19T15:11:55.063Z",
+      "finishedAt": "2026-10-19T15:13:52.287Z",
+      "buildSeconds": 117.224,
+      "buildCommand": [
+        "task",
+        "--dir",
+        "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate",
+        "web:build"
+      ],
+      "serveCommand": "  server = spawn(resolve(snapshot, 'node_modules/.bin/wrangler'), ['dev', '--config', 'dist/server/wrangler.json', '--ip', '127.0.0.1', '--port', '62841', '--inspector-port', '0'], { cwd: resolve(snapshot, 'apps/web'), detached: true,\n    stdio: ['ignore', out, out], env: { ...process.env, MAIN_ORIGIN: observerOrigin, ACCOUNT_ORIGIN: 'http://127.0.0.1:3004',\n      MAIN_RESOURCE: publicFixture.resource, WEB_OAUTH_CLIENT_ID: publicFixture.clientId, WRANGLER_SEND_METRICS: 'false' } });",
+      "supportedServeHelper": {
+        "path": "scripts/dev/preview.ts",
+        "sha256": "1b9a2e31626dc30f375eafef0e8fc61e1e7ee4a5e812ece7ce6c13daece37f74",
+        "bytes": 1997
+      },
+      "viteConfig": {
+        "path": "apps/web/vite.config.ts",
+        "sha256": "f3e735deaf8bc457f322eae2ec351394f33588604901e80b8a95b59a2020200e",
+        "bytes": 5032
+      },
+      "taskfile": {
+        "path": "Taskfile.yml",
+        "sha256": "9ebb829d62cd74ab42b1fa2bd4ad2786cd9ef8d16e61ef4f3637d9a40693516f",
+        "bytes": 25724
+      },
+      "buildAdapter": {
+        "path": ".temp/feed-authority-compiled-build.ts",
+        "sha256": "e0301161f40b6ebf94978802070629af2f980ef9e203bf4abc42f1bd25471a99",
+        "bytes": 5576
+      },
+      "driver": {
+        "path": ".temp/feed-authority-live.test.ts",
+        "sha256": "9db43dcdf55f4bb4167791bb5c4b2a0e9538e0cc735b89e02f7999e07e0d0795",
+        "bytes": 25572
+      },
+      "installedDependencyStamp": {
+        "path": "node_modules/.rezics-dependencies",
+        "sha256": "4e85518bfd315f8d440f0d5b617c8e51d918b9e7eac014b9079f7adb9d50e4c2",
+        "bytes": 64
+      },
+      "installedVinextBrowserEntry": {
+        "path": "node_modules/vinext/dist/server/app-browser-entry.js",
+        "sha256": "496abcdede37434faa54443e4bd90d6ca8aef076e371fefe7f19cab701a14998",
+        "bytes": 78597
+      },
+      "dependencyInputsUnchanged": true,
+      "dependencyInputsAndHashes": ".temp/feed-authority-evidence/compiled-build.json#dependencyInputs",
+      "installOrUpgrade": false,
+      "compiledOutputs": {
+        "manifest": {
+          "path": ".temp/feed-authority-evidence/compiled-output-manifest.json",
+          "sha256": "c3dc87a8b9342c0127b5cc1946fdc38dcf367a1526da27e5412184ad3c78f35e",
+          "bytes": 656685
+        },
+        "files": 3382,
+        "generatedConfig": {
+          "path": "apps/web/dist/server/wrangler.json",
+          "sha256": "163f876482344849daa88d2b0eb1531d6dfd49a35c8d5cdeb4f2f28d70f182da",
+          "bytes": 1712,
+          "productionWorker": false,
+          "bindingEquality": {
+            "MAIN_ORIGIN": true,
+            "ACCOUNT_ORIGIN": true,
+            "MAIN_RESOURCE": true,
+            "WEB_OAUTH_CLIENT_ID": true
+          },
+          "allBindingsEqual": true
+        },
+        "assetBindingDirectory": "../client relative to dist/server/wrangler.json",
+        "main": "index.js",
+        "actualWebModuleRequests": 120,
+        "actualWebHttp200Finished": 120,
+        "completedBodies": 116,
+        "all116BodyHashesEqualExactDistClientOutputs": true,
+        "bodyCaptureFailuresAfterNavigation": 4,
+        "devModulePathsRequestedAtOwnedWeb": 0,
+        "compiledClientMapping": ".temp/feed-authority-evidence/compiled-module-readiness-manifest.json#compiledClientOutputMatches"
+      },
+      "bindings": "Same fixture-derived MAIN_ORIGIN/ACCOUNT_ORIGIN/MAIN_RESOURCE/WEB_OAUTH_CLIENT_ID supplied at build and serve. Generated Worker vars equality true for all4; private values not printed. No web:preview --profile qa or QA apps.env overlay. Production environment not selected.",
+      "buildServeManifest": {
+        "path": ".temp/feed-authority-evidence/compiled-build.json",
+        "sha256": "bc1b9d6ec0b38c3fc90caa90d21f85db29ba129a77decac7e3f70a5c74c3fa4f",
+        "bytes": 5663
+      }
+    },
+    "frozenProof": {
+      "beforeDriverSha256": "36220544b7c8bc8a648a5340f500cb30f0a4630da7cef4db5afb9efddb1847fe",
+      "afterDriverSha256": "9db43dcdf55f4bb4167791bb5c4b2a0e9538e0cc735b89e02f7999e07e0d0795",
+      "onlyLauncherArgvCwdChanged": true,
+      "launcherDiff": {
+        "path": ".temp/feed-authority-evidence/compiled-launcher-change.json",
+        "sha256": "e044ec2ce994277b76322176ceae967fd8cd41a1402bbc766c27430898f496f3",
+        "bytes": 2915
+      },
+      "verification": {
+        "allPreserved": true,
+        "regionsAndControls": [
+          {
+            "name": "observerForwardingAndFaults",
+            "sha256": "fa768fa886cb073bea0e53def9cf86e4adc219919a693e73a2a4ced50047ecfd",
+            "bytes": 3809,
+            "equal": true
+          },
+          {
+            "name": "browserFetchAuthorityCapture",
+            "sha256": "58c9f6652c7cc25b46cb61f92b4674f2c1e3ef740713432073d1c325bef906ad",
+            "bytes": 662,
+            "equal": true
+          },
+          {
+            "name": "sessionAndSelection",
+            "sha256": "e8463431155b6c6325238b9f1474f123b83c8c88b8f97ec57d6c39a27dd017e0",
+            "bytes": 981,
+            "equal": true
+          },
+          {
+            "name": "runCell",
+            "sha256": "a258ffc03ad48ca9ea02896c445b4775f23a93d4fa1313a8f7b05738c4f9ca26",
+            "bytes": 5016,
+            "equal": true
+          },
+          {
+            "name": "originalTestCallback",
+            "sha256": "84e734f8a763da977194916cbe5eb020124851b2a08f813af0507769a262fdf0",
+            "bytes": 2268,
+            "equal": true
+          },
+          {
+            "name": ".temp/feed-review-live-focus.test.ts",
+            "sha256": "3d92e6262c83f760c28620327b92fa5ed30bb9a9d2f31ab9cd36239ba1fe92ac",
+            "bytes": 6438,
+            "equal": true
+          },
+          {
+            "name": ".temp/feed-rsc-patch.test.ts",
+            "sha256": "0d2d4ad3b8674d36eba41221cd810c464bc0adc772b737eb77d2af6807a3b74d",
+            "bytes": 11809,
+            "equal": true
+          }
+        ],
+        "driverSha256": "9db43dcdf55f4bb4167791bb5c4b2a0e9538e0cc735b89e02f7999e07e0d0795",
+        "driverBytes": 25572
+      },
+      "note": "Observer faults, browser authority instrumentation, session/select, runCell and full original callback byte-identical. Both anonymous control bodies byte-identical. No increased timeout or retry."
+    },
+    "checks": {
+      "recordedSequence": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- test ./.temp/feed-authority-live.test.ts' -- task goal -- slot -- bun .temp/feed-authority-compiled-build.ts",
+      "jobId": "d2ede738-0793-4fef-9aa1-eac9ac4f16e6",
+      "resultClass": "assertion",
+      "reviewClassification": "setup/premise failure",
+      "steps": [
+        {
+          "command": "task goal -- slot -- bun .temp/feed-authority-compiled-build.ts",
+          "exitCode": 0,
+          "result": "Task web:build at pinned source passed; immutable source/dependency hashes and generated4binding equality passed; compiled output manifest captured. No install or shared lifecycle.",
+          "log": ".temp/goal/jobs/d2ede738-0793-4fef-9aa1-eac9ac4f16e6.1.log"
+        },
+        {
+          "command": "task goal -- test ./.temp/feed-authority-live.test.ts",
+          "exitCode": 201,
+          "innerTestExitCode": 1,
+          "runtimeSeconds": 73.24,
+          "beforeAllMilliseconds": 72133.36,
+          "testsPassed": 0,
+          "testsFailed": 1,
+          "expectCallsReached": 0,
+          "originalFeedOutcomeAssertionsReached": false,
+          "failureLocation": ".temp/feed-authority-live.test.ts:179 beforeAll; disposable warmPage.locator(html[data-hydrated]).waitFor() after actual Accounts /sign-in navigation",
+          "failure": "Timeout45000ms; actual Accounts form rendered but hydration marker absent.",
+          "log": ".temp/goal/jobs/d2ede738-0793-4fef-9aa1-eac9ac4f16e6.2.log"
+        }
+      ],
+      "notRun": "No G2747 runtime suite, web:e2e, whole Feed/native tier, fresh catalogue, previously passed anonymous drivers or completed preview/RSC/story/static suite."
+    },
+    "actualBrowserSetup": {
+      "ownedPortsBefore": "62841/62842 free, verified ss -ltnp immediately before recorded startup.",
+      "ownedPortsAfter": "62841/62842 free after afterAll; same check.",
+      "stage": "Disposable warmup reached actual public Accounts3004 /sign-in with title REZICS Account. Fresh original proof browser context, supported signInAtAccounts invocation and credential entry were not reached.",
+      "instrumentation": "Existing console/pageerror/request/requestfailed/response/requestfinished and CDP initiator capture attached before navigation, without route interception, fake hydration, API fixture or server callback replacement.",
+      "readinessGatePassed": false,
+      "moduleCaptureManifest": {
+        "path": ".temp/feed-authority-evidence/compiled-module-readiness-manifest.json",
+        "sha256": "275d0db525ba54511a2f81b7e3e463c6793540cde9cf4f8ca237d5d9e4d2e33d",
+        "bytes": 291029
+      },
+      "capturedModules": 211,
+      "ownedWeb": {
+        "requests": 120,
+        "http200Finished": 120,
+        "bodyHashes": 116,
+        "bodyReadFailures": 4
+      },
+      "publicAccounts": {
+        "requests": 91,
+        "http200FinishedBodyHashes": 49,
+        "noResponseTransportFailures": 42
+      },
+      "firstAccountsTransportFailure": {
+        "phase": "module-readiness",
+        "capture": "disposable-warmup",
+        "kind": "requestfailed",
+        "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/app-browser-navigation-abort.js?v=76985142",
+        "origin": "http://127.0.0.1:3004",
+        "path": "/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/app-browser-navigation-abort.js",
+        "error": "net::ERR_NETWORK_CHANGED",
+        "httpStatus": null,
+        "body": null,
+        "noResponse": true,
+        "initiators": [
+          {
+            "requestId": "2187561.327",
+            "type": "script",
+            "sourceUrl": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/app-browser-entry.js?v=76985142",
+            "lineNumber": 36,
+            "stack": []
+          }
+        ]
+      },
+      "AccountsEntryDependencyChain": [
+        {
+          "url": "http://127.0.0.1:3004/@id/__x00__virtual:vinext-app-browser-entry",
+          "status": 200,
+          "finished": true,
+          "bodySha256": "dbde36f472645e8415f981e1b6fa7216464d6dd9ffe7fa438d499386363033fb",
+          "bodyBytes": 92821,
+          "initiators": [
+            {
+              "requestId": "2187561.285",
+              "type": "script",
+              "sourceUrl": null,
+              "lineNumber": null,
+              "stack": [
+                {
+                  "url": "http://127.0.0.1:3004/@id/__x00__virtual:vite-rsc/entry-browser",
+                  "functionName": "",
+                  "lineNumber": 6,
+                  "columnNumber": 0
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/app-browser-entry.js?v=76985142",
+          "status": 200,
+          "finished": true,
+          "bodySha256": "c4f9e2f83c951b1c570299394555fd4dd9c642f415efa6b5773fcde7dbad02be",
+          "bodyBytes": 243815,
+          "initiators": [
+            {
+              "requestId": "2187561.288",
+              "type": "script",
+              "sourceUrl": "http://127.0.0.1:3004/@id/__x00__virtual:vinext-app-browser-entry",
+              "lineNumber": 30,
+              "stack": []
+            }
+          ]
+        }
+      ],
+      "allAccountsFailedRequests": [
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/app-browser-navigation-abort.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/app-browser-hydration.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/app-browser-history-controller.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/app-visited-response-cache.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/app-browser-popstate.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/app-browser-error.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/app-hydration-cache-publication.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/app-browser-prefetch-response.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/app-optimistic-routing.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/app-inline-css-client.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/node_modules/.vite/deps/react-dom.js?v=a673f68c",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/node_modules/.vite/deps/react-dom_client.js?v=a673f68c",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/@vitejs/plugin-rsc/dist/browser.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@id/__x00__virtual:vinext-app-capabilities",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/node_modules/.vite/deps/react-D97yM1qr.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/utils/protocol-headers.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/app-rsc-vary.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/utils/compare.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/normalize-path.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/app-elements-wire-key.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/artifact-compatibility.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/app-render-dependency.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/app-mounted-slots-header.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/node_modules/.vite/deps/react_jsx-runtime.js?v=a673f68c",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/utils/redirect-digest.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/utils/navigation-signal.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/shims/navigation-server.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/shims/error-boundary-navigation.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/utils/dev-error-recovery-event.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/bfcache-identity.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/utils/hash.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/app-rsc-render-mode.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/utils/deployment-id.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/app-rsc-state-fingerprint.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/client/empty-module.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/utils/number.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/app-bfcache-id.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/cache-proof.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/client-reuse-manifest.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/static-layout-client-reuse-proof.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/app-rsc-embedded-chunks.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        },
+        {
+          "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/app-browser-visible-commit.js?v=76985142",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "noResponse": true,
+          "body": null
+        }
+      ],
+      "distinctBodyCaptureFailures": [
+        {
+          "phase": "module-readiness",
+          "capture": "disposable-warmup",
+          "kind": "module-body-failure",
+          "url": "http://127.0.0.1:62841/_next/static/chunks/chevrons-up-down-3V6rYGGo.js",
+          "httpStatus": 200,
+          "body": null,
+          "error": "Error: body: Protocol error (Network.getResponseBody): No resource with given identifier found\nResponse body is not available for a response that was navigated away from. Read response.body() before triggering any navigation."
+        },
+        {
+          "phase": "module-readiness",
+          "capture": "disposable-warmup",
+          "kind": "module-body-failure",
+          "url": "http://127.0.0.1:62841/_next/static/chunks/textarea-DEGoyk_s.js",
+          "httpStatus": 200,
+          "body": null,
+          "error": "Error: body: Protocol error (Network.getResponseBody): No resource with given identifier found\nResponse body is not available for a response that was navigated away from. Read response.body() before triggering any navigation."
+        },
+        {
+          "phase": "module-readiness",
+          "capture": "disposable-warmup",
+          "kind": "module-body-failure",
+          "url": "http://127.0.0.1:62841/_next/static/chunks/input-group-BajA8siw.js",
+          "httpStatus": 200,
+          "body": null,
+          "error": "Error: body: Protocol error (Network.getResponseBody): No resource with given identifier found\nResponse body is not available for a response that was navigated away from. Read response.body() before triggering any navigation."
+        },
+        {
+          "phase": "module-readiness",
+          "capture": "disposable-warmup",
+          "kind": "module-body-failure",
+          "url": "http://127.0.0.1:62841/_next/static/chunks/entity-picker-DS5V_54U.js",
+          "httpStatus": 200,
+          "body": null,
+          "error": "Error: body: Protocol error (Network.getResponseBody): No resource with given identifier found\nResponse body is not available for a response that was navigated away from. Read response.body() before triggering any navigation."
+        }
+      ],
+      "bodyCaptureDisposition": "These4 compiled Web responses have actual200 and requestfinished but no body hash: Playwright explicitly reports response body unavailable after navigation. They are capture-completeness failures, not HTTP or module-transport failures; no reconstructed/supplied bundle body substituted for the missing browser body. They would need addressing before the unchanged readiness gate can pass, independently of Accounts transport.",
+      "actualAccountsPageerror": [
+        {
+          "phase": "module-readiness",
+          "capture": "disposable-warmup",
+          "kind": "pageerror",
+          "message": "Failed to fetch dynamically imported module: http://127.0.0.1:3004/@id/__x00__virtual:vinext-app-browser-entry"
+        }
+      ],
+      "main": {
+        "requests": 18,
+        "method": "GET",
+        "statuses": [
+          200
+        ],
+        "authorizationPresent": false,
+        "cookiePresent": false,
+        "actingSubject": null,
+        "feedRequests": 0,
+        "sessionAgentRequests": 0,
+        "controlledFaults": 0,
+        "writes": 0,
+        "requestEvidence": ".temp/feed-authority-evidence/observations.json#network"
+      },
+      "captureDrain": "Warmup context closed, capture promises0. No fresh proof context created; no Account/session selection/write. Only owned browser/frontend/observer stopped.",
+      "cleanup": {
+        "ownBrowserClosed": true,
+        "ownFrontendStopped": true,
+        "ownObserverStopped": true,
+        "peerLifecycleChanged": false,
+        "corpusOrGrantWrites": false,
+        "accountCreated": false,
+        "ownSessionSelectionOnly": true
+      },
+      "causeDisposition": "Accounts module transport failures and separate Web body-capture loss are evidenced. No captured HTTP error body or proven font/path/optimizer/cache/proxy cause. Existing Accounts/public issuer/backend/account/dependency bindings not switched, no shared restart and no speculative repair."
+    },
+    "screenshotsActuallyViewed": [
+      {
+        "path": ".temp/feed-authority-evidence/module-readiness-failure.png",
+        "sha256": "4ebbfc07f2fe76141ff922f78b9ed53c273d27ef0d67f793a52ba05c20d0236c",
+        "bytes": 488381,
+        "viewedWith": "view_image",
+        "viewport": [
+          1440,
+          1000
+        ],
+        "observation": "Actual Accounts sign-in card with empty Email input focused, Next, Create account, disabled passkey action and language control. No credentials entered. HTML form appearance is not evidence of data-hydrated marker, executed Accounts graph, OAuth success or Feed assertions."
+      }
+    ],
+    "originalAcceptanceVerbatim": [
+      "同一登录账户在未选 Agent、Agent 不合资格、acting-context 读取暂时不可用三种条件下，公开首屏、next/head 和恢复读取使用一致且明确的读者权限；不会发出“有认证、无 actingSubject”的请求。",
+      "公开列表至少连续两页并能恢复一次暂时失败，无 400、无漏项或重复；选择有效 Agent 后的个人 Feed 及匿名公开 Feed 同样覆盖。保留 Main 的认证配对校验，不能靠放宽安全契约通过。",
+      "内容真实变化/409 才显示“Feed changed”；认证、权限和服务不可用各有可解释且可恢复的状态。en/zh-Hans、1440/390、浅/深色均验收。"
+    ],
+    "originalCriterionTierMapping": [
+      {
+        "criterion": "OriginalD3 acceptance1 / assertions1-3: same signed-in Account unselected or genuine nonnull saved Agent ineligible or actual identity-read unavailable; first/next/head/recovery preserve explicit anonymous transport and matched Main pairing",
+        "thisAttempt": "None reached. Unselected and actual identity503 branches remain prepared/frozen. Nonnull eligible=false receipt remains separately missing; null+false is unselected, unavailable is not ineligible. Existing G2775 lawful invitation plan is future input, not a state produced by this run."
+      },
+      {
+        "criterion": "OriginalD3 acceptance2: at least2 genuine pages and bounded temporary recovery, no400/gaps/duplicates, eligible personal Feed and anonymous public control, fresh generation without anonymous cursor reuse",
+        "thisAttempt": "No Feed API or original callback executed. Existing genuine anonymous control retained byte-for-byte and accepted earlier; compiled build/redirect/module counts cannot substitute for signed-in outcome proof."
+      },
+      {
+        "criterion": "OriginalD3 acceptance3: only actual content409 means Feed changed; distinct recoverable authentication/authority/service failures; en/zh-Hans1440/390light/dark applicable cells",
+        "thisAttempt": "No fault or cell executed. Frozen new callback covers503 only if reached; no new401/403/409 or original matrix claim. All original historical409/error classification and prior matrix limits preserved."
+      }
+    ],
+    "ownerHandoff": {
+      "to": "Root -> existing G-2747 startup/runtime owner and existing Accounts owner as appropriate; no new product scope.",
+      "smallestReproduction": "Existing exact compiled build generation and frozen one-file driver use62841 Worker +62842 observer -> Main3001, Accounts3004. Warmup /auth/start executes compiled bundle and redirects to actual Accounts /sign-in without credentials. data-hydrated fails at45s; first actual Accounts request is recorded below with importing200 body hashes. Do not replay a raw HTTP200 as browser hydration proof.",
+      "firstFailedURL": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/app-browser-navigation-abort.js?v=76985142",
+      "actualCDPInitiator": [
+        {
+          "requestId": "2187561.327",
+          "type": "script",
+          "sourceUrl": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/app-browser-entry.js?v=76985142",
+          "lineNumber": 36,
+          "stack": []
+        }
+      ],
+      "moduleManifest": ".temp/feed-authority-evidence/compiled-module-readiness-manifest.json",
+      "serverLog": ".temp/feed-authority-evidence/web-server.log",
+      "requestedAction": "Return a demonstrated authorized Accounts hydration/runtime correction and, separately, a permitted capture-lifecycle correction for4 Web bodies lost on real redirect; preserve all frozen assertions and existing bounds. No blind retry, shared restart, Account/backend fallback, network/config/dependency mutation or fabricated success.",
+      "FeedProductFindingConfirmed": false
+    },
+    "administrativeReportChecks": {
+      "recordedJob": "79e9c1b1-887d-4255-a9f1-d1680db294d0",
+      "steps": [
+        {
+          "command": "task docs:check",
+          "exitCode": 0,
+          "log": ".temp/goal/jobs/79e9c1b1-887d-4255-a9f1-d1680db294d0.1.log",
+          "result": "13tests pass;250Markdown files, local links and design navigation pass."
+        },
+        {
+          "command": "task goal -- check",
+          "exitCode": 0,
+          "runId": "run-vpFel0",
+          "log": ".temp/goal/jobs/79e9c1b1-887d-4255-a9f1-d1680db294d0.2.log",
+          "result": "AST and1selected repository guard pass. Report-only types/lint skipped correctly; brief names no tests. No completed source/browser suite rerun."
+        }
+      ]
+    },
+    "privateEvidence": [
+      {
+        "path": ".temp/feed-authority-evidence/observations.json",
+        "sha256": "2d4cca0bf037d00fa74d1feb85e8b0fe7dd7f5b1dfd434460109ed95184bcb19",
+        "bytes": 268906
+      },
+      {
+        "path": ".temp/feed-authority-evidence/web-server.log",
+        "sha256": "fdd1a5ed66233b00cd66259f5e39358828c9f4a73c5a0cea42e8fe3febe6e9e8",
+        "bytes": 835544
+      },
+      {
+        "path": ".temp/feed-authority-evidence/cleanup.json",
+        "sha256": "c024e4441560cafd75414cdfaef7abf8cd3c4a69d335ffda92d0f7d56bdf9406",
+        "bytes": 217
+      },
+      {
+        "path": ".temp/feed-authority-evidence/callback-verification.json",
+        "sha256": "001a9b8366b3b38b30f53a6eaea4ec8e5420c9b53ded8a35eceae930ef0b8ed8",
+        "bytes": 1423
+      },
+      {
+        "path": ".temp/feed-authority-evidence/compiled-launcher-change.json",
+        "sha256": "e044ec2ce994277b76322176ceae967fd8cd41a1402bbc766c27430898f496f3",
+        "bytes": 2915
+      },
+      {
+        "path": ".temp/feed-authority-evidence/compiled-build.json",
+        "sha256": "bc1b9d6ec0b38c3fc90caa90d21f85db29ba129a77decac7e3f70a5c74c3fa4f",
+        "bytes": 5663
+      },
+      {
+        "path": ".temp/feed-authority-evidence/compiled-output-manifest.json",
+        "sha256": "c3dc87a8b9342c0127b5cc1946fdc38dcf367a1526da27e5412184ad3c78f35e",
+        "bytes": 656685
+      },
+      {
+        "path": ".temp/feed-authority-evidence/compiled-module-readiness-manifest.json",
+        "sha256": "275d0db525ba54511a2f81b7e3e463c6793540cde9cf4f8ca237d5d9e4d2e33d",
+        "bytes": 291029
+      },
+      {
+        "path": ".temp/feed-authority-evidence/module-readiness-failure.png",
+        "sha256": "4ebbfc07f2fe76141ff922f78b9ed53c273d27ef0d67f793a52ba05c20d0236c",
+        "bytes": 488381
+      },
+      {
+        "path": ".temp/feed-authority-evidence/setup-module-readiness-dev/observations.json",
+        "sha256": "707ea6fccba2fc8dd08cf517b6f60a45d9788fb1fdaa8c0bb8bdc2310cfbbcab",
+        "bytes": 327007
+      },
+      {
+        "path": ".temp/feed-authority-evidence/setup-module-readiness-dev/web-server.log",
+        "sha256": "d87ae011916e095191acd76c719acf3441b7f034930e229068d1500d11789533",
+        "bytes": 7215
+      },
+      {
+        "path": ".temp/feed-authority-evidence/setup-module-readiness-dev/module-readiness-failure.png",
+        "sha256": "e7d836072b1596431bdb17e932a95f9861de485ae0ef5bbe890edcd5e053ce8d",
+        "bytes": 46176
+      },
+      {
+        "path": ".temp/feed-authority-evidence/setup-module-readiness-dev/callback-verification.json",
+        "sha256": "859186fffe6a16098132cd90fa575e631385a62052e3a85e37f40ab7f94df315",
+        "bytes": 1423
+      },
+      {
+        "path": ".temp/feed-authority-evidence/setup-module-readiness-dev/feed-authority-live.test.ts",
+        "sha256": "36220544b7c8bc8a648a5340f500cb30f0a4630da7cef4db5afb9efddb1847fe",
+        "bytes": 25437
+      },
+      {
+        "path": ".temp/feed-authority-live.test.ts",
+        "sha256": "9db43dcdf55f4bb4167791bb5c4b2a0e9538e0cc735b89e02f7999e07e0d0795",
+        "bytes": 25572
+      },
+      {
+        "path": ".temp/feed-authority-compiled-build.ts",
+        "sha256": "e0301161f40b6ebf94978802070629af2f980ef9e203bf4abc42f1bd25471a99",
+        "bytes": 5576
+      },
+      {
+        "path": ".temp/goal/jobs/d2ede738-0793-4fef-9aa1-eac9ac4f16e6.1.log",
+        "sha256": "f65c73af9d5e48723104851ec191c1fed675fd6f62969f5be2e359d8c0405958",
+        "bytes": 313446
+      },
+      {
+        "path": ".temp/goal/jobs/d2ede738-0793-4fef-9aa1-eac9ac4f16e6.2.log",
+        "sha256": "89ed3c75065d202ac2d104bce41bf675e96f7702b18fd3c948f1690dea5c4d11",
+        "bytes": 1246
+      }
+    ],
+    "ownerChanges": "Publish only cumulative claimed report; build adapter, launcher edit, output/logs/manifests ignored under own .temp/. No authored product/main/index/ledger/data/peer-lifecycle change.",
+    "blockers": [
+      "Actual Accounts3004 module graph has42 transport failures; hydration not established.",
+      "Four compiled Web completed-response bodies unavailable after cross-origin navigation; completeness gate remains unmet.",
+      "Genuine nonnull saved-Agent eligible=false state remains a distinct original premise pending existing lawful owner plan."
+    ],
+    "next": "Root routes precise setup evidence, retains original D3 browser assertions open and preserves all completed proofs. Resume only on same-scope explicit correction input; no class self-closure."
+  },
   "d3ReaderAuthorityReadinessVerdict": {
     "result": "partial-original-d3-001-blocked-at-owned-module-readiness; no-new-Feed-outcome",
     "summary": "The single authorized bounded startup correction completed its capture, not its readiness gate: disposable Web /auth/start returned200 but15 actual module requests failed net::ERR_NETWORK_CHANGED with no HTTP response. 141 actual Web module bodies completed and were hashed, including the virtual entry; Accounts form/hydration was never reached. The fresh proof profile was correctly not created. No original signed-in Feed assertion or controlled API fault ran.",
