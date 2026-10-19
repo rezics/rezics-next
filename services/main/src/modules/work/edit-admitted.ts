@@ -101,7 +101,7 @@ export async function editAdmittedMetadataWork(
   env: WorkActivationEnvironment,
   account: Pick<AccountAssertionVerifier, 'verify'>,
   access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>
-    & Partial<Pick<AccessAdmissionRegistry, 'issueTitleAdmission'>>,
+    & Partial<Pick<AccessAdmissionRegistry, 'issueTitleAdmission' | 'withOwnerAuthority' | 'fenceClaim'>>,
   request: Request,
   input: AdmittedMetadataEditInput,
 ): Promise<WorkEditReceipt> {
@@ -141,11 +141,21 @@ export async function editAdmittedMetadataWork(
     } else if (!admission.dispatchEligible || admission.state === 'registered') {
       await sealMetadataWorkEditAdmission(env, admission);
     } else {
+      let fencingPost = false;
       try {
         result = await editMetadataWork(env, { admission, work: input.work,
-          expectedHead: input.expectedHead, title: input.title });
+          expectedHead: input.expectedHead, title: input.title }, async commit => {
+          fencingPost = true;
+          if (!access.withOwnerAuthority || !access.fenceClaim) throw new WorkEditUnavailable('Post edit authority fence is unavailable');
+          await access.withOwnerAuthority({ principal, actingSubject: input.actingSubject,
+            action: 'work.edit', scope: admission.scope }, async client => {
+            await access.fenceClaim!(client, admission.id, digest, principal);
+            await commit();
+          });
+        });
       } catch (error) {
-        if (error instanceof IdempotencyConflict) throw error;
+        if (error instanceof IdempotencyConflict || fencingPost && (error instanceof AdmissionDenied
+          || error instanceof AdmissionExpired || error instanceof WorkEditUnavailable)) throw error;
         // A stale or ambiguous graph result is resolved from the same receipt.
       }
     }
@@ -156,7 +166,7 @@ export async function editAdmittedMetadataWork(
     return result ? { ...checked, replayed: result.replayed } : checked;
   } catch (error) {
     if (error instanceof IdempotencyConflict || error instanceof StaleWorkHead
-      || error instanceof WorkEditUnavailable) throw error;
+      || error instanceof WorkEditUnavailable || error instanceof AdmissionDenied || error instanceof AdmissionExpired) throw error;
     throw new PendingAdmittedWork(registered.id, 'work-edit');
   }
 }

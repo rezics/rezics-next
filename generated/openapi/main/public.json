@@ -804199,392 +804199,507 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "description": {
+                  "anyOf": [
+                    {
                       "properties": {
+                        "description": {
+                          "properties": {
+                            "language": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "language"
+                          ],
+                          "type": "object"
+                        },
+                        "descriptionObligations": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "status": {
+                                  "const": "unassessed",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "status"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "instrument": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "obligations": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "appliesTo": {
+                                        "enum": [
+                                          "display",
+                                          "all"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "instrument": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "enum": [
+                                          "attribution",
+                                          "share_alike",
+                                          "notice_retention",
+                                          "change_indication",
+                                          "non_commercial",
+                                          "no_derivatives",
+                                          "other"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "notice": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "instrument",
+                                      "appliesTo",
+                                      "notice"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 16,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "const": "assessed",
+                                  "type": "string"
+                                },
+                                "use": {
+                                  "const": "wiki_display",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "status",
+                                "use",
+                                "instrument",
+                                "obligations"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        },
+                        "factObligations": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "status": {
+                                  "const": "unassessed",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "status"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "instrument": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "obligations": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "appliesTo": {
+                                        "enum": [
+                                          "display",
+                                          "all"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "instrument": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "enum": [
+                                          "attribution",
+                                          "share_alike",
+                                          "notice_retention",
+                                          "change_indication",
+                                          "non_commercial",
+                                          "no_derivatives",
+                                          "other"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "notice": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "instrument",
+                                      "appliesTo",
+                                      "notice"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 16,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "const": "assessed",
+                                  "type": "string"
+                                },
+                                "use": {
+                                  "const": "wiki_display",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "status",
+                                "use",
+                                "instrument",
+                                "obligations"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        },
                         "language": {
                           "type": "string"
                         },
-                        "value": {
+                        "localizedTitle": {
+                          "properties": {
+                            "language": {
+                              "type": "string"
+                            },
+                            "value": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "language"
+                          ],
+                          "type": "object"
+                        },
+                        "mainVersion": {
+                          "type": "string"
+                        },
+                        "operation": {
+                          "type": "string"
+                        },
+                        "predecessor": {
+                          "type": "string"
+                        },
+                        "resolution": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "hops": {
+                              "maximum": 32,
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "source": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "state": {
+                              "const": "merged",
+                              "type": "string"
+                            },
+                            "survivor": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "state",
+                            "source",
+                            "survivor",
+                            "hops"
+                          ],
+                          "type": "object"
+                        },
+                        "revision": {
+                          "type": "string"
+                        },
+                        "scalarValue": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "const": "integer",
+                                  "type": "string"
+                                },
+                                "lexical": {
+                                  "const": "0",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "lexical"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "const": "boolean",
+                                  "type": "string"
+                                },
+                                "lexical": {
+                                  "const": "false",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "lexical"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "const": "string",
+                                  "type": "string"
+                                },
+                                "lexical": {
+                                  "const": "",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "lexical"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "const": "unknown",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "const": "no-value",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind"
+                              ],
+                              "type": "object"
+                            }
+                          ]
+                        },
+                        "semanticTypes": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "pattern": "^[0-9]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "work": {
                           "type": "string"
                         }
                       },
                       "required": [
-                        "value",
-                        "language"
+                        "revision",
+                        "work",
+                        "operation",
+                        "mainVersion",
+                        "title",
+                        "language",
+                        "semanticTypes",
+                        "sourcePosition"
                       ],
                       "type": "object"
                     },
-                    "descriptionObligations": {
-                      "anyOf": [
-                        {
-                          "additionalProperties": false,
-                          "properties": {
-                            "status": {
-                              "const": "unassessed",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "status"
-                          ],
-                          "type": "object"
-                        },
-                        {
-                          "additionalProperties": false,
-                          "properties": {
-                            "instrument": {
-                              "~elyTyp": 7,
-                              "nullable": true,
-                              "type": [
-                                "string",
-                                "null"
-                              ]
-                            },
-                            "obligations": {
-                              "items": {
-                                "additionalProperties": false,
-                                "properties": {
-                                  "appliesTo": {
-                                    "enum": [
-                                      "display",
-                                      "all"
-                                    ],
-                                    "type": "string"
-                                  },
-                                  "instrument": {
-                                    "type": "string"
-                                  },
-                                  "kind": {
-                                    "enum": [
-                                      "attribution",
-                                      "share_alike",
-                                      "notice_retention",
-                                      "change_indication",
-                                      "non_commercial",
-                                      "no_derivatives",
-                                      "other"
-                                    ],
-                                    "type": "string"
-                                  },
-                                  "notice": {
-                                    "~elyTyp": 7,
-                                    "nullable": true,
-                                    "type": [
-                                      "string",
-                                      "null"
-                                    ]
-                                  }
-                                },
-                                "required": [
-                                  "kind",
-                                  "instrument",
-                                  "appliesTo",
-                                  "notice"
-                                ],
-                                "type": "object"
-                              },
-                              "maxItems": 16,
-                              "type": "array"
-                            },
-                            "status": {
-                              "const": "assessed",
-                              "type": "string"
-                            },
-                            "use": {
-                              "const": "wiki_display",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "status",
-                            "use",
-                            "instrument",
-                            "obligations"
-                          ],
-                          "type": "object"
-                        }
-                      ]
-                    },
-                    "factObligations": {
-                      "anyOf": [
-                        {
-                          "additionalProperties": false,
-                          "properties": {
-                            "status": {
-                              "const": "unassessed",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "status"
-                          ],
-                          "type": "object"
-                        },
-                        {
-                          "additionalProperties": false,
-                          "properties": {
-                            "instrument": {
-                              "~elyTyp": 7,
-                              "nullable": true,
-                              "type": [
-                                "string",
-                                "null"
-                              ]
-                            },
-                            "obligations": {
-                              "items": {
-                                "additionalProperties": false,
-                                "properties": {
-                                  "appliesTo": {
-                                    "enum": [
-                                      "display",
-                                      "all"
-                                    ],
-                                    "type": "string"
-                                  },
-                                  "instrument": {
-                                    "type": "string"
-                                  },
-                                  "kind": {
-                                    "enum": [
-                                      "attribution",
-                                      "share_alike",
-                                      "notice_retention",
-                                      "change_indication",
-                                      "non_commercial",
-                                      "no_derivatives",
-                                      "other"
-                                    ],
-                                    "type": "string"
-                                  },
-                                  "notice": {
-                                    "~elyTyp": 7,
-                                    "nullable": true,
-                                    "type": [
-                                      "string",
-                                      "null"
-                                    ]
-                                  }
-                                },
-                                "required": [
-                                  "kind",
-                                  "instrument",
-                                  "appliesTo",
-                                  "notice"
-                                ],
-                                "type": "object"
-                              },
-                              "maxItems": 16,
-                              "type": "array"
-                            },
-                            "status": {
-                              "const": "assessed",
-                              "type": "string"
-                            },
-                            "use": {
-                              "const": "wiki_display",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "status",
-                            "use",
-                            "instrument",
-                            "obligations"
-                          ],
-                          "type": "object"
-                        }
-                      ]
-                    },
-                    "language": {
-                      "type": "string"
-                    },
-                    "localizedTitle": {
+                    {
                       "properties": {
+                        "labels": {
+                          "items": {
+                            "properties": {
+                              "language": {
+                                "type": "string"
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "value",
+                              "language"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 24,
+                          "minItems": 1,
+                          "type": "array"
+                        },
                         "language": {
                           "type": "string"
                         },
-                        "value": {
+                        "operation": {
+                          "type": "string"
+                        },
+                        "predecessor": {
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "post-v1",
+                          "type": "string"
+                        },
+                        "publisher": {
+                          "type": "string"
+                        },
+                        "resolution": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "hops": {
+                              "maximum": 32,
+                              "minimum": 1,
+                              "type": "integer"
+                            },
+                            "source": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "state": {
+                              "const": "merged",
+                              "type": "string"
+                            },
+                            "survivor": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "state",
+                            "source",
+                            "survivor",
+                            "hops"
+                          ],
+                          "type": "object"
+                        },
+                        "revision": {
+                          "type": "string"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "pattern": "^[0-9]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "work": {
                           "type": "string"
                         }
                       },
                       "required": [
-                        "value",
-                        "language"
+                        "revision",
+                        "work",
+                        "operation",
+                        "title",
+                        "language",
+                        "sourcePosition",
+                        "profile",
+                        "publisher",
+                        "labels"
                       ],
                       "type": "object"
-                    },
-                    "mainVersion": {
-                      "type": "string"
-                    },
-                    "operation": {
-                      "type": "string"
-                    },
-                    "predecessor": {
-                      "type": "string"
-                    },
-                    "resolution": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "hops": {
-                          "maximum": 32,
-                          "minimum": 1,
-                          "type": "integer"
-                        },
-                        "source": {
-                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                          "type": "string"
-                        },
-                        "state": {
-                          "const": "merged",
-                          "type": "string"
-                        },
-                        "survivor": {
-                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "state",
-                        "source",
-                        "survivor",
-                        "hops"
-                      ],
-                      "type": "object"
-                    },
-                    "revision": {
-                      "type": "string"
-                    },
-                    "scalarValue": {
-                      "anyOf": [
-                        {
-                          "additionalProperties": false,
-                          "properties": {
-                            "kind": {
-                              "const": "integer",
-                              "type": "string"
-                            },
-                            "lexical": {
-                              "const": "0",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "lexical"
-                          ],
-                          "type": "object"
-                        },
-                        {
-                          "additionalProperties": false,
-                          "properties": {
-                            "kind": {
-                              "const": "boolean",
-                              "type": "string"
-                            },
-                            "lexical": {
-                              "const": "false",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "lexical"
-                          ],
-                          "type": "object"
-                        },
-                        {
-                          "additionalProperties": false,
-                          "properties": {
-                            "kind": {
-                              "const": "string",
-                              "type": "string"
-                            },
-                            "lexical": {
-                              "const": "",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "kind",
-                            "lexical"
-                          ],
-                          "type": "object"
-                        },
-                        {
-                          "additionalProperties": false,
-                          "properties": {
-                            "kind": {
-                              "const": "unknown",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "type": "object"
-                        },
-                        {
-                          "additionalProperties": false,
-                          "properties": {
-                            "kind": {
-                              "const": "no-value",
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "kind"
-                          ],
-                          "type": "object"
-                        }
-                      ]
-                    },
-                    "semanticTypes": {
-                      "items": {
-                        "type": "string"
-                      },
-                      "type": "array"
-                    },
-                    "sourcePosition": {
-                      "properties": {
-                        "dataEpoch": {
-                          "type": "string"
-                        },
-                        "datasetId": {
-                          "const": "product",
-                          "type": "string"
-                        },
-                        "sequence": {
-                          "pattern": "^[0-9]+$",
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "datasetId",
-                        "dataEpoch",
-                        "sequence"
-                      ],
-                      "type": "object"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "work": {
-                      "type": "string"
                     }
-                  },
-                  "required": [
-                    "revision",
-                    "work",
-                    "operation",
-                    "mainVersion",
-                    "title",
-                    "language",
-                    "semanticTypes",
-                    "sourcePosition"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
