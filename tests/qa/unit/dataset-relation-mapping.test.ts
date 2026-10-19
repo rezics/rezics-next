@@ -1105,7 +1105,7 @@ describe('ordered occurrence grains and frozen identities', () => {
     expect(f.requests).toHaveLength(0);
   });
 
-  test('Bangumi decimal episode sort, disc, type and exact episode target survive unsupported profile mapping', async () => {
+  test('Bangumi decimal episode sort, disc, type and exact episode target remain pending acknowledged Source mapping', async () => {
     const subject = record('bangumi:subject:5393'),
       episode = record(
         'bangumi:episode:36420',
@@ -1133,6 +1133,8 @@ describe('ordered occurrence grains and frozen identities', () => {
     );
     const candidate = datasetCompositionCandidates(f.context)[0]!;
     expect(candidate.native.grain).toBe('episode-occurrence');
+    expect(candidate.native.missing.join('; ')).toContain('episode-list-v1 native admission is available');
+    expect(candidate.native.missing.join('; ')).toContain('exact Source binding/conversion/adoption/support receipts');
     expect(candidate.qualifiers).toMatchObject({
       sort: 0.5,
       disc: 0,

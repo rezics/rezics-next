@@ -136943,8 +136943,9 @@
                                     "type": "string"
                                   },
                                   "values": {
+                                    "additionalProperties": false,
                                     "patternProperties": {
-                                      "^.*$": {
+                                      "^[A-Za-z][A-Za-z0-9]*$": {
                                         "anyOf": [
                                           {
                                             "maxLength": 4000,
@@ -136953,6 +136954,54 @@
                                           },
                                           {
                                             "type": "boolean"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "denominator": {
+                                                "maximum": 1000000000000,
+                                                "minimum": 1,
+                                                "type": "integer"
+                                              },
+                                              "numerator": {
+                                                "maximum": 1000000000000,
+                                                "minimum": 0,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "numerator",
+                                              "denominator"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "language": {
+                                                "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+                                                "type": "string"
+                                              },
+                                              "value": {
+                                                "maxLength": 4000,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "value",
+                                              "language"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "items": {
+                                              "maxLength": 2048,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "maxItems": 64,
+                                            "type": "array"
                                           }
                                         ]
                                       }
@@ -138345,8 +138394,9 @@
                                       "type": "string"
                                     },
                                     "values": {
+                                      "additionalProperties": false,
                                       "patternProperties": {
-                                        "^.*$": {
+                                        "^[A-Za-z][A-Za-z0-9]*$": {
                                           "anyOf": [
                                             {
                                               "maxLength": 4000,
@@ -138355,6 +138405,54 @@
                                             },
                                             {
                                               "type": "boolean"
+                                            },
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "denominator": {
+                                                  "maximum": 1000000000000,
+                                                  "minimum": 1,
+                                                  "type": "integer"
+                                                },
+                                                "numerator": {
+                                                  "maximum": 1000000000000,
+                                                  "minimum": 0,
+                                                  "type": "integer"
+                                                }
+                                              },
+                                              "required": [
+                                                "numerator",
+                                                "denominator"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "language": {
+                                                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+                                                  "type": "string"
+                                                },
+                                                "value": {
+                                                  "maxLength": 4000,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "value",
+                                                "language"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "items": {
+                                                "maxLength": 2048,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "maxItems": 64,
+                                              "type": "array"
                                             }
                                           ]
                                         }
@@ -138910,8 +139008,9 @@
                                           "type": "string"
                                         },
                                         "values": {
+                                          "additionalProperties": false,
                                           "patternProperties": {
-                                            "^.*$": {
+                                            "^[A-Za-z][A-Za-z0-9]*$": {
                                               "anyOf": [
                                                 {
                                                   "maxLength": 4000,
@@ -138920,6 +139019,54 @@
                                                 },
                                                 {
                                                   "type": "boolean"
+                                                },
+                                                {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "denominator": {
+                                                      "maximum": 1000000000000,
+                                                      "minimum": 1,
+                                                      "type": "integer"
+                                                    },
+                                                    "numerator": {
+                                                      "maximum": 1000000000000,
+                                                      "minimum": 0,
+                                                      "type": "integer"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "numerator",
+                                                    "denominator"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "language": {
+                                                      "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+                                                      "type": "string"
+                                                    },
+                                                    "value": {
+                                                      "maxLength": 4000,
+                                                      "minLength": 1,
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "value",
+                                                    "language"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                {
+                                                  "items": {
+                                                    "maxLength": 2048,
+                                                    "minLength": 1,
+                                                    "type": "string"
+                                                  },
+                                                  "maxItems": 64,
+                                                  "type": "array"
                                                 }
                                               ]
                                             }
@@ -139504,8 +139651,9 @@
                                       "type": "string"
                                     },
                                     "values": {
+                                      "additionalProperties": false,
                                       "patternProperties": {
-                                        "^.*$": {
+                                        "^[A-Za-z][A-Za-z0-9]*$": {
                                           "anyOf": [
                                             {
                                               "maxLength": 4000,
@@ -139514,6 +139662,54 @@
                                             },
                                             {
                                               "type": "boolean"
+                                            },
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "denominator": {
+                                                  "maximum": 1000000000000,
+                                                  "minimum": 1,
+                                                  "type": "integer"
+                                                },
+                                                "numerator": {
+                                                  "maximum": 1000000000000,
+                                                  "minimum": 0,
+                                                  "type": "integer"
+                                                }
+                                              },
+                                              "required": [
+                                                "numerator",
+                                                "denominator"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "language": {
+                                                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+                                                  "type": "string"
+                                                },
+                                                "value": {
+                                                  "maxLength": 4000,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "value",
+                                                "language"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "items": {
+                                                "maxLength": 2048,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "maxItems": 64,
+                                              "type": "array"
                                             }
                                           ]
                                         }
@@ -140069,8 +140265,9 @@
                                           "type": "string"
                                         },
                                         "values": {
+                                          "additionalProperties": false,
                                           "patternProperties": {
-                                            "^.*$": {
+                                            "^[A-Za-z][A-Za-z0-9]*$": {
                                               "anyOf": [
                                                 {
                                                   "maxLength": 4000,
@@ -140079,6 +140276,54 @@
                                                 },
                                                 {
                                                   "type": "boolean"
+                                                },
+                                                {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "denominator": {
+                                                      "maximum": 1000000000000,
+                                                      "minimum": 1,
+                                                      "type": "integer"
+                                                    },
+                                                    "numerator": {
+                                                      "maximum": 1000000000000,
+                                                      "minimum": 0,
+                                                      "type": "integer"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "numerator",
+                                                    "denominator"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "language": {
+                                                      "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+                                                      "type": "string"
+                                                    },
+                                                    "value": {
+                                                      "maxLength": 4000,
+                                                      "minLength": 1,
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "value",
+                                                    "language"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                {
+                                                  "items": {
+                                                    "maxLength": 2048,
+                                                    "minLength": 1,
+                                                    "type": "string"
+                                                  },
+                                                  "maxItems": 64,
+                                                  "type": "array"
                                                 }
                                               ]
                                             }
@@ -140663,8 +140908,9 @@
                                       "type": "string"
                                     },
                                     "values": {
+                                      "additionalProperties": false,
                                       "patternProperties": {
-                                        "^.*$": {
+                                        "^[A-Za-z][A-Za-z0-9]*$": {
                                           "anyOf": [
                                             {
                                               "maxLength": 4000,
@@ -140673,6 +140919,54 @@
                                             },
                                             {
                                               "type": "boolean"
+                                            },
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "denominator": {
+                                                  "maximum": 1000000000000,
+                                                  "minimum": 1,
+                                                  "type": "integer"
+                                                },
+                                                "numerator": {
+                                                  "maximum": 1000000000000,
+                                                  "minimum": 0,
+                                                  "type": "integer"
+                                                }
+                                              },
+                                              "required": [
+                                                "numerator",
+                                                "denominator"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "language": {
+                                                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+                                                  "type": "string"
+                                                },
+                                                "value": {
+                                                  "maxLength": 4000,
+                                                  "minLength": 1,
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "value",
+                                                "language"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "items": {
+                                                "maxLength": 2048,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              },
+                                              "maxItems": 64,
+                                              "type": "array"
                                             }
                                           ]
                                         }
@@ -141228,8 +141522,9 @@
                                           "type": "string"
                                         },
                                         "values": {
+                                          "additionalProperties": false,
                                           "patternProperties": {
-                                            "^.*$": {
+                                            "^[A-Za-z][A-Za-z0-9]*$": {
                                               "anyOf": [
                                                 {
                                                   "maxLength": 4000,
@@ -141238,6 +141533,54 @@
                                                 },
                                                 {
                                                   "type": "boolean"
+                                                },
+                                                {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "denominator": {
+                                                      "maximum": 1000000000000,
+                                                      "minimum": 1,
+                                                      "type": "integer"
+                                                    },
+                                                    "numerator": {
+                                                      "maximum": 1000000000000,
+                                                      "minimum": 0,
+                                                      "type": "integer"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "numerator",
+                                                    "denominator"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "language": {
+                                                      "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+                                                      "type": "string"
+                                                    },
+                                                    "value": {
+                                                      "maxLength": 4000,
+                                                      "minLength": 1,
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "value",
+                                                    "language"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                {
+                                                  "items": {
+                                                    "maxLength": 2048,
+                                                    "minLength": 1,
+                                                    "type": "string"
+                                                  },
+                                                  "maxItems": 64,
+                                                  "type": "array"
                                                 }
                                               ]
                                             }
@@ -143115,8 +143458,9 @@
                                     "type": "string"
                                   },
                                   "values": {
+                                    "additionalProperties": false,
                                     "patternProperties": {
-                                      "^.*$": {
+                                      "^[A-Za-z][A-Za-z0-9]*$": {
                                         "anyOf": [
                                           {
                                             "maxLength": 4000,
@@ -143125,6 +143469,54 @@
                                           },
                                           {
                                             "type": "boolean"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "denominator": {
+                                                "maximum": 1000000000000,
+                                                "minimum": 1,
+                                                "type": "integer"
+                                              },
+                                              "numerator": {
+                                                "maximum": 1000000000000,
+                                                "minimum": 0,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "numerator",
+                                              "denominator"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "language": {
+                                                "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+                                                "type": "string"
+                                              },
+                                              "value": {
+                                                "maxLength": 4000,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "value",
+                                              "language"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "items": {
+                                              "maxLength": 2048,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "maxItems": 64,
+                                            "type": "array"
                                           }
                                         ]
                                       }
@@ -144548,8 +144940,9 @@
                                     "type": "string"
                                   },
                                   "values": {
+                                    "additionalProperties": false,
                                     "patternProperties": {
-                                      "^.*$": {
+                                      "^[A-Za-z][A-Za-z0-9]*$": {
                                         "anyOf": [
                                           {
                                             "maxLength": 4000,
@@ -144558,6 +144951,54 @@
                                           },
                                           {
                                             "type": "boolean"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "denominator": {
+                                                "maximum": 1000000000000,
+                                                "minimum": 1,
+                                                "type": "integer"
+                                              },
+                                              "numerator": {
+                                                "maximum": 1000000000000,
+                                                "minimum": 0,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "numerator",
+                                              "denominator"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "language": {
+                                                "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+                                                "type": "string"
+                                              },
+                                              "value": {
+                                                "maxLength": 4000,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "value",
+                                              "language"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "items": {
+                                              "maxLength": 2048,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "maxItems": 64,
+                                            "type": "array"
                                           }
                                         ]
                                       }
@@ -151698,8 +152139,9 @@
                                     "type": "string"
                                   },
                                   "values": {
+                                    "additionalProperties": false,
                                     "patternProperties": {
-                                      "^.*$": {
+                                      "^[A-Za-z][A-Za-z0-9]*$": {
                                         "anyOf": [
                                           {
                                             "maxLength": 4000,
@@ -151708,6 +152150,54 @@
                                           },
                                           {
                                             "type": "boolean"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "denominator": {
+                                                "maximum": 1000000000000,
+                                                "minimum": 1,
+                                                "type": "integer"
+                                              },
+                                              "numerator": {
+                                                "maximum": 1000000000000,
+                                                "minimum": 0,
+                                                "type": "integer"
+                                              }
+                                            },
+                                            "required": [
+                                              "numerator",
+                                              "denominator"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "language": {
+                                                "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+                                                "type": "string"
+                                              },
+                                              "value": {
+                                                "maxLength": 4000,
+                                                "minLength": 1,
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "value",
+                                              "language"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "items": {
+                                              "maxLength": 2048,
+                                              "minLength": 1,
+                                              "type": "string"
+                                            },
+                                            "maxItems": 64,
+                                            "type": "array"
                                           }
                                         ]
                                       }

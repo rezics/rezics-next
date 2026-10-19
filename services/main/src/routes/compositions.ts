@@ -16,7 +16,7 @@ import { readVisibleCompositionPage } from '../modules/collection/visible-page.t
 import { readCompositionSeal } from '../modules/structure/seal-read.ts';
 import { canReadStructureTarget, structureProfileFor } from '../modules/structure/profiles.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable } from '../modules/structure/tree.ts';
-import { InvalidStructureObject, type OccurrenceRecord } from '../modules/structure/format.ts';
+import { InvalidStructureObject, structureQualifierText, type OccurrenceRecord } from '../modules/structure/format.ts';
 import { StructureStageConflict, StructureStageInvalid, StructureStageUnavailable }
   from '../modules/structure/stage.ts';
 import { planStructureRefresh, readStructureSnapshot, StructureRefreshInvalid }
@@ -52,11 +52,21 @@ const position = t.Union([t.Literal('first'), t.Literal('last'),
 const division = t.Union([t.Literal('volume'), t.Literal('part'), t.Literal('extras')]);
 const profile = t.String({ minLength: 1, maxLength: 64, pattern: '^[a-z][a-z0-9]*(-[a-z0-9]+)*$' });
 const roleName = t.String({ minLength: 1, maxLength: 32, pattern: '^[a-z][a-z0-9]*(-[a-z0-9]+)*$' });
-const declaredQualifier = t.Object({
+type DeclaredStructureQualifier = Extract<NonNullable<OccurrenceRecord['qualifier']>, { type: 'fields' }>;
+// Keep the existing immutable field envelope at the transport boundary, including
+// exact fractions. The selected owner still admits each field and its meaning.
+export const declaredStructureQualifier = t.Unsafe<DeclaredStructureQualifier>(t.Object({
   type: t.Literal('fields'),
   id: t.String({ minLength: 1, maxLength: 64, pattern: '^[a-z][a-z0-9]*(-[a-z0-9]+)*$' }),
-  values: t.Record(t.String(), t.Union([t.String({ minLength: 1, maxLength: 4000 }), t.Boolean()])),
-}, { additionalProperties: false });
+  values: t.Record(t.String({ minLength: 1, maxLength: 64, pattern: '^[A-Za-z][A-Za-z0-9]*$' }), t.Union([
+    t.String({ minLength: 1, maxLength: 4000 }), t.Boolean(),
+    t.Object({ numerator: t.Integer({ minimum: 0, maximum: 1_000_000_000_000 }),
+      denominator: t.Integer({ minimum: 1, maximum: 1_000_000_000_000 }) }, { additionalProperties: false }),
+    structureQualifierText(4000),
+    t.Array(t.String({ minLength: 1, maxLength: 2048 }), { maxItems: 64 }),
+  ]), { additionalProperties: false }),
+}, { additionalProperties: false }));
+const declaredQualifier = declaredStructureQualifier;
 const noteQualifier = t.Object({ note: t.String({ minLength: 1, maxLength: 4000 }) },
   { additionalProperties: false });
 const inclusion = t.Union([t.Literal('required'), t.Literal('optional'), t.Literal('extra')]);

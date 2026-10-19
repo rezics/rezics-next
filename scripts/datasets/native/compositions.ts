@@ -142,8 +142,8 @@ export function datasetCompositionCandidates(
               grain: episode ? 'episode-occurrence' : 'track-occurrence',
               missing: episode
                 ? [
-                    'Structure profile/owner policy for Bangumi episode type/disc/fractional sort and episode targets',
-                    'source Structure conversion/adoption/support adapter',
+                    'episode-list-v1 native admission is available; exact Source binding/conversion/adoption/support receipts and source fractional sort/disc/qualified-type correspondence are required before mapping',
+                    'source Structure conversion/adoption/support adapter; exact acknowledged TVEpisode resource target and Work/MainVersion owner heads',
                   ]
                 : [
                     consumedTracks.has(path)
