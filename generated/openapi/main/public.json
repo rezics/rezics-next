@@ -1252,6 +1252,12 @@
               "ratings": {
                 "type": "string"
               },
+              "realizations": {
+                "type": "string"
+              },
+              "releases": {
+                "type": "string"
+              },
               "versions": {
                 "type": "string"
               }
@@ -1321,6 +1327,142 @@
               "string",
               "null"
             ]
+          },
+          "navigation": {
+            "patternProperties": {
+              "^.*$": {
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "href": {
+                        "maxLength": 4096,
+                        "pattern": "^/v1/[^#{}]+$",
+                        "type": "string"
+                      },
+                      "kind": {
+                        "const": "resource",
+                        "type": "string"
+                      },
+                      "method": {
+                        "const": "GET",
+                        "type": "string"
+                      },
+                      "operationId": {
+                        "maxLength": 128,
+                        "pattern": "^getV1[A-Z]",
+                        "type": "string"
+                      },
+                      "responseProfile": {
+                        "~elyTyp": 7,
+                        "maxLength": 128,
+                        "minLength": 1,
+                        "nullable": true,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "method",
+                      "href",
+                      "operationId",
+                      "responseProfile"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "href": {
+                        "const": "/v1/query",
+                        "type": "string"
+                      },
+                      "kind": {
+                        "const": "query",
+                        "type": "string"
+                      },
+                      "method": {
+                        "const": "POST",
+                        "type": "string"
+                      },
+                      "operationId": {
+                        "const": "postV1Query",
+                        "type": "string"
+                      },
+                      "request": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "limit": {
+                            "const": 20,
+                            "type": "number"
+                          },
+                          "parameters": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "roots": {
+                                "items": false,
+                                "minItems": 1,
+                                "prefixItems": [
+                                  {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  }
+                                ],
+                                "type": "array"
+                              }
+                            },
+                            "required": [
+                              "roots"
+                            ],
+                            "type": "object"
+                          },
+                          "profile": {
+                            "const": "template-query-v1",
+                            "type": "string"
+                          },
+                          "query": {
+                            "enum": [
+                              "https://rezics.com/query/work-versions",
+                              "https://rezics.com/query/work-adoptions"
+                            ],
+                            "type": "string"
+                          },
+                          "revision": {
+                            "const": 1,
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "profile",
+                          "query",
+                          "revision",
+                          "parameters",
+                          "limit"
+                        ],
+                        "type": "object"
+                      },
+                      "responseProfile": {
+                        "const": "query-v1",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "method",
+                      "href",
+                      "operationId",
+                      "responseProfile",
+                      "request"
+                    ],
+                    "type": "object"
+                  }
+                ]
+              }
+            },
+            "type": "object"
           },
           "originalTitle": {
             "~elyTyp": 7,
@@ -254913,6 +255055,158 @@
                     "profile": {
                       "const": "facets-v1",
                       "type": "string"
+                    },
+                    "queryShapes": {
+                      "items": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "continuation": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "request": {
+                                    "const": "page.continuation",
+                                    "type": "string"
+                                  },
+                                  "response": {
+                                    "const": "result.nextCursor",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "request",
+                                  "response"
+                                ],
+                                "type": "object"
+                              },
+                              "facets": {
+                                "items": {
+                                  "maxLength": 2048,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "maxItems": 64,
+                                "type": "array",
+                                "uniqueItems": true
+                              },
+                              "href": {
+                                "const": "/v1/query",
+                                "type": "string"
+                              },
+                              "id": {
+                                "const": "release-works-v1",
+                                "type": "string"
+                              },
+                              "maxPageSize": {
+                                "maximum": 20,
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "method": {
+                                "const": "POST",
+                                "type": "string"
+                              },
+                              "requestProfile": {
+                                "const": "filter-document-v1",
+                                "type": "string"
+                              },
+                              "state": {
+                                "const": "ready",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "facets",
+                              "method",
+                              "href",
+                              "requestProfile",
+                              "maxPageSize",
+                              "continuation",
+                              "state"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "continuation": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "request": {
+                                    "const": "page.continuation",
+                                    "type": "string"
+                                  },
+                                  "response": {
+                                    "const": "result.nextCursor",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "request",
+                                  "response"
+                                ],
+                                "type": "object"
+                              },
+                              "facets": {
+                                "items": {
+                                  "maxLength": 2048,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "maxItems": 64,
+                                "type": "array",
+                                "uniqueItems": true
+                              },
+                              "href": {
+                                "const": "/v1/query",
+                                "type": "string"
+                              },
+                              "id": {
+                                "const": "release-works-v1",
+                                "type": "string"
+                              },
+                              "maxPageSize": {
+                                "maximum": 20,
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "method": {
+                                "const": "POST",
+                                "type": "string"
+                              },
+                              "refusal": {
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "requestProfile": {
+                                "const": "filter-document-v1",
+                                "type": "string"
+                              },
+                              "state": {
+                                "const": "unsupported",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "facets",
+                              "method",
+                              "href",
+                              "requestProfile",
+                              "maxPageSize",
+                              "continuation",
+                              "state",
+                              "refusal"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "maxItems": 1,
+                      "type": "array"
                     }
                   },
                   "required": [
@@ -753409,6 +753703,12 @@
                                       "ratings": {
                                         "type": "string"
                                       },
+                                      "realizations": {
+                                        "type": "string"
+                                      },
+                                      "releases": {
+                                        "type": "string"
+                                      },
                                       "versions": {
                                         "type": "string"
                                       }
@@ -753478,6 +753778,142 @@
                                       "string",
                                       "null"
                                     ]
+                                  },
+                                  "navigation": {
+                                    "patternProperties": {
+                                      "^.*$": {
+                                        "anyOf": [
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "href": {
+                                                "maxLength": 4096,
+                                                "pattern": "^/v1/[^#{}]+$",
+                                                "type": "string"
+                                              },
+                                              "kind": {
+                                                "const": "resource",
+                                                "type": "string"
+                                              },
+                                              "method": {
+                                                "const": "GET",
+                                                "type": "string"
+                                              },
+                                              "operationId": {
+                                                "maxLength": 128,
+                                                "pattern": "^getV1[A-Z]",
+                                                "type": "string"
+                                              },
+                                              "responseProfile": {
+                                                "~elyTyp": 7,
+                                                "maxLength": 128,
+                                                "minLength": 1,
+                                                "nullable": true,
+                                                "type": [
+                                                  "string",
+                                                  "null"
+                                                ]
+                                              }
+                                            },
+                                            "required": [
+                                              "kind",
+                                              "method",
+                                              "href",
+                                              "operationId",
+                                              "responseProfile"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "href": {
+                                                "const": "/v1/query",
+                                                "type": "string"
+                                              },
+                                              "kind": {
+                                                "const": "query",
+                                                "type": "string"
+                                              },
+                                              "method": {
+                                                "const": "POST",
+                                                "type": "string"
+                                              },
+                                              "operationId": {
+                                                "const": "postV1Query",
+                                                "type": "string"
+                                              },
+                                              "request": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "limit": {
+                                                    "const": 20,
+                                                    "type": "number"
+                                                  },
+                                                  "parameters": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "roots": {
+                                                        "items": false,
+                                                        "minItems": 1,
+                                                        "prefixItems": [
+                                                          {
+                                                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                                            "type": "string"
+                                                          }
+                                                        ],
+                                                        "type": "array"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "roots"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "profile": {
+                                                    "const": "template-query-v1",
+                                                    "type": "string"
+                                                  },
+                                                  "query": {
+                                                    "enum": [
+                                                      "https://rezics.com/query/work-versions",
+                                                      "https://rezics.com/query/work-adoptions"
+                                                    ],
+                                                    "type": "string"
+                                                  },
+                                                  "revision": {
+                                                    "const": 1,
+                                                    "type": "number"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "profile",
+                                                  "query",
+                                                  "revision",
+                                                  "parameters",
+                                                  "limit"
+                                                ],
+                                                "type": "object"
+                                              },
+                                              "responseProfile": {
+                                                "const": "query-v1",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "kind",
+                                              "method",
+                                              "href",
+                                              "operationId",
+                                              "responseProfile",
+                                              "request"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        ]
+                                      }
+                                    },
+                                    "type": "object"
                                   },
                                   "originalTitle": {
                                     "~elyTyp": 7,
@@ -761857,6 +762293,12 @@
                             "ratings": {
                               "type": "string"
                             },
+                            "realizations": {
+                              "type": "string"
+                            },
+                            "releases": {
+                              "type": "string"
+                            },
                             "versions": {
                               "type": "string"
                             }
@@ -761926,6 +762368,142 @@
                             "string",
                             "null"
                           ]
+                        },
+                        "navigation": {
+                          "patternProperties": {
+                            "^.*$": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "href": {
+                                      "maxLength": 4096,
+                                      "pattern": "^/v1/[^#{}]+$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "resource",
+                                      "type": "string"
+                                    },
+                                    "method": {
+                                      "const": "GET",
+                                      "type": "string"
+                                    },
+                                    "operationId": {
+                                      "maxLength": 128,
+                                      "pattern": "^getV1[A-Z]",
+                                      "type": "string"
+                                    },
+                                    "responseProfile": {
+                                      "~elyTyp": 7,
+                                      "maxLength": 128,
+                                      "minLength": 1,
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "method",
+                                    "href",
+                                    "operationId",
+                                    "responseProfile"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "href": {
+                                      "const": "/v1/query",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "query",
+                                      "type": "string"
+                                    },
+                                    "method": {
+                                      "const": "POST",
+                                      "type": "string"
+                                    },
+                                    "operationId": {
+                                      "const": "postV1Query",
+                                      "type": "string"
+                                    },
+                                    "request": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "limit": {
+                                          "const": 20,
+                                          "type": "number"
+                                        },
+                                        "parameters": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "roots": {
+                                              "items": false,
+                                              "minItems": 1,
+                                              "prefixItems": [
+                                                {
+                                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                                  "type": "string"
+                                                }
+                                              ],
+                                              "type": "array"
+                                            }
+                                          },
+                                          "required": [
+                                            "roots"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "profile": {
+                                          "const": "template-query-v1",
+                                          "type": "string"
+                                        },
+                                        "query": {
+                                          "enum": [
+                                            "https://rezics.com/query/work-versions",
+                                            "https://rezics.com/query/work-adoptions"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "revision": {
+                                          "const": 1,
+                                          "type": "number"
+                                        }
+                                      },
+                                      "required": [
+                                        "profile",
+                                        "query",
+                                        "revision",
+                                        "parameters",
+                                        "limit"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "responseProfile": {
+                                      "const": "query-v1",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "method",
+                                    "href",
+                                    "operationId",
+                                    "responseProfile",
+                                    "request"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            }
+                          },
+                          "type": "object"
                         },
                         "originalTitle": {
                           "~elyTyp": 7,
