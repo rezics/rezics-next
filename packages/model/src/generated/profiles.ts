@@ -1230,6 +1230,18 @@ export const profileRegistry = {
       "revision"
     ]
   },
+  "semantic-definition-v2": {
+    "sha256": "fc4ed843cea04c13d9fac64b9056455cf316977d8ff7f4c40856ac5879cf6d7c",
+    "file": "shapes/semantic-definition-v2.ttl",
+    "shapes": [
+      "https://rezics.com/definition/semantic-definition-v2/definition-shape",
+      "https://rezics.com/definition/semantic-definition-v2/revision-shape"
+    ],
+    "focusRoles": [
+      "definition",
+      "revision"
+    ]
+  },
   "semantic-model-generation-v1": {
     "sha256": "16d519183b325de019c55dc5ca2c5bf140b246ba4bb81609b16e386d431595f0",
     "file": "shapes/semantic-model-generation-v1.ttl",

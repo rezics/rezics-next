@@ -32,6 +32,8 @@ const position = t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String
 const semanticWrite = t.Object({ profile: t.Literal('semantic-change-v1'), component: t.String(),
   revision: t.String(), predecessor: t.Nullable(t.String()), receipt: t.String(), sourcePosition: position,
   replayed: t.Boolean() });
+const authoredSemanticWrite = t.Object({ ...semanticWrite.properties, profile: t.Literal('semantic-change-v2'),
+  modelGeneration: t.String(), manifest: t.String() });
 const semanticRead = t.Object({ profile: t.Literal('semantic-change-v1'), component: t.String(),
   revision: t.String(), predecessor: t.Nullable(t.String()), modelGeneration: t.String(), state: t.Unknown(),
   references: t.Record(t.String(), t.Object({ state: t.Union([t.Literal('available'), t.Literal('unavailable')]) })),
@@ -65,6 +67,9 @@ export function semanticError(error: unknown): Response {
     'Semantic change is not admitted', undefined,
     { itemIndex: error.itemIndex, pointer: error.pointer, reference: error.reference });
   if (error instanceof SemanticChangeRejected) {
+    if (error.code === 'immutable-meaning' || error.code === 'unsupported-model-revision') {
+      return problem(409, error.code.replaceAll('-', '_'), error.message);
+    }
     if (error.code === 'invalid' || error.code === 'unsupported') {
       return problem(400, `${error.code}_semantic_change`, 'Semantic change does not match its profile');
     }
@@ -120,10 +125,10 @@ export function semanticRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
   };
   return new Elysia()
     .post('/v1/semantic/changes', {
-      body: t.Object({ profile: t.Literal('semantic-change-v1'), target: t.Optional(native),
+      body: t.Object({ profile: t.Union([t.Literal('semantic-change-v1'), t.Literal('semantic-change-v2')]), target: t.Optional(native),
         expectedHead: t.Nullable(native), state: t.Record(t.String(), t.Unknown()), actingSubject: native },
       { additionalProperties: false }),
-      response: transportResponses(openApiOperations["/v1/semantic/changes"].post, { 200: semanticWrite, 201: semanticWrite, 202: pendingOperation, ...writeProblems,
+      response: transportResponses(openApiOperations["/v1/semantic/changes"].post, { 200: t.Union([semanticWrite, authoredSemanticWrite]), 201: t.Union([semanticWrite, authoredSemanticWrite]), 202: pendingOperation, ...writeProblems,
         404: problemResult(404), 422: semanticChangeProblem }, 'POST'),
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
@@ -132,12 +137,14 @@ export function semanticRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       }
       try {
         const result = await admittedSemanticChange(work.environment, work.account, work.access, request, {
+          profile: body.profile,
           ...(body.target ? { target: body.target } : {}), expectedHead: body.expectedHead, state: body.state,
           actingSubject: body.actingSubject, idempotencyKey }, work.platformAccess);
-        return Response.json({ profile: 'semantic-change-v1', component: result.component, revision: result.revision,
+        return Response.json({ profile: body.profile, component: result.component, revision: result.revision,
           predecessor: result.predecessor, receipt: result.receipt, sourcePosition: { datasetId: 'product',
-            dataEpoch: result.dataEpoch, sequence: result.sequence }, replayed: result.replayed },
-        { status: body.target ? 200 : 201, headers: { 'cache-control': 'no-store' } });
+            dataEpoch: result.dataEpoch, sequence: result.sequence }, replayed: result.replayed,
+          ...(body.profile === 'semantic-change-v2' ? { modelGeneration: result.modelGeneration, manifest: result.manifest } : {}) },
+        { status: body.target || body.profile === 'semantic-change-v2' && result.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
       } catch (error) { return semanticError(error); }
     })
     .post('/v1/semantic/changes/bulk', {

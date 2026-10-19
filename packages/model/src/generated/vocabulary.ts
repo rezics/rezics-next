@@ -74,6 +74,7 @@ export const iri = {
   "<https://rezics.com/definition/release-v3>": "https://rezics.com/definition/release-v3",
   "<https://rezics.com/definition/rights-offering-v1>": "https://rezics.com/definition/rights-offering-v1",
   "<https://rezics.com/definition/semantic-definition-v1>": "https://rezics.com/definition/semantic-definition-v1",
+  "<https://rezics.com/definition/semantic-definition-v2>": "https://rezics.com/definition/semantic-definition-v2",
   "<https://rezics.com/definition/semantic-model-generation-v1>": "https://rezics.com/definition/semantic-model-generation-v1",
   "<https://rezics.com/definition/semantic-resource-v1>": "https://rezics.com/definition/semantic-resource-v1",
   "<https://rezics.com/definition/semantic-rule-v1>": "https://rezics.com/definition/semantic-rule-v1",

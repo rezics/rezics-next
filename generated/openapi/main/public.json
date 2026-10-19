@@ -815772,7 +815772,10 @@
                     ]
                   },
                   "profile": {
-                    "const": "semantic-change-v1",
+                    "enum": [
+                      "semantic-change-v1",
+                      "semantic-change-v2"
+                    ],
                     "type": "string"
                   },
                   "state": {
@@ -815813,7 +815816,10 @@
                     ]
                   },
                   "profile": {
-                    "const": "semantic-change-v1",
+                    "enum": [
+                      "semantic-change-v1",
+                      "semantic-change-v2"
+                    ],
                     "type": "string"
                   },
                   "state": {
@@ -815854,7 +815860,10 @@
                     ]
                   },
                   "profile": {
-                    "const": "semantic-change-v1",
+                    "enum": [
+                      "semantic-change-v1",
+                      "semantic-change-v2"
+                    ],
                     "type": "string"
                   },
                   "state": {
@@ -815885,62 +815894,132 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "component": {
-                      "type": "string"
-                    },
-                    "predecessor": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "profile": {
-                      "const": "semantic-change-v1",
-                      "type": "string"
-                    },
-                    "receipt": {
-                      "type": "string"
-                    },
-                    "replayed": {
-                      "type": "boolean"
-                    },
-                    "revision": {
-                      "type": "string"
-                    },
-                    "sourcePosition": {
+                  "anyOf": [
+                    {
                       "properties": {
-                        "dataEpoch": {
+                        "component": {
                           "type": "string"
                         },
-                        "datasetId": {
-                          "const": "product",
+                        "predecessor": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "profile": {
+                          "const": "semantic-change-v1",
                           "type": "string"
                         },
-                        "sequence": {
+                        "receipt": {
                           "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "revision": {
+                          "type": "string"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
                         }
                       },
                       "required": [
-                        "datasetId",
-                        "dataEpoch",
-                        "sequence"
+                        "profile",
+                        "component",
+                        "revision",
+                        "predecessor",
+                        "receipt",
+                        "sourcePosition",
+                        "replayed"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "component": {
+                          "type": "string"
+                        },
+                        "manifest": {
+                          "type": "string"
+                        },
+                        "modelGeneration": {
+                          "type": "string"
+                        },
+                        "predecessor": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "profile": {
+                          "const": "semantic-change-v2",
+                          "type": "string"
+                        },
+                        "receipt": {
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "revision": {
+                          "type": "string"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "component",
+                        "revision",
+                        "predecessor",
+                        "receipt",
+                        "sourcePosition",
+                        "replayed",
+                        "modelGeneration",
+                        "manifest"
                       ],
                       "type": "object"
                     }
-                  },
-                  "required": [
-                    "profile",
-                    "component",
-                    "revision",
-                    "predecessor",
-                    "receipt",
-                    "sourcePosition",
-                    "replayed"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
@@ -815950,62 +816029,132 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "component": {
-                      "type": "string"
-                    },
-                    "predecessor": {
-                      "~elyTyp": 7,
-                      "nullable": true,
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    },
-                    "profile": {
-                      "const": "semantic-change-v1",
-                      "type": "string"
-                    },
-                    "receipt": {
-                      "type": "string"
-                    },
-                    "replayed": {
-                      "type": "boolean"
-                    },
-                    "revision": {
-                      "type": "string"
-                    },
-                    "sourcePosition": {
+                  "anyOf": [
+                    {
                       "properties": {
-                        "dataEpoch": {
+                        "component": {
                           "type": "string"
                         },
-                        "datasetId": {
-                          "const": "product",
+                        "predecessor": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "profile": {
+                          "const": "semantic-change-v1",
                           "type": "string"
                         },
-                        "sequence": {
+                        "receipt": {
                           "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "revision": {
+                          "type": "string"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
                         }
                       },
                       "required": [
-                        "datasetId",
-                        "dataEpoch",
-                        "sequence"
+                        "profile",
+                        "component",
+                        "revision",
+                        "predecessor",
+                        "receipt",
+                        "sourcePosition",
+                        "replayed"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "component": {
+                          "type": "string"
+                        },
+                        "manifest": {
+                          "type": "string"
+                        },
+                        "modelGeneration": {
+                          "type": "string"
+                        },
+                        "predecessor": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "profile": {
+                          "const": "semantic-change-v2",
+                          "type": "string"
+                        },
+                        "receipt": {
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "revision": {
+                          "type": "string"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "component",
+                        "revision",
+                        "predecessor",
+                        "receipt",
+                        "sourcePosition",
+                        "replayed",
+                        "modelGeneration",
+                        "manifest"
                       ],
                       "type": "object"
                     }
-                  },
-                  "required": [
-                    "profile",
-                    "component",
-                    "revision",
-                    "predecessor",
-                    "receipt",
-                    "sourcePosition",
-                    "replayed"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },

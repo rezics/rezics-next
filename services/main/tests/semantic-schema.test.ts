@@ -25,7 +25,7 @@ const load = async <T>(file: string): Promise<T> => await import(join(model, fil
 const { profileSource } = await load<{ profileSource: (profile: AuthoredProfile) => string }>('compiler/shacl.ts');
 const { buildModelOutputs } = await load<{ buildModelOutputs: (profiles: readonly AuthoredProfile[]) => Map<string, string> }>(
   'compiler/outputs.ts');
-const profileFiles = ['semantic-resource-v1', 'semantic-definition-v1', 'semantic-model-generation-v1',
+const profileFiles = ['semantic-resource-v1', 'semantic-definition-v1', 'semantic-definition-v2', 'semantic-model-generation-v1',
   'semantic-annotation-v1', 'value-exact-v1', 'relation-occurrence-v1'];
 const profiles = await Promise.all(profileFiles.map(async id => {
   const module = await load<Record<string, AuthoredProfile>>(`definitions/${id}.ts`);

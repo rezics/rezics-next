@@ -8,7 +8,8 @@ import { assertSemanticDispatchable, checkedSemanticTerminal, ensureModelGenerat
   sealSemanticRejection, sendSemanticWrite, StaleSemanticHead, validationsFor, type SemanticAdmission,
   type SemanticTerminal } from '../semantic/command.ts';
 import { ModelGenerationChanged } from '../semantic/generation-guard.ts';
-import { checkedStoredState, term, type RelationRole, type RelationStar } from '../semantic/change.ts';
+import { checkedComponentProfile, checkedStoredState, term, type RelationRole, type RelationStar } from '../semantic/change.ts';
+import type { AssociationBinding, RetainedCreditMapping } from '../semantic/association.ts';
 import { checkedNativeIri, definitionKindIri, MODEL_COMPONENT, PROFILES, type Lifecycle } from '../semantic/schema.ts';
 import { semanticValueRdf } from '../semantic/value.ts';
 import { checkedApplicability, checkedParticipations, checkedRevealedAt, InvalidRelationOccurrence,
@@ -78,6 +79,9 @@ export interface ExactDefinition extends EditorRecording {
   workSubjectRole?: string;
   /** Role keys of the star constraint, when the definition declares one. */
   star?: RelationStar;
+  modelRevision?: string;
+  association?: AssociationBinding;
+  retainedCredit?: RetainedCreditMapping;
 }
 
 export const roleIri = (definition: string, key: string): string => `${definition}/role/${key}`;
@@ -123,9 +127,10 @@ export async function readExactDefinition(env: WorkActivationEnvironment, revisi
   disclose: ReferenceDisclosure, canRead?: (definition: string) => Promise<boolean>,
   kinds: readonly ReadableDefinitionKind[] = ['relation']): Promise<ExactDefinition | null> {
   checkedNativeIri(revision);
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?definition ?manifest ?kind WHERE {
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?definition ?manifest ?kind ?model WHERE {
     GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:DefinitionRevision ; rv:component ?definition ;
-      rv:manifest ?manifest . OPTIONAL { ${iri(revision)} rv:definitionKind ?kind } } } LIMIT 2`);
+      rv:manifest ?manifest . OPTIONAL { ${iri(revision)} rv:definitionKind ?kind }
+      OPTIONAL { ${iri(revision)} rv:modelRevision ?model } } } LIMIT 2`);
   const rows = result.results?.bindings ?? [];
   if (!rows.length) return null;
   if (rows.length !== 1) throw new RevisionCorrupt('definition revision is ambiguous');
@@ -134,7 +139,8 @@ export async function readExactDefinition(env: WorkActivationEnvironment, revisi
   const graphKind = graphDefinitionKind(rows[0]!.kind?.value);
   if (graphKind === 'other') return null;
   if (graphKind && !kinds.includes(graphKind)) return null;
-  const state = checkedStoredState(await readComponent(env, rows[0]!.manifest!.value, definition, PROFILES.definition));
+  const profile = checkedComponentProfile(rows[0]!.model?.value, 'definition');
+  const state = checkedStoredState(await readComponent(env, rows[0]!.manifest!.value, definition, profile), profile);
   if (state.component !== 'definition') throw new RevisionCorrupt('definition revision names another component');
   if (state.kind !== 'relation' && state.kind !== 'property') return null;
   if (!kinds.includes(state.kind)) return null;
@@ -143,7 +149,11 @@ export async function readExactDefinition(env: WorkActivationEnvironment, revisi
   const roles = state.roles.map((role: RelationRole) => ({ role: roleIri(definition, role.key),
     minParticipants: role.minParticipants, maxParticipants: role.maxParticipants, ordered: role.ordered,
     ...(role.members ? { members: role.members.filter(ref => readableMembers.has(ref)) } : {}) }));
-  return { revision, definition, kind: state.kind, lifecycle: state.lifecycle, ...(state.editorRecordable === undefined ? {} : { editorRecordable: state.editorRecordable }),
+  return { revision, definition, kind: state.kind, lifecycle: state.lifecycle,
+    ...(profile === PROFILES.definitionV2 ? { modelRevision: profile } : {}),
+    ...(state.association ? { association: state.association } : {}),
+    ...(state.retainedCredit ? { retainedCredit: state.retainedCredit } : {}),
+    ...(state.editorRecordable === undefined ? {} : { editorRecordable: state.editorRecordable }),
     ...(state.writePath === undefined ? {} : { writePath: state.writePath }),
     ...(state.notation ? { notation: state.notation } : {}),
     ...(state.workSubjectRole ? { workSubjectRole: state.workSubjectRole } : {}),
