@@ -4,7 +4,7 @@ import { PROFILES } from '../semantic/schema.ts';
 import { systemDisclosure } from '../target/disclosed-references.ts';
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { canonicalCreditValue, creditNativeId, RETAINED_CREDIT_ASSOCIATIONS_PROFILE } from '../work/credit-association-state.ts';
-import { openRetainedCreditAssociationRead, readRetainedCreditAssociationView, resolveRetainedCreditAssociationIdentity,
+import { openRetainedCreditIdentityRead, openRetainedCreditAssociationRead, readRetainedCreditAssociationView, resolveRetainedCreditAssociationIdentity,
   RetainedCreditReadUnavailable } from '../work/credit-association-read.ts';
 import { readExactDefinition } from './change.ts';
 import { retainedRelationDependencies } from './retained-change.ts';
@@ -50,7 +50,7 @@ export async function retainedRelationOwnerMetadata(env: WorkActivationEnvironme
 export async function readRetainedRelationOwner(work: MainWorkDependencies, principal: VerifiedPrincipal,
   actingSubject: string, credit: string, associationHead: string, current = false) {
   const deps = retainedRelationDependencies(work, actingSubject);
-  const basis = await openRetainedCreditAssociationRead(deps, principal);
+  const basis = await openRetainedCreditIdentityRead(deps, principal);
   const exact = await resolveRetainedCreditAssociationIdentity(deps, { basis, credit, associationHead });
   if (exact.sourceValidation.some(value => value.state !== 'current')
     || exact.attribution.some(value => value.unsupportedFields.length))
@@ -68,9 +68,12 @@ export async function readRetainedRelationOwner(work: MainWorkDependencies, prin
     return unavailable('retained credit exact authored mapping unavailable');
   if (current) {
     if (exact.currentAssociationHead !== associationHead) return unavailable('retained credit current association head changed');
-    const view = await readRetainedCreditAssociationView(deps, { basis, work: exact.state.work, credit, associationHead });
+    const publicBasis = await openRetainedCreditAssociationRead(deps, principal);
+    const view = await readRetainedCreditAssociationView(deps, { basis: publicBasis, work: exact.state.work, credit, associationHead });
     if (!view) return null;
   }
   const metadata = await retainedRelationOwnerMetadata(work.environment, credit, associationHead, exact.receipt);
+  if (metadata.operation !== exact.operation || metadata.modelGeneration !== exact.modelGeneration)
+    return unavailable('retained credit exact owner command metadata changed');
   return { ...exact, ...metadata, definition };
 }

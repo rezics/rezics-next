@@ -7,12 +7,13 @@ import { resolvedSemanticCapabilities } from '../semantic/selected-capability.ts
 import { PROFILES } from '../semantic/schema.ts';
 import { systemDisclosure } from '../target/disclosed-references.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
-import { readCreditOwnerHead, readCreditOwnerWitness, type CreditOwnerWitness } from '../work/credit-verification.ts';
+import type { CreditOwnerWitness } from '../work/credit-verification.ts';
 import { creditAttributionOwner, creditOwnerParticipant, retainedCreditAttributionReader } from '../work/credit-attribution.ts';
 import { canonicalCreditValue, RETAINED_CREDIT_ASSOCIATIONS, type RetainedCreditAssociationState,
   type RetainedCreditMapping } from '../work/credit-association-state.ts';
-import { openRetainedCreditAssociationRead, resolveRetainedCreditAssociationIdentity,
+import { openRetainedCreditIdentityRead, resolveRetainedCreditAssociationIdentity,
   RetainedCreditReadUnavailable, type RetainedCreditAssociationReadOwners } from '../work/credit-association-read.ts';
+import { loadRetainedCreditBinding, type RetainedCreditOriginLoaders } from '../work/credit-association-origin.ts';
 import { bindRetainedCreditAssociation, prepareRetainedCreditBinding, type RetainedCreditBindingDependencies,
   type RetainedCreditBindingInput, type RetainedCreditBindingResult } from '../work/credit-association-write.ts';
 import { assertIdentityParticipants, canonicalRelation, readExactDefinition, relationReferences,
@@ -26,11 +27,10 @@ export type RetainedCreditOriginValue = Pick<RetainedCreditBindingInput,
 export interface RetainedRelationOwners {
   /** The same owners used for retained query hydration, without a second registry. */
   reads: RetainedCreditAssociationReadOwners;
-  origin?(input: { principal: VerifiedPrincipal; retained: RetainedRelationInput['retained'];
-    actingSubject: string }): Promise<RetainedCreditOriginValue | null>;
+  originLoaders?: RetainedCreditOriginLoaders;
   originGuard?: RetainedCreditBindingDependencies['originGuard'];
   /** Optional exact Relation publication settlement, never a request guard or
-   * a manufactured Global adoption. Required by the current credit command. */
+   * a manufactured Global adoption. An unadopted binding needs no publication. */
   publication?(input: { principal: VerifiedPrincipal; state: RetainedCreditAssociationState;
     actingSubject: string }): Promise<RelationPublication | null>;
 }
@@ -120,25 +120,15 @@ export async function admittedRetainedRelationChange(work: MainWorkDependencies,
   if (!owners) return unavailable('retained credit relation owners unavailable');
   const definition = await readExactDefinition(work.environment, input.mappingRevision, systemDisclosure);
   if (!definition) return unavailable('exact retained credit mapping unavailable');
-  let original: RetainedCreditOriginValue;
-  if (input.retained.origin.kind === 'stored-credit') {
-    const witness = await readCreditOwnerWitness(work.environment, input.retained.credit);
-    if (!witness || !await readCreditOwnerHead(work.environment, witness))
-      throw new SemanticChangeRejected('unavailable-reference', 'original retained credit is unavailable');
-    original = storedRetainedCreditOrigin(input, witness);
-  } else {
-    const retained = await owners.origin?.({ principal, retained: structuredClone(input.retained), actingSubject: input.actingSubject });
-    if (!retained) return unavailable('exact Source or selected-publication origin owner unavailable');
-    original = retained;
-  }
-  const binding = retainedRelationBindingInput(input, definition, original);
+  const deps = retainedRelationDependencies(work, input.actingSubject);
+  const loaded = await loadRetainedCreditBinding({ ...deps, originLoaders: owners.originLoaders }, principal, input);
+  const binding = retainedRelationBindingInput(input, definition, loaded.input);
   const prepared = await prepareRetainedCreditBinding(work.environment, binding);
   const publication = await owners.publication?.({ principal, state: structuredClone(prepared.state), actingSubject: input.actingSubject });
-  if (!publication?.guard?.trim()) return unavailable('retained credit relation settlement owner unavailable');
+  if (owners.publication && !publication?.guard?.trim()) return unavailable('retained credit relation settlement owner unavailable');
   const state = canonicalRelation(definition, { profile: 'relation-change-v2', definition: input.mappingRevision,
     participations: prepared.state.participations.map(({ id: _id, role, ...part }) => ({ ...part, role: definition.roleKeys[role]! })) });
   const readable = referenceReader(work.access, principal, input.actingSubject);
-  const deps = retainedRelationDependencies(work, input.actingSubject);
   return admitted({ env: work.environment, account: work.account, access: work.access, request,
     actingSubject: input.actingSubject, idempotencyKey, action: 'relation.change', family: RETAINED_CREDIT_ASSOCIATIONS,
     scope: `work:edit:${binding.work}`, digest: prepared.digest, platformAccess: work.platformAccess,
@@ -154,7 +144,7 @@ export async function admittedRetainedRelationChange(work: MainWorkDependencies,
         { access: work.access, principal: reader, actingSubject: input.actingSubject });
     },
     dispatch: admission => bindRetainedCreditAssociation(deps, { principal, admission, input: binding,
-      actingSubject: input.actingSubject, beforeCommit: publication }),
+      actingSubject: input.actingSubject, ...(publication ? { beforeCommit: publication } : {}) }),
     readTerminal: id => readSemanticTerminal(work.environment, familyReceiptIri(id, RETAINED_CREDIT_ASSOCIATIONS)),
     result: async (terminal: SemanticTerminal, dispatched) => {
       if (!terminal.component || !terminal.revision || terminal.component !== binding.credit
@@ -162,14 +152,15 @@ export async function admittedRetainedRelationChange(work: MainWorkDependencies,
       // A sealed Access reply still resolves the original seal and current
       // owner support. A receipt is never transformed into a new admission.
       const resolve = async (): Promise<RetainedCreditBindingResult> => {
-        const basis = await openRetainedCreditAssociationRead(deps, principal);
+        const basis = await openRetainedCreditIdentityRead(deps, principal);
         const exact = await resolveRetainedCreditAssociationIdentity(deps,
           { basis, credit: terminal.component!, associationHead: terminal.revision! });
         if (!equal(exact.state, prepared.state) || exact.predecessor !== input.expectedAssociationHead)
           return unavailable('retained credit replay differs from its immutable intent');
-        await publication.complete?.(exact.occurrence, exact.receipt);
+        await publication?.complete?.(exact.occurrence, exact.receipt);
         return { profile: RETAINED_CREDIT_ASSOCIATIONS, occurrence: exact.occurrence,
           associationHead: exact.associationHead, predecessor: exact.predecessor, compatibilityReceipt: exact.receipt,
+          operation: exact.operation, modelGeneration: exact.modelGeneration,
           manifest: exact.manifest, participations: structuredClone(exact.state.participations),
           sourcePosition: exact.sourcePosition, replayed: true };
       };
