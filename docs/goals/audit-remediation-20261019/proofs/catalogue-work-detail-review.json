@@ -3110,5 +3110,1346 @@
     "reviewDisposition": "Original reviewer completed review and requested exact caller correction plus targeted types; no further broad review required. Actual original failure remains in review report.",
     "productAcceptance": false,
     "classClosed": false
+  },
+  "boundedBookCoverCheckpoint": {
+    "observedAt": "2026-10-19T10:48:17.227664+00:00",
+    "reviewer": {
+      "account": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independent": true,
+      "delegation": false,
+      "fallback": false
+    },
+    "authority": "Latest same-claim manager continuation selects only Book82df58..f05b655 (3 paths) and ordinary nonBook cover5a99c7..54d1ade (2 paths). Source-only independent review, no implementation, services, corpus, main mutation, accepted-review repetition or account fallback.",
+    "priorReport": {
+      "commit": "fd09b3f8b597bd5ddc321058074862b91f83c0f0",
+      "sha256": "69cd62b27d2d02c88a9f7b3761235cbdc06ea45fd14c80865e6f384e7c30392d",
+      "disposition": "bounded-2cc223-credits-cook-review-complete-one-reproduced-typecheck-finding",
+      "acceptance": "Immutable2cc2233811e03867ad11567ece53a5e97bba4b90 versus80265f871e601ce870c5eaeadea7095fc122a726 reviewed across22paths. Credits and Cook source/progression inspected with exact regression receipts; WORK-REVIEW-07 reproduces two existing entry test callers missing newly required resource. Prior findings and all historical failures/dispositions preserved. Genuine C27 remains independently due; C21 and Performer owner gaps are not closed.",
+      "preservation": "Every pre-existing JSON field/value except the current top-level disposition and acceptance summaries is preserved exactly. Their previous values are archived here. Original five findings, WORK-REVIEW-06/07, all source/footer/Cook/Guide checkpoints, original failures and passing receipts retain their historical dispositions. No accepted delta is reviewed again and no prior finding is silently closed."
+    },
+    "disposition": "bounded-book-and-nonbook-cover-review-complete-one-source-inferred-P2",
+    "acceptance": "Ordinary nonBook54d1ade versus5a99c7 has no actionable delta finding. Bookf05b655 versus82df58 binds actual content revision and captured progress identity, but failed same-position persistence has no in-place retry (WORK-REVIEW-08, source inference). Matching fixture/type receipts do not establish C13/C28 acceptance or durable writes before hard teardown. Prior review histories/dispositions remain intact.",
+    "bookReader": {
+      "base": "82df58d2ba1d9d377b591126e7f4dfa42f27f02e",
+      "candidate": "f05b655c04b26f75673e4ecf2059f083aee11f0d",
+      "receipt": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-candidate.json",
+        "sha256": "fe77b5d1080c4888e2767afa76f7289d7cfe3ce268fb1c4030c83b8d10912ea4"
+      },
+      "patch": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-candidate.patch",
+        "sha256": "6130bc8520b4e1cc6c36b44e54ea903449349290310fc3941264cd71854225cf",
+        "gitApplyCheckAgainstCurrentMain": {
+          "exitCode": 0,
+          "log": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-apply-check.log",
+          "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "numstat": [
+          "73\t26\tapps/web/features/work-page/reader-client.tsx",
+          "241\t0\tapps/web/features/work-page/reader-progress.stories.tsx",
+          "2\t0\tapps/web/features/work-page/reader.tsx"
+        ]
+      },
+      "inspectedChangedPaths": [
+        {
+          "path": "apps/web/features/work-page/reader-client.tsx",
+          "baseBlob": "b09b34e6596e32be6a5230581e89dd45b507f56f",
+          "baseSha256": "9c8262066a7d59f1d10b6ccea1ee7e7655ce69fc72a17c42b0b268f7c9131830",
+          "candidateBlob": "162ffa8d0d8e808d8d7db9826616b171b7d98627",
+          "candidateSha256": "591bcf2ce5a801bc24983ff4d0acd15d6f45ca3efe07f5c5d3de8681f349681f",
+          "candidateWorktreeBytesMatch": true
+        },
+        {
+          "path": "apps/web/features/work-page/reader.tsx",
+          "baseBlob": "70c3fcb102f759416088436fbb400822cbc2f9c0",
+          "baseSha256": "e1c3202c85d29073416ba01e1ca4473888f7ae166397184aa600f0624a1a18eb",
+          "candidateBlob": "0752f68c91e9d4e3590dd2ff03759db67bdcbe77",
+          "candidateSha256": "106d1bc3c271baedb4d8409cc4af1fca645f4255a8405c9076b7098fca112f76",
+          "candidateWorktreeBytesMatch": true
+        },
+        {
+          "path": "apps/web/features/work-page/reader-progress.stories.tsx",
+          "baseBlob": null,
+          "baseSha256": null,
+          "candidateBlob": "3a38995683a3d40f4f0b047f7907618b7b4f0105",
+          "candidateSha256": "341e2539845970b61cb3c1b5e825c93944810e3fb48baaeeebe5c7ca7f099f09",
+          "candidateWorktreeBytesMatch": true
+        }
+      ],
+      "inspectedRelevantCallers": [
+        {
+          "pin": "f05b655c04b26f75673e4ecf2059f083aee11f0d",
+          "path": "apps/web/app/[locale]/w/[ref]/read/[chapter]/page.tsx",
+          "blob": "c572af292519b7109f40e0f90feed35c4c4d7c27",
+          "sha256": "9befbd818bc0b0e4105b73ac75d544dd758749990f29b6004c0a35dc6b9c1c1d"
+        },
+        {
+          "pin": "f05b655c04b26f75673e4ecf2059f083aee11f0d",
+          "path": "apps/web/features/work-page/read.ts",
+          "blob": "b2b7c4457be34cba802915bd68ed89ed075c1a77",
+          "sha256": "e870e0881a71a195db9172517a437202898b9a3ed77a089324b96d2bb9aaed4a"
+        },
+        {
+          "pin": "f05b655c04b26f75673e4ecf2059f083aee11f0d",
+          "path": "services/main/src/modules/work-contents/read.ts",
+          "blob": "2597cae7feb03d5c33a06d48a8f01640c427a4df",
+          "sha256": "dcb6b9b782f3ffe0842bf468e6af97d541a36e27b4a6c7bf843cbd861dd9efa4"
+        },
+        {
+          "pin": "f05b655c04b26f75673e4ecf2059f083aee11f0d",
+          "path": "services/main/src/routes/progress.ts",
+          "blob": "b48c9018620ad6568498acda0b769696d35fb947",
+          "sha256": "a4bd8e4648d194def501879cff820ad9ece325611f45287bfc66795995c3f91d"
+        }
+      ],
+      "sourceReviewObservations": [
+        {
+          "contract": "Actual admitted revision and paragraph",
+          "result": "ChapterReader article key binds occurrence and content.reference.revisionId; data-content-revision consumes that actual content-reference revision. Plain-text and structured-document paragraph rendering/indices remain unchanged. currentPosition scopes to the connected article and visible data-reader-text/data-paragraph nodes; rated/unsupported content has no admitted paragraph and cannot invent an opening. MutationObserver waits for admitted text."
+        },
+        {
+          "contract": "Real owner projection and authority",
+          "result": "ChapterPage rejects another Work's chapter and unavailable chapter reads; it gets progress using read.data.progress and the same request reader identity. Main selects content, reads that exact revision through content owner, fences selection, and returns the corresponding composition/occurrence/selectedRevision tuple. Progress GET/PUT authorize the exact occurrence/actor/selectedRevision. ProgressPanel mounts the writer only for an actual successful progress read and acting subject. No API/schema/authority or frontend completion policy is introduced."
+        },
+        {
+          "contract": "Actor/composition/occurrence/revision isolation",
+          "result": "Keyed ChapterProgress resets state/latest refs on any tuple change. Each queued closure captures its own tuple; the module queue serializes by actor+composition without replacing occurrence/revision in individual commands. Scroll captures the old connected reader position immediately; cleanup flushes the captured string and does not query the next article. These isolation conclusions are source inference; the fixture receipt directly exercises a chapter/revision navigation pair, not every actor/composition permutation."
+        },
+        {
+          "contract": "Opening and completion semantics",
+          "result": "Opening writes actual p:N without setting completed. body() retains the last successful completion flag, or the fresh flag from one409 reread. Explicit Mark read/unread remains the completion action. Existing completion, native body, language/direction, author notes and navigation rendering are preserved."
+        },
+        {
+          "contract": "CAS and failure handling",
+          "result": "Each mutation carries expectedVersion and a new idempotency key. One409 reread uses the same actor/revision; at most one retry is made. A second conflict/denial/network error produces failed state, not saved/completed success. Catch settles the old queue so a rejected old-chapter request does not block the next chapter. Keepalive covers initiated commands/rereads; it cannot prove a command begins before hard document teardown."
+        },
+        {
+          "contract": "Retry after failed position",
+          "result": "WORK-REVIEW-08: entered/queued deduplication is updated before success and not reset after failure. A same-position scroll/pagehide is suppressed; the panel has no position Retry action. This applies to the new automatic opening and ordinary debounced scroll writes, independently of bounded409 recovery."
+        }
+      ],
+      "newActionableFindings": [
+        {
+          "id": "WORK-REVIEW-08",
+          "severity": "P2",
+          "status": "open-source-finding-not-browser-reproduced",
+          "title": "A failed opened or scrolled paragraph remains deduplicated without a same-position retry",
+          "classification": "source-inference-with-matching-failure-state-capture",
+          "candidate": "f05b655c04b26f75673e4ecf2059f083aee11f0d",
+          "changedPath": "apps/web/features/work-page/reader-client.tsx",
+          "changedLines": [
+            398,
+            412,
+            420,
+            428,
+            453,
+            458
+          ],
+          "concreteCounterexample": "Open an admitted one-paragraph chapter with readable progress and completed=false. Let its automatic p:0 PUT return 503 or reject once, then restore the service while the reader stays in that paragraph. enter() has already set entered=true and queued=p:0. Failure only sets state=failed. A subsequent scroll/pagehide flush for p:0 compares pending===queued and sends no second command. The only progress button is Mark chapter as read, which would change completion intent; the failure text says Try again but supplies no retry action. The same suppression applies after a failed debounced p:N scroll write. Remounting/navigating or reaching another paragraph can trigger another write; no same-position in-place recovery is supplied.",
+          "impact": "A transient save failure can leave the current opened position unsaved for the remainder of the visit, even after connectivity returns. Retrying position persistence should not require marking the chapter completed. This does not assert that a denied write should be retried automatically.",
+          "action": "Keep the failed captured position retryable and expose a retry that reuses the exact actor/composition/occurrence/revision and existing CAS recovery while preserving completion. Deduplicate successful/in-flight positions separately from failed attempts. Cover both failed opening and failed debounced scroll persistence without weakening denied-state or bounded-conflict assertions.",
+          "evidence": {
+            "source": "enter sets queued before write, flush also sets queued before success, error paths never release that position, and the rendered panel has no retry callback/control.",
+            "existingFailureStory": "OpeningSaveFailure and OpeningSaveFailurePhone exercise a 403, not the proposed transient-503/same-position retry sequence. Their verified captures show the failure text beside the completion action; they support the rendered state only.",
+            "actualRetrySequenceExecutedByReviewer": false,
+            "outcomeAssertionReached": false,
+            "setupFailure": false,
+            "blockingOutcomeTestClaimed": false,
+            "qualification": "This is an actionable source inference. No reproduced genuine C28 failure, browser retry assertion failure, timeout waiver or new landing blocker is claimed."
+          }
+        }
+      ],
+      "reusedCandidateChecks": {
+        "executedBy": "candidate owner, not rerun by G-2841",
+        "verification": "Exact changed blobs, receipt SHA256 and all cited log hashes matched; reviewer read the actual summaries.",
+        "checks": [
+          {
+            "command": "task goal:type-files -- --jsx react-jsx --target esnext --module preserve --moduleResolution bundler --allowImportingTsExtensions --noEmit --skipLibCheck --strict apps/web/features/work-page/reader-client.tsx apps/web/features/work-page/reader.tsx apps/web/features/work-page/reader-progress.stories.tsx",
+            "exitCode": 0,
+            "checkedImportedFiles": 1775,
+            "evidence": {
+              "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-candidate/book-reader-types-final.log",
+              "sha256": "298291f82d85892fbf24594dbb766d80881f8ec18c1f881e9fd4f32d6bfc1536"
+            }
+          },
+          {
+            "command": "REZICS_STORY_SCREENSHOTS_DIR=../../.temp/book-reader-review-final task storybook:test -- features/work-page/reader-progress.stories.tsx features/work-page/reader.stories.tsx features/work-page/books-reader-review.stories.tsx",
+            "exitCode": 0,
+            "filesPassed": 3,
+            "storiesPassed": 42,
+            "focusedBehaviorStories": 9,
+            "accessibility": "Inherited real browser accessibility checks completed in the same passing run; visual inspection remains separate.",
+            "evidence": {
+              "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-candidate/book-reader-stories-final.log",
+              "sha256": "16475bf05c434ed626695caf4f27e2295b4216e8d365f787ff2d44eea793920c"
+            }
+          },
+          {
+            "command": "REZICS_STORY_SCREENSHOTS_DIR=../../.temp/book-reader-opened-final task storybook:test -- features/work-page/reader-progress.stories.tsx -t 'Opened Paragraph'",
+            "exitCode": 0,
+            "storiesPassed": 1,
+            "storiesSkipped": 8,
+            "reason": "Replace one rejected blank optional screenshot capture with a settled exact-source opening capture; no source changed.",
+            "evidence": {
+              "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-candidate/book-reader-opened-final.log",
+              "sha256": "9641f39bd4f5221626de3a2846d81f16cc8c494bcb7ca088ccf04694a5bfc3ca"
+            }
+          },
+          {
+            "command": "git diff --check",
+            "exitCode": 0
+          }
+        ],
+        "meaning": "1775 imported files type-check;42 actual fixture browser states across3 files pass, including9 focused progress states. A focused Opened Paragraph rerun passed1 with8 skipped and replaces a rejected blank optional capture. These are component/transport regressions, not genuine C28."
+      },
+      "visualObservations": {
+        "method": "G-2841 used view_image on existing, hash-verified exact-source PNGs.",
+        "screenshots": [
+          {
+            "storyExport": "CompletedChapterRemainsCompleted",
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-candidate/screenshots/CompletedChapterRemainsCompleted.png",
+            "sha256": "e3c6556318945f77dcb7a72f4cd6e1c05facb4472a128d25d345a732b3a6014d",
+            "width": 1200,
+            "height": 900,
+            "viewedByAI": true
+          },
+          {
+            "storyExport": "NavigationKeepsCapturedChapterPosition",
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-candidate/screenshots/NavigationKeepsCapturedChapterPosition.png",
+            "sha256": "3e01f042ea96e732433137e39319d87a4acb4d9524e0668afc37dae5b2402e6d",
+            "width": 1200,
+            "height": 900,
+            "viewedByAI": true
+          },
+          {
+            "storyExport": "OpenedParagraph",
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-candidate/screenshots/OpenedParagraph.png",
+            "sha256": "64f6941ad2c15ea35141e3263f4cf9382c5e8e3678b6ef11c70407e14089b675",
+            "width": 1200,
+            "height": 900,
+            "viewedByAI": true
+          },
+          {
+            "storyExport": "OpeningSaveFailure",
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-candidate/screenshots/OpeningSaveFailure.png",
+            "sha256": "5ed61919f71bab856d09500414aac214dbf9764a501d7f2506ef3217e19df9ba",
+            "width": 1200,
+            "height": 900,
+            "viewedByAI": true
+          },
+          {
+            "storyExport": "OpeningSaveFailurePhone",
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-candidate/screenshots/OpeningSaveFailurePhone.png",
+            "sha256": "6084973146b96cafe7483e15a57e2e875a3d858ac003f34e7dc4a9a954e586ec",
+            "width": 390,
+            "height": 844,
+            "viewedByAI": true
+          }
+        ],
+        "result": "Readable body and chapter controls, preserved completed state, next-chapter body, and visible failure on1200x900 and390x844. No clipping/overlap observed in these5 captures. Failure capture shows Try again as text and only a completion button. Unselected/deduplicated captures are not independently claimed as additional viewed states."
+      },
+      "limitations": [
+        "Fixture transport regression and rendered review only; original C28/native Book proof remains pending same-producer admission/execution.",
+        "Initiated small commands use keepalive. Arbitrary hard document teardown before a queued command begins, network failure or a lost server response does not prove durable completion; the original service-return assertion remains required.",
+        "No claim of successful user-facing Retry click or broad catalogue/native acceptance is made.",
+        "WORK-REVIEW-08 is source-inferred; reviewer did not execute a successful user Retry, transient503/same-position recovery or genuine C28 outcome assertion.",
+        "No arbitrary pending-request timeout/durable finalization guarantee is inferred. Actor/composition variation was traced in source rather than separately exercised in a browser.",
+        "Original Work first6 sampling, native/API/schema/corpus and unchanged C28 assertions are outside this correction."
+      ],
+      "originalAcceptance": {
+        "C28": "open; no genuine producer execution by this reviewer",
+        "retainedOriginalProof": {
+          "path": ".temp/worktrees/g-2774/apps/web/tests/catalogue-detail-contract.e2e.ts",
+          "lines": "287-336, plus following blank separator in retained whole-block hash",
+          "fullOriginalFileSha256": "b6889bcde1f06083da74aa0507f85c35a91627a80dea75cb9e3f586b8ebfa2c3",
+          "retainedBodySha256": "93b73795f973363fef9ad4ccefdb3964f26a020171f24e996c1e5f5f90a856a9",
+          "assertionsOrHelpersChanged": false,
+          "executedAgainstGenuineProducer": false,
+          "closureClaimed": false,
+          "nextProof": "Existing operator executes unchanged original C28 against the same sole G2791 endpoint after G2793 admission. Fixture story success does not establish the genuine original outcome."
+        },
+        "hardDocumentTeardownBeforeQueuedWriteStarts": "unproved"
+      }
+    },
+    "nonBookCover": {
+      "base": "5a99c7d18979ebed15fca6ac6ef60b55ec9d68f4",
+      "candidate": "54d1ade3403ebe71c45857185f42f5434b74d9b3",
+      "receipt": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/nonbook-cover-candidate.json",
+        "sha256": "177ce2fcafba076953d1c2def764dfbc299896f1631682e17e6dd0601b605066"
+      },
+      "patch": {
+        "sha256": "25df05aba95f3da53ea2152cb8e2adb147382b03866fc40f1b0dad9f6892d9ec",
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/nonbook-cover-candidate.patch",
+        "reverseApplyCheck": "passed against frozen candidate"
+      },
+      "inspectedChangedPaths": [
+        {
+          "path": "apps/web/features/work-page/work-frame.tsx",
+          "baseBlob": "5bf210320640cac0a73b2655a85c0ae3dfe6c42c",
+          "baseSha256": "4e311856d7708dec0bf7120e09770d617929f9f364e2ad2ab9140b2e68540218",
+          "candidateBlob": "e37a1cc6e224d42825cabf6a6b670c0b7a851879",
+          "candidateSha256": "7564b24a3c5bd526234af1303f375b51f737f669bbd23d97a76c74bedf5552fd",
+          "candidateWorktreeBytesMatch": true
+        },
+        {
+          "path": "apps/web/features/work-page/nonbook-cover.stories.tsx",
+          "baseBlob": null,
+          "baseSha256": null,
+          "candidateBlob": "c408596464011e00aebe2db5dcccc62d7aee6472",
+          "candidateSha256": "387716fe56f8f54f3b3c5d45e9159b0fca4e70530e2538a58b37decb42fd43f3",
+          "candidateWorktreeBytesMatch": true
+        }
+      ],
+      "inspectedRelevantCallers": [
+        {
+          "pin": "54d1ade3403ebe71c45857185f42f5434b74d9b3",
+          "path": "apps/web/features/work-page/work-views.tsx",
+          "blob": "d3ef8f5d11f4eb6262a573b6738b4d170853ed22",
+          "sha256": "973f63a6fe8bac141f161e256581723d589354ef5dc1da1ce791e6c9a12257f0"
+        },
+        {
+          "pin": "54d1ade3403ebe71c45857185f42f5434b74d9b3",
+          "path": "apps/web/features/work-page/recipe-reading-recorded-page.tsx",
+          "blob": "8b36d7c01be38ca1e0c01077a0012108bee7895d",
+          "sha256": "1ef6ca2fead2b3a24f1862ed702911f9c11f7664dde41cf8eb9b6b6987d70095"
+        },
+        {
+          "pin": "54d1ade3403ebe71c45857185f42f5434b74d9b3",
+          "path": "apps/web/features/work-page/work-sources.tsx",
+          "blob": "806aa2cd690e05581823e3627da0800877a692c5",
+          "sha256": "c3ce0cce5e7e28555332297e3cfa537edf2d5436f7ef33bacd2371a758e22160"
+        },
+        {
+          "pin": "54d1ade3403ebe71c45857185f42f5434b74d9b3",
+          "path": "apps/web/features/catalogue/cover.tsx",
+          "blob": "c04cdc6b42ad8a3acd673f6b97fe90115bc350ed",
+          "sha256": "7f828d0830242221654a749352493309932e987dba94e31906cd55008effdb36"
+        },
+        {
+          "pin": "54d1ade3403ebe71c45857185f42f5434b74d9b3",
+          "path": "apps/web/features/catalogue/work.ts",
+          "blob": "3eb1e843d762f36659e178a5e378913f747c68c9",
+          "sha256": "05ca6b9152ec952f081d3db0da1ff1f97cd31c7cf88358e21f3a8d8658fe3dba"
+        },
+        {
+          "pin": "54d1ade3403ebe71c45857185f42f5434b74d9b3",
+          "path": "apps/web/features/showcase/work-header-tab.tsx",
+          "blob": "8fdc5f61d11a6ea1b1ea2b2afea735fa5e259c67",
+          "sha256": "82ae3af2a4348d684387959a08c330b1318fc5a47fc98973fc67d7a14fb46c6f"
+        },
+        {
+          "pin": "54d1ade3403ebe71c45857185f42f5434b74d9b3",
+          "path": "apps/web/features/work-page/source-recipe-hub-contract.stories.tsx",
+          "blob": "2a5903a2e3d7b64f8dfa9804dd4c15b29f3fec00",
+          "sha256": "23d5bdf40fe182f9d348027c9ef5361777f01005fc59a6355ebe0f037ed08c25"
+        }
+      ],
+      "disposition": "no-actionable-delta-finding",
+      "sourceReviewObservations": [
+        {
+          "contract": "Consume supplied ordinary cover",
+          "result": "Only the nonBook branch adds the responsive two-column cover/header wrapper. cover??WorkPageCover consumes the supplied slot (including the existing Suspense cover read) or the shared fallback. No showcase prerequisite, image selection, title/revision inference, or fabricated media request is added. WorkPageCover derives kind/title/authors from the existing Work projection and CatalogueCover/coverProps."
+        },
+        {
+          "contract": "Native identity, current attribution and page end",
+          "result": "data-subject-header/resource/semantic-type and registry selection are unchanged. Credits remain inside the header; reactions, exact report targets, primary actions, status, navigation and final evidence placement are unchanged. WorkSources continues using current CatalogueCoverCredit with the same avatarQuery/presentation metadata; no duplicate inline source link or new rights claim is introduced. The one Sources and licenses contentinfo follows page content."
+        },
+        {
+          "contract": "Existing Book/shared consumers",
+          "result": "Book layout is byte-unchanged. Normal WorkFrameView already passes a separately streamed WorkPageCover; recipeWorkFrame already passes WorkPageCover and genuine authors. The same nonBook wrapper therefore affects ordinary kinds, Guide, Recipe and other existing registry kinds. Existing generated fallbacks and cover shape/gating remain owned by unchanged CatalogueCover/WorkCover. Showcase Overview/compact tab selection remains owned by existing components; no all-showcase visual acceptance is inferred."
+        },
+        {
+          "contract": "Layout and accessibility",
+          "result": "minmax(0,1fr)/min-w-0 retains bounded header width; cover column is6.5rem on phone,8rem atsm and15rem atlg. The six stories consume decoded portrait/square/landscape fixture bytes, exercise streamed and omitted slot fallback, preserve exact resource/type and Credits region, deny invented Read, require a unique page-end source landmark/current credit and no horizontal overflow. Passing assertions are component evidence only."
+        },
+        {
+          "contract": "Four source-story failures",
+          "result": "Actual candidate and exact-base logs each show four assertion failures at source-recipe-hub-contract.stories.tsx:112 for the same missing Gutenberg inline link. That unchanged story renders WorkHeader directly and never mounts changed WorkFrame. No source/citation assertion was weakened or edited. These are real pre-existing component assertions, not setup failures and not introduced by this cover delta."
+        }
+      ],
+      "newActionableFindings": [],
+      "reusedCandidateChecks": {
+        "executedBy": "candidate owner, not rerun by G-2841",
+        "verification": "Exact changed/source-owner blobs,2 patch/file identities, logs and screenshots verified. Reviewer read both failure logs and passing summaries.",
+        "checks": [
+          {
+            "command": "task install",
+            "result": "passed with existing peer/build-script warnings; isolated worktree dependencies only"
+          },
+          {
+            "command": "task goal:type-files -- apps/web/features/work-page/work-frame.tsx apps/web/features/work-page/nonbook-cover.stories.tsx",
+            "result": "passed; no type errors in 1,761 imported files",
+            "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-nonbook-cover-candidate-20261019/.temp/nonbook-cover-evidence/typecheck.log"
+          },
+          {
+            "command": "REZICS_STORY_SCREENSHOTS_DIR=\"$PWD/.temp/nonbook-cover-evidence/screenshots\" task storybook:test -- features/work-page/nonbook-cover.stories.tsx",
+            "result": "6/6 passed; native Chromium browser interactions, automatic light/dark responsive accessibility checks, 6 captured screenshots all viewed",
+            "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-nonbook-cover-candidate-20261019/.temp/nonbook-cover-evidence/storybook-covers.log"
+          },
+          {
+            "command": "REZICS_STORY_SCREENSHOTS_DIR=\"$PWD/.temp/nonbook-cover-evidence/screenshots\" task storybook:test -- features/work-page/source-recipe-hub-contract.stories.tsx features/work-page/work-views.stories.tsx features/work-page/work-detail-contract.stories.tsx -t 'Visitor|English Wide|Japanese Phone|Recipe Cooking$|Recipe Cooking From Link|Long English (1440|390)|Recipe Task From Connections|Guide Task From Connections|Game Is Not A Book|Film Is Not A Book'",
+            "result": "8 affected Work views/detail states passed; 4 source-recipe states failed; 59 skipped. The four failures reproduce unchanged on exact base.",
+            "passed": [
+              "RecipeCooking",
+              "RecipeCookingFromLink",
+              "GameIsNotABook",
+              "FilmIsNotABook",
+              "LongEnglish1440",
+              "LongEnglish390",
+              "RecipeTaskFromConnections",
+              "GuideTaskFromConnections"
+            ],
+            "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-nonbook-cover-candidate-20261019/.temp/nonbook-cover-evidence/storybook-regressions.log"
+          },
+          {
+            "command": "task storybook:test -- features/work-page/source-recipe-hub-contract.stories.tsx -t 'Visitor|English Wide|Japanese Phone'",
+            "baseFileTemporarilyRestoredFrom": "5a99c7d18979ebed15fca6ac6ef60b55ec9d68f4",
+            "result": "4/4 selected source-recipe states failed on the exact same missing inline Gutenberg source-link expectation; 7 skipped. Candidate WorkFrame bytes restored immediately after run.",
+            "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-nonbook-cover-candidate-20261019/.temp/nonbook-cover-evidence/storybook-base-source-regression.log"
+          },
+          {
+            "command": "task ast-grep -- scan apps/web/features/work-page/work-frame.tsx apps/web/features/work-page/nonbook-cover.stories.tsx",
+            "result": "passed",
+            "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-nonbook-cover-candidate-20261019/.temp/nonbook-cover-evidence/ast-grep.log"
+          },
+          {
+            "command": "git diff --check",
+            "result": "passed before commit"
+          },
+          {
+            "command": "git apply --check --reverse <candidate.patch>",
+            "result": "passed against frozen candidate"
+          }
+        ],
+        "logs": [
+          {
+            "sha256": "c44a73b7356ea3693f75ce989ba07c95cf7459b1d4000fbd55eb9d768b555b84",
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-nonbook-cover-candidate-20261019/.temp/nonbook-cover-evidence/ast-grep.log"
+          },
+          {
+            "sha256": "20d12039187b6cf84b3ece587106fe247b71435f855dd674e608e8442d1edb60",
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-nonbook-cover-candidate-20261019/.temp/nonbook-cover-evidence/storybook-base-source-regression.log"
+          },
+          {
+            "sha256": "3e8b0d4f474fde9b68526a9f4f124bc25ec68666f0168fc4682b16c4d3b64ddc",
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-nonbook-cover-candidate-20261019/.temp/nonbook-cover-evidence/storybook-covers.log"
+          },
+          {
+            "sha256": "4a14971c5bc6844379cf5ee8bcc168ad76fc804de6f65c92b2b629bc9e44650c",
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-nonbook-cover-candidate-20261019/.temp/nonbook-cover-evidence/storybook-regressions.log"
+          },
+          {
+            "sha256": "a3647fae0c09cbc5c4e6ae91fa4b76aaf8a0e7e072994d03919a3f1dc0b9e017",
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-nonbook-cover-candidate-20261019/.temp/nonbook-cover-evidence/typecheck.log"
+          }
+        ],
+        "qualification": "1761-file types and ast-grep pass;6 cover browser states pass;8 affected Work states pass. Four source-recipe states fail on both candidate and exact base;59 candidate/7 base states skipped. This review does not call the selected regression run wholly passing."
+      },
+      "preExistingAssertionFailures": {
+        "file": "apps/web/features/work-page/source-recipe-hub-contract.stories.tsx",
+        "line": 112,
+        "states": [
+          "Visitor",
+          "VisitorPhone",
+          "EnglishWide",
+          "JapanesePhone"
+        ],
+        "failure": "Unable to find the accessible link matching gutenberg · 65061/quick-puff-paste.",
+        "explanation": "This unrecorded contract story renders WorkHeader directly and does not render WorkFrame; its inline provenance-link expectation predates the reviewed shared Source footer. Exact-base reproduction confirms no new candidate failure. Source story/credits/footer owners were left unchanged.",
+        "candidateLog": {
+          "sha256": "4a14971c5bc6844379cf5ee8bcc168ad76fc804de6f65c92b2b629bc9e44650c",
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-nonbook-cover-candidate-20261019/.temp/nonbook-cover-evidence/storybook-regressions.log"
+        },
+        "exactBaseLog": {
+          "sha256": "20d12039187b6cf84b3ece587106fe247b71435f855dd674e608e8442d1edb60",
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-nonbook-cover-candidate-20261019/.temp/nonbook-cover-evidence/storybook-base-source-regression.log"
+        },
+        "reviewerSnapshotDirectory": ".temp/catalogue-work-review/book-cover-final/logs/nonbook-cover",
+        "originalAssertionsChanged": false,
+        "setupFailure": false,
+        "blockingNewCoverRegressionClaimed": false
+      },
+      "visualObservations": {
+        "method": "G-2841 used view_image on9 existing, hash-verified exact-source captures.",
+        "screenshots": [
+          {
+            "sha256": "a757678cc5af2e35a5fab95b644130ae56afef81d006fda5f7c4742f25fb38df",
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-nonbook-cover-candidate-20261019/.temp/nonbook-cover-evidence/screenshots/apps-web-features-work-page-nonbook-cover.stories.tsx/AnimeDesktop.png",
+            "exportName": "AnimeDesktop",
+            "viewed": true,
+            "role": "ordinary cover component proof",
+            "viewport": {
+              "width": 1440,
+              "height": 1000
+            }
+          },
+          {
+            "sha256": "09bc88c86e0e82d2d3fea358361ce2d05f7589f276c0e98fc0d0f38b8ad0f692",
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-nonbook-cover-candidate-20261019/.temp/nonbook-cover-evidence/screenshots/apps-web-features-work-page-nonbook-cover.stories.tsx/AnimePhone.png",
+            "exportName": "AnimePhone",
+            "viewed": true,
+            "role": "ordinary cover component proof",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            }
+          },
+          {
+            "sha256": "3711deb8d4e322477e3d3b5f2335bfaeca0cc2922a328476ba8bf2352a260fde",
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-nonbook-cover-candidate-20261019/.temp/nonbook-cover-evidence/screenshots/apps-web-features-work-page-nonbook-cover.stories.tsx/GameDesktop.png",
+            "exportName": "GameDesktop",
+            "viewed": true,
+            "role": "ordinary cover component proof",
+            "viewport": {
+              "width": 1440,
+              "height": 1000
+            }
+          },
+          {
+            "sha256": "37c8798e2c726c419947b461fc267f9740213344d9cf546ee94930dabbad344e",
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-nonbook-cover-candidate-20261019/.temp/nonbook-cover-evidence/screenshots/apps-web-features-work-page-nonbook-cover.stories.tsx/GamePhone.png",
+            "exportName": "GamePhone",
+            "viewed": true,
+            "role": "ordinary cover component proof",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            }
+          },
+          {
+            "sha256": "62e1e642dfc15bfdfaf84a32ba0431ebbcc0e608ce3519b922aa243d243b3848",
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-nonbook-cover-candidate-20261019/.temp/nonbook-cover-evidence/screenshots/apps-web-features-work-page-nonbook-cover.stories.tsx/MusicDesktop.png",
+            "exportName": "MusicDesktop",
+            "viewed": true,
+            "role": "ordinary cover component proof",
+            "viewport": {
+              "width": 1440,
+              "height": 1000
+            }
+          },
+          {
+            "sha256": "f39996fd2dd6a55e8be17d72d9c5d244ca0eb681793da0fecf92f99514f41078",
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-nonbook-cover-candidate-20261019/.temp/nonbook-cover-evidence/screenshots/apps-web-features-work-page-nonbook-cover.stories.tsx/MusicPhone.png",
+            "exportName": "MusicPhone",
+            "viewed": true,
+            "role": "ordinary cover component proof",
+            "viewport": {
+              "width": 390,
+              "height": 844
+            }
+          },
+          {
+            "sha256": "ce3924a9e393ecb96fd0aaa1f9b577dd0528abb320712a50bf90a430209886a0",
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-nonbook-cover-candidate-20261019/.temp/nonbook-cover-evidence/screenshots/apps-web-features-work-page-work-detail-contract.stories.tsx/LongEnglish1440.png",
+            "exportName": "LongEnglish1440",
+            "viewed": true,
+            "role": "focused regression evidence"
+          },
+          {
+            "sha256": "f9cb978ad5bb7bde2ea634da7b1c7a7f98f903e3a71f966341fbc634b8db7335",
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-nonbook-cover-candidate-20261019/.temp/nonbook-cover-evidence/screenshots/apps-web-features-work-page-work-detail-contract.stories.tsx/LongEnglish390.png",
+            "exportName": "LongEnglish390",
+            "viewed": true,
+            "role": "focused regression evidence"
+          },
+          {
+            "sha256": "c5cefbea5e434879a28edeaf46361ce168db9ba086de2225172f99d3ab8ea1a2",
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-nonbook-cover-candidate-20261019/.temp/nonbook-cover-evidence/screenshots/apps-web-features-work-page-work-views.stories.tsx/RecipeCooking.png",
+            "exportName": "RecipeCooking",
+            "viewed": true,
+            "role": "focused regression evidence"
+          }
+        ],
+        "result": "All6 ordinary desktop/phone covers are visible beside their identity; square Music is contained/letterboxed by existing shape policy. Header/credit/source/footer and mobile actions remain readable. Guide desktop/phone and Recipe Cooking captures show generated cover with retained task/body layout. No clipping/overlap observed in selected captures. RecipeCookingFromLink has identical bytes to RecipeCooking but was not separately viewed; other captures are not claimed as independent visual acceptance."
+      },
+      "preservedOwnerBlobs": [
+        {
+          "path": "apps/web/features/work-page/work-sources.tsx",
+          "gitBlob": "806aa2cd690e05581823e3627da0800877a692c5",
+          "unchangedFromBase": true
+        },
+        {
+          "path": "apps/web/features/work-page/credits.tsx",
+          "gitBlob": "3547f430c4d037214cf9272bca864be078e92dc3",
+          "unchangedFromBase": true
+        },
+        {
+          "path": "apps/web/features/work-page/types/recipe.tsx",
+          "gitBlob": "e85debe638bb5070189849b2144eefd999e1fcd5",
+          "unchangedFromBase": true
+        },
+        {
+          "path": "apps/web/features/work-page/work-views.tsx",
+          "gitBlob": "d3ef8f5d11f4eb6262a573b6738b4d170853ed22",
+          "unchangedFromBase": true
+        },
+        {
+          "path": "apps/web/features/work-page/types.ts",
+          "gitBlob": "d8d9e31adf25b2e899b819fec37923f3d60d1723",
+          "unchangedFromBase": true
+        }
+      ],
+      "originalAcceptance": {
+        "C13": "open; decoded fixture art is not actual API-supplied ordinary catalogue cover proof",
+        "A10": "open; no cast/wiki-Zone/query/native/corpus class closure",
+        "retainedOriginalProof": {
+          "edited": false,
+          "files": [
+            {
+              "path": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/02-findings-and-capability-matrix.md",
+              "sha256": "feb868056d39b9e660f41636d9bd2cecf9c33bb17b6a39f20f33352b6d54e7a7",
+              "assertion": "A10 retained unchanged"
+            },
+            {
+              "path": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/03-acceptance-and-investigation-backlog.md",
+              "sha256": "4298c3194e13b41db04b2a2602bd0454d7a9979eafac8b08be20957ebea7c6b3",
+              "assertion": "Genuine C13 row retained unchanged"
+            },
+            {
+              "path": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/01-live-api-audit.md",
+              "sha256": "f734709ccfae03063dff89526764dfe7914f3522cad8f4a1fb19fa4b6e45fcfc",
+              "assertion": "Original actual consumer/static gap evidence retained unchanged"
+            }
+          ],
+          "hashVerification": "All three hashes matched before and after candidate work.",
+          "c13Acceptance": "OPEN. This candidate proves only the consumer/layout behavior with decoded component fixtures. It does not replace genuine catalogue API/image/page evidence or accept the original product row.",
+          "a10ClassAcceptance": "OPEN. Cast/wiki-Zone gating and classification/corpus/query/native gaps were not implemented or accepted."
+        }
+      },
+      "limitations": [
+        "Genuine C13 acceptance remains open until a real API-supplied cover is decoded and visible on the actual ordinary non-Book catalogue page.",
+        "The shared non-Book frame now also displays existing generated type-cover fallbacks; affected guide and Recipe layout/Cook regressions passed.",
+        "Media cover shape policy remains owned by existing CatalogueCover/WorkPageCover: square Music art is letterboxed in the document frame. No shared cover/library policy was changed.",
+        "Four pre-existing source-recipe contract failures remain explicitly recorded and reproduced on the exact base.",
+        "No genuine C13 assertion, full original C28, all-showcase states or whole registry/browser tier was run by this reviewer. A source/layout acceptance does not close canonical or class findings."
+      ]
+    },
+    "checksActuallyExecuted": [
+      {
+        "kind": "read-only-pin-artifact-verification",
+        "executedBy": "G-2841",
+        "result": "passed",
+        "detail": "Independently resolved both immutable Git diffs (3 Book paths, 2 nonBook paths); verified all 5 changed candidate blobs and SHA256 values against receipts and current isolated file bytes; checked 2 existing Book base blobs/hashes where supplied or independently recorded, exact new-file absence, patches, 8 logs and 27 screenshot records. Both frozen diffs pass whitespace checks. All 5 cover preserved-owner blobs match base and candidate.",
+        "artifact": ".temp/catalogue-work-review/book-cover-final/pin-and-artifact-verification.json"
+      },
+      {
+        "kind": "independent-source-review",
+        "executedBy": "G-2841",
+        "result": "complete-one-source-inferred-P2",
+        "detail": "Read both exact diffs and relevant projection, progress authority, body rendering, WorkFrame consumers, cover policy/credit and unchanged failing source-story call chains. No implementation or assertion edits."
+      },
+      {
+        "kind": "actual-image-inspection",
+        "executedBy": "G-2841",
+        "result": "complete",
+        "detail": "Viewed 5 selected Book captures and 9 selected nonBook/Guide/Recipe captures, each verified by SHA256. Inspected screenshots are component-fixture evidence, not genuine producer acceptance."
+      }
+    ],
+    "evidenceClassification": {
+      "sourceInference": [
+        "WORK-REVIEW-08 retry suppression and source call-chain observations; no reproduced retry assertion claimed."
+      ],
+      "reproducedAssertionFailuresReused": [
+        "Four unchanged source-recipe fixture assertions fail at line112 on both exact5a99c7 base and54d1ade candidate. Their logs are separately hash-verified and retained."
+      ],
+      "newReproducedOutcomeAssertionFailures": [],
+      "setupFailures": [],
+      "originalProductAcceptance": "C13/C28 remain open. No fixture counts, successful types, existing screens or source review is substituted for genuine producer proof.",
+      "priorEvidence": "All historical failures, including original unavailable states and WORK-REVIEW-07 typecheck diagnostics, are preserved in their existing immutable review checkpoints. No current disposition for an unselected subsequent fix is inferred."
+    },
+    "proofReuse": {
+      "allowed": "Reuse only exact immutable code receipts/screens; no review of changing main.",
+      "pinAndArtifactVerification": ".temp/catalogue-work-review/book-cover-final/pin-and-artifact-verification.json",
+      "callChainBlobs": ".temp/catalogue-work-review/book-cover-final/inspected-call-chain-blobs.json",
+      "verifiedArtifactCounts": {
+        "book": 13,
+        "nonBookCover": 24
+      },
+      "receiptSnapshots": [
+        ".temp/catalogue-work-review/book-cover-final/book-reader-candidate.json",
+        ".temp/catalogue-work-review/book-cover-final/nonbook-cover-candidate.json"
+      ]
+    },
+    "reportValidation": {
+      "status": "passed",
+      "jobId": "7101b227-2f17-42cf-b144-26e31a8c5142",
+      "commands": [
+        {
+          "command": "task docs:check",
+          "exitCode": 0,
+          "result": "13 self-tests;249 Markdown files pass; local links, fragments and design navigation checked. External URLs and runtime behavior not tested.",
+          "log": ".temp/goal/jobs/7101b227-2f17-42cf-b144-26e31a8c5142.1.log",
+          "sha256": "f576f9496eaed3f41fc24a0a007a81b750150c7b8ba24934d227acdc29d2c43c"
+        },
+        {
+          "command": "task goal -- check",
+          "exitCode": 0,
+          "result": "Report-only diff; no TypeScript workspace/source changed; no tests named in brief. AST and1/44selected repository guards pass.",
+          "log": ".temp/goal/jobs/7101b227-2f17-42cf-b144-26e31a8c5142.2.log",
+          "artifact": ".temp/goal/check/run-OAuWGa/output.log",
+          "sha256": "b4b00ac275686c6f18be2f55df5d5595d255a34d93e219332babbae4f40c9f04"
+        }
+      ],
+      "harnessNotice": "Check reports harness3commits behind main; all selected report checks passed. No rebase or main mutation performed.",
+      "independentFindingStillOpen": "Report QA does not reproduce or clear source-inferred WORK-REVIEW-08, pre-existing component assertion failures, genuine C13/C28 or hard-document-teardown gaps.",
+      "subsequentEdits": "Only validation metadata; JSON parse, prior JSON-value preservation, scope and whitespace checked before commit."
+    },
+    "limitations": [
+      "Review-only; no product source, assertions, Goal brief, implementation owner claim, API/schema/converter, services, corpus, main checkout, other worktree, lifecycle/import/reset or unrelated report was changed.",
+      "No new full-tier/wave/native/class closure is claimed. Only the five selected changed paths and necessary read-only call chains were inspected.",
+      "WORK-REVIEW-08 is not presented as a reproduced original outcome blocker. Existing source-finding history and original proof obligations remain independent."
+    ],
+    "managerNext": [
+      "Use this exact same report commit for normal bounded-delta review handling; ordinary nonBook54d1ade has no actionable source finding.",
+      "Have the existing Book correction owner address or reproduce WORK-REVIEW-08 with a failed same-position save/retry that preserves completion and exact CAS identity. No implementation change is authored here.",
+      "Keep genuine C13/C28 and hard-document-teardown proof open with their existing owners; retain both pre-existing source-story failure logs and all historical review evidence. Do not reopen accepted reviews or broaden to a whole wave."
+    ]
+  },
+  "boundedBookRetryCorrectionCheckpoint": {
+    "observedAt": "2026-10-19T11:13:23.967751+00:00",
+    "reviewer": {
+      "account": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independent": true,
+      "delegation": false,
+      "fallback": false
+    },
+    "authority": "Same G-2841 codex-1/GPT-6.1 Sol/xhigh continuation, no fallback or delegation. Review only the four-file failed-captured-position correction f05b655..41ec2c5 for historical WORK-REVIEW-08; accepted Book opening, cover, Cook, footer and Guide reviews are not repeated.",
+    "priorReport": {
+      "commit": "67f252d5c7bc366f929dfa91c2e9225fe57b2196",
+      "sha256": "95ec3a0fe4dab665cb3506440cc2dfcea5d007ab8bfe29c7b2c4a9a860b0460c",
+      "disposition": "bounded-book-and-nonbook-cover-review-complete-one-source-inferred-P2",
+      "acceptance": "Ordinary nonBook54d1ade versus5a99c7 has no actionable delta finding. Bookf05b655 versus82df58 binds actual content revision and captured progress identity, but failed same-position persistence has no in-place retry (WORK-REVIEW-08, source inference). Matching fixture/type receipts do not establish C13/C28 acceptance or durable writes before hard teardown. Prior review histories/dispositions remain intact.",
+      "preservation": "Every pre-existing JSON key/value except top-level disposition and acceptance is preserved exactly. Their previous values are archived here. boundedBookCoverCheckpoint and its source-inferred WORK-REVIEW-08 remain historical and unchanged; this appended disposition describes only the exact correction. All earlier failures, accepted reviews and independent original assertions retain their provenance."
+    },
+    "disposition": "bounded-book-retry-correction-reviewed-WORK-REVIEW-08-addressed-no-new-actionable-delta-finding",
+    "acceptance": "Exact41ec2c5374b1bbc992119490d6b662ded725e6a3 versusf05b655c04b26f75673e4ecf2059f083aee11f0d addresses WORK-REVIEW-08 in source and matching component-fixture evidence. Failed opening and scroll saves can retry the captured position without changing completion or identity; denial and second conflict remain failed. No new actionable correction finding. Historical findings and receipts are preserved. Genuine original C28/A11 acceptance and durability before hard document teardown remain unproved.",
+    "pins": {
+      "base": "f05b655c04b26f75673e4ecf2059f083aee11f0d",
+      "candidate": "41ec2c5374b1bbc992119490d6b662ded725e6a3",
+      "candidateParent": "f05b655c04b26f75673e4ecf2059f083aee11f0d",
+      "directParentVerified": true,
+      "originalBookBase": "82df58d2ba1d9d377b591126e7f4dfa42f27f02e",
+      "isolatedCheckout": ".temp/worktrees/catalogue-book-reader-candidate-20261019",
+      "scope": "Correction-only immutable four-path diff, not changing main or the combined original reader patch."
+    },
+    "inspectedChangedPaths": [
+      {
+        "path": "apps/web/features/work-page/reader-client.tsx",
+        "originalBlob": "162ffa8d0d8e808d8d7db9826616b171b7d98627",
+        "originalSha256": "591bcf2ce5a801bc24983ff4d0acd15d6f45ca3efe07f5c5d3de8681f349681f",
+        "candidateBlob": "d587ba5916f3a1ba3f70f22611fc6bc7e8d95460",
+        "candidateSha256": "b7aab4630276d6e1eae08af163a6c160f1ab64e67e66ab47a74c664952b4f6d9",
+        "isolatedWorktreeBytesMatch": true
+      },
+      {
+        "path": "apps/web/features/work-page/reader.tsx",
+        "originalBlob": "0752f68c91e9d4e3590dd2ff03759db67bdcbe77",
+        "originalSha256": "106d1bc3c271baedb4d8409cc4af1fca645f4255a8405c9076b7098fca112f76",
+        "candidateBlob": "176d46467dfe1254e9b34dc5e37befcc5ce28919",
+        "candidateSha256": "16ad025b77f5863ba1e2c3468d081003cc47afe1952fd0968566e03a47f20194",
+        "isolatedWorktreeBytesMatch": true
+      },
+      {
+        "path": "apps/web/features/work-page/reader-progress.stories.tsx",
+        "originalBlob": "3a38995683a3d40f4f0b047f7907618b7b4f0105",
+        "originalSha256": "341e2539845970b61cb3c1b5e825c93944810e3fb48baaeeebe5c7ca7f099f09",
+        "candidateBlob": "1bd17e7fe1d8ce8bb0de5c05961a3c9aeceac125",
+        "candidateSha256": "23d0dcb7aa0862cdce315362bfb1c71064db0275dc727583b25faedaa2b8f7ac",
+        "isolatedWorktreeBytesMatch": true
+      },
+      {
+        "path": "apps/web/features/work-page/reader.stories.tsx",
+        "originalBlob": "f20ecd9d40266b01f0aabef837e7b548537c7141",
+        "originalSha256": "33d92e573e8b8791f4be199a890038eaa8dce4c89da200cd4a4d9f60de94140f",
+        "candidateBlob": "fdc30140a8f046435178608d37a7e12704767cf4",
+        "candidateSha256": "b37695117b173d0acf68e54ca76ac396086e569c78a7de5e5df2bfca0f8e6991",
+        "isolatedWorktreeBytesMatch": true
+      }
+    ],
+    "inspectedUnchangedLocaleSources": [
+      {
+        "path": "apps/web/features/work-page/messages.ts",
+        "blob": "c1126e2d50dc7e7212d0a71d2a2aa683204fa16c",
+        "sha256": "7f6246fd4f11b9ad825c357c6da15f0b4116d465237afb687d0695ff0b77c861",
+        "baseBytesUnchanged": true
+      },
+      {
+        "path": "apps/web/features/work-page/messages/de.ts",
+        "blob": "431b838d88886c5fdd36f36a4263f212a1dac88f",
+        "sha256": "4162c9d6c377b7fe88384d809e795ad7d8de7c6719a921e397a59b658b1689c5",
+        "baseBytesUnchanged": true
+      },
+      {
+        "path": "apps/web/features/work-page/messages/es.ts",
+        "blob": "222a2ddbac4217d64402732b5e5d41bf9244f651",
+        "sha256": "c41454fc72671bdf5aaee66f791614fe7aed5bd1087710360f2c9c6ddbff1841",
+        "baseBytesUnchanged": true
+      },
+      {
+        "path": "apps/web/features/work-page/messages/fr.ts",
+        "blob": "080c4340b3b252f8ca2de3cefd9217aaf7292ae0",
+        "sha256": "7830c915556634a0ee13476b562a162c674c6c54f42bf3162b497c74ca622dcc",
+        "baseBytesUnchanged": true
+      },
+      {
+        "path": "apps/web/features/work-page/messages/ja.ts",
+        "blob": "ae34616e42260e82449832b5002e6e112b9b41bb",
+        "sha256": "e23262fe4405b59ccd785e3747b6de55182d9af2413fb549e4345c4ab8fc1e4e",
+        "baseBytesUnchanged": true
+      },
+      {
+        "path": "apps/web/features/work-page/messages/ko.ts",
+        "blob": "b9cb55d887c4e97d7f0a42f0398421dc0766a593",
+        "sha256": "9c4c8b6be18dd62d85680abca532653335beafc22c94d8a8b0a84841613450ec",
+        "baseBytesUnchanged": true
+      },
+      {
+        "path": "apps/web/features/work-page/messages/zh-Hans.ts",
+        "blob": "52dfa7ebee807baf814e06fadb69fcb5cbe5434c",
+        "sha256": "fde1ebaa51fdb41726554fb0896c73b1fab663eb16ee5f003cd475d53c54a032",
+        "baseBytesUnchanged": true
+      },
+      {
+        "path": "apps/web/features/work-page/messages/zh-Hant.ts",
+        "blob": "ae6a0200c8811a1cd756c52cc509765b11fa6ee6",
+        "sha256": "b7088e340db22a951b18336a8e7f13fdbf9280d07823230020ad183c5ab7a745",
+        "baseBytesUnchanged": true
+      }
+    ],
+    "findingDispositions": [
+      {
+        "id": "WORK-REVIEW-08",
+        "historicalSeverity": "P2",
+        "historicalReportCommit": "67f252d5c7bc366f929dfa91c2e9225fe57b2196",
+        "historicalClassification": "source-inference-with-matching-failure-state-capture; no original browser retry failure was claimed",
+        "statusAtCandidate": "addressed-in-selected-source-and-fixture-regression-scope",
+        "candidate": "41ec2c5374b1bbc992119490d6b662ded725e6a3",
+        "counterexampleDisposition": "The prior one-paragraph p:0 transient failure now retains failedChange and marks the position attempt failed. Retry sends the same captured intent, and a later same-paragraph scroll flush is no longer suppressed. A failed debounced p:2 similarly retries without requiring Mark chapter as read. Successful/pending latest-position writes still deduplicate.",
+        "sourceLocations": [
+          {
+            "path": "apps/web/features/work-page/reader-client.tsx",
+            "lines": [
+              364,
+              375,
+              376,
+              379,
+              383,
+              387,
+              396,
+              402,
+              409,
+              426,
+              441,
+              476
+            ]
+          },
+          {
+            "path": "apps/web/features/work-page/reader.tsx",
+            "lines": [
+              99,
+              110
+            ]
+          }
+        ],
+        "meaningfulFixtureAssertions": [
+          "OpeningPositionRetry",
+          "OpeningPositionRetryPhone",
+          "CompletedOpeningPositionRetry",
+          "FailedOpeningRetriesSameParagraphOnScroll",
+          "ScrolledPositionRetry",
+          "ScrolledPositionRetryPhone",
+          "RetryPreservesConcurrentCompletion",
+          "DeniedRetryRemainsDenied",
+          "DeniedRetryRemainsDeniedPhone",
+          "RetryConflictRemainsBounded",
+          "RetryKeepsCapturedChapterDuringNavigation"
+        ],
+        "qualification": "Addressed source finding, not closure of genuine original C28/A11 or a promise that an in-memory queued request survives hard document teardown."
+      }
+    ],
+    "newActionableFindings": [],
+    "sourceReviewObservations": [
+      {
+        "contract": "Captured exact identity and native paragraph ownership",
+        "result": "Retry passes the stored ProgressChange, never reads the new DOM. ChapterProgress key still includes actor/composition/occurrence/selectedRevision; write closure retains that tuple. Actor+composition queue preserves order while each PUT/GET uses its own occurrence/revision. Connected-reader paragraph capture, actual content-reference revision marker and admitted-body-only opening are unchanged by this correction. No new schema, authority, completion-on-open or unsupported-content write is introduced.",
+        "evidenceScope": "Exact correction and surrounding existing call chain; actor/composition permutation coverage is source inference, not a claim that every tuple permutation was browser exercised."
+      },
+      {
+        "contract": "Opening and ordinary scroll recovery apply the same principle",
+        "result": "Both enter and debounced flush use write. PositionAttempt separates failed from pending/saved attempts, so the same failed paragraph can be resubmitted. Only the last ordered position deduplicates, preserving A-to-B-to-A intent. failedChange retains the captured opening or scroll intent for the explicit Retry button. This addresses both changed automatic opening and the existing ordinary scroll surface."
+      },
+      {
+        "contract": "Completion and bounded compare-and-swap",
+        "result": "Position-only retries omit completed in their intent, so body uses latest successful completed or fresh completion from the existing single409 reread. The retry carries actor and selectedRevision, uses expectedVersion and a new idempotency key/keepalive, and refreshes at most once. Completion remains an explicit separate action. Successful response.data alone updates saved state; denial, thrown failure or second conflict retains failed UI."
+      },
+      {
+        "contract": "Navigation and stale UI",
+        "result": "Old queued Retry retains its captured composition/occurrence/revision/position and remains ordered before new chapter opening. Keyed state separates the new chapter and active guards prevent old responses changing its UI. Cleanup still flushes a position captured while the old connected article owned the DOM. The new navigation fixture holds old retry until after the new article mounts, then asserts old exact command plus new revision/version7/p:0 and no leaked failure."
+      },
+      {
+        "contract": "Visible failure recovery and shared labels/callers",
+        "result": "Retry is distinct from Mark read/unread, uses the existing materialized localized retry value, and clears only after success. Exact-pin search finds ProgressPanel as the only ReadingProgress render caller; it supplies the added required label. All eight message source blobs are unchanged and already supply retry. Denied-state desktop/phone captures retain the error and Retry after rejection; successful captures retain the appropriate explicit completion action."
+      },
+      {
+        "contract": "Independent assertion preservation",
+        "result": "All nine original progress exported story declarations are byte-exact, with independently verified hashes. NavigationReader keeps its original longChapter default; the new short fixture is opt-in. reader.stories changes only three Retry selector occurrences across two identification stories, scoped to actual article/header owning ChapterWorkLinks. All navigation/error/body/actor/language/read-count assertions remain; the other27 exported declarations are byte-exact. Identification Retry absence continues to be asserted within its actual owner; the new progress Retry below it is not hidden by weakening product assertions."
+      }
+    ],
+    "assertionPreservation": {
+      "originalProgressDeclarations": [
+        {
+          "name": "OpenedParagraph",
+          "declarationByteExact": true,
+          "reviewerDeclarationSha256": "539db934d666861ad30103b28a22d45383d92d8c870702e99ada5314d67e2b10",
+          "receiptDeclarationSha256": "539db934d666861ad30103b28a22d45383d92d8c870702e99ada5314d67e2b10",
+          "receiptHashMatches": true
+        },
+        {
+          "name": "CompletedChapterRemainsCompleted",
+          "declarationByteExact": true,
+          "reviewerDeclarationSha256": "2a9f5399694e5349be17bad5d24b9ea75d4ade033be01a7cf8579aa588824e72",
+          "receiptDeclarationSha256": "2a9f5399694e5349be17bad5d24b9ea75d4ade033be01a7cf8579aa588824e72",
+          "receiptHashMatches": true
+        },
+        {
+          "name": "ConcurrentCompletionIsPreserved",
+          "declarationByteExact": true,
+          "reviewerDeclarationSha256": "cf287be5ee01f0a36fbc7c4a510984d6a4ba5d8f35633a58857a2ed892adcbeb",
+          "receiptDeclarationSha256": "cf287be5ee01f0a36fbc7c4a510984d6a4ba5d8f35633a58857a2ed892adcbeb",
+          "receiptHashMatches": true
+        },
+        {
+          "name": "OpeningSaveFailure",
+          "declarationByteExact": true,
+          "reviewerDeclarationSha256": "1b712d50762b573d9a3b3f887cfc2e98cc97b28690ad45795af511246fdf7378",
+          "receiptDeclarationSha256": "1b712d50762b573d9a3b3f887cfc2e98cc97b28690ad45795af511246fdf7378",
+          "receiptHashMatches": true
+        },
+        {
+          "name": "OpeningSaveFailurePhone",
+          "declarationByteExact": true,
+          "reviewerDeclarationSha256": "29060d0e75d2ee6a9dbdba4ed00de03d3f57223f94215120e4f68658bbef6b17",
+          "receiptDeclarationSha256": "29060d0e75d2ee6a9dbdba4ed00de03d3f57223f94215120e4f68658bbef6b17",
+          "receiptHashMatches": true
+        },
+        {
+          "name": "ConflictRetryIsBounded",
+          "declarationByteExact": true,
+          "reviewerDeclarationSha256": "fb6684522dd804d80068208970cbc4f7076da54557e779ba22b3a71099d26e40",
+          "receiptDeclarationSha256": "fb6684522dd804d80068208970cbc4f7076da54557e779ba22b3a71099d26e40",
+          "receiptHashMatches": true
+        },
+        {
+          "name": "NavigationKeepsCapturedChapterPosition",
+          "declarationByteExact": true,
+          "reviewerDeclarationSha256": "6eec1043c54284e5f31c7a72c246d63f902aec1fa45d0adaaf230f9e42e8de55",
+          "receiptDeclarationSha256": "6eec1043c54284e5f31c7a72c246d63f902aec1fa45d0adaaf230f9e42e8de55",
+          "receiptHashMatches": true
+        },
+        {
+          "name": "FailedOldChapterDoesNotBlockNextChapter",
+          "declarationByteExact": true,
+          "reviewerDeclarationSha256": "fcd1175361332da3f6d94887be7b2fef465526651d64773343b118ddc966ca1d",
+          "receiptDeclarationSha256": "fcd1175361332da3f6d94887be7b2fef465526651d64773343b118ddc966ca1d",
+          "receiptHashMatches": true
+        },
+        {
+          "name": "OnlyReadableTextRecordsAnOpening",
+          "declarationByteExact": true,
+          "reviewerDeclarationSha256": "decb245a762b3e6cb1599db34f440c071e2b5bd7139bc75920ae6456ff75b8c0",
+          "receiptDeclarationSha256": "decb245a762b3e6cb1599db34f440c071e2b5bd7139bc75920ae6456ff75b8c0",
+          "receiptHashMatches": true
+        }
+      ],
+      "readerStoryDeclarations": {
+        "unchanged": [
+          "Reading",
+          "IdentifiedAsWork",
+          "AgeGateIncludesAuthorNotes",
+          "IdentifiedWorksContinuation",
+          "Settings",
+          "ProgressSaveFails",
+          "ChapterRead",
+          "SignedOut",
+          "ProgressNotKept",
+          "UnsupportedFormat",
+          "LatinLineHeight",
+          "UntitledChapter",
+          "TitleNotRepeated",
+          "ChinesePhoneDark",
+          "PhoneChromeTap",
+          "OneText",
+          "OneTextNotFound",
+          "NotFound",
+          "Unavailable",
+          "Loading",
+          "WorkParts",
+          "GroupedWorkParts",
+          "ContentsByVolume",
+          "ContentsByVolumeChinese",
+          "InAVolume",
+          "InAVolumeChinese",
+          "InExtras"
+        ],
+        "changed": [
+          "UnidentifiedChapterReadLeavesNoTrace",
+          "WorkLinksRetryThenLeaveNoTrace"
+        ],
+        "removed": [],
+        "added": []
+      },
+      "changedIdentificationSelectors": {
+        "stories": 2,
+        "selectorOccurrences": 3,
+        "scope": "article header",
+        "reason": "Identification Retry and absence/recovery belong to ChapterWorkLinks in that header. Progress Retry is a separate action below it."
+      },
+      "originalC28AssertionChanges": false,
+      "acceptedCoverAndOtherReviews": "Preserved historical report checkpoints; no accepted blobs re-reviewed."
+    },
+    "proofReuse": {
+      "receipt": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate.json",
+        "sha256": "ec595c7f2bba7e954423117465cc3c5bd728dba9da19bf8900303339322d917f"
+      },
+      "patches": [
+        {
+          "kind": "correction-only-applies-on-f05",
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate.delta.patch",
+          "sha256": "4689609ee9eea02b191242eaed959e2abae56d6bbc886ad365f4fc1c502f56bd",
+          "numstat": [
+            "29\t9\tapps/web/features/work-page/reader-client.tsx",
+            "189\t4\tapps/web/features/work-page/reader-progress.stories.tsx",
+            "6\t3\tapps/web/features/work-page/reader.stories.tsx",
+            "1\t0\tapps/web/features/work-page/reader.tsx"
+          ]
+        },
+        {
+          "kind": "combined-original-reader-and-retry-applies-on-main",
+          "base": "82df58d2ba1d9d377b591126e7f4dfa42f27f02e",
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate.patch",
+          "sha256": "6f69345bd2b300e54a71cb78cac21b267c13d84daa64f847a39538a16ac65eb2",
+          "applyCheckMainPin": "6430441893f5c3609efd97b3921a21a85eab0707",
+          "applyCheckExitCode": 0,
+          "applyCheckLog": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/apply-check.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        }
+      ],
+      "verificationArtifact": ".temp/catalogue-work-review/book-retry-final/verification.json",
+      "verifiedArtifacts": [
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate.delta.patch",
+          "sha256": "4689609ee9eea02b191242eaed959e2abae56d6bbc886ad365f4fc1c502f56bd"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate.patch",
+          "sha256": "6f69345bd2b300e54a71cb78cac21b267c13d84daa64f847a39538a16ac65eb2"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/apply-check.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/types-final.log",
+          "sha256": "c41c60dc1a20114af8cb2afa6d64a9c3fb4f4081a5c4fb2491dbfcdc75903b5b"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/stories-52.log",
+          "sha256": "ebbf643a556ace65bb603121f43a65e4576ad73589c2ecd0c9347f361bbc5cc4"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/stories-phone.log",
+          "sha256": "3fa7d62dbf01e425969bf6a854f45564f5b10771112903c2b3c9be7b28be513e"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/screenshots/OpeningSaveFailure.png",
+          "sha256": "9ade5a53981d4ce1ac42ff9df5ab920db824489775e73f77ff8fbcc9bc740fbc"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/screenshots/OpeningSaveFailurePhone.png",
+          "sha256": "5b7701f09e2d6f7c9958642e11a8b9cd2a5382f6c615e31aa8e748c0e544b2cd"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/screenshots/OpeningPositionRetry.png",
+          "sha256": "732c934f78dc73ed1326915ff792c0591eb286805c4eeffb960b57381e844262"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/screenshots/OpeningPositionRetryPhone.png",
+          "sha256": "b7c5ed1e38970b7ff7863d68dddfdc062d1945de4584212697c0fa13713783c2"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/screenshots/ScrolledPositionRetry.png",
+          "sha256": "9932d5d76b3d6ed2accd7132dc59444783612e4ff1ac34b63ad42563214c07d8"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/screenshots/ScrolledPositionRetryPhone.png",
+          "sha256": "c96cabdb19c4f54858deb18ce76a5132057070ff91418cd90c041e5558feec0d"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/screenshots/DeniedRetryRemainsDenied.png",
+          "sha256": "725f0834de19a71ff2c769370e339931ca8305e5e33e1fbc53da1cea6e93e68a"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/screenshots/CompletedOpeningPositionRetry.png",
+          "sha256": "85a2022af4da5a945a1a385b38c1832b60a80323295df3368a917c95be38a54d"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/screenshots/RetryKeepsCapturedChapterDuringNavigation.png",
+          "sha256": "3e01f042ea96e732433137e39319d87a4acb4d9524e0668afc37dae5b2402e6d"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/screenshots/DeniedRetryRemainsDeniedPhone.png",
+          "sha256": "0a846acb7649270a320c150ad83943337f596527f2d14924c280487f2c782eb4"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/stories-synthetic-pagehide-rejected.log",
+          "sha256": "856d25ce21a98b4e0cfcfc91f82683b7f16a945404e6f7c6a34df23d010c478f"
+        }
+      ],
+      "checks": [
+        {
+          "command": "task goal:type-files -- --jsx react-jsx --target esnext --module preserve --moduleResolution bundler --allowImportingTsExtensions --noEmit --skipLibCheck --strict apps/web/features/work-page/reader-client.tsx apps/web/features/work-page/reader.tsx apps/web/features/work-page/reader-progress.stories.tsx apps/web/features/work-page/reader.stories.tsx",
+          "exitCode": 0,
+          "checkedImports": 1775,
+          "evidence": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/types-final.log",
+            "sha256": "c41c60dc1a20114af8cb2afa6d64a9c3fb4f4081a5c4fb2491dbfcdc75903b5b"
+          }
+        },
+        {
+          "command": "REZICS_STORY_SCREENSHOTS_DIR=../../.temp/book-reader-retry-final-review task storybook:test -- features/work-page/reader-progress.stories.tsx features/work-page/reader.stories.tsx features/work-page/books-reader-review.stories.tsx",
+          "exitCode": 0,
+          "filesPassed": 3,
+          "storiesPassed": 52,
+          "productSourcesExactFinal": true,
+          "storySourceQualification": "Final story file differs only by subsequently added focused phone-denial declaration; source hash verified above.",
+          "accessibility": "Inherited actual browser accessibility checks completed.",
+          "evidence": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/stories-52.log",
+            "sha256": "ebbf643a556ace65bb603121f43a65e4576ad73589c2ecd0c9347f361bbc5cc4"
+          }
+        },
+        {
+          "command": "REZICS_STORY_SCREENSHOTS_DIR=../../.temp/book-reader-retry-phone-review task storybook:test -- features/work-page/reader-progress.stories.tsx -t 'Denied Retry Remains Denied Phone'",
+          "exitCode": 0,
+          "storiesPassed": 1,
+          "storiesSkipped": 19,
+          "source": "final exact story file",
+          "accessibility": "Inherited actual browser accessibility checks completed.",
+          "evidence": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/stories-phone.log",
+            "sha256": "3fa7d62dbf01e425969bf6a854f45564f5b10771112903c2b3c9be7b28be513e"
+          }
+        },
+        {
+          "command": "git diff --check f05b655c04b26f75673e4ecf2059f083aee11f0d 41ec2c5374b1bbc992119490d6b662ded725e6a3",
+          "exitCode": 0
+        }
+      ],
+      "executedBy": "Existing correction owner; logs and exact product/source hashes independently inspected by G-2841, not rerun or claimed as reviewer executions.",
+      "browserCountQualification": "The three-file run reports52 passing states on exact final product source. Its progress-story source precedes only the added phone-denial declaration according to the receipt; the final exact20-declaration file separately runs that one focused state (1pass/19skipped). Do not describe the52run as an all-final-stories rerun. These are fixture regressions with inherited accessibility checks, not genuine producer C28.",
+      "reviewerScreenshotInspection": {
+        "method": "G-2841 individually opened all ten supplied SHA256-verified actual screenshots using view_image.",
+        "screenshots": [
+          {
+            "storyExport": "OpeningSaveFailure",
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/screenshots/OpeningSaveFailure.png",
+            "sha256": "9ade5a53981d4ce1ac42ff9df5ab920db824489775e73f77ff8fbcc9bc740fbc",
+            "width": 1200,
+            "height": 900,
+            "viewedByAI": true,
+            "viewedByReviewerG2841": true
+          },
+          {
+            "storyExport": "OpeningSaveFailurePhone",
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/screenshots/OpeningSaveFailurePhone.png",
+            "sha256": "5b7701f09e2d6f7c9958642e11a8b9cd2a5382f6c615e31aa8e748c0e544b2cd",
+            "width": 390,
+            "height": 844,
+            "viewedByAI": true,
+            "viewedByReviewerG2841": true
+          },
+          {
+            "storyExport": "OpeningPositionRetry",
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/screenshots/OpeningPositionRetry.png",
+            "sha256": "732c934f78dc73ed1326915ff792c0591eb286805c4eeffb960b57381e844262",
+            "width": 1200,
+            "height": 900,
+            "viewedByAI": true,
+            "viewedByReviewerG2841": true
+          },
+          {
+            "storyExport": "OpeningPositionRetryPhone",
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/screenshots/OpeningPositionRetryPhone.png",
+            "sha256": "b7c5ed1e38970b7ff7863d68dddfdc062d1945de4584212697c0fa13713783c2",
+            "width": 390,
+            "height": 844,
+            "viewedByAI": true,
+            "viewedByReviewerG2841": true
+          },
+          {
+            "storyExport": "ScrolledPositionRetry",
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/screenshots/ScrolledPositionRetry.png",
+            "sha256": "9932d5d76b3d6ed2accd7132dc59444783612e4ff1ac34b63ad42563214c07d8",
+            "width": 1200,
+            "height": 900,
+            "viewedByAI": true,
+            "viewedByReviewerG2841": true
+          },
+          {
+            "storyExport": "ScrolledPositionRetryPhone",
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/screenshots/ScrolledPositionRetryPhone.png",
+            "sha256": "c96cabdb19c4f54858deb18ce76a5132057070ff91418cd90c041e5558feec0d",
+            "width": 390,
+            "height": 844,
+            "viewedByAI": true,
+            "viewedByReviewerG2841": true
+          },
+          {
+            "storyExport": "DeniedRetryRemainsDenied",
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/screenshots/DeniedRetryRemainsDenied.png",
+            "sha256": "725f0834de19a71ff2c769370e339931ca8305e5e33e1fbc53da1cea6e93e68a",
+            "width": 1200,
+            "height": 900,
+            "viewedByAI": true,
+            "viewedByReviewerG2841": true
+          },
+          {
+            "storyExport": "CompletedOpeningPositionRetry",
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/screenshots/CompletedOpeningPositionRetry.png",
+            "sha256": "85a2022af4da5a945a1a385b38c1832b60a80323295df3368a917c95be38a54d",
+            "width": 1200,
+            "height": 900,
+            "viewedByAI": true,
+            "viewedByReviewerG2841": true
+          },
+          {
+            "storyExport": "RetryKeepsCapturedChapterDuringNavigation",
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/screenshots/RetryKeepsCapturedChapterDuringNavigation.png",
+            "sha256": "3e01f042ea96e732433137e39319d87a4acb4d9524e0668afc37dae5b2402e6d",
+            "width": 1200,
+            "height": 900,
+            "viewedByAI": true,
+            "viewedByReviewerG2841": true
+          },
+          {
+            "storyExport": "DeniedRetryRemainsDeniedPhone",
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/screenshots/DeniedRetryRemainsDeniedPhone.png",
+            "sha256": "0a846acb7649270a320c150ad83943337f596527f2d14924c280487f2c782eb4",
+            "width": 390,
+            "height": 844,
+            "viewedByAI": true,
+            "viewedByReviewerG2841": true
+          }
+        ],
+        "observations": "Failure and Retry are distinct from completion. Desktop and390px phone successful opening/scroll retries remove failure without marking read. CompletedOpeningPositionRetry retains Chapter read/Mark as unread. DeniedRetryRemainsDenied desktop and focused phone show the full retained failure/Retry row. The original long-chapter phone failure row reaches the bottom of the captured viewport; this capture alone does not show the full control, while the focused denial image does. New-chapter capture shows its own heading/body and no old failure. No overlap or horizontal overflow observed in the supplied selected images.",
+        "limitations": "Images establish selected rendered fixture states only; commands/identity/CAS require source and browser assertion evidence, not visual inference."
+      }
+    },
+    "checksActuallyExecuted": [
+      {
+        "kind": "pin-blob-artifact-verification",
+        "executedBy": "G-2841",
+        "result": "passed",
+        "detail": "Verified exact direct parent, four-path diff, base/candidate Git blobs and SHA256, clean isolated file bytes, receipt,17 artifact hashes and unchanged declarations. No product mutation.",
+        "artifact": ".temp/catalogue-work-review/book-retry-final/verification.json"
+      },
+      {
+        "kind": "read-only-source-review",
+        "executedBy": "G-2841",
+        "result": "complete-no-new-actionable-delta-finding",
+        "detail": "Inspected the complete correction, surrounding progress queue/key/cleanup/CAS/UI, only render caller, eight unchanged localized retry sources, all added regression assertions and both changed identification stories."
+      },
+      {
+        "kind": "actual-image-inspection",
+        "executedBy": "G-2841",
+        "result": "complete",
+        "count": 10
+      },
+      {
+        "kind": "pinned-diff-whitespace",
+        "executedBy": "G-2841",
+        "command": "git diff --check f05b655c04b26f75673e4ecf2059f083aee11f0d 41ec2c5374b1bbc992119490d6b662ded725e6a3",
+        "exitCode": 0
+      }
+    ],
+    "evidenceClassification": {
+      "sourceInference": [
+        "Exact identity closure, state/dedup behavior, unchanged paragraph ownership, denied/failure semantics and shared-caller checks are independent source review. Historical WORK-REVIEW-08 was source-inferred and its prior classification is unchanged."
+      ],
+      "reusedFixtureAssertionPasses": "Owner logs independently inspected:1775-file typecheck,52states in3files, plus1focused phone-denial state; counts and source qualification retained above. No genuine original outcome assertion pass is inferred.",
+      "newReproducedOutcomeAssertionFailures": [],
+      "rejectedHarnessRuntimeFailure": {
+        "log": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/book-reader-retry-candidate/stories-synthetic-pagehide-rejected.log",
+          "sha256": "856d25ce21a98b4e0cfcfc91f82683b7f16a945404e6f7c6a34df23d010c478f"
+        },
+        "actualObservedResult": "Exit1:48tests reported passed, but only2of3files passed and one unhandled iframe connection error in reader-progress. This run is retained as failed harness/runtime evidence and is not counted as passing.",
+        "causeQualification": "Receipt attributes iframe disconnection to synthetic global pagehide. Final source uses the actual two-second scroll debounce; existing navigation assertions still cover captured cleanup flush. No product lifecycle listener changed."
+      },
+      "originalC28SetupFailure": {
+        "classification": "manager-reported-sign-in-setup/runtime-binding-failure-before-assertions",
+        "independentlyExecutedOrReproducedByThisReviewer": false,
+        "effect": "No new original C28 product assertion failure/pass claimed; genuine original C28/A11 remains separately open."
+      },
+      "priorFailures": "All original and subsequent historical failures remain byte-equivalent JSON values in their existing checkpoints, including WORK-REVIEW-07, WORK-REVIEW-08 and the base-identical source/inline footer assertions. No waiver or accepted-review repetition."
+    },
+    "reportValidation": {
+      "status": "passed",
+      "commands": [
+        {
+          "command": "task docs:check",
+          "exitCode": 0,
+          "result": "Passed13self-tests and249Markdown files; local links, fragments and design navigation. External URLs and runtime behavior not tested.",
+          "log": ".temp/goal/jobs/74586303-c752-4d92-9dd1-0853dd61d947.1.log",
+          "sha256": "92d56d7bf60ce79ac95ff8fa91aa76c60bf30b6bd3b72ce1f630f74c6c6245a7"
+        },
+        {
+          "command": "task goal -- check",
+          "exitCode": 0,
+          "result": "Report-only diff: AST and1/44selected repository guards passed; no changed TypeScript workspace, no source lint targets and no tests named in brief.",
+          "log": ".temp/goal/jobs/74586303-c752-4d92-9dd1-0853dd61d947.2.log",
+          "sha256": "e72ae5d1e1e0ec49408ad6553dae62d13fb916eff8278dbf347eac898f898e8f"
+        }
+      ],
+      "jobId": "74586303-c752-4d92-9dd1-0853dd61d947",
+      "goalCheckArtifact": ".temp/goal/check/run-UhS2Xw/output.log",
+      "harnessNotice": "Check reports harness3commits behind main. All selected report checks pass; no rebase or main mutation performed.",
+      "subsequentEdits": "Only this validation metadata; JSON parse, prior JSON-value preservation, tracked scope and whitespace checked before commit.",
+      "qualification": "Report checks do not establish genuine original C28/A11, hard-teardown durability or any class closure."
+    },
+    "limitations": [
+      "Review only; the only tracked change is this report. No product implementation, source assertions, main checkout, other worktree, Goal brief, API/schema, services, corpus, lifecycle/import/reset, research task or account fallback.",
+      "No new real backend/auth/C28 execution by this reviewer. Fixture regressions and source acceptance do not close C28/A11, C13 or any full catalogue finding.",
+      "Hard document teardown before an in-memory queued command begins remains unproved. keepalive only applies after the request starts; no durability promise added.",
+      "Actor/composition/occurrence/revision isolation is reviewed in source with the provided chapter/revision navigation regression, not every possible identity permutation.",
+      "Only the selected correction and necessary unchanged caller/label context were inspected. No broad tier rerun, review of accepted blobs, new product prerequisite or unrelated class closure."
+    ],
+    "managerNext": [
+      "Use this exact report commit for normal manager handling of immutable41ec2c5 overf05b655. WORK-REVIEW-08 is addressed in the bounded source/fixture scope; no actionable correction finding remains.",
+      "Retain historical findings/receipts, the rejected harness run and separate genuine original C28 setup/proof status. Do not substitute type/unit/story counts for original acceptance.",
+      "Keep hard-document-teardown durability unproved and any genuine original product checks with their existing owners. No implementation or landing authored by this reviewer."
+    ]
+  },
+  "managerBookIntegration": {
+    "recordedAt": "2026-10-19T11:19:27.779806+00:00",
+    "candidate": "41ec2c5374b1bbc992119490d6b662ded725e6a3",
+    "review": "cd6b4951cd7fb0adb1682031f8761744d4ef65ce",
+    "fourProductPaths": [
+      "apps/web/features/work-page/reader-client.tsx",
+      "apps/web/features/work-page/reader.tsx",
+      "apps/web/features/work-page/reader-progress.stories.tsx",
+      "apps/web/features/work-page/reader.stories.tsx"
+    ],
+    "preservation": "All actual-main preexisting keys and values, including Cook caller correction and historical dispositions, remain unchanged. Appended independent Book/cover checkpoint and exact retry correction copied from actual reviewer report.",
+    "productAcceptance": false,
+    "classClosed": false
   }
 }
