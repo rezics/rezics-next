@@ -1,0 +1,494 @@
+{
+  "schema": "catalogue-conversion-library-review-v1",
+  "review": {
+    "worker": "G-2859",
+    "goal": "audit-remediation-20261019",
+    "engine": "codex-1",
+    "model": "GPT-6.1 Sol",
+    "effort": "xhigh",
+    "reviewedAtUtc": "2026-10-19T14:04:55.856551+00:00",
+    "worktree": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2859",
+    "workerBase": "6cf460b284cca8677a9b696f8f842fea9fac5321",
+    "decision": "request-changes-bounded-candidate",
+    "summary": "The standalone extraction and unchanged test split meet the settled separation boundary. One confirmed refusal defect remains: inherited Object properties bypass the VNDB namespace allowlist and yield nonstring native kinds. No product edits or landing performed; no original catalogue class closed.",
+    "actionableFindingCount": 1,
+    "candidateLandedByReviewer": false
+  },
+  "candidate": {
+    "commit": "77e6db65b767ca7d60d50008964e71e913fe1cf8",
+    "parent": "3bfc6a33a7ff529e8a5ad089a9401961241c25d2",
+    "directParentVerified": true,
+    "tree": "9f43b275c5c6b8080e51889348f0815df5b6df41",
+    "isolatedCheckout": ".temp/worktrees/g-2781/.temp/candidates/conversion-library",
+    "method": "Read the immutable Git parent/diff and every changed file; verify candidate blobs against owner manifest and exact local read-only-source copies. Read owner evidence without modifying owner checkout or main. Run targeted adversarial checks against those exact local package copies.",
+    "changedPathCount": 5,
+    "diffSummary": {
+      "insertions": 140,
+      "deletions": 0
+    },
+    "paths": [
+      {
+        "path": "packages/conversion/package.json",
+        "change": "added",
+        "parentBlob": null,
+        "blob": "946ba903846f0e8a734988322072eb34a95cc625",
+        "sha256": "a05f73f96a6d9f4d590913192b838d78c5e7f8305f7361978cf6309d5e88bf85",
+        "bytes": 167,
+        "originalBlob": "946ba903846f0e8a734988322072eb34a95cc625",
+        "exactOriginalBlob": true,
+        "inspected": true,
+        "review": "Eight-line ESM manifest exports only the TypeScript entry. No dependencies, install/build hooks, workspace references or application entry points. Bun/TypeScript consumers are covered; no compiled JavaScript or universal runtime compatibility is claimed."
+      },
+      {
+        "path": "packages/conversion/src/bangumi.ts",
+        "change": "added",
+        "parentBlob": null,
+        "blob": "26e11897c263e140a0438e11b698e58c0548e35c",
+        "sha256": "98f49e86a7a3f7e7ec4c81613b017bc17059548558a427524b378d3fadbaf93c",
+        "bytes": 2299,
+        "originalBlob": "26e11897c263e140a0438e11b698e58c0548e35c",
+        "exactOriginalBlob": true,
+        "inspected": true,
+        "review": "Reviewed all 37 lines: bounded required subject fields, explicit type table, exact strings and repeated tag pointers, unsupported field inventory, no I/O. Optional malformed values are omitted/null; fixed title slot and inventory limits are recorded below."
+      },
+      {
+        "path": "packages/conversion/src/errors.ts",
+        "change": "added",
+        "parentBlob": null,
+        "blob": "2e5c4f66c14b6a6f2f8e94fe37bd4e87e2e737c9",
+        "sha256": "ef8aa4000953066c9c7236dac582a31548e094f63da9e87cc92b6eeb1a7b56ed",
+        "bytes": 154,
+        "originalBlob": "2e5c4f66c14b6a6f2f8e94fe37bd4e87e2e737c9",
+        "exactOriginalBlob": true,
+        "inspected": true,
+        "review": "Three-line standalone Error subclass with record/unsupported basis. No Main exception, permission, network or database dependency."
+      },
+      {
+        "path": "packages/conversion/src/index.ts",
+        "change": "added",
+        "parentBlob": null,
+        "blob": "2e9229364cf18fa397e1d33da37d80621ec7d531",
+        "sha256": "2bf55b5e7a05d269d455bbd5e567909910a86a8a47cbcb51045ce763be570e72",
+        "bytes": 2741,
+        "originalBlob": "2e9229364cf18fa397e1d33da37d80621ec7d531",
+        "exactOriginalBlob": true,
+        "inspected": true,
+        "review": "Reviewed all 40 lines: exports the two conversion functions and error class, plus a TypeScript identity interface; only relative package imports. Caller coordinates and raw data are returned without persistent assignment. VNDB own-property refusal is defective (CONV-REFUSAL-1)."
+      },
+      {
+        "path": "tests/qa/unit/conversion-library.test.ts",
+        "change": "added",
+        "parentBlob": null,
+        "blob": "a5d78aa53fe08166f7aff10898968ec6ba1e4807",
+        "sha256": "f78376be42e27099bbe974f250f29572701334d1a33993a5f5b9e83539e36e30",
+        "bytes": 3806,
+        "originalBlob": "ad13894e8351e1b9fe0e9c7b8546f8820f1b2368",
+        "exactOriginalBlob": false,
+        "inspected": true,
+        "review": "All 52 lines reviewed. Exactly three original portable case bodies, 14 owner assertions; copied-source Bun execution and primitive preservation checks. The two Source-only cases are absent here and retained unchanged separately."
+      }
+    ]
+  },
+  "controllingDirection": {
+    "references": [
+      {
+        "path": ".temp/ref/conversion-citation-direction.md",
+        "sha256": "521b2f77eeb27112dad003aa3a345f999eeec6347a1896ad8b855ed0524be8fc",
+        "read": true
+      },
+      {
+        "path": ".temp/ref/source-citations-review-20261019.md",
+        "sha256": "644a91a56dec771e2399cdca533808a877de6d0f3bfe50677724eee2adc69f50",
+        "read": true
+      }
+    ],
+    "appliedBoundary": "An external library may be invoked by an optional explicit server conversion interface. Ordinary native/business APIs accept native contracts and never auto-convert. Manual citations do not require conversion IDs, mapping registration, re-conversion, raw capture or converter proof.",
+    "scope": "Pure library review only. The candidate changes no Source, ordinary native/business API, importer, server route, citation contract or persistent storage. Those integrations require their own later cut and proof; their absence here is intentional."
+  },
+  "provenance": {
+    "originalCommit": "61ba57c0767dee7666f993e41773c2b7dac6a58c",
+    "originalAuthoredBranch": "goal/g-2781",
+    "originalAuthoredHead": "1323df2fcea6812d37f401f93b8d3093efb9fb1a",
+    "originalAuthor": "Edge-coordinates <Edgecoordinates@gmail.com>",
+    "originalAuthorDate": "2026-10-19T15:50:57+08:00",
+    "originalMixedTestBlob": "ad13894e8351e1b9fe0e9c7b8546f8820f1b2368",
+    "ownerPreparation": {
+      "path": ".temp/worktrees/g-2781/.temp/goal/landing-candidates/conversion-preparation.json",
+      "sha256": "470616ea7bc8811572dd97c0382dc02f732b19f0ce20724aa2bead0a6e70535e"
+    },
+    "ownerManifest": {
+      "path": ".temp/worktrees/g-2781/.temp/goal/landing-candidates/conversion-library-manifest.json",
+      "sha256": "c947ccb44a41958e5ea7d5cd80555dbbe9b1eacbf84693f77abecc128a90baca"
+    },
+    "fourPackageBlobsUnchanged": true,
+    "allFiveCandidateBlobsVerified": true,
+    "splitVerification": {
+      "caseHashConvention": "UTF-8 bytes from test( through final }); including one LF; exact original and split bodies compared",
+      "originalCount": 5,
+      "portableCount": 3,
+      "retainedSourceCount": 2,
+      "checks": [
+        {
+          "group": "portableCases",
+          "name": "external provider conversion preserves exact supplied primitives and rejects unsupported enrichment",
+          "sha256": "45ca3f46d5cdebad47198612c422fe1bcf5459a1f58c13cfd55d6b9948a8765c",
+          "bodyUnchanged": true
+        },
+        {
+          "group": "portableCases",
+          "name": "the exported conversion package runs when copied away from Main and importer code",
+          "sha256": "699a5eef026d40975ceac8fcead42f96c2a15bc693d7dba541651236c1d0cbaf",
+          "bodyUnchanged": true
+        },
+        {
+          "group": "portableCases",
+          "name": "Bangumi explicit conversion shares the external pure transformation and preserves repeated source values",
+          "sha256": "b91da025bb3b06268df29c9d10c349a8a8e7c8618b4814379905a2c0b3af457c",
+          "bodyUnchanged": true
+        },
+        {
+          "group": "retainedSourceCases",
+          "name": "native retained validation reads explicit results instead of invoking provider transformations",
+          "sha256": "a0ac04d42aa7c68086630b20798c33dfda99f98d6aa01df55ce4971c9bc44c2b",
+          "bodyUnchanged": true
+        },
+        {
+          "group": "retainedSourceCases",
+          "name": "legacy native source reads also validate saved conversion output without transforming the provider again",
+          "sha256": "6e98a57f3262ab568de6d4253b21794bb0d71c8af3a46ffba4be7e9d40e4bfbe",
+          "bodyUnchanged": true
+        }
+      ]
+    },
+    "retainedSourceFile": {
+      "path": ".temp/worktrees/g-2781/.temp/goal/landing-candidates/conversion-source-boundary.test.ts",
+      "sha256": "9a9b2244df5cb54f052a5bf297eaeb0df53735d74e965e19f917449571afa129",
+      "executedAgainstCurrentMain": false,
+      "status": "Both original Source case bodies remain unchanged for the later Source cut; static preservation only, not current-main execution evidence."
+    },
+    "preservationLimit": "Extraction preserves existing authorship and code, including the confirmed inherited-key bug. No claim that Source integration or all authored work is ready to land."
+  },
+  "acceptedObservations": [
+    {
+      "id": "standalone-boundary",
+      "finding": "All runtime imports resolve within these three source files. They perform transformations only: no Main/dataset scripts, database, network, accounts, permissions, filesystem, services or citation writes. Identity key/provider/namespace/externalId are caller coordinates; the library does not allocate persistent native identity."
+    },
+    {
+      "id": "export-surface",
+      "finding": "Runtime public exports are convertProviderRecord, convertBangumiSubject and ProviderConversionError; ProviderRecordIdentity is a TypeScript interface. Errors expose only record/unsupported basis. The explicit optional server interface is neither introduced nor required by this cut."
+    },
+    {
+      "id": "exact-plain-input-values",
+      "finding": "The unchanged portable test preserves empty strings, CRLF/tab text, null, partial-looking date and decimal strings, false, empty arrays, repeated array values, omitted properties and exact EN-us language casing in the raw data. Plain input remains unchanged. VNDB valid string name/language are retained; nullish language falls through olang, lang, und. MusicBrainz accepts string language only and otherwise uses und."
+    },
+    {
+      "id": "positive-bangumi",
+      "finding": "Valid summary strings and repeated tag values keep their exact text and ordinal pointers. Unknown top-level fields appear as unsupported with undeclared-field reason; mismatched subject ID and unsupported numeric type are refused. No enrichment or health/business inference is added."
+    },
+    {
+      "id": "ordinary-refusal-controls",
+      "finding": "The independent control passes all seven declared VNDB native-kind mappings and rejects empty/ordinary unknown namespace and unknown provider. The unchanged owner test rejects mismatched identity and bare Bangumi provider enrichment. These controls do not erase CONV-REFUSAL-1."
+    },
+    {
+      "id": "portable-evidence",
+      "finding": "The owner test copies only manifest and three source files into a fresh directory and executes the copied TypeScript entry in a Bun subprocess without Main/importer imports. Static import closure agrees. This demonstrates self-contained source use under Bun, with the distribution/runtime limits below."
+    }
+  ],
+  "actionableFindings": [
+    {
+      "id": "CONV-REFUSAL-1",
+      "priority": "P2",
+      "status": "confirmed-actionable",
+      "blocksCandidateAcceptance": true,
+      "title": "Reject inherited object-property names as unsupported VNDB namespaces",
+      "location": {
+        "path": "packages/conversion/src/index.ts",
+        "startLine": 30,
+        "endLine": 32,
+        "blob": "2e9229364cf18fa397e1d33da37d80621ec7d531"
+      },
+      "defectClass": "Untrusted string indexes a prototype-bearing object as though it were a closed allowlist.",
+      "trigger": {
+        "identity": {
+          "key": "caller-coordinate",
+          "provider": "vndb",
+          "namespace": "constructor",
+          "externalId": "v11"
+        },
+        "data": {
+          "id": "v11",
+          "name": "Exact",
+          "olang": "ja"
+        }
+      },
+      "expected": "Each undeclared VNDB namespace is refused with ProviderConversionError whose basis is unsupported, before returning a converted native kind.",
+      "actual": "The lookup inherits Object properties. constructor and toString return functions as native, disappearing in JSON; __proto__ returns Object.prototype, serialized as native: {}. No error is thrown. Type assertions disguise the runtime nonstring value.",
+      "impact": "A standalone caller using the exported string-valued namespace interface receives success and an invalid native classification for unsupported input; serialized output can even omit native. No prototype mutation or application security exploit is claimed.",
+      "counterexamples": [
+        {
+          "namespace": "constructor",
+          "nativeType": "function",
+          "jsonNative": "omitted",
+          "error": null
+        },
+        {
+          "namespace": "__proto__",
+          "nativeType": "object",
+          "jsonNative": {},
+          "error": null
+        },
+        {
+          "namespace": "toString",
+          "nativeType": "function",
+          "jsonNative": "omitted",
+          "error": null
+        }
+      ],
+      "evidence": {
+        "job": "job:2bb7a72f-9b89-43fd-8ba7-a9e131777658",
+        "log": ".temp/goal/jobs/2bb7a72f-9b89-43fd-8ba7-a9e131777658.log",
+        "logSha256": "a38d55fd8bbe524c73adcedf3eb20c7d365df5fdf6b8bf450d38c96906ae9409",
+        "testFile": ".temp/review/conversion-library/independent-review.test.ts",
+        "testSha256": "c9148f553d4d1b4b8b6716b1e857a13f7572181820379bf611229bc5bdeedea6",
+        "outcomeAssertionLine": 23,
+        "outcomeAssertion": "expect(error).toBeInstanceOf(ProviderConversionError)",
+        "assertionReached": true,
+        "failedCases": [
+          "unsupported VNDB namespace constructor is refused instead of yielding a nonstring native kind",
+          "unsupported VNDB namespace __proto__ is refused instead of yielding a nonstring native kind",
+          "unsupported VNDB namespace toString is refused instead of yielding a nonstring native kind"
+        ],
+        "failure": "Expected ProviderConversionError; received undefined. 2 passing control/characterization cases, 3 failing refusal cases, 21 assertions; failures occur in test bodies after the real converter returned."
+      },
+      "requestedCorrection": "Use a lookup that admits only the seven own namespace keys, preserving their mappings and current unsupported error. Cover inherited-key counterexamples in the existing portable tests and search this five-file cut for the same class. No new framework or owner is needed.",
+      "sameClassSearch": "Inspected both tables and all dynamic reads in this cut: Bangumi requires a number and checks its numeric type table; MusicBrainz uses literal equality/array inclusion. Only the VNDB arbitrary-string table lookup admits inherited names.",
+      "reviewOnly": "No implementation or authored portable-test edits made. Return this confirmed class to the existing conversion owner for correction and matching proof."
+    }
+  ],
+  "adverseStateCharacterization": [
+    {
+      "id": "bangumi-optional-shapes",
+      "input": {
+        "id": 1014,
+        "name": "Exact",
+        "type": 2,
+        "summary": [
+          "text"
+        ],
+        "tags": [
+          {
+            "name": "A"
+          },
+          {
+            "name": 12
+          }
+        ]
+      },
+      "observed": {
+        "fields": [],
+        "tagValues": null,
+        "summaryInventory": "native",
+        "tagsInventory": "native"
+      },
+      "evidence": "Passing characterization case in job:2bb7a72f-9b89-43fd-8ba7-a9e131777658",
+      "interpretation": "Present malformed optional values are omitted/null while inventory remains native by field name. sourceOnlyFields also lists summary/tags. This is not lossless arbitrary-record conversion or proof of per-value inventory completeness. The brief supplies no separate optional-malformed policy, so this observation is not promoted to another confirmed blocker; consumers must not treat inventory native as proof a value was mapped."
+    },
+    {
+      "id": "bangumi-empty-versus-omitted",
+      "observed": "summary empty string is emitted unchanged; tags [] remains []; absent summary yields no field and absent tags yields null. Required unknown numeric type 5 throws ProviderConversionError.",
+      "evidence": "Passing characterization case in job:2bb7a72f-9b89-43fd-8ba7-a9e131777658"
+    },
+    {
+      "id": "vndb-coercion-boundary",
+      "input": {
+        "id": [
+          "v11"
+        ],
+        "name": {
+          "value": "Title"
+        },
+        "olang": [
+          "ja",
+          "en"
+        ]
+      },
+      "observed": {
+        "title": "[object Object]",
+        "language": "ja,en",
+        "rawDataRetained": true,
+        "error": null
+      },
+      "evidence": "Characterization case logs real result in job:2bb7a72f-9b89-43fd-8ba7-a9e131777658",
+      "interpretation": "The existing String/nullish-coalescing normalization is not a comprehensive provider schema validator: an ID array can compare equal after String coercion and nonscalar text is coerced. Raw data is retained. Do not generalize portable primitive assertions into all malformed-shape refusal or normalized-language validation; no stricter provider-schema contract is invented in this review."
+    }
+  ],
+  "checks": {
+    "executedByReviewer": [
+      {
+        "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test ./.temp/review/conversion-library/independent-review.test.ts",
+        "job": "job:2bb7a72f-9b89-43fd-8ba7-a9e131777658",
+        "status": "failed-at-outcome-assertions-confirmed-finding",
+        "counts": {
+          "pass": 2,
+          "fail": 3,
+          "expectCalls": 21
+        },
+        "durationMs": 12,
+        "log": ".temp/goal/jobs/2bb7a72f-9b89-43fd-8ba7-a9e131777658.log",
+        "sha256": "a38d55fd8bbe524c73adcedf3eb20c7d365df5fdf6b8bf450d38c96906ae9409",
+        "scope": "Exact four package blobs copied from candidate; no mocks, installs or application stack."
+      },
+      {
+        "command": "task docs:check",
+        "status": "passed",
+        "job": "job:2fbe9a3a-0ef0-4b33-868a-0fc65fc35518",
+        "log": ".temp/goal/jobs/2fbe9a3a-0ef0-4b33-868a-0fc65fc35518.1.log",
+        "sha256": "bb6e8d431dd4512e2ca32b2dcd769c9cffdf1bfaaca66b6aa5985900421036cd",
+        "result": "13 checks passed; 259 Markdown files checked for local links, fragments and design navigation. External URLs and runtime behavior not tested; no claim this validates JSON review semantics."
+      },
+      {
+        "command": "task goal -- check",
+        "status": "passed",
+        "job": "job:2fbe9a3a-0ef0-4b33-868a-0fc65fc35518",
+        "log": ".temp/goal/jobs/2fbe9a3a-0ef0-4b33-868a-0fc65fc35518.2.log",
+        "sha256": "1cc3e28053ae1a1fc427328d1ac2ef766c034cb5d81a259eac7e28c66ef1dcfc",
+        "result": "Only the new report changed: no TypeScript workspace, source lint or brief-named tests; AST and one selected repository guard passed.",
+        "fullOutput": {
+          "path": ".temp/goal/check/run-NgTE8Y/output.log",
+          "sha256": "17886c07238789c6ba738abd77a55aa682f77d0512222eb5e4f10c0c20214c54"
+        }
+      }
+    ],
+    "historicalCorrections": [
+      {
+        "job": "job:9dcd8cbd-a263-48ff-a6d2-a37cda655bbe",
+        "command": "bun scripts/goal/goalctl.ts test .temp/review/conversion-library/independent-review.test.ts",
+        "status": "setup-only-failure-corrected",
+        "assertionReached": false,
+        "log": ".temp/goal/jobs/9dcd8cbd-a263-48ff-a6d2-a37cda655bbe.log",
+        "sha256": "07d9056b966f6de2958d66844c219f8a8f616ebcb4209a5fe152cc4917deed0b",
+        "correction": "Bun treated the ignored .temp path as a filter and found no files. Add leading ./ to use a direct file path. The unchanged test source then reached all assertions in job:2bb7a72f-9b89-43fd-8ba7-a9e131777658. This earlier filter failure is not a product finding."
+      }
+    ],
+    "reusedUnchangedOwnerEvidence": {
+      "job": "job:612220da-7240-4d36-9ff6-ecaee7e4c9ba",
+      "candidate": "77e6db65b767ca7d60d50008964e71e913fe1cf8",
+      "matchingBlobs": "All five reviewed blobs match the manifest; four package files match the original commit and the three portable case bodies match their original hashes.",
+      "steps": [
+        {
+          "command": "bun scripts/goal/goalctl.ts test tests/qa/unit/conversion-library.test.ts",
+          "status": "passed",
+          "tests": 3,
+          "expectCalls": 14,
+          "logSuffix": ".1.log",
+          "scope": "Only the portable cases. No Source-only assertions executed here. Owner log records its own dependency preflight install; reviewer performed no install."
+        },
+        {
+          "command": "task goal:type-files -- --project scripts/tsconfig.json packages/conversion/src/index.ts packages/conversion/src/bangumi.ts packages/conversion/src/errors.ts tests/qa/unit/conversion-library.test.ts",
+          "status": "passed",
+          "files": 4,
+          "logSuffix": ".2.log"
+        },
+        {
+          "command": "task goal -- check --only types,lint,guards",
+          "status": "passed",
+          "logSuffix": ".3.log",
+          "details": {
+            "types": "No TypeScript workspace changed; not a package typecheck substitute. The separate four-file focused check passed.",
+            "guards": "10 selected files / 75 tests / 0 failures",
+            "inference": "passed; main, web and Eden cost gates",
+            "lint": "oxlint on the three package sources and portable test passed",
+            "ast": "ast-grep on all five paths passed"
+          }
+        }
+      ],
+      "evidenceFiles": [
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/goal/jobs/612220da-7240-4d36-9ff6-ecaee7e4c9ba.log",
+          "localCopy": ".temp/review/conversion-library/owner-evidence/612220da-7240-4d36-9ff6-ecaee7e4c9ba.log",
+          "sha256": "91b1212e744a535f7edaac42d776a4898d5b10a0bef1b7258e91d6fcb5214069",
+          "bytes": 373
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/goal/jobs/612220da-7240-4d36-9ff6-ecaee7e4c9ba.1.log",
+          "localCopy": ".temp/review/conversion-library/owner-evidence/612220da-7240-4d36-9ff6-ecaee7e4c9ba.1.log",
+          "sha256": "8b3707ab95cd9ea2214b9886bf9645771b8c75800cb9ef334d53af9af3b4f4d3",
+          "bytes": 374
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/goal/jobs/612220da-7240-4d36-9ff6-ecaee7e4c9ba.2.log",
+          "localCopy": ".temp/review/conversion-library/owner-evidence/612220da-7240-4d36-9ff6-ecaee7e4c9ba.2.log",
+          "sha256": "df2437bec4cf193ddf6ccba2256d0402d4bf9cc6e9759fe9fabad0819e545545",
+          "bytes": 1076
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/goal/jobs/612220da-7240-4d36-9ff6-ecaee7e4c9ba.3.log",
+          "localCopy": ".temp/review/conversion-library/owner-evidence/612220da-7240-4d36-9ff6-ecaee7e4c9ba.3.log",
+          "sha256": "2dc55f7a84a50f63ba10e891cddc4fceadb9402f98f47ad7d3f37fd45adea936",
+          "bytes": 607
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/candidates/conversion-library/.temp/goal/check/run-zV4tVd/output.log",
+          "localCopy": ".temp/review/conversion-library/owner-evidence/output.log",
+          "sha256": "bc90cfaac20de2e76add6eb75d7fed9bd0b6414cae5afa5cd783f2b793ee5687",
+          "bytes": 40134
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/candidates/conversion-library/.temp/goal/check/run-zV4tVd/inference-0.log",
+          "localCopy": ".temp/review/conversion-library/owner-evidence/inference-0.log",
+          "sha256": "81ee2412ce4ff66d166f93a317cf63c3615d7031ebab3ad262f6906d0f4562b5",
+          "bytes": 838
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/candidates/conversion-library/.temp/goal/check/run-zV4tVd/lint-0.log",
+          "localCopy": ".temp/review/conversion-library/owner-evidence/lint-0.log",
+          "sha256": "04df5ac82ea5ad630c9c9a404344e84fa247a6229ee9a5f5aff440c2ca46d45c",
+          "bytes": 170
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/candidates/conversion-library/.temp/goal/check/run-zV4tVd/ast-0.log",
+          "localCopy": ".temp/review/conversion-library/owner-evidence/ast-0.log",
+          "sha256": "fab69d6d38531aaab091c65b6ed5fa91d52cebf03b8e76efd687929c111e3298",
+          "bytes": 425
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/candidates/conversion-library/.temp/goal/check/run-zV4tVd/guards-0.log",
+          "localCopy": ".temp/review/conversion-library/owner-evidence/guards-0.log",
+          "sha256": "35a1771d4619dd74d9c0be6cee90d16e1be94d41cc4bb81170b063557c8a9169",
+          "bytes": 890
+        }
+      ],
+      "reuseLimits": "These passes did not test inherited namespace names and do not supersede the independently confirmed finding. No whole-tier run, retained Source execution or public product behavior is inferred."
+    },
+    "sourceIntegrity": "Candidate direct parent, exact five added paths and all blob SHA-1/SHA-256 values verified with Git objects; original/split test bodies compared byte-for-byte including a single terminal LF.",
+    "dependencyPreflight": {
+      "dependencyInstallWouldRun": false,
+      "method": "Read dependencyInstallIsStale before reviewer QA. Only report and ignored .temp artifacts are created; no dependency manifests or dependencies changed."
+    },
+    "applicationRuntimeOrBroadChecksExecuted": false
+  },
+  "reproducer": {
+    "path": ".temp/review/conversion-library/independent-review.test.ts",
+    "sha256": "c9148f553d4d1b4b8b6716b1e857a13f7572181820379bf611229bc5bdeedea6",
+    "source": "import { expect, test } from 'bun:test';\nimport { convertBangumiSubject, convertProviderRecord, ProviderConversionError } from './packages/conversion/src/index.ts';\n\nconst identity = { key: 'caller-coordinate', provider: 'vndb', namespace: 'vn', externalId: 'v11' };\nconst data = { id: 'v11', name: 'Exact', olang: 'ja' };\n\ntest('declared VNDB namespaces convert and unrelated unsupported input is refused', () => {\n  for (const [namespace, native] of Object.entries({ vn: 'work', release: 'release', character: 'character', staff: 'person', producer: 'organization', tag: 'concept', trait: 'concept' })) {\n    expect(convertProviderRecord({ ...identity, namespace }, data).native).toBe(native);\n  }\n  for (const namespace of ['', 'not-a-kind']) {\n    expect(() => convertProviderRecord({ ...identity, namespace }, data)).toThrow(ProviderConversionError);\n  }\n  expect(() => convertProviderRecord({ ...identity, provider: 'not-a-provider' }, data)).toThrow(ProviderConversionError);\n});\n\nfor (const namespace of ['constructor', '__proto__', 'toString']) {\n  test(`unsupported VNDB namespace ${namespace} is refused instead of yielding a nonstring native kind`, () => {\n    let converted: ReturnType<typeof convertProviderRecord> | undefined;\n    let error: unknown;\n    try { converted = convertProviderRecord({ ...identity, namespace }, data); } catch (caught) { error = caught; }\n    console.info('unsupported namespace result', JSON.stringify({ namespace, nativeType: typeof converted?.native, serialized: converted, errorBasis: error instanceof ProviderConversionError ? error.basis : null }));\n    expect(error).toBeInstanceOf(ProviderConversionError);\n    if (error instanceof ProviderConversionError) expect(error.basis).toBe('unsupported');\n  });\n}\n\ntest('characterize optional Bangumi data without claiming lossless malformed-field admission', () => {\n  const base = { id: 1014, name: 'Exact', type: 2 };\n  const empty = convertBangumiSubject('1014', { ...base, summary: '', tags: [] });\n  expect(empty.values.fields[0]!.value).toBe('');\n  expect(empty.values.children[0]!.values).toEqual([]);\n  const omitted = convertBangumiSubject('1014', base);\n  expect(omitted.values.fields).toEqual([]);\n  expect(omitted.values.children[0]!.values).toBeNull();\n  const malformed = convertBangumiSubject('1014', { ...base, summary: ['text'], tags: [{ name: 'A' }, { name: 12 }] });\n  expect(malformed.values.fields).toEqual([]);\n  expect(malformed.values.children[0]!.values).toBeNull();\n  console.info('malformed optional Bangumi fields', JSON.stringify(malformed));\n  expect(() => convertBangumiSubject('1014', { ...base, type: 5 })).toThrow(ProviderConversionError);\n  const coercion = convertProviderRecord(identity, { id: ['v11'], name: { value: 'Title' }, olang: ['ja', 'en'] });\n  console.info('VNDB unknown-field coercion', JSON.stringify(coercion));\n  expect(coercion.data).toEqual({ id: ['v11'], name: { value: 'Title' }, olang: ['ja', 'en'] });\n});\n",
+    "portability": "Place this file beside exact candidate package sources under .temp/review/conversion-library and invoke the recorded command above. It imports only the public candidate entry; after correcting the inherited-key bug all three refusal cases should pass."
+  },
+  "preservedAcceptedWork": {
+    "report": "docs/goals/audit-remediation-20261019/proofs/catalogue-A19-nutrition-absence-review.json",
+    "blob": "f314de0649d2b20ff09a550c7a880b44950f6929",
+    "acceptedReviewCommit": "3b83cd82350ddb2e3f787fea7d08626c52d8d2c1",
+    "integratedOnMain": "4a7e36965a",
+    "unchanged": true,
+    "candidateReReviewed": false,
+    "limits": "All prior original failures, historical diagnostics, screenshot evidence and A19/C30 limits remain in that unchanged report. Positive nutrition, scaling, substitution and full A19 remain open separately."
+  },
+  "limitations": [
+    "One actionable refusal defect blocks accepting this immutable candidate. Review completion does not imply candidate acceptance.",
+    "Pure-library source and unit evidence close no original catalogue class and prove no Source/native/citation integration, genuine browser behavior or server interface.",
+    "The copied-source portability case runs under Bun 1.4.3 and imports the TypeScript entry directly. Package-specifier installation, published tarball, compiled JavaScript, Node/browser matrix and downstream native admission were not executed. No such compatibility is claimed.",
+    "The raw provider data object is returned by reference, not deep-cloned or frozen. No mutation occurs in reviewed plain-data transformation paths, but caller mutations can later affect that shared object. Proxy/getter side effects and arbitrary hostile JavaScript objects are not validated.",
+    "Bangumi conversion emits selected fields rather than preserving an entire raw record; title uses fixed work-metadata-v1#title:en. Neither general language inference nor optional-value inventory completeness is established.",
+    "No product or retained Source test edits, package installs, services, network capture, accounts, shared datasets, UI/browser/corpus work, original113 restore, architecture research, new owner/framework or landing performed."
+  ],
+  "next": "Manager returns CONV-REFUSAL-1 and its assertion-reaching reproducer to existing G-2781 conversion owner; preserve authored Source work and accepted A19 report, then review only the corrected bounded candidate and matching targeted proof."
+}
