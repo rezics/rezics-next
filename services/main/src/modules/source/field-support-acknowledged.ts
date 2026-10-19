@@ -1,6 +1,7 @@
 import { readCommandReceipt } from '../context/command.ts';
 import { readSemanticTerminal } from '../semantic/command.ts';
-import { NativeBasisVerificationProblem, verifyAcknowledgedSemanticBasis } from '../semantic/native-basis.ts';
+import { NativeBasisVerificationProblem, verifyAcknowledgedSemanticBasis,
+  type AcknowledgedSemanticBasis } from '../semantic/native-basis.ts';
 import { STATEMENT_FAMILIES } from '../statement/receipt-family.ts';
 import { GRAPHS, RV, iri } from '../work/activate.ts';
 import { SourceFieldProblem, mappingUnverified, supportChanged, supportUnavailable,
@@ -8,6 +9,18 @@ import { SourceFieldProblem, mappingUnverified, supportChanged, supportUnavailab
 import type { NativeSupportVerifier, SourceNativeVerifiers } from './field-support-native.ts';
 
 export type AcknowledgedSourceNativeDependencies = Parameters<typeof verifyAcknowledgedSemanticBasis>[0];
+
+async function readTerminal(work: AcknowledgedSourceNativeDependencies,native: AcknowledgedSemanticBasis) {
+  const env = work.environment;
+  if (native.kind === 'component-property') return readSemanticTerminal(env,native.receipt);
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?admission WHERE {
+    GRAPH ${iri(GRAPHS.receipts)} { ${iri(native.receipt)} a rv:OperationReceipt ;
+      rv:commandFamily "${STATEMENT_FAMILIES.record}" ; rv:outcome rv:Succeeded ; rv:admissionId ?admission }
+  } LIMIT 2`)).results?.bindings ?? [];
+  if (!rows.length) return null;
+  if (rows.length !== 1 || !rows[0]?.admission) return supportUnavailable();
+  return readCommandReceipt(env,rows[0].admission.value,STATEMENT_FAMILIES.record);
+}
 
 /** Compose the actual Semantic/Statement owner after Source has independently
  * resolved and verified the retained coordinate. This verifies current admission;
@@ -23,25 +36,13 @@ export function acknowledgedSemanticSupportOwners(work: AcknowledgedSourceNative
       const basis = await verifyAcknowledgedSemanticBasis(work,context.principal,{
         actingSubject: input.actingSubject,native,selected: context.selected,
       });
-      const env = work.environment;
       // Admission IDs and scopes come from the terminal receipt, never from a
       // component/revision ID or a reconstructed action name.
-      let terminal: Awaited<ReturnType<typeof readSemanticTerminal>> | Awaited<ReturnType<typeof readCommandReceipt>>;
-      if (native.kind === 'component-property') terminal = await readSemanticTerminal(env,basis.receipt);
-      else {
-        const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?admission WHERE {
-          GRAPH ${iri(GRAPHS.receipts)} { ${iri(basis.receipt)} a rv:OperationReceipt ;
-            rv:commandFamily "${STATEMENT_FAMILIES.record}" ; rv:outcome rv:Succeeded ;
-            rv:operation ${iri(basis.operation)} ; rv:component ${iri(native.statement)} ;
-            rv:revision ${iri(basis.revision)} ; rv:admissionId ?admission }
-        } LIMIT 2`)).results?.bindings ?? [];
-        if (rows.length !== 1 || !rows[0]?.admission) return supportUnavailable();
-        terminal = await readCommandReceipt(env,rows[0].admission.value,STATEMENT_FAMILIES.record);
-        if (terminal?.outcome === 'succeeded' && terminal.operation !== basis.operation) return supportChanged('native-head');
-      }
+      const terminal = await readTerminal(work,native);
       if (!terminal || terminal.outcome !== 'succeeded') return supportUnavailable();
       const component = native.kind === 'statement' ? native.statement : native.component;
       if (terminal.receipt !== basis.receipt || terminal.component !== component || terminal.revision !== basis.revision
+        || native.kind === 'statement' && (!('operation' in terminal) || terminal.operation !== basis.operation)
         || terminal.dataEpoch !== basis.sourcePosition.dataEpoch || terminal.sequence !== basis.sourcePosition.sequence) {
         return supportChanged('native-head');
       }
@@ -57,7 +58,14 @@ export function acknowledgedSemanticSupportOwners(work: AcknowledgedSourceNative
       if (error instanceof NativeBasisVerificationProblem) {
         if (error.code === 'native_target_mismatch') return supportChanged('native-target');
         if (error.code === 'native_value_mismatch') return supportChanged('native-value');
-        if (error.code === 'native_head_mismatch' || error.code === 'native_receipt_mismatch') return supportChanged('native-head');
+        if (error.code === 'native_head_mismatch') return supportChanged('native-head');
+        if (error.code === 'native_receipt_mismatch') {
+          // Missing owner evidence is not a disclosed mismatch with an existing
+          // acknowledged command. Neither refusal creates a Source settlement.
+          const terminal = await readTerminal(work,native);
+          if (!terminal || terminal.outcome !== 'succeeded') return supportUnavailable();
+          return supportChanged('native-head');
+        }
         if (error.status === 403) throw new SourceFieldProblem(403,error.code,error.message);
         return supportUnavailable();
       }
