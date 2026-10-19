@@ -205,6 +205,35 @@ test('a real nonzero compiler result is compared and an admitted timeout or sign
   }
 }, 10_000);
 
+for (const fault of ['duplicate-eof', 'malformed-eof', 'token-only-line']) {
+  test(`an incomplete admission notification refuses inherited diagnostics: ${fault}`, async () => {
+    const directory = fixture({ branch: { diagnostic: true, status: 2 } });
+    const emitter = join(directory, 'emitter.ts');
+    writeFileSync(emitter, `
+import { writeSync } from 'node:fs';
+const prefix = 'QA_ADMITTED_COMMAND ' + process.env.REZICS_QA_ADMITTED_COMMAND_TOKEN;
+writeSync(1, prefix + ' BEGIN ' + Date.now() + '\\n');
+writeSync(1, 'fixture.ts(1,1): error TS2322: fixture problem\\n');
+const end = prefix + ' END ' + Date.now() + ' 2 exit';
+writeSync(1, end + '\\n');
+const fault = ${JSON.stringify(fault)};
+writeSync(1, fault === 'duplicate-eof' ? end : fault === 'malformed-eof' ? prefix + ' END broken' : prefix + '\\n');
+process.exit(2);
+`);
+    const taskfile = JSON.parse(readFileSync(join(directory, 'Taskfile.yml'), 'utf8'));
+    taskfile.tasks['main:typecheck'] = { cmds: [`bun ${quote(emitter)}`] };
+    writeFileSync(join(directory, 'Taskfile.yml'), JSON.stringify(taskfile));
+    const results: { side: string; done: boolean }[] = [];
+    const refusal = await typecheckGate(['scripts'], async (_workspace, side, budget) => {
+      const result = await runTypecheck(directory, side, budget);
+      results.push({ side, done: result.done });
+      return result;
+    }, 1000);
+    expect(results).toEqual([{ side: 'branch', done: true }, { side: 'main', done: false }]);
+    expect(refusal).toContain('the type check on main is inconclusive');
+  }, 10_000);
+}
+
 test('known pre-protocol main comparisons preserve inherited diagnostics while missing notifications fail closed', async () => {
   const directory = fixture({ branch: { diagnostic: true, status: 2 }, old: { diagnostic: true, status: 2, legacy: true } });
   const refusal = await typecheckGate(['scripts'], (_workspace, side, budget) =>

@@ -153,10 +153,15 @@ export async function runTypecheck(cwd: string, workspace: string, budget: Typec
   let terminalDeadline: number | undefined;
   let completed: { status: number | null; timedOut: boolean } | undefined;
   let invalid = false;
-  const prefix = `QA_ADMITTED_COMMAND ${token} `;
-  const observe = (line: string) => {
+  const prefix = `QA_ADMITTED_COMMAND ${token}`;
+  const observe = (line: string, terminated = true) => {
     if (!line.startsWith(prefix)) return;
-    const event = line.slice(prefix.length);
+    if (!terminated || line[prefix.length] !== ' ') {
+      invalid = true;
+      armTimer();
+      return;
+    }
+    const event = line.slice(prefix.length + 1);
     const begin = /^BEGIN (\d+)$/.exec(event);
     const end = /^END (\d+) (\d+|signal) (exit|timeout)$/.exec(event);
     if (begin && !finishActive && !completed) {
@@ -177,9 +182,17 @@ export async function runTypecheck(cwd: string, workspace: string, budget: Typec
     } else invalid = true;
     armTimer();
   };
+  const flushStreams: (() => void)[] = [];
   for (const stream of [child.stdout, child.stderr]) {
     let pending = '';
+    const flush = () => {
+      // Admission records require their newline; an EOF tail must not hide a protocol fault.
+      if (pending) observe(pending, false);
+      pending = '';
+    };
+    flushStreams.push(flush);
     stream?.setEncoding('utf8');
+    stream?.once('end', flush);
     stream?.on('data', (chunk: string) => {
       bytes += chunk.length;
       if (bytes <= UNIT_GATE_OUTPUT_CAP) chunks.push(chunk);
@@ -191,7 +204,7 @@ export async function runTypecheck(cwd: string, workspace: string, budget: Typec
   }
   const closed = new Promise<number | null>(resolve => {
     child.once('error', error => { chunks.push(`Unable to start the type check: ${error.message}`); resolve(null); });
-    child.once('close', code => resolve(code));
+    child.once('close', code => { for (const flush of flushStreams) flush(); resolve(code); });
   });
   let timer: ReturnType<typeof setTimeout> | undefined;
   let expire!: () => void;
