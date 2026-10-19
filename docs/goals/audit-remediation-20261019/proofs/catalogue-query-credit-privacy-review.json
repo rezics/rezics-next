@@ -1,0 +1,700 @@
+{
+  "schemaVersion": 1,
+  "reviewedAtUtc": "2026-10-19T07:51:39.152208+00:00",
+  "goal": "audit-remediation-20261019",
+  "worker": "G-2849",
+  "reviewKind": "independent-combined-implementation-and-caller-review",
+  "status": "review-complete-public-qualification-open",
+  "conclusion": {
+    "sourceAndArtifactProvenance": "verified",
+    "callerAuthorityBoundary": "eight controlled-owner assertion failures reproduced",
+    "privacySmallSlice": "four unchanged privacy tests freshly passed",
+    "installedAssociationOwners": "absent",
+    "confirmedPublicOutcomeFailures": 0,
+    "newAcceptanceIdsClosed": 0,
+    "productAcceptance": "not-established",
+    "recommendation": "Do not treat this candidate or its unit receipt as closure of native association, credit/inverse, authority or privacy product findings. Route the composed caller defect for a targeted fix and then reproduce through installed public operations. The separately regenerated artifact is bounded and eligible for inclusion; this worker did not land it."
+  },
+  "pins": {
+    "base": "2811e7dfa99d5dd56f72e55828413f2f116d1eaa",
+    "sourceCandidate": "19f79493fe4da28ec3a39017e82e8f2041eb87d9",
+    "sourceCandidateParent": "2811e7dfa99d5dd56f72e55828413f2f116d1eaa",
+    "sourceCandidateTree": "801a58788381440564caaec799dcac4184a21835d2d0f0e3081ff071392e69e9",
+    "sourceFileCount": 21,
+    "queryFileCount": 15,
+    "creditReaderFileCount": 3,
+    "privacyFileCount": 3,
+    "generatedArtifactFollowup": {
+      "path": "generated/openapi/main/public.json",
+      "pin": "0eecc01bc7dbd28b46cbd3d8d37899623aef27bd",
+      "generatedFromSource": "19f79493fe4da28ec3a39017e82e8f2041eb87d9",
+      "sha256": "7539f4a592939cee6aac1ceb62035fc1336dfb673aa278a1fd6623d31967f80a",
+      "gitBlob": "5bb7b759ab85c787e0ce8cfd1b1a824db89af943"
+    },
+    "reviewWorkerBase": "2811e7dfa99d5dd56f72e55828413f2f116d1eaa"
+  },
+  "receipt": {
+    "stagedPath": ".temp/ref/native-query-credit-privacy-candidate.json",
+    "sha256": "50ede75dcb46ea71223f34c205b47cc815f24b8bd2f7faf6a947361d3ad537bb",
+    "assembledCandidatePin": "0eecc01bc7dbd28b46cbd3d8d37899623aef27bd",
+    "immutableSourceCandidatePin": "19f79493fe4da28ec3a39017e82e8f2041eb87d9",
+    "namedIsolation": ".temp/worktrees/catalogue-native-query-credit-candidate-20261019",
+    "independentSnapshotWithinWorker": ".temp/native-query-credit-review/candidate",
+    "minimumPriorDependencies": [
+      {
+        "path": "services/main/src/modules/query/association-match.ts",
+        "publishedAt": "43ca6ce3d0addd284270147e251e6d3ba054f866"
+      },
+      {
+        "path": "services/main/src/modules/query/association-selection.ts",
+        "publishedAt": "43ca6ce3d0addd284270147e251e6d3ba054f866"
+      }
+    ],
+    "noInheritedApproval": true
+  },
+  "exactFiles": [
+    {
+      "path": "apps/web/features/work-page/anime-hub-recorded-page.ts",
+      "owner": "G-2764",
+      "sourcePin": "e411544962159d8fb30e379e4b41d3a46ad111fe",
+      "lastAuthoredPin": "e411544962159d8fb30e379e4b41d3a46ad111fe",
+      "gitBlob": "302eb3ea165b369b61aeb4a2ef51af6d07b04619",
+      "sha256": "c5059618f1b41bca2565f42f2d1b9c45dc0779cb5794b81b3573ee2fb21a93a5",
+      "verifiedAgainstReceipt": true,
+      "verifiedAgainstLastAuthoredPin": true,
+      "snapshotSha256Matches": true
+    },
+    {
+      "path": "scripts/api/generate.ts",
+      "owner": "G-2764",
+      "sourcePin": "e411544962159d8fb30e379e4b41d3a46ad111fe",
+      "lastAuthoredPin": "e411544962159d8fb30e379e4b41d3a46ad111fe",
+      "gitBlob": "8524504e20c380a5b12c95e9f329a973d54f51c2",
+      "sha256": "f9c009fda24426d3b49ad25ab33c451b4b3d85a68334b9ead47ad316d64ecd18",
+      "verifiedAgainstReceipt": true,
+      "verifiedAgainstLastAuthoredPin": true,
+      "snapshotSha256Matches": true
+    },
+    {
+      "path": "scripts/api/query-parameters.test.ts",
+      "owner": "G-2764",
+      "sourcePin": "e411544962159d8fb30e379e4b41d3a46ad111fe",
+      "lastAuthoredPin": "e411544962159d8fb30e379e4b41d3a46ad111fe",
+      "gitBlob": "443c6734c2e60302101aca5a1b32aaa3bfef3e6e",
+      "sha256": "20cf8673a71e23014c9970517e9a974893ecec15014cc6ed51b4df86894eb87e",
+      "verifiedAgainstReceipt": true,
+      "verifiedAgainstLastAuthoredPin": true,
+      "snapshotSha256Matches": true
+    },
+    {
+      "path": "scripts/static/hidden-id-reads.json",
+      "owner": "G-2764",
+      "sourcePin": "e411544962159d8fb30e379e4b41d3a46ad111fe",
+      "lastAuthoredPin": "e411544962159d8fb30e379e4b41d3a46ad111fe",
+      "gitBlob": "d003ddba81a842da98aa576c9d2547cb9faca9e2",
+      "sha256": "35388db0ad2320eadf483327753b1007c256fffab2b052599d00796a4d2a2cc3",
+      "verifiedAgainstReceipt": true,
+      "verifiedAgainstLastAuthoredPin": true,
+      "snapshotSha256Matches": true
+    },
+    {
+      "path": "services/main/src/modules/query/association-contract.ts",
+      "owner": "G-2764",
+      "sourcePin": "e411544962159d8fb30e379e4b41d3a46ad111fe",
+      "lastAuthoredPin": "e411544962159d8fb30e379e4b41d3a46ad111fe",
+      "gitBlob": "e42e4cc7b7f4d1617ff57408fe09ef836d19519e",
+      "sha256": "39779cb582263e34941ee3889c05f652845fc8163960cf1f0b54dbe7e5cee8e3",
+      "verifiedAgainstReceipt": true,
+      "verifiedAgainstLastAuthoredPin": true,
+      "snapshotSha256Matches": true
+    },
+    {
+      "path": "services/main/src/modules/query/association-credit.ts",
+      "owner": "G-2764",
+      "sourcePin": "e411544962159d8fb30e379e4b41d3a46ad111fe",
+      "lastAuthoredPin": "e411544962159d8fb30e379e4b41d3a46ad111fe",
+      "gitBlob": "eb624d4ef07a80aa33081b1b68deff3a4662f2e8",
+      "sha256": "a186c06a0934067cb63c0fd5b1b8170b171aee0a69524ad80aebd56772a14859",
+      "verifiedAgainstReceipt": true,
+      "verifiedAgainstLastAuthoredPin": true,
+      "snapshotSha256Matches": true
+    },
+    {
+      "path": "services/main/src/modules/query/association-cursor.ts",
+      "owner": "G-2764",
+      "sourcePin": "e411544962159d8fb30e379e4b41d3a46ad111fe",
+      "lastAuthoredPin": "e411544962159d8fb30e379e4b41d3a46ad111fe",
+      "gitBlob": "d8d27fff500e6d204451a6c40b07f850cd1ab524",
+      "sha256": "d1f1fa6e1f98d6d30629d51667acc2c15e7cf14155a5056848fc1e426f6996d0",
+      "verifiedAgainstReceipt": true,
+      "verifiedAgainstLastAuthoredPin": true,
+      "snapshotSha256Matches": true
+    },
+    {
+      "path": "services/main/src/modules/query/association-match.ts",
+      "owner": "G-2764",
+      "sourcePin": "e411544962159d8fb30e379e4b41d3a46ad111fe",
+      "lastAuthoredPin": "43ca6ce3d0addd284270147e251e6d3ba054f866",
+      "gitBlob": "bd16e46627fb0808c16db55a198cf261b9adc7c0",
+      "sha256": "1d47330873092907502bbdb543cd9bb2ac3dab6ccfd71e52438b08f792ef8b8c",
+      "verifiedAgainstReceipt": true,
+      "verifiedAgainstLastAuthoredPin": true,
+      "snapshotSha256Matches": true
+    },
+    {
+      "path": "services/main/src/modules/query/association-page.ts",
+      "owner": "G-2764",
+      "sourcePin": "e411544962159d8fb30e379e4b41d3a46ad111fe",
+      "lastAuthoredPin": "e411544962159d8fb30e379e4b41d3a46ad111fe",
+      "gitBlob": "472c883c0f48a35e6a09f04006c2336ef61d899e",
+      "sha256": "de9b334090352ffd88e1e238328f0354a5e796d713aefe815ce7b399cec605e0",
+      "verifiedAgainstReceipt": true,
+      "verifiedAgainstLastAuthoredPin": true,
+      "snapshotSha256Matches": true
+    },
+    {
+      "path": "services/main/src/modules/query/association-read.ts",
+      "owner": "G-2764",
+      "sourcePin": "e411544962159d8fb30e379e4b41d3a46ad111fe",
+      "lastAuthoredPin": "e411544962159d8fb30e379e4b41d3a46ad111fe",
+      "gitBlob": "4cc760ca62e5287416558b71b884a970c348d721",
+      "sha256": "f8ff57ab2fc0bebddbad0206152fa3fa54d77d24cab449effa0f82cf076ee668",
+      "verifiedAgainstReceipt": true,
+      "verifiedAgainstLastAuthoredPin": true,
+      "snapshotSha256Matches": true
+    },
+    {
+      "path": "services/main/src/modules/query/association-selection.ts",
+      "owner": "G-2764",
+      "sourcePin": "e411544962159d8fb30e379e4b41d3a46ad111fe",
+      "lastAuthoredPin": "43ca6ce3d0addd284270147e251e6d3ba054f866",
+      "gitBlob": "94c64825a6bf79d0399b1d05a72feefe249497f2",
+      "sha256": "1c95d30a105b978da0e5382f08278cfe33bab9e6eabfccbeddad6efcc22c42d6",
+      "verifiedAgainstReceipt": true,
+      "verifiedAgainstLastAuthoredPin": true,
+      "snapshotSha256Matches": true
+    },
+    {
+      "path": "services/main/src/routes/query.ts",
+      "owner": "G-2764",
+      "sourcePin": "e411544962159d8fb30e379e4b41d3a46ad111fe",
+      "lastAuthoredPin": "e411544962159d8fb30e379e4b41d3a46ad111fe",
+      "gitBlob": "070b9b2cd088613b14561878cd6ef8d8f4636d9c",
+      "sha256": "18e382dcd5d93d0f81fa299436937f03ab1d64f012cb62a70bd68722c2421f59",
+      "verifiedAgainstReceipt": true,
+      "verifiedAgainstLastAuthoredPin": true,
+      "snapshotSha256Matches": true
+    },
+    {
+      "path": "services/main/src/routes/work-reads.ts",
+      "owner": "G-2764",
+      "sourcePin": "e411544962159d8fb30e379e4b41d3a46ad111fe",
+      "lastAuthoredPin": "e411544962159d8fb30e379e4b41d3a46ad111fe",
+      "gitBlob": "97443a6c90c5cddb1842270b6b456ee176415f3d",
+      "sha256": "58028ef063c188144a290b04fc95da135eed088ee8c7e5bc8c55c0d2226a65e3",
+      "verifiedAgainstReceipt": true,
+      "verifiedAgainstLastAuthoredPin": true,
+      "snapshotSha256Matches": true
+    },
+    {
+      "path": "services/main/tests/resource-query-associations.test.ts",
+      "owner": "G-2764",
+      "sourcePin": "e411544962159d8fb30e379e4b41d3a46ad111fe",
+      "lastAuthoredPin": "e411544962159d8fb30e379e4b41d3a46ad111fe",
+      "gitBlob": "daf9769088746fdb2b5ff8f82a4dd8e531461992",
+      "sha256": "a720a79c30bc77e13788a21a97a3c1454b7e33c8218286cdf493cd8ccbae3acd",
+      "verifiedAgainstReceipt": true,
+      "verifiedAgainstLastAuthoredPin": true,
+      "snapshotSha256Matches": true
+    },
+    {
+      "path": "services/main/tests/resource-query-credit-composition.test.ts",
+      "owner": "G-2764",
+      "sourcePin": "e411544962159d8fb30e379e4b41d3a46ad111fe",
+      "lastAuthoredPin": "e411544962159d8fb30e379e4b41d3a46ad111fe",
+      "gitBlob": "372d2a4780570378ae8a3175e6b2d3bc9a9a230f",
+      "sha256": "d91ad7ed23999ceaf46f8ce6bb0dedc3693e0329f24158214196f66dd6f479cb",
+      "verifiedAgainstReceipt": true,
+      "verifiedAgainstLastAuthoredPin": true,
+      "snapshotSha256Matches": true
+    },
+    {
+      "path": "services/main/src/modules/work/credit-association-state.ts",
+      "owner": "G-2800-base",
+      "sourcePin": "b2d1edb3bfcdcf01927d8af21ca8769ee3abf01c",
+      "lastAuthoredPin": "b2d1edb3bfcdcf01927d8af21ca8769ee3abf01c",
+      "gitBlob": "047e82eb8ade897916eec2513dcb83dfa5af5163",
+      "sha256": "64a8714529615f0a8d2af1eae672606f65f3bdb4ae399c925973a7f4cf3f3f6a",
+      "verifiedAgainstReceipt": true,
+      "verifiedAgainstLastAuthoredPin": true,
+      "snapshotSha256Matches": true
+    },
+    {
+      "path": "services/main/src/modules/work/credit-association-read.ts",
+      "owner": "G-2800-fix",
+      "sourcePin": "c7e34c7dd89bb9dc20344ac28c79236b2de81608",
+      "lastAuthoredPin": "c7e34c7dd89bb9dc20344ac28c79236b2de81608",
+      "gitBlob": "7bd929bf694c01d9358f571ce684dd8e5a470c46",
+      "sha256": "534579d2786e828e66836737d675889fb41bde7a8491e09cb0cd96272ada1038",
+      "verifiedAgainstReceipt": true,
+      "verifiedAgainstLastAuthoredPin": true,
+      "snapshotSha256Matches": true
+    },
+    {
+      "path": "services/main/tests/credit-retained-reads.test.ts",
+      "owner": "G-2800-fix",
+      "sourcePin": "c7e34c7dd89bb9dc20344ac28c79236b2de81608",
+      "lastAuthoredPin": "c7e34c7dd89bb9dc20344ac28c79236b2de81608",
+      "gitBlob": "b221d4420eebb5a679e7df9e6cf3fed89dcb23f1",
+      "sha256": "ab0f7fff1da06a1a8728a091cf65e4791dedb7369ee96add2853db86516f6424",
+      "verifiedAgainstReceipt": true,
+      "verifiedAgainstLastAuthoredPin": true,
+      "snapshotSha256Matches": true
+    },
+    {
+      "path": "services/main/src/modules/wiki/evidence-read.ts",
+      "owner": "G-2758",
+      "sourcePin": "40f0251e787c021ca22a7c120e819a9ffc49106a",
+      "lastAuthoredPin": "40f0251e787c021ca22a7c120e819a9ffc49106a",
+      "gitBlob": "87ddbdb70bf63be930c7541adf66f57745fbf3b4",
+      "sha256": "d6409986fc81cf04e56f8af52f0d42768f78702bd043fb4fe82f3c281539b830",
+      "verifiedAgainstReceipt": true,
+      "verifiedAgainstLastAuthoredPin": true,
+      "snapshotSha256Matches": true
+    },
+    {
+      "path": "services/main/src/modules/wiki/evidence.ts",
+      "owner": "G-2758",
+      "sourcePin": "40f0251e787c021ca22a7c120e819a9ffc49106a",
+      "lastAuthoredPin": "40f0251e787c021ca22a7c120e819a9ffc49106a",
+      "gitBlob": "d5484dfcd8c18646fa6944fb92482d4d29efa5e2",
+      "sha256": "a8b97a506398fe5babb0618b0ec2ffce2644f3c5253df59f82a04f01f9068b43",
+      "verifiedAgainstReceipt": true,
+      "verifiedAgainstLastAuthoredPin": true,
+      "snapshotSha256Matches": true
+    },
+    {
+      "path": "services/main/tests/wiki-evidence-projection.test.ts",
+      "owner": "G-2758",
+      "sourcePin": "40f0251e787c021ca22a7c120e819a9ffc49106a",
+      "lastAuthoredPin": "40f0251e787c021ca22a7c120e819a9ffc49106a",
+      "gitBlob": "7c6dce17e8025f8d4dcbe56ce37d91afd87f55a1",
+      "sha256": "7124604f15135506ce61d8df66f0e572b66833001f281c4d46742abec277fc47",
+      "verifiedAgainstReceipt": true,
+      "verifiedAgainstLastAuthoredPin": true,
+      "snapshotSha256Matches": true
+    }
+  ],
+  "findings": [
+    {
+      "id": "query-credit-live-authority",
+      "priority": "high",
+      "title": "Query strips live Account authority before calling the corrected retained-credit reader",
+      "evidenceLevel": "reproduced-controlled-owner-assertions",
+      "publicOutcomeConfirmed": false,
+      "acceptanceDisposition": "Open; no public stack outcome established and no worker fix round consumed.",
+      "locations": [
+        {
+          "path": "services/main/src/modules/query/association-credit.ts",
+          "line": 43,
+          "pin": "19f79493fe4da28ec3a39017e82e8f2041eb87d9"
+        },
+        {
+          "path": "services/main/src/modules/query/association-credit.ts",
+          "line": 122,
+          "pin": "19f79493fe4da28ec3a39017e82e8f2041eb87d9"
+        },
+        {
+          "path": "services/main/src/modules/query/association-read.ts",
+          "line": 47,
+          "pin": "19f79493fe4da28ec3a39017e82e8f2041eb87d9"
+        },
+        {
+          "path": "services/main/src/modules/work/credit-association-read.ts",
+          "line": 176,
+          "pin": "19f79493fe4da28ec3a39017e82e8f2041eb87d9"
+        },
+        {
+          "path": "services/main/src/modules/work/credit-association-read.ts",
+          "line": 208,
+          "pin": "19f79493fe4da28ec3a39017e82e8f2041eb87d9"
+        },
+        {
+          "path": "services/main/src/modules/work/read-session.ts",
+          "line": 202,
+          "pin": "19f79493fe4da28ec3a39017e82e8f2041eb87d9"
+        },
+        {
+          "path": "services/main/src/modules/work/read-session.ts",
+          "line": 458,
+          "pin": "19f79493fe4da28ec3a39017e82e8f2041eb87d9"
+        },
+        {
+          "path": "services/main/src/modules/access/admission.ts",
+          "line": 1097,
+          "pin": "19f79493fe4da28ec3a39017e82e8f2041eb87d9"
+        }
+      ],
+      "cause": "readerFor returns only issuer, subject, emailVerified and cloned contentEvidence. It drops currentAssertion, accountExpiresAt and Account consent/scope/client identity. The corrected retained reader receives a static principal, so currentReader cannot call the real token/scope verifier or enforce expiry. The enclosing session does not compensate: fenceAuthority checks only the Access principal/recovery state, and activePrincipalId queries issuer/subject without Account introspection. Global publicWorkRead carries the principal only through publicViewer and keeps session.principal null, so even the Access principal fence is skipped there.",
+      "cloneBoundary": "projection.basis is typed to receive RetainedCreditAssociationReadBasis and structuredClone(credit) clones its principal. Merely restoring a live callback in readerFor would expose a DataCloneError at this second boundary. Pass the full live principal into the retained reader while passing only RetainedCreditAssociationReadPosition to serializable projection/cursor consumers.",
+      "reproducedCases": [
+        {
+          "case": "live Account revocation during projection",
+          "assertionLine": 327,
+          "actual": "Page resolved after projection set revoked=true; currentAssertion would throw if invoked."
+        },
+        {
+          "case": "expired enclosing principal",
+          "assertionLine": 334,
+          "actual": "Adapter resolved with accountExpiresAt already in the past. This is a direct boundary diagnostic; normal fresh HTTP admission would separately refuse an already expired token."
+        },
+        {
+          "case": "global public viewer revocation",
+          "assertionLine": 354,
+          "actual": "Page and both session fences resolved with null session.principal and a revoked live viewer principal."
+        },
+        {
+          "case": "empty candidate inventory revocation",
+          "assertionLine": 384,
+          "actual": "Empty page resolved after candidate transport marked the live assertion revoked."
+        },
+        {
+          "case": "withheld Work disclosure revocation",
+          "assertionLine": 384,
+          "actual": "Withheld empty page resolved after summary owner marked the live assertion revoked."
+        },
+        {
+          "case": "withheld exact coverage revocation",
+          "assertionLine": 384,
+          "actual": "Withheld empty page resolved after coverage owner marked the live assertion revoked."
+        },
+        {
+          "case": "changed Account reader metadata",
+          "assertionLine": 398,
+          "actual": "Page resolved instead of AssociationStaleQuery after currentAssertion changed emailVerified; this test changes reader metadata, not a reproduced age-policy decision."
+        },
+        {
+          "case": "Account expiry during hydration",
+          "assertionLine": 413,
+          "actual": "Page and both session fences resolved after the test clock passed the verified expiry; clock restored in finally."
+        }
+      ],
+      "affectedSurfaces": [
+        "POST /v1/query, subject-associations template",
+        "GET /v1/works/{id}/credits?profile=subject-associations-v1",
+        "global signed-in viewers",
+        "Realm signed-in readers",
+        "visible, withheld and empty pages"
+      ],
+      "productImpactInference": "When real association owners are supplied, a page can finish on stale Account authority or reader metadata. Main currently supplies no such owners, so this test does not demonstrate an installed public data leak.",
+      "requiredPublicScenario": "With installed owners and unchanged native IDs/data, admit a signed-in global query and dedicated credits read, revoke that token/consent or expire it during owner hydration, and reach an outcome assertion that delivery is refused. Repeat for Realm, empty and withheld pages and a changed disclosure decision; retain continuation restart semantics.",
+      "suggestedGuard": "An API-facing real-stack outcome plus a caller composition test with Account-issued currentAssertion/accountExpiresAt; direct retained-reader tests alone do not cover readerFor."
+    },
+    {
+      "id": "association-runtime-composition",
+      "priority": "capability-readiness",
+      "title": "New association contracts are admitted without installed native or retained owners",
+      "evidenceLevel": "source-inference-plus-existing-controlled-route-tests",
+      "publicOutcomeConfirmed": false,
+      "locations": [
+        {
+          "path": "services/main/src/modules/query/association-read.ts",
+          "line": 12,
+          "pin": "19f79493fe4da28ec3a39017e82e8f2041eb87d9"
+        },
+        {
+          "path": "services/main/src/modules/query/association-read.ts",
+          "line": 40,
+          "pin": "19f79493fe4da28ec3a39017e82e8f2041eb87d9"
+        },
+        {
+          "path": "services/main/src/modules/query/association-credit.ts",
+          "line": 93,
+          "pin": "19f79493fe4da28ec3a39017e82e8f2041eb87d9"
+        },
+        {
+          "path": "services/main/src/modules/query/association-credit.ts",
+          "line": 107,
+          "pin": "19f79493fe4da28ec3a39017e82e8f2041eb87d9"
+        },
+        {
+          "path": "services/main/src/composition.ts",
+          "line": 453,
+          "pin": "19f79493fe4da28ec3a39017e82e8f2041eb87d9"
+        }
+      ],
+      "evidence": "The only source references to subjectAssociations are its dependency augmentation and its consumer. Main composition supplies neither retainedCredits nor creditProjection. The adapter refuses appearance unconditionally and anonymous credit reads before opening a reader; authenticated credit reads require an absent activation owner. No associationHead writer is installed by these 21 files. Missing mapping/coverage/origin/attribution/projection owners also refuse empty inventories. Existing controlled route tests explicitly expect 503; this is fail-closed readiness evidence, not successful native output.",
+      "disposition": "Preserve fail-closed behavior. Do not invent a permissive owner or turn optional retained derivation into mandatory native citation. Native association/appearance and installed credit/inverse acceptance remain open; ordinary implementation may land separately only with an explicit limited-scope disposition.",
+      "requiredPublicScenario": "After actual owner composition, prove one directly authored native citation without conversion, one native association and an external participant credit in both directions with the exact published authorities, Context/frame/position and sparse continuation. Do not require the entire wave."
+    }
+  ],
+  "reviewedBehaviors": [
+    {
+      "area": "selection and bounds",
+      "assessment": "Closed shape, native/external identity including namespace, max 64 roots, bounded predicates/frames, canonical exact Value admission and explicit filtered catalogue omission are enforced. One retained physical window hydrates at most two candidates, with limit+1 seek lookahead and the enclosing 160-call/4-MiB/10-second Work read allocation. No product population cap inferred from the physical window.",
+      "evidence": "association-contract.ts; association-selection.ts; association-credit.ts; credit-association-read.ts; WORK_READ_COST; identical-owner receipt.",
+      "limit": "No installed-stack budget or large retained inventory proof."
+    },
+    {
+      "area": "pagination and withheld empty",
+      "assessment": "Physical frontiers retain withheld keys without invented participation allocations. Work grouping supplies a separately bound nested occurrence cursor; inverse roots remain native/external subjects. Counts are exact-page with total null; snapshot/source/model/dependency changes require restart. Both surfaces bind separate cursors.",
+      "evidence": "association-page.ts; association-cursor.ts; association-match.ts; original 13 selection/matching/pagination tests and seven composition tests.",
+      "limit": "Adoption/Context/frame/evidence/disclosure tokens remain explicit trusted-owner responsibilities; no installed implementation was qualified."
+    },
+    {
+      "area": "exact authority and attribution",
+      "assessment": "Retained views verify immutable manifest/compatibility receipts, exact mapping, active generation, exact Statement/revision/decision coverage, original occurrence identity, independent attribution field supports and source-owner validations. Withdrawal omits unsupported optional fields and keeps native/external occurrence identity. The caller strips live Account authority as reported above.",
+      "evidence": "credit-association-state.ts; credit-association-read.ts; association-credit.ts; 54 direct-reader tests reused for identical blobs.",
+      "limit": "Direct-reader callback correctness does not prove caller composition; no source identity, assertion or original data was rewritten."
+    },
+    {
+      "area": "withheld EPUB CFI privacy",
+      "assessment": "The sanitizer removes bracketed CFI assertions including escaped bracket/comma text, recursively nulls quote/exact/prefix/suffix, sanitizes both locator and method, and nulls malformed bracket/escape envelopes. Permitted rows preserve exact original objects. Four unchanged privacy tests freshly passed.",
+      "evidence": "evidence.ts:24; evidence-read.ts:83; wiki-evidence-projection.test.ts:22,38,45,53.",
+      "limit": "This is a bounded projection check, not complete privacy closure. No actual public wiki/search/export payload or every malformed locator grammar was exercised."
+    },
+    {
+      "area": "native citation and conversion separation",
+      "assessment": "The changed native reads and wiki privacy projection invoke no converter or provider transformation. The credit compatibility view is an optional retained-derived read path. Existing native wiki evidence uses its own admitted citation/rights boundary, without requiring a conversion ID. No missing retained Source module is imposed as a prerequisite on directly authored native annotations.",
+      "evidence": "Exact candidate call graph and docs/contracts/source-lifecycle.md, Conversion and independent source annotation.",
+      "limit": "Other pre-existing conversion interfaces were not reviewed or qualified by this slice."
+    },
+    {
+      "area": "web credit consumer",
+      "assessment": "The only web change narrows the default selected-publication credit response by its work-credits query discriminator and preserves failure data as problem. It does not opt the UI into the new association profile.",
+      "evidence": "apps/web/features/work-page/anime-hub-recorded-page.ts:113.",
+      "limit": "No visible UI change or screenshot journey exercised; no UI acceptance claimed."
+    }
+  ],
+  "sourceRuntimeDependencies": {
+    "wikiEvidence": {
+      "status": "present",
+      "exports": [
+        "WikiEvidenceStore from services/main/src/modules/wiki/evidence.ts"
+      ],
+      "dependency": "services/main/src/routes/dependencies.ts:108 wikiEvidence",
+      "composition": "services/main/src/composition.ts:453 new WikiEvidenceStore(contentPool)",
+      "candidateUse": "Privacy projection uses the existing native wiki evidence contract; no new Source store is imported."
+    },
+    "retainedEvidenceExports": {
+      "status": "absent-from-exact-source",
+      "missingExports": [
+        "SourceRetainedFieldSupportStore",
+        "SourceRetainedRecordEvidenceOwner"
+      ],
+      "missingDependency": "sourceRetainedFieldSupports",
+      "evidence": "Independent source search finds no definitions/imports/dependency/composition entries in the candidate. Existing sourceFieldAttachments/sourceFieldApplications/sourceAdoptions are distinct installed dependencies.",
+      "impact": "A proposal requiring those exports would need implementation and composition. These 21 files import neither export, so their absence is not a module-load failure here and is not a mandatory native citation prerequisite."
+    },
+    "queryOwners": {
+      "status": "interfaces-only-not-composed",
+      "required": [
+        "subjectAssociations.retainedCredits.activation",
+        "subjectAssociations.retainedCredits.mapping",
+        "subjectAssociations.retainedCredits.coverage",
+        "subjectAssociations.retainedCredits.origin",
+        "subjectAssociations.retainedCredits.attribution",
+        "subjectAssociations.creditProjection.basis",
+        "subjectAssociations.creditProjection.read"
+      ],
+      "absenceBehavior": "503, including empty inventories; appearance and anonymous retained credit are also unavailable."
+    }
+  },
+  "openapiDisposition": {
+    "oldArtifactExcluded": true,
+    "oldSourcePin": "e411544962159d8fb30e379e4b41d3a46ad111fe",
+    "oldArtifactLineDelta": 96633,
+    "independentFreshGenerationRun": false,
+    "freshGenerationReceipt": {
+      "status": "PASS",
+      "command": "task gen",
+      "changedArtifacts": [
+        "generated/openapi/main/public.json"
+      ],
+      "changedSemanticPaths": [
+        "POST /v1/query",
+        "GET /v1/works/{id}/credits"
+      ],
+      "unchangedPaths": 717,
+      "pathCount": 719,
+      "addedPaths": 0,
+      "removedPaths": 0,
+      "componentsEqualToBase": true,
+      "rootKeysChanged": [
+        "paths"
+      ],
+      "insertions": 39148,
+      "deletions": 25161
+    },
+    "independentArtifactValidation": "Verified 0eecc01 is an artifact-only child of the exact source pin, artifact hash/blob match the receipt, and parsed JSON differs only at POST /v1/query and GET /v1/works/{id}/credits. All 719 paths remain, 717 unchanged, components and all non-path root keys equal base.",
+    "landingDisposition": "Include the bounded generatedArtifactFollowup or regenerate from the eventual exact landing source. Do not restore the excluded e411 artifact. No artifact was changed or landed by this review."
+  },
+  "checks": [
+    {
+      "id": "provenance",
+      "status": "pass",
+      "kind": "independent-read-only-git-and-sha256",
+      "details": "Exactly 21 changed paths; each candidate blob and SHA-256 matches the receipt and lastAuthoredPin; all snapshot files match. Base is source candidate parent. git diff --check passes.",
+      "temporaryEvidence": ".temp/native-query-credit-review/provenance.json"
+    },
+    {
+      "id": "openapi-semantic-diff",
+      "status": "pass",
+      "kind": "independent-read-only-json-comparison",
+      "pin": "0eecc01bc7dbd28b46cbd3d8d37899623aef27bd",
+      "sha256": "7539f4a592939cee6aac1ceb62035fc1336dfb673aa278a1fd6623d31967f80a",
+      "changedPaths": [
+        "/v1/query",
+        "/v1/works/{id}/credits"
+      ],
+      "componentsEqual": true,
+      "nonPathRootEqual": true,
+      "basePathCount": 719,
+      "candidatePathCount": 719
+    },
+    {
+      "id": "exact-source-owner-receipt",
+      "status": "reused-pass",
+      "runId": "20261019t073112-959f64",
+      "source": {
+        "head": "19f79493fe4da28ec3a39017e82e8f2041eb87d9",
+        "fingerprint": "801a58788381440564caaec799dcac4184a21835d2d0f0e3081ff071392e69e9",
+        "clean": true,
+        "sourceStable": true
+      },
+      "tests": 84,
+      "assertions": 750,
+      "failures": 0,
+      "acceptanceIdsPassed": 0,
+      "uncoveredAcceptanceIds": 292,
+      "certifiesFull": false,
+      "receiptLocation": "candidate isolation from staged receipt: .artifacts/qa/20261019t073112-959f64/{acceptance.json,owner.xml,summary.md}",
+      "inspectedReceiptSha256": {
+        "owner.xml": "fe49a07a1c1d7e46b0bbc55c8c83db39c6e75f4e090269ab33787b9bd25007b4",
+        "acceptance.json": "965764f7fcc4cbec8c4a97660cbb1ec023b2ebb5e371226f528c136f7097b556"
+      },
+      "files": [
+        "scripts/api/authored-responses.test.ts",
+        "scripts/api/query-parameters.test.ts",
+        "services/main/tests/resource-query-associations.test.ts",
+        "services/main/tests/resource-query-credit-composition.test.ts",
+        "services/main/tests/wiki-evidence-projection.test.ts",
+        "services/main/tests/credit-retained-reads.test.ts"
+      ],
+      "limit": "Controlled graph/owner inputs, not installed native or persona acceptance. Receipt reused only for identical pinned source."
+    },
+    {
+      "id": "initial-diagnostic-selection",
+      "jobId": "ab0b9a1e-4ad5-4c7c-8651-6661a8a1a85c",
+      "status": "setup-failed",
+      "assertionReached": false,
+      "log": ".temp/goal/jobs/ab0b9a1e-4ad5-4c7c-8651-6661a8a1a85c.log",
+      "cause": "Bun treated .temp paths without ./ as filters; no files selected. goalctl refreshed dependencies with task install. No tracked dependency changes."
+    },
+    {
+      "id": "diagnostic-snapshot-imports",
+      "jobId": "d666aaa1-cf69-4e64-a437-d9d2b2d1a935",
+      "status": "setup-failed",
+      "assertionReached": false,
+      "log": ".temp/goal/jobs/d666aaa1-cf69-4e64-a437-d9d2b2d1a935.log",
+      "cause": "Partial inspection snapshot omitted model/compiler/registry.ts; both files failed to load. Corrected by a full git archive of the immutable source; no product failure claimed."
+    },
+    {
+      "id": "caller-plus-privacy",
+      "jobId": "b966284a-0ee5-4d40-b88e-8f1311f412f6",
+      "status": "assertion-failed",
+      "kind": "controlled-owner-unit",
+      "command": "bun scripts/goal/goalctl.ts test ./.temp/native-query-credit-review/candidate/services/main/tests/independent-credit-caller-review.test.ts ./.temp/native-query-credit-review/candidate/services/main/tests/wiki-evidence-projection.test.ts",
+      "log": ".temp/goal/jobs/b966284a-0ee5-4d40-b88e-8f1311f412f6.log",
+      "passed": 11,
+      "failed": 3,
+      "assertions": 77,
+      "details": "All seven original composition tests and four unchanged privacy tests passed. Three added revocation/expiry diagnostics reached rejects assertions and failed because their page promises resolved.",
+      "publicAcceptance": false
+    },
+    {
+      "id": "caller-adverse-state-matrix",
+      "jobId": "dca61feb-04c5-47e6-929b-16e09b4c8793",
+      "status": "assertion-failed",
+      "kind": "controlled-owner-unit",
+      "command": "bun scripts/goal/goalctl.ts test ./.temp/native-query-credit-review/candidate/services/main/tests/independent-credit-caller-review.test.ts --test-name-pattern 'independent caller'",
+      "log": ".temp/goal/jobs/dca61feb-04c5-47e6-929b-16e09b4c8793.log",
+      "passed": 0,
+      "failed": 8,
+      "filtered": 7,
+      "assertions": 8,
+      "assertionReached": true,
+      "failureEvidence": "All eight expected rejection assertions instead received a resolved Promise. No setup failure in this run.",
+      "publicAcceptance": false
+    },
+    {
+      "id": "report-docs",
+      "command": "task docs:check",
+      "status": "pending"
+    },
+    {
+      "id": "report-worker-gate",
+      "command": "task goal -- check",
+      "status": "pending",
+      "scope": "Report-only worker branch; this does not gate the candidate implementation."
+    }
+  ],
+  "affectedChecksNotRun": [
+    {
+      "command": "task main:typecheck",
+      "disposition": "Staged receipt reports pass (2716 files, 14.68s); not independently reproduced or treated as product acceptance."
+    },
+    {
+      "command": "task gen",
+      "disposition": "Staged receipt reports pass; independently checked exact artifact semantics, not rerun."
+    },
+    {
+      "files": [
+        "services/main/tests/work-credits-facade.test.ts",
+        "services/main/tests/work-credits-roles.test.ts",
+        "services/main/tests/credit-native-verifiers.test.ts",
+        "services/main/tests/work-query-ceilings.test.ts"
+      ],
+      "disposition": "Manager regression follow-ups, no repeat of unrelated passing tests."
+    },
+    {
+      "paths": [
+        "tests/qa/integration/outcomes/catalogue/contextual-associations.test.ts",
+        "tests/qa/integration/outcomes/catalogue/credits-and-inverse.test.ts",
+        "tests/qa/integration/outcomes/catalogue/supporting-information.test.ts"
+      ],
+      "disposition": "Named in the authoritative catalogue plan as proposed/unimplemented/unrun; absent at this base. No tests synthesized as replacement acceptance."
+    }
+  ],
+  "diagnosticReproducer": {
+    "scope": "Temporary controlled-owner diagnostic, not a claimed implementation or public acceptance test.",
+    "sourcePin": "19f79493fe4da28ec3a39017e82e8f2041eb87d9",
+    "snapshot": "Full git archive under this worker .temp; node_modules symlink points to this worker root.",
+    "preservedOriginalTest": {
+      "path": "services/main/tests/resource-query-credit-composition.test.ts",
+      "gitBlob": "372d2a4780570378ae8a3175e6b2d3bc9a9a230f",
+      "sha256": "d91ad7ed23999ceaf46f8ce6bb0dedc3693e0329f24158214196f66dd6f479cb",
+      "unchangedBytePrefix": true
+    },
+    "harnessPath": ".temp/native-query-credit-review/candidate/services/main/tests/independent-credit-caller-review.test.ts",
+    "harnessSha256": "260e5e7f6bd2f7ba8eb09a49935563542c09fcef67719609dabdc2f3a1a10a72",
+    "reconstruction": "Use the exact original composition test as the complete prefix, append appendedSource verbatim in a separate temporary .test.ts sibling, and run the recorded caller-adverse-state-matrix command from this worker. All original assertions and fixture identities remain unchanged.",
+    "appendedSource": "\n\n// Independent caller diagnostics: original fixture/assertions above remain byte-for-byte.\n// These are controlled-owner checks, not installed public outcome acceptance.\ntest('independent caller: live Account revocation must still fence the composed credit page', async () => {\n  const f = fixture(1), selected = f.selection(), current = f.session(selected);\n  let revoked = false, validations = 0;\n  current.principal = { ...principal, currentAssertion: async () => {\n    validations++;\n    if (revoked) throw new Error('independent-account-revoked');\n    return principal;\n  } };\n  f.live.afterProjection = () => { revoked = true; };\n  await expect(withWorkReadSession(current, async () => {\n    const result = await readRetainedCreditAssociationPage(current, selected, f.owners, 'query');\n    await current.fenceDependencies();\n    await current.fenceAuthority();\n    return result;\n  })).rejects.toThrow('independent-account-revoked');\n  expect(validations).toBeGreaterThan(0);\n});\n\ntest('independent caller: expiry on the enclosing principal must reach the retained reader', async () => {\n  const f = fixture(1), selected = f.selection(), current = f.session(selected);\n  current.principal = { ...principal, accountExpiresAt: Math.floor(Date.now() / 1000) - 1 } as typeof current.principal;\n  await expect(readRetainedCreditAssociationPage(current, selected, f.owners, 'query')).rejects.toThrow();\n});\n\ntest('independent caller: public viewer live revocation must fence a global credit page', async () => {\n  const f = fixture(1), selected = f.selection(), prepared = f.session(selected);\n  let revoked = false;\n  const liveReader = { ...principal, currentAssertion: async () => {\n    if (revoked) throw new Error('independent-public-account-revoked');\n    return principal;\n  } };\n  const { disclosureViewer } = await import('../src/modules/disclosure/viewer.ts');\n  const current = new WorkReadSession(f.deps, prepared.request,\n    { ...prepared.options, publicViewer: disclosureViewer(liveReader) }, { ...prepared.position });\n  current.summaries = prepared.summaries;\n  f.live.afterProjection = () => { revoked = true; };\n  await expect(withWorkReadSession(current, async () => {\n    const result = await readRetainedCreditAssociationPage(current, selected, f.owners, 'query');\n    await current.fenceDependencies();\n    await current.fenceAuthority();\n    return result;\n  })).rejects.toThrow('independent-public-account-revoked');\n});\n\nfor (const phase of ['empty-page', 'withheld-disclosure', 'withheld-coverage'] as const) {\n  test(`independent caller: ${phase} must close live Account revocation`, async () => {\n    const f = fixture(phase === 'empty-page' ? 0 : 1), selected = f.selection(), current = f.session(selected);\n    let revoked = false;\n    current.principal = { ...principal, currentAssertion: async () => {\n      if (revoked) throw new Error('independent-account-revoked');\n      return principal;\n    } };\n    if (phase === 'empty-page') {\n      const query = f.environment.fuseki.query.bind(f.environment.fuseki);\n      f.environment.fuseki.query = async (...args) => {\n        const value = await query(...args);\n        if (args[0].includes('SELECT ?work ?credit ?associationHead')) revoked = true;\n        return value;\n      };\n    } else if (phase === 'withheld-disclosure') {\n      current.summaries = async () => { revoked = true; return []; };\n    } else {\n      f.live.hidden.add(id(100));\n      const coverage = f.owners.retainedCredits!.coverage!;\n      f.owners.retainedCredits!.coverage = async (input) => { const value = await coverage(input); revoked = true; return value; };\n    }\n    await expect(withWorkReadSession(current, async () => {\n      const result = await readRetainedCreditAssociationPage(current, selected, f.owners, 'query');\n      await current.fenceDependencies();\n      await current.fenceAuthority();\n      return result;\n    })).rejects.toThrow('independent-account-revoked');\n  });\n}\n\ntest('independent caller: changed live Account disclosure must restart the page', async () => {\n  const f = fixture(1), selected = f.selection(), current = f.session(selected);\n  let changed = false;\n  current.principal = { ...principal, emailVerified: true, currentAssertion: async () => ({ ...principal, emailVerified: !changed }) };\n  f.live.afterProjection = () => { changed = true; };\n  await expect(withWorkReadSession(current, async () => {\n    const result = await readRetainedCreditAssociationPage(current, selected, f.owners, 'query');\n    await current.fenceDependencies();\n    await current.fenceAuthority();\n    return result;\n  })).rejects.toBeInstanceOf(AssociationStaleQuery);\n});\n\ntest('independent caller: an Account token expiring during hydration must refuse completion', async () => {\n  const { setSystemTime } = await import('bun:test');\n  const f = fixture(1), selected = f.selection(), current = f.session(selected);\n  const expiry = Math.floor(Date.now() / 1000) + 300;\n  current.principal = { ...principal, accountExpiresAt: expiry } as typeof current.principal;\n  f.live.afterProjection = () => setSystemTime(new Date((expiry + 1) * 1000));\n  try {\n    await expect(withWorkReadSession(current, async () => {\n      const result = await readRetainedCreditAssociationPage(current, selected, f.owners, 'query');\n      await current.fenceDependencies();\n      await current.fenceAuthority();\n      return result;\n    })).rejects.toThrow();\n  } finally { setSystemTime(); }\n});\n"
+  },
+  "limitations": [
+    "No implementation edits, services, data import, conversion, land, rebase, merge or review-of-review performed. Only the claimed report is committed; temporary source copies and diagnostics remain under this worker .temp.",
+    "No full public stack, populated catalogue, real persona, browser or installed owner proof was run. Unit failures are evidence of a caller bug, not confirmation of public product findings or closure.",
+    "Current absence of installed owners masks the caller behavior behind fail-closed unavailability. The exact public failure, status and disclosure effects must be established after proper owner composition.",
+    "No original acceptance assertion, identity, data or implementation was changed. No full-wave prerequisite is introduced."
+  ],
+  "nextActions": [
+    "Fix the live principal/serializable position boundary in the query adapter and projection interface without weakening the direct-reader tests.",
+    "Add focused caller checks for all eight adverse cases; then run a small installed public outcome slice for POST and dedicated GET before claiming acceptance.",
+    "Supply the real native/retained association owners or explicitly keep this capability unavailable; native annotation remains independent of conversion.",
+    "Use the verified generated artifact follow-up for the two intended operations."
+  ],
+  "reportValidation": {
+    "status": "pending",
+    "scope": "task docs:check and recorded report-only worker gate"
+  }
+}
