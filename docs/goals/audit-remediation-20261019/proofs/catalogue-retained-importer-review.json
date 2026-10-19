@@ -680,5 +680,400 @@
     ],
     "postCheckEdit": "Only validation result/log metadata appended after passing scans; no reviewed code, test fixture or disposition changed.",
     "jsonParseAndGitDiffCheck": "passed"
+  },
+  "correctionReviews": [
+    {
+      "finding": "IMPORTER-PARENT-CUSTODY-1",
+      "reviewer": {
+        "worker": "G-2857",
+        "engine": "codex-1",
+        "model": "GPT-6.1 Sol",
+        "effort": "xhigh",
+        "sameReviewer": true,
+        "accountOrModelFallbackUsed": false,
+        "additionalReviewersUsed": false
+      },
+      "reviewWorktreeInitialHead": "56b2d60086c17ef5f6c4d8f11196cf72a9b39341",
+      "previousReportCommit": "77125347aad7b26e0ed2f80f6ff8b545daae4784",
+      "previousReportSha256": "d6845ce3ca64a478cd6a0ae8398a2d7cc828bd206fb3391a9e9c2846268cfd19",
+      "scope": "Incremental review of the two corrected importer paths against the failed 9c50 candidate. Six other importer core blobs and previously reviewed context are unchanged; no A02/A09, Source86, native53, raw-slice or whole113 review repeated.",
+      "pins": {
+        "previousFailedCandidate": "9c50f6f7f946b54afa82b90177e7fbf367cf7b21",
+        "correctedCandidate": "524def3d9f6ca4c8f162c2f0c070b0e1e0626eb4",
+        "candidateCheckout": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2778/.temp/candidates/retained-importer-parent-custody",
+        "checkoutHeadVerified": "524def3d9f6ca4c8f162c2f0c070b0e1e0626eb4",
+        "manifest": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2778/.temp/goal/landing-candidates/retained-importer-parent-custody-manifest.json",
+          "sha256": "a3fd475bb1350cc74abe1fac3c7ef399f165a32234f0caa300901b4383ad5da6"
+        },
+        "handoff": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2778/.temp/goal/landing-candidates/retained-importer-parent-custody-handoff.md",
+          "sha256": "e84dea9db61c98aee5ecb7ea106d271a078dc9951575ed1e9998e2de63261907"
+        },
+        "patches": [
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2778/.temp/goal/landing-candidates/retained-importer-parent-custody.patch",
+            "sha256": "7ce589d1804614a9205c100c25868fffa827ebaf4a5a53a0ccfff1ea430a5f0b"
+          },
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2778/.temp/goal/landing-candidates/retained-importer-parent-custody-review-delta.patch",
+            "sha256": "de5d48b019991923563a4acc7c16d8aa969258458e4960ea8719d8f0bb43856c"
+          }
+        ],
+        "focusedPatchMatchesExactTwoPathGitDiffBinary": true,
+        "reviewedDeltaFiles": [
+          {
+            "path": "scripts/datasets/import.ts",
+            "previousBlob": "c94b7f596e92f367d1b80d5a2ee006c71cbf04f3",
+            "correctedBlob": "46831e5adc56916e721ccfbe5f21d3c604f17126",
+            "correctedSha256": "f588087097cfcc09dc403cd5b3da3d8d78ef12a0538b017fb57a3f9eeee538e3"
+          },
+          {
+            "path": "tests/qa/unit/dataset-import.test.ts",
+            "previousBlob": "b8d43dd80573788cd0d69e2282a247defb188069",
+            "correctedBlob": "4cf0b392d792908c039ec4594d6862bec537a095",
+            "correctedSha256": "e29a993b366b473e48bdbfa86ba8aaf9991375775e40ea98b33a91b3888db5cf"
+          }
+        ],
+        "allEightManifestBlobsAndSha256Verified": true,
+        "sixUnchangedCoreFiles": [
+          {
+            "path": "scripts/datasets/auth.ts",
+            "blob": "21b587d1b0a524b627dc21a10c43fcbfa4926070",
+            "sha256": "0e725a15daca7429c21f0d26a027ee8a577a7f910c6dde954b048bb0a8554782"
+          },
+          {
+            "path": "scripts/datasets/conformance.ts",
+            "blob": "3ff6dd6123397f2e4a9038c4cb66c99d6ba0e56d",
+            "sha256": "ae370d7115a76fe9e46917df2dd1a7fc04e3a8720499763e809291a77590b865"
+          },
+          {
+            "path": "scripts/datasets/native/coverage.ts",
+            "blob": "0f57df7e34aba08141ece8ee6b39a336f1b8fe2f",
+            "sha256": "e07ea8ed39f5307172fa9b4961e24ae41a897a288e3a6af556274d11b3e27c89"
+          },
+          {
+            "path": "scripts/datasets/native/field-adoption.ts",
+            "blob": "46ed4358cab43235f8aac59bd69be6d10e79d750",
+            "sha256": "12860778f3a8513479c1867efd23d5a1fca62092b99d00c4b983b78b433fd422"
+          },
+          {
+            "path": "scripts/datasets/types.ts",
+            "blob": "028e85fd6ad83391acac26d4bd7b25d68adb5e47",
+            "sha256": "deb7f626b0599dd762368507e42d4c09e266669f9f7f4a57e06c669ac8b7e10d"
+          },
+          {
+            "path": "tests/qa/unit/dataset-import-coverage.test.ts",
+            "blob": "97817a054b235f03590f466cfbd0ba5d9f071acb",
+            "sha256": "5301f0cb2aa810135a42d5be396a2b281b8563543ee6bad84a58b9793fc416b3"
+          }
+        ],
+        "producerCorrection": "ca612aa8cc61cc77e2d5bf64627dd2f10d13ba04",
+        "producerTestCorrection": "8f6302dec324124327dbd635b69037d857790abe"
+      },
+      "disposition": {
+        "result": "accepted-bounded-correction",
+        "findingResolvedAtExactCandidate": true,
+        "blockingFindingsInReviewedCorrection": [],
+        "summary": "Full parent outgoing edges, repeated occurrences, stored media and provider scope supply retained intake custody. Source intake requests use the original snapshot context and historical request directory; native processing keeps its selection-specific context. Both unchanged counterexamples pass, including exact request/result replay and no additional intake commands.",
+        "historicalFailurePreserved": true,
+        "implementationOrLandingPerformed": false,
+        "originalClassClosed": false,
+        "managerNext": "Manager may integrate this exact bounded correction through its normal gate. Compatible Site retained-support composition and the sole genuine Source/conversion/native/public producer remain independent pending obligations."
+      },
+      "reviewedCorrection": [
+        {
+          "path": "scripts/datasets/import.ts",
+          "lines": [
+            781,
+            807,
+            1283,
+            1293,
+            1304,
+            1328
+          ],
+          "observation": "Intake images and occurrence paths retain every original occurrence of selected records. Outgoing intake edges are built from all parent sources in order, with no deduplication. Scope and source-image candidate envelopes come from the full original provider source, using original indexes; a provider outside selection is not newly retained. Native neighbors still use selected allEdges."
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "lines": [
+            822,
+            838,
+            862,
+            900,
+            939,
+            1023,
+            1087,
+            1094,
+            2056,
+            2111
+          ],
+          "observation": "Separate intakeContext is the historical origin/subject/epoch/snapshot/digest hash. Only source-intake POSTs use it for durable request files and keys, including cover-evidence intake calls and exports; native context retains its selection hash. Parent metadata is checked before loading, and parent intake lease is held. Old selected partial intake entries are not rebound to the parent acknowledgement. Cached successful entries receive checked export coordinates in memory without rewriting their historical file."
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "lines": [
+            1054,
+            1078,
+            1083,
+            1095
+          ],
+          "observation": "Existing exact request/parts/envelope/coordinate/receipt validation and the exact historical unknown-rights exception remain unchanged. With the parent journal now loaded, original bytes, rights, keys and acknowledgements are authoritative across selection. Absent status/raw reply stays absent. A pending intent is dispatched with its stored request and parent key."
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "lines": [
+            727,
+            729,
+            753,
+            805,
+            1460,
+            1472,
+            1484,
+            1560,
+            1990
+          ],
+          "observation": "No selected closure recap added. Newly complete outgoing is used only for intake envelopes. Native creation iterates selected records; visibility neighbors and graphEdges still use selected allEdges; media and coverage retain inView admission; mappingContext carries selected keys. Restoring a captured outside edge does not make its Work a native creation or relation target. Existing historical identity recovery remains separate from new native writes."
+        },
+        {
+          "path": "tests/qa/unit/dataset-import.test.ts",
+          "lines": [
+            509,
+            667,
+            693,
+            748,
+            761
+          ],
+          "observation": "Existing corruption test now locates parent request files via actual parent context, preserving its negative assertions. Four meaningful new cases cover single/multipart full parent envelope and command replay, historical unknown rights with absent status/raw reply and byte-for-byte unchanged files, exact selected native identity set excluding outside Work, and interrupted multipart replay across selected/full views plus subject separation. The latter expectation uses the existing public replay error; remaining assertions reach the replay outcome."
+        }
+      ],
+      "independentChecks": {
+        "job": "97ec1e3a-cbaf-4265-892d-b21bf8c26b4d",
+        "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task goal:unit-files -- ./.temp/review/retained-importer-correction/parent-intake.test.ts --reporter=junit --reporter-outfile=.temp/review/retained-importer-correction/parent-intake.junit.xml",
+        "result": "passed",
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0,
+        "assertions": 13,
+        "log": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2857/.temp/goal/jobs/97ec1e3a-cbaf-4265-892d-b21bf8c26b4d.log",
+          "sha256": "f5bf14d1a4976c6524f635b14c05715a11c8b3b2703ccc279363a7f3b4eea52b"
+        },
+        "junit": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2857/.temp/review/retained-importer-correction/parent-intake.junit.xml",
+          "sha256": "d9da2038966117a8c33390cd56e353fea08b2331d3565a3bd2037cf1517a7da7"
+        },
+        "fixture": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2857/.temp/review/retained-importer-correction/parent-intake.test.ts",
+          "sha256": "84dd7235a93840f1de3945c4cb13c00bdd2d1758e4f94910f80cfef2e0832934"
+        },
+        "assertionsByteIdenticalToPriorFailure": true,
+        "cases": [
+          {
+            "name": "selected native view retains the original complete parent intake envelope",
+            "outcomeLine": 66,
+            "outcomeReached": true,
+            "passed": true,
+            "assertions": 5,
+            "actual": "Selected c1 retains all three ordered outgoing appearances, including the duplicate and outside v99 edge. Frozen parent file and selected indexes [0,1,2] remain exact."
+          },
+          {
+            "name": "selection reuses the original source intake command and acknowledgement",
+            "outcomeLine": 74,
+            "outcomeReached": true,
+            "passed": true,
+            "assertions": 8,
+            "actual": "Same dataset:0bc6d3f7a567ccf86dcfde1edede340303218d506bdf821f2b7db734d76adf6a key, exact original request bytes and acknowledgement; later equality assertions reached and no new source-intake requests emitted."
+          }
+        ],
+        "subjectRelocation": {
+          "candidate": "524def3d9f6ca4c8f162c2f0c070b0e1e0626eb4",
+          "originalSha256": "f588087097cfcc09dc403cd5b3da3d8d78ef12a0538b017fb57a3f9eeee538e3",
+          "relocatedSha256": "449318ff5d5f1cc0628c0669ea9cedfa01228f2409de08979f80b3f4124252c2",
+          "nonImportSpecifierSha256": "7f184cf54e11b303b9d89fce2125a72f3345a602bda5438c39932a45bb6adc65",
+          "onlyModuleSpecifiersChanged": true,
+          "fixtureSha256": "84dd7235a93840f1de3945c4cb13c00bdd2d1758e4f94910f80cfef2e0832934",
+          "lockBlob": "8a2c5691bab9d9edbd960fa97d1e48e7cd5ea0f4",
+          "storeBlob": "cfbe0dc1712e8606144dbf772344032fee20ee21",
+          "recipeAndReason": "Same constrained relocation as the original review: exact pinned importer statements with only static relative from-specifiers resolved to read-only candidate dependencies; ./lock.ts resolves to our byte-identical local lock/store so lease bookkeeping stays inside this worktree. Normalized non-specifier text is identical. No module mock, candidate mutation, dependency install/copy or runtime stack."
+        },
+        "premiseLimits": "Same synthetic fixture embedded in freshFocusedChecks above; native:false isolates the two reported intake failures. Outside-native nonmutation is source review plus the separately reused new owner fixture, not a new independent native/public journey. Original 113/206 identities and epochs are untouched."
+      },
+      "reusedCorrectionEvidence": {
+        "producerFinal": {
+          "job": "ec71758f-8dca-4bdc-a8ce-e99ec07371b4",
+          "candidate": "524def3d9f6ca4c8f162c2f0c070b0e1e0626eb4",
+          "importerUnits": {
+            "files": [
+              "tests/qa/unit/dataset-import-coverage.test.ts",
+              "tests/qa/unit/dataset-import.test.ts"
+            ],
+            "passed": 92,
+            "failed": 0,
+            "assertions": 2095,
+            "milliseconds": 18260,
+            "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2778/.temp/goal/jobs/ec71758f-8dca-4bdc-a8ce-e99ec07371b4.1.log"
+          },
+          "candidateRequired": {
+            "command": "task --dir .temp/candidates/retained-importer-parent-custody goal -- check --only types,lint,guards",
+            "types": "passed",
+            "lint": "passed",
+            "guards": "passed",
+            "ast": "passed",
+            "check": "run-XZfLi2",
+            "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2778/.temp/goal/jobs/ec71758f-8dca-4bdc-a8ce-e99ec07371b4.2.log"
+          },
+          "postRebaseRootTypes": {
+            "pin": "8f6302dec324124327dbd635b69037d857790abe",
+            "passed": true,
+            "check": "run-KBJASC",
+            "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2778/.temp/goal/jobs/ec71758f-8dca-4bdc-a8ce-e99ec07371b4.3.log"
+          },
+          "localWavePush": {
+            "passed": true,
+            "pin": "8f6302dec324124327dbd635b69037d857790abe",
+            "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2778/.temp/goal/jobs/ec71758f-8dca-4bdc-a8ce-e99ec07371b4.4.log"
+          }
+        },
+        "producerFinalLogs": [
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2778/.temp/goal/jobs/ec71758f-8dca-4bdc-a8ce-e99ec07371b4.1.log",
+            "sha256": "f893868815c2170d845b168bc46e8bc9c71008508085d357ce62eac77025443e"
+          },
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2778/.temp/goal/jobs/ec71758f-8dca-4bdc-a8ce-e99ec07371b4.2.log",
+            "sha256": "cdfa4e90c8ad349332d85283ed97d71c162399de0cdaaa1f1a1c07ab407d2a92"
+          },
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2778/.temp/goal/jobs/ec71758f-8dca-4bdc-a8ce-e99ec07371b4.3.log",
+            "sha256": "eb476b801dec21de4ed06edc6955db72009ccf5bbc3412703964af3d5aed2aed"
+          }
+        ],
+        "actual": "92 PASS / 0 FAIL / 2095 assertions, affected types/lint/AST and 11/45 guards PASS (run-XZfLi2); post-rebase root types PASS (run-KBJASC). Exact hashes/log tails checked, no unchanged passing suites rerun.",
+        "firstCorrectionAttemptPreserved": {
+          "job": "97a297db-6fbc-4ceb-bf2d-ce5048337948",
+          "install": "passed",
+          "independentAssertions": {
+            "passed": 2,
+            "failed": 0,
+            "assertions": 13,
+            "productionImportBlob": "46831e5adc56916e721ccfbe5f21d3c604f17126",
+            "fixtureSha256": "84dd7235a93840f1de3945c4cb13c00bdd2d1758e4f94910f80cfef2e0832934",
+            "candidate": "242ce89ae2fef25aeaf0c163a266d1642664fac7",
+            "finalProductionClosureUnchanged": true,
+            "finalOnlyDelta": "Own importer unit error expectation; independent fixture and product files unchanged.",
+            "log": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2778/.temp/goal/jobs/97a297db-6fbc-4ceb-bf2d-ce5048337948.2.log",
+            "junit": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2778/.temp/candidates/retained-importer-parent-custody/.temp/review/retained-importer/parent-custody.junit.xml",
+            "junitSha256": "311f3ee622cd958b647ae7673ef7832dc1104c1bd2963038491ea8882e4bb7d3",
+            "outcomesReached": true,
+            "laterEqualityAndNoNewIntakeReached": true
+          },
+          "importerUnits": {
+            "passed": 91,
+            "failed": 1,
+            "assertions": 2086,
+            "reason": "New interruption test expected injected socket text rather than the existing public replay instruction. Only this own test expectation was corrected; final run below reaches and passes its remaining replay/custody assertions."
+          },
+          "remainingSteps": "Not run after the first nonzero exit."
+        },
+        "firstCorrectionInterpretation": "Independent 2/13 passed at candidate242ce with the same production importer blob. Own units had 91 PASS / 1 FAIL / 2086 assertions due only to expected injected socket text instead of existing public replay instruction. Final own test changes that expectation, reaches later replay assertions and passes. Remaining sequence steps did not run after the first failure.",
+        "priorFailuresPreserved": "Original 9c50 0 PASS / 2 FAIL / 10 assertions, manager confirmation and this report original failure remain historical. Earlier default-mapper omission 83 PASS / 3 FAIL and correction remain recorded above. Older91/1915 is still not fresh proof.",
+        "unchangedPriorEvidence": "Reuse selector20/43241, A02 consumer30/351 and previous eight-file context; no repeated acceptance or broadened original outcome claim."
+      },
+      "dependencyAndRuntimeQualifications": {
+        "updatedMain": "f3ee0c069dc66bfb9470220476d50cfd64a7af25",
+        "updatedMainIsAncestor": true,
+        "sourceReviewedOwner": "e44ea5413624f3f868fb04c8591b74eb845c8505",
+        "sourceCorrectionQualification": "SOURCE-CORRECTED-DEPENDENCY from the old report is satisfied by the corrected Source owner landed on f3ee main. Only its two existing dispatch repairs and tests differ from old9c50 Source dependency; no Source re-review or runtime success inferred.",
+        "standaloneLibraryMain": "fa76ef9adc59c52095ae7a1155df958d7c1116ce",
+        "libraryUnchangedFromMain": true,
+        "mediaDependency": "db15f1b3604cb7f9fb3ee4f21ee70391d30f5a2b",
+        "mediaOriginal": "a5da02b2d59b0c2427235186a0977d25d290fbff",
+        "defaultAdapterDependency": "62a05cf4885d1dc578531778a382aa2fb2d74eb3",
+        "defaultAdapterOriginal": "8c74e06730ca01769d7ded525521cc9d8d9a32ee",
+        "sixCoreBlobsUnchanged": true,
+        "conversionBoundary": "New production lines route Source intake persistence only. Explicit Source conversion remains the sole converter interface; ordinary native APIs remain converter-free. Manual citations stay independent, retained lineage optional. No new adapter/framework/store added.",
+        "pending": [
+          "Existing Site G-2763 retained-support composition6b34: this importer composition still lacks work.sourceRetainedFieldSupports and returns503 source_support_unavailable without compatible owner installation.",
+          "Sole G-2791 genuine compatible preparation and actual Source -> explicit conversion -> acknowledged native -> allowed public read chain. Name receipts do not prove synopsis, public attribution, media or complete fidelity."
+        ],
+        "originalOutcomes": {
+          "files": [
+            "tests/qa/integration/outcomes/catalogue/import-fidelity.test.ts",
+            "tests/qa/integration/outcomes/catalogue/source-coverage.test.ts",
+            "tests/qa/integration/outcomes/catalogue/supporting-information.test.ts",
+            "tests/qa/integration/outcomes/catalogue/releases-and-media.test.ts"
+          ],
+          "unchanged": true,
+          "executed": false
+        },
+        "outcomeFilesByteIdenticalToUpdatedMain": true,
+        "originalNative113AndSource206IdentitiesEpochsTouched": false,
+        "newPreparationOrProductProof": false,
+        "producerCommandAndBudget": "Existing hashed Task/thin import handoff remains command provenance only; no execution, new corpus/preparation/restore/lifecycle operation or backup compatibility claim. Existing 600-second preparation/restore budget unchanged."
+      },
+      "reportValidation": {
+        "status": "selected-report-components-passed",
+        "normalWorkerWrapperExecuted": false,
+        "reason": "Current dependencies still stale: required afed563fd4dcabbfa62a2354edc5c7b7b8856b5067fc2a39011e76ff75b59c64 versus installed379a1a7fd693a541828a37f3ccec3b7c73da8587888b1b006177b9f644e20abe. goalctl test/workerCheck would invoke task install. Explicit no-installs scope takes precedence; run selected report components directly through recorded Task without altering stamp/config.",
+        "instructionSource": {
+          "path": ".agents/skills/goal-worker/SKILL.md",
+          "quote": "Run the recorded check once before handing off done; it includes the repository-wide guards.",
+          "effect": "Execute its report-selected components directly through recorded Task, disclose that the full wrapper was not run."
+        },
+        "commands": [
+          "task docs:check",
+          "task ast-grep -- scan docs/goals/audit-remediation-20261019/proofs/catalogue-retained-importer-review.json",
+          "task guards -- scripts/static/one-language-parser-debt.test.ts"
+        ],
+        "job": "6d8bdf54-5adb-42c1-9bce-7e5a50d5be7b",
+        "actualChecks": [
+          {
+            "command": "task docs:check",
+            "exitCode": 0,
+            "log": ".temp/goal/jobs/6d8bdf54-5adb-42c1-9bce-7e5a50d5be7b.1.log",
+            "sha256": "e7bb2662d8e0a5437e5a490f1b6cfbea42f9fbcef6d493b1d1159189ba56a8ca"
+          },
+          {
+            "command": "task ast-grep -- scan docs/goals/audit-remediation-20261019/proofs/catalogue-retained-importer-review.json",
+            "exitCode": 0,
+            "log": ".temp/goal/jobs/6d8bdf54-5adb-42c1-9bce-7e5a50d5be7b.2.log",
+            "sha256": "5f24a60f247a158f799a128d86200e8d63723c0cb10ac4ad634d5b603e3e54d2"
+          },
+          {
+            "command": "task guards -- scripts/static/one-language-parser-debt.test.ts",
+            "exitCode": 0,
+            "log": ".temp/goal/jobs/6d8bdf54-5adb-42c1-9bce-7e5a50d5be7b.3.log",
+            "sha256": "05f0c0c0bc7b82f55fb464cf4dd9dfceb8fd4df3ab3c5e0b8d81e59f6e6278b0"
+          }
+        ],
+        "guardSelection": {
+          "selected": 1,
+          "total": 45,
+          "files": [
+            "scripts/static/one-language-parser-debt.test.ts"
+          ],
+          "passedTests": 2
+        },
+        "skippedBySelection": {
+          "types": "no TypeScript workspace changed",
+          "inference": "not selected",
+          "lint": "no source file changed",
+          "briefTests": "none"
+        },
+        "finalVerification": "JSON parsed, git diff --check passed; all historical report fields and A02/A09 report hashes unchanged. Only validation result metadata appended after scans."
+      }
+    }
+  ],
+  "effectiveDisposition": {
+    "candidate": "524def3d9f6ca4c8f162c2f0c070b0e1e0626eb4",
+    "result": "accepted-bounded-correction",
+    "resolvedFinding": "IMPORTER-PARENT-CUSTODY-1",
+    "historicalFailedCandidate": "9c50f6f7f946b54afa82b90177e7fbf367cf7b21",
+    "blockingFindingsInReviewedCorrection": [],
+    "pendingIntegrationQualification": "SITE-SUPPORT-OWNER and actual genuine public chain",
+    "originalClassClosed": false,
+    "priorFailureSectionsUnchanged": true,
+    "onlyNewWrite": "docs/goals/audit-remediation-20261019/proofs/catalogue-retained-importer-review.json"
   }
 }
