@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test';
 import { materializeData } from 'native-i18n';
 import { messages } from '../../features/library/messages.ts';
 import { clean, credentials, signIn, writeLibrary } from '../g-855-library.ts';
+import { openLibraryTools } from '../library-tools.ts';
 
 export function registerLibraryExportJourney(viewports: readonly { width: number; height: number }[] = [
     { width: 1440, height: 900 },
@@ -29,6 +30,7 @@ export function registerLibraryExportJourney(viewports: readonly { width: number
       await page.reload();
       const summary = page.getByRole('heading', { name: t.backupTitle });
       await expect(async () => {
+        await openLibraryTools(page, t.libraryTools);
         await summary.click();
         await expect(summary.locator('xpath=ancestor::details[1]')).toHaveAttribute('open', '');
       }).toPass({ timeout: 30_000 });
@@ -39,6 +41,7 @@ export function registerLibraryExportJourney(viewports: readonly { width: number
       await expect(page.getByText(/Collected [4-9]\d records/)).toBeVisible({ timeout: 120_000 });
       await page.reload();
       await expect(async () => {
+        await openLibraryTools(page, t.libraryTools);
         await summary.click();
         await expect(summary.locator('xpath=ancestor::details[1]')).toHaveAttribute('open', '');
       }).toPass({ timeout: 30_000 });

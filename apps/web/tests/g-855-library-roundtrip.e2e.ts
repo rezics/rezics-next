@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test';
 import { materializeData } from 'native-i18n';
 import { messages } from '../features/library/messages.ts';
 import { clean, credentials, exportRows, retainedFields, signIn, writeLibrary } from './g-855-library.ts';
+import { openLibraryTools } from './library-tools.ts';
 
 // A 1,200-record library, exported as the Library page’s download assembles it, is imported back through the Library page and
 // every row is matched and applies without a problem; a new export then holds the same records. The QA
@@ -23,6 +24,7 @@ test('a downloaded 1,200-record library imports back, row for row, with the same
   const summary = page.getByRole('heading', { name: t.importTitle });
   await page.reload();
   await expect(async () => {
+    await openLibraryTools(page, t.libraryTools);
     await summary.click();
     await expect(summary.locator('xpath=ancestor::details[1]')).toHaveAttribute('open', '');
   }).toPass({ timeout: 30_000 });

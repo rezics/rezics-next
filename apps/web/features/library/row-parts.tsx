@@ -51,8 +51,14 @@ export function ReadingProgress({ row, locale, messages, className }: {
         total: new Intl.NumberFormat(locale).format(chapters.total) })}</p>
     </div> : null}
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+      {/* Native focus can leave a neighboring card behind the wrapped header; include its scroll margin. */}
       <Link href={next?.href ?? row.work.href} className={cn(buttonVariants({ size: 'sm', pill: true,
-        variant: next ? 'default' : 'outline' }))}>
+        variant: next ? 'default' : 'outline' }), 'scroll-mt-28')}
+        onFocus={event => {
+          if (event.currentTarget.matches(':focus-visible')) {
+            event.currentTarget.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
+          }
+        }}>
         <BookOpenIcon aria-hidden="true" />{next ? t.continue : t.openWork}
         <span className="sr-only"> — {title}</span></Link>
       {next ? <p className="min-w-0 text-muted-foreground text-sm">

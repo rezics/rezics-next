@@ -1,9 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import collectionRecord from '../../../../tests/qa/fixtures/outcomes/games/collection-tracking-and-progress.json';
 import type { RecordedSelection } from '../stories/recorded-fetch.ts';
 import { BooksLibraryRecorded } from './books-library-recorded-page.tsx';
+import { messages } from './messages.ts';
 
 // The library reader asks for three currently-reading works (`limit=3`). This
 // record's currently-reading page asks for six, so those titles are not drawn.
@@ -56,6 +57,8 @@ async function expectMemberLibrary(canvasElement: HTMLElement) {
   await expect(shelves.getByRole('link', { name: 'Want to read 1' })).toBeVisible();
   await expect(shelves.getByRole('link', { name: 'Read 0' })).toBeVisible();
   await expect(canvas.getByRole('button', { name: 'Who can see your reading shelves: Only you' })).toBeVisible();
+  const tools = canvas.getByText(messages.libraryTools, { selector: 'summary' });
+  await userEvent.click(tools);
   await expect(canvas.getByRole('heading', { level: 2, name: '2026 reading goal' })).toBeVisible();
   await expect(canvas.getByText('Set a goal for books finished this year')).toBeVisible();
   await expect(canvas.getByRole('heading', { level: 2, name: 'Reading in 2026' })).toBeVisible();
@@ -65,6 +68,8 @@ async function expectMemberLibrary(canvasElement: HTMLElement) {
   await expect(canvas.queryByRole('region', { name: 'Currently reading' })).toBeNull();
   await expect(canvas.queryByRole('heading', { name: 'Original garden with main and bonus routes' })).toBeNull();
   await expect(canvas.queryByRole('heading', { name: 'Original neighbouring garden game' })).toBeNull();
+  await userEvent.click(tools);
+  window.scrollTo(0, 0);
 }
 
 /** Member’s recorded shelf counts, private library and chapter year. */
