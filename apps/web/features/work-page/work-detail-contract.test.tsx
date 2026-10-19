@@ -179,8 +179,8 @@ test('facts continuation retains the exact Work/Zone view, scope and opaque curs
     expect(restart.searchParams.has('statements')).toBe(false);
     expect(restart.pathname).toBe(path);
   }
-  expect(workFactsSelection(fixture.workRef, '/w/test?statements=a&statements=b').invalid).toBe(true);
-  expect(workFactsSelection(fixture.workRef, `/w/test?statements=${'a'.repeat(2049)}`).invalid).toBe(true);
+  expect(workFactsSelection(fixture.workRef, `${workHref(fixture.workRef)}?statements=a&statements=b`).invalid).toBe(true);
+  expect(workFactsSelection(fixture.workRef, `${workHref(fixture.workRef)}?statements=${'a'.repeat(2049)}`).invalid).toBe(true);
 });
 
 test('field evidence preserves the exact supplied selection and never exposes a withheld quote', () => {

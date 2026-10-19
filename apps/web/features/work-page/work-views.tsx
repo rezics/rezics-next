@@ -34,7 +34,7 @@ import { publicationSource } from './publication-source.tsx';
 import { readAnimeAgentCredits, readAnimeReaderState, readAnimeWorkCredits, readSelectedWorkCredits } from './anime-hub-recorded-page.ts';
 import { oneTextLanguage, readAdoptions, readAgentWorks, readAlsoEnjoyed, readClassifications,
   readContents, readDiscussion, readHistory, readingAgent, readRatings, readRealm,
-  readReviewer, readReviews, readVersions, readWorkStats, readReleases,
+  readReviewer, readReviews, readVersions, readWorkStats,
   readHubWorkPage, readText, readRatingPopulations, reader, type SuppliedClient } from './read.ts';
 import { Region, RegionFailure, RegionSkeleton } from './region.tsx';
 import { WorkRecord } from './record.tsx';

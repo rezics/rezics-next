@@ -17,16 +17,16 @@ import { sourceHref, SubjectSources } from '../entity-page/sources.tsx';
 import { HoldsIn, Pages, StatementsView, Value } from '../entity-page/views.tsx';
 import type { Copy } from '../entity-page/messages.ts';
 import { Region } from './region.tsx';
-import { standaloneHrefFor } from '../entity-page/route.ts';
-import { idOf, workHref, type WorkAt } from './route.ts';
-import { resourceHref } from '../address/path.ts';
+import { entityHref, parseEntityCursors, standaloneHrefFor } from '../entity-page/route.ts';
+import { globalWorkHref, idOf, workHref, type WorkAt } from './route.ts';
 
 /** Facts continue on the actual Work view, retaining the host and the reader's selections. */
 export function workFactsSelection(workRef: WorkAt, pageUrl?: string | null) {
   const page = new URL(pageUrl ?? workHref(workRef), 'https://work.invalid');
   const values = page.searchParams.getAll('statements');
-  const cursor = values[0] || undefined;
-  const invalid = values.length > 1 || Boolean(cursor && cursor.length > 2048);
+  const cursors = parseEntityCursors({ statements: values.length > 1 ? values : values[0] });
+  const cursor = cursors?.statements;
+  const invalid = cursors === null;
   const resource = standaloneHrefFor({}, workHref(workRef));
   const hrefFor: HrefFor = link => {
     if (link.kind !== 'continue') return resource(link);
@@ -139,9 +139,9 @@ function WorkFieldEvidence({ page, labels = new Map(), messages: t }: {
           {item.evidence.map(evidence => <li key={evidence.id} data-field-evidence className="grid min-w-0 gap-2">
             <dl className="grid min-w-0 gap-2">
               {[[t.evidenceSource, evidence.sourceWork, 'work'],
-                [t.evidenceSubmitter, evidence.submitter, 'entity']] .map(([label, value, base]) => {
+                [t.evidenceSubmitter, evidence.submitter, 'entity']].map(([label, value, base]) => {
                 const id = idOf(value!);
-                const href = id ? resourceHref(base === 'work' ? '/w/' : '/e/', value!) : sourceHref(value);
+                const href = id ? base === 'work' ? globalWorkHref(value!) : entityHref(value!) : sourceHref(value);
                 return <div key={label} className="grid min-w-0 gap-0.5"><dt className="text-muted-foreground">{label}</dt>
                   <dd className="[overflow-wrap:anywhere]">{href ? <a href={href} className={sourceLink}>{value}</a> : value}</dd></div>;
               })}
