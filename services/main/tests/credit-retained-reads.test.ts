@@ -1,9 +1,10 @@
 import { expect, test, setSystemTime } from 'bun:test';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
-import { mkdirSync, rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { Parser } from 'n3';
+import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import type { CommandEnvelope, SparqlResult } from '../src/infrastructure/fuseki.ts';
 import type { VerifiedPrincipal } from '../src/modules/access/admission.ts';
 import {
@@ -13,15 +14,20 @@ import {
   type VerifiedAccountAssertion,
 } from '../src/modules/account/verify-assertion.ts';
 import { familyReceiptIri, readComponent, StaleSemanticHead, type SemanticAdmission } from '../src/modules/semantic/command.ts';
-import { PROFILES } from '../src/modules/semantic/schema.ts';
+import { MODEL_COMPONENT, PROFILES } from '../src/modules/semantic/schema.ts';
 import { nativeCreditDigest } from '../src/modules/profiles/credits.ts';
 import {
   hash,
+  GRAPHS,
+  iri,
+  lit,
   prepareComponent,
   RV,
   type WorkActivationEnvironment,
 } from '../src/modules/work/activate.ts';
-import { authorCreditDigest, type AuthorCreditValue } from '../src/modules/work/author-credit.ts';
+import { authorCreditDigest, authorCreditEnvelope, authorCreditTriples, creditProfile,
+  type AuthorCreditValue } from '../src/modules/work/author-credit.ts';
+import { readCreditOwnerWitness } from '../src/modules/work/credit-verification.ts';
 import { workEditReceiptIri } from '../src/modules/work/edit.ts';
 import {
   canonicalCreditValue,
@@ -459,7 +465,9 @@ function fixture(
   };
   const deps: RetainedCreditAssociationReadDependencies = {
     environment: {
-      fuseki: { query, async commandWithReceipt(command: CommandEnvelope) {
+      fuseki: { query, async commandHealth() {
+        return { profiles: Object.fromEntries(Object.entries(profileRegistry).map(([name, profile]) => [name, profile.sha256])) };
+      }, async commandWithReceipt(command: CommandEnvelope) {
         commands.push(structuredClone(command));
         live.beforeCommand?.();
         if (terminals.has(command.receipt)) return { status: 'committed' };
@@ -665,6 +673,103 @@ function fixture(
     clean: () => rmSync(directory, { recursive: true, force: true }),
   };
 }
+
+/** Exact owner-produced native prestate plus the guarded model/mapping basis.
+ * The Java regression executes the captured writer, not a hand-written update. */
+async function retainedBindingNativeSeed(f: ReturnType<typeof fixture>) {
+  const native = (await readCreditOwnerWitness(f.deps.environment, f.value.credit))!;
+  const original = native.receipt;
+  const triples = authorCreditTriples(native.value, original.dataEpoch, original.sequence);
+  const generation = `urn:rezics:model-generation:${f.live.generation}`;
+  const modelReceipt = `urn:rezics:receipt:${hash(`${generation}\0model-generation`)}`;
+  return `@prefix rv: <${RV}> .
+    @prefix schema: <https://schema.org/> .
+    GRAPH ${iri(GRAPHS.control)} { <urn:rezics:dataset:product> rv:dataEpoch ${lit(f.live.epoch)} ;
+      rv:routingEpoch ${lit(f.live.routing)} ; rv:sequence ${f.live.sequence} . }
+    GRAPH ${iri(GRAPHS.current)} { ${triples.current}
+      ${iri(native.value.work)} a <https://schema.org/CreativeWork> ; rv:head ${iri(native.value.expectedHead)} .
+      ${native.value.agent ? `${iri(native.value.agent)} a rv:Agent .` : ''}
+      ${iri(MODEL_COMPONENT)} rv:generationHead ${iri(generation)} .
+      ${iri(f.state.mapping.definition)} rv:definitionHead ${iri(f.state.mapping.revision)} . }
+    GRAPH ${iri(GRAPHS.revisions)} { ${triples.revision}
+      ${iri(native.value.expectedHead)} a rv:RevisionAnchor ; rv:component ${iri(native.value.work)} .
+      ${iri(f.state.mapping.revision)} rv:lifecycle rv:Active .
+      ${iri(generation)} a rv:ModelGeneration, rv:RevisionAnchor ; rv:component ${iri(MODEL_COMPONENT)} ;
+        rv:entailmentProfile rv:NoEntailment ; rv:identityInference rv:Excluded ; rv:validationPosture rv:RejectOnViolation ;
+        rv:modelRevision ${iri(PROFILES.generation)} ; rv:shapeRevision ${iri(PROFILES.generation)} ;
+        rv:operation ${iri(id(70))} ; rv:dataEpoch ${lit(f.live.epoch)} ; rv:sequence 50 . }
+    GRAPH ${iri(GRAPHS.receipts)} { ${iri(modelReceipt)} a rv:OperationReceipt ; rv:operation ${iri(id(70))} ;
+      rv:outcome rv:Succeeded ; rv:dataEpoch ${lit(f.live.epoch)} ; rv:sequence 50 . }
+    ${authorCreditEnvelope(native.value, original.sourceIntent, { id: original.admissionId,
+      authorityEpoch: original.authorityEpoch, scope: original.scope, requestDigest: original.requestDigest },
+    original.dataEpoch, original.sequence, true)}`;
+}
+
+for (const agent of [true, false]) for (const role of ['artist', 'performer'] as const)
+  test(`retained bootstrap emits the exact native-runtime envelope for ${agent ? 'Agent' : 'external'} ${role}`, async () => {
+    const captures = JSON.parse(readFileSync(new URL(
+      '../../../infra/jena/command-module/src/test/resources/credit-retained-binding-commands.json', import.meta.url), 'utf8')) as {
+      envelopes: { agent: boolean; role: string; seed: string; operation: string; profile: string;
+        command: CommandEnvelope; originalReceipt: string;
+        successor: { operation: string; command: CommandEnvelope } }[];
+    };
+    const captured = captures.envelopes.find(item => item.agent === agent && item.role === role)!;
+    const f = fixture(agent, role);
+    try {
+      const w = f.enableBinding();
+      delete f.deps.owners.activation;
+      f.live.activation = false; f.live.coverage = false;
+      const selection: RetainedCreditBindingRequest = { retained: {
+        profile: agent ? 'native-agent-credit-v1' : 'work-author-credit-v1', credit: f.value.credit,
+        origin: { kind: 'stored-credit', revision: f.value.revision } },
+        mappingRevision: f.state.mapping.revision, attributionSupports: [], expectedAssociationHead: null };
+      const loaded = await loadRetainedCreditBinding(w.deps, principal, selection);
+      expect(await retainedBindingNativeSeed(f)).toBe(captured.seed);
+      const native = (await readCreditOwnerWitness(f.deps.environment, f.value.credit))!;
+      expect(creditProfile(native.value)).toBe(captured.profile);
+      const created = await bindRetainedCreditAssociation(w.deps, { principal,
+        actingSubject: f.value.actingSubject, input: loaded.input, admission: await w.admission(loaded.input) });
+      expect(f.commands).toHaveLength(1);
+      const command = f.commands[0]!;
+      // Only the command's new operation is random. Everything else must be the
+      // exact envelope that the production Java runtime executes in its test.
+      expect({ ...command, update: command.update.replaceAll(created.operation, captured.operation) }).toEqual(captured.command);
+      expect(command.validations).toHaveLength(2);
+      expect(command.validations!.map(value => value.focus)).toEqual([[f.value.credit], [f.value.revision]]);
+      for (const validation of command.validations!) {
+        expect(validation.profile).toBe(captured.profile);
+        expect(validation.sha256).toBe(profileRegistry[captured.profile as keyof typeof profileRegistry].sha256);
+        if (agent) expect(validation.binding).toBeUndefined();
+        else {
+          expect(validation.binding).toMatchObject({ receipt: native.receipt.receipt,
+            'work-head': native.value.expectedHead, epoch: native.receipt.authorityEpoch,
+            intent: native.receipt.sourceIntent, scope: native.receipt.scope });
+          expect(validation.binding!.receipt).not.toBe(created.compatibilityReceipt);
+        }
+      }
+      expect(native.receipt.receipt).toBe(captured.originalReceipt);
+      const nextInput = w.input(created.associationHead);
+      const successor = await bindRetainedCreditAssociation(w.deps, { principal,
+        actingSubject: f.value.actingSubject, input: nextInput, admission: await w.admission(nextInput, 201) });
+      expect(successor.participations).toEqual(created.participations);
+      expect(f.commands).toHaveLength(2);
+      const nextCommand = f.commands[1]!;
+      expect({ ...nextCommand, update: nextCommand.update.replaceAll(successor.operation, captured.successor.operation) })
+        .toEqual(captured.successor.command);
+    } finally { f.clean(); }
+  });
+
+test('retained binding refuses an unavailable installed native profile before sending product data', async () => {
+  const f = fixture(false, 'performer');
+  try {
+    const w = f.enableBinding();
+    const health = await f.deps.environment.fuseki.commandHealth();
+    f.deps.environment.fuseki.commandHealth = async () => ({ ...health, profiles: {} });
+    await expect(w.bind()).rejects.toThrow('Fuseki profile work-author-credit-v2 differs from reviewed artifact');
+    expect(f.commands).toHaveLength(0);
+    expect(f.sealed.size).toBe(0);
+  } finally { f.clean(); }
+});
 
 for (const agent of [true, false]) test(`closed retained selection derives the actual ${agent ? 'Agent' : 'external'} first binding without adoption`, async () => {
   const f = fixture(agent);

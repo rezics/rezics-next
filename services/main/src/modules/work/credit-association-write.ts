@@ -7,6 +7,7 @@ import { assertSemanticDispatchable, checkedSemanticTerminal, familyReceiptIri, 
   StaleSemanticHead, type SemanticAdmission, type SemanticTerminal } from '../semantic/command.ts';
 import { systemDisclosure } from '../target/disclosed-references.ts';
 import { GRAPHS, ID, PendingActivation, hash, iri, lit, type WorkActivationEnvironment } from './activate.ts';
+import { authorCreditValidations } from './author-credit.ts';
 import { creditAttributionOwner, creditOwnerGuard } from './credit-attribution.ts';
 import { canonicalCreditValue, checkedRetainedCreditAssociationState, creditNativeId,
   retainedCreditAssociationDigest, RETAINED_CREDIT_ASSOCIATIONS, RETAINED_CREDIT_ASSOCIATIONS_PROFILE,
@@ -132,16 +133,16 @@ async function verifyBinding(deps: RetainedCreditBindingDependencies, intent: Re
     throw new SemanticChangeRejected('retired-definition', 'retained credit mapping is not current');
   const canonical = canonicalRelation(definition, { profile: 'relation-change-v2', definition: definition.revision,
     participations: state.participations.map(({ id: _id, role, ...item }) => ({ ...item, role: definition.roleKeys[role]! })) });
-  let nativeGuard = '';
-  let requiresOriginGuard = state.origin.kind !== 'stored-credit' || state.retainedProfile === 'source-reported-credit-v1';
-  if (state.retainedProfile !== 'source-reported-credit-v1' && state.origin.kind !== 'selected-publication') {
-    const native = await readCreditOwnerWitness(deps.environment, state.credit);
-    const head = native && await readCreditOwnerHead(deps.environment, native);
-    if (!native || !head || native.value.revision !== state.creditRevision)
-      throw new RetainedCreditReadUnavailable('original credit owner unavailable');
-    requiresOriginGuard ||= native.receipt.sourceIntent !== state.credit;
-    nativeGuard = creditOwnerGuard(native, head);
-  }
+  // The compatibility pointer mutates this existing current subject. Validate
+  // its actual canonical credit and original command, independently of the
+  // retained Source/publication proof and this command's compatibility receipt.
+  const native = await readCreditOwnerWitness(deps.environment, state.credit);
+  const head = native && await readCreditOwnerHead(deps.environment, native);
+  if (!native || !head || native.value.revision !== state.creditRevision || native.value.work !== state.work)
+    throw new RetainedCreditReadUnavailable('original credit owner unavailable');
+  const nativeGuard = creditOwnerGuard(native, head);
+  const requiresOriginGuard = state.origin.kind !== 'stored-credit' || state.retainedProfile === 'source-reported-credit-v1'
+    || native.receipt.sourceIntent !== state.credit;
   const supported = await verifyRetainedCreditAssociationState(deps, basis, state);
   if (supported.sourceValidation.some(value => value.state !== 'current'))
     throw new RetainedCreditReadUnavailable('retained credit support is withdrawn');
@@ -156,7 +157,7 @@ async function verifyBinding(deps: RetainedCreditBindingDependencies, intent: Re
   if (intent.beforeCommit && !intent.beforeCommit.guard?.trim())
     throw new PendingActivation('retained credit publication guard unavailable');
   await fenceRetainedCreditIdentityRead(deps, basis);
-  return { basis, supported, guard: `${modelGenerationHeadGuard(basis.generation.generation)}
+  return { basis, supported, native, guard: `${modelGenerationHeadGuard(basis.generation.generation)}
     ${mappingGuard(state)} ${nativeGuard} ${originGuard} ${attribution.guard}
     ${intent.beforeCommit ? `FILTER EXISTS ${intent.beforeCommit.guard}` : ''}` };
 }
@@ -220,10 +221,13 @@ async function bind(deps: RetainedCreditBindingDependencies,
   const current = await verifyBinding(deps, intent, prepared);
   if (!equal(current.supported, verified.supported) || !equal(current.basis.generation, verified.basis.generation))
     throw new RetainedCreditReadUnavailable('retained credit authority or support changed before commit');
+  const original = current.native.receipt;
+  const validations = await authorCreditValidations(deps.environment, current.native.value,
+    original.receipt, original.authorityEpoch, original.sourceIntent, original.scope);
   await sendSemanticWrite(deps.environment, { receipt, digest, admission: intent.admission,
     // This compatibility view refines an existing admitted credit. It is not a
     // second RelationOccurrence or an unregistered semantic profile mutation.
-    validations: [], event: 'RetainedCreditAssociationChangedEvent',
+    validations, event: 'RetainedCreditAssociationChangedEvent',
     deletes: expectedAssociationHead ? `GRAPH ${iri(GRAPHS.current)} { ${iri(state.credit)} rv:associationHead ${iri(expectedAssociationHead)} }` : '',
     inserts: `GRAPH ${iri(GRAPHS.current)} { ${iri(state.credit)} rv:associationHead ${iri(revision)} }
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:RetainedCreditAssociationRevision, rv:RevisionAnchor ;
