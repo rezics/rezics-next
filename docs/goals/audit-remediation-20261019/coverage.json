@@ -316,9 +316,11 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "开发切片丢失已选作品的核心邻接资料",
-      "status": "pending",
-      "owner": null,
-      "proof": []
+      "status": "closed",
+      "owner": "G-2778",
+      "proof": [
+        "docs/goals/audit-remediation-20261019/proofs/catalogue-A02-acceptance.json"
+      ]
     },
     {
       "id": "A12",
@@ -397,9 +399,11 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "公开结构未就绪时仍提供无反馈的做菜主操作",
-      "status": "pending",
-      "owner": null,
-      "proof": []
+      "status": "closed",
+      "owner": "G-2757",
+      "proof": [
+        "docs/goals/audit-remediation-20261019/proofs/catalogue-A18-acceptance.json"
+      ]
     },
     {
       "id": "AUD-007",
