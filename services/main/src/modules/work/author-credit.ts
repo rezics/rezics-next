@@ -118,13 +118,14 @@ export async function readAuthorCredit(env: WorkActivationEnvironment, credit: s
         rv:confirmedBy ?actor ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
         OPTIONAL { ${iri(revision)} rv:sourceRoleKey ?role }
         FILTER NOT EXISTS { ${iri(revision)} rv:agent|schema:author ?agent }
+        FILTER NOT EXISTS { ${iri(revision)} a rv:ErasedRevision }
       }
       FILTER((!BOUND(?currentRole) && !BOUND(?role)) || sameTerm(?currentRole, ?role))
     } LIMIT 2`);
   const rows = data.results?.bindings ?? [];
   if (!rows.length) return null;
   const row = rows[0]!;
-  if (rows.length !== 1 || !['work', 'head', 'key', 'ordinal', 'actor', 'epoch', 'sequence']
+  if (rows.length !== 1 || !['work', 'head', 'key', 'ordinal', 'actor', 'epoch', 'sequence', 'provider', 'namespace', 'creditRole']
     .every(key => row[key]?.value !== undefined)) throw new AuthorCreditUnavailable('native credit is ambiguous');
   const value: AuthorCreditValue = { work: row.work!.value, credit, revision, expectedHead: row.head!.value,
     sourceKey: row.key!.value, sourceRoleKey: row.role?.value ?? null,
@@ -164,6 +165,9 @@ export async function readAuthorCreditReceipt(env: WorkActivationEnvironment,
   admissionId: string): Promise<AuthorCreditReceipt | null> {
   const terminal = await readWorkEditTerminalReceipt(env, admissionId);
   if (!terminal) return null;
+  if (terminal.admissionId !== admissionId || terminal.receipt !== workEditReceiptIri(admissionId)) {
+    throw new AuthorCreditUnavailable('credit receipt differs from admission');
+  }
   if (terminal.outcome !== 'succeeded') throw new AuthorCreditConflict('credit command was cancelled');
   const data = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?credit ?revision ?intent WHERE {
     GRAPH ${iri(GRAPHS.receipts)} { ${iri(terminal.receipt)} (rv:authorCredit|rv:nativeCredit) ?credit ;
