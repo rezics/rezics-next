@@ -261,12 +261,14 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps, cli
     }
     return SiteHomeRoute(communityProps, async () => homeView);
   }
-  // Resolve mounts before the starter Browse renderer, so a mount named browse is never shadowed.
-  const routed = replay
-    ? await replay.readZoneRoute(resolved.zone, routePath(path), routeCursor(path, search))
-    : await readZoneRoute(resolved.zone, routePath(path), routeCursor(path, search));
-  if (!routed.ok && routed.status === 404 && routed.failure === 'missing' && path.length === 1 && path[0] === 'browse') {
-    return RealmBrowseRoute(communityProps, undefined, client);
+  if (path.length === 1 && path[0] === 'browse') {
+    // Resolve mounts before the starter Browse renderer, so a mount named browse is never shadowed.
+    const routed = replay
+      ? await replay.readZoneRoute(resolved.zone, routePath(path), routeCursor(path, search))
+      : await readZoneRoute(resolved.zone, routePath(path), routeCursor(path, search));
+    if (!routed.ok && routed.status === 404 && routed.failure === 'missing') {
+      return RealmBrowseRoute(communityProps, undefined, client);
+    }
   }
   const view = await loadRealmView(space, locale, search, 'site');
   if (view.kind === 'missing') notFound();
