@@ -7869,5 +7869,1657 @@
       "newImplementationOrAssertionEdits": [],
       "next": "Manager may compose the exact bounded authored delta while preserving all current generated peer rows, then separately route native revision/edit repair and genuine unchanged AMGT01 acceptance. Source approval does not assert main landing, a new genuine pass or D2-004 closure."
     }
+  },
+  "nativePostRevisionFirstSourceReview": {
+    "format": "additive first independent source review of new native Post revision/edit and matched union consumer only",
+    "reviewedAt": "2026-10-19T17:09:05.555025+00:00",
+    "reviewer": {
+      "worker": "G-2851",
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "independentSourceInspection": true,
+      "nestedAgents": false,
+      "accountFallback": false
+    },
+    "sourceVerdict": {
+      "decision": "approved for the exact bounded nine-path source candidate",
+      "blockingFindings": [],
+      "basis": "Inspected the actual immutable source and minimal diff, verified authored/composed provenance before review, checked exact evidence equivalence, and personally viewed the affected desktop/phone native Post and retained metadata screenshots. No new blocking source defect found.",
+      "acceptanceStatus": "D2-004 remains open. No new genuine AMGT01 result, installed runtime pass, main landing or completion assertion.",
+      "runtimePremise": "Combined native inputs differ from the owner image in two inherited dependencies. Derived combined image tag is pinned below; its image ID and runtime availability are unknown. This is separate from source approval."
+    },
+    "provenance": {
+      "candidate": {
+        "head": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+        "tree": "0fd2ee925bc3c123b0ccb1f87ddc2c839c3d9c82",
+        "base": "49c33b1c0b3333d084d6dd4e5853ccdb7ef10a79"
+      },
+      "manifest": {
+        "path": ".temp/native-post-first-review/combined-manifest.json",
+        "sha256": "971574400f6ce53cdd17dd17f1d71040f982db998389441ae2a026aaf931a845",
+        "bytes": 8894
+      },
+      "manifestExpectedSha256": "971574400f6ce53cdd17dd17f1d71040f982db998389441ae2a026aaf931a845",
+      "isolatedReviewCheckout": ".temp/native-post-source",
+      "isolatedCheckoutHead": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+      "checkoutUse": "Owned detached exact-source clone, source reads only; clean. No installation, stack, lease or native command launched.",
+      "recordedBeforeSourceReview": "2026-10-19T16:59:36.204888+00:00",
+      "exactPerPathManifest": [
+        {
+          "path": "apps/web/features/work/work-detail.stories.tsx",
+          "before": {
+            "gitBlob": "1ec4f7046c7ccd35bea0ba5472a671299a27d9ee",
+            "sha256": "8f35446a58dbb50514263c72d365bf3084e967243c637baf32cf11b981c58458",
+            "bytes": 2994
+          },
+          "after": {
+            "gitBlob": "61559b8a9dea3723312dda390f99d82697d0a914",
+            "sha256": "619694a51cc7cbe20bc5e9300c70e2993462c2fe8f12108350213be37d6b5b01",
+            "bytes": 4782
+          }
+        },
+        {
+          "path": "apps/web/features/work/work-detail.tsx",
+          "before": {
+            "gitBlob": "668389d5a922b0a349b0f23c5ae51620b9a8903a",
+            "sha256": "db0b3fd2d64dafb3bc4822d61da1727d1ea114d4eeca5d476bdb8b8c50573d0e",
+            "bytes": 4460
+          },
+          "after": {
+            "gitBlob": "f99936d0fb2d1a0820405eb0a2690a62d2f37a5a",
+            "sha256": "bdecf1e0185243ca051618cecc5fafaf681aa3e1b0d45b1478c2ce2b9a068f22",
+            "bytes": 4721
+          }
+        },
+        {
+          "path": "generated/openapi/main/public.json",
+          "before": {
+            "gitBlob": "9e87fa7fa35195b5287b7928d2734a8fe7d1d84d",
+            "sha256": "0a828d05fc00dc818177b161982d0d20b67644a9f3449386ae10cf32b0ebf452",
+            "bytes": 41792309
+          },
+          "after": {
+            "gitBlob": "89ba9868b10c4735f6297aab43ac6d852fb87693",
+            "sha256": "e9614b5cef5c385f61849f5e22d4fe1e32e5123783e026a2e82ed41b78bdcdd0",
+            "bytes": 41798229
+          }
+        },
+        {
+          "path": "services/main/src/modules/work/edit-admitted.ts",
+          "before": {
+            "gitBlob": "2985f14356f2fc1838971bf1259e83b0f84bb5c9",
+            "sha256": "4ff08e82c3ac263c0065386c5cf0a4a5f4e69d1b295486aa30f401e2895ea645",
+            "bytes": 8390
+          },
+          "after": {
+            "gitBlob": "2622562ffdfe2d6c766444f965482907b0ba5301",
+            "sha256": "16b8b104f56d64f1ce45aedd44ed5f9d464caa37e3fad585996d92328c164e8f",
+            "bytes": 9159
+          }
+        },
+        {
+          "path": "services/main/src/modules/work/edit.ts",
+          "before": {
+            "gitBlob": "1f668bc1066cde09e3b042f2251de8ce008e0538",
+            "sha256": "57ff14f299e66e3b1bb66d33540cf9f17ac2fd926e97bac26ff96899d5dbba42",
+            "bytes": 24010
+          },
+          "after": {
+            "gitBlob": "6dc73dc20221d6360b23d82c0c37fd70a5d51f75",
+            "sha256": "30eb7544cc79e01a51776047ecb01d8dfa0ff20f1acd62d6c21c3e48a35cff61",
+            "bytes": 26793
+          }
+        },
+        {
+          "path": "services/main/src/modules/work/history.ts",
+          "before": {
+            "gitBlob": "c0d4cffeeeb871ab7003a4d2dc9cdf5c46289c18",
+            "sha256": "8eb45c300ffbef312fc437daae283699027e44cd797d1c10c7e4328767bff1dd",
+            "bytes": 22453
+          },
+          "after": {
+            "gitBlob": "2c4141692f9b69402d0575244d9a96989d0366f6",
+            "sha256": "c2b5dff60b79d5b2d3f98152c8e1fe4771829717a800d55a52cb96e0094db12c",
+            "bytes": 25158
+          }
+        },
+        {
+          "path": "services/main/src/routes/works.ts",
+          "before": {
+            "gitBlob": "0b791886d112f7544b41ef5370424bcb48ffc9c1",
+            "sha256": "0a12ac1710a537d39cb7f4d053726e19726ea63816859eed48a41020029eb1b1",
+            "bytes": 24848
+          },
+          "after": {
+            "gitBlob": "4da46321a02088671bfaa1c210313b9e4bfa5782",
+            "sha256": "c2320fdce5e7c015b9fb3378bf939d5bf35543b3e93e9392dfc8850ff28df15a",
+            "bytes": 25436
+          }
+        },
+        {
+          "path": "services/main/tests/author-lifecycle-post-edit.test.ts",
+          "before": {
+            "gitBlob": null,
+            "sha256": null,
+            "bytes": 0
+          },
+          "after": {
+            "gitBlob": "3c7795a6bfe9d9c09d1ef9c461ccd1d315b72780",
+            "sha256": "1e3ccd822d9be6da6cb09261e1236af0da5a27a224a9b5383ee1bcbf9a238357",
+            "bytes": 18892
+          }
+        },
+        {
+          "path": "services/main/tests/revision-read.test.ts",
+          "before": {
+            "gitBlob": "df317e23b20f22c1c1f91de859f2b7c28c20942f",
+            "sha256": "66e680b40ac1c04511d87e92ae7d44716dbe3522ab254a3ac56543766766862d",
+            "bytes": 3047
+          },
+          "after": {
+            "gitBlob": "a49636e1fb766be2fbf5767e56f6adbb4185e0fa",
+            "sha256": "c845f8202a53f5c23f03e29b1e97778de81971d017d2703d980d38a9e56253c6",
+            "bytes": 6574
+          }
+        }
+      ],
+      "diffNumstat": "31\t0\tapps/web/features/work/work-detail.stories.tsx\n24\t21\tapps/web/features/work/work-detail.tsx\n407\t292\tgenerated/openapi/main/public.json\n14\t4\tservices/main/src/modules/work/edit-admitted.ts\n69\t37\tservices/main/src/modules/work/edit.ts\n58\t7\tservices/main/src/modules/work/history.ts\n19\t9\tservices/main/src/routes/works.ts\n274\t0\tservices/main/tests/author-lifecycle-post-edit.test.ts\n57\t1\tservices/main/tests/revision-read.test.ts\n",
+      "combinedPatch": {
+        "path": ".temp/native-post-first-review/native-post-combined.patch",
+        "sha256": "50caa7a1ce40478cca73870b85f7930062fcd25ce22673404f535d24a12883a4",
+        "bytes": 92313
+      },
+      "uiPatch": {
+        "path": ".temp/native-post-first-review/ui-two.patch",
+        "sha256": "752d860adb27da04dacda2edf05d3ef0075ec87e533bb1ab352e787f3244ea53",
+        "bytes": 7335
+      },
+      "backendSource": {
+        "head": "39a6072e53b4f3dade3b34cd2e6d250b1cec79f0",
+        "minimalDeltaBase": "f2be97abf6181bb2ee4891f98053682265cf0af4",
+        "paths": 7,
+        "allPostimagesByteExact": true,
+        "proofReused": "owner-proof-reuse.json"
+      },
+      "backendAuthoredChain": [
+        {
+          "head": "50a551eba5b30230775cb42e94cdb7339bdd14cc",
+          "parent": "f2be97abf6181bb2ee4891f98053682265cf0af4",
+          "purpose": "Native Post retained revision, metadata title correction and bounded owner tests"
+        },
+        {
+          "head": "e2f500f21aa4a4ad7bf609372092f6eccad97d06",
+          "parent": "50a551eba5b30230775cb42e94cdb7339bdd14cc",
+          "purpose": "Generated GET revision response union"
+        },
+        {
+          "head": "39a6072e53b4f3dade3b34cd2e6d250b1cec79f0",
+          "parent": "e2f500f21aa4a4ad7bf609372092f6eccad97d06",
+          "purpose": "Remove unused type-only FusekiClient fixture import; assertions unchanged"
+        }
+      ],
+      "uiSource": {
+        "head": "62368e3f04286c65a9db5b0d8734084c92b4b911",
+        "tree": "7f43aebb31f1b221c18c6a93255f857a29d1d4af",
+        "base": "475c770b339a80320dd97d2c6a15099ac7f21413",
+        "paths": 2,
+        "patch": "ui-two.patch",
+        "sha256": "752d860adb27da04dacda2edf05d3ef0075ec87e533bb1ab352e787f3244ea53"
+      },
+      "backendSevenPostimagesExact": true,
+      "uiTwoPostimagesExact": true,
+      "generatedSchemaByteVerification": {
+        "jsonPointer": "/paths/~1v1~1revisions~1{revision}/get/responses/200/content/application~1json/schema",
+        "before": {
+          "offsetStart": 31094329,
+          "offsetEnd": 31109395,
+          "sha256": "2f298399c497292965935ad92d3f0493890853455ef825ced46986cdff14c27e"
+        },
+        "after": {
+          "offsetStart": 31094329,
+          "offsetEnd": 31115315,
+          "sha256": "389449e399bf1e28e0d75bf7d26388b2ccf7bda2453e56f8a9e762bba52755c5"
+        },
+        "unchangedPrefixSha256": "d79864ea2d664441089a8d4370b35941ae05f7285fe7abb48d1c522859bdb1d3",
+        "unchangedSuffixSha256": "5c717fef97ad6a2c5f9fa68394f46d6d186b3f352ef3ec52dbabe459aa53360d",
+        "prefixBytes": 31094329,
+        "suffixBytes": 10682914,
+        "outsideSchemaByteExact": true,
+        "metadataArmSemanticallyExact": true,
+        "nativeArmHasNoMainVersion": true
+      },
+      "generatedScope": "Only GET /v1/revisions/{revision} 200 JSON schema changes. The 31,094,329-byte prefix and 10,682,914-byte suffix are byte exact; the previous metadata schema is the unchanged first union arm. All current-main other operations/rows preserved.",
+      "currentMainPeersPreserved": [
+        {
+          "path": "apps/web/app/[locale]/works/[revision]/page.tsx",
+          "unchangedGitBlob": "1c54bce1db54ad668bfc0758baf906367b82db93",
+          "sha256": "a727399984817d0e508aeee1a77c780a488fce30ca37d5b32a60fd0ffaccc4cb"
+        },
+        {
+          "path": "apps/web/features/work-page/fixtures.ts",
+          "unchangedGitBlob": "f3e1080352301dcbdeaf0964b81305a0f75cb131",
+          "sha256": "3a2ee3fc25c37c47f2ddb03d0d4ca0926e3adb8563cf966a5828b90b215116a3"
+        },
+        {
+          "path": "apps/web/features/work-page/discussion.tsx",
+          "unchangedGitBlob": "62993c47ba90f666cd9b0b8e72c50243c4590687",
+          "sha256": "8476f15a6036cde7f43eb689c9948e56d703cb7a9cb94222f11d1cd38e4934ae"
+        },
+        {
+          "path": "apps/web/features/work-page/discussion.stories.tsx",
+          "unchangedGitBlob": "0ab3c66b2a9ab627e1ca8db1aa300ff7b0a11fb4",
+          "sha256": "d5c0ae9df644d925c000ed108d0b2d751eea9c7a028f2028ddecdeddaa9bedca"
+        },
+        {
+          "path": "services/main/src/modules/query/resource-contract.ts",
+          "unchangedGitBlob": "2013d72bc7518d2ae4ea6d8bced22d595c584a8a",
+          "sha256": "175c57c24f7aa33bf454751fae2c6857d7509b78ff90d92ad65a4d1a43b23535"
+        },
+        {
+          "path": "services/main/src/modules/query/work-cards.ts",
+          "unchangedGitBlob": "bb08b7e1148284f8fd7395ec190cb5c97366bc13",
+          "sha256": "f38059836d29afc1308d6229d1396817fafc91d2d8a678227d5d2eab4ca15493"
+        },
+        {
+          "path": "services/main/src/modules/studio/chapters.ts",
+          "unchangedGitBlob": "39b42541832c5499ff77a7ec18dcf07d0dcd0a09",
+          "sha256": "a0156b6733b53701eb08a8307c255ab4a126c02462d668a51d80e1d63ccb8e4b"
+        }
+      ],
+      "peerScope": "Preserved current discussion fixture 8caf lineage and current discussion renderer/stories, UUID revision page, Source/query and Studio consumers. These inherited dependencies are not additional implementation or a renewed whole-wave review.",
+      "dependencies": [
+        {
+          "source": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+          "path": "yarn.lock",
+          "gitBlob": "e70dcbe4159d3fcab2585962a1cf3688937eb0e5",
+          "sha256": "026c93ddc3085e43b1ff6727a42f7c55b03a03cc1aa4c11cbf57438ce5b9d391"
+        },
+        {
+          "source": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+          "path": "package.json",
+          "gitBlob": "4aed970288778fefd485dd2e401e6fdf458f7a2d",
+          "sha256": "487061c605dc753c9e60c657ecaa4dd7cf417a213ac65c2e906380367b98acaf"
+        },
+        {
+          "source": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+          "path": ".yarnrc.yml",
+          "gitBlob": "18e7483343c144cd6b21f5c31726b973198d333c",
+          "sha256": "3a5fa848917bb984a50f6fe6c270e3b8270b2c1a1b905c5c7727c9263e35dc7b"
+        },
+        {
+          "source": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+          "path": "apps/web/package.json",
+          "gitBlob": "788bd74341217c9fb7f655e00ccd902d64210f5b",
+          "sha256": "f0b29308365ed08148f73ba83b3c5f6c5b5e890c1df2d547ece26b541ad7965f"
+        },
+        {
+          "source": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+          "path": "services/main/package.json",
+          "gitBlob": "b1da791318ab3a42057a19a00435564cd6593e38",
+          "sha256": "c1b72803a0e8a3c6c1ef6087951e53e6ae5c01101b59836857f7bed2d5cc19c8"
+        },
+        {
+          "source": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+          "path": "apps/web/tsconfig.json",
+          "gitBlob": "659368a38e61912a9eac38e020e53c967d95e14f",
+          "sha256": "bfb40006439d31cc8a96d7d8b5888073b86ccdecbfda78b1657a7fca1ee8774a"
+        },
+        {
+          "source": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+          "path": "apps/web/.storybook/preview.tsx",
+          "gitBlob": "1ba5806d7f8720646dfe0a591067966745179187",
+          "sha256": "b6a0488d6b05e049eb07e1a560c1d78ef7fe8af5a9e674975b984fc7615b4003"
+        },
+        {
+          "source": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+          "path": "apps/web/vitest.config.ts",
+          "gitBlob": "87980f03e746d949c3235e27a6b1f4fcc1f19231",
+          "sha256": "6eba5c586df8eafca044a4473fb9977a66bd79f06e5efdc2ac155b43521febc4"
+        }
+      ],
+      "supportAndRunnerEquivalence": [
+        {
+          "owner": {
+            "source": "39a6072e53b4f3dade3b34cd2e6d250b1cec79f0",
+            "path": "services/main/src/modules/post/read.ts",
+            "gitBlob": "c283d7b9a08a9fd56ad53e73ad91152fbb46f295",
+            "sha256": "b7044337a14c69bd55245516040e57509f0837cc1cf5608feca5f0f627c8a09b"
+          },
+          "combined": {
+            "source": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+            "path": "services/main/src/modules/post/read.ts",
+            "gitBlob": "c283d7b9a08a9fd56ad53e73ad91152fbb46f295",
+            "sha256": "b7044337a14c69bd55245516040e57509f0837cc1cf5608feca5f0f627c8a09b"
+          },
+          "equal": true
+        },
+        {
+          "owner": {
+            "source": "39a6072e53b4f3dade3b34cd2e6d250b1cec79f0",
+            "path": "services/main/src/modules/work/read-session.ts",
+            "gitBlob": "85381184a0704f74645f97e0b0327a2b13d0d27d",
+            "sha256": "1e057f09ae28386be2ee2a737826a5060bf67aabe3dd4ce8abe105183659b4db"
+          },
+          "combined": {
+            "source": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+            "path": "services/main/src/modules/work/read-session.ts",
+            "gitBlob": "85381184a0704f74645f97e0b0327a2b13d0d27d",
+            "sha256": "1e057f09ae28386be2ee2a737826a5060bf67aabe3dd4ce8abe105183659b4db"
+          },
+          "equal": true
+        },
+        {
+          "owner": {
+            "source": "39a6072e53b4f3dade3b34cd2e6d250b1cec79f0",
+            "path": "services/main/src/modules/work/activate.ts",
+            "gitBlob": "402916b129faea907d0213120afe34350b5b24cd",
+            "sha256": "e2a4c562188fdbe84b023a1438e5213ab4abe2e6e17b446b2e69e49f6958e79a"
+          },
+          "combined": {
+            "source": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+            "path": "services/main/src/modules/work/activate.ts",
+            "gitBlob": "402916b129faea907d0213120afe34350b5b24cd",
+            "sha256": "e2a4c562188fdbe84b023a1438e5213ab4abe2e6e17b446b2e69e49f6958e79a"
+          },
+          "equal": true
+        },
+        {
+          "owner": {
+            "source": "39a6072e53b4f3dade3b34cd2e6d250b1cec79f0",
+            "path": "services/main/src/modules/work/public-patterns.ts",
+            "gitBlob": "1bdfaa8feb997a02b1d8301fd78d873c916317dc",
+            "sha256": "dc5d128b954a1b83f760395b926946304395e5a487d246ee29160e9e78096cd5"
+          },
+          "combined": {
+            "source": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+            "path": "services/main/src/modules/work/public-patterns.ts",
+            "gitBlob": "1bdfaa8feb997a02b1d8301fd78d873c916317dc",
+            "sha256": "dc5d128b954a1b83f760395b926946304395e5a487d246ee29160e9e78096cd5"
+          },
+          "equal": true
+        },
+        {
+          "owner": {
+            "source": "39a6072e53b4f3dade3b34cd2e6d250b1cec79f0",
+            "path": "services/main/src/modules/access/admission.ts",
+            "gitBlob": "b3e946f323278c79f8644dba21dafda43fb4f5e5",
+            "sha256": "3378cb8d1411c0be71bfce488a5fdccecdb204799e3645491a10fb216e4acfc0"
+          },
+          "combined": {
+            "source": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+            "path": "services/main/src/modules/access/admission.ts",
+            "gitBlob": "b3e946f323278c79f8644dba21dafda43fb4f5e5",
+            "sha256": "3378cb8d1411c0be71bfce488a5fdccecdb204799e3645491a10fb216e4acfc0"
+          },
+          "equal": true
+        },
+        {
+          "owner": {
+            "source": "39a6072e53b4f3dade3b34cd2e6d250b1cec79f0",
+            "path": "services/main/src/infrastructure/profile.ts",
+            "gitBlob": "69a0c14fd60a96ea80dd0417495cbe4de276825d",
+            "sha256": "3c54eea0cd0c7cabbb64d98a89f6fb919d5da14617cb3a3bc9f774d9deeb03a1"
+          },
+          "combined": {
+            "source": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+            "path": "services/main/src/infrastructure/profile.ts",
+            "gitBlob": "69a0c14fd60a96ea80dd0417495cbe4de276825d",
+            "sha256": "3c54eea0cd0c7cabbb64d98a89f6fb919d5da14617cb3a3bc9f774d9deeb03a1"
+          },
+          "equal": true
+        },
+        {
+          "owner": {
+            "source": "39a6072e53b4f3dade3b34cd2e6d250b1cec79f0",
+            "path": "services/main/src/infrastructure/immutable-objects.ts",
+            "gitBlob": "5b062ed039a9debe356dca065172952475df71b6",
+            "sha256": "81f6918bbf30e6980eb373efcbf6c4e31bc1d35f0108144d926a000fa360a94f"
+          },
+          "combined": {
+            "source": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+            "path": "services/main/src/infrastructure/immutable-objects.ts",
+            "gitBlob": "5b062ed039a9debe356dca065172952475df71b6",
+            "sha256": "81f6918bbf30e6980eb373efcbf6c4e31bc1d35f0108144d926a000fa360a94f"
+          },
+          "equal": true
+        },
+        {
+          "owner": {
+            "source": "39a6072e53b4f3dade3b34cd2e6d250b1cec79f0",
+            "path": "scripts/goal/goalctl.ts",
+            "gitBlob": "79ae1a7484acc4d6cd793c79aae05d5a94d61273",
+            "sha256": "cf06b6b0727f466917913fc2a607194323c43037439b8636ce8bc84342d6ccac"
+          },
+          "combined": {
+            "source": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+            "path": "scripts/goal/goalctl.ts",
+            "gitBlob": "79ae1a7484acc4d6cd793c79aae05d5a94d61273",
+            "sha256": "cf06b6b0727f466917913fc2a607194323c43037439b8636ce8bc84342d6ccac"
+          },
+          "equal": true
+        },
+        {
+          "owner": {
+            "source": "39a6072e53b4f3dade3b34cd2e6d250b1cec79f0",
+            "path": "scripts/qa/test.ts",
+            "gitBlob": "81c4fa2ae7770c68b359f86ae910069aca509c08",
+            "sha256": "3f57d88efe82ff83e300594443f5c8bb824711003525ff3db615ef15a2165a80"
+          },
+          "combined": {
+            "source": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+            "path": "scripts/qa/test.ts",
+            "gitBlob": "81c4fa2ae7770c68b359f86ae910069aca509c08",
+            "sha256": "3f57d88efe82ff83e300594443f5c8bb824711003525ff3db615ef15a2165a80"
+          },
+          "equal": true
+        },
+        {
+          "owner": {
+            "source": "39a6072e53b4f3dade3b34cd2e6d250b1cec79f0",
+            "path": "scripts/qa/core.ts",
+            "gitBlob": "7e73c7a7b25c09930781ef55fd0f837587c7a97f",
+            "sha256": "c22fed1e7e7665bb18690864003b58563302e8c93e1884801a6a74973be8586c"
+          },
+          "combined": {
+            "source": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+            "path": "scripts/qa/core.ts",
+            "gitBlob": "7e73c7a7b25c09930781ef55fd0f837587c7a97f",
+            "sha256": "c22fed1e7e7665bb18690864003b58563302e8c93e1884801a6a74973be8586c"
+          },
+          "equal": true
+        },
+        {
+          "owner": {
+            "source": "39a6072e53b4f3dade3b34cd2e6d250b1cec79f0",
+            "path": "scripts/qa/host-admission.ts",
+            "gitBlob": "20e060f612be5aac2b9653138443e351cab2874b",
+            "sha256": "a1309db2d03e9a30cfa68615e680b24dfab657ad56f4743d2de052ae66d4a684"
+          },
+          "combined": {
+            "source": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+            "path": "scripts/qa/host-admission.ts",
+            "gitBlob": "20e060f612be5aac2b9653138443e351cab2874b",
+            "sha256": "a1309db2d03e9a30cfa68615e680b24dfab657ad56f4743d2de052ae66d4a684"
+          },
+          "equal": true
+        }
+      ],
+      "proofFiles": {
+        "count": 71,
+        "hashManifest": {
+          "path": ".temp/native-post-first-review/SHA256SUMS",
+          "sha256": "321eceb9602d40daddc4e54a2309b7dfbe3b0cde31f2b220984d6e7e6031b8a5",
+          "bytes": 7606
+        },
+        "verifiedHashes": {
+          "path": ".temp/native-post-first-review/verified-packet-hashes.json",
+          "sha256": "c10d815925fb0616054ead1b1e72d319561bd7329ae1e4ea0d291f0f86925799",
+          "bytes": 12491
+        },
+        "files": [
+          {
+            "path": "backend-seven.patch",
+            "sha256": "28c908753193339b207cd368be2bbbc43263aa9fc7432737870a9505827625f7",
+            "bytes": 84978
+          },
+          {
+            "path": "blobs/after/apps/web/features/work/work-detail.stories.tsx",
+            "sha256": "619694a51cc7cbe20bc5e9300c70e2993462c2fe8f12108350213be37d6b5b01",
+            "bytes": 4782
+          },
+          {
+            "path": "blobs/after/apps/web/features/work/work-detail.tsx",
+            "sha256": "bdecf1e0185243ca051618cecc5fafaf681aa3e1b0d45b1478c2ce2b9a068f22",
+            "bytes": 4721
+          },
+          {
+            "path": "blobs/after/revision-response-schema.json",
+            "sha256": "da73e0c5c59f678e276214dd2bb8fd97236bc3459a3ccc1942b0dd2b5bb72d62",
+            "bytes": 12955
+          },
+          {
+            "path": "blobs/after/services/main/src/modules/work/edit-admitted.ts",
+            "sha256": "16b8b104f56d64f1ce45aedd44ed5f9d464caa37e3fad585996d92328c164e8f",
+            "bytes": 9159
+          },
+          {
+            "path": "blobs/after/services/main/src/modules/work/edit.ts",
+            "sha256": "30eb7544cc79e01a51776047ecb01d8dfa0ff20f1acd62d6c21c3e48a35cff61",
+            "bytes": 26793
+          },
+          {
+            "path": "blobs/after/services/main/src/modules/work/history.ts",
+            "sha256": "c2b5dff60b79d5b2d3f98152c8e1fe4771829717a800d55a52cb96e0094db12c",
+            "bytes": 25158
+          },
+          {
+            "path": "blobs/after/services/main/src/routes/works.ts",
+            "sha256": "c2320fdce5e7c015b9fb3378bf939d5bf35543b3e93e9392dfc8850ff28df15a",
+            "bytes": 25436
+          },
+          {
+            "path": "blobs/after/services/main/tests/author-lifecycle-post-edit.test.ts",
+            "sha256": "1e3ccd822d9be6da6cb09261e1236af0da5a27a224a9b5383ee1bcbf9a238357",
+            "bytes": 18892
+          },
+          {
+            "path": "blobs/after/services/main/tests/revision-read.test.ts",
+            "sha256": "c845f8202a53f5c23f03e29b1e97778de81971d017d2703d980d38a9e56253c6",
+            "bytes": 6574
+          },
+          {
+            "path": "blobs/before/apps/web/features/work/work-detail.stories.tsx",
+            "sha256": "8f35446a58dbb50514263c72d365bf3084e967243c637baf32cf11b981c58458",
+            "bytes": 2994
+          },
+          {
+            "path": "blobs/before/apps/web/features/work/work-detail.tsx",
+            "sha256": "db0b3fd2d64dafb3bc4822d61da1727d1ea114d4eeca5d476bdb8b8c50573d0e",
+            "bytes": 4460
+          },
+          {
+            "path": "blobs/before/revision-response-schema.json",
+            "sha256": "63f04af9092020f0ad712e30892435ce56854f32300963b4aabdf7c82f2f8bba",
+            "bytes": 8875
+          },
+          {
+            "path": "blobs/before/services/main/src/modules/work/edit-admitted.ts",
+            "sha256": "4ff08e82c3ac263c0065386c5cf0a4a5f4e69d1b295486aa30f401e2895ea645",
+            "bytes": 8390
+          },
+          {
+            "path": "blobs/before/services/main/src/modules/work/edit.ts",
+            "sha256": "57ff14f299e66e3b1bb66d33540cf9f17ac2fd926e97bac26ff96899d5dbba42",
+            "bytes": 24010
+          },
+          {
+            "path": "blobs/before/services/main/src/modules/work/history.ts",
+            "sha256": "8eb45c300ffbef312fc437daae283699027e44cd797d1c10c7e4328767bff1dd",
+            "bytes": 22453
+          },
+          {
+            "path": "blobs/before/services/main/src/routes/works.ts",
+            "sha256": "0a12ac1710a537d39cb7f4d053726e19726ea63816859eed48a41020029eb1b1",
+            "bytes": 24848
+          },
+          {
+            "path": "blobs/before/services/main/tests/revision-read.test.ts",
+            "sha256": "66e680b40ac1c04511d87e92ae7d44716dbe3522ab254a3ac56543766766862d",
+            "bytes": 3047
+          },
+          {
+            "path": "candidate-commit.txt",
+            "sha256": "70f9632232003540178c255a319990a5b1b75c9bd6b098bacc290f19b28eb15b",
+            "bytes": 123
+          },
+          {
+            "path": "check-results.json",
+            "sha256": "b88c82dae484fd36f18d9f43cf9bf62e0f8ed999002dc5f3ef5ab2992649c7c7",
+            "bytes": 3715
+          },
+          {
+            "path": "combined-compatibility/compatibility.ts",
+            "sha256": "5fe54b3a202fe73c15f80ce1e90f4dace892ee2e9d186f5090b31ac61b28fe66",
+            "bytes": 1163
+          },
+          {
+            "path": "combined-compatibility/tsconfig.json",
+            "sha256": "48d04afeca290c56156099424d59f42729b024194b2f0b194c27106f660a5c91",
+            "bytes": 445
+          },
+          {
+            "path": "composition-preimages.json",
+            "sha256": "7a892e9a964f52c4294f0a6fc2d1e0fd1ed728231bfc023bd27de41180d90f7d",
+            "bytes": 2386
+          },
+          {
+            "path": "dependency-pins.json",
+            "sha256": "07daf1b7eb5a39194e8030ca05cf4876c78c00f890f6a7024828fd9348ac396d",
+            "bytes": 2753
+          },
+          {
+            "path": "generated-schema-verification.json",
+            "sha256": "034558849f9e236aab8259d58a47511570fe07b4ac37c6087289fb7840cd945d",
+            "bytes": 24174
+          },
+          {
+            "path": "manifest.json",
+            "sha256": "971574400f6ce53cdd17dd17f1d71040f982db998389441ae2a026aaf931a845",
+            "bytes": 8894
+          },
+          {
+            "path": "native-post-combined.patch",
+            "sha256": "50caa7a1ce40478cca73870b85f7930062fcd25ce22673404f535d24a12883a4",
+            "bytes": 92313
+          },
+          {
+            "path": "owner-proof/acceptance.json",
+            "sha256": "ac7a2b4fcfbd69d3d97bf335032c20ff80705aa4b43206d3131422a186017710",
+            "bytes": 152895
+          },
+          {
+            "path": "owner-proof/logs/memory-admission.log",
+            "sha256": "62b0f71771bfc4758687652bf56524ad7837576d4cd673738a1a35b3a24bce22",
+            "bytes": 143
+          },
+          {
+            "path": "owner-proof/logs/owner.log",
+            "sha256": "713172bfd3437440f6331b5b8869f8be58c790ecf78217f94505a0fa58c0d416",
+            "bytes": 1406
+          },
+          {
+            "path": "owner-proof/owner-candidate.json",
+            "sha256": "878b6704bd9031913399603e1ed3d7dc5a3f51242818f1f4a3ed9593b1c25f67",
+            "bytes": 18877
+          },
+          {
+            "path": "owner-proof/owner-handoff.md",
+            "sha256": "e28ab456cf2d391b1f189d2fcd31599830555a10717f1657a955a5bd03930263",
+            "bytes": 4916
+          },
+          {
+            "path": "owner-proof/owner.xml",
+            "sha256": "acff530ecf50d8d445101688ad60a18b15871e749958cfb5c5af69fdd4eb0140",
+            "bytes": 2989
+          },
+          {
+            "path": "owner-proof/run-deadline.json",
+            "sha256": "6f3367fd8b3ab9d205cb26d94d2c5f8e3c0dbe71dd0f5e4ff7d4b084475c35e0",
+            "bytes": 112
+          },
+          {
+            "path": "owner-proof/summary.md",
+            "sha256": "987ab169fc0c8862a8e9095738738d7472d0d43f4b12ed83bcdac5a6e0cb7f42",
+            "bytes": 474
+          },
+          {
+            "path": "owner-proof-reuse.json",
+            "sha256": "c0ffd216efa917f5a9f01f5deb84767bd71742a7673a781980721463e593872e",
+            "bytes": 3561
+          },
+          {
+            "path": "patch-replay.json",
+            "sha256": "2ace3eee87444b90f97e1d913abd16fd93eb6dda7618e6598bbd4243a134ba72",
+            "bytes": 356
+          },
+          {
+            "path": "prior-ui-proof/baseline-tsconfig.json",
+            "sha256": "d6ba0b02b226008821eefec51a89a5f16279f7af382d78692c871c5c54d9142e",
+            "bytes": 82
+          },
+          {
+            "path": "prior-ui-proof/baseline.ts",
+            "sha256": "5d9535b557caab764a35efeda444a366cfe5edb2aecf294182c512d9d3f9a851",
+            "bytes": 563
+          },
+          {
+            "path": "prior-ui-proof/candidate-commit.txt",
+            "sha256": "81e19beaa55ce75ae56e333072cbdc73cde067c43e0b25dbfe50cf67f18b2d22",
+            "bytes": 510
+          },
+          {
+            "path": "prior-ui-proof/compatibility.ts",
+            "sha256": "508cf4609cb5c4e4b3d7488ae0a3da6296f99178016cc62123e550a868ba8fc5",
+            "bytes": 1197
+          },
+          {
+            "path": "prior-ui-proof/new-api-baseline-typecheck.log",
+            "sha256": "1723c056eb06dc38ba08e634e02391f075c939aad9894858310792ea47801c76",
+            "bytes": 1062
+          },
+          {
+            "path": "prior-ui-proof/new-api-typecheck.log",
+            "sha256": "d00fae8c28bc579e27ef9c587a508e49cd7f1cfa4d71e0b4e6df2fe52aeb04ce",
+            "bytes": 437
+          },
+          {
+            "path": "prior-ui-proof/screenshots/NativePost.png",
+            "sha256": "5e3b44882f6a7262e9fa4ac1f9c8537b2bd326fc034861b2570458293e739679",
+            "bytes": 128729
+          },
+          {
+            "path": "prior-ui-proof/screenshots/NativePostPhone.png",
+            "sha256": "2da9cd9bc6ae2907d05b36bce978ad595bb7e962eff45aba01762fc2ef9c3ae0",
+            "bytes": 74199
+          },
+          {
+            "path": "prior-ui-proof/screenshots/Standard.png",
+            "sha256": "d95b61aa3c1e72e9150ae59ff0b903f361951a4d02a264347179ffc5bd932ede",
+            "bytes": 157119
+          },
+          {
+            "path": "prior-ui-proof/storybook-attempt-1.log",
+            "sha256": "fb9008c75250fcb90db9327a5bbf1039c747c3a318263fb63a230559a0e00db4",
+            "bytes": 3593
+          },
+          {
+            "path": "prior-ui-proof/storybook-results.json",
+            "sha256": "5ea40f180c2f950468a0b181a28e5055aa2060d0c6d5c2e35dcd8f54e00f1601",
+            "bytes": 695473
+          },
+          {
+            "path": "prior-ui-proof/storybook-summary.json",
+            "sha256": "7bb9e8c02e5933c2cb8500aba8e4133891b878c5caf11911bbc81c1c9e8e3d1f",
+            "bytes": 3775
+          },
+          {
+            "path": "prior-ui-proof/storybook.log",
+            "sha256": "b04f2fe040cf6caa5fe0487dd0c268241106ad214662436d2792404faaab6381",
+            "bytes": 2864
+          },
+          {
+            "path": "prior-ui-proof/tsconfig.json",
+            "sha256": "49907915fed7961738e6b4cebdd25609da93422a39d2ac6be51f24c09175e6f5",
+            "bytes": 394
+          },
+          {
+            "path": "prior-ui-proof/ui-tsconfig.json",
+            "sha256": "4442cd3b52f6e5eb908380ae8d8d7af825387fca6e761289e4ac44b2986fbaa8",
+            "bytes": 194
+          },
+          {
+            "path": "prior-ui-proof/ui-typecheck.log",
+            "sha256": "aad322b766b527dfad1a00263c5099b11d22462415599f1378a4d7784609bccf",
+            "bytes": 439
+          },
+          {
+            "path": "prior-ui-proof/web-typecheck.log",
+            "sha256": "6cc5501e9aad6e31524992919829d39d995efed3dcb6fe2c74b8767935831d53",
+            "bytes": 272
+          },
+          {
+            "path": "screenshots/apps-web-features-work-work-detail.stories.tsx/Chinese.png",
+            "sha256": "e750e0f2a39a8f1e02397eb059d68fbd9bd8a350cd9c2fb5cd44232acfe1161c",
+            "bytes": 146696
+          },
+          {
+            "path": "screenshots/apps-web-features-work-work-detail.stories.tsx/Dark.png",
+            "sha256": "84cad701ef2b130c14063deb3bacc342cc52b65544f1326283ee9be2ceaabaff",
+            "bytes": 153171
+          },
+          {
+            "path": "screenshots/apps-web-features-work-work-detail.stories.tsx/Loading.png",
+            "sha256": "33c64b53117f93e61323de315b06be14c0dda468168dc55eff348dd908df4ab3",
+            "bytes": 12024
+          },
+          {
+            "path": "screenshots/apps-web-features-work-work-detail.stories.tsx/LongMultilingualTitle.png",
+            "sha256": "b2436279e191efb6fc71d9f3cdeac1beace4ea53e581e73fdc4bb0f25c55e5f6",
+            "bytes": 222174
+          },
+          {
+            "path": "screenshots/apps-web-features-work-work-detail.stories.tsx/NativePost.png",
+            "sha256": "5e3b44882f6a7262e9fa4ac1f9c8537b2bd326fc034861b2570458293e739679",
+            "bytes": 128729
+          },
+          {
+            "path": "screenshots/apps-web-features-work-work-detail.stories.tsx/NativePostPhone.png",
+            "sha256": "2da9cd9bc6ae2907d05b36bce978ad595bb7e962eff45aba01762fc2ef9c3ae0",
+            "bytes": 74199
+          },
+          {
+            "path": "screenshots/apps-web-features-work-work-detail.stories.tsx/NotFound.png",
+            "sha256": "c8f8a1baa6ee395c822cf21ecfed441a7782ae2f9d376d4de2dc2ba4856a6636",
+            "bytes": 19376
+          },
+          {
+            "path": "screenshots/apps-web-features-work-work-detail.stories.tsx/Phone.png",
+            "sha256": "231f655c348032fe391808e353abc2c36482f92972a80c341fab1e678e80bcdb",
+            "bytes": 112799
+          },
+          {
+            "path": "screenshots/apps-web-features-work-work-detail.stories.tsx/Standard.png",
+            "sha256": "d95b61aa3c1e72e9150ae59ff0b903f361951a4d02a264347179ffc5bd932ede",
+            "bytes": 157119
+          },
+          {
+            "path": "screenshots/apps-web-features-work-work-detail.stories.tsx/Unavailable.png",
+            "sha256": "96f1d13afc86e2d4dd0471f4f1b3a893a1af0cd40139e067892ac970feb7dc4d",
+            "bytes": 17579
+          },
+          {
+            "path": "screenshots-viewed.json",
+            "sha256": "a5087c33e23eca3543528745bfcbbe8709896500271bd0482af1c180c312a835",
+            "bytes": 924
+          },
+          {
+            "path": "storybook-results.json",
+            "sha256": "dacfbf39e8e74782927963321c9ae90a48198e9457f45fcb72c5539f9fac5fd8",
+            "bytes": 695520
+          },
+          {
+            "path": "storybook-summary.json",
+            "sha256": "2dafb0807e751595e5168a029f43bc50f027349f16dade579bd41b84e86928a7",
+            "bytes": 3775
+          },
+          {
+            "path": "storybook.log",
+            "sha256": "b6bcb45f1c01c63ed0d489ee10475524ee0234b87c4a18de7e3e798b9394e54e",
+            "bytes": 2894
+          },
+          {
+            "path": "typecheck.log",
+            "sha256": "f502f88d71f5bd4d3bfa5cb5ce70b04261d562b7a4e0c0ba383db51255202c9a",
+            "bytes": 441
+          },
+          {
+            "path": "ui-manifest.json",
+            "sha256": "b9d8d7429acc902a642cd6901196fbfc0c3da917c086569cbb054117d557144d",
+            "bytes": 3576
+          },
+          {
+            "path": "ui-two.patch",
+            "sha256": "752d860adb27da04dacda2edf05d3ef0075ec87e533bb1ab352e787f3244ea53",
+            "bytes": 7335
+          }
+        ]
+      }
+    },
+    "sourceReview": [
+      {
+        "path": "services/main/src/modules/work/history.ts",
+        "line": 402,
+        "owner": "G-2839",
+        "finding": "Native exact revision arm preserves its actual post-v1 identity and immutable custody.",
+        "reach": "readPostPayloadForRevision validates the existing verified object envelope, sole publisher and ordered unique-language labels (1..24), profile/model/shape and component. readExactWorkRevision retains current read authorization, erasure and ambiguous custody refusal, predecessor/source position and merge resolution. Native arm has no invented MainVersion or semanticTypes; metadata arm remains distinct.",
+        "minimalReproduction": "Read an authorized retained rv:Post post-v1 anchor: response contains profile, publisher and original ordered labels/title. Wrong bytes/component/shape, duplicate language, denied/erased or ambiguous custody refuse instead of returning a fake metadata revision.",
+        "result": "approved; owner proof covers both valid bytes and refusal cases"
+      },
+      {
+        "path": "services/main/src/routes/works.ts",
+        "line": 331,
+        "owner": "G-2839",
+        "finding": "The existing UUID exact-revision GET accepts native Post through the same protected read session.",
+        "reach": "Account work:read, graph admission and actual canReadWork remain. The exact retained read is observed and reread at session close; readPost checks current custody/privacy/Work authority and publisher against the retained manifest. Metadata readWorkHeader and synopsis/fact disclosure obligations remain on their original arm. Errors remain typed; denied/currently unavailable data is not returned from an old retained anchor.",
+        "minimalReproduction": "GET a retained native Post UUID revision as the authorized reader returns the post-v1 arm. Deny current custody or revoke on closing reread: no hidden title is returned and the bounded route test receives 404. The page still passes the real UUID revision prop.",
+        "result": "approved; source supports the previously missing native GET, without claiming genuine callback 102 now passed"
+      },
+      {
+        "path": "services/main/src/modules/work/edit.ts",
+        "line": 258,
+        "owner": "G-2839",
+        "finding": "Title-only Post correction preserves publisher, other labels, identity, history and exact receipt semantics.",
+        "reach": "Native Post is selected only with rv:Post, no MainVersion/scalar, exact post-v1 anchor, one retained publisher and bounded labels. Current graph labels/publisher must equal the verified immutable prior state. Only the primary label value changes; language/order and all other labels/publisher are retained. Metadata Work keeps its MainVersion/profile/semantic-type/scalar path. MAX_WORK_SEMANTIC_TYPES=3 keeps metadata query rows below the new bounded LIMIT 25.",
+        "finalFences": "Native validation, lineage/routing/data epoch/restore hold, expected head, current Post type and publisher, primary language, unerased state, title-control absence and receipt absence remain in final graph CAS. A new immutable manifest points to the predecessor. Durable terminal receipt resolves lost response, same-key replay and stale head; changed intent conflicts.",
+        "minimalReproduction": "Correct native Post primary title with an exact expected head and new key; read old and new immutable snapshots, replay same key, then reuse it with changed intent or use a stale head. Publisher/secondary label and old snapshot must remain; changed key intent and stale head must refuse.",
+        "result": "approved; bounded owner proof exercises snapshots, replay, stale and final erasure/title-control races"
+      },
+      {
+        "path": "services/main/src/modules/work/edit-admitted.ts",
+        "line": 141,
+        "owner": "G-2839",
+        "finding": "The native dispatch callback holds actual current Access authority and the exact saved claim through commit.",
+        "reach": "Public admitted edit still verifies work:edit, registers/claims the original scope/digest, and checks terminal receipt work/predecessor/admission/epoch. Native callback requires withOwnerAuthority and fenceClaim, rechecks the existing live admission policy and fences that original claim on the same SQL client before native commit. Denied, expired or missing final fence errors are not converted to successful or unknown receipts.",
+        "actualDependencyInspection": "Inspected actual AccessAdmissionRegistry.withOwnerAuthority/registerRequest (admission.ts:1221,1251,1561,1727), saved-claim fence and withCommandOwnerAuthority (editorial-review/admission.ts:114), not only the test double. Ordinary work:edit uses its existing author baseline/controller or explicit represented authority, and saved claim remains authoritative. No frontend ownership grant or new authority policy introduced.",
+        "minimalReproduction": "Foreign actor or revoked final authority refuses. Same-key exact receipt replays; changed intent conflicts. Final title-control/erasure race emits no success receipt.",
+        "result": "approved; owner test uses bounded external graph/Access doubles, not a genuine principal/native runtime"
+      },
+      {
+        "path": "apps/web/features/work/work-detail.tsx",
+        "line": 13,
+        "owner": "manager bounded UI composition (62368e3f)",
+        "finding": "The visible exact-revision consumer handles the actual native union without a fake MainVersion adapter.",
+        "reach": "WorkRevisionDetail separates mainVersion metadata from profile post-v1 with revision. Native revision displays actual Work/revision identity and common title/language/operation/source position; metadata-only perspective/tab/MainVersion/help remain only for their actual arm. Shared details preserve previous metadata behavior. Current route page retains its UUID revision prop and authorized API read.",
+        "minimalReproduction": "Open a native Post exact revision at desktop or 390px phone: identifiers wrap, no MainVersion/perspective/tab is invented. Open a metadata revision: original MainVersion/tab/perspective/help remain.",
+        "result": "approved; real combined API/page/discussion compilation and actual desktop/phone screenshots inspected"
+      },
+      {
+        "path": "apps/web/features/work/work-detail.stories.tsx",
+        "line": 33,
+        "owner": "manager bounded UI composition (62368e3f)",
+        "finding": "Two meaningful native Post states join eight unchanged metadata/recovery stories.",
+        "reach": "NativePost and NativePostPhone use real post-v1 shape, exact identifiers and viewport sizes; assert heading/details, absence of metadata-only controls and document overflow. Existing stories and independent genuine assertions were not rewritten.",
+        "result": "10/10 actual Storybook cases passed with zero a11y violations; screenshots personally viewed"
+      }
+    ],
+    "settledContracts": {
+      "retained": "Work Structure removal, Content qualification withdrawal, Work publication withdrawal and owned Post/reply placement withdrawal remain distinct. Existing correction/qualificationWithdrawal/placementWithdrawal contracts, independent supports, native identity/history, immutable bodies, content rights/disclosure/erasure and final authority fences are not reauthored.",
+      "priorReviewsReused": "Original author55/backend and UI b840, pool repair, opener20b62, header72 and the previously approved five-path AMGT01 source remain retained. Their historical decisions and failures below the existing report fields are untouched; this review adds only the new nine-path native repair/consumer verdict."
+    },
+    "evidenceReuse": {
+      "method": "All 71 supplied evidence files independently SHA256 verified and retained privately. Actual immutable production/test blobs, dependency/runner equivalence, report logs and source reach checked before reuse. No unchanged suite rerun.",
+      "owner": {
+        "reexecuted": false,
+        "check": {
+          "job": "ed6db85e-0b4c-4e33-9b70-eea47983811d",
+          "qa": "20261019t162024-271345",
+          "command": "bun scripts/goal/goalctl.ts test services/main/tests/revision-read.test.ts services/main/tests/author-lifecycle-post-edit.test.ts",
+          "result": "passed bounded owner tests",
+          "counts": {
+            "passed": 10,
+            "failed": 0,
+            "assertions": 110
+          },
+          "sourceBase": "a4be518b049bbcd4a5a79cea44867bd62e03b828",
+          "dirtyDigest": "15982ee6d372",
+          "log": ".artifacts/qa/20261019t162024-271345/logs/owner.log",
+          "acceptanceIdsClosed": 0
+        },
+        "cases": [
+          {
+            "file": "services/main/tests/revision-read.test.ts",
+            "case": "configured Work revision reader uses verified object-store bytes without a local mirror"
+          },
+          {
+            "file": "services/main/tests/revision-read.test.ts",
+            "case": "configured Work revision reader rejects wrong bytes even if a local copy is valid"
+          },
+          {
+            "file": "services/main/tests/revision-read.test.ts",
+            "case": "configured Work revision reader retains verified directory revisions"
+          },
+          {
+            "file": "services/main/tests/revision-read.test.ts",
+            "case": "native Post exact history reads the actual publisher/labels manifest without inventing a MainVersion"
+          },
+          {
+            "file": "services/main/tests/revision-read.test.ts",
+            "case": "native Post exact history refuses denied, erased, ambiguous and mismatched revision custody"
+          },
+          {
+            "file": "services/main/tests/author-lifecycle-post-edit.test.ts",
+            "case": "same-identity native Post title edit retains post-v1 custody and old/new exact snapshots with replay and stale-head refusal"
+          },
+          {
+            "file": "services/main/tests/author-lifecycle-post-edit.test.ts",
+            "case": "ordinary metadata Work title correction retains its MainVersion, optional metadata and existing profile validations"
+          },
+          {
+            "file": "services/main/tests/author-lifecycle-post-edit.test.ts",
+            "case": "native Post exact revision HTTP reads current custody and closes the retained read and authority fences"
+          },
+          {
+            "file": "services/main/tests/author-lifecycle-post-edit.test.ts",
+            "case": "native Post admitted correction uses current author and final claim, replays the exact receipt and refuses changed intent"
+          },
+          {
+            "file": "services/main/tests/author-lifecycle-post-edit.test.ts",
+            "case": "native Post edit refuses corrupt/mismatched custody before dispatch and final title-control or erasure races without a success receipt"
+          }
+        ],
+        "equivalence": {
+          "authoredCommit": "abe8928202cdae790cb7bd619b9a6d8952946aa9",
+          "rebasedCommit": "50a551eba5b30230775cb42e94cdb7339bdd14cc",
+          "allSixTypeScriptBlobsEqual": true,
+          "generatedAuthoredCommit": "34dbbec95b48792631657e00565320ace2b0fa42",
+          "generatedRebasedCommit": "e2f500f21aa4a4ad7bf609372092f6eccad97d06",
+          "generatedBlobEqual": true,
+          "onlyChangeAfterPassingOwnerProof": "Remove unused type-only FusekiClient import from the owner fixture; test bodies and production source unchanged.",
+          "compositionRebase": "21359d5b job rebased onto 2ae2f508; only new inherited Main source was composition.ts and its existing Source-native-owner test. Main types refreshed on final head."
+        },
+        "allSevenBackendPostimagesExactOwnerCommit": true,
+        "scope": "Bounded owner behavior using actual production handlers/immutable objects and external graph/Access doubles. Original genuine AMGT01 remains separate; no acceptance closure."
+      },
+      "ownerAssertionEquivalence": [
+        {
+          "path": "services/main/src/modules/work/edit-admitted.ts",
+          "authored": {
+            "source": "abe8928202cdae790cb7bd619b9a6d8952946aa9",
+            "path": "services/main/src/modules/work/edit-admitted.ts",
+            "gitBlob": "2622562ffdfe2d6c766444f965482907b0ba5301",
+            "sha256": "16b8b104f56d64f1ce45aedd44ed5f9d464caa37e3fad585996d92328c164e8f"
+          },
+          "combined": {
+            "source": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+            "path": "services/main/src/modules/work/edit-admitted.ts",
+            "gitBlob": "2622562ffdfe2d6c766444f965482907b0ba5301",
+            "sha256": "16b8b104f56d64f1ce45aedd44ed5f9d464caa37e3fad585996d92328c164e8f"
+          },
+          "byteExact": true,
+          "onlyUnusedTypeImportRemoved": false
+        },
+        {
+          "path": "services/main/src/modules/work/edit.ts",
+          "authored": {
+            "source": "abe8928202cdae790cb7bd619b9a6d8952946aa9",
+            "path": "services/main/src/modules/work/edit.ts",
+            "gitBlob": "6dc73dc20221d6360b23d82c0c37fd70a5d51f75",
+            "sha256": "30eb7544cc79e01a51776047ecb01d8dfa0ff20f1acd62d6c21c3e48a35cff61"
+          },
+          "combined": {
+            "source": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+            "path": "services/main/src/modules/work/edit.ts",
+            "gitBlob": "6dc73dc20221d6360b23d82c0c37fd70a5d51f75",
+            "sha256": "30eb7544cc79e01a51776047ecb01d8dfa0ff20f1acd62d6c21c3e48a35cff61"
+          },
+          "byteExact": true,
+          "onlyUnusedTypeImportRemoved": false
+        },
+        {
+          "path": "services/main/src/modules/work/history.ts",
+          "authored": {
+            "source": "abe8928202cdae790cb7bd619b9a6d8952946aa9",
+            "path": "services/main/src/modules/work/history.ts",
+            "gitBlob": "2c4141692f9b69402d0575244d9a96989d0366f6",
+            "sha256": "c2b5dff60b79d5b2d3f98152c8e1fe4771829717a800d55a52cb96e0094db12c"
+          },
+          "combined": {
+            "source": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+            "path": "services/main/src/modules/work/history.ts",
+            "gitBlob": "2c4141692f9b69402d0575244d9a96989d0366f6",
+            "sha256": "c2b5dff60b79d5b2d3f98152c8e1fe4771829717a800d55a52cb96e0094db12c"
+          },
+          "byteExact": true,
+          "onlyUnusedTypeImportRemoved": false
+        },
+        {
+          "path": "services/main/src/routes/works.ts",
+          "authored": {
+            "source": "abe8928202cdae790cb7bd619b9a6d8952946aa9",
+            "path": "services/main/src/routes/works.ts",
+            "gitBlob": "4da46321a02088671bfaa1c210313b9e4bfa5782",
+            "sha256": "c2320fdce5e7c015b9fb3378bf939d5bf35543b3e93e9392dfc8850ff28df15a"
+          },
+          "combined": {
+            "source": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+            "path": "services/main/src/routes/works.ts",
+            "gitBlob": "4da46321a02088671bfaa1c210313b9e4bfa5782",
+            "sha256": "c2320fdce5e7c015b9fb3378bf939d5bf35543b3e93e9392dfc8850ff28df15a"
+          },
+          "byteExact": true,
+          "onlyUnusedTypeImportRemoved": false
+        },
+        {
+          "path": "services/main/tests/author-lifecycle-post-edit.test.ts",
+          "authored": {
+            "source": "abe8928202cdae790cb7bd619b9a6d8952946aa9",
+            "path": "services/main/tests/author-lifecycle-post-edit.test.ts",
+            "gitBlob": "dd5e95f8d19e3c2d84b9402159ae2cd7d412501c",
+            "sha256": "0557a6c5bed3a9844ddd2bfc694d395f2e52d9ddad740b04f41a0c6a73e328a3"
+          },
+          "combined": {
+            "source": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+            "path": "services/main/tests/author-lifecycle-post-edit.test.ts",
+            "gitBlob": "3c7795a6bfe9d9c09d1ef9c461ccd1d315b72780",
+            "sha256": "1e3ccd822d9be6da6cb09261e1236af0da5a27a224a9b5383ee1bcbf9a238357"
+          },
+          "byteExact": false,
+          "onlyUnusedTypeImportRemoved": true
+        },
+        {
+          "path": "services/main/tests/revision-read.test.ts",
+          "authored": {
+            "source": "abe8928202cdae790cb7bd619b9a6d8952946aa9",
+            "path": "services/main/tests/revision-read.test.ts",
+            "gitBlob": "a49636e1fb766be2fbf5767e56f6adbb4185e0fa",
+            "sha256": "c845f8202a53f5c23f03e29b1e97778de81971d017d2703d980d38a9e56253c6"
+          },
+          "combined": {
+            "source": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+            "path": "services/main/tests/revision-read.test.ts",
+            "gitBlob": "a49636e1fb766be2fbf5767e56f6adbb4185e0fa",
+            "sha256": "c845f8202a53f5c23f03e29b1e97778de81971d017d2703d980d38a9e56253c6"
+          },
+          "byteExact": true,
+          "onlyUnusedTypeImportRemoved": false
+        }
+      ],
+      "ownerCheckHistory": [
+        {
+          "job": "5ddbc132-01fc-4e48-a5bb-b68a77c7f14a",
+          "qa": "20261019t161236-67d663",
+          "result": "failed assertions (expected red reproduction)",
+          "counts": {
+            "passed": 4,
+            "failed": 2,
+            "assertions": 27
+          },
+          "failures": [
+            "Actual native Post exact revision rejects its native profile as incomplete anchor.",
+            "Actual native Post edit rejects the missing metadata Work MainVersion/profile."
+          ]
+        },
+        {
+          "job": "277d893c-97a8-417b-929c-4c9852eba425",
+          "qa": "20261019t161726-0208f1",
+          "result": "failed fixture query admission; retained historical run",
+          "counts": {
+            "passed": 6,
+            "failed": 2,
+            "assertions": 47
+          },
+          "correction": "Graph double recognized actual full-IRI titleControlHead ASK, preserving all assertions."
+        },
+        {
+          "job": "ed6db85e-0b4c-4e33-9b70-eea47983811d",
+          "qa": "20261019t162024-271345",
+          "command": "bun scripts/goal/goalctl.ts test services/main/tests/revision-read.test.ts services/main/tests/author-lifecycle-post-edit.test.ts",
+          "result": "passed bounded owner tests",
+          "counts": {
+            "passed": 10,
+            "failed": 0,
+            "assertions": 110
+          },
+          "sourceBase": "a4be518b049bbcd4a5a79cea44867bd62e03b828",
+          "dirtyDigest": "15982ee6d372",
+          "log": ".artifacts/qa/20261019t162024-271345/logs/owner.log",
+          "acceptanceIdsClosed": 0
+        },
+        {
+          "job": "92e1731f-1da2-478f-914d-8bca017202a2",
+          "result": "generation and Main types passed; Web types failed; later sequence lint step not run",
+          "mainTypeFiles": 2783,
+          "failure": "Web exact Work renderer requires MainVersion on newly recognized native Post union; inherited discussion fixture kind also absent in this snapshot."
+        },
+        {
+          "job": "21359d5b-dd48-4e5a-b54f-62aaa34a1cef",
+          "result": "AST and guards passed; lint failed on unused type-only import",
+          "astSeconds": 1.2,
+          "guardSelection": "32/45",
+          "guardSeconds": 51.7,
+          "guardTimeoutRetriesPassed": [
+            "scripts/static/access-fixture-writes.test.ts",
+            "scripts/static/web-accepted-commands.test.ts",
+            "tests/qa/unit/acceptance.test.ts"
+          ],
+          "log": ".temp/goal/check/run-FPjwDr/output.log"
+        },
+        {
+          "job": "bd2527ae-90a4-4d68-8deb-48ad59389e22",
+          "result": "harness stopped before lint on automatic rebase conflict in pre-existing work-activity-discussion.test.ts; rebase undone, candidate unchanged"
+        },
+        {
+          "job": "98634f6b-36d7-4a5e-9b82-8fc848357861",
+          "command": "task goal -- slot -- node_modules/.bin/oxlint <same 13 source files selected by prior worker check>",
+          "result": "passed; normal Task/admission slot, no currency/admission bypass"
+        },
+        {
+          "job": "5a613d67-66d6-47d0-810e-ddda704ab838",
+          "command": "task goal:type-files -- --project services/main/tsconfig.json",
+          "result": "passed final Main types",
+          "mainTypeFiles": 2784
+        }
+      ],
+      "combinedActualChecks": [
+        {
+          "command": "task goal:type-files -- -p .temp/native-post-combined-compatibility/tsconfig.json",
+          "status": "passed",
+          "exitCode": 0,
+          "files": 1839,
+          "seconds": 9.06,
+          "log": "typecheck.log",
+          "scope": "Actual combined @rezics/main/app; real exact revision route page, changed WorkDetail/stories, current discussion fixture/stories and imported closure. Native arm exists, is not any, lacks mainVersion and full response union assigns to WorkRevisionDetail.",
+          "sourceCommit": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+          "sourceTree": "0fd2ee925bc3c123b0ccb1f87ddc2c839c3d9c82",
+          "logSha256": "f502f88d71f5bd4d3bfa5cb5ce70b04261d562b7a4e0c0ba383db51255202c9a",
+          "actualConfiguration": "/home/edge/projects/rezics/rezics-next/.temp/site-native-post-combined-candidate/.temp/native-post-combined-compatibility/tsconfig.json",
+          "configurationSha256": "48d04afeca290c56156099424d59f42729b024194b2f0b194c27106f660a5c91",
+          "contractAssertionsSha256": "5fe54b3a202fe73c15f80ce1e90f4dace892ee2e9d186f5090b31ac61b28fe66"
+        },
+        {
+          "command": "REZICS_STORY_SCREENSHOTS_DIR=<evidence>/screenshots STORYBOOK_MAX_WORKERS=1 task storybook:test -- ../../apps/web/features/work/work-detail.stories.tsx --reporter=verbose --reporter=json --outputFile=<evidence>/storybook-results.json",
+          "status": "passed",
+          "exitCode": 0,
+          "testsPassed": 10,
+          "testsFailed": 0,
+          "seconds": 23.44,
+          "log": "storybook.log",
+          "report": "storybook-results.json",
+          "summary": "storybook-summary.json",
+          "screenshotsActuallyViewed": "screenshots-viewed.json",
+          "sourceCommit": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+          "sourceTree": "0fd2ee925bc3c123b0ccb1f87ddc2c839c3d9c82",
+          "logSha256": "b6bcb45f1c01c63ed0d489ee10475524ee0234b87c4a18de7e3e798b9394e54e",
+          "reportSha256": "dacfbf39e8e74782927963321c9ae90a48198e9457f45fcb72c5539f9fac5fd8"
+        },
+        {
+          "command": "git diff --cached --check (before immutable commit)",
+          "status": "passed",
+          "exitCode": 0
+        },
+        {
+          "command": "task goal:type-files -- -p .temp/native-post-api-compatibility/ui-tsconfig.json",
+          "status": "passed",
+          "exitCode": 0,
+          "files": 26,
+          "seconds": 0.392,
+          "source": "UI62368e3f on475c770b",
+          "log": "prior-ui-proof/ui-typecheck.log"
+        },
+        {
+          "command": "task goal:type-files -- -p .temp/native-post-api-compatibility/tsconfig.json",
+          "status": "passed",
+          "exitCode": 0,
+          "files": 1645,
+          "seconds": 11.41,
+          "source": "UI62368e3f + read-only actual API source abe8928202cdae790cb7bd619b9a6d8952946aa9",
+          "log": "prior-ui-proof/new-api-typecheck.log"
+        },
+        {
+          "command": "task goal:type-files -- -p .temp/native-post-api-compatibility/baseline-tsconfig.json",
+          "status": "expected-red control",
+          "exitCode": 201,
+          "diagnostics": 1,
+          "scope": "Original WorkDetail rejects actual new API union: native Post has no mainVersion. No other diagnostics.",
+          "log": "prior-ui-proof/new-api-baseline-typecheck.log"
+        },
+        {
+          "command": "task web:typecheck",
+          "status": "cancelled before compiler",
+          "exitCode": 201,
+          "scope": "Waited for normal large admission then cancelled own Task/flock before compiler started; replaced with admitted scoped checks. Not a typecheck pass/failure.",
+          "log": "prior-ui-proof/web-typecheck.log"
+        },
+        {
+          "command": "Initial Storybook through root node_modules symlink",
+          "status": "harness setup failed before tests",
+          "exitCode": 201,
+          "scope": "Private worktree setup module resolution failure; replaced symlink with dependency-compatible private reflink copy, then UI and combined Storybook both passed.",
+          "log": "prior-ui-proof/storybook-attempt-1.log"
+        }
+      ],
+      "storybook": {
+        "success": true,
+        "testsPassed": 10,
+        "testsFailed": 0,
+        "stories": [
+          {
+            "title": "Standard",
+            "status": "passed",
+            "storyId": "work-exact-revision--standard",
+            "a11y": [
+              {
+                "width": 1200,
+                "height": 900,
+                "violations": 0,
+                "engine": {
+                  "name": "axe-core",
+                  "version": "4.13.0"
+                },
+                "status": "passed"
+              }
+            ]
+          },
+          {
+            "title": "Native Post",
+            "status": "passed",
+            "storyId": "work-exact-revision--native-post",
+            "a11y": [
+              {
+                "width": 1440,
+                "height": 1000,
+                "violations": 0,
+                "engine": {
+                  "name": "axe-core",
+                  "version": "4.13.0"
+                },
+                "status": "passed"
+              }
+            ]
+          },
+          {
+            "title": "Native Post Phone",
+            "status": "passed",
+            "storyId": "work-exact-revision--native-post-phone",
+            "a11y": [
+              {
+                "width": 390,
+                "height": 844,
+                "violations": 0,
+                "engine": {
+                  "name": "axe-core",
+                  "version": "4.13.0"
+                },
+                "status": "passed"
+              }
+            ]
+          },
+          {
+            "title": "Long Multilingual Title",
+            "status": "passed",
+            "storyId": "work-exact-revision--long-multilingual-title",
+            "a11y": [
+              {
+                "width": 1200,
+                "height": 900,
+                "violations": 0,
+                "engine": {
+                  "name": "axe-core",
+                  "version": "4.13.0"
+                },
+                "status": "passed"
+              }
+            ]
+          },
+          {
+            "title": "Chinese",
+            "status": "passed",
+            "storyId": "work-exact-revision--chinese",
+            "a11y": [
+              {
+                "width": 1200,
+                "height": 900,
+                "violations": 0,
+                "engine": {
+                  "name": "axe-core",
+                  "version": "4.13.0"
+                },
+                "status": "passed"
+              }
+            ]
+          },
+          {
+            "title": "Dark",
+            "status": "passed",
+            "storyId": "work-exact-revision--dark",
+            "a11y": [
+              {
+                "width": 1200,
+                "height": 900,
+                "violations": 0,
+                "engine": {
+                  "name": "axe-core",
+                  "version": "4.13.0"
+                },
+                "status": "passed"
+              }
+            ]
+          },
+          {
+            "title": "Phone",
+            "status": "passed",
+            "storyId": "work-exact-revision--phone",
+            "a11y": [
+              {
+                "width": 390,
+                "height": 844,
+                "violations": 0,
+                "engine": {
+                  "name": "axe-core",
+                  "version": "4.13.0"
+                },
+                "status": "passed"
+              }
+            ]
+          },
+          {
+            "title": "Unavailable",
+            "status": "passed",
+            "storyId": "work-exact-revision--unavailable",
+            "a11y": [
+              {
+                "width": 1200,
+                "height": 900,
+                "violations": 0,
+                "engine": {
+                  "name": "axe-core",
+                  "version": "4.13.0"
+                },
+                "status": "passed"
+              }
+            ]
+          },
+          {
+            "title": "Not Found",
+            "status": "passed",
+            "storyId": "work-exact-revision--not-found",
+            "a11y": [
+              {
+                "width": 1200,
+                "height": 900,
+                "violations": 0,
+                "engine": {
+                  "name": "axe-core",
+                  "version": "4.13.0"
+                },
+                "status": "passed"
+              }
+            ]
+          },
+          {
+            "title": "Loading",
+            "status": "passed",
+            "storyId": "work-exact-revision--loading",
+            "a11y": [
+              {
+                "width": 1200,
+                "height": 900,
+                "violations": 0,
+                "engine": {
+                  "name": "axe-core",
+                  "version": "4.13.0"
+                },
+                "status": "passed"
+              }
+            ]
+          }
+        ]
+      },
+      "storybookReach": "10 cases total: Standard, NativePost, NativePostPhone, LongMultilingualTitle, Chinese, Dark, Phone, Unavailable, NotFound and Loading. Actual combined source 88c927/tree0fd2. Axe 4.13.0 reports zero violations for each. Controlled component transport/state evidence, not genuine backend acceptance.",
+      "screenshotsPersonallyViewed": [
+        {
+          "path": ".temp/native-post-first-review/evidence/screenshots/apps-web-features-work-work-detail.stories.tsx/NativePost.png",
+          "sha256": "5e3b44882f6a7262e9fa4ac1f9c8537b2bd326fc034861b2570458293e739679",
+          "width": 1440,
+          "height": 1000,
+          "actuallyViewedByG2851": true,
+          "source": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+          "tree": "0fd2ee925bc3c123b0ccb1f87ddc2c839c3d9c82"
+        },
+        {
+          "path": ".temp/native-post-first-review/evidence/screenshots/apps-web-features-work-work-detail.stories.tsx/NativePostPhone.png",
+          "sha256": "2da9cd9bc6ae2907d05b36bce978ad595bb7e962eff45aba01762fc2ef9c3ae0",
+          "width": 390,
+          "height": 844,
+          "actuallyViewedByG2851": true,
+          "source": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+          "tree": "0fd2ee925bc3c123b0ccb1f87ddc2c839c3d9c82"
+        },
+        {
+          "path": ".temp/native-post-first-review/evidence/screenshots/apps-web-features-work-work-detail.stories.tsx/Standard.png",
+          "sha256": "d95b61aa3c1e72e9150ae59ff0b903f361951a4d02a264347179ffc5bd932ede",
+          "width": 1200,
+          "height": 900,
+          "actuallyViewedByG2851": true,
+          "source": "88c927318c5dab2bafe47921ca6f9ae2efe08d31",
+          "tree": "0fd2ee925bc3c123b0ccb1f87ddc2c839c3d9c82"
+        }
+      ],
+      "visualObservations": [
+        {
+          "path": "screenshots/apps-web-features-work-work-detail.stories.tsx/NativePost.png",
+          "actualView": "functions tools.view_image then image output, inspected by agent",
+          "finding": "1440x1000: native title, revision ID and details legible; no Main Version tab/row/help, clipping or overflow."
+        },
+        {
+          "path": "screenshots/apps-web-features-work-work-detail.stories.tsx/NativePostPhone.png",
+          "actualView": "functions tools.view_image then image output, inspected by agent",
+          "finding": "390x844: title and full identifiers wrap inside viewport; all details visible; no Main Version tab/row/help."
+        },
+        {
+          "path": "screenshots/apps-web-features-work-work-detail.stories.tsx/Standard.png",
+          "actualView": "functions tools.view_image then image output, inspected by agent",
+          "finding": "1200x900: existing metadata title, Main Version tab/row/perspective and metadata help retained."
+        }
+      ],
+      "retainedWarnings": "Successful Storybook log retains Vite CJS/configLoader and missing @storybook/react-dom-shim optimizeDeps warnings. Earlier symlink resolution harness failure ran no story, and cancelled broad web check reached no compiler; neither is relabeled green.",
+      "historicalFailuresPreserved": "Owner expected red 4PASS/2FAIL/27 assertions and intermediate fixture 6PASS/2FAIL/47 assertions remain. Generation/Main types passed while old UI/new union and old discussion fixture failed Web; later lint step did not run. AST/guards passed with three timeout-only retries; unused type import lint failure, rebase harness conflict, then corrected lint and final Main types remain distinct. Prior full-native ranked deadline failure is unchanged historical evidence.",
+      "priorPassingProofNotReexecuted": "Retained original 21 stories QA20261019t093745-297783, 9 UI units/49 assertions, author18, backend51, pool10 and native7 at their already-recorded exact pins. This cut changes no original author menu/recovery stories; native7 remains historical unchanged-source evidence, not a new image/native run.",
+      "missingAffectedCheck": "None identified after source/runner equivalence, actual 10 owner tests/110 assertions, combined1839-file API/page/discussion compile and 10 actual WorkDetail stories. No fullweb/fullnative/full-domain rerun authorized or needed.",
+      "affectedOutsideClaimNotRun": [
+        "services/main/tests/edit.integration.test.ts",
+        "services/main/tests/immutable-objects.integration.test.ts",
+        "services/main/tests/owner-recovery-cache.test.ts",
+        "services/main/tests/outbox.integration.test.ts",
+        "services/main/tests/recovery.integration.test.ts",
+        "services/main/tests/work-current-head-scalar.test.ts"
+      ]
+    },
+    "nativePins": {
+      "inputCount": 475,
+      "inputDigest": "1184c9cbf79dfae63cad3f26481547b2bdd05ef432a8d9ce517a545ee153215a",
+      "sources": [
+        "a4be518b049bbcd4a5a79cea44867bd62e03b828",
+        "39a6072e53b4f3dade3b34cd2e6d250b1cec79f0",
+        "49c33b1c0b3333d084d6dd4e5853ccdb7ef10a79",
+        "88c927318c5dab2bafe47921ca6f9ae2efe08d31"
+      ],
+      "sourceDigests": {
+        "a4be518b049bbcd4a5a79cea44867bd62e03b828": "dc638e3d37eff679185f295e72dfa7c231fd0fa59dc359f0c744b918007c411d",
+        "39a6072e53b4f3dade3b34cd2e6d250b1cec79f0": "dc638e3d37eff679185f295e72dfa7c231fd0fa59dc359f0c744b918007c411d",
+        "49c33b1c0b3333d084d6dd4e5853ccdb7ef10a79": "1184c9cbf79dfae63cad3f26481547b2bdd05ef432a8d9ce517a545ee153215a",
+        "88c927318c5dab2bafe47921ca6f9ae2efe08d31": "1184c9cbf79dfae63cad3f26481547b2bdd05ef432a8d9ce517a545ee153215a"
+      },
+      "ownerBaseAndFinalInputsByteEqual": true,
+      "combinedBaseAndFinalInputsByteEqual": true,
+      "inheritedDifferencesFromOwner": [
+        {
+          "path": "infra/jena/command-module/src/main/java/com/rezics/jena/SearchDeltaJournal.java",
+          "ownerSha256": "640b2e217a8b37a2e9ebcfc29dd47cff043b9d963615e736bc39d09fd6a44710",
+          "combinedSha256": "45f15213d26830a119d03769d265717e293735338352a5862f754d33cc498e50"
+        },
+        {
+          "path": "infra/jena/command-module/src/test/java/com/rezics/jena/ContentQualificationMaintenanceTest.java",
+          "ownerSha256": "25c221a70b95eeca7d93e616993b1382e076f2cb1036d1b171c923d21fb6af05",
+          "combinedSha256": "9f12a1df90644386ca21eb39b5ab8d86a319ef8958513864e5273ca34b0983fd"
+        }
+      ],
+      "ownerTag": "rezics/fuseki:6.2.0-cmd0.5.43-dc638e3d37ef",
+      "ownerImageId": "sha256:930e00693c1b99199200cbffe9a4c869277b632e372bb48176d66925f7e404b4",
+      "combinedDerivedTag": "rezics/fuseki:6.2.0-cmd0.5.43-1184c9cbf79d",
+      "combinedImageId": null,
+      "imageInspectionEvidence": "Retained owner image packet only; combined derived input pin is independently computed. No new build, Docker inspection or native test.",
+      "fullInputManifest": {
+        "path": ".temp/native-post-first-review/independent-evidence-verification.json",
+        "sha256": "6feb821b0dfd66f0d0c6691078ababb0008f9bc5a856eb93555c91a38ce33552",
+        "bytes": 105665
+      },
+      "ownerNativeProof": {
+        "path": ".temp/goal/amgt01-native-post-native-dependency.json",
+        "sha256": "abac70621ee102a4077584d33ced4db3592c2759345e7c8c8a2f13718454b0a3",
+        "inputCount": 475,
+        "inputDigest": "dc638e3d37eff679185f295e72dfa7c231fd0fa59dc359f0c744b918007c411d",
+        "tag": "rezics/fuseki:6.2.0-cmd0.5.43-dc638e3d37ef",
+        "base": "a4be518b049bbcd4a5a79cea44867bd62e03b828",
+        "allInputBytesEqualBase": true,
+        "differencesFromBase": [],
+        "imageId": "sha256:930e00693c1b99199200cbffe9a4c869277b632e372bb48176d66925f7e404b4",
+        "imageInspectError": null,
+        "changesByThisDelta": [],
+        "availability": "Existing local image inspected by immutable image ID; no build, native batch or runtime preparation performed for this cut.",
+        "historicalNativeTests": "Unchanged historical seven native tests retained; no claim those older image pins prove genuine runtime acceptance of this new TypeScript owner repair."
+      },
+      "interpretation": "Owner source/base match all 475 inputs of dc638e3d37ef. Combined base49c33 and candidate88c927 independently match all 475 inputs of 1184c9cbf79d. Two inherited Java input differences are dependencies outside this nine-path cut, not new changes by it. The owner image ID is not the combined candidate image ID. No new image inspection/build/native run performed.",
+      "verificationCorrection": "The private equivalence helper initially assumed all four source pins had identical native inputs and stopped at combined base49c33. Independent enumeration found the two inherited differences recorded here; the corrected helper retains both owner base/final and combined base/final equality checks. No product guard, outcome assertion or failing evidence changed."
+    },
+    "originalAcceptance": {
+      "canonical": {
+        "id": "D2-004",
+        "status": "open",
+        "record": ".temp/site-audit-2026-10-18/round-3/all-findings.json",
+        "originalClauses": [
+          "作者能在已发布章节的正常界面发现撤回公开发布，确认影响并得到回执；刷新及另一账号阅读/搜索视图都反映撤回，同时保留草稿和权属。",
+          "Work 结构撤回、Content 公开资格撤回、帖子删除分别有准确的契约与授权，不能用删除未发布草稿代替撤回公开内容。",
+          "用真实自有已发布帖子和嵌套回复完成更正、取消更正、删除/撤回、重试与刷新；作者操作位于对象自己的 ⋯ 中，其他人的对象没有这些权限。"
+        ]
+      },
+      "productAudit": "Read the original canonical three clauses and applied the lifecycle/custody principle only to the new native GET/edit/union seam. Source repair and controlled stories cannot establish genuine own-object correction/cancel/withdrawal/retry/refresh or another reader/search outcome. No six-persona/full-Studio/full-catalogue requirement added.",
+      "originalGenuineWitness": {
+        "testAndSupport": "9da346a1ec56a7dc2417cb0a8662c2dea8b16900",
+        "testSha256": "d9e9270968dd6c6c591edaa5fdc6d30cedb54b36eb86611cd60d4359489cec09",
+        "product": "3d6097238d9bc63de4da2b8fb797774a3da31df2",
+        "handoff": ".temp/worktrees/g-2776/.temp/author-management-proof/AMGT01-witness-handoff.json",
+        "reach": "All ten original callback bodies reached in the retained genuine witness. Visitor callback91 and republish183 completed there only; eight other bodies failed in four groups. No original callback rerun or new reached assertion claimed in this source review.",
+        "failureGroupsRetained": [
+          "Foreign-author reply correction refusal failed at original83 for stranger/member/moderator/operator; previous accepted author check addresses this source group, not a new runtime pass.",
+          "Owner original102 native chapter post-v1 exact revision GET returned404 revision_unavailable. Original owner did not reach metadata edit POST at131. This new native revision/edit source addresses the missing support; new owner units do not establish genuine original owner acceptance.",
+          "Qualification/distinct-withdrawal callbacks received generic content_conflict instead of stale_eligibility_head; prior typed adapter source approval remains separate from runtime proof.",
+          "Placement first short-UUID GET failed; retained actual witness was400 invalid_request, despite manager shorthand404. Prior path adapter source approval does not alter that historical failure."
+        ]
+      },
+      "newGenuineOutcomesReached": [],
+      "remaining": [
+        "On compatible admitted backend/native pins, a real owned published chapter has discoverable withdrawal, confirmation/acknowledgement, refreshed and another reader/search withdrawal while draft and ownership remain.",
+        "Verify the settled distinct Structure, qualification, publication and owned Post/reply placement contracts through genuine operations; preserve their authority boundaries.",
+        "Complete genuine owned published Post/nested-reply correction, cancel, withdrawal, retry and refresh through each object own menu, without foreign-author powers."
+      ],
+      "nextSetupPremise": "Manager must bind the reviewed native GET/title edit and prior withdrawal unions to an actually available compatible backend/native image. Combined desired tag1184c9cbf79d is derived, availability unknown. Do not claim legacy75409ac3 supports the new withdrawal unions. Reuse compatible existing command-created records/prepared data; no fake receipt, manual graph/authority seed, new catalogue, restore/import or fixture producer."
+    },
+    "reportPreservation": {
+      "baseReviewCommit": "1df0e659992e07134bc6c9d668853edcd888788b",
+      "existingTopLevelFieldsPreserved": [
+        "schemaVersion",
+        "goal",
+        "worker",
+        "title",
+        "reviewedAt",
+        "reviewer",
+        "decision",
+        "candidate",
+        "inputs",
+        "contractReview",
+        "sourceReview",
+        "findings",
+        "reviewTest",
+        "evidenceReuse",
+        "visualReview",
+        "newChecks",
+        "executionPolicy",
+        "genuineAcceptance",
+        "handoff",
+        "correctiveDeltas",
+        "correctiveSourceEquivalence",
+        "currentDecision",
+        "currentGenuineAcceptance",
+        "correctiveHandoff",
+        "openingPostCallerReview",
+        "latestDecision",
+        "latestGenuineAcceptance",
+        "latestHandoff",
+        "amgt01RuntimeRepairFirstReview"
+      ],
+      "mainComparison": "All 29 existing own/main report fields were value-identical before this additive append; no rebase or main write. Existing failures, pending markers, genuine limits and peer source decisions remain unchanged.",
+      "onlyAddedField": "nativePostRevisionFirstSourceReview",
+      "writes": "Only the claimed cumulative JSON report and owned private artifacts. No product/test/assertion/fixture/generated source, main/index/ledger/other-worker mutations, runtime/lease launch or new corpus.",
+      "finalReadOnlyMainComparison": {
+        "head": "c9699dcef53ce0109404228efe15e24118fa63e0",
+        "oldFieldCount": 29,
+        "allExistingFieldsValueExact": true,
+        "newPeerFields": []
+      }
+    },
+    "newChecks": {
+      "independentSourceAndEvidenceVerification": "passed; private exact-source and SHA256/byte-span checks",
+      "reportGate": {
+        "job": "5a5e8a1e-f93c-4734-a0bf-27a0c29c5ccd",
+        "result": "passed",
+        "exitCode": 0,
+        "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task docs:check' -- task goal -- check",
+        "goalCheck": {
+          "result": "passed",
+          "types": "not applicable: no TypeScript workspace changed",
+          "tests": "none named in brief; no tests run",
+          "lint": "not applicable: no source file changed",
+          "ast": "passed, 0.2s",
+          "guards": "passed, 1/45 selected, 2.3s",
+          "output": ".temp/goal/check/run-41ZuC3/output.log",
+          "advisory": "Harness reported two commits behind main; check passed without rebase."
+        },
+        "docsCheck": {
+          "result": "passed",
+          "markdownFiles": 259,
+          "checkerTestsPassed": 13,
+          "reach": "Local links, fragments and design navigation; external URLs and runtime behavior not tested."
+        },
+        "logs": [
+          {
+            "path": ".temp/goal/jobs/5a5e8a1e-f93c-4734-a0bf-27a0c29c5ccd.1.log",
+            "sha256": "d09063022eabe8fa341eeb449d87141328cf70e626c912d1236ba41fda6f51ef"
+          },
+          {
+            "path": ".temp/goal/jobs/5a5e8a1e-f93c-4734-a0bf-27a0c29c5ccd.2.log",
+            "sha256": "9dc9f42ca7e9e91125bdb50dcaf685e3616d42305621c39e9c44a98251f2237c"
+          }
+        ],
+        "postCheckEdit": "Only additive result/provenance metadata recorded after the passing report gate; no source or acceptance assertion change."
+      }
+    },
+    "handoff": {
+      "sourceVerdictReady": true,
+      "genuineAcceptanceOpen": true,
+      "mainLandingClaimed": false,
+      "next": "Deliver exact bounded source approval to manager, preserve all history, and coordinate compatible runtime proof of original unchanged genuine acceptance separately."
+    }
   }
 }
