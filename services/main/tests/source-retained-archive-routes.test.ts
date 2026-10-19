@@ -108,8 +108,11 @@ test('Source HTTP archive reads and retries recheck custody and actual authority
   const settled = await admitted.json() as { admission: RetainedArchiveAdmission };
   const path = `/v1/sources/archives/${settled.admission.admission.slice(-36)}/image-witness`;
   const other = await authority(), foreign = client(other.principal,other.actor);
-  expect((await foreign(path,coordinate)).status).toBe(503);
-  expect((await foreign(`/v1/sources/archives/${randomUUID()}/image-witness`,coordinate)).status).toBe(503);
+  const hidden = await foreign(path,coordinate);
+  const absent = await foreign(`/v1/sources/archives/${randomUUID()}/image-witness`,coordinate);
+  expect(hidden.status).toBe(503); expect(absent.status).toBe(hidden.status);
+  expect(await hidden.json()).toEqual(await absent.json());
+  expect([...hidden.headers]).toEqual([...absent.headers]);
   await new VerificationStore(fixture.pool).recordObservationDisposition(a.principalId,randomUUID(),
     retained.parts[1]!.observation.slice(-36),{ expectedHead: null,state: 'withdrawn',reason: 'Withdraw retained byte part' });
   expect((await post(path,coordinate)).status).toBe(503);

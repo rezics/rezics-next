@@ -9,6 +9,7 @@ import {
   hiddenIdReadsPath,
   loadHiddenIdReads,
   loadOpenApi,
+  registeredHiddenArchiveReads,
   registeredHiddenIdOperations,
   registeredHiddenIdReads,
   registeredHiddenIdWrites,
@@ -184,6 +185,6 @@ test('the committed inventory matches the public contract and registered reads h
     [...registeredHiddenIdOperations],
   );
   expect(committed.filter((entry) => entry.status === 'registered' && entry.operation.startsWith('POST ')
-    && !registeredHiddenIdReads.some((operation) => operation === entry.operation))
+    && ![...registeredHiddenIdReads, ...registeredHiddenArchiveReads].some((operation) => operation === entry.operation))
     .map((entry) => entry.operation)).toEqual([...registeredHiddenIdWrites]);
 });
