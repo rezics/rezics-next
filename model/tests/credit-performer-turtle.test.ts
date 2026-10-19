@@ -106,7 +106,7 @@ test('external Performer credit preserves source-key identity, ordinal and the p
 
 test('external credit successor retains the exact Work-edit binding and actual receipt graphs', () => {
   const binding = registry.bindings.get('work-author-credit-v2')!;
-  expect(binding).toEqual(registry.bindings.get('work-author-credit-v1'));
+  expect(binding).toEqual(registry.bindings.get('work-author-credit-v1')!);
   // One existing type demand remains; native canonical selection requires the
   // selected successor binding rather than making another type-level authority.
   expect(registry.bindingDemands.filter(({ type }) => type === `${rv}AuthorCredit` || type === `${rv}AuthorCreditRevision`))
