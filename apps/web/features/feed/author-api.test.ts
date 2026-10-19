@@ -10,9 +10,70 @@ test('author read uses the exact object and full native Realm/reply coordinates'
   if (result.kind !== 'done') throw new Error('Author fixture must load');
   expect(bodyText(result.value.body)).toBe(f.body);
   expect(result.value.language).toBe('en');
-  expect(calls.map(call => call.url.searchParams.get('actingSubject'))).toEqual([f.actor, f.actor, f.actor]);
+  expect(calls.map(call => call.url.searchParams.get('actingSubject'))).toEqual([f.actor, f.actor, f.actor, f.actor]);
   expect(decodeURIComponent(calls[1]!.url.pathname)).toContain(`/realms/${f.realm}/replies/${f.reply}`);
 });
+
+async function corrected() {
+  const transport = authorTransport();
+  const before = await transport.api.read(authorTarget, f.actor);
+  if (before.kind !== 'done') throw new Error('Initial author read failed');
+  const result = await transport.api.correct({ key: 'first-correction', target: authorTarget,
+    actingSubject: f.actor, basis: before.value, body: f.correctedBody }, () => {});
+  if (result.kind !== 'done') throw new Error('First correction failed');
+  const target = { ...authorTarget, placement: f.nextPlacement, revisionId: f.corrected };
+  const reopened = await transport.api.read(target, f.actor);
+  if (reopened.kind !== 'done') throw new Error('Reopened author read failed');
+  return { ...transport, target, reopened: reopened.value };
+}
+
+test('reopening a corrected own placement reads that placement exact revision', async () => {
+  const { reopened } = await corrected();
+  expect(reopened.exact.reference.revisionId).toBe(reopened.placedRevision);
+  expect(bodyText(reopened.body)).toBe(f.correctedBody);
+  expect(reopened.reply.revisionId).toBe(f.revision);
+});
+
+test('the next correction uses the acknowledged new draft head after refresh', async () => {
+  const { api, calls, target, reopened } = await corrected();
+  expect(await api.correct({ key: 'second-correction', target, actingSubject: f.actor,
+    basis: reopened, body: 'The next correction.' }, () => {})).toEqual({ kind: 'done',
+    value: { reply: f.reply, revisionId: f.nextCorrected, placement: f.latestPlacement } });
+  const drafts = calls.filter(call => call.url.pathname.endsWith('/member-reply-drafts'));
+  expect(drafts[1]!.body?.expectedHead).toBe(f.corrected);
+});
+
+test('selected published bytes stay separate from a paged current private draft head', async () => {
+  const { api, calls } = authorTransport({ publishedCorrected: true, draftAhead: true, variantsOnNextPage: true });
+  const target = { ...authorTarget, placement: f.nextPlacement, revisionId: f.corrected };
+  const read = await api.read(target, f.actor);
+  if (read.kind !== 'done') throw new Error('Selected author fixture must load');
+  expect(bodyText(read.value.body)).toBe(f.correctedBody);
+  expect(read.value.draftHead).toBe(f.concurrent);
+  expect(calls.filter(call => call.url.pathname.endsWith('/content-variants'))
+    .map(call => call.url.searchParams.get('cursor'))).toEqual([null, 'next-variant-page']);
+  expect(calls.filter(call => call.url.pathname.includes('/content-revisions/'))
+    .map(call => call.url.pathname.split('/').at(-1))).toEqual([f.corrected]);
+  expect((await api.correct({ key: 'current-author-basis', target, actingSubject: f.actor,
+    basis: read.value, body: 'Another correction.' }, () => {})).kind).toBe('done');
+  expect(calls.find(call => call.method === 'POST')!.body?.expectedHead).toBe(f.concurrent);
+});
+
+test('the private author read cannot substitute a grant or an unrelated exact revision', async () => {
+  expect(await authorTransport({ authoringSubject: null }).api.read(authorTarget, f.actor)).toEqual({ kind: 'denied' });
+  expect(await authorTransport({ publishedCorrected: true, wrongRevision: true }).api.read({
+    ...authorTarget, placement: f.nextPlacement, revisionId: f.corrected,
+  }, f.actor)).toEqual({ kind: 'invalid' });
+});
+
+for (const [status, kind] of [[401, 'sign-in'], [403, 'denied'], [503, 'failed']] as const) {
+  test(`a ${status} private draft-head read never falls back to public bytes as its CAS`, async () => {
+    const { api, calls } = authorTransport({ fail: 'head', status });
+    expect(await api.read(authorTarget, f.actor)).toEqual({ kind });
+    expect(calls.every(call => call.method === 'GET')).toBe(true);
+    expect(calls.some(call => call.url.pathname.includes('/content-revisions/'))).toBe(false);
+  });
+}
 
 test('foreign author and a changed placement never become an editable basis', async () => {
   const foreign = authorTransport({ foreign: true });
@@ -47,6 +108,21 @@ for (const failedStep of ['draft', 'place'] as const) {
     expect(calls.some(call => call.url.pathname.endsWith('/realm-replies'))).toBe(false);
   });
 }
+
+test('a pre-upgrade frozen correction replays its original CAS and idempotency key', async () => {
+  const { api, calls } = authorTransport({ fail: 'draft' });
+  const read = await api.read(authorTarget, f.actor);
+  if (read.kind !== 'done') throw new Error('Author fixture must load');
+  const intent: ReplyCorrection = { key: 'retained-before-head-fix', target: authorTarget,
+    actingSubject: f.actor, basis: read.value, body: 'Retained correction.' };
+  Reflect.deleteProperty(intent.basis, 'draftHead');
+  expect(await api.correct(intent, () => {})).toEqual({ kind: 'failed' });
+  expect((await api.correct(JSON.parse(JSON.stringify(intent)), () => {})).kind).toBe('done');
+  const drafts = calls.filter(call => call.url.pathname.endsWith('/member-reply-drafts'));
+  expect(drafts[1]!.body).toEqual(drafts[0]!.body);
+  expect(drafts[1]!.key).toBe(drafts[0]!.key);
+  expect(drafts[1]!.body?.expectedHead).toBe(f.revision);
+});
 
 test('withdrawal names one exact placement, replays its intent and rejects an unrelated receipt', async () => {
   const intent = { key: 'one-withdrawal', target: authorTarget, actingSubject: f.actor,

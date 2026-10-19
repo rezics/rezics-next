@@ -43,6 +43,24 @@ function Objects({ locale = 'en', options, signedIn = true, foreign = false }: P
   </main>;
 }
 
+function SelectedObject({ locale = 'en' }: { locale?: UiLocale }) {
+  const [transport] = useState(() => authorTransport({ publishedCorrected: true, draftAhead: true }));
+  const [updated, setUpdated] = useState(false);
+  const [generation, setGeneration] = useState(0);
+  const target = { ...authorTarget, placement: updated ? f.latestPlacement : f.nextPlacement,
+    revisionId: updated ? f.nextCorrected : f.corrected };
+  return <main className="mx-auto grid max-w-2xl gap-5 p-4 sm:p-8">
+    <article className="grid gap-3 border-b border-border pb-4">
+      <header className="flex items-center gap-2"><p className="me-auto text-sm font-medium">Mei · Rain at the station</p>
+        <AuthorActions key={generation} target={target} actingSubject={f.actor} signedIn locale={locale}
+          signInHref="/auth/start?next=%2Fen" api={transport.api} onChanged={() => setUpdated(true)} />
+      </header>
+      <p lang="en">{f.correctedBody}{updated ? ' Another published correction.' : ''}</p>
+    </article>
+    <Button variant="outline" onClick={() => setGeneration(value => value + 1)}>Reload selected object</Button>
+  </main>;
+}
+
 const meta = {
   title: 'Feed/Author actions', component: Objects,
   beforeEach() { localStorage.clear(); },
@@ -210,7 +228,38 @@ export const StaleCorrection: Story = {
     await userEvent.click(dialog.getByRole('button', { name: authorMessages.en.reload }));
     await expect(await dialog.findByRole('status')).toHaveTextContent(authorMessages.en.latest);
     await expect(dialog.getByRole('textbox', { name: authorMessages.en.body })).toHaveTextContent('My correction survives.');
+    await waitFor(() => expect(dialog.getByRole('button', { name: authorMessages.en.save })).toHaveFocus());
+    await userEvent.keyboard('{Enter}');
+    await expect(await dialog.findByText(authorMessages.en.corrected)).toBeVisible();
+    await waitFor(() => expect(dialog.getByRole('button', { name: authorMessages.en.close })).toHaveFocus());
   },
+};
+
+async function selectedHeadRecovery(canvasElement: HTMLElement, locale: UiLocale = 'en') {
+  const t = authorMessages[locale];
+  let dialog = await open(canvasElement, 'edit', locale);
+  await expect(dialog.getByRole('textbox', { name: t.body })).toHaveTextContent(f.correctedBody);
+  await expect(dialog.getByRole('textbox', { name: t.body })).not.toHaveTextContent('Private unpublished draft.');
+  await append(dialog.getByRole('textbox', { name: t.body }), ' Another published correction.');
+  await userEvent.click(dialog.getByRole('button', { name: t.save }));
+  await expect(await dialog.findByText(t.corrected)).toBeVisible();
+  await waitFor(() => expect(dialog.getByRole('button', { name: t.close })).toHaveFocus());
+  await userEvent.click(dialog.getByRole('button', { name: t.close }));
+  await waitFor(() => expect(within(canvasElement).getByRole('button', { name: t.menu })).toHaveFocus());
+  await userEvent.click(within(canvasElement).getByRole('button', { name: 'Reload selected object' }));
+  dialog = await open(canvasElement, 'edit', locale);
+  await expect(dialog.getByRole('textbox', { name: t.body })).toHaveTextContent('Another published correction.');
+}
+
+export const SelectedHeadRecovery: Story = {
+  render: () => <SelectedObject />,
+  async play({ canvasElement }) { await selectedHeadRecovery(canvasElement); },
+};
+
+export const SelectedHeadRecoveryPhone: Story = {
+  render: () => <SelectedObject locale="zh-Hans" />,
+  globals: { viewport: { value: 'phone' }, locale: 'zh-Hans', theme: 'dark' },
+  async play({ canvasElement }) { await selectedHeadRecovery(canvasElement, 'zh-Hans'); },
 };
 
 export const WithdrawPlacement: Story = {

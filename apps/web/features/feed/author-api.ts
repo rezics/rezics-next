@@ -37,6 +37,8 @@ export interface AuthorReplyBasis {
   exact: Exact;
   placement: string;
   placedRevision: string;
+  /** Author-only current draft head; independent of the selected public revision. */
+  draftHead: string;
   language: string;
   direction: 'ltr' | 'rtl' | 'none';
   body: string;
@@ -82,21 +84,44 @@ export function mainAuthorApi(main: MainClient = browserMainApi()): AuthorApi {
           || placed.data.author !== actingSubject) return { kind: 'denied' };
         if (target.placement && placed.data.placement !== target.placement
           || target.revisionId && placed.data.revisionId !== target.revisionId) return { kind: 'stale' };
-        const exact = await main.v1['content-revisions']({ revision: read.data.revisionId }).get({ query: { actingSubject } });
+        let cursor: string | undefined;
+        let draftHead: string;
+        const cursors = new Set<string>();
+        for (;;) {
+          const heads = await main.v1.works({ id: target.reply.slice(-36) })['content-variants'].get({
+            query: { actingSubject, ...(cursor ? { cursor } : {}) },
+          });
+          if (!heads.data) return { kind: authorFailure(heads.error) };
+          if (heads.data.work !== target.reply || heads.data.authoringSubject !== actingSubject) return { kind: 'denied' };
+          const variant = heads.data.items.find(item => item.variantId === read.data.variantId);
+          if (variant) {
+            if (!variant.draftHead) return { kind: 'missing' };
+            draftHead = variant.draftHead;
+            break;
+          }
+          const next = heads.data.nextCursor;
+          if (!next) return { kind: 'missing' };
+          if (cursors.has(next)) return { kind: 'failed' };
+          cursors.add(next);
+          cursor = next;
+        }
+        const exact = await main.v1['content-revisions']({ revision: placed.data.revisionId }).get({ query: { actingSubject } });
         if (!exact.data) return { kind: authorFailure(exact.error) };
         const { reference, body } = exact.data;
         if (reference.resourceId !== target.reply || reference.variantId !== read.data.variantId
-          || reference.revisionId !== read.data.revisionId || reference.language.kind !== 'tag'
+          || reference.revisionId !== placed.data.revisionId || reference.language.kind !== 'tag'
           || typeof body.body !== 'string') return { kind: 'invalid' };
         return { kind: 'done', value: {
           reply: read.data, exact: exact.data, placement: placed.data.placement,
-          placedRevision: placed.data.revisionId, language: reference.language.tag,
+          placedRevision: placed.data.revisionId, draftHead, language: reference.language.tag,
           direction: reference.direction, body: editorValue(body.body, body.document),
         } };
       } catch { return { kind: 'failed' }; }
     },
     async correct(intent, remember) {
       const { basis, target, actingSubject } = intent;
+      // Frozen requests saved before draftHead was recorded must replay their original CAS unchanged.
+      const expectedHead = basis.draftHead ?? basis.reply.revisionId;
       try {
         if (!intent.saved) {
           const saved = await main.v1['member-reply-drafts'].post({
@@ -104,13 +129,13 @@ export function mainAuthorApi(main: MainClient = browserMainApi()): AuthorApi {
             rootTarget: basis.reply.rootTarget, rootRevision: basis.reply.rootRevision,
             originRealm: basis.reply.originRealm ?? null,
             language: basis.language, direction: basis.direction,
-            expectedHead: basis.reply.revisionId, actingSubject,
-            ...(basis.reply.spoiler !== undefined ? { spoiler: basis.reply.spoiler } : {}),
+            expectedHead, actingSubject,
+            ...(typeof basis.exact.body.spoiler === 'boolean' ? { spoiler: basis.exact.body.spoiler } : {}),
             ...bodyInput(intent.body),
           }, headers(intent.key, 'draft'));
           if (!saved.data) return { kind: authorFailure(saved.error) };
           if (saved.data.reply !== target.reply || saved.data.variantId !== basis.reply.variantId
-            || saved.data.predecessor !== basis.reply.revisionId || saved.data.deleted) return { kind: 'failed' };
+            || saved.data.predecessor !== expectedHead || saved.data.deleted) return { kind: 'failed' };
           intent.saved = { revisionId: saved.data.revisionId, digest: saved.data.revisionDigest };
           remember({ ...intent });
         }
