@@ -1,12 +1,10 @@
 # Product completeness state
 
-Checkpoint be84a80b retains checkpoint 12697ac8 and covers handled
-mail:b4bbe9d7-f058-4c27-8fb6-eb4ace381d37,
-mail:be39a35e-f55a-4f78-bb79-79be6264ba96,
-mail:20c727a2-54a5-4cb7-b4aa-a9f05ed3a1ef and task:G-2823:41. All three mail
-deliveries are acknowledged. Covered decisions run through 07:54Z; measures
-were read at this checkpoint and may include later activity. Other event turns
-retain their own dispositions.
+Checkpoint 0b42f006 retains checkpoint be84a80b and covers handled
+task:G-2825:17 and mail:96fdb2d6-f260-40b3-8d6d-90698193524d. The landing mail
+is acknowledged. Covered decisions run through 08:58Z; measures were read at
+this checkpoint and may include later activity. Other event turns retain their
+own dispositions.
 
 Scope remains domain-leading completeness across supported domains, including
 specialist jobs, with API outcomes first and actual rendered/interaction proof.
@@ -46,39 +44,53 @@ shows the actual 2px focus ring clipped; the helper's conservative 4px
 outlineWithinRow flag is not acceptance. G-2747 retains startup/navigation repair
 ownership across Discover/Studio/Site/Library.
 
-The maintainer's sprint delegates G-2825 proof and G-2826 inspection needed by
-original audit assertions to site under GOAL_ID=product-completion-20261019.
-Coordinate directly through
-`.temp/audit-remediation-20261019/two-hour-sprint/product-to-site.md`; do not
-duplicate or reassign its workers, proof, review or landing. The current G-2825
-brief and site handoff own the repaired immutable pin, actual dev/production
-readiness and continuation. Preserve original evidence and append separate runs.
-Acceptance still needs supported sign-in, D3-002's 128 combinations, repeated
-AUD-006 home/Discover/search/back in both builds, real eight-locale AUD-012
-names/unread/axe checks and D4-002 route/history/filter/focus at both widths.
-Heard voice/screen-reader acceptance remains due; Program received the operator
-request. Audit retains finding closure and wave integration.
+G-2825's repaired-pin report source
+aae78d7573c46c0f32d5c79aca348b1b139f6a05 was accepted by decision b27048cb06
+and its partial step landed at 271b7e40b3713782eec2148443c0e3b53f65a059.
+The later landing event verified the report and fixture handoff, closed G-2825
+verified and archived its brief. Collection scope is complete; no further
+G-2825 worker execution, repeated review or landing is due.
 
-Site's retained G-2825 theme correction establishes only 51/64 distinct actual
-theme combinations per build: 13/16 requested-light signed-in cases rendered
-DOM.theme=dark in both development and production. Anonymous 32/32 and signed-in
-dark 16/16 matched. Preserve original evidence and assertions. Site retains the
-same immutable frontend/backend; D3-002 remains open.
+The separately retained repaired frontend run at
+196a6f4a98413857dbf3e178d05ef65415035f29 records 64 effective Proposals
+combinations and 16 complete repeated navigation journeys per build, actual
+eight-locale label/name observations, Discover history/focus measurements,
+five boundary tests/454 assertions and 47 viewed images. Retain initial
+failures, settled follow-up measurements and data-service errors. No immutable
+historical backend identity was established; the frontend pin and a current
+refresh receipt do not establish one throughout the run. No original finding
+closes from this accepted report.
 
-G-2825 decision ca8414cb4f authorizes that worker alone to change displayMode on
-existing account 71473997-6e2e-4e59-9044-01627a79e839 through supported UI/BFF
-GET/PUT with current expectedRevision, preserving showZoneThemes. Retain original
-values/revision, settled readback and actual DOM theme for each assertion/PNG;
-restore and verify original values/synchronization even after failure. A conflict
-needs owner coordination; failed restoration blocks further display testing and
-requires audit notice. Rerun only missing 13 signed-in light Proposals cases per
-build and six development/one production mobile cases, with separate evidence.
-No sync/CSS bypass, source movement, new fixture or other shared mutation.
-Site's `.temp/audit-remediation-20261019/two-hour-sprint/site-display-preference-serialization.json`
-reserves display preferences to G-2825 until verified restoration; G-2829 retains
-separate person/notification scope. The existing resumed worker consumed it;
-no second resume or brief change was needed. These events establish no completed
-theme proof or release; subsequent receipts retain their own dispositions.
+Preserve the original 13/16 signed-in requested-light mismatches per build.
+Separate supported display-preference corrections reached all 13 missing light
+Proposals cases per build and six development/one production mobile cases
+without failures. Original displayMode=dark and showZoneThemes=true were
+restored, read back and confirmed by settled DOM in both builds: development
+revision 104 at 07:43:26.870Z, production revision 106 at 07:48:18.899Z.
+The display reservation was released; G-2825 has no further display-write
+authority. Both owned frontend servers stopped.
+
+Audit received the fixture and residual acceptance handoff in mail e0a634d5.
+G-2829 may reuse the existing owned fixture through main's
+`.temp/audit-remediation-20261019/two-hour-sprint/site-auth-fixture.json`:
+configured Main/Auth/Web identities, both actual successful OAuth sign-ins
+with eligible Main session-agent 200s, and separate development/production
+private browser states, each mode 0600. Preserve private states and artifacts
+for reuse; revalidate an expired session through the supported existing fixture.
+The receipt supplies authentication, not a running server or G-2829's separate
+repaired Settings/startup integration pin and actual readiness. No new account,
+corpus, importer or shared refresh/reset/import is authorized.
+
+Audit retains finding closure, wave integration and disposition of early
+forward measurements, retained development web_render_failed connection-loss
+evidence through G-2747, read-service/search errors and historical backend
+identity limits. Remaining acceptance includes live nonzero unread semantics,
+actual heard/voice verification, an existing public Site journey, residual
+Studio/Library destinations/history/filter coverage and successful search/content
+assertions when their read services are ready. Program's operator request remains
+open; automation and zero-applicable-node axe results do not satisfy heard
+acceptance. Route residuals through existing audit/site owners without duplicate
+workers, proof, review or landing.
 
 G-2829's report-only partial Settings proof is accepted, with report source
 41e1aeef56eccababa64d672e622789a1b220844 and original product pin 92b8a78f.
@@ -87,11 +99,10 @@ stories reached assertions: ten passed, 22 failed. G-2751 owns mobile overflow,
 clipped last-row conflict feedback, busy-notice overlap and LanguagePicker
 visible-name repair, retaining width/axe assertions. Rendered channels establish
 neither persistence nor heard announcements; D2-005/D4-004/D4-005 remain open.
-The committed G-2825 decision requires the existing isolated signed-in/OAuth
-fixture's owner, private browser/session state, configured Main/Auth/Web
-identities, immutable ready product pin and actual sign-in receipts for audit.
-No duplicate account/corpus/importer or shared refresh/reset/import is authorized.
-G-2829 needs that tuple and G-2751's repair pin before continuation.
+G-2825 supplied the owned signed-in/OAuth fixture and actual sign-in receipts
+above. G-2829 still needs its separately selected repaired Settings/startup
+integration and actual readiness under its own brief; the fixture handoff
+does not satisfy that source prerequisite.
 
 The maintainer's current instruction supersedes earlier estimates: complete
 both retained original audits by 08:00Z / 16:00 Asia/Shanghai on 2026-10-19.
@@ -112,9 +123,12 @@ Preserve independent assertions, actual authority, exact retained bytes/values/
 rights and real receipts. G-2786 must scope refusal to affected cuts, preserving
 revocation and availability.
 
-Product retains G-2823 host repair and runtime acceptance. G-2825 proof remains
-with the delegated site manager, which also owns G-2826's supported continuation
-under existing delegated proof authority. Product retains task authority.
+Product retains G-2823 host repair and runtime acceptance. G-2825 is closed
+verified for its report and fixture handoff; audit owns residual finding
+acceptance. Site retains G-2826's supported continuation under existing delegated
+proof authority and GOAL_ID=product-completion-20261019. Product retains task
+authority; coordinate through
+`.temp/audit-remediation-20261019/two-hour-sprint/product-to-site.md`.
 Do not duplicate a landing or edit any brief with a live landing lock.
 
 G-2826's additional inventory/selection baseline
@@ -284,10 +298,11 @@ continuations. Three environment attempts, one step continuation and three fixes
 14 harness failures and one unclassified. The common setup cause is routed to
 G-2842; G-2823 owns bounded fixture recovery and causal cleanup repair. The
 unclassified wake and one retained other-kind refusal still need tooling
-disposition. Four completed attempts for the covered events recorded 2.925M
-input/31.6k output tokens, including 2.705M cached input. G-2823's earlier cut
-attempt has no recorded token totals. These exclude this checkpoint and do not
-establish a comparable manager/worker share.
+disposition. Of six manager attempts for the covered events, two successful
+attempts recorded 835,605 input/8,239 output tokens, including 766,720 cached
+input. Two cut attempts and two other failed attempts have no recorded token
+totals. These exclude this checkpoint and do not establish a comparable
+manager/worker share. Product has zero live workers and two open tasks.
 Latest recorded efficiency window remains 2026-10-18T08:36:08Z–20:36:08Z:
 552.47M processed input, 527.63M cached; 37% other-session share cannot establish
 manager-only share and omits older-started sessions. No comparable savings or
@@ -296,10 +311,11 @@ later full-window comparison and instrumentation attribution remain due.
 
 Next event owners: product consumes G-2823's identified-fixture/causal handoff,
 requires demonstrated cleanup repair and reviewed follow-up landing, then
-executes delegated normal refresh and finishes runtime proof. Site returns
-G-2825's genuine-theme correction/restoration and Settings proof under the
-existing brief/direct handoff, and G-2842's landed identity plus G-2826's
-supported-transition/runtime receipts from its existing continuation.
+executes delegated normal refresh and finishes runtime proof. Audit consumes
+G-2825's landed report and fixture through G-2829's separate Settings repair
+prerequisite and routes residual site acceptance to existing owners. Site returns
+G-2842's landed identity plus G-2826's supported-transition/runtime receipts from
+its existing continuation.
 Audit retains finding closure, focused native fixes and
 tooling gates; Program's existing controller owner owes reviewed fingerprint and
 activation receipts. No watcher, duplicate assignment/landing or worker/landing
