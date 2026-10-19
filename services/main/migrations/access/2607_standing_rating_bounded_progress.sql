@@ -394,16 +394,24 @@ END $$;
 CREATE OR REPLACE FUNCTION access.rating_standing_publication(c text,m text,OUT generation text,OUT pending bigint)
 LANGUAGE sql STABLE AS $$
   SELECT encode(sha256(convert_to(concat_ws('|',c,m,
-      COALESCE((SELECT publication_revision::text FROM access.rating_standing_component WHERE context=c AND main_version=m),'0'),
-      COALESCE((SELECT revision::text FROM access.rating_standing_cut WHERE context=c AND main_version=m),'0')),'UTF8')),'hex'),
-    CASE WHEN COALESCE((SELECT pending FROM access.rating_standing_cut WHERE context=c AND main_version=m),0)>0
+      COALESCE(k.publication_revision::text,'0'),COALESCE(f.revision::text,'0')),'UTF8')),'hex'),
+    CASE WHEN COALESCE(f.pending,0)>0
       OR EXISTS(SELECT 1 FROM access.rating_standing_bootstrap WHERE context=c AND main_version=m)
-      OR EXISTS(SELECT 1 FROM access.rating_standing_dependency d
+      OR EXISTS(SELECT 1 FROM (SELECT dependency FROM access.rating_standing_dependency
+          WHERE context=c AND main_version=m AND kind='origin' AND inherited_slots>0
+          ORDER BY dependency OFFSET 0) d
         CROSS JOIN LATERAL (SELECT 1 FROM access.rating_standing_refresh j
           WHERE j.context=c AND j.origin_main_version=d.dependency AND j.after_main_version<m
           ORDER BY j.after_main_version LIMIT 1) awaiting
-        WHERE d.context=c AND d.main_version=m AND d.kind='origin' AND d.inherited_slots>0 LIMIT 1)
-      THEN 1::bigint ELSE 0::bigint END;
+        LIMIT 1)
+      THEN 1::bigint ELSE 0::bigint END
+  FROM (VALUES (1)) one_row(n)
+  -- A seek stops at the first visible key. Filtering equality afterward also
+  -- handles absent cuts without a bitmap over every obsolete index entry.
+  LEFT JOIN LATERAL (SELECT main_version,publication_revision FROM access.rating_standing_component
+    WHERE context=c AND main_version>=m ORDER BY main_version LIMIT 1) k ON k.main_version=m
+  LEFT JOIN LATERAL (SELECT main_version,revision,pending FROM access.rating_standing_cut
+    WHERE context=c AND main_version>=m ORDER BY main_version LIMIT 1) f ON f.main_version=m;
 $$;
 -- No trigger, read, continuation or completion calls these recursive APIs.
 DROP FUNCTION access.rating_standing_revoked_selections(text);

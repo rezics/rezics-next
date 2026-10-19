@@ -579,7 +579,8 @@ export const STANDING_RATING_INVENTORY_SQL = `WITH publication AS MATERIALIZED (
             AND member.admission_id=h.admission_id AND member.value_known)
       LIMIT 2) w) AS witnesses
   FROM access.rating_standing_publication($1,$2) p
-  LEFT JOIN access.rating_standing_component k ON k.context=$1 AND k.main_version=$2
+  LEFT JOIN LATERAL (SELECT * FROM access.rating_standing_component
+    WHERE context=$1 AND main_version>=$2 ORDER BY main_version LIMIT 1) k ON k.main_version=$2
 )
 SELECT inventory.*,publication.standing_generation,publication.pending,
   CASE WHEN row_number() OVER ()=1 AND publication.slots IS NOT NULL THEN
