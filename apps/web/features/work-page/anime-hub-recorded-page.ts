@@ -110,8 +110,13 @@ export async function readUndatedAnimeHub(main: MainClient, actingSubject: strin
 }
 
 /** The sourced publication's public credit page keeps author and transcriber roles supplied by Main. */
-export function readSelectedWorkCredits(main: Pick<MainClient, 'v1'>, actingSubject: string | undefined, id: string, sourced: boolean) {
-  return sourced ? settle(() => main.v1.works({ id }).credits.get({ query: { actingSubject } }))
+export function readSelectedWorkCredits(main: Pick<MainClient, 'v1'>, actingSubject: string | undefined, id: string, sourced: boolean):
+  Promise<BooksRead<CreditPage>> {
+  return sourced ? settle(async () => {
+    const result = await main.v1.works({ id }).credits.get({ query: { actingSubject } });
+    return { ...result, problem: result.data,
+      data: result.data?.query === 'https://rezics.com/query/work-credits' ? result.data : null };
+  })
     : readAnimeWorkCredits(main, actingSubject, id);
 }
 
