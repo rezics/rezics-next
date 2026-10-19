@@ -117,8 +117,10 @@ readiness requires it; no new pretransform prerequisite is asserted here.
 
 ## Root execution and remaining proof
 
-Root runs this command directly in its manager session, from
-`/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2774`:
+Root executed the following V2 command from its manager session in the G-2774
+worktree. Do not repeat this unchanged run; the
+[V2 diagnosis and V3 observations](catalogue-recipe-recovery-diagnosis.md)
+record the outcome, precise owner corrections and the successor command:
 
 ```sh
 GOAL_ID=audit-remediation-20261019 task --taskfile .temp/goal/recipe-recovery-original-v2/Taskfile.yml run
@@ -142,8 +144,10 @@ frontend log/readiness HTML, Playwright JSON/trace/screenshots, fault/recovery
 screenshots and `assertion-outcomes.json` recording every executed expect step.
 The outer receipt records exact pins, source checks, actual outcomes and cleanup
 of only owned frontend/browser process groups and relay. Setup errors remain
-explicit; they are not asserted to be product failures. Every browser outcome is
-currently **unexecuted**.
+explicit; they are not asserted to be product failures. Root's subsequent run
+`run-1792421869618` reached the original recovered-method assertion in all four
+cells and failed at its unchanged 5,000ms limit. Later recovery/Cook assertions
+were not reached. Product acceptance remains open.
 
 Recorded job `0ff46d1e-8458-4f2f-8e6e-017d9d4c6a65` passed V2 preparation,
 `task goal:type-files -- --project .temp/goal/recipe-recovery-original-v2/tsconfig.json`
@@ -151,4 +155,5 @@ Recorded job `0ff46d1e-8458-4f2f-8e6e-017d9d4c6a65` passed V2 preparation,
 `task --taskfile .temp/goal/recipe-recovery-original-v2/Taskfile.yml freeze`:
 source/local-font/literal verification, runner/spec builds, exact four-test
 collection and the final manifest freeze. The original 18-assertion ledger is
-byte-identical to V1. Every V2 browser outcome remains unexecuted.
+byte-identical to V1. Those checks passed before root's four-cell runtime;
+they do not establish a browser outcome.
