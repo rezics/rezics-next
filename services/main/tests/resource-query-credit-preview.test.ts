@@ -120,6 +120,51 @@ test('stale previews coalesce only the exact current qualified credit and preser
   expect(card.creditCount).toEqual({ value: 1, kind: 'at-least' });
 });
 
+test('other qualified participants do not request Open Library author names for colliding keys', async () => {
+  for (const qualified of [
+    { provider: 'other-provider', namespace: 'author' },
+    { provider: 'open-library', namespace: 'other-namespace' },
+  ]) {
+    const f = fixture();
+    f.withdraw();
+    f.native([{ work: field(jane), id: field(id(15)), role: field('author'),
+      provider: field(qualified.provider), namespace: field(qualified.namespace),
+      key: field(key), ordinal: field('0') }]);
+    const card = (await resourceWorkCards(f.session, [jane])).get(jane)!;
+    expect(card.primaryCredits).toHaveLength(1);
+    expect(card.primaryCredits[0]).toMatchObject({ id: id(15), ...qualified, key, displayName: null });
+    expect(card.primaryCredits[0]).not.toHaveProperty('nameSource');
+    expect(card.creditCount).toEqual({ value: 1, kind: 'at-least' });
+    expect(f.nameReads).toEqual([]);
+  }
+});
+
+test('a shared preview key names only the exact Open Library author participant', async () => {
+  const f = fixture();
+  f.withdraw();
+  const qualified = [
+    { provider: 'open-library', namespace: 'author' },
+    { provider: 'other-provider', namespace: 'author' },
+    { provider: 'open-library', namespace: 'other-namespace' },
+  ];
+  f.native(qualified.map((participant, ordinal) => ({ work: field(jane), id: field(id(15 + ordinal)),
+    role: field('author'), provider: field(participant.provider), namespace: field(participant.namespace),
+    key: field(key), ordinal: field(String(ordinal)) })));
+  const card = (await resourceWorkCards(f.session, [jane])).get(jane)!;
+  expect(card.primaryCredits).toHaveLength(3);
+  qualified.forEach((participant, ordinal) => {
+    const preview = card.primaryCredits.find(row => row.id === id(15 + ordinal));
+    expect(preview).toMatchObject({ id: id(15 + ordinal), ...participant, key, ordinal,
+      displayName: ordinal === 0 ? author.displayName : null });
+    if (ordinal === 0) expect(preview).toHaveProperty('nameSource', author.nameSource);
+    else expect(preview).not.toHaveProperty('nameSource');
+  });
+  expect(card.creditCount).toEqual({ value: 3, kind: 'at-least' });
+  expect(f.nameReads).toEqual([[key], [key]]);
+  expect(card.rating).toBeNull();
+  expect(Value.Check(resourceWorkCard, card)).toBe(true);
+});
+
 test('withdrawn or changed Source bindings never resurrect a stale credit or exact empty inventory', async () => {
   for (const change of ['withdraw', 'moveBinding', 'sourceFailure', 'withdrawDuringNames'] as const) {
     const f = fixture();

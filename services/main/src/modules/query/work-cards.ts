@@ -11,6 +11,13 @@ import { Value } from 'typebox/value';
 import { optionalPreview } from './optional-preview.ts';
 import { readFactObligations } from '../rights/read-imported.ts';
 
+// The Source name owner handles Open Library authors. V1 credits may omit the
+// author namespace; another provider or namespace cannot share its name keys.
+function sourceAuthorKey(credit: ProjectedCredit) {
+  return credit.participantKind === 'external-reference' && credit.provider === 'open-library'
+    && (credit.namespace ?? 'author') === 'author' ? credit.key : null;
+}
+
 /** Work-keyed projection probes and current bounded credit/name batches. Optional
  * previews fail independently; membership and disclosure belong to the caller. */
 export async function resourceWorkCards(session: WorkReadSession, works: readonly string[]) {
@@ -62,7 +69,10 @@ export async function resourceWorkCards(session: WorkReadSession, works: readonl
       ratings.set(work, rating);
   }
   const selected = [...credits.values()].flat();
-  const keys = [...new Set(selected.flatMap(credit => credit.key ? [credit.key] : []))];
+  const keys = [...new Set(selected.flatMap(credit => {
+    const key = sourceAuthorKey(credit);
+    return key ? [key] : [];
+  }))];
   const [agents, sources] = await Promise.all([
     optionalPreview(session, () => readCreditAttributionCards(session,
       selected.flatMap(credit => credit.agent ? [credit.agent] : []), 'preview')),
@@ -89,8 +99,9 @@ export async function resourceWorkCards(session: WorkReadSession, works: readonl
         if (currentCredits && credit.confirmation === 'source-reported'
           && !currentReports?.get(work)?.some(ref => ref.id === credit.id
             && ref.key === credit.key && ref.ordinal === credit.ordinal)) return [];
-        const source = sources?.get(credit.key);
-        const current = currentSources?.get(credit.key);
+        const key = sourceAuthorKey(credit);
+        const source = key ? sources?.get(key) : undefined;
+        const current = key ? currentSources?.get(key) : undefined;
         const name = source && JSON.stringify(source) === JSON.stringify(current) ? source : null;
         const { displayName: _savedName, nameSource: _savedSource, ...identity } = credit;
         return [{ ...identity, ...name, displayName: name?.displayName ?? null }];
