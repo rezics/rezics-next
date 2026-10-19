@@ -567,9 +567,19 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "横向导航在整页进入时丢掉当前选项的位置",
-      "status": "build-dispatched",
+      "status": "closed",
       "owner": "G-2747",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "D4-002",
+          "assessedMain": "8d5a550fc6ca47f756a347165bb61f89156ac18a",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "disposition": "Original applicable3+3 assertions passed; genuine Discover/Studio/Library and independent Site component inspection kept distinct; root accepted.",
+      "remainingValidation": []
     },
     {
       "id": "D4-003",

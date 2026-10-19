@@ -1,8 +1,8 @@
 {
-  "recordedAt": "2026-10-19T13:20:07.142834+00:00",
+  "recordedAt": "2026-10-19T13:38:32.424376+00:00",
   "manager": "site",
   "goal": "audit-remediation-20261019",
-  "assessedMain": "653c9c18a6d4577717dfd4af26f63f2c6eadf996",
+  "assessedMain": "8d5a550fc6ca47f756a347165bb61f89156ac18a",
   "basis": "Original applicable acceptance and assertions, without adding unrelated classes or full-domain journeys. Product-audit class tracing applied; unchanged exact proof reused.",
   "findings": [
     {
@@ -6786,6 +6786,421 @@
         "skillApplied": ".agents/skills/product-audit/SKILL.md",
         "knownMissingOriginalAssertions": []
       }
+    },
+    {
+      "id": "D4-002",
+      "status": "closed",
+      "assessedAt": "2026-10-19T13:28:19.896366+00:00",
+      "main": "178b831da1ccc347d0db6f57208ae75659685252",
+      "productCommit": "e265b737d4eeec378517b85f7f6b71f9dbaa9e78",
+      "canonicalSource": "docs/goals/audit-remediation-20261019/site-plan.json#D4-002",
+      "canonicalSourceSha256": "4ab008ae2a5144eb71f887daa737f1c5eb1a75b443e084b0f67fa67a0cbec3bc",
+      "originalRegistry": ".temp/site-audit-2026-10-18/round-3/all-findings.json",
+      "originalRegistrySha256": "e2721c44e74305c694b02e81e757e4476c3a19de414d25b0689617316c5ebc3f",
+      "skill": ".agents/skills/product-audit/SKILL.md",
+      "productAuditMethod": "Trace the three original Discover destinations through direct/reload/history/filter, seven actual keyboard destinations, and shared Studio/Site/Library current-item visibility. Retain genuine browser and recorded Site-component tiers distinctly; no whole-domain journey, aliases or new class.",
+      "originalAcceptanceVerbatim": [
+        "在390与1440，直接链接、刷新、前进后退和更换筛选后，当前目的地标签及选中标记无需手动横滑即可完整看见。",
+        "所有7个目的地有可发现的访问方式；键盘焦点、选中项和内容类型保持一致。",
+        "对同样采用横向页面导航的Studio、Site和Library做同类验收；本项只计已确认的Discover三实例。"
+      ],
+      "originalRegressionAssertionsVerbatim": [
+        {
+          "id": "D4-002/assertion-1",
+          "assert": "The active Topics/Lists/People or any of seven Discover destinations is visible in the horizontal strip on direct 390px load, Back and filter changes."
+        },
+        {
+          "id": "D4-002/assertion-2",
+          "assert": "Current state, keyboard focus and aria semantics remain consistent while the strip scrolls into view."
+        },
+        {
+          "id": "D4-002/assertion-3",
+          "assert": "Inspect shared Studio/Site/Library horizontal navigation for the same active-item visibility failure without counting aliases as new classes."
+        }
+      ],
+      "originalAssertionsChanged": false,
+      "originalCriterionWitnesses": [
+        {
+          "ordinal": 1,
+          "originalVerbatim": "在390与1440，直接链接、刷新、前进后退和更换筛选后，当前目的地标签及选中标记无需手动横滑即可完整看见。",
+          "status": "PASS",
+          "basis": "G2825 genuine production30 Topics/Lists/People ×390/1440×direct/reload/back/forward/filter; all settled selected labels/markers visible and focus rings inside. Six targeted development Back/Forward checks pass; historical early settling failures remain retained.",
+          "artifact": ".temp/audit-remediation-20261019/proofs/site-boundaries-navigation-G-2825-final-aae78d75/production/result.json",
+          "sha256": "bd4fdec6edc52b5d49dcdc655d7557039fdc06fd48862a4d2c4ff3082ecf56d9",
+          "targetedDevelopmentArtifact": ".temp/audit-remediation-20261019/proofs/site-boundaries-navigation-G-2825-final-aae78d75/development-followup/result.json",
+          "targetedDevelopmentSha256": "5c9b6eee0678011ad941b754683cd9161ac0f0a95552fd994108b0cdf8689d76"
+        },
+        {
+          "ordinal": 2,
+          "originalVerbatim": "所有7个目的地有可发现的访问方式；键盘焦点、选中项和内容类型保持一致。",
+          "status": "PASS",
+          "basis": "Seven actual keyboard Enter destinations at both widths/builds; original14 production destination records agree on label, href and content heading, and all30 original measured navigation states have genuine focused current links and unclipped rings."
+        },
+        {
+          "ordinal": 3,
+          "originalVerbatim": "对同样采用横向页面导航的Studio、Site和Library做同类验收；本项只计已确认的Discover三实例。",
+          "status": "PASS at stated inspection tiers",
+          "basis": {
+            "Studio": "Retained genuine signed-in All works390/1440 in both builds from271b plus independently viewed Curated390 direct/reload/back/forward and corrected Details390/1440 from G2848/a1af782b. Current StudioHome and its stories exactly match testedc43/acaf bytes.",
+            "Library": "G2825 genuine Loans390/1440 both builds: selected item and actual focus ring visible; desktop raw nav-box false is retained and actual clipping-ancestor measurement shows the full ring inside viewport. Empty root has no navigation. Current main preserves that nav and adds only loan-current BringIntoRow wrapper, already present in retained native Library candidate53f4ec and compatible reviewedc43/acaf source; no invented populated shelf or whole-Library claim.",
+            "Site": "G2847/e5935025 recorded RealmSite and StandaloneSite compositions, each52 links with lateGuide51 selected, at390/1440; all4 pre-focus/pre-manual-scroll visibility states and natural Shift+Tab current/ring checks pass,10 screenshots actually viewed. This is recorded component inspection, not genuine Site/API task."
+          }
+        }
+      ],
+      "originalRegressionAssertionWitnesses": [
+        {
+          "id": "D4-002/assertion-1",
+          "assert": "The active Topics/Lists/People or any of seven Discover destinations is visible in the horizontal strip on direct 390px load, Back and filter changes.",
+          "status": "PASS by corresponding unchanged original-criterion witnesses above"
+        },
+        {
+          "id": "D4-002/assertion-2",
+          "assert": "Current state, keyboard focus and aria semantics remain consistent while the strip scrolls into view.",
+          "status": "PASS by corresponding unchanged original-criterion witnesses above"
+        },
+        {
+          "id": "D4-002/assertion-3",
+          "assert": "Inspect shared Studio/Site/Library horizontal navigation for the same active-item visibility failure without counting aliases as new classes.",
+          "status": "PASS by corresponding unchanged original-criterion witnesses above"
+        }
+      ],
+      "independentReview": {
+        "G2825": {
+          "reportCommit": "aae78d7573c46c0f32d5c79aca348b1b139f6a05",
+          "mainProofLanding": "271b7e40b3713782eec2148443c0e3b53f65a059",
+          "frontend": "196a6f4a98413857dbf3e178d05ef65415035f29",
+          "compatibleBackend": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+          "normalResume": "Already verified/closed; preserved, no reopen."
+        },
+        "G2848": {
+          "reportCommit": "a1af782bfc799e57778b226c6fc208e551489a78",
+          "path": "docs/goals/audit-remediation-20261019/proofs/studio-inventory-review.json",
+          "testedStudio": "c43a05f54b8f80db57028ab08efc4dd277ad739d",
+          "detailsCorrection": "acaf46bd6962a337aa03f429b127b9f4076320f1"
+        },
+        "G2847": {
+          "account": "codex-1",
+          "model": "gpt-6.1-sol",
+          "effort": "xhigh",
+          "fallback": false,
+          "reportCommit": "e5935025fe756dbbd5d58e30b46620d70b045a26",
+          "path": "docs/goals/audit-remediation-20261019/proofs/startup-navigation-review.json",
+          "fullReportSha256": "a756eb2ed0ae7df0ee9f2995dfcabc89434cb5d50b59e492fd9f4b2932f38ca8",
+          "testedPin": "967816dada58aef2c90f049fcb9b207cbe62a5ee",
+          "tier": "recorded-component inspection, not genuine Site/API task",
+          "execution": {
+            "recorded_job": "c3ac3b1c-6b31-4b76-b889-3da3c618102b",
+            "exit_status": 0,
+            "command": "env PLAYWRIGHT_BROWSERS_PATH=/home/edge/.cache/ms-playwright bun scripts/goal/goalctl.ts test ./.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/site-navigation.test.ts apps/web/features/zones/public-navigation-frame.stories.tsx",
+            "qa_run": "20261019t131524-19c776",
+            "independent_test": "1 passed, 0 failed, 5 expect calls; 36 named cell checks all true across four cells.",
+            "normal_stories": "2 passed with original play and normal a11y test:error configuration. No axe rule or assertion was weakened; no separate applicable-node count is claimed.",
+            "browser": {
+              "version": "153.0.8010.12",
+              "executable": "/home/edge/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome",
+              "officialInstalled": true
+            },
+            "setup_errors": [],
+            "outcome_failures": [],
+            "browser_errors": [],
+            "network_errors": [],
+            "nonfailing_diagnostics": [
+              "Existing Vite native-config ESM warnings.",
+              "Failed to resolve dependency: @storybook/react-dom-shim, present in client optimizeDeps.include; both normal stories still passed. Original log retained."
+            ]
+          },
+          "reportChecks": {
+            "recorded_at_utc": "2026-10-19T13:21:37.264173+00:00",
+            "job": "e16a74f6-779d-4af4-8ef2-ed89929b9544",
+            "exit_status": 0,
+            "result_class": "passed",
+            "checked_report_sha256": "a756eb2ed0ae7df0ee9f2995dfcabc89434cb5d50b59e492fd9f4b2932f38ca8",
+            "worker_check_run": "run-OiLEYF",
+            "docs_check": {
+              "result": "passed",
+              "tests": 13,
+              "markdown_files": 259
+            },
+            "worker_check": {
+              "ast": "passed",
+              "guards": "passed",
+              "selected_guards": 1,
+              "registered_guards": 45,
+              "types": "not applicable; no TypeScript workspace changed",
+              "lint": "not applicable; no source changed",
+              "brief_tests": "none named"
+            },
+            "logs": [
+              {
+                "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/report-check.log",
+                "sha256": "47cd3d51c78b0394d15ff72081355467a0a6ad0c91b79b7fa247426c0aad2b9e"
+              },
+              {
+                "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/report-check.1.log",
+                "sha256": "5dc87b2935da64242867792c65c1768c94191231defcb4377a1d7bf266ac4036"
+              },
+              {
+                "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/report-check.2.log",
+                "sha256": "6fb539b65fc04fd7461ad13af774ec9135fac139a577cf9198844a0d407f3e1b"
+              }
+            ],
+            "previous_report_fields_preserved": 31,
+            "evidence_hashes_verified": true,
+            "tracked_change": "docs/goals/audit-remediation-20261019/proofs/startup-navigation-review.json only"
+          }
+        }
+      },
+      "sourceAndArtifacts": {
+        "navigationOwnerManifest": [
+          {
+            "path": "apps/web/features/discover/browse-tabs.tsx",
+            "mainBlob": "ede86388b8dcb55a4c7e5db76feed7ff68316b4f",
+            "tested196aBlob": "ede86388b8dcb55a4c7e5db76feed7ff68316b4f",
+            "equal": true
+          },
+          {
+            "path": "apps/web/features/shell/localized-link.tsx",
+            "mainBlob": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba",
+            "tested196aBlob": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba",
+            "equal": true
+          },
+          {
+            "path": "apps/web/features/shell/current-page-visibility.ts",
+            "mainBlob": "4580530fd0e47923f4bf9de65a0baba9292b2a45",
+            "tested196aBlob": "4580530fd0e47923f4bf9de65a0baba9292b2a45",
+            "equal": true
+          },
+          {
+            "path": "apps/web/features/zones/site-navigation.tsx",
+            "mainBlob": "17ee6d85ab0d80b564bc9f9ea8870fc03e351799",
+            "tested196aBlob": "17ee6d85ab0d80b564bc9f9ea8870fc03e351799",
+            "equal": true
+          }
+        ],
+        "allElevenSiteInputsExactOnMain": [
+          {
+            "path": "apps/web/features/shell/localized-link.tsx",
+            "testedBlob": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba",
+            "mainBlob": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba",
+            "equal": true
+          },
+          {
+            "path": "apps/web/features/shell/current-page-visibility.ts",
+            "testedBlob": "4580530fd0e47923f4bf9de65a0baba9292b2a45",
+            "mainBlob": "4580530fd0e47923f4bf9de65a0baba9292b2a45",
+            "equal": true
+          },
+          {
+            "path": "apps/web/features/zones/site-navigation.tsx",
+            "testedBlob": "17ee6d85ab0d80b564bc9f9ea8870fc03e351799",
+            "mainBlob": "17ee6d85ab0d80b564bc9f9ea8870fc03e351799",
+            "equal": true
+          },
+          {
+            "path": "apps/web/features/zones/public-navigation-frame.stories.tsx",
+            "testedBlob": "3c9f4f01a86a5059923dcd229cf8c29ba07650da",
+            "mainBlob": "3c9f4f01a86a5059923dcd229cf8c29ba07650da",
+            "equal": true
+          },
+          {
+            "path": "apps/web/features/zones/zone-frame.tsx",
+            "testedBlob": "78975f822807cc211485ef25fe286eae41021990",
+            "mainBlob": "78975f822807cc211485ef25fe286eae41021990",
+            "equal": true
+          },
+          {
+            "path": "apps/web/features/zones/site-cuts.ts",
+            "testedBlob": "b191edace8b4a3d683bddcdba2ff766a1eca3edd",
+            "mainBlob": "b191edace8b4a3d683bddcdba2ff766a1eca3edd",
+            "equal": true
+          },
+          {
+            "path": "apps/web/features/zones/fixtures.ts",
+            "testedBlob": "1c0e2d0e401bb6628cb32a62744b0cf21506186f",
+            "mainBlob": "1c0e2d0e401bb6628cb32a62744b0cf21506186f",
+            "equal": true
+          },
+          {
+            "path": "apps/web/.storybook/preview.tsx",
+            "testedBlob": "1ba5806d7f8720646dfe0a591067966745179187",
+            "mainBlob": "1ba5806d7f8720646dfe0a591067966745179187",
+            "equal": true
+          },
+          {
+            "path": "apps/web/.storybook/main.ts",
+            "testedBlob": "9ff3e4e1f77dac7c040eb566b6cb102b83cce455",
+            "mainBlob": "9ff3e4e1f77dac7c040eb566b6cb102b83cce455",
+            "equal": true
+          },
+          {
+            "path": "package.json",
+            "testedBlob": "4aed970288778fefd485dd2e401e6fdf458f7a2d",
+            "mainBlob": "4aed970288778fefd485dd2e401e6fdf458f7a2d",
+            "equal": true
+          },
+          {
+            "path": "yarn.lock",
+            "testedBlob": "e70dcbe4159d3fcab2585962a1cf3688937eb0e5",
+            "mainBlob": "e70dcbe4159d3fcab2585962a1cf3688937eb0e5",
+            "equal": true
+          }
+        ],
+        "DiscoverViewQualifiedDelta": "Main2ac7ffe differs from testedf737dd only by19120c known failed-section heading/region wrapper. BrowseTabs props/navigation/selection and reveal owner unchanged.",
+        "libraryNavQualifiedDelta": {
+          "tested196aBlob": "d1d55ac753ba87246758792cd75e0bc2b8fdeed2",
+          "mainBlob": "8448b624b334cbd23ffade74247b613b3bc9b97d",
+          "onlyDifference": "Import BringIntoRow and replace Loans li with active-current BringIntoRow; links, classes, labels, current markers and surrounding navigation unchanged.",
+          "wrapperBlob": "f4dc79482009201dbddab229cf370029bffb7cb7",
+          "retainedCompatibleComposedLibraryFrontend": "53f4ec6709f31bfb0cf7eca934e25b796644fa88"
+        },
+        "SiteManifest": ".temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/evidence-manifest.json",
+        "SiteManifestSha256": "271fca547cf9a68f0ef4c2e21b43264a3e5bf2bffdf73fbb85054046d3616027",
+        "verifiedSiteArtifacts": [
+          {
+            "path": ".temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/result.json",
+            "sha256": "3547865d11476da2cf71ac1849d11485e678d0a95b0e35977c9b0955e2d07892",
+            "bytes": 863636
+          },
+          {
+            "path": ".temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/source-provenance.json",
+            "sha256": "60d14a89a1208917d84579291278cdc80d9b222d9b5e371a027e12b244f8dbc8",
+            "bytes": 4336
+          },
+          {
+            "path": ".temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/site-navigation.test.ts",
+            "sha256": "d124c692957016fd5e6ddc014661c84fa203b9ba16b90840f3fd1479e8f7320b",
+            "bytes": 15187
+          },
+          {
+            "path": ".temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/finalize-inspection.py",
+            "sha256": "c9f72a7800065a8de78d635a7a1fb00fcdf89f3873d2baab1f36654f0e90656f",
+            "bytes": 13202
+          },
+          {
+            "path": ".temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/installed-storybook-embed-semantics.txt",
+            "sha256": "706e5c5e743202429d6be63789b78b75b412689d3ef2239b03b5dd8b4566bfd2",
+            "bytes": 191
+          },
+          {
+            "path": ".temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/site-D4-002-original-readiness.json",
+            "sha256": "43b13f569fcabd675bb6e9195a1de5d5dc772104a4102432161019df21a96922",
+            "bytes": 15637
+          },
+          {
+            "path": ".temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/site-studio-named-gate-and-main-dependencies.json",
+            "sha256": "f84aeac3443a76095bbdcedf7fad8cd4b99141a0cec7fb239fb143f93f4c48e2",
+            "bytes": 18014
+          },
+          {
+            "path": ".temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/storybook.server.log",
+            "sha256": "ad0a6adb6c1eea4b1d9cfb4e0efd952540b4310765edf71618ac0080c0366eab",
+            "bytes": 4528
+          },
+          {
+            "path": ".temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/recorded-job.log",
+            "sha256": "a8c9a17bd31f167726219b60a16dfd37492dda7b1d5247b2fed2ada6eff2bec8",
+            "bytes": 2306
+          },
+          {
+            "path": ".temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/cleanup-verification.json",
+            "sha256": "855f021e6e8545d6620657937cd5928288e418a13842d8299f6cdc8db240ee81",
+            "bytes": 546
+          },
+          {
+            "path": ".temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/report-before-site-inspection.json",
+            "sha256": "7bac36159b7fcc6eeef1ccb0cf1c37e0e5d80695042b205f7b41a52f71683a6b",
+            "bytes": 183158
+          },
+          {
+            "path": ".temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/RealmSite-390-before-focus.png",
+            "sha256": "28256f181c1261fa24f5cad197ced15845f712b84c5dc822fd01f94a8bc6357c",
+            "bytes": 22891
+          },
+          {
+            "path": ".temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/RealmSite-390-focus.png",
+            "sha256": "9999415b6a1b66add71185c5714c0c836fab561b8a7b1266e3b91e6dffabae77",
+            "bytes": 23948
+          },
+          {
+            "path": ".temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/RealmSite-1440-before-focus.png",
+            "sha256": "bc4bb57fe3965701a9ed03d811e8684f3ee218d22e276762ee18503ef5bc4a20",
+            "bytes": 29539
+          },
+          {
+            "path": ".temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/RealmSite-1440-focus.png",
+            "sha256": "4d6127edb93a762ee41bcbf3981e777c80888b52556a5b54f773433391b2a4ec",
+            "bytes": 30692
+          },
+          {
+            "path": ".temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/StandaloneSite-390-before-focus.png",
+            "sha256": "c209e61d2d971aabb069c94f18eb37bdd4a47181ff3b1bd8635b6ba242ef451b",
+            "bytes": 19965
+          },
+          {
+            "path": ".temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/StandaloneSite-390-focus.png",
+            "sha256": "e30307939d5fc460c0a51755672002e4a64b36fea8a966c9194187255ebe17a0",
+            "bytes": 21071
+          },
+          {
+            "path": ".temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/StandaloneSite-1440-before-focus.png",
+            "sha256": "293416746e6aff0e201232878c1146ff7a41450b51db2831d30e1c8a6643a52d",
+            "bytes": 26361
+          },
+          {
+            "path": ".temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/StandaloneSite-1440-focus.png",
+            "sha256": "1e7436d6d5f9a6e56299b5c4c4d24a0de4fe234c923b975cf5bcaebd05a7a4e0",
+            "bytes": 27525
+          },
+          {
+            "path": ".temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/baseline-RealmSite.png",
+            "sha256": "6fbadb6f7c03267f9c1cab691d73f5a4ca2c36b1bcc505ba474da1d75c085754",
+            "bytes": 28042
+          },
+          {
+            "path": ".temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/baseline-StandaloneSite.png",
+            "sha256": "ddc90245a44f2f054e3ec2b962bcd928ac1a96ae21c752e7a732dd2f25ec1849",
+            "bytes": 24909
+          }
+        ],
+        "allSiteArtifactHashesMatch": true
+      },
+      "approvedReportSelection": {
+        "task": "G-2847",
+        "approvedReportCommit": "e5935025fe756dbbd5d58e30b46620d70b045a26",
+        "path": "docs/goals/audit-remediation-20261019/proofs/startup-navigation-review.json",
+        "approvedFullReportBlob": "7b70213c08dcd8b3e136186ce79aca2e19378b0c",
+        "approvedFullReportSha256": "a756eb2ed0ae7df0ee9f2995dfcabc89434cb5d50b59e492fd9f4b2932f38ca8",
+        "selectedSectionOnly": "d4_002_site_navigation_component_inspection",
+        "selectedSectionSha256": "692d26b8f0c4c624d873a6e6508f41c905cb5cf52d145a3bc545f4364d1137aa",
+        "baseMain": "178b831da1ccc347d0db6f57208ae75659685252",
+        "baseReportBlob": "85a3b94e512c3423170dbcc07495470a70302b32",
+        "baseReportSha256": "dc3e108ae5c60942dc8626f3a8c1bc7335d702b1915c1122d250e6740443135b",
+        "selectedAfterSha256": "e3d16a14cd372b39a19a8610fdc4f57cc5092a831a015900711074650d8c8d84",
+        "preservesEveryCurrentMainField": true,
+        "omittedPeerSections": "Every other worker-only section and worker top-level disposition replacement; existing Main fields retained byte-equivalent as JSON values.",
+        "patch": ".temp/audit-remediation-20261019/two-hour-sprint/site-D4002-D1003-report-selection/D4-002/report-only.patch",
+        "candidateReport": ".temp/audit-remediation-20261019/two-hour-sprint/site-D4002-D1003-report-selection/D4-002/after.json",
+        "normalRootCommitCommand": "task goal -- commit -m \"Record original D4-002 independent proof\" -- docs/goals/audit-remediation-20261019/proofs/startup-navigation-review.json",
+        "rootCapturePerformed": false
+      },
+      "missingOriginalAssertions": [],
+      "outOfScopeHoldsRejected": [
+        "WholeSite/Library/Studio journeys",
+        "AUD011 inventory topology/count or100-row genuine corpus",
+        "AUD012 voice/screenreader",
+        "nonzero notification semantics",
+        "fresh backend/fullcatalogue or oldbaseline restore"
+      ],
+      "rootAcceptance": {
+        "acceptedAt": "2026-10-19T13:30:41.900552+00:00",
+        "main": "178b831da1ccc347d0db6f57208ae75659685252",
+        "verifiedMainInputRecords": 15,
+        "verifiedArtifactHashes": 23,
+        "originalAssertionsUnchanged": true,
+        "skillRead": ".agents/skills/product-audit/SKILL.md",
+        "scope": "Original3+3, genuine Discover/Studio/Library and recorded Site inspection kept distinct; no missing original assertion. Additive independent report captured next through normal gate."
+      },
+      "canonicalClosureAuthority": "root manager original applicable3+3 acceptance; no new scope/criteria"
     }
   ]
 }
