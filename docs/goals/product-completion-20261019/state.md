@@ -1,13 +1,11 @@
 # Product completeness state
 
-Checkpoint 2c6b6a7a retains the previous checkpoint and covers handled
-mail:76c28496-a567-456b-8968-090359f91600,
-mail:1af0151c-09c5-468a-96fb-924dfaf646ce,
-mail:overdue:mail:c7dfe475-f221-4b9b-99cb-fb3bb84b6224:product-completion-20261019,
-task:G-2826:15, mail:e69774b2-147c-46a1-bab2-ebfdc9ce59d5 and
-mail:01c63ef0-e86f-4c9a-8095-4d1086606161. All five underlying mail deliveries
-are acknowledged. Covered decisions run through 06:32Z; measures were read
-at this checkpoint. Other event turns retain their own dispositions.
+Checkpoint 12697ac8 retains checkpoint 2c6b6a7a and covers handled
+mail:af7c802d-e9b5-4f1e-88ba-2e93848585d3, task:G-2823:35,
+mail:b5472b28-a2b0-43fa-ad7d-a7f40d2c783e and task:G-2823:39. Both mail
+deliveries are acknowledged. Covered decisions run through 07:24Z; measures
+were read at this checkpoint and may include later activity. Other event turns
+retain their own dispositions.
 
 Scope remains domain-leading completeness across supported domains, including
 specialist jobs, with API outcomes first and actual rendered/interaction proof.
@@ -15,6 +13,14 @@ Accepted research G-2787/G-2788/G-2792/G-2797 and tooling G-2789/G-2794 remain
 closed verified. Progress remains 0/61 original findings closed by these events,
 zero additional completeness rows proved. The registry's 68/68 rows and 408
 cells remain a distinct denominator.
+
+Program completed the academic, Wikipedia/Cite and repository-boundary citation
+research; do not reopen or duplicate it. Maintainer-confirmed library/native/
+annotation separation permits minimal extraction of existing algorithms.
+Citation model, targets and numbering remain recommendations for maintainer
+review, introducing no prerequisite for unrelated fixes, general engine/DSL or
+installed library. Continue ready independently reviewed, checked product slices
+and original assertions; research completion changes no original61 acceptance.
 
 G-2824 shared controls are implemented on main at
 64736e0f29c56b7355fd1d8bfaaf2336f1e4db6d: 59/59 candidate stories, 19 viewed
@@ -51,6 +57,14 @@ AUD-006 home/Discover/search/back in both builds, real eight-locale AUD-012
 names/unread/axe checks and D4-002 route/history/filter/focus at both widths.
 Heard voice/screen-reader acceptance remains due; Program received the operator
 request. Audit retains finding closure and wave integration.
+
+Site's retained G-2825 theme correction establishes only 51/64 distinct actual
+theme combinations per build: 13/16 requested-light signed-in cases rendered
+DOM.theme=dark in both development and production. Anonymous 32/32 and signed-in
+dark 16/16 matched. Preserve original evidence and assertions. Site retains the
+supported actual-theme setup and rerun of only missing signed-in light cases on
+the same immutable frontend/backend, verifying DOM.theme before original bodies.
+D3-002 remains open; product made no brief change or duplicate dispatch.
 
 G-2829's report-only partial Settings proof is accepted, with report source
 41e1aeef56eccababa64d672e622789a1b220844 and original product pin 92b8a78f.
@@ -164,25 +178,49 @@ passing Goal/AppHost/script checks and a 45,378 ms isolated copy within the
 unchanged 90-second wall, with checkpoint digest unchanged. This does not
 exclude recurrent host latency or prove live telemetry limits.
 
-Decision 1347f62e20 requires both retained review fixes before normal refresh:
-cancellation before the container PID acknowledgement must prevent owned copy
-work starting or surviving, and smoke timeout must terminate the exact owned
-native CLI/launcher and close or drain inherited streams within the existing
-wall. Prove delayed-start cancellation, no surviving copy/artifact/source lock,
-stalled-child bounded exit and sibling/checkpoint/writer preservation. Keep the
-existing owners, affected behavior/script/AppHost checks and reviewed landing;
-no broad termination or longer wall. The worker resumed for this follow-up;
-the later recovery-mail event retained recorded repair/check job ded1ef57 without
-starting another worker, job or landing.
+Decisions 76bf44e6ca and 2811e7dfa9 retain candidates 9890ecc2652f,
+374bb9ec10a3 and 02aa624ac74a without accepting cleanup repair or landing.
+Job de5369d5 passed delayed-copy cancellation and stalled-native deadline cases,
+but reached five failing exact disposable cleanup assertions: live writers,
+pending-migration SIGINT/SIGTERM, dump failure and restore failure. Preserve its
+112 passes, one skip and five failures separately from startup failure. Job
+1e6bec86 later reached one cleanup assertion failure and one teardown failure;
+it failed before later preservation assertions. An observer gap establishes no
+continuous checkpoint wait; an unavailable inspect establishes no absence.
+
+The latest committed cut resumed G-2823 for exact fixture
+refresh-rehearsal-c006102e8f8127e1 and its proven anonymous volumes. Bounded
+admitted identity/state requests must distinguish transport/daemon, permission
+and confirmed absence before one supported exact removal within 45 seconds.
+Use retained mount identities if already absent; unidentifiable volumes remain
+unconfirmed. An unavailable request ends that stage with its precise blocker.
+No prune, inferred deletion or unchanged removal retry is authorized.
+
+Use retained evidence to repair sanitized host-invocation error classification,
+including status zero with an invocation error, and distinguish checkpoint
+write/sync, process-barrier, DROP and Docker transport timings. A sampler must
+run independently of the synchronous test loop, stay bounded and retain gaps.
+Only after exact fixture cleanup is confirmed may one admitted isolated
+observation run for up to 120 seconds within the 600-second preparation ceiling.
+Require a demonstrated cleanup repair or independently changed premise before
+the selected original failing case, then the full targeted file once and
+affected recorded script/AppHost checks. Preserve five-second utility and
+90-second copy walls, pinned storage/durability, all assertions, exact
+cancellation/quiescence and checkpoint/writer/data/sibling guarantees. No shared
+interruption, background cleanup, watcher or unchanged full-file replay. Return
+an unresolved cause or external operation once and exit. Both retained review
+fixes, full cleanup acceptance and reviewed follow-up landing remain due before
+normal shared refresh; subsequent handoffs belong to their own event turns.
 
 Program completed supported `task dev:stop` and `task dev`, both exit 0, with
 AppHost PID 1363725 and reported healthy Account/Accounts/Main/relay/Web/Storybook.
 Data and the prior checkpoint were preserved; no reset or normal refresh ran.
 Retain the actual backend pointer: restart alone proves no newly served revision.
 Committed decision 5b80beb702 delegates post-repair refresh to product without
-another Program reading/scheduling turn. After both fixes are reviewed and
-landed, verify clean containing main and normal lifecycle admission/locks,
-inspect `task dev:refresh -- --dry-run`, then run `task dev:refresh -- --wait`.
+another Program reading/scheduling turn. After both fixes and full cleanup
+outcomes are accepted, reviewed and landed, verify clean containing main and
+normal lifecycle admission/locks, inspect `task dev:refresh -- --dry-run`, then
+run `task dev:refresh -- --wait`.
 Do not repeat stop/start; coordinate any further interruption through the two
 sprint peer receipts. The worker may not interrupt healthy resources.
 
@@ -205,27 +243,29 @@ restore isolated copies. Corpus prerequisites do not block independent site
 proof. Small main batches need affected checks and codex-1/xhigh review;
 coordinate publication. Final full regression/confirmation precedes wave merge.
 
-Checkpoint measures: first attempts 9/10 (90%; today 3/4, 75%); landed median
-4.5 attempts, maximum 34 (G-2823); 75.11M input/660.1k output; tokens per proved
+Checkpoint measures: first attempts 9/12 (75%; today 3/6, 50%); landed median
+4.5 attempts, maximum 41 (G-2823); 81.6M input/715.3k output; tokens per proved
 row unavailable. Tool counts include job wakes and open partial-landing
-continuations. Two environment attempts, one step continuation and one fix;
-68 job wakes: 20 passes, 33 assertion failures, two environment failures and
-13 harness failures. The common setup cause is routed to G-2842; G-2823 owns
-the bounded lifecycle fixes. One retained other-kind refusal still needs tooling
-disposition. The six covered manager turns used 3.00M input/37.6k
-output tokens, excluding this checkpoint; this is not a comparable
-manager/worker share.
+continuations. Two environment attempts, one step continuation and three fixes;
+75 job wakes: 23 passes, 35 assertion failures, two environment failures,
+14 harness failures and one unclassified. The common setup cause is routed to
+G-2842; G-2823 owns bounded fixture recovery and causal cleanup repair. The
+unclassified wake and one retained other-kind refusal still need tooling
+disposition. The four covered manager turns used 3.018M input/22.8k output
+tokens, including 2.801M cached input, excluding this checkpoint; this is not a
+comparable manager/worker share.
 Latest recorded efficiency window remains 2026-10-18T08:36:08Z–20:36:08Z:
 552.47M processed input, 527.63M cached; 37% other-session share cannot establish
 manager-only share and omits older-started sessions. No comparable savings or
 spending claim follows. Audit owns shared scheduling; verified hourly coverage,
 later full-window comparison and instrumentation attribution remain due.
 
-Next event owners: product consumes G-2823's repair handoff, obtains its reviewed
-landing, executes delegated normal refresh and finishes runtime proof. Site
-continues G-2825/Settings proof under its latest brief and direct handoff, and
-returns G-2842's supported transition receipts before a separate G-2826
-continuation decision. Audit retains finding closure, focused native fixes and
+Next event owners: product consumes G-2823's bounded fixture/causal handoff,
+requires demonstrated cleanup repair and reviewed follow-up landing, then
+executes delegated normal refresh and finishes runtime proof. Site continues
+G-2825's actual-theme correction and Settings proof under its latest brief and
+direct handoff, and returns G-2842's supported transition receipts before a
+separate G-2826 continuation decision. Audit retains finding closure, focused native fixes and
 tooling gates; Program's existing controller owner owes reviewed fingerprint and
 activation receipts. No watcher, duplicate assignment/landing or worker/landing
 wait belongs to this checkpoint.
