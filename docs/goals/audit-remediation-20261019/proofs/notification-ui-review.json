@@ -1517,8 +1517,32 @@
       }
     },
     "navigationAppendixValidation": {
-      "status": "pending-recorded-documentation-and-worker-check",
-      "scope": "Only the owned review JSON changes; prior source review and checks remain preserved above."
+      "status": "passed",
+      "scope": "Report-only appendix; product, test, assertions and shared data unchanged. Producer one-story proof reused separately above.",
+      "checkedHead": "a161ad5ebee4a72541631f6ef75a2cd571b30cbd",
+      "headUnchangedDuringWorkerCheck": true,
+      "checks": [
+        {
+          "status": "passed",
+          "job": "job:ce97425b-24f1-4241-8ad2-ec5e2f2b8c92",
+          "step": 1,
+          "command": "task docs:check",
+          "exitStatus": 0,
+          "log": ".temp/goal/jobs/ce97425b-24f1-4241-8ad2-ec5e2f2b8c92.1.log",
+          "sha256": "33621b0789fc0c162df6baadcef5d5eaf5b1662a42cb2b5c429e3ad534b55f8b",
+          "result": "13 tests passed; 250 Markdown files checked for local links, fragments and design navigation."
+        },
+        {
+          "status": "passed",
+          "job": "job:ce97425b-24f1-4241-8ad2-ec5e2f2b8c92",
+          "step": 2,
+          "command": "task goal -- check",
+          "exitStatus": 0,
+          "log": ".temp/goal/jobs/ce97425b-24f1-4241-8ad2-ec5e2f2b8c92.2.log",
+          "sha256": "dddae66e79dae15104f2ff7dd12bfb76ca5dc720b338e5b3ba39bc70cd642a49",
+          "result": "types/tests/lint/ast/guards passed; no TypeScript workspace or source changes, no brief tests, 1/45 applicable repository guards selected."
+        }
+      ]
     }
   },
   "managerNext": [
@@ -1527,5 +1551,6 @@
     "Canonical class/ledger status remains the manager responsibility. No backend notification delivery, nonzero backend fixture, new capability/contract/persona matrix, unrelated voice-control gate or whole-domain journey is added as an original D4-015 precondition."
   ],
   "validationCompletedAt": "2026-10-19T10:37:48.403616+00:00",
-  "navigationReviewCompletedAt": "2026-10-19T10:53:55.255892+00:00"
+  "navigationReviewCompletedAt": "2026-10-19T10:53:55.255892+00:00",
+  "navigationAppendixValidationCompletedAt": "2026-10-19T10:54:55.503751+00:00"
 }
