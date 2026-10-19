@@ -1405,7 +1405,7 @@ describe('isolated PostgreSQL migration rehearsal', () => {
     const deadline = Date.now() + 60_000;
     container = docker(['run', '--detach', '--rm', '--name', fixtureName,
       '--pull=never', '--memory=512m', '-e', 'POSTGRES_PASSWORD=fixture-admin',
-      '-p', '127.0.0.1::5432', image], 45_000);
+      '-p', '127.0.0.1::5432', image, '-c', 'log_line_prefix=%m [%p] [%b] '], 45_000);
     const port = docker(['port', container, '5432/tcp']).split(':').at(-1)!;
     const adminUrl = `postgres://postgres:fixture-admin@127.0.0.1:${port}/postgres`;
     while (true) {
@@ -1450,9 +1450,22 @@ describe('isolated PostgreSQL migration rehearsal', () => {
     finally {
       const logs = spawnSync('docker', ['logs', '--tail', '100', fixtureName], { encoding: 'utf8', timeout: 1_000, maxBuffer: 65_536 });
       const health = (logs.stdout + logs.stderr).split('\n').flatMap(line => {
-        const signal = line.match(/server process .* was terminated by signal (\d+)/);
-        if (signal) return [`backend-signal-${signal[1]}`];
-        const exit = line.match(/server process .* exited with exit code (\d+)/);
+        const prefix = line.match(/\[(\d+)\] \[([^\]]+)\]/);
+        const process = prefix ? [`pid-${prefix[1]}`, ...[
+          'client backend', 'checkpointer', 'background writer', 'walwriter', 'startup',
+          'autovacuum launcher', 'autovacuum worker', 'parallel worker', 'postmaster',
+        ].filter(kind => prefix[2] === kind)] : [];
+        const sender = line.match(/Signal sent by PID (\d+), UID (\d+)/);
+        if (sender) return [...process, `sender-${sender[1]}`];
+        if (line.includes('terminating connection due to administrator command')) return [...process, 'session-terminated'];
+        const signal = line.match(/(?:was )?terminated by signal (\d+)/);
+        if (signal) return [...process, `backend-signal-${signal[1]}`,
+          `target-${line.match(/\(PID (\d+)\)/)?.[1] ?? 'unknown'}`, ...[
+          'untracked child process', 'client backend', 'server process', 'background worker', 'wal writer', 'WAL writer', 'WAL summarizer', 'io worker',
+          'checkpointer', 'background writer', 'walwriter', 'logical replication launcher',
+          'autovacuum launcher', 'parallel worker', 'startup process', 'archiver', 'autovacuum worker',
+        ].filter(kind => line.includes(kind))];
+        const exit = line.match(/exited with exit code (\d+)/);
         if (exit) return [`backend-exit-${exit[1]}`];
         if (line.includes('PANIC:')) return ['panic', ...[
           'could not fsync', 'could not fdatasync', 'could not write', 'could not open',
@@ -1698,7 +1711,7 @@ const args = process.argv.slice(2);
 const index = args.findIndex(arg => arg.includes("echo 'REHEARSAL dump start'"));
 if (index >= 0) {
   if (${JSON.stringify(failure)}.startsWith('SIG')) {
-    args[index] = "echo 'REHEARSAL dump start' >&2; exec sleep 300";
+    args[index] = "trap 'trap \\\"\\\" TERM INT; wait; exit 124' TERM INT; echo 'REHEARSAL dump start' >&2; sleep 300";
   } else {
     console.error('REHEARSAL dump start');
     console.error('pg_dump: dumping contents of table "private-row@example.invalid"');
