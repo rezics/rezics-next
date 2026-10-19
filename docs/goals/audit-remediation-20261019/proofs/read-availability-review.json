@@ -2352,5 +2352,714 @@
       ],
       "receiptFinalization": "Only report receipt metadata finalized after these checks; source, assertions, decisions and historical evidence unchanged."
     }
+  },
+  "discoveryConcurrentCoreReadContinuation": {
+    "reviewedAt": "2026-10-19T11:17:00.242961+00:00",
+    "authority": "Latest manager same-claims continuation: only original missing D5-004 concurrent core-read criterion; unchanged source/native proofs and historical failures retained.",
+    "reviewer": {
+      "worker": "G-2846",
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "independent": true,
+      "nestedAgents": false,
+      "fallback": false
+    },
+    "decision": {
+      "tenPathSourceOnlyVerdict": "APPROVE unchanged 50f11211795621e95941719d745bfd3b3f381591 ten-path mechanism, as previously independently reviewed in report commit 39df91b7e4192b0cdccd23faabf8fbd6a267b09b; all ten product blobs at ff5a214 are byte-identical. No new source review or unchanged native replay performed.",
+      "testSourceAssessment": "The authored selector can establish the original controlled faulty-refresh/pending-response overlap assertion if its actual gates, six real HTTP answers, quarantine, no-reread and repair/checkpoint assertions pass. It forwards native bytes and does not invent public success. It does not prove overlapping native CPU execution or cancellation/resource drain.",
+      "runtimeDisposition": "blocked on existing preparation compatibility, before QA admission or assertion execution",
+      "newProductFailureConfirmed": false,
+      "sourceApprovalWithdrawn": false,
+      "originalD5004Closed": false,
+      "automaticLanding": false,
+      "wholeCandidateLandingCertified": false
+    },
+    "productPins": {
+      "observedAt": "2026-10-19T11:15:09.144861+00:00",
+      "candidate": "ff5a214f7de0f66b888f728ab48e50863f338374",
+      "candidateTree": "f268b1fce23a51ce62e9349f81f566a01ceade4e",
+      "peerHead": "ff5a214f7de0f66b888f728ab48e50863f338374",
+      "peerStatusPorcelain": "",
+      "tenPaths": [
+        {
+          "path": "services/main/migrations/access/2605_discovery_refresh_disposition.sql",
+          "revision": "ff5a214f7de0f66b888f728ab48e50863f338374",
+          "blob": "43b36a41e6d3d3ea6ad540f8153098494cd59317",
+          "sha256": "ef134594fd78c03871e1fd18e7e9364b29deaa13c96df71f39ccf01e6414d90f",
+          "bytes": 1084,
+          "equalPreviouslyReviewed50f112": true
+        },
+        {
+          "path": "services/main/src/modules/discovery/credits.ts",
+          "revision": "ff5a214f7de0f66b888f728ab48e50863f338374",
+          "blob": "27d564a9a981c2ec126cbd4ad9f961e03a450a29",
+          "sha256": "726af3efd432013d6a337abd94a03c76d4c04fd74e31402ae0fc3d6c69ac4289",
+          "bytes": 9096,
+          "equalPreviouslyReviewed50f112": true
+        },
+        {
+          "path": "services/main/src/modules/discovery/lineage.ts",
+          "revision": "ff5a214f7de0f66b888f728ab48e50863f338374",
+          "blob": "a5c0538508bac0b0f2996455f81cd1bccd976c85",
+          "sha256": "9ca45312e0ae102e816b2031b0f928c2e239c71bd84438808b028cfdbaf9f6d3",
+          "bytes": 1778,
+          "equalPreviouslyReviewed50f112": true
+        },
+        {
+          "path": "services/main/src/modules/discovery/refresh-store.ts",
+          "revision": "ff5a214f7de0f66b888f728ab48e50863f338374",
+          "blob": "defc127b6c012f99cb27a1e8c49cbea2bf31d4bb",
+          "sha256": "b651003ce756022907de938b4de338daf3286994df36aefb8d08d5cf3f18b6d7",
+          "bytes": 25226,
+          "equalPreviouslyReviewed50f112": true
+        },
+        {
+          "path": "services/main/src/modules/discovery/refresh.ts",
+          "revision": "ff5a214f7de0f66b888f728ab48e50863f338374",
+          "blob": "f9f1ad773fd0f089b60af13cd3c27516d4d60e70",
+          "sha256": "02479ebd50095eb8abcbb76c153166abfeaf8ede1634ec02ca435865ca6b9106",
+          "bytes": 19487,
+          "equalPreviouslyReviewed50f112": true
+        },
+        {
+          "path": "services/main/src/modules/discovery/source.ts",
+          "revision": "ff5a214f7de0f66b888f728ab48e50863f338374",
+          "blob": "50fe7da3b20f48105be6eb1ac9597bfb3c408aab",
+          "sha256": "114f6a6b7420664bc3429702be60f8c0265339a15bcb751fe1b180cd891dcc3b",
+          "bytes": 24289,
+          "equalPreviouslyReviewed50f112": true
+        },
+        {
+          "path": "services/main/src/modules/work/read-classifications.ts",
+          "revision": "ff5a214f7de0f66b888f728ab48e50863f338374",
+          "blob": "1a7697b593cd187132ea5aa650b8daef9e3a902a",
+          "sha256": "683478a49188ab40465ce8cb72be2161754088a1b2d714ccd088432e99384f9a",
+          "bytes": 14697,
+          "equalPreviouslyReviewed50f112": true
+        },
+        {
+          "path": "services/main/src/modules/work/read-source-fault.ts",
+          "revision": "ff5a214f7de0f66b888f728ab48e50863f338374",
+          "blob": "6f39dd70e3ccf55d658f1e3e4c5ef7d758012ac0",
+          "sha256": "e235a7180ad1aec3dd5c041f60df868163122c0922da9c27e188be06f203bd97",
+          "bytes": 668,
+          "equalPreviouslyReviewed50f112": true
+        },
+        {
+          "path": "services/main/tests/discovery-refresh.test.ts",
+          "revision": "ff5a214f7de0f66b888f728ab48e50863f338374",
+          "blob": "3dba75c69ca60932cf86655059f4801b0752865d",
+          "sha256": "d3d72b945dcdf9f235242c1c512ad64010e03d35d77de65810154616101683fd",
+          "bytes": 10154,
+          "equalPreviouslyReviewed50f112": true
+        },
+        {
+          "path": "tests/qa/integration/discovery-refresh.test.ts",
+          "revision": "ff5a214f7de0f66b888f728ab48e50863f338374",
+          "blob": "15d57cabd5864dc506a7a55c4d3ad8040bef000a",
+          "sha256": "79c899dec0a23cffba10f4fc8eebd1c3edfc91f4789196cf051eaa73ab830889",
+          "bytes": 27210,
+          "equalPreviouslyReviewed50f112": true
+        }
+      ]
+    },
+    "separateAssertionAndHarnessPins": {
+      "authoredCommit": "652e825ee2858d5370f9c654cfa5d8f2bbfff4bc",
+      "authoredParent": "34afa9c89e2fb7859681b76ff10414e4f61d7b16",
+      "reviewedDeltaPaths": [
+        "tests/qa/integration/audit-bounded-reads.test.ts",
+        "docs/goals/audit-remediation-20261019/read-budget-outcomes.json (D5004C01 and refreshConcurrencyContinuation only)"
+      ],
+      "test": {
+        "path": "tests/qa/integration/audit-bounded-reads.test.ts",
+        "revision": "652e825ee2858d5370f9c654cfa5d8f2bbfff4bc",
+        "blob": "5b619eff8d21d0877244c2ae8be0cc58fcfcfce3",
+        "sha256": "02f661be81d6122d21dfba025f8c933b53a04b267d891e79c34641d0b6cb00c2",
+        "bytes": 23051
+      },
+      "matrix": {
+        "path": "docs/goals/audit-remediation-20261019/read-budget-outcomes.json",
+        "blob": "129e68c51fd2fd63c1ad158c47f5affbcaeb503b",
+        "sha256": "6df675a65bf1f62baa1f659ffc1169d75625df7a1ed98e30c9abacfdca34420f"
+      },
+      "supportAndRunner": [
+        {
+          "overlay": {
+            "path": "tests/qa/support/bounded-read-corpus.ts",
+            "revision": "652e825ee2858d5370f9c654cfa5d8f2bbfff4bc",
+            "blob": "3e96462c53d545ddbb067f8161c9639bc637a71b",
+            "sha256": "22b736942522a2915b25603908f8ef8b0ce4d2c1b187e87d3a7dc0b7a8374a79",
+            "bytes": 25514
+          },
+          "product": {
+            "path": "tests/qa/support/bounded-read-corpus.ts",
+            "revision": "ff5a214f7de0f66b888f728ab48e50863f338374",
+            "absent": true
+          },
+          "equal": false
+        },
+        {
+          "overlay": {
+            "path": "tests/qa/support/personas.ts",
+            "revision": "652e825ee2858d5370f9c654cfa5d8f2bbfff4bc",
+            "blob": "bee4a852e36dc8244a38896033bbe90b169c5497",
+            "sha256": "e38b4eff624b971ab4f6c58b028a66e4c7fe4017f83e47fbc2ce39bbb57c502b",
+            "bytes": 33624
+          },
+          "product": {
+            "path": "tests/qa/support/personas.ts",
+            "revision": "ff5a214f7de0f66b888f728ab48e50863f338374",
+            "blob": "f21cb38c0bab91cb730d7fda4adb21b275548769",
+            "sha256": "b2b2be661dd39b9baab070d0b823c3cee0d0109bb93de275058f02c65fd7f574",
+            "bytes": 32571
+          },
+          "equal": false
+        },
+        {
+          "overlay": {
+            "path": "tests/qa/support/persona-fixture-authority.ts",
+            "revision": "652e825ee2858d5370f9c654cfa5d8f2bbfff4bc",
+            "blob": "5930818272ff1e895761639fbafb75df99e73899",
+            "sha256": "02a60db426f311e024a8448e8f1c2a17e9fe809e89bfc0ca27aeaa25e3ed9e69",
+            "bytes": 1301
+          },
+          "product": {
+            "path": "tests/qa/support/persona-fixture-authority.ts",
+            "revision": "ff5a214f7de0f66b888f728ab48e50863f338374",
+            "blob": "5930818272ff1e895761639fbafb75df99e73899",
+            "sha256": "02a60db426f311e024a8448e8f1c2a17e9fe809e89bfc0ca27aeaa25e3ed9e69",
+            "bytes": 1301
+          },
+          "equal": true
+        },
+        {
+          "overlay": {
+            "path": "tests/qa/support/work-profile.ts",
+            "revision": "652e825ee2858d5370f9c654cfa5d8f2bbfff4bc",
+            "blob": "1d13174551974060b6ca29f89db9a2daa5c32216",
+            "sha256": "a950846b08f32e1e74573518cacd473629686cd26318bd28c895e45a111a707b",
+            "bytes": 26440
+          },
+          "product": {
+            "path": "tests/qa/support/work-profile.ts",
+            "revision": "ff5a214f7de0f66b888f728ab48e50863f338374",
+            "blob": "1d13174551974060b6ca29f89db9a2daa5c32216",
+            "sha256": "a950846b08f32e1e74573518cacd473629686cd26318bd28c895e45a111a707b",
+            "bytes": 26440
+          },
+          "equal": true
+        },
+        {
+          "overlay": {
+            "path": "scripts/load/catalogue-backup.ts",
+            "revision": "652e825ee2858d5370f9c654cfa5d8f2bbfff4bc",
+            "blob": "a77bcdec0094d324cfaa60d5e02b31578bdaf346",
+            "sha256": "e17d1baa98cf54cf2a2764f0b14c3febdd9bc10b258892a8debf27be74d082fc",
+            "bytes": 17084
+          },
+          "product": {
+            "path": "scripts/load/catalogue-backup.ts",
+            "revision": "ff5a214f7de0f66b888f728ab48e50863f338374",
+            "blob": "a77bcdec0094d324cfaa60d5e02b31578bdaf346",
+            "sha256": "e17d1baa98cf54cf2a2764f0b14c3febdd9bc10b258892a8debf27be74d082fc",
+            "bytes": 17084
+          },
+          "equal": true
+        },
+        {
+          "overlay": {
+            "path": "scripts/load/compatibility.ts",
+            "revision": "652e825ee2858d5370f9c654cfa5d8f2bbfff4bc",
+            "blob": "82d4cf905b3db35a049440d0254da999a4bb3fe4",
+            "sha256": "2d89f8f7bfd5e85653e62896c3f2d2d6d46e7d1bd8f3edc3fc9e30bdb0dc7e23",
+            "bytes": 3717
+          },
+          "product": {
+            "path": "scripts/load/compatibility.ts",
+            "revision": "ff5a214f7de0f66b888f728ab48e50863f338374",
+            "blob": "82d4cf905b3db35a049440d0254da999a4bb3fe4",
+            "sha256": "2d89f8f7bfd5e85653e62896c3f2d2d6d46e7d1bd8f3edc3fc9e30bdb0dc7e23",
+            "bytes": 3717
+          },
+          "equal": true
+        },
+        {
+          "overlay": {
+            "path": "scripts/qa/test.ts",
+            "revision": "652e825ee2858d5370f9c654cfa5d8f2bbfff4bc",
+            "blob": "81c4fa2ae7770c68b359f86ae910069aca509c08",
+            "sha256": "3f57d88efe82ff83e300594443f5c8bb824711003525ff3db615ef15a2165a80",
+            "bytes": 17812
+          },
+          "product": {
+            "path": "scripts/qa/test.ts",
+            "revision": "ff5a214f7de0f66b888f728ab48e50863f338374",
+            "blob": "81c4fa2ae7770c68b359f86ae910069aca509c08",
+            "sha256": "3f57d88efe82ff83e300594443f5c8bb824711003525ff3db615ef15a2165a80",
+            "bytes": 17812
+          },
+          "equal": true
+        },
+        {
+          "overlay": {
+            "path": "scripts/qa/cli.ts",
+            "revision": "652e825ee2858d5370f9c654cfa5d8f2bbfff4bc",
+            "blob": "e6770de45d4e8511693c48fa20b7e0738d41dcf0",
+            "sha256": "8ba1141697413c310ff3fc6b80654e5fe7310591d9fb7c9ab57f869557d952a9",
+            "bytes": 89967
+          },
+          "product": {
+            "path": "scripts/qa/cli.ts",
+            "revision": "ff5a214f7de0f66b888f728ab48e50863f338374",
+            "blob": "e6770de45d4e8511693c48fa20b7e0738d41dcf0",
+            "sha256": "8ba1141697413c310ff3fc6b80654e5fe7310591d9fb7c9ab57f869557d952a9",
+            "bytes": 89967
+          },
+          "equal": true
+        },
+        {
+          "overlay": {
+            "path": "scripts/goal/goalctl.ts",
+            "revision": "652e825ee2858d5370f9c654cfa5d8f2bbfff4bc",
+            "blob": "79ae1a7484acc4d6cd793c79aae05d5a94d61273",
+            "sha256": "cf06b6b0727f466917913fc2a607194323c43037439b8636ce8bc84342d6ccac",
+            "bytes": 18177
+          },
+          "product": {
+            "path": "scripts/goal/goalctl.ts",
+            "revision": "ff5a214f7de0f66b888f728ab48e50863f338374",
+            "blob": "79ae1a7484acc4d6cd793c79aae05d5a94d61273",
+            "sha256": "cf06b6b0727f466917913fc2a607194323c43037439b8636ce8bc84342d6ccac",
+            "bytes": 18177
+          },
+          "equal": true
+        },
+        {
+          "overlay": {
+            "path": "Taskfile.yml",
+            "revision": "652e825ee2858d5370f9c654cfa5d8f2bbfff4bc",
+            "blob": "30cfc2093436fab2cc18a589404a2f589783f7c7",
+            "sha256": "9ebb829d62cd74ab42b1fa2bd4ad2786cd9ef8d16e61ef4f3637d9a40693516f",
+            "bytes": 25724
+          },
+          "product": {
+            "path": "Taskfile.yml",
+            "revision": "ff5a214f7de0f66b888f728ab48e50863f338374",
+            "blob": "30cfc2093436fab2cc18a589404a2f589783f7c7",
+            "sha256": "9ebb829d62cd74ab42b1fa2bd4ad2786cd9ef8d16e61ef4f3637d9a40693516f",
+            "bytes": 25724
+          },
+          "equal": true
+        }
+      ],
+      "runnerObservation": "Exact ff5 and 652 Task/goalctl/QA test/CLI/catalogue-backup/compatibility sources match. D5004C01 satisfies the existing acceptance-ID selector grammar. Persona support differs and would need its exact separately pinned 652 overlay, together with the audit test and bounded-read support absent from ff5. No combined overlay runtime or compilation is claimed.",
+      "executionTreeCreated": false,
+      "assertionsEdited": false,
+      "wholeWaveImported": false
+    },
+    "independentTestInspection": {
+      "selector": "tests/qa/integration/audit-bounded-reads.test.ts -t D5004C01",
+      "linesAt652": {
+        "filteredHistoricalHooks": 26,
+        "setupPreflight": 143,
+        "test": 164,
+        "realNativeGate": 183,
+        "realSourceFault": 267,
+        "overlapAnswers": 284,
+        "quarantineAndProbe": 311,
+        "repairCheckpoint": 339,
+        "cleanup": 365
+      },
+      "meaningfulOverlap": "The worker claims real durable queue work and performs the actual native population query. Its actual response bytes are held after native fetch/arrayBuffer completes. While that delivery and tick remain pending, Promise.all dispatches six persona Work GETs; the assertions require all six answers before gate release, tick unsettled and under the original 10000ms deadline.",
+      "answersRequired": {
+        "personas": [
+          "visitor",
+          "stranger",
+          "member",
+          "owner",
+          "moderator",
+          "operator"
+        ],
+        "status": 200,
+        "exactRetainedPublicWorkIdentity": true,
+        "privateIdentityAbsent": true,
+        "retry": false,
+        "settle": false,
+        "deadlineMs": 10000,
+        "positiveGraphCalls": true,
+        "maximumGraphCalls": 160,
+        "maximumGraphBytes": 4194304
+      },
+      "faultAndRecovery": "The existing contradictory native revision sequence 9223372036854775808 is inserted at the genuine retained Work head. After release, actual durable state must diagnose basis-invalid/Discovery source is ambiguous with attempts 0. Exactly one population read is required; one unchanged probe must preserve generation/checkpoint/basis without population reread. Native repair and a fresh real store/worker must activate the retained generation with the original basis sequence and complete=true.",
+      "privacy": "Visitor and stranger must receive 404 without the private Work identity; signed-in legitimate private authority is not denied by a fabricated blanket rule.",
+      "boundsAndCleanup": "Request signal is forwarded to the native fetch. A 10000ms gate watchdog and inner/outer finally release the held response; pending worker is awaited, contradiction repaired, proxy stopped, SQL pools ended and cloned owners closed. Pump/probe/repair loops remain at 200 ticks, relay drain at 1000 batches and test timeout at 120000ms. Source inspection alone does not prove teardown actually drained.",
+      "explicitLimits": [
+        "The gate is after native response materialization; nativeEngineCpuOverlapClaimed=false is correct. The assertion proves pending refresh overlap, not competing native engine CPU load.",
+        "Queue clock is injected into the real reviewed store, as in the retained native owner proof; no production-clock aggregate-rate measurement.",
+        "There is no cancellation/fresh-retry or abandoned-client resource-drain assertion in D5004C01; signal forwarding and finally blocks are source observations.",
+        "The public Main backend used by restored sessions must itself run exact ff5a214 product code; old port 46775 backend readiness is not sufficient.",
+        "No actual HTTP response, overlap timestamp, graph counter or native state result was observed in this continuation."
+      ],
+      "sourceOnlyConclusion": "No fabricated-success path identified in the new selector. Runtime success is required before marking the original concurrency assertion reached or passed."
+    },
+    "preparationPremise": {
+      "G2750HistoricalQueries": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/audit-bounded-reads/queries/corpus.json",
+        "sha256": "03ec7304ea3cd543a7c58e1fd208672707478f194fe508b77700fd0655337e2c",
+        "format": "bounded-public-reads-v2",
+        "capability": "queries",
+        "baseline": "7df2e285d3199c32b4e61c08c33ba9c25afaaa21",
+        "backup": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/audit-bounded-reads/queries/owners/backup.json",
+        "recordSets": 2,
+        "explicitlyRejectedBy652Preflight": true,
+        "credentialsPrintedOrPublished": false
+      },
+      "G2791RetainedQualification": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2791/.temp/goal/a18-retained-owner-ready.json",
+        "sha256": "66c90d17130bb8ecb8a6354caace08ddc374e63f40bbc847e4a2d6588734359e",
+        "backendProductRevision": "4a616b079a364b8f5ac7fe4d4ff56bc99849e766",
+        "mainOrigin": "http://127.0.0.1:46775",
+        "backup": {
+          "file": ".temp/launch-corpus/book-recipes/backups/launch-book-recipe-aa32916c0c4d822307ea/backup.json",
+          "sha256": "7f6d8d7645e870959b050028d53ed1b7997c243065f236915af13db2720b09ca",
+          "compatibilityDigest": "eac0b47cf9ddb55c380ef50a880c1a98917d786b67f11dea26f6743670e54b82"
+        },
+        "originalOutcomeAssertionsReached": false
+      },
+      "G2791ExistingProjectionOwner": {
+        "contract": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2791/tests/qa/fixtures/audit-corpus-contract.ts",
+        "contractSha256": "f1f73dbdf7d1b7d685e03629e967c0e3b955dd145e6df9d68fb475a5276797e1",
+        "producer": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2791/scripts/qa/fixtures/audit-corpus.ts",
+        "producerSha256": "63913bf4211b4c9bb0d4e471438cf1208707708249d1221b4e546199f45a2d81",
+        "auditConsumers": [
+          "imports",
+          "context",
+          "releases",
+          "information",
+          "publicDomain",
+          "search",
+          "identity",
+          "author"
+        ],
+        "queriesConsumerExists": false
+      },
+      "storageCompatibility": {
+        "classification": "read-only source/manifest compatibility inspection; not runtime setup or product assertion",
+        "backup": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2791/.temp/launch-corpus/book-recipes/backups/launch-book-recipe-aa32916c0c4d822307ea/backup.json",
+        "backupSha256": "7f6d8d7645e870959b050028d53ed1b7997c243065f236915af13db2720b09ca",
+        "backupCompatibilityDigest": "eac0b47cf9ddb55c380ef50a880c1a98917d786b67f11dea26f6743670e54b82",
+        "backupRun": "recipes-build-mveymfp0-c3acb7",
+        "product": "ff5a214f7de0f66b888f728ab48e50863f338374",
+        "supportedComparator": {
+          "path": "scripts/load/compatibility.ts",
+          "revision": "ff5a214f7de0f66b888f728ab48e50863f338374",
+          "blob": "82d4cf905b3db35a049440d0254da999a4bb3fe4",
+          "sha256": "2d89f8f7bfd5e85653e62896c3f2d2d6d46e7d1bd8f3edc3fc9e30bdb0dc7e23",
+          "bytes": 3717
+        },
+        "restoreGuard": {
+          "path": "scripts/load/catalogue-backup.ts",
+          "revision": "ff5a214f7de0f66b888f728ab48e50863f338374",
+          "blob": "a77bcdec0094d324cfaa60d5e02b31578bdaf346",
+          "sha256": "e17d1baa98cf54cf2a2764f0b14c3febdd9bc10b258892a8debf27be74d082fc",
+          "bytes": 17084
+        },
+        "compatibleUnderExactProductComparator": false,
+        "backupStorageInputCount": 534,
+        "productStorageInputCount": 527,
+        "differences": [
+          {
+            "path": "generated/model/manifest.json",
+            "backupSha256": "9d5f636794bcd0ff7b7619b40869202862e6fdc7c0cd69e091dc74818c86742b",
+            "productSha256": "204eaefc70cf790b8f8bfd51d5bf520bfa4eb621a7d0d97cbe1d3e41279a60b8",
+            "kind": "different-bytes"
+          },
+          {
+            "path": "infra/dev/compose.yaml",
+            "backupSha256": "57fe7a1580785f3efb4d944d62f6ff200fece87d1b36fb018cb717793dadb1f8",
+            "productSha256": "b45b3537365bcd9ab2745c3d8b4853196180f3a3f78dc33e3906d43585d00320",
+            "kind": "different-bytes"
+          },
+          {
+            "path": "services/content/migrations/2701_source_retained_record.sql",
+            "backupSha256": "a794df55d4aebcf1efc9fb9a06e4ab329021143c18b2181463e30c7ee73fccb4",
+            "productSha256": null,
+            "kind": "not-in-product"
+          },
+          {
+            "path": "services/content/migrations/2702_source_field_attachment.sql",
+            "backupSha256": "9dce99d762fddf26cdd1203a7931658debb4972404f2c42ed7319ea24c444298",
+            "productSha256": null,
+            "kind": "not-in-product"
+          },
+          {
+            "path": "services/content/migrations/2703_source_field_evidence_generation.sql",
+            "backupSha256": "132e2de1c25233ae00e6cda6f53601736f02271a7e5ce7ffb2281a706d074d6e",
+            "productSha256": null,
+            "kind": "not-in-product"
+          },
+          {
+            "path": "services/content/migrations/2704_source_release_field_mapping.sql",
+            "backupSha256": "971c45261f06237f3ffb70dc3bce91087723ac132a5ab753bb6a7ff5092de0da",
+            "productSha256": null,
+            "kind": "not-in-product"
+          },
+          {
+            "path": "services/main/migrations/access/2045_standing_rating_components.sql",
+            "backupSha256": "65d2a75a859182d5808f7ad8ca3b197006c9d684a7c1bb41c005880e800314f5",
+            "productSha256": null,
+            "kind": "not-in-product"
+          },
+          {
+            "path": "services/main/migrations/access/2077_standing_rating_publication.sql",
+            "backupSha256": "6583a1657afe45a3ee250a0ec4eb11fc244bf88820b05bf7a7e739ad5cce7b41",
+            "productSha256": null,
+            "kind": "not-in-product"
+          },
+          {
+            "path": "services/main/migrations/access/2606_standing_rating_affected_cuts.sql",
+            "backupSha256": "7d1f1743e6b8c771b275fe8dd1afa601cab07fb62b553699bce52ab76f2b4677",
+            "productSha256": null,
+            "kind": "not-in-product"
+          }
+        ],
+        "manifestEdited": false,
+        "migrationAppliedByThisWorker": false
+      },
+      "migrationObservation": "The retained backup manifest lists 2605_discovery_refresh_disposition.sql with the exact ff5 file digest; this is manifest metadata, not a new physical applied-migration receipt. No changed refresh code executed or migration applied here. Other storage inputs differ, so the supported equal-storage restore guard rejects compatibility before startup.",
+      "nativeImage": "rezics/fuseki:6.2.0-cmd0.5.43-57fb53d598b7",
+      "nativeImageEvidence": "Unchanged prior pinned native capability reused; no new container/image assertion, rebuild or native execution.",
+      "minimalExistingOwnerPrerequisite": "G-2791 must provide its existing bounded-public-reads-v2 / queries projection retaining actual public Work command/receipt, private Work command/receipt and all genuine retained persona/Realm records bound to one consistent stopped backup. The exact reviewed ff5 backend must have a supported compatible isolated restore with physical migration 2605 receipt. The currently found 7f6d8d76 backup has nine differing storage inputs, so its readiness cannot substitute. Preserve all backups and use only an owner-supported transition/compatible cut; no caller baseline rewrite or manifest edit.",
+      "missingOwnerSurface": "Existing G-2791 scripts/qa/fixtures/audit-corpus.ts and tests/qa/fixtures/audit-corpus-contract.ts expose eight consumer projections, none for the existing bounded-read queries contract. No such support path is edited here.",
+      "coordination": "Requested the exact already-qualified queries projection location from the manager through the active session; no peer/external message, preparation work, new authority grant or reset issued.",
+      "callerDefinedReceipts": false,
+      "backupModified": false,
+      "storageAdoptionPerformed": false
+    },
+    "execution": {
+      "intendedCommand": "task goal -- test tests/qa/integration/audit-bounded-reads.test.ts -t D5004C01",
+      "recordedJobPrefix": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --",
+      "admission": "not requested for known unsupported data/restore premises",
+      "qaRun": null,
+      "job": null,
+      "commandExitCode": null,
+      "executed": 0,
+      "pass": 0,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "assertionsExecuted": 0,
+      "assertionReached": false,
+      "observedApiResults": [],
+      "rawOverlapMeasurements": [],
+      "setupClassification": "read-only compatibility/prerequisite refusal; no runtime setup attempt or product assertion",
+      "noFixRoundConsumed": true
+    },
+    "perPersona": [
+      {
+        "persona": "visitor",
+        "case": "D5004C01",
+        "status": "unexecuted; common retained queries/compatible restore prerequisite missing",
+        "assertionReached": false,
+        "httpStatus": null,
+        "graphCalls": null,
+        "graphBytes": null,
+        "elapsedMs": null
+      },
+      {
+        "persona": "stranger",
+        "case": "D5004C01",
+        "status": "unexecuted; common retained queries/compatible restore prerequisite missing",
+        "assertionReached": false,
+        "httpStatus": null,
+        "graphCalls": null,
+        "graphBytes": null,
+        "elapsedMs": null
+      },
+      {
+        "persona": "member",
+        "case": "D5004C01",
+        "status": "unexecuted; common retained queries/compatible restore prerequisite missing",
+        "assertionReached": false,
+        "httpStatus": null,
+        "graphCalls": null,
+        "graphBytes": null,
+        "elapsedMs": null
+      },
+      {
+        "persona": "owner",
+        "case": "D5004C01",
+        "status": "unexecuted; common retained queries/compatible restore prerequisite missing",
+        "assertionReached": false,
+        "httpStatus": null,
+        "graphCalls": null,
+        "graphBytes": null,
+        "elapsedMs": null
+      },
+      {
+        "persona": "moderator",
+        "case": "D5004C01",
+        "status": "unexecuted; common retained queries/compatible restore prerequisite missing",
+        "assertionReached": false,
+        "httpStatus": null,
+        "graphCalls": null,
+        "graphBytes": null,
+        "elapsedMs": null
+      },
+      {
+        "persona": "operator",
+        "case": "D5004C01",
+        "status": "unexecuted; common retained queries/compatible restore prerequisite missing",
+        "assertionReached": false,
+        "httpStatus": null,
+        "graphCalls": null,
+        "graphBytes": null,
+        "elapsedMs": null
+      }
+    ],
+    "producerCompilationReceiptsReused": {
+      "selectorHookIsolation": {
+        "command": "bun test ./.temp/refresh-concurrent/describe-hooks.test.ts -t D5004C01",
+        "result": "pass",
+        "selected": 1,
+        "filtered": 1,
+        "historicalBeforeAllExecuted": false,
+        "productProof": false
+      },
+      "affectedCompilation": {
+        "command": "task goal:type-files -- --project services/main/tsconfig.json tests/qa/integration/audit-bounded-reads.test.ts",
+        "status": "passed",
+        "attempts": [
+          {
+            "job": "43a3cc09-945e-446a-837f-c016c7565172",
+            "step": 1,
+            "result": "harness failure: TS2554 at original authored lines 240 and 337; current historical constructor accepts one argument, reviewed fixed constructor accepts the optional queue clock",
+            "evidence": ".temp/goal/jobs/43a3cc09-945e-446a-837f-c016c7565172.1.log",
+            "filesChecked": 1631,
+            "seconds": 8.98,
+            "productAssertionReached": false,
+            "followingLintAndDocsRan": false,
+            "correction": "Use a typed constructor alias of the unchanged real DiscoveryRefreshStore, with the reviewed optional clock signature. No cast, replacement, mock or production edit. The fixed-source/migration preflight remains mandatory; compilation does not make the old constructor clock-capable."
+          },
+          {
+            "job": "49c0a3cd-8332-4e79-bc54-a103756d70be",
+            "step": 1,
+            "result": "passed",
+            "evidence": ".temp/goal/jobs/49c0a3cd-8332-4e79-bc54-a103756d70be.1.log",
+            "filesChecked": 1631,
+            "seconds": 7.44,
+            "productAssertionReached": false
+          }
+        ]
+      },
+      "affectedLint": {
+        "job": "49c0a3cd-8332-4e79-bc54-a103756d70be",
+        "step": 2,
+        "command": "task goal -- check --only lint",
+        "lint": "passed",
+        "ast": "passed",
+        "evidence": ".temp/goal/jobs/49c0a3cd-8332-4e79-bc54-a103756d70be.2.log"
+      },
+      "docs": {
+        "job": "49c0a3cd-8332-4e79-bc54-a103756d70be",
+        "step": 3,
+        "command": "task docs:check",
+        "result": "passed",
+        "markdownFiles": 250,
+        "tests": 13,
+        "evidence": ".temp/goal/jobs/49c0a3cd-8332-4e79-bc54-a103756d70be.3.log"
+      }
+    },
+    "originalCriteria": [
+      {
+        "criterion": "持续非法输入终止/隔离且原因可诊断，无source变化不重做同一完整工作。",
+        "disposition": "proved for the actual current malformed-source owner path",
+        "closure": "partial for the original class; no public-persona or refusal-witness-race proof",
+        "evidence": "Retained native 32-assertion case and exact reviewed source: diagnosed basis-invalid, attempts reset, one full claim/read, zero unchanged rereads; source change rearms.",
+        "limits": "Historical invalid-media trigger is not hydrated today. SRC-D5-004-001 remains unconfirmed; frozen public diagnostic was not executed.",
+        "thisContinuation": "Unchanged retained owner proof reused; no additional execution."
+      },
+      {
+        "criterion": "暂态故障退避并在恢复后推进checkpoint，维护总工作和scope公平性有预算。",
+        "disposition": "partial",
+        "evidence": "Retained real-owner 30/60-second transient backoff, generation/checkpoint preservation and successful activation; 21 parked scopes and one shared probe allowance. Source fairness/due-index bounds already reviewed.",
+        "limits": "Fixture bounds only. No retained assertion measures healthy core reads or scope progress concurrently with malformed/transient work; no additional benchmark or scale requirement added.",
+        "thisContinuation": "Unchanged transient/fleet assertions reused; new overlap selector not executed because preparation prerequisites are absent."
+      },
+      {
+        "criterion": "隔离fixture验证invalid media重试上界、修复后恢复及与核心读取并行可用。",
+        "disposition": "partial; original concurrent core-read assertion still unreached",
+        "evidence": "Previously proved actual contradictory-source quarantine and repair/recovery reused. Original test owner now authored D5004C01 at 652e825ee2858d5370f9c654cfa5d8f2bbfff4bc; independently inspected, not executed.",
+        "limits": "Historical invalid-media trigger remains obsolete. The retained post-repair read remains sequential. A compatible genuine queries projection/restore for exact ff5a214 product is not available; no concurrent API result or resource measurement is claimed."
+      }
+    ],
+    "preservation": {
+      "priorReportSha256": "abc759a5bdff8cace8f88ee795f7460f36cd7c468d95b130b2f69b483d47d4ef",
+      "allPriorReportFieldsUnchanged": true,
+      "sourceConcern": "SRC-D5-004-001 remains the separately recorded unconfirmed P2 source inference; no outcome reached, no new repair round.",
+      "nativeProof": "20261019t070623-ce62e2 / job 75646c07-cc40-4663-aa4c-a1c00b79e67c step 4: two cases, 1 pass/1 fail, 53 assertions; malformed-source owner case 32 pass, personaJourney=false; no replay.",
+      "reachedCreditFailure": "Original discovery-refresh.test.ts:121 namespace author discrepancy remains failed; later lease/Mine assertions remain unreached. This case is not selected by D5004C01 and is not a new prerequisite.",
+      "notificationRepairReview": "469b47d9dbe676b5a8ad04068f6087a719e19347 approval and job 6c0388f8-a6f5-4a59-b5b5-7c98d52da175 (56 focused tests/283 assertions) unchanged. Original public notification workload/persona limits and historical failures unchanged.",
+      "transitionDependencyReview": "b0b3a5e7cbf47f03eda24f53ee7ca3a492436aff retained approval unchanged; it is not generalized into support for a different backup/schema."
+    },
+    "evidence": {
+      "privateBundle": ".temp/read-availability-review/concurrent-refresh-652",
+      "credentialPolicy": "Raw corpus credentials are neither printed nor copied into the public report; only hashes/counts/receipt metadata retained.",
+      "files": [
+        "authored-test-delta.patch",
+        "authored-audit-bounded-reads.test.ts",
+        "authored-concurrency-matrix.json",
+        "product-source-pins.json",
+        "separate-test-runner-support-pins.json",
+        "retained-backup-compatibility-inspection.json",
+        "fixture-prerequisite-inspection.json",
+        "G2791-ready-receipt.json",
+        "G2791-custody-summary.json",
+        "report-before-continuation.json",
+        "report-preservation-check.json",
+        "report-check.1.log",
+        "report-check.2.log",
+        "report-worker-check-output.log",
+        "inventory.json"
+      ]
+    },
+    "ownedReportChecks": {
+      "job": "0918be9d-4963-4334-a281-0d0931a5f1e7",
+      "status": "pass",
+      "docs": {
+        "command": "task docs:check",
+        "exitCode": 0,
+        "executed": 13,
+        "pass": 13,
+        "fail": 0,
+        "error": 0,
+        "skip": 0,
+        "markdownFiles": 249
+      },
+      "worker": {
+        "command": "task goal -- check",
+        "exitCode": 0,
+        "types": "not applicable; no TypeScript workspace changed",
+        "tests": "none named in brief",
+        "lint": "not applicable; no source file changed",
+        "ast": "pass (0.7s)",
+        "guards": {
+          "selectedFiles": 1,
+          "availableFiles": 44,
+          "executed": 2,
+          "pass": 2,
+          "fail": 0,
+          "error": 0,
+          "skip": 0,
+          "assertions": 6,
+          "elapsedSeconds": 2.6
+        }
+      },
+      "harnessNotice": "Reported 3 commits behind main; no harness failure, rebase or fallback occurred.",
+      "productChecksRepeated": false,
+      "runtimeAssertionReached": false,
+      "receiptFinalization": "Only this report receipt metadata finalized after passing checks; no source/assertion/decision change."
+    }
   }
 }
