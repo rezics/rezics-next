@@ -643,9 +643,18 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "Studio用展示卡管理作品，却缺少定位和排序，状态与元数据挤成高卡",
-      "status": "build-briefed",
+      "status": "closed",
       "owner": "G-2753",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "D4-014",
+          "assessedMain": "653c9c18a6d4577717dfd4af26f63f2c6eadf996",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     },
     {
       "id": "D4-015",
@@ -670,9 +679,18 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "Feed预览复述刚读过的标题，有限预览空间没有新增判断信息",
-      "status": "build-dispatched",
+      "status": "closed",
       "owner": "G-2749",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "D4-016",
+          "assessedMain": "653c9c18a6d4577717dfd4af26f63f2c6eadf996",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     },
     {
       "id": "D6-003",

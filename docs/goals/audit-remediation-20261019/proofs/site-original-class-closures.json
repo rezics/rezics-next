@@ -1,8 +1,8 @@
 {
-  "recordedAt": "2026-10-19T13:00:48.548372+00:00",
+  "recordedAt": "2026-10-19T13:20:07.142834+00:00",
   "manager": "site",
   "goal": "audit-remediation-20261019",
-  "assessedMain": "feb3d091d0dcc6c96f40021b706fdcdeb87daa2b",
+  "assessedMain": "653c9c18a6d4577717dfd4af26f63f2c6eadf996",
   "basis": "Original applicable acceptance and assertions, without adding unrelated classes or full-domain journeys. Product-audit class tracing applied; unchanged exact proof reused.",
   "findings": [
     {
@@ -5732,6 +5732,1059 @@
         "method": "Original applicable acceptance and regression assertions read verbatim. Product-audit applied to generation owner, query/sequence preservation, retry UI, stale/end guards and shared RSC correction. Root freshly checked all33 source/dependency entries against current main and all51 safe artifact hashes; original historical failures and explicit proof tiers preserved. No new runtime or review claimed.",
         "mainObserved": "c66468eddfb4ff5b1ac126dd47423c65b46833fd",
         "remainingOriginalAssertions": []
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "id": "D4-014",
+      "status": "closed",
+      "candidateOnly": false,
+      "assessedAt": "2026-10-19T13:20:07.142834+00:00",
+      "main": "653c9c18a6d4577717dfd4af26f63f2c6eadf996",
+      "productCommit": "e265b737d4eeec378517b85f7f6b71f9dbaa9e78",
+      "proofLanding": "653c9c18a6d4577717dfd4af26f63f2c6eadf996",
+      "testedProductPin": "c43a05f54b8f80db57028ab08efc4dd277ad739d",
+      "testedFrontendSsrOverlay": "c108a658a37676c1497fb501924fa5c90ab567a9",
+      "compatibleGenuineBackend": "4a616b079a364b8f5ac7fe4d4ff56bc99849e766",
+      "canonicalSource": "docs/goals/audit-remediation-20261019/site-plan.json#D4-014",
+      "canonicalSourceSha256": "4ab008ae2a5144eb71f887daa737f1c5eb1a75b443e084b0f67fa67a0cbec3bc",
+      "originalRegistry": ".temp/site-audit-2026-10-18/round-3/all-findings.json",
+      "originalRegistrySha256": "e2721c44e74305c694b02e81e757e4476c3a19de414d25b0689617316c5ebc3f",
+      "skill": ".agents/skills/product-audit/SKILL.md",
+      "productAuditMethod": "Trace the original inventory management job through authorized full inventory, normalized title/order before pagination, title-led row hierarchy and URL/Back/reload restoration. Inspect original long CJK/Latin, lifecycle/mixed-state and coverless variations. Reuse independent source, controlled algorithm, recorded rendering and genuine two-Work wiring at their stated tiers; no new whole-domain or AUD-011 topology requirement.",
+      "originalAcceptanceVerbatim": [
+        "在足够多的库存（建议100项且跨页）下，可以按名字定位并按最近编辑等明确顺序查找；条件在返回后保留，不能只在已加载三项里假筛选。",
+        "1440/390中标题是行的主锚点，核心状态、最近更新时间和继续/章节入口形成可重复扫读位置；次要类型、语言、审核说明逐级展开。",
+        "多状态、长CJK/Latin标题与无封面样本保持可读，不要求从最前面滚完整个库存找回作品。"
+      ],
+      "originalRegressionAssertionsVerbatim": [
+        {
+          "id": "D4-014/assertion-1",
+          "assert": "Drafts are recognized by title first, with state, updated time and continue action, including long CJK/English and coverless/mixed-state works."
+        },
+        {
+          "id": "D4-014/assertion-2",
+          "assert": "Title search and useful sort find items beyond the first loaded three cards, with truthful incomplete/pagination state."
+        },
+        {
+          "id": "D4-014/assertion-3",
+          "assert": "390/1440 layout and Back restore the working filter and selected draft rather than repeating oversized cover-first cards."
+        }
+      ],
+      "originalAssertionsChanged": false,
+      "originalCriterionWitnesses": [
+        {
+          "ordinal": 1,
+          "originalVerbatim": "在足够多的库存（建议100项且跨页）下，可以按名字定位并按最近编辑等明确顺序查找；条件在返回后保留，不能只在已加载三项里假筛选。",
+          "status": "proved by composed original evidence",
+          "basis": [
+            "Independent 227-candidate/23-match full authorized-cut normalization/filter-before-pagination/all-three-order test, including targets beyond candidate204 and full Work IRI ties; previously executed job9e260eb3, 119 combined Web/Main assertions.",
+            "Previously viewed 105-Work/20-row LargeInventory, LocatedWork and SearchContinuation stories at 390/1440.",
+            "Newly qualified genuine HTTP200 title-only normalization/all-three-orders across native limit1 cursors and actual Work open/Back/reload preserving q/sort/view at 390/1440."
+          ],
+          "limits": "Genuine retained inventory contains two Works, not 100. The original recommends 100; larger-scale behavior is supplied by the existing controlled tests and rendered inputs, not an invented genuine corpus."
+        },
+        {
+          "ordinal": 2,
+          "originalVerbatim": "1440/390中标题是行的主锚点，核心状态、最近更新时间和继续/章节入口形成可重复扫读位置；次要类型、语言、审核说明逐级展开。",
+          "status": "proved by composed original evidence",
+          "basis": [
+            "Previously independently viewed title-led rows, repeated state/time/action placement and progressive secondary Details across all recorded home states at 390/1440.",
+            "Newly viewed genuine two-Work screenshots and passed DOM checks show actual title links, updatedAt-backed time, Open/Details and chapter label with no horizontal page overflow at both widths."
+          ],
+          "limits": "Actual count labels and updated time/actions are observed; this addendum does not qualify AUD-011 chapter-count truth, topology or private-draft disclosure."
+        },
+        {
+          "ordinal": 3,
+          "originalVerbatim": "多状态、长CJK/Latin标题与无封面样本保持可读，不要求从最前面滚完整个库存找回作品。",
+          "status": "proved by composed original evidence",
+          "basis": [
+            "Previously independently viewed lifecycle/mixed-state, long CJK/Latin, Chinese, coverless and located/continuation states at both widths and selected light/dark themes.",
+            "Independent full-cut controlled search locates 23 results beyond candidate204 without scrolling through the inventory; genuine retained title location and Back/reload establish current API/UI wiring."
+          ],
+          "limits": "Genuine retained data does not itself contain the long CJK/Latin, coverless/multiple-lifecycle variations; those dimensions remain recorded-rendering evidence."
+        }
+      ],
+      "originalRegressionAssertionWitnesses": [
+        {
+          "id": "D4-014/assertion-1",
+          "assert": "Drafts are recognized by title first, with state, updated time and continue action, including long CJK/English and coverless/mixed-state works.",
+          "status": "proved by composed original evidence",
+          "basis": "Mapped to the three unchanged original criteria above; controlled algorithm, recorded rendering and genuine HTTP/browser evidence remain separately identified."
+        },
+        {
+          "id": "D4-014/assertion-2",
+          "assert": "Title search and useful sort find items beyond the first loaded three cards, with truthful incomplete/pagination state.",
+          "status": "proved by composed original evidence",
+          "basis": "Mapped to the three unchanged original criteria above; controlled algorithm, recorded rendering and genuine HTTP/browser evidence remain separately identified."
+        },
+        {
+          "id": "D4-014/assertion-3",
+          "assert": "390/1440 layout and Back restore the working filter and selected draft rather than repeating oversized cover-first cards.",
+          "status": "proved by composed original evidence",
+          "basis": "Mapped to the three unchanged original criteria above; controlled algorithm, recorded rendering and genuine HTTP/browser evidence remain separately identified."
+        }
+      ],
+      "independentReview": {
+        "task": "G-2848",
+        "account": "codex-1",
+        "model": "gpt-6.1-sol",
+        "effort": "xhigh",
+        "fallback": false,
+        "reportCommit": "dbe0ed615a7a372501042e14e155565d5fdb72e6",
+        "reportPath": "docs/goals/audit-remediation-20261019/proofs/studio-inventory-review.json",
+        "reportBlob": "5bdb5b4b384b69d58fddff04cbe744335d4426bc",
+        "reportSha256": "a848ed1f4089b0a006b4fb0180d85b69bf5a386030dabeee8703e540f0705d31",
+        "docsCheck": {
+          "command": "task docs:check",
+          "status": "passed",
+          "exitStatus": 0,
+          "jobId": "job:bcdfe139-98db-4f04-a66c-df5eb4102d1b",
+          "log": ".temp/goal/jobs/bcdfe139-98db-4f04-a66c-df5eb4102d1b.log",
+          "result": "13 documentation checker tests passed; 259 Markdown files checked. JSON syntax, preserved prior sections, actual job exits and qualification invariants also validated separately. This is report validation, not product acceptance."
+        },
+        "qualificationStatus": "D4-014 original composed evidence qualified; Studio source equivalence on landed main independently recorded; canonical class disposition remains with manager",
+        "newProductExecution": false
+      },
+      "sourceAndArtifacts": {
+        "mainSourceManifest": [
+          {
+            "path": "apps/web/app/[locale]/studio/[agent]/page.tsx",
+            "reviewedCaptureBlob": "75ec428a2fa2cdad6c5714810cf48ccd690558f8",
+            "previousQualifiedMainBlob": "75ec428a2fa2cdad6c5714810cf48ccd690558f8",
+            "currentMainBlob": "75ec428a2fa2cdad6c5714810cf48ccd690558f8",
+            "currentQualifiedExpectedBlob": "75ec428a2fa2cdad6c5714810cf48ccd690558f8",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "apps/web/features/address/client.ts",
+            "reviewedCaptureBlob": "14a890bb2996661a8a19f2f2a562950d363a4c9b",
+            "previousQualifiedMainBlob": "14a890bb2996661a8a19f2f2a562950d363a4c9b",
+            "currentMainBlob": "14a890bb2996661a8a19f2f2a562950d363a4c9b",
+            "currentQualifiedExpectedBlob": "14a890bb2996661a8a19f2f2a562950d363a4c9b",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "apps/web/features/address/edge.ts",
+            "reviewedCaptureBlob": "9465ea4d555f13bb5a818ad83c077255b366ee3a",
+            "previousQualifiedMainBlob": "9465ea4d555f13bb5a818ad83c077255b366ee3a",
+            "currentMainBlob": "9465ea4d555f13bb5a818ad83c077255b366ee3a",
+            "currentQualifiedExpectedBlob": "9465ea4d555f13bb5a818ad83c077255b366ee3a",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "apps/web/features/api/server-fetch.ts",
+            "reviewedCaptureBlob": "5dc162e45643cf34d789e24c56af204ac1d95b93",
+            "previousQualifiedMainBlob": "5dc162e45643cf34d789e24c56af204ac1d95b93",
+            "currentMainBlob": "5dc162e45643cf34d789e24c56af204ac1d95b93",
+            "currentQualifiedExpectedBlob": "5dc162e45643cf34d789e24c56af204ac1d95b93",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "apps/web/features/api/server-read.ts",
+            "reviewedCaptureBlob": "4486ceb5072fbd9be6d455c95ad83cd6b629d2f4",
+            "previousQualifiedMainBlob": "4486ceb5072fbd9be6d455c95ad83cd6b629d2f4",
+            "currentMainBlob": "4486ceb5072fbd9be6d455c95ad83cd6b629d2f4",
+            "currentQualifiedExpectedBlob": "4486ceb5072fbd9be6d455c95ad83cd6b629d2f4",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "apps/web/features/shell/current-page-visibility.test.ts",
+            "reviewedCaptureBlob": "0786d38b74cf348725fecce81743193a7c93e1ce",
+            "previousQualifiedMainBlob": "0786d38b74cf348725fecce81743193a7c93e1ce",
+            "currentMainBlob": "0786d38b74cf348725fecce81743193a7c93e1ce",
+            "currentQualifiedExpectedBlob": "0786d38b74cf348725fecce81743193a7c93e1ce",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "apps/web/features/shell/current-page-visibility.ts",
+            "reviewedCaptureBlob": "4580530fd0e47923f4bf9de65a0baba9292b2a45",
+            "previousQualifiedMainBlob": "4580530fd0e47923f4bf9de65a0baba9292b2a45",
+            "currentMainBlob": "4580530fd0e47923f4bf9de65a0baba9292b2a45",
+            "currentQualifiedExpectedBlob": "4580530fd0e47923f4bf9de65a0baba9292b2a45",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "apps/web/features/shell/localized-link.tsx",
+            "reviewedCaptureBlob": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba",
+            "previousQualifiedMainBlob": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba",
+            "currentMainBlob": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba",
+            "currentQualifiedExpectedBlob": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "apps/web/features/shell/navigation-focus.test-utils.ts",
+            "reviewedCaptureBlob": "73119b78128e31d9e513a30a2e8f27e1d2f3e7ef",
+            "previousQualifiedMainBlob": "73119b78128e31d9e513a30a2e8f27e1d2f3e7ef",
+            "currentMainBlob": "73119b78128e31d9e513a30a2e8f27e1d2f3e7ef",
+            "currentQualifiedExpectedBlob": "73119b78128e31d9e513a30a2e8f27e1d2f3e7ef",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "apps/web/features/studio/fixtures.ts",
+            "reviewedCaptureBlob": "b9d07c1df79828ba9c4268a454df23f0f1060017",
+            "previousQualifiedMainBlob": "b9d07c1df79828ba9c4268a454df23f0f1060017",
+            "currentMainBlob": "b9d07c1df79828ba9c4268a454df23f0f1060017",
+            "currentQualifiedExpectedBlob": "b9d07c1df79828ba9c4268a454df23f0f1060017",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "apps/web/features/studio/messages.ts",
+            "reviewedCaptureBlob": "5c8e2b5e7b1d1c1907cc7db59b1e3cef298eda6d",
+            "previousQualifiedMainBlob": "5c8e2b5e7b1d1c1907cc7db59b1e3cef298eda6d",
+            "currentMainBlob": "5c8e2b5e7b1d1c1907cc7db59b1e3cef298eda6d",
+            "currentQualifiedExpectedBlob": "5c8e2b5e7b1d1c1907cc7db59b1e3cef298eda6d",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "apps/web/features/studio/messages/de.ts",
+            "reviewedCaptureBlob": "f7cbc00bc6699111280668b1e19191cdd0bc2f3a",
+            "previousQualifiedMainBlob": "f7cbc00bc6699111280668b1e19191cdd0bc2f3a",
+            "currentMainBlob": "f7cbc00bc6699111280668b1e19191cdd0bc2f3a",
+            "currentQualifiedExpectedBlob": "f7cbc00bc6699111280668b1e19191cdd0bc2f3a",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "apps/web/features/studio/messages/es.ts",
+            "reviewedCaptureBlob": "5ebf616667fd5abb78951edeea2d7ed920a22736",
+            "previousQualifiedMainBlob": "5ebf616667fd5abb78951edeea2d7ed920a22736",
+            "currentMainBlob": "5ebf616667fd5abb78951edeea2d7ed920a22736",
+            "currentQualifiedExpectedBlob": "5ebf616667fd5abb78951edeea2d7ed920a22736",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "apps/web/features/studio/messages/fr.ts",
+            "reviewedCaptureBlob": "d74a4ba257a5753db86a2098c96d3e4982baa73f",
+            "previousQualifiedMainBlob": "d74a4ba257a5753db86a2098c96d3e4982baa73f",
+            "currentMainBlob": "d74a4ba257a5753db86a2098c96d3e4982baa73f",
+            "currentQualifiedExpectedBlob": "d74a4ba257a5753db86a2098c96d3e4982baa73f",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "apps/web/features/studio/messages/ja.ts",
+            "reviewedCaptureBlob": "cdba6d3cd9a8f8fca5663a66eb5c6f2b8d65fdcb",
+            "previousQualifiedMainBlob": "cdba6d3cd9a8f8fca5663a66eb5c6f2b8d65fdcb",
+            "currentMainBlob": "cdba6d3cd9a8f8fca5663a66eb5c6f2b8d65fdcb",
+            "currentQualifiedExpectedBlob": "cdba6d3cd9a8f8fca5663a66eb5c6f2b8d65fdcb",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "apps/web/features/studio/messages/ko.ts",
+            "reviewedCaptureBlob": "5d84d8907eadc6ad29af9998f39ca55acd774923",
+            "previousQualifiedMainBlob": "5d84d8907eadc6ad29af9998f39ca55acd774923",
+            "currentMainBlob": "5d84d8907eadc6ad29af9998f39ca55acd774923",
+            "currentQualifiedExpectedBlob": "5d84d8907eadc6ad29af9998f39ca55acd774923",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "apps/web/features/studio/messages/zh-Hans.ts",
+            "reviewedCaptureBlob": "572f8b601fdcd22e592f5b102b3bb6aefc150654",
+            "previousQualifiedMainBlob": "572f8b601fdcd22e592f5b102b3bb6aefc150654",
+            "currentMainBlob": "572f8b601fdcd22e592f5b102b3bb6aefc150654",
+            "currentQualifiedExpectedBlob": "572f8b601fdcd22e592f5b102b3bb6aefc150654",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "apps/web/features/studio/messages/zh-Hant.ts",
+            "reviewedCaptureBlob": "9236ab79c0d2dc7f4779c6cbb9753d6b2f819b8a",
+            "previousQualifiedMainBlob": "9236ab79c0d2dc7f4779c6cbb9753d6b2f819b8a",
+            "currentMainBlob": "9236ab79c0d2dc7f4779c6cbb9753d6b2f819b8a",
+            "currentQualifiedExpectedBlob": "9236ab79c0d2dc7f4779c6cbb9753d6b2f819b8a",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "apps/web/features/studio/read.ts",
+            "reviewedCaptureBlob": "3a726b274415c4289d8fe46f832a843c150919db",
+            "previousQualifiedMainBlob": "3a726b274415c4289d8fe46f832a843c150919db",
+            "currentMainBlob": "3a726b274415c4289d8fe46f832a843c150919db",
+            "currentQualifiedExpectedBlob": "3a726b274415c4289d8fe46f832a843c150919db",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "apps/web/features/studio/studio-home.stories.tsx",
+            "reviewedCaptureBlob": "e12fa175a1e61bffee6a918413c42e2f4734163b",
+            "previousQualifiedMainBlob": "e12fa175a1e61bffee6a918413c42e2f4734163b",
+            "currentMainBlob": "e12fa175a1e61bffee6a918413c42e2f4734163b",
+            "currentQualifiedExpectedBlob": "e12fa175a1e61bffee6a918413c42e2f4734163b",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "apps/web/features/studio/studio-home.tsx",
+            "reviewedCaptureBlob": "c7d2187111f7a15b5dec4da69aa13cfe8110a342",
+            "previousQualifiedMainBlob": "c7d2187111f7a15b5dec4da69aa13cfe8110a342",
+            "currentMainBlob": "c7d2187111f7a15b5dec4da69aa13cfe8110a342",
+            "currentQualifiedExpectedBlob": "c7d2187111f7a15b5dec4da69aa13cfe8110a342",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "apps/web/features/studio/studio-work.tsx",
+            "reviewedCaptureBlob": "7fb80382695f309d4e733354415e6c417a6efd17",
+            "previousQualifiedMainBlob": "7fb80382695f309d4e733354415e6c417a6efd17",
+            "currentMainBlob": "7fb80382695f309d4e733354415e6c417a6efd17",
+            "currentQualifiedExpectedBlob": "7fb80382695f309d4e733354415e6c417a6efd17",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "apps/web/features/studio/types.ts",
+            "reviewedCaptureBlob": "fad3a36758ea8a5be9c59a35211c6db54bcad542",
+            "previousQualifiedMainBlob": "fad3a36758ea8a5be9c59a35211c6db54bcad542",
+            "currentMainBlob": "fad3a36758ea8a5be9c59a35211c6db54bcad542",
+            "currentQualifiedExpectedBlob": "fad3a36758ea8a5be9c59a35211c6db54bcad542",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "apps/web/proxy.ts",
+            "reviewedCaptureBlob": "eb69692fec2543ea823d67928ccb0bee7c802efc",
+            "previousQualifiedMainBlob": "eb69692fec2543ea823d67928ccb0bee7c802efc",
+            "currentMainBlob": "eb69692fec2543ea823d67928ccb0bee7c802efc",
+            "currentQualifiedExpectedBlob": "eb69692fec2543ea823d67928ccb0bee7c802efc",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "apps/web/tests/studio-inventory.test.ts",
+            "reviewedCaptureBlob": "124aaaa6cce231a160036ead484b20fa3923b889",
+            "previousQualifiedMainBlob": "124aaaa6cce231a160036ead484b20fa3923b889",
+            "currentMainBlob": "124aaaa6cce231a160036ead484b20fa3923b889",
+            "currentQualifiedExpectedBlob": "124aaaa6cce231a160036ead484b20fa3923b889",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "apps/web/worker/index.ts",
+            "reviewedCaptureBlob": "fc345d1f85383b1fb16866d8cddc82c634f140c5",
+            "previousQualifiedMainBlob": "fc345d1f85383b1fb16866d8cddc82c634f140c5",
+            "currentMainBlob": "fc345d1f85383b1fb16866d8cddc82c634f140c5",
+            "currentQualifiedExpectedBlob": "fc345d1f85383b1fb16866d8cddc82c634f140c5",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "docs/goals/audit-remediation-20261019/proofs/studio-inventory-review.json",
+            "reviewedCaptureBlob": "1bb1bc13c45c53e64b880acc088838bf0b12fa5b",
+            "previousQualifiedMainBlob": "1bb1bc13c45c53e64b880acc088838bf0b12fa5b",
+            "currentMainBlob": "5bdb5b4b384b69d58fddff04cbe744335d4426bc",
+            "currentQualifiedExpectedBlob": "5bdb5b4b384b69d58fddff04cbe744335d4426bc",
+            "qualified": true,
+            "note": "Latest independently qualified report supersedes its historical report blob."
+          },
+          {
+            "path": "generated/openapi/main/public.json",
+            "reviewedCaptureBlob": "cf4366d8cc7fae5bd905f6397fab10ed025a7ac3",
+            "previousQualifiedMainBlob": "573fb53333d46ea1f4e76fb111f7139bfd651915",
+            "currentMainBlob": "573fb53333d46ea1f4e76fb111f7139bfd651915",
+            "currentQualifiedExpectedBlob": "573fb53333d46ea1f4e76fb111f7139bfd651915",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "scripts/static/web-continuations.inventory.json",
+            "reviewedCaptureBlob": "37154e2fc29ab393b5062954c9b0f3442d488946",
+            "previousQualifiedMainBlob": "b419d777e0bf6b7220e464a9194bf7a12dd1d2ba",
+            "currentMainBlob": "b419d777e0bf6b7220e464a9194bf7a12dd1d2ba",
+            "currentQualifiedExpectedBlob": "b419d777e0bf6b7220e464a9194bf7a12dd1d2ba",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "scripts/static/web-continuations.test.ts",
+            "reviewedCaptureBlob": "6b235b24fdb2a486a2e51c7bc25ef653444ff8d3",
+            "previousQualifiedMainBlob": "6b235b24fdb2a486a2e51c7bc25ef653444ff8d3",
+            "currentMainBlob": "6b235b24fdb2a486a2e51c7bc25ef653444ff8d3",
+            "currentQualifiedExpectedBlob": "6b235b24fdb2a486a2e51c7bc25ef653444ff8d3",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "services/main/src/modules/studio/access.ts",
+            "reviewedCaptureBlob": "e1a76597038a74975df36d5ec82f6166853bc6a2",
+            "previousQualifiedMainBlob": "e1a76597038a74975df36d5ec82f6166853bc6a2",
+            "currentMainBlob": "e1a76597038a74975df36d5ec82f6166853bc6a2",
+            "currentQualifiedExpectedBlob": "e1a76597038a74975df36d5ec82f6166853bc6a2",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "services/main/src/modules/studio/chapters.ts",
+            "reviewedCaptureBlob": "bfd0fc170069cd912842352952742344ec3c28bd",
+            "previousQualifiedMainBlob": "bfd0fc170069cd912842352952742344ec3c28bd",
+            "currentMainBlob": "bfd0fc170069cd912842352952742344ec3c28bd",
+            "currentQualifiedExpectedBlob": "bfd0fc170069cd912842352952742344ec3c28bd",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "services/main/src/modules/studio/works.ts",
+            "reviewedCaptureBlob": "e9bb2042c1626ddf9651068c42f2920e6a93c4d8",
+            "previousQualifiedMainBlob": "e9bb2042c1626ddf9651068c42f2920e6a93c4d8",
+            "currentMainBlob": "e9bb2042c1626ddf9651068c42f2920e6a93c4d8",
+            "currentQualifiedExpectedBlob": "e9bb2042c1626ddf9651068c42f2920e6a93c4d8",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "services/main/src/routes/studio.ts",
+            "reviewedCaptureBlob": "332c6b0ee18c92237863e9ecd8478a03ec501802",
+            "previousQualifiedMainBlob": "332c6b0ee18c92237863e9ecd8478a03ec501802",
+            "currentMainBlob": "332c6b0ee18c92237863e9ecd8478a03ec501802",
+            "currentQualifiedExpectedBlob": "332c6b0ee18c92237863e9ecd8478a03ec501802",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "services/main/tests/studio-inventory.test.ts",
+            "reviewedCaptureBlob": "d4189db56e06da8d535ad9bc9601fbeadca93b98",
+            "previousQualifiedMainBlob": "d4189db56e06da8d535ad9bc9601fbeadca93b98",
+            "currentMainBlob": "d4189db56e06da8d535ad9bc9601fbeadca93b98",
+            "currentQualifiedExpectedBlob": "d4189db56e06da8d535ad9bc9601fbeadca93b98",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          },
+          {
+            "path": "services/main/tests/studio-transfer-parity.test.ts",
+            "reviewedCaptureBlob": "10e9b7d8dcd3a97ec9165c226c0d43c4f028ce83",
+            "previousQualifiedMainBlob": "10e9b7d8dcd3a97ec9165c226c0d43c4f028ce83",
+            "currentMainBlob": "10e9b7d8dcd3a97ec9165c226c0d43c4f028ce83",
+            "currentQualifiedExpectedBlob": "10e9b7d8dcd3a97ec9165c226c0d43c4f028ce83",
+            "qualified": true,
+            "note": "Unchanged from independently qualified landed main."
+          }
+        ],
+        "sourceMapReceipt": ".temp/audit-remediation-20261019/two-hour-sprint/site-D4002-D4014-main-qualification-1303.json",
+        "sourceMapReceiptSha256": "9bcef8f17780679c5b371d632bf0cad580408d8cfdba9349a6de9e33fc505519",
+        "finalQualificationReceipt": ".temp/audit-remediation-20261019/two-hour-sprint/site-D4002-D4014-original-qualification-final.json",
+        "finalQualificationReceiptSha256": "4575343afb929d3e925e4b976dd4bb3614d7298c940cc4cc77fb9380a840db5b",
+        "proofManifest": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/d4-014-qualification/manifest-verification.json",
+          "sha256": "9b8cd903b1fdf07ae36bffa9e0303f9d7edad23a5f8dfdea5f1ad2550911b6cf",
+          "manifestSha256": "95043b5024b00ca33358cfdd6e8b52f2ebabbd0b9a59c16d4b65dca06193f274",
+          "localProofFiles": 22,
+          "allHashesAndSizesVerified": true,
+          "mismatches": [],
+          "proofFileCount": 22,
+          "copiedProducerFiles": false
+        },
+        "retainedProofFiles": [
+          {
+            "path": ".temp/worktrees/g-2753/.temp/studio-proof/original-proof-summary.json",
+            "sha256": "4500e9fe2107347d796d83577b4d0e6b5ff8ff78be4fe8c720e5f2e983f7ed32",
+            "manifestSha256": "4500e9fe2107347d796d83577b4d0e6b5ff8ff78be4fe8c720e5f2e983f7ed32",
+            "unchanged": true
+          },
+          {
+            "path": ".temp/worktrees/g-2753/.temp/studio-proof/retained-runtime-observation.json",
+            "sha256": "6297050239d88e1a0e1826a044a1506e622970ede9a66be3e526290f3aefd657",
+            "manifestSha256": "6297050239d88e1a0e1826a044a1506e622970ede9a66be3e526290f3aefd657",
+            "unchanged": true
+          },
+          {
+            "path": ".temp/worktrees/g-2753/.temp/studio-proof/original-proof-selection.json",
+            "sha256": "c3fd5f66d3c332fbd645dbd0756b1a636e5c223cb719499b80fcdc12061f1776",
+            "manifestSha256": "c3fd5f66d3c332fbd645dbd0756b1a636e5c223cb719499b80fcdc12061f1776",
+            "unchanged": true
+          },
+          {
+            "path": ".temp/worktrees/g-2753/.temp/studio-proof/readiness-1792411950651/receipt.json",
+            "sha256": "3a847d507d3016a0bc01bddda003ac2aab37cc88bcc9abc6221541dbf197f6bf",
+            "manifestSha256": "3a847d507d3016a0bc01bddda003ac2aab37cc88bcc9abc6221541dbf197f6bf",
+            "unchanged": true
+          },
+          {
+            "path": ".temp/worktrees/g-2753/.temp/studio-proof/retained-source-selection.json",
+            "sha256": "0e7cd6070450bbd2754f1cabdb7dbd2e6433c96a7b0ac23a4116f2c564544029",
+            "manifestSha256": "0e7cd6070450bbd2754f1cabdb7dbd2e6433c96a7b0ac23a4116f2c564544029",
+            "unchanged": true
+          },
+          {
+            "path": ".temp/worktrees/g-2753/.temp/studio-proof/retained-public-and-refusal.test.ts",
+            "sha256": "6f43806a3e7271e7facafe632a7a53abf246ffaacf1e54e20b21de80da7442bd",
+            "manifestSha256": "6f43806a3e7271e7facafe632a7a53abf246ffaacf1e54e20b21de80da7442bd",
+            "unchanged": true
+          },
+          {
+            "path": ".temp/worktrees/g-2753/.temp/studio-proof/original-inventory-proof.test.ts",
+            "sha256": "33ceccd75dc33b950b84b2f0f2c36572fdd1585ed3c35d10d57d3b7f61772190",
+            "manifestSha256": "33ceccd75dc33b950b84b2f0f2c36572fdd1585ed3c35d10d57d3b7f61772190",
+            "unchanged": true
+          },
+          {
+            "path": ".temp/worktrees/g-2753/.temp/studio-proof/public-and-refusal-1792411326953/receipt.json",
+            "sha256": "4644688e1f5947e5cd96af560cff2aad4582add9f28407d745d1ef44e37856ba",
+            "manifestSha256": "4644688e1f5947e5cd96af560cff2aad4582add9f28407d745d1ef44e37856ba",
+            "unchanged": true
+          },
+          {
+            "path": ".temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412407144/receipt.json",
+            "sha256": "6df52db26056388660876d46a4c5e7fc6c65ea8000d6d50884028b6d1d87f8a5",
+            "manifestSha256": "6df52db26056388660876d46a4c5e7fc6c65ea8000d6d50884028b6d1d87f8a5",
+            "unchanged": true
+          },
+          {
+            "path": ".temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412649696/receipt.json",
+            "sha256": "39b80f250b815348a82a90a59142d2821ca2eb3264bcdd323fd6b20640d6246a",
+            "manifestSha256": "39b80f250b815348a82a90a59142d2821ca2eb3264bcdd323fd6b20640d6246a",
+            "unchanged": true
+          },
+          {
+            "path": ".temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412958143/receipt.json",
+            "sha256": "b1a1b8e10cdbb676015093b2ba75ea38c1a2d158980e091530d9511a9ee28f91",
+            "manifestSha256": "b1a1b8e10cdbb676015093b2ba75ea38c1a2d158980e091530d9511a9ee28f91",
+            "unchanged": true
+          },
+          {
+            "path": ".temp/worktrees/g-2753/.temp/studio-proof/screenshot-review-current.json",
+            "sha256": "ca3b230435767b1cad9140b15313fa1c7f3e7ff8215da901098a879840a0a74c",
+            "manifestSha256": "ca3b230435767b1cad9140b15313fa1c7f3e7ff8215da901098a879840a0a74c",
+            "unchanged": true
+          },
+          {
+            "path": ".temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412407144/failure-1440.png",
+            "sha256": "a394bac4f0dadf618a8f26ab7f926cb6bacbb7aba20811b098edf6df164ce180",
+            "manifestSha256": "a394bac4f0dadf618a8f26ab7f926cb6bacbb7aba20811b098edf6df164ce180",
+            "unchanged": true
+          },
+          {
+            "path": ".temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412407144/failure-390.png",
+            "sha256": "ed05732e286fc0b2a712ea63377f2627e715d51ee922d537920182d5162d70aa",
+            "manifestSha256": "ed05732e286fc0b2a712ea63377f2627e715d51ee922d537920182d5162d70aa",
+            "unchanged": true
+          },
+          {
+            "path": ".temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412649696/inventory-1440.png",
+            "sha256": "e42ee0b27f9eabe3a8f64413687089539a52e079bf8ecddd50583f35be346810",
+            "manifestSha256": "e42ee0b27f9eabe3a8f64413687089539a52e079bf8ecddd50583f35be346810",
+            "unchanged": true
+          },
+          {
+            "path": ".temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412649696/failure-1440.png",
+            "sha256": "3a7235de18d62576cae78c17ea2d74d49b382addeb69c7815d2ebfd24c3d8cf4",
+            "manifestSha256": "3a7235de18d62576cae78c17ea2d74d49b382addeb69c7815d2ebfd24c3d8cf4",
+            "unchanged": true
+          },
+          {
+            "path": ".temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412649696/inventory-390.png",
+            "sha256": "8daaa254edafa705eecc9498b21cabde768a1f9ca1b447ab2d321d502fd2583e",
+            "manifestSha256": "8daaa254edafa705eecc9498b21cabde768a1f9ca1b447ab2d321d502fd2583e",
+            "unchanged": true
+          },
+          {
+            "path": ".temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412649696/located-390.png",
+            "sha256": "9bbec9068f281591cb389d434c416fb6f71a40971159651f11034b0f395e9153",
+            "manifestSha256": "9bbec9068f281591cb389d434c416fb6f71a40971159651f11034b0f395e9153",
+            "unchanged": true
+          },
+          {
+            "path": ".temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412649696/returned-390.png",
+            "sha256": "9bbec9068f281591cb389d434c416fb6f71a40971159651f11034b0f395e9153",
+            "manifestSha256": "9bbec9068f281591cb389d434c416fb6f71a40971159651f11034b0f395e9153",
+            "unchanged": true
+          },
+          {
+            "path": ".temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412958143/inventory-1440.png",
+            "sha256": "46e0468c952866647d826d72a6820620ba51ac8a6c72983f4c685e856aa77202",
+            "manifestSha256": "46e0468c952866647d826d72a6820620ba51ac8a6c72983f4c685e856aa77202",
+            "unchanged": true
+          },
+          {
+            "path": ".temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412958143/located-1440.png",
+            "sha256": "1bc97aae088b633f5401df886301c8bcd55b45c5cd70b27a078297de6ea2e074",
+            "manifestSha256": "1bc97aae088b633f5401df886301c8bcd55b45c5cd70b27a078297de6ea2e074",
+            "unchanged": true
+          },
+          {
+            "path": ".temp/worktrees/g-2753/.temp/studio-proof/original-inventory-1792412958143/returned-1440.png",
+            "sha256": "1bc97aae088b633f5401df886301c8bcd55b45c5cd70b27a078297de6ea2e074",
+            "manifestSha256": "1bc97aae088b633f5401df886301c8bcd55b45c5cd70b27a078297de6ea2e074",
+            "unchanged": true
+          }
+        ],
+        "allPriorProofFilesUnchangedAtQualification": true,
+        "sharedArtifactExceptions": {
+          "scripts/static/web-continuations.inventory.json": {
+            "violations": {
+              "sourceRows": 49,
+              "mainRows": 49,
+              "exactRows": true,
+              "sourceSha256": "9e99b5763b79109fada37bfe13bebb094b77d6ee8c3b17f1f100685a42f50248",
+              "mainSha256": "9e99b5763b79109fada37bfe13bebb094b77d6ee8c3b17f1f100685a42f50248"
+            },
+            "remaining": {
+              "sourceRows": 1,
+              "mainRows": 1,
+              "exactRows": true,
+              "sourceSha256": "f72d5371fde65871bac1a5cf0c36cdd50eede86d37a4a2d8ff2b66cf40cb571b",
+              "mainSha256": "f72d5371fde65871bac1a5cf0c36cdd50eede86d37a4a2d8ff2b66cf40cb571b"
+            }
+          },
+          "generated/openapi/main/public.json": {
+            "selectedStudioPaths": [
+              "/v1/agents/{id}/shelves/status/{status}/works",
+              "/v1/agents/{id}/works",
+              "/v1/me/agents/{agent}/works",
+              "/v1/me/agents/{agent}/works/{id}",
+              "/v1/me/agents/{agent}/works/{id}/chapters"
+            ],
+            "operationSubtreesExact": true,
+            "sourceSha256": "32976b3407ac18e2121bffe9ec97d8d0e14d3304f3167999939e2bffc87126d9",
+            "mainSha256": "32976b3407ac18e2121bffe9ec97d8d0e14d3304f3167999939e2bffc87126d9",
+            "wholeFileDifference": "Only rating count/histogram/population/withdrawn maximum100 schema bound removed by already-main peer changes; no Studio path delta."
+          }
+        }
+      },
+      "remainingOriginalAssertions": [],
+      "sourceOnMain": true,
+      "latestCumulativeProofOnMain": true,
+      "classStatusMutated": true,
+      "rootAcceptanceRequired": false,
+      "proofTiers": [
+        "Controlled227candidate algorithm proves full inventory search/order before slices; not genuine227nativeWorks.",
+        "105PostgreSQLboundary uses graphReaderdouble; exact one-lineUUIDcast approved and normalgatepassed, but individual105testresult remains UNQUALIFIED and is not closurepremise.",
+        "Recorded 105Work/20row authored states and retained independentvisual/storyproof coverlargeinventory and longCJKLatin/mixedstate/coverless semantics.",
+        "Genuine2retainedWorks plus5ROOTplacements demonstrate actualAPI200 title normalization/recent-created-title nativeone-itemcursorwiring and actualUI Work→Back/reload q/sort/view/selectedWork1440/390. Not genuine100Works."
+      ],
+      "reportHistory": {
+        "historicalFailuresPreserved": true,
+        "priorReportCommits": [
+          "7515ee6729465f55031090ac31245d7f63f52b7d",
+          "a1af782bfc799e57778b226c6fc208e551489a78",
+          "53a6c411e73c8b511be8d29f10a5b47b6655e44e"
+        ],
+        "specific105WorkSqlBodyResult": "Unqualified, not a closure premise. Controlled 227-candidate algorithm, rendered large-inventory states and genuine two-Work API/browser wiring form the composed original proof."
+      },
+      "limits": [
+        "AUD-011 same-Work top-level/volume/extras/native23-occurrence pagination and incomplete/private-draft limits retain their separate original dispositions and G-2753 work.",
+        "Original four-chapter counterexample and23-occurrence corpus are not substituted or claimed rerun.",
+        "All-six-persona/four-additional-body AMGT and wider STUDIO01 journeys are not claimed passed.",
+        "D4-002 Discover instances and navigation class remain outside this qualification.",
+        "Genuine inventory contains two Works; no genuine 100-Work inventory is asserted. Long/mixed-state/coverless variations remain recorded rendering proof.",
+        "AUD-011 chapter-count truth, topology, private-draft disclosure and full AMGT acceptance remain separate. No new runtime, review, source or data action performed for this candidate."
+      ],
+      "rootAcceptance": {
+        "manager": "SITE same end-to-end manager",
+        "acceptedAt": "2026-10-19T13:20:07.142834+00:00",
+        "originalAssertionsUnchanged": true,
+        "originalAcceptanceAndRegressionVerbatimMatch": true,
+        "materialSourceBlobsVerified": 36,
+        "localHashRecordsReverified": 23,
+        "skillApplied": ".agents/skills/product-audit/SKILL.md",
+        "knownMissingOriginalAssertions": []
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "id": "D4-016",
+      "status": "closed",
+      "assessedAt": "2026-10-19T13:20:07.142834+00:00",
+      "main": "653c9c18a6d4577717dfd4af26f63f2c6eadf996",
+      "productCommit": "2b1bd0c675df504b9610a44dcdcbc2a6e4860f6b",
+      "testedProductPin": "32400992a4879132812a83d9e6a0bd1cd5d996bf",
+      "compatibleGenuineBackend": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "canonicalSource": "docs/goals/audit-remediation-20261019/site-plan.json#D4-016",
+      "canonicalSourceSha256": "4ab008ae2a5144eb71f887daa737f1c5eb1a75b443e084b0f67fa67a0cbec3bc",
+      "originalRegistry": ".temp/site-audit-2026-10-18/round-3/all-findings.json",
+      "originalRegistrySha256": "e2721c44e74305c694b02e81e757e4476c3a19de414d25b0689617316c5ebc3f",
+      "skill": ".agents/skills/product-audit/SKILL.md",
+      "productAuditMethod": "Original previewinformationinvariant through suppliedsourceexcerpt→feedExcerpt→Card/PostRow→actualvisibleclipping. Check allsixoriginalRecipeinstances plus mixedBookGuideoriginalrows, honestfallback/omission/meaningfulsame-nameprose atownedunit/storytiers. Compareexactmainblobs and retainedhashes. Reusepassingunchangedproof; do notaddD3001identity/fullRecipejourney/AUD013densitygates.",
+      "originalAcceptanceVerbatim": [
+        "对六个现有recipe样本及book/guide混合样本，标题后的预览提供新增且真实的内容线索；重复开头不再次耗尽有限预览行数。",
+        "无新增正文时使用真实类型相关信息或省略无效预览，不编造简介、不误删正文中有意义的同名句子。",
+        "1440/390中仅靠当前行即可判断是否值得打开，修复不依赖拉高所有卡片。"
+      ],
+      "originalRegressionAssertionsVerbatim": [
+        {
+          "id": "D4-016/assertion-1",
+          "assert": "Recipe and other typed previews show a useful nonduplicate excerpt instead of repeating title/Ingredients boilerplate without new meaning."
+        },
+        {
+          "id": "D4-016/assertion-2",
+          "assert": "Meaningful source sentences that happen to include the title stay intact; no generated fake introduction or larger card substitutes for real content."
+        },
+        {
+          "id": "D4-016/assertion-3",
+          "assert": "Verify short/long/CJK/coverless and other Work types with readable targets and unchanged author lifecycle menus."
+        }
+      ],
+      "originalAssertionsChanged": false,
+      "originalCriterionWitnesses": [
+        {
+          "criterion": "对六个现有recipe样本及book/guide混合样本，标题后的预览提供新增且真实的内容线索；重复开头不再次耗尽有限预览行数。",
+          "status": "verified-at-stated-tiers",
+          "genuineApiTier": "Six original retained Recipe IDs/titles/excerpts are unchanged. Previously captured Recipe25 plus this five-Recipe run cover all six. Genuine original Home Book/Guide discussion samples retain their original item/target/work UUIDs, post titles, excerpts and actual types.",
+          "actualBrowserTier": "14 newly viewed 1440/390 screenshots show useful Recipe body clues and real Book/Guide post-body previews. No title echo or structural Ingredients opening consumes the visible lines.",
+          "componentUnitTier": "Unchanged 4 preview unit cases and UsefulWorkPreviews stories additionally cover ordinary Book/Guide work-body preview composition."
+        },
+        {
+          "criterion": "无新增正文时使用真实类型相关信息或省略无效预览，不编造简介、不误删正文中有意义的同名句子。",
+          "status": "verified-by-retained-unit-and-rendered-component-proof",
+          "unitTier": "Empty/null/title-only/Ingredients-only excerpts return null, without an invented summary; genuine same-name sentences such as Middlemarch explores provincial life, recipe-title is served in broth, and Ingredients are measured by weight are retained. Book/Guide heading-only prefixes and Chinese heading/body cases are tested explicitly.",
+          "componentTier": "Previously viewed UsefulWorkPreviews and phone story cover Recipe/Book/Guide/facts-only rows using real type-related facts or omission. Card/PostRow and preview test blobs/consumers remain unchanged.",
+          "genuineApiTier": "Newly rendered bodies equal real retained source text. This does not claim the corpus naturally supplied every empty/fallback/same-name edge case."
+        },
+        {
+          "criterion": "1440/390中仅靠当前行即可判断是否值得打开，修复不依赖拉高所有卡片。",
+          "status": "verified-in-genuine-public-ui-at-both-widths",
+          "actualBrowserTier": "Each of seven selected rows is fully visible, its first real body clue is visible, and the document has no horizontal overflow. Recipe body is capped at three actual visible lines. Desktop Recipe rows are 221px; phone rows are 221px or 245px where the title wraps. No card-height/style implementation changed. Book/Guide discussion body is two lines at desktop and three at phone, with actual attached-work context.",
+          "visualJudgment": "Viewed all 14 captures: title/content hierarchy, compact covers, body clues and actions remain readable with no selected-row overlap. Ingredient quantities, the Austen reader question and mod backup/recovery account each add a reason to open the row."
+        }
+      ],
+      "originalRegressionAssertionWitnesses": [
+        {
+          "id": "D4-016/assertion-1",
+          "originalVerbatim": "Recipe and other typed previews show a useful nonduplicate excerpt instead of repeating title/Ingredients boilerplate without new meaning.",
+          "status": "PASS",
+          "witness": "Original six retained Recipe rows (first priorcapture+five new) plus genuine original mixed Book/Guide discussion rows at1440/390; every body clue real-source substring without own title/Ingredients opening. Newjob740625bd2cases/148assertions;14newPNGs independentlyviewed. OrdinaryBook/Guide work-event composition remains authoredunit/storytier, distinguished from genuinepostpreview."
+        },
+        {
+          "id": "D4-016/assertion-2",
+          "originalVerbatim": "Meaningful source sentences that happen to include the title stay intact; no generated fake introduction or larger card substitutes for real content.",
+          "status": "PASS",
+          "witness": "Retained4previewunitcases preserve same-title meaningful English/Chinese/bodyphrases; empty/title-only/Ingredients-only omit instead of fabrication; RecipeBookGuide/facts-only authoredstoriespassed. Actualnewbodyequalsrealretainedsource and three-lineclampunchanged."
+        },
+        {
+          "id": "D4-016/assertion-3",
+          "originalVerbatim": "Verify short/long/CJK/coverless and other Work types with readable targets and unchanged author lifecycle menus.",
+          "status": "PASS-at-applicable-tiers",
+          "witness": "Retainedpassing36Feedstories include typedfallbackcover/coverlessfixtures, long/short/CJKtargets, Chinese andHideAndUndo menuinteraction; inspectedpreviewunit includesChinese meaningfulsame-titletext. Actualgenuine14captures provideItalian/English/Chinese readabletargets and menu/actionsvisible1440/390. All7materialconsumers exactlymain, includingpost-row; source does not changeauthorlifecycle/menucontract. This is not genuineauthenticatedauthorlifecyclejourneyproof."
+        }
+      ],
+      "independentReview": {
+        "task": "G-2836",
+        "commit": "3b0904b94bc91a49032143b06bdf0acc48e73f2d",
+        "reviewer": {
+          "worker": "G-2836",
+          "engine": "codex-1",
+          "model": "GPT-6.1 Sol",
+          "effort": "xhigh",
+          "soleActualIndependentReviewer": true,
+          "candidateAuthor": false,
+          "accountFallback": false,
+          "nestedAgents": false
+        },
+        "verdict": {
+          "result": "candidate-reviewed-and-checked-original-d4-016-ready-for-manager-closure-at-stated-tiers",
+          "scope": "Only the missing five original Recipe rendered captures and genuine original mixed Book/Guide public samples at 1440/390, plus cumulative mapping to retained unchanged unit/story/source proof. No product edit, second source review or new full matrix.",
+          "summary": "Two actual-browser cases pass 148 assertions with fourteen screenshots actually viewed. All five remaining original Recipe item UUIDs display real ingredient/body clues without a repeated title or Ingredients opening. The original Book and Guide public discussion samples display real post-body clues and their real attached works at both widths. Together with the previously viewed first Recipe and unchanged unit/story assertions for honest omission/fallback and meaningful same-name sentences, the original D4-016 clauses are supported at their applicable tiers.",
+          "blockingFindings": [],
+          "missingOriginalD4AssertionsAtStatedTiers": [],
+          "findingDisposition": "No reproduced public D4-016 failure remains in the selected original samples. Ready for the manager to judge and record D4-016 closure against its original acceptance; this reviewer changes no finding status, index or ledger.",
+          "originalFindingsClosed": [],
+          "otherOriginalClasses": "D3-001 genuine authenticated persona/identity/generation and the wider locale/theme matrix remain open exactly as retained. Completed FEED-RSC-01 / AUD-005 proof is unchanged and was not rerun. Those classes are not prerequisites newly imposed on D4-016.",
+          "next": "Normal landing of this claimed cumulative report only. Ordinary preview source is already main at 2b1bd0c675; no implementation import is queued by this handoff."
+        },
+        "newPassingJob": {
+          "job": "740625bd-6f71-4890-9808-f9ea4be00cf6",
+          "command": "bun scripts/goal/goalctl.ts test ./.temp/feed-preview-live.test.ts",
+          "exit": 0,
+          "classification": "genuine-public-browser-original-preview-assertions",
+          "passed": 2,
+          "failed": 0,
+          "expectCalls": 148,
+          "seconds": 97.75,
+          "cases": [
+            "D4-016 original five remaining Recipe and mixed Book/Guide rows at 1440",
+            "D4-016 original five remaining Recipe and mixed Book/Guide rows at 390"
+          ],
+          "assertions": [
+            "Original sample item UUID targets arrive through real SSR/pagination; each rendered heading equals the genuine source title.",
+            "Each complete preview equals its retained genuine body excerpt, is a substring of that real source, and starts with neither its own repeated title nor Ingredients.",
+            "The first body clue is actually within the clipping box and viewport; CSS line-clamp remains 3 and visible text Range line boxes are at most three. Full unclipped span height is not substituted for visible content height.",
+            "The selected row is wholly in the viewport, without horizontal document overflow. Original Book/Guide work title is visible in the real discussion row.",
+            "All observed browser feed responses are real unmodified 200s, with no observed Main write request."
+          ],
+          "log": ".temp/goal/jobs/740625bd-6f71-4890-9808-f9ea4be00cf6.log",
+          "privateRunner": ".temp/feed-preview-live.test.ts",
+          "runnerSha256": "1da30d41c6de8483353d9f8b333cc6c7eadc64f234a3f65e5430ebe6efaf2092"
+        },
+        "docsAndWorkerCheck": {
+          "job": "a0e239ed-afc8-49ab-9d84-e0c749911e75",
+          "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+          "exit": 0,
+          "steps": [
+            {
+              "command": "task docs:check",
+              "exit": 0,
+              "log": ".temp/goal/jobs/a0e239ed-afc8-49ab-9d84-e0c749911e75.1.log",
+              "result": "13 checker tests pass; 250 Markdown files pass local links, fragments and design-navigation checks."
+            },
+            {
+              "command": "task goal -- check",
+              "exit": 0,
+              "run": "run-yDLAEG",
+              "log": ".temp/goal/jobs/a0e239ed-afc8-49ab-9d84-e0c749911e75.2.log",
+              "fullOutput": ".temp/goal/check/run-yDLAEG/output.log",
+              "result": "Report-only check: AST and the 1 selected repository guard pass. Types/lint skip because no source changed; tests skip because the brief names none. This does not relabel administrative checks as additional product-runtime proof."
+            }
+          ]
+        }
+      },
+      "sourceAndArtifacts": {
+        "exactCurrentMainSource": [
+          {
+            "path": "apps/web/features/feed/preview.ts",
+            "testedBlob": "fd5ed1b9aed59f71c33b3b0d0e6dea8b0dc14bbb",
+            "mainBlob": "fd5ed1b9aed59f71c33b3b0d0e6dea8b0dc14bbb",
+            "exact": true
+          },
+          {
+            "path": "apps/web/features/feed/card.tsx",
+            "testedBlob": "6b661992860176f78eab0ae164c1b09513b4e02b",
+            "mainBlob": "6b661992860176f78eab0ae164c1b09513b4e02b",
+            "exact": true
+          },
+          {
+            "path": "apps/web/features/feed/post-row.tsx",
+            "testedBlob": "fa45522092d60a0d6d86770414dcab9472367028",
+            "mainBlob": "fa45522092d60a0d6d86770414dcab9472367028",
+            "exact": true
+          },
+          {
+            "path": "apps/web/features/feed/feed-list.tsx",
+            "testedBlob": "127eddc9eabc0c1dd0ae16406bc78c1d8fdd23d6",
+            "mainBlob": "127eddc9eabc0c1dd0ae16406bc78c1d8fdd23d6",
+            "exact": true
+          },
+          {
+            "path": "apps/web/features/feed/feed-context.tsx",
+            "testedBlob": "e97de6dff0da2c4ee03cdf1cc13f5c4a297b2b43",
+            "mainBlob": "e97de6dff0da2c4ee03cdf1cc13f5c4a297b2b43",
+            "exact": true
+          },
+          {
+            "path": "apps/web/features/feed/preview.test.ts",
+            "testedBlob": "12434e4203a7dcf256a0f170db81102fc97fe77f",
+            "mainBlob": "12434e4203a7dcf256a0f170db81102fc97fe77f",
+            "exact": true
+          },
+          {
+            "path": "apps/web/features/feed/feed.stories.tsx",
+            "testedBlob": "61ba4abd075575c1a6dbe45aea16f84d25624563",
+            "mainBlob": "61ba4abd075575c1a6dbe45aea16f84d25624563",
+            "exact": true
+          }
+        ],
+        "proofFilesVerified": [
+          {
+            "path": ".temp/worktrees/g-2836/.temp/feed-preview-data.ts",
+            "expectedSha256": "455fa361cc787888be33fe69886717067d7fb8896fb621e5efb5df8ea527e827",
+            "actualSha256": "455fa361cc787888be33fe69886717067d7fb8896fb621e5efb5df8ea527e827",
+            "matches": true
+          },
+          {
+            "path": ".temp/worktrees/g-2836/.temp/feed-preview-evidence/browser-feed-1.json",
+            "expectedSha256": "07dd271e685b7afa63b606ace28503e9cd54b7e3a50953d76584bcf604f8bfa3",
+            "actualSha256": "07dd271e685b7afa63b606ace28503e9cd54b7e3a50953d76584bcf604f8bfa3",
+            "matches": true
+          },
+          {
+            "path": ".temp/worktrees/g-2836/.temp/feed-preview-evidence/browser-feed-2.json",
+            "expectedSha256": "16868941d2ae9c0e0377dfec0c179b234b20ab2acecfde4b40355258160ff808",
+            "actualSha256": "16868941d2ae9c0e0377dfec0c179b234b20ab2acecfde4b40355258160ff808",
+            "matches": true
+          },
+          {
+            "path": ".temp/worktrees/g-2836/.temp/feed-preview-evidence/browser-feed-3.json",
+            "expectedSha256": "8fa2317f513621335edc7167085a7e680aa2449f73ee8c046ce49baddc7cda7b",
+            "actualSha256": "8fa2317f513621335edc7167085a7e680aa2449f73ee8c046ce49baddc7cda7b",
+            "matches": true
+          },
+          {
+            "path": ".temp/worktrees/g-2836/.temp/feed-preview-evidence/d4-1-recipe-23-1440.png",
+            "expectedSha256": "8c25663e1b5eb280087b0b8492cf17c82176f55000051e64c9d3b8f21512c16c",
+            "actualSha256": "8c25663e1b5eb280087b0b8492cf17c82176f55000051e64c9d3b8f21512c16c",
+            "matches": true
+          },
+          {
+            "path": ".temp/worktrees/g-2836/.temp/feed-preview-evidence/d4-1-recipe-23-390.png",
+            "expectedSha256": "50cee741f22d98a11d436e26c1cc4b7783b975e2f3e6cf40239132465b37ed8a",
+            "actualSha256": "50cee741f22d98a11d436e26c1cc4b7783b975e2f3e6cf40239132465b37ed8a",
+            "matches": true
+          },
+          {
+            "path": ".temp/worktrees/g-2836/.temp/feed-preview-evidence/d4-2-recipe-21-1440.png",
+            "expectedSha256": "1c3df75355fa7ba749ffca4fe97ae8233e9a22c4d5a1a69863b05d8aff23307f",
+            "actualSha256": "1c3df75355fa7ba749ffca4fe97ae8233e9a22c4d5a1a69863b05d8aff23307f",
+            "matches": true
+          },
+          {
+            "path": ".temp/worktrees/g-2836/.temp/feed-preview-evidence/d4-2-recipe-21-390.png",
+            "expectedSha256": "96d44412f1ece944570bafd76aab06cce8c6060ddfa907c233af8573ef2f97e1",
+            "actualSha256": "96d44412f1ece944570bafd76aab06cce8c6060ddfa907c233af8573ef2f97e1",
+            "matches": true
+          },
+          {
+            "path": ".temp/worktrees/g-2836/.temp/feed-preview-evidence/d4-3-recipe-17-1440.png",
+            "expectedSha256": "219f900fe2c6212c326285aa613f4e20d17c5c6aad52715a5cd13d48e0835da1",
+            "actualSha256": "219f900fe2c6212c326285aa613f4e20d17c5c6aad52715a5cd13d48e0835da1",
+            "matches": true
+          },
+          {
+            "path": ".temp/worktrees/g-2836/.temp/feed-preview-evidence/d4-3-recipe-17-390.png",
+            "expectedSha256": "509b2ec41b2576543cc0ff62baadaa0bcb3a6acee4258009271d25fa5234ccb1",
+            "actualSha256": "509b2ec41b2576543cc0ff62baadaa0bcb3a6acee4258009271d25fa5234ccb1",
+            "matches": true
+          },
+          {
+            "path": ".temp/worktrees/g-2836/.temp/feed-preview-evidence/d4-4-recipe-16-1440.png",
+            "expectedSha256": "f875ca775e212adfddac956980eb523cf16b3f1c8063338f143c544384495cb5",
+            "actualSha256": "f875ca775e212adfddac956980eb523cf16b3f1c8063338f143c544384495cb5",
+            "matches": true
+          },
+          {
+            "path": ".temp/worktrees/g-2836/.temp/feed-preview-evidence/d4-4-recipe-16-390.png",
+            "expectedSha256": "4bf10f11e3da3685d12c3848ec793481c1743ffb0e2c8e1595345ed679ed073f",
+            "actualSha256": "4bf10f11e3da3685d12c3848ec793481c1743ffb0e2c8e1595345ed679ed073f",
+            "matches": true
+          },
+          {
+            "path": ".temp/worktrees/g-2836/.temp/feed-preview-evidence/d4-5-recipe-11-1440.png",
+            "expectedSha256": "2069edd9ea49d8c6ae700ecc1ba063f2589574f3eff0646b517feb73cac7c659",
+            "actualSha256": "2069edd9ea49d8c6ae700ecc1ba063f2589574f3eff0646b517feb73cac7c659",
+            "matches": true
+          },
+          {
+            "path": ".temp/worktrees/g-2836/.temp/feed-preview-evidence/d4-5-recipe-11-390.png",
+            "expectedSha256": "9b888d96ece2bb6bbd7ed9533e327c4a8e2888764ee08a336dc80d054ffc754e",
+            "actualSha256": "9b888d96ece2bb6bbd7ed9533e327c4a8e2888764ee08a336dc80d054ffc754e",
+            "matches": true
+          },
+          {
+            "path": ".temp/worktrees/g-2836/.temp/feed-preview-evidence/d4-6-book-1440.png",
+            "expectedSha256": "f82740b61ba65e2e4d76110a398ebfa1c1623c58df75a0b6f49264dcc0ca3b86",
+            "actualSha256": "f82740b61ba65e2e4d76110a398ebfa1c1623c58df75a0b6f49264dcc0ca3b86",
+            "matches": true
+          },
+          {
+            "path": ".temp/worktrees/g-2836/.temp/feed-preview-evidence/d4-6-book-390.png",
+            "expectedSha256": "9df36bb3fa0a1c0325814e6b946f67ea07bb2c789b6fee416b76d7167a52fcfd",
+            "actualSha256": "9df36bb3fa0a1c0325814e6b946f67ea07bb2c789b6fee416b76d7167a52fcfd",
+            "matches": true
+          },
+          {
+            "path": ".temp/worktrees/g-2836/.temp/feed-preview-evidence/d4-7-guide-1440.png",
+            "expectedSha256": "494ccd6bc96ebeb2394313eb5989f10083de6013c7e7b6db7f031295174909e0",
+            "actualSha256": "494ccd6bc96ebeb2394313eb5989f10083de6013c7e7b6db7f031295174909e0",
+            "matches": true
+          },
+          {
+            "path": ".temp/worktrees/g-2836/.temp/feed-preview-evidence/d4-7-guide-390.png",
+            "expectedSha256": "03568130458c74e2955ebb2c375e804b9745d45c5d0b19ac44403a24b64a14bd",
+            "actualSha256": "03568130458c74e2955ebb2c375e804b9745d45c5d0b19ac44403a24b64a14bd",
+            "matches": true
+          },
+          {
+            "path": ".temp/worktrees/g-2836/.temp/feed-preview-evidence/live-observations.json",
+            "expectedSha256": "7591c85bc5c7a1c6e26d099f300e8df38a91d092df69fcba4acc86e221e50b6e",
+            "actualSha256": "7591c85bc5c7a1c6e26d099f300e8df38a91d092df69fcba4acc86e221e50b6e",
+            "matches": true
+          },
+          {
+            "path": ".temp/worktrees/g-2836/.temp/feed-preview-evidence/original-d4-016.json",
+            "expectedSha256": "25c3acdd6b136f2112019e88f5916be47eb0ee8dc5f3565d42281e96e1c3d798",
+            "actualSha256": "25c3acdd6b136f2112019e88f5916be47eb0ee8dc5f3565d42281e96e1c3d798",
+            "matches": true
+          },
+          {
+            "path": ".temp/worktrees/g-2836/.temp/feed-preview-evidence/original-home-1440.json",
+            "expectedSha256": "a254d218eecd45c394198bcc54671dbc3a1a57409727c7b7620653a99f5bc38a",
+            "actualSha256": "a254d218eecd45c394198bcc54671dbc3a1a57409727c7b7620653a99f5bc38a",
+            "matches": true
+          },
+          {
+            "path": ".temp/worktrees/g-2836/.temp/feed-preview-evidence/original-home-390.json",
+            "expectedSha256": "7704a4b34e03aadd623824ebd857df7051ad7aae710fe71807bf719ae909b7dc",
+            "actualSha256": "7704a4b34e03aadd623824ebd857df7051ad7aae710fe71807bf719ae909b7dc",
+            "matches": true
+          },
+          {
+            "path": ".temp/worktrees/g-2836/.temp/feed-preview-evidence/original-home-preview-audit.json",
+            "expectedSha256": "bc43ab5b683dfcc2434f4e7cc8ddd18dacc519b3f9797358b5eee95564422099",
+            "actualSha256": "bc43ab5b683dfcc2434f4e7cc8ddd18dacc519b3f9797358b5eee95564422099",
+            "matches": true
+          },
+          {
+            "path": ".temp/worktrees/g-2836/.temp/feed-preview-evidence/render-targets.json",
+            "expectedSha256": "b483f49c54d34ae10c3dd109a28af06611bd4191e44633591a58a481e906002e",
+            "actualSha256": "b483f49c54d34ae10c3dd109a28af06611bd4191e44633591a58a481e906002e",
+            "matches": true
+          },
+          {
+            "path": ".temp/worktrees/g-2836/.temp/feed-preview-evidence/source.json",
+            "expectedSha256": "860b22cb8b6d25c4e58f6c09f4ee5384fe135481acc616ec5dc0a8d97ba1c512",
+            "actualSha256": "860b22cb8b6d25c4e58f6c09f4ee5384fe135481acc616ec5dc0a8d97ba1c512",
+            "matches": true
+          },
+          {
+            "path": ".temp/worktrees/g-2836/.temp/feed-preview-live.test.ts",
+            "expectedSha256": "1da30d41c6de8483353d9f8b333cc6c7eadc64f234a3f65e5430ebe6efaf2092",
+            "actualSha256": "1da30d41c6de8483353d9f8b333cc6c7eadc64f234a3f65e5430ebe6efaf2092",
+            "matches": true
+          }
+        ],
+        "allVerified": true,
+        "newlyViewedPNGs": 14,
+        "reportPath": "docs/goals/audit-remediation-20261019/proofs/feed-candidate-review.json",
+        "reportBlob": "3066f9fe694a7fdb58edc75836fde77ad5d5e1c8",
+        "reportSha256": "9ef46f345c76711c94bdb91e019695f3f75359fe0802cc06becf405dc0e11811",
+        "currentMainReportSha256": "9ef46f345c76711c94bdb91e019695f3f75359fe0802cc06becf405dc0e11811",
+        "priorReportFieldsUnchanged": true,
+        "reportOnlyPatch": ".temp/audit-remediation-20261019/two-hour-sprint/site-D4-016-approved-report.patch",
+        "reportOnlyPatchSha256": "75b70aca7251db525a0e8e3f1dcd888671029cdaccfce25f297d5304227c6ab6",
+        "latestReportLanding": "9307ec9eaa2cca3e05733ad6b467121d3304dd49"
+      },
+      "reportHistory": {
+        "priorReportCommit": "685fc9d3faf18421fd32731956e6617ffccf9f55",
+        "priorReportSha256": "1e721661924cdf1056c76c47b62395f95f32dcc9ecea4d19c331de7b22f4d65f",
+        "allPriorFieldsUnchanged": true,
+        "priorRscAndFocusFailures": "Every original public/component focus failure, two-document interrupted-RSC failure, setup failure and correction remains in the prior fields and private artifacts. No full failure history was replaced by passing evidence.",
+        "latestFailedPreviewProbe": "Both failed-geometry screenshots also actually viewed and retained in .temp/feed-preview-evidence/first-geometry-probe/; not counted among the 14 passing-run views."
+      },
+      "remainingOriginalAssertions": [],
+      "sourceOnMain": true,
+      "latestCumulativeProofOnMain": true,
+      "classStatusMutated": true,
+      "rootAcceptanceRequired": false,
+      "rootPreparation": "Cumulative report is main9307ec9 and exactly matches independent3b0904b9. Product source already main. Only root acceptance and the central closure entry remain; no additional report/source capture or runtime is required.",
+      "limits": [
+        "Genuine original mixed Book/Guide samples are discussion post previews with attached Work titles. No genuine ordinary Guide work-event body preview is claimed; ordinary Work fallback/title handling is covered by retained unit/component stories.",
+        "The full D3-001 authenticated persona/generation matrix and persisted locale/theme behavior remain missing separately. They are not original D4-016 prerequisites.",
+        "Original finding closure remains a manager decision; review alone does not mutate or close the audit finding.",
+        "No new product/source review/runtime or data/accountmutation by thisreconciliation. Failedlookuppremise+bylinegeometryprobe retained; only visibletextlineboxmeasurement corrected.",
+        "Priorphone darkmanualclass is retainedasmanual; newgenuineEnglish/lightcapture not fullpersistedlocale/themeproof. NoD3001closureorfullRecipejourneyclaim."
+      ],
+      "candidateOnly": false,
+      "proofLanding": "9307ec9eaa2cca3e05733ad6b467121d3304dd49",
+      "rootAcceptance": {
+        "manager": "SITE same end-to-end manager",
+        "acceptedAt": "2026-10-19T13:20:07.142834+00:00",
+        "originalAssertionsUnchanged": true,
+        "originalAcceptanceAndRegressionVerbatimMatch": true,
+        "materialSourceBlobsVerified": 7,
+        "localHashRecordsReverified": 26,
+        "skillApplied": ".agents/skills/product-audit/SKILL.md",
+        "knownMissingOriginalAssertions": []
       }
     }
   ]
