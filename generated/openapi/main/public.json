@@ -262647,6 +262647,158 @@
                     "profile": {
                       "const": "facets-v1",
                       "type": "string"
+                    },
+                    "queryShapes": {
+                      "items": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "continuation": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "request": {
+                                    "const": "page.continuation",
+                                    "type": "string"
+                                  },
+                                  "response": {
+                                    "const": "result.nextCursor",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "request",
+                                  "response"
+                                ],
+                                "type": "object"
+                              },
+                              "facets": {
+                                "items": {
+                                  "maxLength": 2048,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "maxItems": 64,
+                                "type": "array",
+                                "uniqueItems": true
+                              },
+                              "href": {
+                                "const": "/v1/query",
+                                "type": "string"
+                              },
+                              "id": {
+                                "const": "release-works-v1",
+                                "type": "string"
+                              },
+                              "maxPageSize": {
+                                "maximum": 20,
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "method": {
+                                "const": "POST",
+                                "type": "string"
+                              },
+                              "requestProfile": {
+                                "const": "filter-document-v1",
+                                "type": "string"
+                              },
+                              "state": {
+                                "const": "ready",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "facets",
+                              "method",
+                              "href",
+                              "requestProfile",
+                              "maxPageSize",
+                              "continuation",
+                              "state"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "continuation": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "request": {
+                                    "const": "page.continuation",
+                                    "type": "string"
+                                  },
+                                  "response": {
+                                    "const": "result.nextCursor",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "request",
+                                  "response"
+                                ],
+                                "type": "object"
+                              },
+                              "facets": {
+                                "items": {
+                                  "maxLength": 2048,
+                                  "minLength": 1,
+                                  "type": "string"
+                                },
+                                "maxItems": 64,
+                                "type": "array",
+                                "uniqueItems": true
+                              },
+                              "href": {
+                                "const": "/v1/query",
+                                "type": "string"
+                              },
+                              "id": {
+                                "const": "release-works-v1",
+                                "type": "string"
+                              },
+                              "maxPageSize": {
+                                "maximum": 20,
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "method": {
+                                "const": "POST",
+                                "type": "string"
+                              },
+                              "refusal": {
+                                "maxLength": 512,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "requestProfile": {
+                                "const": "filter-document-v1",
+                                "type": "string"
+                              },
+                              "state": {
+                                "const": "unsupported",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "facets",
+                              "method",
+                              "href",
+                              "requestProfile",
+                              "maxPageSize",
+                              "continuation",
+                              "state",
+                              "refusal"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "maxItems": 1,
+                      "type": "array"
                     }
                   },
                   "required": [
