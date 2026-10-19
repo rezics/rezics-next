@@ -13,6 +13,7 @@ import { currentSessionRecord } from '../auth/session-state.ts';
 import { serviceOrigin } from '../api/origins.ts';
 import { mainReadHeaders } from '../api/main-read.ts';
 import { serverRead, withServerRequest } from '../api/server-read.ts';
+import { zoneNonce } from '../zones/csp.ts';
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;',
@@ -40,6 +41,7 @@ export async function addressFailureResponse(url: URL, locale: UiLocale,
   const title = missing ? t.notFoundTitle : t.errorTitle;
   const description = missing ? t.notFoundBody : status === 400 ? page.invalid :
     status === 409 ? page.moved : status === 422 ? page.budget : t.errorBody;
+  const nonce = zoneNonce();
   const link = (href: string, label: string) => `<a href="${escapeHtml(href)}">${escapeHtml(label)}</a>`;
   // The same decorative Lucide search-x / triangle-alert paths, without a React import.
   const icon = missing
@@ -48,16 +50,32 @@ export async function addressFailureResponse(url: URL, locale: UiLocale,
   const document = `<!DOCTYPE html><html lang="${escapeHtml(locale)}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)} · REZICS</title>
-<style>html{color-scheme:light dark;font:100%/1.6 system-ui}body{margin:0}main{max-width:42rem;margin:12vh auto;padding:1.5rem;overflow-wrap:anywhere}svg{width:2rem;height:2rem}h1{font-size:1.75rem}a{display:inline-block;margin:.5rem 1rem .5rem 0;text-underline-offset:.2em}a:focus-visible{outline:3px solid;outline-offset:4px}</style>
+<style nonce="${nonce}">html{color-scheme:light dark;font:100%/1.6 system-ui}body{margin:0}main{max-width:42rem;margin:12vh auto;padding:1.5rem;overflow-wrap:anywhere}svg{width:2rem;height:2rem}h1{font-size:1.75rem}a{display:inline-block;margin:.5rem 1rem .5rem 0;text-underline-offset:.2em}a:focus-visible{outline:3px solid;outline-offset:4px}</style>
 </head><body><main><div data-slot="empty-state"${missing ? '' : ' role="alert"'}>
 <span><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icon}</svg></span>
 <h1>${escapeHtml(title)}</h1><p>${escapeHtml(description)}</p><div>
-${missing ? '' : link(task.pathname + task.search, restart ? page.firstPage : t.retry)}
+${missing ? '' : `<a data-retry href="${escapeHtml(task.pathname + task.search)}">${escapeHtml(restart ? page.firstPage : t.retry)}</a>`}
 ${link(`/${locale}/discover${url.searchParams.get('type') === 'lists' ? '?type=lists' : ''}`, t.searchWorks)}
 ${link(`/${locale}`, t.backHome)}
-</div></div></main></body></html>`;
+</div>${missing ? '' : `<p data-retry-pending role="status" hidden>${escapeHtml(t.loading)}</p>`}</div></main>
+${missing ? '' : `<script nonce="${nonce}">
+(() => {
+  const retry = document.querySelector('[data-retry]');
+  const pending = document.querySelector('[data-retry-pending]');
+  retry.addEventListener('click', event => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    retry.setAttribute('aria-busy', 'true');
+    pending.hidden = false;
+  });
+  window.addEventListener('pageshow', () => {
+    retry.removeAttribute('aria-busy');
+    pending.hidden = true;
+  });
+})();
+</script>`}</body></html>`;
   return new Response(document, { status, headers: { 'content-type': 'text/html; charset=utf-8',
     'cache-control': 'no-store', 'x-robots-tag': 'noindex', 'referrer-policy': 'no-referrer',
+    'content-security-policy': `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'nonce-${nonce}'; base-uri 'none'; frame-ancestors 'none'`,
     ...(!missing && retryAfter ? { 'retry-after': retryAfter } : status === 429 || status === 503 ? { 'retry-after': '5' } : {}) } });
 }
 

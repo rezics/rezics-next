@@ -202,7 +202,15 @@ test('pre-shell recovery documents retain localized tasks and HTTP failure seman
       expect(html.includes(`href="${(url.pathname + url.search).replaceAll('&', '&amp;')}"`)).toBe(!missing);
       expect(html).toContain(`href="/${locale}/discover?type=lists"`);
       expect(html).toContain(`href="/${locale}"`);
-      expect(html).not.toContain('<script');
+      if (missing) expect(html).not.toContain('<script');
+      else {
+        expect(html).toContain('data-retry');
+        expect(html).toContain(`role="status" hidden>${t.loading}</p>`);
+        const nonce = html.match(/<script nonce="([^"]+)">/)?.[1];
+        expect(nonce).toBeTruthy();
+        expect(response.headers.get('content-security-policy')).toContain(`script-src 'nonce-${nonce}'`);
+        expect(html).not.toMatch(/\son(?:click|load)=/i);
+      }
     }
   }
 });
