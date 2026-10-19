@@ -104,7 +104,7 @@ export function DiscoverView({
           topics={topics}
           load={topicLoad}
         />
-        <nav aria-label={t.type} className="flex min-w-0 max-w-full gap-1 overflow-x-auto pb-1">
+        <nav aria-label={t.type} className="flex min-w-0 max-w-full gap-1 overflow-x-auto p-1">
           {tabs.map(({ id: tab, label }) => (
             <Link
               key={tab}

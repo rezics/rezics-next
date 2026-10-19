@@ -134,3 +134,33 @@ Run these through `bun scripts/goal/goalctl.ts test <explicit files>` in the
 authorized prove phase. Check real story IDs through the Storybook tooling before
 selecting individual exports. The URL/runtime matrix still needs real browser
 journeys beyond the component stories.
+
+## Navigation focus integration on the selective candidate
+
+The focus repair from `196a6f4a98413857dbf3e178d05ef65415035f29` is adapted
+to the selective candidate based on `f5f76ca780c5ff06652a3da81539f6db47547a6b`.
+Discover keeps its inline category navigation and current query behavior. Studio
+keeps its existing inventory and continuation links. Four scrolling rows reserve
+space for the painted focus ring. The shared observer reveals the keyboard target
+and retains that target during resize and history restoration notifications.
+
+`navigation-focus.stories.tsx` exercises the actual Discover, Studio views, Studio
+work tabs, public Site navigation, custom shelf and Loans navigation owners at
+390×844 and 1440×1000 in light and dark themes. Its independent helper measures
+the computed painted ring against every clipping ancestor and the viewport while
+Tab and Shift+Tab traverse both ends. Separate assertions retain selected labels,
+accessible names, current-page state and destination counts. Resize and persisted
+`pageshow` are component assertions, not real history acceptance. The Loans body
+and signed-in feature fixtures remain synthetic.
+
+The continuation inventory changes only two existing enclosing-function hashes:
+Discover and Studio home contain the class-only padding edits. Their accepted
+projection expressions and data flow are unchanged; existing mutation assertions
+remain authoritative. No continuation exception is added.
+
+The original G-2825 evidence remains at `b79c8be7c46b39e3345ef781cd5cd376a7ac1b5b`
+for wave `92b8a78f1cb06fb4a02703f2b471b80d1d069199`. Earlier startup receipts above
+retain their original checked pins. The candidate requires its own targeted
+checks, viewed focus screenshots and isolated development/production readiness
+receipts. None of those bounded checks closes the separate intermittent AUD-006,
+real signed-in navigation, route/content agreement or browser history matrix.

@@ -197,7 +197,7 @@ export function StudioWorkFrame({ agent, work, languages, tab, locale, messages,
     </div>
     {/* The rule under the tabs is an inset shadow, not a border the tabs overlap: nothing spills out of the
         scrolling row, so no browser draws a vertical scrollbar (stray arrows) at its end. */}
-    <nav aria-label={t.tabsLabel} className="-mx-1 -mb-3 flex gap-1 overflow-x-auto overflow-y-hidden px-1
+    <nav aria-label={t.tabsLabel} className="-mx-1 -mb-3 flex gap-1 overflow-x-auto overflow-y-hidden p-1
       shadow-[inset_0_-1px_0_0_var(--color-border)]">
       {tabs.map(item => <Link key={item} href={workHref(agent, header.id, item)} aria-current={tab === item ? 'page' : undefined}
         className={cn('shrink-0 border-transparent border-b-2 px-3 py-2 font-medium text-muted-foreground text-sm',
