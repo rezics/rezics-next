@@ -16,6 +16,7 @@ import { NotificationSettings } from './notification-settings.tsx';
 import type { SettingsMessages } from './messages.ts';
 import { languagesAfterRefresh, personPreferenceCommand, sameLanguages,
   type PersonPreferencePatch, type PersonPreferences } from './person-preferences.ts';
+import { useRecoveryFocus } from './use-recovery-focus.ts';
 
 export { notificationTopicLabel, settingsNotificationTopics, topicsShown } from './notification-settings.tsx';
 type Library = { visibility: 'public' | 'private' | 'followers'; version: number };
@@ -152,6 +153,7 @@ function PersonControls({ agent, locale, t, preview = false, previewLanguages = 
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
   const saving = useRef(false);
+  const recoveryFocus = useRecoveryFocus(busy);
   const feedbackId = useId();
   const [activeSection, setActiveSection] = useState<'privacy' | 'content'>('content');
   const [pending, setPending] = useState<PersonPreferencePatch>({});
@@ -217,6 +219,7 @@ function PersonControls({ agent, locale, t, preview = false, previewLanguages = 
   };
   const reviewLatest = async () => {
     if (saving.current || preview) return;
+    recoveryFocus.remember();
     saving.current = true; setBusy(true);
     try { await reload(); setStatus(t.personConflict); }
     catch { setStatus(t.personRefreshFailed); }
@@ -241,7 +244,7 @@ function PersonControls({ agent, locale, t, preview = false, previewLanguages = 
     <p role={activeSection === section && (busy || status) ? 'status' : undefined}
       aria-live="polite" aria-atomic="true">{activeSection === section ? (busy ? busyMessage : status) : ''}</p>
     {busy && activeSection !== section ? <p>{busyMessage}</p> : null}
-    {failed && activeSection === section ? <Button type="button" variant="soft" className="w-fit"
+    {failed && activeSection === section ? <Button ref={recoveryFocus.target} type="button" variant="soft" className="w-fit"
       disabled={busy || preview} onClick={() => void (needsRefresh ? reviewLatest() : save({}, section))}>
       {needsRefresh ? t.reviewLatest : t.retrySave}</Button> : null}
   </div>;
