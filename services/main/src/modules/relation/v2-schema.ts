@@ -20,9 +20,9 @@ export const canonicalAttribution = (value: unknown): string => JSON.stringify(v
 const invalid = (message: string): never => { throw new InvalidRelationOccurrence(message); };
 
 export class UnsupportedRelationModel extends SemanticChangeRejected {
-  readonly modelRevision = RELATION_V2_PROFILE;
-  readonly schema = RELATION_V2_PROFILE;
-  constructor() { super('unsupported-model-revision', 'Select relation-change-v2 for this authored occurrence'); }
+  constructor(readonly modelRevision: string = RELATION_V2_PROFILE, readonly schema: string = modelRevision) {
+    super('unsupported-model-revision', 'Select relation-change-v2 for this authored occurrence');
+  }
 }
 
 export class InvalidParticipationAttribution extends SemanticChangeRejected {

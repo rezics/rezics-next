@@ -760564,6 +760564,569 @@
                         "attributionProofs"
                       ],
                       "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "applicability": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "associationHead": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "attributionProofs": {
+                          "items": {
+                            "properties": {
+                              "participation": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "proof": {}
+                            },
+                            "required": [
+                              "participation",
+                              "proof"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 1024,
+                          "type": "array"
+                        },
+                        "compatibilityReceipt": {
+                          "type": "string"
+                        },
+                        "definition": {
+                          "properties": {
+                            "association": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "enum": [
+                                    "appearance",
+                                    "credit"
+                                  ],
+                                  "type": "string"
+                                },
+                                "subjectRoles": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "maxItems": 15,
+                                  "type": "array"
+                                },
+                                "workRole": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "workRole",
+                                "subjectRoles"
+                              ],
+                              "type": "object"
+                            },
+                            "definition": {
+                              "type": "string"
+                            },
+                            "lifecycle": {
+                              "type": "string"
+                            },
+                            "modelRevision": {
+                              "type": "string"
+                            },
+                            "revision": {
+                              "type": "string"
+                            },
+                            "roles": {
+                              "items": {},
+                              "type": "array"
+                            },
+                            "star": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "properties": {
+                                "hub": {
+                                  "type": "string"
+                                },
+                                "leaf": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "leaf",
+                                "hub"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "revision",
+                            "definition",
+                            "lifecycle",
+                            "roles",
+                            "star"
+                          ],
+                          "type": "object"
+                        },
+                        "lifecycle": {
+                          "type": "string"
+                        },
+                        "manifest": {
+                          "type": "string"
+                        },
+                        "mappingRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "modelGeneration": {
+                          "type": "string"
+                        },
+                        "occurrence": {
+                          "type": "string"
+                        },
+                        "operation": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "origin": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "const": "stored-credit",
+                                  "type": "string"
+                                },
+                                "revision": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "revision"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "binding": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "conversion": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "source-binding",
+                                      "type": "string"
+                                    },
+                                    "observation": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "proposal": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "record": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "sourceOccurrence": {
+                                      "maxLength": 2048,
+                                      "minLength": 1,
+                                      "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                      "type": "string"
+                                    },
+                                    "sourceOrdinal": {
+                                      "maximum": 127,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "binding",
+                                    "proposal",
+                                    "conversion",
+                                    "record",
+                                    "observation",
+                                    "sourceOccurrence",
+                                    "sourceOrdinal"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "decision": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "selected-publication",
+                                      "type": "string"
+                                    },
+                                    "observation": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "record": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "source": {
+                                      "maxLength": 2048,
+                                      "pattern": "^urn:rezics:work-source:[^\\s<>\"{}|\\^`]+$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "decision",
+                                    "source",
+                                    "record",
+                                    "observation"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        "participations": {
+                          "items": {
+                            "properties": {
+                              "attributionSupports": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "basis": {
+                                      "anyOf": [
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "kind": {
+                                              "const": "source-credit",
+                                              "type": "string"
+                                            },
+                                            "support": {
+                                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "support"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "credit": {
+                                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                              "type": "string"
+                                            },
+                                            "kind": {
+                                              "const": "native-credit",
+                                              "type": "string"
+                                            },
+                                            "revision": {
+                                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "credit",
+                                            "revision"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "binding": {
+                                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                              "type": "string"
+                                            },
+                                            "kind": {
+                                              "const": "source-binding",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "binding"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "decision": {
+                                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                              "type": "string"
+                                            },
+                                            "kind": {
+                                              "const": "selected-publication",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "decision"
+                                          ],
+                                          "type": "object"
+                                        }
+                                      ]
+                                    },
+                                    "evidence": {
+                                      "items": {
+                                        "maxLength": 2048,
+                                        "minLength": 1,
+                                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                        "type": "string"
+                                      },
+                                      "maxItems": 16,
+                                      "minItems": 1,
+                                      "type": "array",
+                                      "uniqueItems": true
+                                    },
+                                    "fields": {
+                                      "items": {
+                                        "enum": [
+                                          "creditedName",
+                                          "provider",
+                                          "namespace",
+                                          "key",
+                                          "alias",
+                                          "eid",
+                                          "note"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "maxItems": 7,
+                                      "minItems": 1,
+                                      "type": "array",
+                                      "uniqueItems": true
+                                    }
+                                  },
+                                  "required": [
+                                    "basis",
+                                    "fields",
+                                    "evidence"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 16,
+                                "type": "array"
+                              },
+                              "availability": {
+                                "type": "string"
+                              },
+                              "creditedName": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "language": {
+                                        "maxLength": 35,
+                                        "minLength": 2,
+                                        "type": "string"
+                                      },
+                                      "lexical": {
+                                        "maxLength": 200,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "lexical",
+                                      "language"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "reference": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                        "type": "string"
+                                      },
+                                      "status": {
+                                        "const": "unavailable",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "reference",
+                                      "status"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "participant": {},
+                              "participation": {
+                                "type": "string"
+                              },
+                              "position": {
+                                "type": "integer"
+                              },
+                              "role": {
+                                "type": "string"
+                              },
+                              "sourceIdentity": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "alias": {
+                                    "~elyTyp": 7,
+                                    "maxLength": 200,
+                                    "minLength": 1,
+                                    "nullable": true,
+                                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "eid": {
+                                    "~elyTyp": 7,
+                                    "maxLength": 200,
+                                    "minLength": 1,
+                                    "nullable": true,
+                                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "key": {
+                                    "maxLength": 200,
+                                    "minLength": 1,
+                                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                    "type": "string"
+                                  },
+                                  "namespace": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                    "type": "string"
+                                  },
+                                  "note": {
+                                    "~elyTyp": 7,
+                                    "maxLength": 2000,
+                                    "minLength": 1,
+                                    "nullable": true,
+                                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "provider": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "provider",
+                                  "namespace",
+                                  "key",
+                                  "alias",
+                                  "eid",
+                                  "note"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "required": [
+                              "participation",
+                              "role",
+                              "participant",
+                              "availability",
+                              "attributionSupports"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 64,
+                          "type": "array"
+                        },
+                        "predecessor": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "profile": {
+                          "const": "relation-change-v2",
+                          "type": "string"
+                        },
+                        "receipt": {
+                          "type": "string"
+                        },
+                        "revision": {
+                          "type": "string"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "occurrence",
+                        "revision",
+                        "predecessor",
+                        "lifecycle",
+                        "definition",
+                        "participations",
+                        "applicability",
+                        "sourcePosition",
+                        "modelGeneration",
+                        "manifest",
+                        "operation",
+                        "receipt",
+                        "attributionProofs",
+                        "associationHead",
+                        "compatibilityReceipt",
+                        "origin",
+                        "mappingRevision"
+                      ],
+                      "type": "object"
                     }
                   ]
                 }
@@ -762118,6 +762681,569 @@
                         "operation",
                         "receipt",
                         "attributionProofs"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "applicability": {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "associationHead": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "attributionProofs": {
+                          "items": {
+                            "properties": {
+                              "participation": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "proof": {}
+                            },
+                            "required": [
+                              "participation",
+                              "proof"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 1024,
+                          "type": "array"
+                        },
+                        "compatibilityReceipt": {
+                          "type": "string"
+                        },
+                        "definition": {
+                          "properties": {
+                            "association": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "enum": [
+                                    "appearance",
+                                    "credit"
+                                  ],
+                                  "type": "string"
+                                },
+                                "subjectRoles": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "maxItems": 15,
+                                  "type": "array"
+                                },
+                                "workRole": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "workRole",
+                                "subjectRoles"
+                              ],
+                              "type": "object"
+                            },
+                            "definition": {
+                              "type": "string"
+                            },
+                            "lifecycle": {
+                              "type": "string"
+                            },
+                            "modelRevision": {
+                              "type": "string"
+                            },
+                            "revision": {
+                              "type": "string"
+                            },
+                            "roles": {
+                              "items": {},
+                              "type": "array"
+                            },
+                            "star": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "properties": {
+                                "hub": {
+                                  "type": "string"
+                                },
+                                "leaf": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "leaf",
+                                "hub"
+                              ],
+                              "type": [
+                                "object",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "revision",
+                            "definition",
+                            "lifecycle",
+                            "roles",
+                            "star"
+                          ],
+                          "type": "object"
+                        },
+                        "lifecycle": {
+                          "type": "string"
+                        },
+                        "manifest": {
+                          "type": "string"
+                        },
+                        "mappingRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "modelGeneration": {
+                          "type": "string"
+                        },
+                        "occurrence": {
+                          "type": "string"
+                        },
+                        "operation": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "origin": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "const": "stored-credit",
+                                  "type": "string"
+                                },
+                                "revision": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "revision"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "binding": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "conversion": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "source-binding",
+                                      "type": "string"
+                                    },
+                                    "observation": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "proposal": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "record": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "sourceOccurrence": {
+                                      "maxLength": 2048,
+                                      "minLength": 1,
+                                      "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                      "type": "string"
+                                    },
+                                    "sourceOrdinal": {
+                                      "maximum": 127,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "binding",
+                                    "proposal",
+                                    "conversion",
+                                    "record",
+                                    "observation",
+                                    "sourceOccurrence",
+                                    "sourceOrdinal"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "decision": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "selected-publication",
+                                      "type": "string"
+                                    },
+                                    "observation": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "record": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "source": {
+                                      "maxLength": 2048,
+                                      "pattern": "^urn:rezics:work-source:[^\\s<>\"{}|\\^`]+$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "decision",
+                                    "source",
+                                    "record",
+                                    "observation"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        "participations": {
+                          "items": {
+                            "properties": {
+                              "attributionSupports": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "basis": {
+                                      "anyOf": [
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "kind": {
+                                              "const": "source-credit",
+                                              "type": "string"
+                                            },
+                                            "support": {
+                                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "support"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "credit": {
+                                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                              "type": "string"
+                                            },
+                                            "kind": {
+                                              "const": "native-credit",
+                                              "type": "string"
+                                            },
+                                            "revision": {
+                                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "credit",
+                                            "revision"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "binding": {
+                                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                              "type": "string"
+                                            },
+                                            "kind": {
+                                              "const": "source-binding",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "binding"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "decision": {
+                                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                              "type": "string"
+                                            },
+                                            "kind": {
+                                              "const": "selected-publication",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "decision"
+                                          ],
+                                          "type": "object"
+                                        }
+                                      ]
+                                    },
+                                    "evidence": {
+                                      "items": {
+                                        "maxLength": 2048,
+                                        "minLength": 1,
+                                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                        "type": "string"
+                                      },
+                                      "maxItems": 16,
+                                      "minItems": 1,
+                                      "type": "array",
+                                      "uniqueItems": true
+                                    },
+                                    "fields": {
+                                      "items": {
+                                        "enum": [
+                                          "creditedName",
+                                          "provider",
+                                          "namespace",
+                                          "key",
+                                          "alias",
+                                          "eid",
+                                          "note"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "maxItems": 7,
+                                      "minItems": 1,
+                                      "type": "array",
+                                      "uniqueItems": true
+                                    }
+                                  },
+                                  "required": [
+                                    "basis",
+                                    "fields",
+                                    "evidence"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 16,
+                                "type": "array"
+                              },
+                              "availability": {
+                                "type": "string"
+                              },
+                              "creditedName": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "language": {
+                                        "maxLength": 35,
+                                        "minLength": 2,
+                                        "type": "string"
+                                      },
+                                      "lexical": {
+                                        "maxLength": 200,
+                                        "minLength": 1,
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "lexical",
+                                      "language"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "reference": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                        "type": "string"
+                                      },
+                                      "status": {
+                                        "const": "unavailable",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "reference",
+                                      "status"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "participant": {},
+                              "participation": {
+                                "type": "string"
+                              },
+                              "position": {
+                                "type": "integer"
+                              },
+                              "role": {
+                                "type": "string"
+                              },
+                              "sourceIdentity": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "alias": {
+                                    "~elyTyp": 7,
+                                    "maxLength": 200,
+                                    "minLength": 1,
+                                    "nullable": true,
+                                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "eid": {
+                                    "~elyTyp": 7,
+                                    "maxLength": 200,
+                                    "minLength": 1,
+                                    "nullable": true,
+                                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "key": {
+                                    "maxLength": 200,
+                                    "minLength": 1,
+                                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                    "type": "string"
+                                  },
+                                  "namespace": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                    "type": "string"
+                                  },
+                                  "note": {
+                                    "~elyTyp": 7,
+                                    "maxLength": 2000,
+                                    "minLength": 1,
+                                    "nullable": true,
+                                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "provider": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "provider",
+                                  "namespace",
+                                  "key",
+                                  "alias",
+                                  "eid",
+                                  "note"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "required": [
+                              "participation",
+                              "role",
+                              "participant",
+                              "availability",
+                              "attributionSupports"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 64,
+                          "type": "array"
+                        },
+                        "predecessor": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "profile": {
+                          "const": "relation-change-v2",
+                          "type": "string"
+                        },
+                        "receipt": {
+                          "type": "string"
+                        },
+                        "revision": {
+                          "type": "string"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "occurrence",
+                        "revision",
+                        "predecessor",
+                        "lifecycle",
+                        "definition",
+                        "participations",
+                        "applicability",
+                        "sourcePosition",
+                        "modelGeneration",
+                        "manifest",
+                        "operation",
+                        "receipt",
+                        "attributionProofs",
+                        "associationHead",
+                        "compatibilityReceipt",
+                        "origin",
+                        "mappingRevision"
                       ],
                       "type": "object"
                     },
@@ -763691,6 +764817,325 @@
                       "actingSubject"
                     ],
                     "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "attributionSupports": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "basis": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "kind": {
+                                      "const": "source-credit",
+                                      "type": "string"
+                                    },
+                                    "support": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "support"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "credit": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "native-credit",
+                                      "type": "string"
+                                    },
+                                    "revision": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "credit",
+                                    "revision"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "binding": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "source-binding",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "binding"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "decision": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "selected-publication",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "decision"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "evidence": {
+                              "items": {
+                                "maxLength": 2048,
+                                "minLength": 1,
+                                "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                "type": "string"
+                              },
+                              "maxItems": 16,
+                              "minItems": 1,
+                              "type": "array",
+                              "uniqueItems": true
+                            },
+                            "fields": {
+                              "items": {
+                                "enum": [
+                                  "creditedName",
+                                  "provider",
+                                  "namespace",
+                                  "key",
+                                  "alias",
+                                  "eid",
+                                  "note"
+                                ],
+                                "type": "string"
+                              },
+                              "maxItems": 7,
+                              "minItems": 1,
+                              "type": "array",
+                              "uniqueItems": true
+                            }
+                          },
+                          "required": [
+                            "basis",
+                            "fields",
+                            "evidence"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 16,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "expectedAssociationHead": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "mappingRevision": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "mode": {
+                        "const": "bind-retained-credit",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "relation-change-v2",
+                        "type": "string"
+                      },
+                      "retained": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "credit": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "origin": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "kind": {
+                                    "const": "stored-credit",
+                                    "type": "string"
+                                  },
+                                  "revision": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "revision"
+                                ],
+                                "type": "object"
+                              },
+                              "profile": {
+                                "enum": [
+                                  "work-author-credit-v1",
+                                  "native-agent-credit-v1"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "profile",
+                              "credit",
+                              "origin"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "credit": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "origin": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "binding": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "conversion": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "source-binding",
+                                        "type": "string"
+                                      },
+                                      "observation": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "proposal": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "record": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "sourceOccurrence": {
+                                        "maxLength": 2048,
+                                        "minLength": 1,
+                                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                        "type": "string"
+                                      },
+                                      "sourceOrdinal": {
+                                        "maximum": 127,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "binding",
+                                      "proposal",
+                                      "conversion",
+                                      "record",
+                                      "observation",
+                                      "sourceOccurrence",
+                                      "sourceOrdinal"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "decision": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "selected-publication",
+                                        "type": "string"
+                                      },
+                                      "observation": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "record": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "source": {
+                                        "maxLength": 2048,
+                                        "pattern": "^urn:rezics:work-source:[^\\s<>\"{}|\\^`]+$",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "decision",
+                                      "source",
+                                      "record",
+                                      "observation"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "profile": {
+                                "const": "source-reported-credit-v1",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "profile",
+                              "credit",
+                              "origin"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "mode",
+                      "retained",
+                      "expectedAssociationHead",
+                      "mappingRevision",
+                      "attributionSupports",
+                      "actingSubject"
+                    ],
+                    "type": "object"
                   }
                 ]
               }
@@ -764181,6 +765626,325 @@
                       "expectedHead",
                       "definition",
                       "participations",
+                      "actingSubject"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "attributionSupports": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "basis": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "kind": {
+                                      "const": "source-credit",
+                                      "type": "string"
+                                    },
+                                    "support": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "support"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "credit": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "native-credit",
+                                      "type": "string"
+                                    },
+                                    "revision": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "credit",
+                                    "revision"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "binding": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "source-binding",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "binding"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "decision": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "selected-publication",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "decision"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "evidence": {
+                              "items": {
+                                "maxLength": 2048,
+                                "minLength": 1,
+                                "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                "type": "string"
+                              },
+                              "maxItems": 16,
+                              "minItems": 1,
+                              "type": "array",
+                              "uniqueItems": true
+                            },
+                            "fields": {
+                              "items": {
+                                "enum": [
+                                  "creditedName",
+                                  "provider",
+                                  "namespace",
+                                  "key",
+                                  "alias",
+                                  "eid",
+                                  "note"
+                                ],
+                                "type": "string"
+                              },
+                              "maxItems": 7,
+                              "minItems": 1,
+                              "type": "array",
+                              "uniqueItems": true
+                            }
+                          },
+                          "required": [
+                            "basis",
+                            "fields",
+                            "evidence"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 16,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "expectedAssociationHead": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "mappingRevision": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "mode": {
+                        "const": "bind-retained-credit",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "relation-change-v2",
+                        "type": "string"
+                      },
+                      "retained": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "credit": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "origin": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "kind": {
+                                    "const": "stored-credit",
+                                    "type": "string"
+                                  },
+                                  "revision": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "revision"
+                                ],
+                                "type": "object"
+                              },
+                              "profile": {
+                                "enum": [
+                                  "work-author-credit-v1",
+                                  "native-agent-credit-v1"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "profile",
+                              "credit",
+                              "origin"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "credit": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "origin": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "binding": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "conversion": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "source-binding",
+                                        "type": "string"
+                                      },
+                                      "observation": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "proposal": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "record": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "sourceOccurrence": {
+                                        "maxLength": 2048,
+                                        "minLength": 1,
+                                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                        "type": "string"
+                                      },
+                                      "sourceOrdinal": {
+                                        "maximum": 127,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "binding",
+                                      "proposal",
+                                      "conversion",
+                                      "record",
+                                      "observation",
+                                      "sourceOccurrence",
+                                      "sourceOrdinal"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "decision": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "selected-publication",
+                                        "type": "string"
+                                      },
+                                      "observation": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "record": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "source": {
+                                        "maxLength": 2048,
+                                        "pattern": "^urn:rezics:work-source:[^\\s<>\"{}|\\^`]+$",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "decision",
+                                      "source",
+                                      "record",
+                                      "observation"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "profile": {
+                                "const": "source-reported-credit-v1",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "profile",
+                              "credit",
+                              "origin"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "mode",
+                      "retained",
+                      "expectedAssociationHead",
+                      "mappingRevision",
+                      "attributionSupports",
                       "actingSubject"
                     ],
                     "type": "object"
@@ -764677,6 +766441,325 @@
                       "actingSubject"
                     ],
                     "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "attributionSupports": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "basis": {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "kind": {
+                                      "const": "source-credit",
+                                      "type": "string"
+                                    },
+                                    "support": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "support"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "credit": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "native-credit",
+                                      "type": "string"
+                                    },
+                                    "revision": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "credit",
+                                    "revision"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "binding": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "source-binding",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "binding"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "decision": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "selected-publication",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "decision"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            },
+                            "evidence": {
+                              "items": {
+                                "maxLength": 2048,
+                                "minLength": 1,
+                                "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                "type": "string"
+                              },
+                              "maxItems": 16,
+                              "minItems": 1,
+                              "type": "array",
+                              "uniqueItems": true
+                            },
+                            "fields": {
+                              "items": {
+                                "enum": [
+                                  "creditedName",
+                                  "provider",
+                                  "namespace",
+                                  "key",
+                                  "alias",
+                                  "eid",
+                                  "note"
+                                ],
+                                "type": "string"
+                              },
+                              "maxItems": 7,
+                              "minItems": 1,
+                              "type": "array",
+                              "uniqueItems": true
+                            }
+                          },
+                          "required": [
+                            "basis",
+                            "fields",
+                            "evidence"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 16,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "expectedAssociationHead": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "mappingRevision": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": "string"
+                      },
+                      "mode": {
+                        "const": "bind-retained-credit",
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "relation-change-v2",
+                        "type": "string"
+                      },
+                      "retained": {
+                        "anyOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "credit": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "origin": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "kind": {
+                                    "const": "stored-credit",
+                                    "type": "string"
+                                  },
+                                  "revision": {
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "revision"
+                                ],
+                                "type": "object"
+                              },
+                              "profile": {
+                                "enum": [
+                                  "work-author-credit-v1",
+                                  "native-agent-credit-v1"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "profile",
+                              "credit",
+                              "origin"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "credit": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "origin": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "binding": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "conversion": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "source-binding",
+                                        "type": "string"
+                                      },
+                                      "observation": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "proposal": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "record": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "sourceOccurrence": {
+                                        "maxLength": 2048,
+                                        "minLength": 1,
+                                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                        "type": "string"
+                                      },
+                                      "sourceOrdinal": {
+                                        "maximum": 127,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "binding",
+                                      "proposal",
+                                      "conversion",
+                                      "record",
+                                      "observation",
+                                      "sourceOccurrence",
+                                      "sourceOrdinal"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "decision": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "selected-publication",
+                                        "type": "string"
+                                      },
+                                      "observation": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "record": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      },
+                                      "source": {
+                                        "maxLength": 2048,
+                                        "pattern": "^urn:rezics:work-source:[^\\s<>\"{}|\\^`]+$",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "decision",
+                                      "source",
+                                      "record",
+                                      "observation"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "profile": {
+                                "const": "source-reported-credit-v1",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "profile",
+                              "credit",
+                              "origin"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "mode",
+                      "retained",
+                      "expectedAssociationHead",
+                      "mappingRevision",
+                      "attributionSupports",
+                      "actingSubject"
+                    ],
+                    "type": "object"
                   }
                 ]
               }
@@ -765105,6 +767188,490 @@
                         "participations"
                       ],
                       "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "associationHead": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "compatibilityReceipt": {
+                          "type": "string"
+                        },
+                        "manifest": {
+                          "type": "string"
+                        },
+                        "mappingRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "modelGeneration": {
+                          "type": "string"
+                        },
+                        "occurrence": {
+                          "type": "string"
+                        },
+                        "origin": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "const": "stored-credit",
+                                  "type": "string"
+                                },
+                                "revision": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "revision"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "binding": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "conversion": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "source-binding",
+                                      "type": "string"
+                                    },
+                                    "observation": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "proposal": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "record": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "sourceOccurrence": {
+                                      "maxLength": 2048,
+                                      "minLength": 1,
+                                      "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                      "type": "string"
+                                    },
+                                    "sourceOrdinal": {
+                                      "maximum": 127,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "binding",
+                                    "proposal",
+                                    "conversion",
+                                    "record",
+                                    "observation",
+                                    "sourceOccurrence",
+                                    "sourceOrdinal"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "decision": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "selected-publication",
+                                      "type": "string"
+                                    },
+                                    "observation": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "record": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "source": {
+                                      "maxLength": 2048,
+                                      "pattern": "^urn:rezics:work-source:[^\\s<>\"{}|\\^`]+$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "decision",
+                                    "source",
+                                    "record",
+                                    "observation"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        "participations": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "attributionSupports": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "basis": {
+                                      "anyOf": [
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "kind": {
+                                              "const": "source-credit",
+                                              "type": "string"
+                                            },
+                                            "support": {
+                                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "support"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "credit": {
+                                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                              "type": "string"
+                                            },
+                                            "kind": {
+                                              "const": "native-credit",
+                                              "type": "string"
+                                            },
+                                            "revision": {
+                                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "credit",
+                                            "revision"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "binding": {
+                                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                              "type": "string"
+                                            },
+                                            "kind": {
+                                              "const": "source-binding",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "binding"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "decision": {
+                                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                              "type": "string"
+                                            },
+                                            "kind": {
+                                              "const": "selected-publication",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "decision"
+                                          ],
+                                          "type": "object"
+                                        }
+                                      ]
+                                    },
+                                    "evidence": {
+                                      "items": {
+                                        "maxLength": 2048,
+                                        "minLength": 1,
+                                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                        "type": "string"
+                                      },
+                                      "maxItems": 16,
+                                      "minItems": 1,
+                                      "type": "array",
+                                      "uniqueItems": true
+                                    },
+                                    "fields": {
+                                      "items": {
+                                        "enum": [
+                                          "creditedName",
+                                          "provider",
+                                          "namespace",
+                                          "key",
+                                          "alias",
+                                          "eid",
+                                          "note"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "maxItems": 7,
+                                      "minItems": 1,
+                                      "type": "array",
+                                      "uniqueItems": true
+                                    }
+                                  },
+                                  "required": [
+                                    "basis",
+                                    "fields",
+                                    "evidence"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 16,
+                                "type": "array"
+                              },
+                              "creditedName": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "language": {
+                                    "maxLength": 35,
+                                    "minLength": 2,
+                                    "type": "string"
+                                  },
+                                  "lexical": {
+                                    "maxLength": 200,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "lexical",
+                                  "language"
+                                ],
+                                "type": "object"
+                              },
+                              "id": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "participant": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "kind": {
+                                        "const": "resource",
+                                        "type": "string"
+                                      },
+                                      "ref": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "ref"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "key": {
+                                        "maxLength": 512,
+                                        "minLength": 1,
+                                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "external",
+                                        "type": "string"
+                                      },
+                                      "namespace": {
+                                        "maxLength": 64,
+                                        "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                                        "type": "string"
+                                      },
+                                      "provider": {
+                                        "maxLength": 64,
+                                        "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "provider",
+                                      "namespace",
+                                      "key"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "position": {
+                                "type": "integer"
+                              },
+                              "role": {
+                                "type": "string"
+                              },
+                              "sourceIdentity": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "alias": {
+                                    "~elyTyp": 7,
+                                    "maxLength": 200,
+                                    "minLength": 1,
+                                    "nullable": true,
+                                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "eid": {
+                                    "~elyTyp": 7,
+                                    "maxLength": 200,
+                                    "minLength": 1,
+                                    "nullable": true,
+                                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "key": {
+                                    "maxLength": 200,
+                                    "minLength": 1,
+                                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                    "type": "string"
+                                  },
+                                  "namespace": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                    "type": "string"
+                                  },
+                                  "note": {
+                                    "~elyTyp": 7,
+                                    "maxLength": 2000,
+                                    "minLength": 1,
+                                    "nullable": true,
+                                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "provider": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "provider",
+                                  "namespace",
+                                  "key",
+                                  "alias",
+                                  "eid",
+                                  "note"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "role",
+                              "participant",
+                              "attributionSupports"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 64,
+                          "type": "array"
+                        },
+                        "predecessor": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "profile": {
+                          "const": "relation-change-v2",
+                          "type": "string"
+                        },
+                        "receipt": {
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "revision": {
+                          "type": "string"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "occurrence",
+                        "revision",
+                        "predecessor",
+                        "receipt",
+                        "sourcePosition",
+                        "replayed",
+                        "modelGeneration",
+                        "manifest",
+                        "participations",
+                        "associationHead",
+                        "compatibilityReceipt",
+                        "origin",
+                        "mappingRevision"
+                      ],
+                      "type": "object"
                     }
                   ]
                 }
@@ -765530,6 +768097,490 @@
                         "modelGeneration",
                         "manifest",
                         "participations"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "associationHead": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "compatibilityReceipt": {
+                          "type": "string"
+                        },
+                        "manifest": {
+                          "type": "string"
+                        },
+                        "mappingRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                          "type": "string"
+                        },
+                        "modelGeneration": {
+                          "type": "string"
+                        },
+                        "occurrence": {
+                          "type": "string"
+                        },
+                        "origin": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "kind": {
+                                  "const": "stored-credit",
+                                  "type": "string"
+                                },
+                                "revision": {
+                                  "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "revision"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "anyOf": [
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "binding": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "conversion": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "source-binding",
+                                      "type": "string"
+                                    },
+                                    "observation": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "proposal": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "record": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "sourceOccurrence": {
+                                      "maxLength": 2048,
+                                      "minLength": 1,
+                                      "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                      "type": "string"
+                                    },
+                                    "sourceOrdinal": {
+                                      "maximum": 127,
+                                      "minimum": 0,
+                                      "type": "integer"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "binding",
+                                    "proposal",
+                                    "conversion",
+                                    "record",
+                                    "observation",
+                                    "sourceOccurrence",
+                                    "sourceOrdinal"
+                                  ],
+                                  "type": "object"
+                                },
+                                {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "decision": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "selected-publication",
+                                      "type": "string"
+                                    },
+                                    "observation": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "record": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                      "type": "string"
+                                    },
+                                    "source": {
+                                      "maxLength": 2048,
+                                      "pattern": "^urn:rezics:work-source:[^\\s<>\"{}|\\^`]+$",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "decision",
+                                    "source",
+                                    "record",
+                                    "observation"
+                                  ],
+                                  "type": "object"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        "participations": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "attributionSupports": {
+                                "items": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "basis": {
+                                      "anyOf": [
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "kind": {
+                                              "const": "source-credit",
+                                              "type": "string"
+                                            },
+                                            "support": {
+                                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "support"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "credit": {
+                                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                              "type": "string"
+                                            },
+                                            "kind": {
+                                              "const": "native-credit",
+                                              "type": "string"
+                                            },
+                                            "revision": {
+                                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "credit",
+                                            "revision"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "binding": {
+                                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                              "type": "string"
+                                            },
+                                            "kind": {
+                                              "const": "source-binding",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "binding"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "decision": {
+                                              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                              "type": "string"
+                                            },
+                                            "kind": {
+                                              "const": "selected-publication",
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "decision"
+                                          ],
+                                          "type": "object"
+                                        }
+                                      ]
+                                    },
+                                    "evidence": {
+                                      "items": {
+                                        "maxLength": 2048,
+                                        "minLength": 1,
+                                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                        "type": "string"
+                                      },
+                                      "maxItems": 16,
+                                      "minItems": 1,
+                                      "type": "array",
+                                      "uniqueItems": true
+                                    },
+                                    "fields": {
+                                      "items": {
+                                        "enum": [
+                                          "creditedName",
+                                          "provider",
+                                          "namespace",
+                                          "key",
+                                          "alias",
+                                          "eid",
+                                          "note"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "maxItems": 7,
+                                      "minItems": 1,
+                                      "type": "array",
+                                      "uniqueItems": true
+                                    }
+                                  },
+                                  "required": [
+                                    "basis",
+                                    "fields",
+                                    "evidence"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 16,
+                                "type": "array"
+                              },
+                              "creditedName": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "language": {
+                                    "maxLength": 35,
+                                    "minLength": 2,
+                                    "type": "string"
+                                  },
+                                  "lexical": {
+                                    "maxLength": 200,
+                                    "minLength": 1,
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "lexical",
+                                  "language"
+                                ],
+                                "type": "object"
+                              },
+                              "id": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "participant": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "kind": {
+                                        "const": "resource",
+                                        "type": "string"
+                                      },
+                                      "ref": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "ref"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "key": {
+                                        "maxLength": 512,
+                                        "minLength": 1,
+                                        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "const": "external",
+                                        "type": "string"
+                                      },
+                                      "namespace": {
+                                        "maxLength": 64,
+                                        "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                                        "type": "string"
+                                      },
+                                      "provider": {
+                                        "maxLength": 64,
+                                        "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "provider",
+                                      "namespace",
+                                      "key"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "position": {
+                                "type": "integer"
+                              },
+                              "role": {
+                                "type": "string"
+                              },
+                              "sourceIdentity": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "alias": {
+                                    "~elyTyp": 7,
+                                    "maxLength": 200,
+                                    "minLength": 1,
+                                    "nullable": true,
+                                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "eid": {
+                                    "~elyTyp": 7,
+                                    "maxLength": 200,
+                                    "minLength": 1,
+                                    "nullable": true,
+                                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "key": {
+                                    "maxLength": 200,
+                                    "minLength": 1,
+                                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                    "type": "string"
+                                  },
+                                  "namespace": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                    "type": "string"
+                                  },
+                                  "note": {
+                                    "~elyTyp": 7,
+                                    "maxLength": 2000,
+                                    "minLength": 1,
+                                    "nullable": true,
+                                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "provider": {
+                                    "maxLength": 64,
+                                    "minLength": 1,
+                                    "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "provider",
+                                  "namespace",
+                                  "key",
+                                  "alias",
+                                  "eid",
+                                  "note"
+                                ],
+                                "type": "object"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "role",
+                              "participant",
+                              "attributionSupports"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 64,
+                          "type": "array"
+                        },
+                        "predecessor": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "profile": {
+                          "const": "relation-change-v2",
+                          "type": "string"
+                        },
+                        "receipt": {
+                          "type": "string"
+                        },
+                        "replayed": {
+                          "type": "boolean"
+                        },
+                        "revision": {
+                          "type": "string"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "occurrence",
+                        "revision",
+                        "predecessor",
+                        "receipt",
+                        "sourcePosition",
+                        "replayed",
+                        "modelGeneration",
+                        "manifest",
+                        "participations",
+                        "associationHead",
+                        "compatibilityReceipt",
+                        "origin",
+                        "mappingRevision"
                       ],
                       "type": "object"
                     }
