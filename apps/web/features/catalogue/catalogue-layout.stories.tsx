@@ -50,10 +50,13 @@ function MixedCatalogue({ rtl = false }: { rtl?: boolean }) {
         <button type="button" onClick={() => setImageReady(true)}>Load selected cover</button>
         <button type="button" onClick={() => setExpanded(value => !value)}>Expand community title</button>
       </div>
-      <ResourceList items={visible.map(item => item.id === book.id ? imageBook
-        : item.id === browseResources[1]!.id && expanded ? { ...item,
-          name: { ...item.name, value: 'Readers of astronomy, natural history, travel and letters from the night train' } }
-          : item)} locale="en" />
+      <section aria-labelledby="catalogue-results">
+        <h2 id="catalogue-results" className="sr-only">Catalogue results</h2>
+        <ResourceList items={visible.map(item => item.id === book.id ? imageBook
+          : item.id === browseResources[1]!.id && expanded ? { ...item,
+            name: { ...item.name, value: 'Readers of astronomy, natural history, travel and letters from the night train' } }
+            : item)} locale="en" />
+      </section>
     </div>
   </MediaImageProvider>;
 }
@@ -151,6 +154,7 @@ function AvailableSpace() {
       onValueChange={value => setWidth(Number(value))} />
     <button type="button" className="ms-4" onClick={() => setMixed(value => !value)}>Toggle All and Works</button>
     <div data-testid="available-space" style={{ width, maxWidth: '100%' }} className="mt-6">
+      <h2 className="sr-only">Catalogue results</h2>
       <ResourceList items={mixed ? items : items.filter(item => item.kind === 'work')} locale="en" />
     </div>
   </div>;
@@ -186,9 +190,12 @@ export const ContainerBreakpoints: Story = {
 export const PreviewConsumers: Story = {
   render: () => <div className="mx-auto grid max-w-4xl gap-8 p-4">
     <h1 className="text-xl">More to read</h1>
-    <section aria-label="Single result"><WorkGrid works={works.slice(0, 1)} locale="en" /></section>
-    <section aria-label="Works"><WorkGrid works={works} locale="en" /></section>
-    <section aria-label="All"><ResourceList items={items} locale="en" /></section>
+    <section aria-label="Single result"><h2 className="mb-4 text-lg">Single result</h2>
+      <WorkGrid works={works.slice(0, 1)} locale="en" /></section>
+    <section aria-label="Works"><h2 className="mb-4 text-lg">Works</h2>
+      <WorkGrid works={works} locale="en" /></section>
+    <section aria-label="All"><h2 className="mb-4 text-lg">All</h2>
+      <ResourceList items={items} locale="en" /></section>
     <WorkShelf heading={{ title: 'Popular works' }} works={works} locale="en" />
     <AlsoEnjoyedRow id="also-enjoyed" title="Readers also enjoyed" works={works} locale="en" />
   </div>,
