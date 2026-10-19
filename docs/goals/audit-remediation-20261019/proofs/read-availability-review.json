@@ -5466,5 +5466,577 @@
       ],
       "qualification": "Report only; no product or runtime proof rerun. Only receipt metadata finalized afterward. Non-blocking harness-behind-main notice retained in raw output; both commands exited0."
     }
+  },
+  "boundedIdentityReaderCorrectionFirstReview": {
+    "reviewKind": "First independent source review of the bounded IR01–06 correction and current-main composition; no replay of accepted Zone or Source cuts.",
+    "reviewer": {
+      "worker": "G-2846",
+      "profile": "codex-1 / GPT-6.1 Sol / xhigh",
+      "authoredThisSource": false,
+      "nestedAgents": false,
+      "accountFallback": false
+    },
+    "observedAtUtc": "2026-10-19T15:03:52.971352+00:00",
+    "sourceVerdict": {
+      "decision": "APPROVE",
+      "scope": "Only the twelve boundedReviewPaths and the one publication-state integration hunk in work/read-header.ts at the immutable candidate below. No new blocking source defect found in this cut.",
+      "candidateEligibleForNormalManagerGate": true,
+      "automaticLandingAuthorized": false,
+      "findings": [],
+      "qualification": "Source approval of this correction is separate from original D4-007/D4-008 public API/browser acceptance. It neither approves a whole wave nor closes any audit class."
+    },
+    "immutableSource": {
+      "candidate": "81b412b2e2c6dfcd3989534fff2723aac322978f",
+      "parent": "7ca18eef390b8dbd4f0d65e78a11c64aa2e4a835",
+      "tree": "73fc30ecfc8ef689edc6bda9d65f068f5b69890c",
+      "candidateSourceTreeObservedClean": true,
+      "candidateCheckout": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2790/.temp/identity-reader-main-composition",
+      "authorCorrection": "1e5155f2ab1dd177e7be9cc357804542cf941d57",
+      "authorCorrectionParent": "715ef5caf6144d48f1608cd8018b03c86d59a05a",
+      "initialComposedTree": "1167acca6f018d01aa07e17d6a435cbaa1ebf844",
+      "candidateChangedPaths": 19,
+      "newReviewPaths": 13,
+      "interpretation": "beforeBlob is the actual current-main candidate parent. correctionBeforeBlob is the initial composed tree used by the bounded correction patch. Work contents/read and its tests include an earlier inspected delta; those earlier hunks are reused. The read-header publication-state hunk already exists in the initial composed tree and is checked here only for current-main integration.",
+      "pathManifest": [
+        {
+          "path": "services/main/src/modules/content-publication/public-domain-read.ts",
+          "beforeBlob": "5501c15af985f3c4b2ffc0cc52f5e65868a1fcab",
+          "beforeSha256": "b5756558f29f8793a49e7f96e919a7eafa10d420cf7004d960296e48eb69dcce",
+          "afterBlob": "a2d1185230f8603076c06abf54459720b1dc20f1",
+          "afterSha256": "92b9a3effd5b65ff3ebcde19912a9ac1a11c30dc98ef56807520d3579673ec33",
+          "correctionBeforeBlob": "5501c15af985f3c4b2ffc0cc52f5e65868a1fcab",
+          "correctionBeforeSha256": "b5756558f29f8793a49e7f96e919a7eafa10d420cf7004d960296e48eb69dcce"
+        },
+        {
+          "path": "services/main/src/modules/content-publication/reference.ts",
+          "beforeBlob": "2a910c3042ed2d193be37c71ea898575ec5b14bf",
+          "beforeSha256": "a1c626b0d4039e1914d739cb8b1717226a9a2004bd270c36198d066fa5582998",
+          "afterBlob": "da958f3dc129228a9b4f6a3cbb8a9329a177154f",
+          "afterSha256": "fb6b50d1a28b5b69dc7efb2a333330168e1db7a9683c90edabeb725e6f3a65fc",
+          "correctionBeforeBlob": "2a910c3042ed2d193be37c71ea898575ec5b14bf",
+          "correctionBeforeSha256": "a1c626b0d4039e1914d739cb8b1717226a9a2004bd270c36198d066fa5582998"
+        },
+        {
+          "path": "services/main/src/modules/rate-limit/hook.ts",
+          "beforeBlob": "ffc20b2afa0bb0775aeeffbb7b20c8b36b1cc019",
+          "beforeSha256": "45908e58659ac1910e63e7f2c81cbcf1def96e9a7e8b54d8586803e5ed78f366",
+          "afterBlob": "c44a4a945fe1899163b9a8a7d6c400aba9cf2193",
+          "afterSha256": "a4fdb9a681ba479771328cacd8057c0b5c89a98e2709d4c81ad5ee237b3fc6ae",
+          "correctionBeforeBlob": "ffc20b2afa0bb0775aeeffbb7b20c8b36b1cc019",
+          "correctionBeforeSha256": "45908e58659ac1910e63e7f2c81cbcf1def96e9a7e8b54d8586803e5ed78f366"
+        },
+        {
+          "path": "services/main/src/modules/rights/store.ts",
+          "beforeBlob": "7b93987957a7195f427d550ff49b746d8a496abb",
+          "beforeSha256": "3d40597a56b82e955f54ce945ec70468d96b7ae63b29cfbfa2b6fb5313ec334a",
+          "afterBlob": "753305cc839a5c78b394448dfe837a98073c55f0",
+          "afterSha256": "2b4b63d21f1bea265b5f69172284c7b0bda1543a1278d9fd45925d5649eb2425",
+          "correctionBeforeBlob": "7b93987957a7195f427d550ff49b746d8a496abb",
+          "correctionBeforeSha256": "3d40597a56b82e955f54ce945ec70468d96b7ae63b29cfbfa2b6fb5313ec334a"
+        },
+        {
+          "path": "services/main/src/modules/work-contents/read.ts",
+          "beforeBlob": "2597cae7feb03d5c33a06d48a8f01640c427a4df",
+          "beforeSha256": "dcb6b9b782f3ffe0842bf468e6af97d541a36e27b4a6c7bf843cbd861dd9efa4",
+          "afterBlob": "f0c93de96a3142512f4389adaf185d05c67affb8",
+          "afterSha256": "62ca3f1a54124bf6eb144f47e56ce4fbc7fcbfd6eecbcad392a9276d2b168f3b",
+          "correctionBeforeBlob": "fa6b73a1de2c3cfadb6badfbd77ec8d2c5d9312a",
+          "correctionBeforeSha256": "34a410c5f606b2cf1cd9f99b3df3e56811f5c8a4c189affbb97b9b396a7cfc2e"
+        },
+        {
+          "path": "services/main/src/routes/publication.ts",
+          "beforeBlob": "a62fa90dbcf96dd7bf2222ac4594a672125e389c",
+          "beforeSha256": "0d22dc57e9fc0a001cd75673ba2adee59672c1767086a8b81338afd353aedf26",
+          "afterBlob": "64bfbdf3611bff3ded643065170faf0dee32f6c2",
+          "afterSha256": "163ef08fc905d3f350ff51bf73264fb52e433283d5f835053387e037b9138783",
+          "correctionBeforeBlob": "a62fa90dbcf96dd7bf2222ac4594a672125e389c",
+          "correctionBeforeSha256": "0d22dc57e9fc0a001cd75673ba2adee59672c1767086a8b81338afd353aedf26"
+        },
+        {
+          "path": "services/main/src/routes/work-contents.ts",
+          "beforeBlob": "08d7821c6b06663c625f59892d04e060cff2c257",
+          "beforeSha256": "abcc4d35055cedc495a7bec698f457df381ac348637f1fe74bbdf301bd85e743",
+          "afterBlob": "3e8a63a4fd25876e8eb2d69152ba0b02c0b0b9d6",
+          "afterSha256": "52d307aea656ae890f5830592121903e73f083a15c0129c0dab96a1a82e8019f",
+          "correctionBeforeBlob": "08d7821c6b06663c625f59892d04e060cff2c257",
+          "correctionBeforeSha256": "abcc4d35055cedc495a7bec698f457df381ac348637f1fe74bbdf301bd85e743"
+        },
+        {
+          "path": "services/main/src/routes/work-header.handler.ts",
+          "beforeBlob": "b58ccae6e94e490a47da5a55228aa6404184a972",
+          "beforeSha256": "d1a051ac8442e27b63ba9d5f8ee58e346b78abcfa10c3e3c255e91cf6f130c58",
+          "afterBlob": "9137687c3417baccbc79687ce055728e0aedcac6",
+          "afterSha256": "03506d69e5f12b6ffbc9b861c1538802d32f9c55f6a4bcc902a1fda401a66745",
+          "correctionBeforeBlob": "b58ccae6e94e490a47da5a55228aa6404184a972",
+          "correctionBeforeSha256": "d1a051ac8442e27b63ba9d5f8ee58e346b78abcfa10c3e3c255e91cf6f130c58"
+        },
+        {
+          "path": "services/main/tests/public-reader-authentication.test.ts",
+          "beforeBlob": null,
+          "afterBlob": "dcbc507cbbfdfa54a25808815b483b950717e7e5",
+          "afterSha256": "b1196573b48325f59aeab01c2009c17225b16801f1c3345ab7e4ce81fcc4ac61",
+          "correctionBeforeBlob": null
+        },
+        {
+          "path": "services/main/tests/recipe-instruction-read.test.ts",
+          "beforeBlob": "88fe07cf87f97e8d5b7f2f388bde8c7737fe0dcd",
+          "beforeSha256": "888edcb27c132f7cb22b8549bcc3dcf6b01c91a8235a388f6750c97b2860ccac",
+          "afterBlob": "e980db1033aed19a68ad506be5acf359743ba222",
+          "afterSha256": "b8b22ea5dcd6934119b761482682ba71ff0620d554c6ba530aa044cfe5fc7a0f",
+          "correctionBeforeBlob": "88fe07cf87f97e8d5b7f2f388bde8c7737fe0dcd",
+          "correctionBeforeSha256": "888edcb27c132f7cb22b8549bcc3dcf6b01c91a8235a388f6750c97b2860ccac"
+        },
+        {
+          "path": "services/main/tests/work-contents.test.ts",
+          "beforeBlob": "f21ac5beb36db8ef56434be79e68383aa6a47ed2",
+          "beforeSha256": "2ad0c81f36830d068999f784eadb18c8feba9c4a6cfcb2d79514dab5e23d5af8",
+          "afterBlob": "0bdff956a4003368bca45a14e1e53bdaa2ddc80a",
+          "afterSha256": "eed353eeba951ad054b064ad90c982db1798f01b99a21d705b25e89ff4dbceff",
+          "correctionBeforeBlob": "6256021bc63decd189e4c0355c80a8e97782a4a7",
+          "correctionBeforeSha256": "9a53ac48b8f2bee6ed7d2c865f7e880a63d62b8132305126a04fbf07d6180b5e"
+        },
+        {
+          "path": "services/main/tests/work-read-session-fences.test.ts",
+          "beforeBlob": "cad332c2b2584c59a0d837e1bfbd73b531156492",
+          "beforeSha256": "9d4d04f5460f0de28c3203b27532302fa27daa7c1e47cd26e90a166605cb9d43",
+          "afterBlob": "f678de5f52660330db981c1235daf7a23281f60e",
+          "afterSha256": "5a14fa49ce3c7c0827c299377ca15ad1fd8b43cd8a30580a78cfcb93387476e1",
+          "correctionBeforeBlob": "cad332c2b2584c59a0d837e1bfbd73b531156492",
+          "correctionBeforeSha256": "9d4d04f5460f0de28c3203b27532302fa27daa7c1e47cd26e90a166605cb9d43"
+        },
+        {
+          "path": "services/main/src/modules/work/read-header.ts",
+          "beforeBlob": "a7ab32c544f03028ea6647a4cb991a37a51ae886",
+          "beforeSha256": "c5079a1b4949f7dbba2d5261079dda6ed9cada925ddd09d60fcd67407bbd82a0",
+          "afterBlob": "ea92b2a879154192aaa1fb713af3ade4aba39b6a",
+          "afterSha256": "0f35a3d4c02f26fc72f06206ab7a28cef90b6450d8f8939bf42f03ba7da619d1",
+          "correctionBeforeBlob": "ea92b2a879154192aaa1fb713af3ade4aba39b6a",
+          "correctionBeforeSha256": "0f35a3d4c02f26fc72f06206ab7a28cef90b6450d8f8939bf42f03ba7da619d1"
+        }
+      ],
+      "sixInitialInspectedFilesReusedWithoutNewReview": [
+        {
+          "path": "services/main/src/modules/access/contexts.ts",
+          "blob": "cb8f1a81c77d95f53adfbb8bfb30ac9ac1e5a524"
+        },
+        {
+          "path": "services/main/src/modules/access/session-agent.ts",
+          "blob": "a0b9c84dcceb50428cf5709a3b4668167b78204e"
+        },
+        {
+          "path": "services/main/src/modules/structure/graph.ts",
+          "blob": "ca6f9bdba18c0331e940b73c7406ac1b9e22e69b"
+        },
+        {
+          "path": "services/main/src/modules/structure/read.ts",
+          "blob": "67093e29eb9bb4196a48f4fe2bd4ec2f70b87814"
+        },
+        {
+          "path": "services/main/src/modules/structure/tree.ts",
+          "blob": "6fe83da56b4a58ff5432ccf9d8cddeac7333bfd3"
+        },
+        {
+          "path": "services/main/tests/identity-discovery-owner.test.ts",
+          "blob": "8fd365bb8933e6177d9f9046294e56b355f33411"
+        }
+      ],
+      "initialInspectionSource": "eeac26d5c755839d451351a29e9c753f41742d60",
+      "sharedOwnerComposition": {
+        "paths": [
+          "services/main/src/modules/rate-limit/hook.ts",
+          "services/main/src/modules/rights/store.ts",
+          "services/main/src/modules/work/read-header.ts"
+        ],
+        "observed": "The final rate-limit hunk changes only the 401 code, Rights hunks add nested causes, and read-header changes only the published-state predicate. Current-main budget, Rights and read-header peers remain in the composed files."
+      },
+      "currencyLimit": "The verdict is pinned to 81b412b2 on 7ca18eef. The owner records later a8e44a3372a7ed61a0d0124b5d5667bf7ddf9502 with the nineteen paths unchanged and a clean apply check. No mutable main checkout was changed or certified by this review."
+    },
+    "originalCounterexamples": {
+      "reportSha256": "9a7bd3fc58c9fc73d87e6c5550a31c0c6e74d2d5c94d86ce0037dba056c8a8c6",
+      "meaning": "Consumed six original static source counterexamples and one fixture guidance correction; the prior report is not correction approval or a runtime failure receipt. No review of another reviewer was performed.",
+      "originalExecutedFailingOutcomes": 0,
+      "historicalFindingsDeleted": false,
+      "IR01": {
+        "sourceDisposition": "Resolved in the bounded source correction.",
+        "evidence": [
+          "services/main/src/routes/work-header.handler.ts:17 chooses publicWorkRead when actingSubject is absent; services/main/src/routes/work-contents.ts:23 and :32 do the same for contents/chapter.",
+          "The unchanged publicWorkRead at modules/work/read-session.ts:477 verifies a supplied Account with work:read, retains its disclosure viewer, and calls the public language/read wrapper. The explicit actingSubject branch still uses workRead and its represented private authority. No implicit session/main Agent selection was introduced."
+        ],
+        "reusedAssertions": [
+          "work-read-session-fences.test.ts:126 sends a real Request bearer through the header route, expects 200/published/en, one verification, zero choice calls and signed-in disclosure viewers.",
+          "work-contents.test.ts:692 exercises both ordinary route handlers with an Account-only bearer, asserts exact available contents/body, zero choice calls and signed-in viewers; an activePrincipalId stub fails if Agent eligibility is consulted."
+        ],
+        "limit": "These are owner fixtures, not genuine eligible-account Library/Studio/relationships or six-persona journeys."
+      },
+      "IR02": {
+        "sourceDisposition": "Resolved in the bounded source correction.",
+        "evidence": [
+          "work-contents/read.ts:234 requires a selected Main language for a non-preview book-composition. It cannot substitute catalogue visibility or independently public chapter bytes for that selection.",
+          "The unchanged selection-heads.ts:20 eligible lookup requires the current contribution publication decision, public disclosure and unerased selected draft; chooseMainLanguage requires the requested language when supplied. readWorkBasis registers language heads as a selected dependency.",
+          "work/read-header.ts:160 reports published when either a structured publication or eligible text heads exist. This metadata predicate does not bypass the contents gate or change other owner fields."
+        ],
+        "reusedAssertions": [
+          "work-contents.test.ts:720 retains a catalogue-visible Work and independently eligible chapter, removes the Main selection, and expects missing on contents and chapter with/without explicit en; a requested fr without a head also refuses. Explicit represented preview remains available.",
+          "The existing successful Book chain still expects published/en and exact chapter bytes. The normal Work session closes the selected language-head dependency, so withdrawing that head after selection changes its token and requires retry/refusal."
+        ],
+        "limit": "The no-selection state and language mismatch are reached in owner fixtures. No new concurrent public command or browser publication-withdrawal outcome was executed."
+      },
+      "IR03": {
+        "sourceDisposition": "Resolved in the bounded source correction.",
+        "evidence": [
+          "work-contents/read.ts:38 chapterTextDelivery checks the exact hydrated reference through currentPublicDomainAssessment or its bounded shared-batch owner. It registers the result and repeats it before delivery.",
+          "Both exact chapter delivery and body-derived labels use this path. Withdrawn/replaced current assessments suppress bytes/derived labels; original-contribution text does not gain an unrelated Rights dependency.",
+          "content-publication/public-domain-read.ts:15/:34 and rights/store.ts:251/:270 preserve the original nested owner cause; chapter adapters map dependency failure to WorkReadUnavailable rather than a successful empty label."
+        ],
+        "reusedAssertions": [
+          "work-contents.test.ts:741 checks both withdrawn and replaced assessment states for chapter and derived title; :752 and :789/:805 check SQL cause preservation and recovery.",
+          ":766 covers supported public-domain text and original text during an unrelated Rights outage; :777 proves twenty labels use five bounded body batches, one metadata probe, and two opening/delivery Rights probes, followed by only one more metadata/Rights probe at session close."
+        ],
+        "limit": "Rights state transitions are injected at the owning SQL read boundary. These tests do not establish a public revocation-command journey or new wall/RPC/engine-load measurements."
+      },
+      "IR04": {
+        "sourceDisposition": "Resolved in the bounded source correction.",
+        "evidence": [
+          "work-contents/read.ts:47 registers current-body disclosure in the enclosing session; :54 uses the existing exact metadata owner for availability and byte digest without reloading body bytes, and :71 registers that closing dependency.",
+          "The final delivery closure at :72 repeats Rights, body disclosure and exact metadata. readChapter calls it after neighbors, groups, Work admission and publication recheck (:579). Contents calls the derived-label fence after its Work fence (:437), before applying those labels.",
+          "The unchanged read session fences all selected owner dependencies again before return; changed Rights/disclosure/erasure causes WorkReadMoved and bounded retry/refusal. A missing/unavailable/mismatched exact metadata result remains a typed recoverable failure."
+        ],
+        "reusedAssertions": [
+          "work-contents.test.ts:818 mutates only Rights, body disclosure or metadata erasure after hydration and confirms the derived title is discarded.",
+          ":833 verifies each dependency remains live after readChapter returns to the enclosing session; :844 isolates a no-neighbor body-only disclosure revocation with Work visibility and graph target still true; :853 checks a later Rights revocation.",
+          ":861 preserves a metadata SQL cause and recovers on retry; :876 asserts concurrent metadata erasure or digest mismatch rejects cached bytes."
+        ],
+        "limit": "The real ContentCore metadata method is used with an injected storage boundary. No supported public command to erase a pinned revision or alter an immutable digest was proved; that reachability remains unverified, as in the owner handoff."
+      },
+      "IR05": {
+        "sourceDisposition": "Resolved in the bounded source correction.",
+        "evidence": [
+          "content-publication/reference.ts:116 checks the selected public/adoption or private authority before locating native bytes. It requires exactly one result and exact revision/resource/variant identity.",
+          "Denied/erased or a failed current publication/Rights/disclosure authority returns an opaque absent reference. Corrupt, unavailable, missing published object, incomplete owner result and identity disagreement throw WorkReadUnavailable; transport/owner exceptions retain a cause.",
+          "The adapter registers its exact authority/representation closure in the Work session. resolveResourceReference and readNativeSelections do not swallow that error into an unavailable instruction, so it propagates to the existing recoverable route refusal."
+        ],
+        "reusedAssertions": [
+          "recipe-instruction-read.test.ts:63 runs corrupt, unavailable, missing, identity mismatch, variant mismatch and transport cases through the real ContentCore reader with an injected SQL boundary; all throw WorkReadUnavailable and the transport case retains its cause.",
+          "The retained owner test at :50 changes private authority, governance and Rights after an available exact reference and confirms the closing dependency refuses rather than settling cached authority. Duplicate selections retain order and share one initial read."
+        ],
+        "limit": "The six added cases execute the exact-reference adapter, not a whole public Recipe HTTP journey. No real-stack status success or withheld identifier claim is inferred from those tests alone."
+      },
+      "IR06": {
+        "sourceDisposition": "Resolved in the bounded source correction.",
+        "evidence": [
+          "rate-limit/hook.ts:84 now reports account_assertion_denied for invalid optional bearer authentication while leaving admission attribution, limits, deadlines and unavailable-owner handling intact.",
+          "publication.ts:739 verifies a supplied bearer even without optional rate-limit installation and runs the actual default selection owner under disclosureViewer(principal). Its existing commandError preserves typed Account refusal.",
+          "Header/contents/chapter reach the same optional Account verification through publicWorkRead. There is no anonymous fallback after a supplied bearer fails."
+        ],
+        "reusedAssertions": [
+          "public-reader-authentication.test.ts:17 executes seven original reader surfaces with budget middleware absent and installed: fourteen cases require 401 account_assertion_denied, no-store and one actual verifier call each.",
+          "The owner run also retains rate-limit response and route contract tests; no request/native budget source was replaced."
+        ],
+        "limit": "The default route signed-in viewer wiring is established by source; the new fourteen cases test invalid bearer refusal, not a valid Account default-text journey."
+      },
+      "IR07": {
+        "kind": "fixture guidance",
+        "disposition": "Not a product source acceptance requirement. The supported expectedSelectionHead/main-version-default/main-maintainer fixture guidance and owner responsibilities remain separate; no fixture or assertion was edited by this review."
+      }
+    },
+    "dependencies": [
+      {
+        "path": "services/main/src/modules/work/read-session.ts",
+        "candidateBlob": "85381184a0704f74645f97e0b0327a2b13d0d27d",
+        "baseBlob": "85381184a0704f74645f97e0b0327a2b13d0d27d",
+        "unchangedFromBase": true
+      },
+      {
+        "path": "services/main/src/modules/work/selection-heads.ts",
+        "candidateBlob": "43960ead4ed586d0ea9b6e1eb963440f2270e748",
+        "baseBlob": "43960ead4ed586d0ea9b6e1eb963440f2270e748",
+        "unchangedFromBase": true
+      },
+      {
+        "path": "services/main/src/modules/work-contents/read-contract.ts",
+        "candidateBlob": "60350850ca2ed61b13084edd2395b8e98ea7f8d4",
+        "baseBlob": "60350850ca2ed61b13084edd2395b8e98ea7f8d4",
+        "unchangedFromBase": true
+      },
+      {
+        "path": "services/main/src/modules/work/native-variants.ts",
+        "candidateBlob": "bb286612de57fb3e95fbfa3074148f6bf3132147",
+        "baseBlob": "bb286612de57fb3e95fbfa3074148f6bf3132147",
+        "unchangedFromBase": true
+      },
+      {
+        "path": "services/main/src/modules/work/read-problems.ts",
+        "candidateBlob": "e7f9227957db02b784f523a9c854a252be92a065",
+        "baseBlob": "e7f9227957db02b784f523a9c854a252be92a065",
+        "unchangedFromBase": true
+      },
+      {
+        "path": "services/main/src/modules/account/verify-assertion.ts",
+        "candidateBlob": "8e2e575f544236b6445a4d5ff7df3931b2c1b97b",
+        "baseBlob": "8e2e575f544236b6445a4d5ff7df3931b2c1b97b",
+        "unchangedFromBase": true
+      },
+      {
+        "path": "services/main/src/modules/disclosure/assembly.ts",
+        "candidateBlob": "84b39ecbbd2ee8e33719a8d7084ea3ce8a539159",
+        "baseBlob": "84b39ecbbd2ee8e33719a8d7084ea3ce8a539159",
+        "unchangedFromBase": true
+      },
+      {
+        "path": "services/main/src/modules/disclosure/read.ts",
+        "candidateBlob": "db1fc7c698b7e13ae5c02c6e2f99909728608604",
+        "baseBlob": "db1fc7c698b7e13ae5c02c6e2f99909728608604",
+        "unchangedFromBase": true
+      },
+      {
+        "path": "services/main/src/modules/disclosure/viewer.ts",
+        "candidateBlob": "fb95834e01f693c769e7b2c5f884d3e8ba675b71",
+        "baseBlob": "fb95834e01f693c769e7b2c5f884d3e8ba675b71",
+        "unchangedFromBase": true
+      },
+      {
+        "path": "services/content/src/core.ts",
+        "candidateBlob": "2e1c25587dcb1ec2a593d44306e3f19f0605ee77",
+        "baseBlob": "2e1c25587dcb1ec2a593d44306e3f19f0605ee77",
+        "unchangedFromBase": true
+      },
+      {
+        "path": "services/main/src/modules/zone/route.ts",
+        "candidateBlob": "d028d00dcd300dd5b70964f1463001b10f3bee31",
+        "baseBlob": "d028d00dcd300dd5b70964f1463001b10f3bee31",
+        "unchangedFromBase": true
+      },
+      {
+        "path": "services/main/tests/g-630-zone-route.test.ts",
+        "candidateBlob": "abcb09dc64458cd5d53901a815ff7e2613dd528e",
+        "baseBlob": "abcb09dc64458cd5d53901a815ff7e2613dd528e",
+        "unchangedFromBase": true
+      },
+      {
+        "path": "services/main/src/infrastructure/fuseki.ts",
+        "candidateBlob": "7aa4919f57f878348ecf1ba2a737dabbae456d72",
+        "baseBlob": "7aa4919f57f878348ecf1ba2a737dabbae456d72",
+        "unchangedFromBase": true
+      },
+      {
+        "path": "services/main/tests/request-read-budget.test.ts",
+        "candidateBlob": "52def96aaa632897d106e05f117c951b7c507733",
+        "baseBlob": "52def96aaa632897d106e05f117c951b7c507733",
+        "unchangedFromBase": true
+      }
+    ],
+    "reusedExactCandidateChecks": {
+      "job": "0463251a-d73e-4c14-93c2-81e942c9d040",
+      "qa": "20261019t143035-7512f5",
+      "source": {
+        "head": "81b412b2e2c6dfcd3989534fff2723aac322978f",
+        "fingerprint": "bb1dd68609bcbfed9c5b5fac1c7dfecc3fca2535b1a49868bfa72b025425a2bd",
+        "clean": true
+      },
+      "sourceStable": true,
+      "steps": [
+        {
+          "step": 1,
+          "command": "bun scripts/qa/host-admission.ts --cpu --gib 3 -- task --dir .temp/identity-reader-main-composition install",
+          "exitCode": 0
+        },
+        {
+          "step": 2,
+          "command": "/bin/sh -c task --dir .temp/identity-reader-main-composition goal -- test services/main/tests/identity-discovery-owner.test.ts services/main/tests/work-contents.test.ts services/main/tests/work-read-session-fences.test.ts services/main/tests/recipe-instruction-read.test.ts services/main/tests/public-reader-authentication.test.ts services/main/tests/rate-limit-response-contract.test.ts services/main/tests/route-rate-limit.test.ts",
+          "exitCode": 0
+        },
+        {
+          "step": 3,
+          "command": "/bin/sh -c task --dir .temp/identity-reader-main-composition goal -- check --only types,lint,guards",
+          "exitCode": 0
+        }
+      ],
+      "owner": {
+        "executed": 145,
+        "passed": 145,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 0,
+        "assertions": 1114,
+        "files": [
+          {
+            "file": "services/main/tests/rate-limit-response-contract.test.ts",
+            "tests": "3",
+            "assertions": "23",
+            "failures": "0",
+            "skipped": "0",
+            "time": "2.14047235"
+          },
+          {
+            "file": "services/main/tests/route-rate-limit.test.ts",
+            "tests": "9",
+            "assertions": "92",
+            "failures": "0",
+            "skipped": "0",
+            "time": "0.380209831"
+          },
+          {
+            "file": "services/main/tests/identity-discovery-owner.test.ts",
+            "tests": "6",
+            "assertions": "32",
+            "failures": "0",
+            "skipped": "0",
+            "time": "0.022201037"
+          },
+          {
+            "file": "services/main/tests/public-reader-authentication.test.ts",
+            "tests": "14",
+            "assertions": "56",
+            "failures": "0",
+            "skipped": "0",
+            "time": "3.347010063"
+          },
+          {
+            "file": "services/main/tests/recipe-instruction-read.test.ts",
+            "tests": "11",
+            "assertions": "34",
+            "failures": "0",
+            "skipped": "0",
+            "time": "0.043058519"
+          },
+          {
+            "file": "services/main/tests/work-contents.test.ts",
+            "tests": "59",
+            "assertions": "713",
+            "failures": "0",
+            "skipped": "0",
+            "time": "4.384901437"
+          },
+          {
+            "file": "services/main/tests/work-read-session-fences.test.ts",
+            "tests": "43",
+            "assertions": "164",
+            "failures": "0",
+            "skipped": "0",
+            "time": "2.609283627"
+          }
+        ],
+        "stackFree": true,
+        "acceptanceIdsQualified": 0,
+        "originalIntegrationOrBrowserAssertionsReached": 0
+      },
+      "static": {
+        "types": "passed",
+        "inference": "passed",
+        "lint": "passed",
+        "ast": "passed",
+        "guards": "passed",
+        "selectedGuardFiles": 25,
+        "availableGuardFiles": 45,
+        "retainedInitialFailures": "Two anti-silo cases exceeded ordinary child-process timeouts in the initial guard attempt. Their supported automatic timeout retries passed at 3.951s and 16.381s. The raw initial failure and retries remain in output.log and timeout-retries.jsonl; they are not erased or called initial passes."
+      },
+      "receiptVerification": "All seven producer artifact SHA-256 values in checks.json were independently recomputed and matched. The raw QA acceptance binds a clean stable candidate 81b412b2 with full source fingerprint bb1dd68609bcbfed9c5b5fac1c7dfecc3fca2535b1a49868bfa72b025425a2bd. JUnit totals and per-file counts were independently parsed.",
+      "rerunByReviewer": false
+    },
+    "productAuditWithinOriginalClass": {
+      "principles": [
+        "A signed-in public reader retains Account disclosure policy without a manufactured Agent choice or private authority.",
+        "Catalogue visibility cannot authorize a Book composition independently of the current language-specific Main text publication.",
+        "Exact bytes and text-derived labels share current publication, Rights, disclosure and metadata dependency fences.",
+        "Opaque denial/absence and recoverable owner failure remain distinct; malformed supplied authentication does not become anonymous success."
+      ],
+      "inScopeSurfaceInventory": [
+        "Work header",
+        "Book contents and body-derived chapter labels",
+        "exact chapter delivery",
+        "Recipe adopted exact instruction adapter",
+        "Main default selection optional Account handling",
+        "all seven invalid optional-bearer reader surfaces"
+      ],
+      "recommendation": "The bounded correction is ready for the manager normal source/proof gate with its exact existing dependencies. No new source repair, fixture, corpus or broader gate is proposed.",
+      "D4_007": "UNPROVED: genuine eligible-account Library/Studio/relationships discovery, return/recovery and matching titles remain with the original UI/data/proof owners.",
+      "D4_008": "UNPROVED: genuine Book browser entrances, body/navigation at 1440/390, unavailable metadata, matching titles and same-revision retry remain with the original UI/data/proof owners.",
+      "otherReadAvailabilityAcceptance": "All prior D5-001/D5-004 outcomes, original workload/persona limits, failures, migration/native observations and qualified source verdicts remain unchanged."
+    },
+    "executionThisReview": {
+      "sourceReviewCompleted": true,
+      "newProductOrOwnerTestsExecuted": 0,
+      "nativeOrBrowserReruns": 0,
+      "dataOrAccountChanges": false,
+      "productEdits": false,
+      "ownedReportOnly": true,
+      "documentationCheck": {
+        "job": "a159c3f7-7a4e-4202-9e47-2c0d39da6283",
+        "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task docs:check",
+        "exitCode": 0,
+        "passed": 13,
+        "failed": 0,
+        "markdownFiles": 249,
+        "scope": "Local links, fragments and design navigation; no external URLs or runtime behavior tested.",
+        "retainedLog": ".temp/read-availability-review/identity-reader-81b412/report-docs-check.log",
+        "logSha256": "cdd9c655355e603d582ee21612ebe302652ce3ac82f533f3613c313e443b7ebc"
+      },
+      "checkSelectionReason": "Current maintainer explicitly selected normal report docs checks only and reuse of exact-candidate owner/static receipts. No new concrete source concern required an extra focused check."
+    },
+    "evidence": {
+      "bundle": ".temp/read-availability-review/identity-reader-81b412",
+      "snapshotPriorReport": {
+        "path": ".temp/read-availability-review/identity-reader-81b412/report-before.json",
+        "bytes": 300053,
+        "sha256": "74551b133a0db02219dc8f051b8adff87199e446f28dd2b455bb263a7009da40"
+      },
+      "sourceManifest": {
+        "path": ".temp/read-availability-review/identity-reader-81b412/source-manifest.json",
+        "bytes": 8197,
+        "sha256": "4aabf1da3d43e08d2be8b5ab90a185b5f340fa464038430459bb5f105b40f9fa"
+      },
+      "provenance": {
+        "path": ".temp/read-availability-review/identity-reader-81b412/composition-provenance.json",
+        "bytes": 2685,
+        "sha256": "82b168206be4f1f5085a2e813276d223cf538194b866b1d9dc8b21f9e34dfd59"
+      },
+      "packetManifest": {
+        "path": ".temp/read-availability-review/identity-reader-81b412/packet-manifest.json",
+        "bytes": 18118,
+        "sha256": "c2f4a3e1427a9a9506c198c6da90fa7365a1481ddb57734ad007a4a39bb725a6"
+      },
+      "correctionPatch": {
+        "path": ".temp/read-availability-review/identity-reader-81b412/review-correction-on-main.patch",
+        "bytes": 56109,
+        "sha256": "174ee5543866991c97f60fb4b86841e91584816b8a9467ca9115210e3aefa256"
+      },
+      "sharedCompositionPatch": {
+        "path": ".temp/read-availability-review/identity-reader-81b412/current-main-composition-hunks.patch",
+        "bytes": 3277,
+        "sha256": "6a9da141f8b80117a861b2f6e1c35bee7f0f42bac43d41b1e4066014840de5d1"
+      },
+      "counterexamples": {
+        "path": ".temp/read-availability-review/identity-reader-81b412/original-source-counterexamples.json",
+        "bytes": 33031,
+        "sha256": "9a7bd3fc58c9fc73d87e6c5550a31c0c6e74d2d5c94d86ce0037dba056c8a8c6"
+      },
+      "producerCheckSummary": {
+        "path": ".temp/read-availability-review/identity-reader-81b412/checks.json",
+        "bytes": 5359,
+        "sha256": "a3cf8ed9872653de3641f3adf662ea5af6a76bd0c1cf33daaf8a16b9b1776e06"
+      },
+      "verifiedReceiptManifest": {
+        "path": ".temp/read-availability-review/identity-reader-81b412/reused-receipts.json",
+        "bytes": 2811,
+        "sha256": "12c4cef6b08e0d1459f63229acf01b39bad68b00517aabe630d267e8534770f3"
+      },
+      "namedReusedAssertionReach": {
+        "path": ".temp/read-availability-review/identity-reader-81b412/reviewed-assertion-reach.json",
+        "bytes": 9602,
+        "sha256": "8299265804b8335e006b372c58d2bef3fffaa279d74fbc30e4f0b1702fc3c702"
+      },
+      "rawEvidenceManifest": {
+        "path": ".temp/read-availability-review/identity-reader-81b412/raw-evidence-manifest.json",
+        "sha256": "697c79a47133a8766adcf8a2fbb3954832ccfe0258beb20b49694b364c4355fe",
+        "files": 36
+      }
+    },
+    "historyPreservation": {
+      "priorTopLevelFields": 32,
+      "allPriorTopLevelValuesUnchanged": true,
+      "priorReportCommit": "2715cba4c54380095bfe463cc0426e3e15feb682",
+      "acceptedZoneAndSourceCutsReplayed": false,
+      "historicalRuntimeFailuresRetained": true
+    }
   }
 }
