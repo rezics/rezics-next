@@ -3,6 +3,7 @@ import { resourceHref } from '../address/path.ts';
 import { communityHref } from '../feed/discussion.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
+import { materializeData } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
 import { fixtureFollow, memoryRelationships } from '../relationships/fixtures.ts';
 import { relationshipStoryFetch } from '../relationships/story-fetch.ts';
@@ -10,6 +11,8 @@ import { memoryReaderActions } from '../catalogue/fixtures.ts';
 import { everyKind, memoryFeed, NOW, page, post, realms, storyId, suggestion } from '../feed/fixtures.ts';
 import { messages as feed } from '../feed/messages.ts';
 import feedZhHans from '../feed/messages/zh-Hans.ts';
+import feedDe from '../feed/messages/de.ts';
+import feedFr from '../feed/messages/fr.ts';
 import { idOf } from '../discover/scope.ts';
 import { type FeedDefaults, type FeedState, feedQuery } from '../feed/state.ts';
 import type { FeedPage, Loaded } from '../feed/types.ts';
@@ -21,6 +24,8 @@ import { HomePage, type HomePageProps, HomePosts } from './home-page.tsx';
 import { ConceptTopicFeed } from './tabs.tsx';
 import { messages as home } from './messages.ts';
 import homeZhHans from './messages/zh-Hans.ts';
+import homeDe from './messages/de.ts';
+import homeFr from './messages/fr.ts';
 import { Rail, type RailData } from './rail.tsx';
 import { AppShell } from '../shell/app-shell.tsx';
 import { messages as shell } from '../shell/messages.ts';
@@ -53,7 +58,7 @@ function props(options: { signedIn?: boolean; state?: FeedState; page?: Loaded<F
     recommendations = null, ...rest } = options;
   const view = options.state ?? state(signedIn ? {} : { tab: 'all' });
   const zh = locale === 'zh-Hans';
-  const messages = { home: zh ? { ...home, ...homeZhHans } : home, feed: zh ? { ...feed, ...feedZhHans } : feed };
+  const messages = options.messages ?? { home: zh ? { ...home, ...homeZhHans } : home, feed: zh ? { ...feed, ...feedZhHans } : feed };
   const defaults: FeedDefaults = signedIn ? following : { tab: 'all', sort: 'best' };
   const pinned = view.tab === 'pinned' ? [...filters.pinned, ...filters.unpinned].find(item => item.id === view.filter)
     ?? null : null;
@@ -247,6 +252,54 @@ export const ReturningReader: Story = {
     await expect(canvas.getByText(/fading over about 24 hours/)).toBeVisible();
     await expect(canvas.getByText('No Realm fills more than 3 of any 10 posts in a row.')).toBeVisible();
   },
+};
+
+const expectContinueDescriptions: Story['play'] = async ({ canvasElement, args }) => {
+  const { userEvent: keyboard } = await import('vitest/browser');
+  const t = materializeData(args.messages.home, { locale: args.locale });
+  const strip = within(canvasElement).getByRole('region', { name: t.continueTitle });
+  const descriptionOf = (item: typeof continueItems[number]) => `${item.nextUnread.title
+    ? t.nextChapter({ chapter: item.nextUnread.title }) : t.nextUp} ${item.unreadCount.kind === 'exact'
+    ? t.newChapters(item.unreadCount.value) : t.newChaptersAtLeast(item.unreadCount.value)}`;
+
+  // Focused access keeps the visible chapter and exact/lower-bound badge even with a custom link name.
+  for (const item of continueItems) {
+    const link = within(strip).getByRole('link', { name: t.continueWork({ title: item.title.value }) });
+    await expect(link).toHaveAccessibleDescription(descriptionOf(item));
+    await expect(link).toHaveAttribute('href', localizedPath(item.nextUnread.href, args.locale));
+    await expect(link.querySelector('span[lang]')).toHaveAttribute('lang', item.title.language);
+  }
+  const item = continueItems[0]!;
+  const name = t.continueWork({ title: item.title.value });
+  within(strip).getByRole('link', { name }).focus();
+  await keyboard.keyboard('{Tab}');
+  await expect(within(strip).getByRole('button', { name: t.hideFromContinue({ title: item.title.value }) }))
+    .toHaveFocus();
+  await keyboard.keyboard('{Enter}');
+  await waitFor(() => expect(within(strip).queryByRole('link', { name })).toBeNull());
+  await expect(within(strip).getByRole('status')).toHaveTextContent(t.hiddenFromContinue({ title: item.title.value }));
+  within(strip).getByRole('button', { name: t.undo }).focus();
+  await keyboard.keyboard(' ');
+  await waitFor(() => expect(within(strip).getByRole('link', { name })).toHaveAccessibleDescription(descriptionOf(item)));
+  await expect((args.api as ReturnType<typeof memoryFeed>).calls.filter(call => call.startsWith('continue')))
+    .toEqual([`continue:${item.work.slice(-4)}:true`, `continue:${item.work.slice(-4)}:false`]);
+  await document.fonts.ready;
+  window.scrollTo(0, 0);
+  await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+};
+
+export const ContinueDescriptionsGermanPhone: Story = {
+  args: props({ locale: 'de', continueItems, withRail: false, messages: { home: { ...home, ...homeDe }, feed: feedDe } }),
+  globals: { viewport: { value: 'phone' }, locale: 'de' },
+  parameters: { route: { pathname: '/de' } },
+  play: expectContinueDescriptions,
+};
+
+export const ContinueDescriptionsFrenchPhone: Story = {
+  args: props({ locale: 'fr', continueItems, withRail: false, messages: { home: { ...home, ...homeFr }, feed: feedFr } }),
+  globals: { viewport: { value: 'phone' }, locale: 'fr', theme: 'dark' },
+  parameters: { route: { pathname: '/fr' } },
+  play: expectContinueDescriptions,
 };
 
 /**

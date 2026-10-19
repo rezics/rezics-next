@@ -2902,5 +2902,221 @@
         "instructionBoundary": "Current user manager decision explicitly requires holding this one qualified status reading for serialized G-2847 and resuming cleanup after borrower release. This is a required partial-ready handoff, not an inferred approval gate."
       }
     }
-  ]
+  ],
+  "homeContinuationDescriptionFirstSourceReview": {
+    "atUTC": "2026-10-19T17:08:24.428308+00:00",
+    "worker": "G-2831",
+    "reviewer": "Codex-1 / GPT-6.1 Sol / xhigh; no fallback or nested agents",
+    "finding": "AUD-012 original single acceptance; Home continuation description/status clause only",
+    "canonicalAcceptance": {
+      "path": "docs/goals/audit-remediation-20261019/site-plan.json",
+      "fileSHA256": "4ab008ae2a5144eb71f887daa737f1c5eb1a75b443e084b0f67fa67a0cbec3bc",
+      "canonicalAcceptanceLanguage": "zh-CN, preserved verbatim from the audit registry",
+      "acceptance": [
+        "手机导航的辅助名称包含对应可见标签；保留未读数等附加语义，覆盖八种UI语言及登录/匿名状态。重复axe检查并实际用语音或读屏验证；卡片的描述文本和状态不应因aria-label覆盖而不可获得。"
+      ],
+      "applicableClause": "卡片的描述文本和状态不应因aria-label覆盖而不可获得。",
+      "regressionAssertion": {
+        "id": "AUD-012/assertion-3",
+        "assert": "Inspect Continue-card accessible descriptions for the same visible-name mismatch class with manual assistive-technology confirmation."
+      }
+    },
+    "verdict": "Source approved for the bounded three-path correction. No source blocker found; genuine German/French Home native callbacks remain due and no class closure is claimed.",
+    "candidate": {
+      "commit": "28df550060047f93aa8ad0d3f1cf30d3bff6324b",
+      "tree": "ac4728f62daf1f265c4ce23749ea15e6ad8b6500",
+      "base": "49c33b1c0b3333d084d6dd4e5853ccdb7ef10a79",
+      "ownerSource": "b8477905da8275b1dffc560c752cb17767b5f46e",
+      "renderedSource": "ce2283d09e0adb316dc6d56feed4d81d7cb08e7e",
+      "manifestSHA256": "28e0e62038e68053dbdb158f70a52af112c10e9ed86e5e07ec9a5d2494c88810",
+      "SHA256SUMS": "afb654a76571b3b43daf3f72dab5d3badb70e31cda7fc9d17d925dea5e242fcf",
+      "artifactEntriesVerified": 44,
+      "perPath": [
+        {
+          "path": "apps/web/features/home/continue-strip.tsx",
+          "beforeBlob": "ef0f3e5a0f3147c5e8479c906347528010af92e4",
+          "afterBlob": "980743f17fddc375c41738c8d16ed28b4abe760e",
+          "beforeSHA256": "5d6f7b67e676f64f8460a07f043111b5874503e2a90c84989ad4e36bcaebac01",
+          "afterSHA256": "455dc7eac09a03ea8063c0304101cd5288d0f5581ee8e621abe7d14e644508fb",
+          "ownerAndRenderedPostimagesByteExact": true
+        },
+        {
+          "path": "apps/web/features/home/home-page.stories.tsx",
+          "beforeBlob": "76e522e834a991101c055df493887bcf8fb862a0",
+          "afterBlob": "e20f5da1aa212a84eee31961b78a1945a4f4907c",
+          "beforeSHA256": "0d3f415b52e04a2ed929f391045f5917b9e8bdf3a425dd652986cb649f071500",
+          "afterSHA256": "f30c6a69b8c1497dac400fc2977c46904a2dd1f99a3373596719a9425ffd4843",
+          "ownerAndRenderedPostimagesByteExact": true
+        },
+        {
+          "path": "scripts/static/web-continuations.inventory.json",
+          "beforeBlob": "6aed8f6f04af4096885b2f2975e66cb02da866da",
+          "afterBlob": "44c2042c5bc60b0d9c3736d779623fb5bb8fe41f",
+          "beforeSHA256": "faa1bc71ca3a9d1ba3ba6b4c6c21b9f8b6df1b827eeac6f72a2eb57e35190756",
+          "afterSHA256": "1bb6438b5439692b0d614932d9a04575b59844d15baa54c0cb75b0e484b59b29"
+        }
+      ]
+    },
+    "sourceFindings": [
+      {
+        "result": "pass",
+        "scope": "Accessible description relationship",
+        "evidence": "One unconditional React useId per strip plus the existing unique Work identity creates per-card next/unread ID references. Both referenced visible spans are rendered with the link; whitespace-free Work IRIs remain valid IDREF tokens. LocalizedLink forwards aria-describedby unchanged. The chapter description precedes the unread description while the custom localized title/resume name stays intact."
+      },
+      {
+        "result": "pass",
+        "scope": "Preserved reading and recovery behavior",
+        "evidence": "The exact/lower-bound unread calculation, chapter-null fallback, title and content language, nextUnread href, existing item identity/filter/map, cover credit, separate hide control, API command, failure rollback, undo and keyboard order are unchanged. No new product copy, API or state-write behavior was added."
+      },
+      {
+        "result": "pass",
+        "scope": "Focused invariant audit",
+        "evidence": "The changed Home rich link is the custom-named link masking these existing descendants. Parent Home/welcome/rail ARIA uses label sections or discrete actions. No new matching affected instance was found in the changed ownership/dependency slice; prior accepted Library source and German Library native proof are reused."
+      },
+      {
+        "result": "pass",
+        "scope": "Original assertions and fixture content",
+        "evidence": "Two German/French phone stories add computed accessible-description checks for exact 3, lower-bound 20 and exact 1/null-chapter fixtures, preserved localized href/content lang, native Tab to the separate hide button, Enter hide, Space Undo and exact in-memory command calls. Existing assertions and supplied fixtures are unchanged. The props helper now consistently accepts explicit localized message arguments."
+      },
+      {
+        "result": "pass",
+        "scope": "Continuation inventory integrity",
+        "evidence": "All 743 rows, operations, rules and expressions remain unchanged. Only existing ContinueStrip index115 context changes ca7c16d54bfaf21fc337c1e5c1daea8bf1c70933f42e1ec3d2a5181d81a9a764 to e4e60391a6c132b641bc8e2ca42e0d68202101d486598ac89b8c5b9b850d19ca; byte replacement and unchanged detector/test/scanner/rule hashes independently verified. No guard debt, timeout, suppression or test weakening."
+      }
+    ],
+    "integration": {
+      "perPathAndTreeVerified": true,
+      "ownerAndRenderedUIPostimagesByteExact": true,
+      "materialDependencyPinsVerified": 17,
+      "dependencyReceipt": ".temp/home-continuation-description-first-source-review-G-2831/verification.json",
+      "contextDifferencesRetained": [
+        "apps/web/features/feed/feed-list.tsx",
+        "apps/web/vite.config.ts",
+        "package.json",
+        "yarn.lock",
+        "packages/model/src/generated/types.ts",
+        "packages/conversion/src/index.ts"
+      ],
+      "assessment": "Current peer feed recovery focus, SSR editor preparation, vinext/dependency and catalogue/conversion changes are preserved from the exact integration base; they do not change the reviewed ARIA relationship or continuation item contract. Owner/runtime checks are retained on their own contexts, without claiming fresh combined tests.",
+      "mainObservedAtReview": "c9699dcef53ce0109404228efe15e24118fa63e0",
+      "currentMainInventoryDifferences": [
+        {
+          "index": 115,
+          "candidate": {
+            "path": "apps/web/features/home/continue-strip.tsx",
+            "consumer": "ContinueStrip",
+            "operation": "<syntax>",
+            "rule": "dropped-continuation",
+            "expression": "{items:items,locale:locale,messages:messages}",
+            "context": "e4e60391a6c132b641bc8e2ca42e0d68202101d486598ac89b8c5b9b850d19ca"
+          },
+          "currentMain": {
+            "path": "apps/web/features/home/continue-strip.tsx",
+            "consumer": "ContinueStrip",
+            "operation": "<syntax>",
+            "rule": "dropped-continuation",
+            "expression": "{items:items,locale:locale,messages:messages}",
+            "context": "ca7c16d54bfaf21fc337c1e5c1daea8bf1c70933f42e1ec3d2a5181d81a9a764"
+          }
+        }
+      ],
+      "preserveD1": "Root ZoneSiteRoute inventory refresh is outside this patch. Candidate and observed main have no other inventory-row differences; retain all current main peer contexts at integration."
+    },
+    "retainedChecks": {
+      "rerunByVerifier": false,
+      "ownerStoryAndUnit": {
+        "job": "b0da5c8a-a692-47ba-8699-19899598fab7",
+        "qa": "20261019t163721-5ffb64",
+        "source": "ce2283d09e0adb316dc6d56feed4d81d7cb08e7e",
+        "storiesPassed": 57,
+        "unitsPassed": 6,
+        "reach": "Includes computed descriptions, multilingual content/hrefs, keyboard hide/undo and story accessibility; in-memory fixtures only."
+      },
+      "ownerPostRebaseWebTypes": {
+        "job": "0af8b403-a25d-4a6c-978d-47aac9317b9d",
+        "source": "b8477905da8275b1dffc560c752cb17767b5f46e",
+        "files": 4059,
+        "result": "passed"
+      },
+      "ownerLintASTAndInferenceDelta": "Retained passed logs; inherited Main inference baseline failure remains explicitly recorded, not cleared. Initial old whole-function-context guard failure is retained.",
+      "combinedCandidateGuard": {
+        "source": "28df550060047f93aa8ad0d3f1cf30d3bff6324b",
+        "command": "task goal -- slot -- bun test scripts/static/web-continuations.test.ts",
+        "passed": 48,
+        "failed": 0,
+        "assertions": 66,
+        "logSHA256": "5b488bce8e9278039ff991a91458352f4c52b064fa479f7a0782ba71dd0217d7"
+      },
+      "limitation": "No fresh combined-main 57-story/full-type run is claimed."
+    },
+    "screenshotsActuallyViewedByVerifier": [
+      {
+        "path": ".temp/home-continuation-description-first-source-review-G-2831/retained-candidate-evidence/owner-proof/screenshots/german-phone-light.png",
+        "SHA256": "1117fbf7295ffec10d99cbb62a4f8fe94709fa43e209c4fc332edba2bc8dcd19",
+        "dimensions": "390x844",
+        "story": "ContinueDescriptionsGermanPhone",
+        "observation": "German light parent Home shows all three continuation titles, existing chapter previews and exact/lower-bound badges within the viewport. Long chapter previews remain visibly clamped as before; full description exposure is covered by retained computed-description assertions."
+      },
+      {
+        "path": ".temp/home-continuation-description-first-source-review-G-2831/retained-candidate-evidence/owner-proof/screenshots/french-phone-dark.png",
+        "SHA256": "6d5aa04c683f6b24870cb438828a20e05f1560f29a4fdfb34eab6141b9b6dc93",
+        "dimensions": "390x844",
+        "story": "ContinueDescriptionsFrenchPhone",
+        "observation": "French dark parent Home retains readable title/chapter previews and exact/lower-bound badges with no new visible clipping or overlap. Screenshot inspection does not establish native speech."
+      }
+    ],
+    "nativeAcceptance": {
+      "originalCallback": "aud012-card-only.test.ts:259:74",
+      "unchanged": true,
+      "germanHomeCAS5": "Original speech/dispatcher expectation failed; retained. Not cleared by this source approval.",
+      "frenchHomeCAS5": "Original outcome assertion unreached due to actual document/Orca mode qualification failure; retained.",
+      "germanLibrary": "Original callback passed; reused unchanged.",
+      "remaining": "Root/G-2847 own missing German/French Home native callbacks after integration and separately authorized fresh serialized preparation. This source review ran no native callback or runtime."
+    },
+    "preservation": {
+      "preexistingReportFieldsUnchanged": true,
+      "preexistingReportSHA256": "91b23350432de98867aede7160769b9d380f63672ac7065eb44a338a772b1273",
+      "priorD4003D4011AndNativeProofsReused": true,
+      "native81CaptionsAndSixDestinationsUnchanged": true,
+      "CAS5SemanticCleanupReceipt": ".temp/reading-home-CAS5-cleanup-G-2831-20261019T1612Z/sanitized-CAS5-cleanup-receipt.json",
+      "CAS5SemanticCleanupSHA256": "3d4b7d0e9ca68e9e90f8b4b4341be379ae30646a504981d910bb769f19069e73",
+      "historicalFailuresPreserved": true,
+      "runtimeStarted": false,
+      "leaseBorrowed": false,
+      "APIOrFixtureWrites": false,
+      "productOrOriginalAssertionEdits": false,
+      "rootOrPeerEdits": false,
+      "classStatusChanged": false
+    },
+    "evidence": {
+      "bundle": ".temp/home-continuation-description-first-source-review-G-2831",
+      "independentVerification": ".temp/home-continuation-description-first-source-review-G-2831/verification.json",
+      "retainedCandidateManifest": ".temp/home-continuation-description-first-source-review-G-2831/retained-candidate-evidence/manifest.json",
+      "retainedCandidateSHA256SUMS": ".temp/home-continuation-description-first-source-review-G-2831/retained-candidate-evidence/SHA256SUMS"
+    },
+    "administrativeChecks": {
+      "scope": "Documentation/report branch only; no product integration/runtime acceptance",
+      "job": "4c237c4e-cf98-4859-802b-8d4dec42d3e9",
+      "reportHeadChecked": "0de512fb2a127b85ddd1a70c190ecb775c01c900",
+      "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "documentation": {
+        "command": "task docs:check",
+        "result": "passed",
+        "exitStatus": 0,
+        "testsPassed": 13,
+        "markdownFilesChecked": 258,
+        "log": ".temp/home-continuation-description-first-source-review-G-2831/administrative-checks/4c237c4e-cf98-4859-802b-8d4dec42d3e9.1.log"
+      },
+      "goal": {
+        "command": "task goal -- check",
+        "result": "harness blocked before checks",
+        "sequenceExitStatus": 201,
+        "cause": "Automatic main rebase conflicted on docs/goals/audit-remediation-20261019/proofs/reading-home.json; rebase undone at unchanged report head, 99 commits behind main.",
+        "assertionReach": "No Goal types, lint, guards or outcome assertions reached.",
+        "log": ".temp/home-continuation-description-first-source-review-G-2831/administrative-checks/4c237c4e-cf98-4859-802b-8d4dec42d3e9.2.log"
+      },
+      "worktreeAfterCheck": "Clean on goal/g-2831; no manual main rebase or conflict resolution attempted.",
+      "remaining": "Manager integrates only this appended review field while preserving cumulative proof, then reruns normal Goal checks. The source approval remains bounded; no native callback acceptance is added."
+    }
+  }
 }
