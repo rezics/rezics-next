@@ -490,5 +490,251 @@
     "Bangumi conversion emits selected fields rather than preserving an entire raw record; title uses fixed work-metadata-v1#title:en. Neither general language inference nor optional-value inventory completeness is established.",
     "No product or retained Source test edits, package installs, services, network capture, accounts, shared datasets, UI/browser/corpus work, original113 restore, architecture research, new owner/framework or landing performed."
   ],
-  "next": "Manager returns CONV-REFUSAL-1 and its assertion-reaching reproducer to existing G-2781 conversion owner; preserve authored Source work and accepted A19 report, then review only the corrected bounded candidate and matching targeted proof."
+  "next": "Manager returns CONV-REFUSAL-1 and its assertion-reaching reproducer to existing G-2781 conversion owner; preserve authored Source work and accepted A19 report, then review only the corrected bounded candidate and matching targeted proof.",
+  "correctionReview": {
+    "reviewedAtUtc": "2026-10-19T14:17:46.587579+00:00",
+    "worker": "G-2859",
+    "engine": "codex-1",
+    "model": "GPT-6.1 Sol",
+    "effort": "xhigh",
+    "workerBase": "5644678c25046eba1dabf239e30b461a5c5465ce",
+    "scope": "Same-scope correction-only review of the sole confirmed P2 CONV-REFUSAL-1. The preceding report fields remain the immutable historical disposition for 77e6db65b767ca7d60d50008964e71e913fe1cf8; this appended section is the latest disposition for the corrected pin.",
+    "decision": "accept-bounded-correction",
+    "summary": "The private Map admits exactly the seven declared VNDB namespaces and retains the existing unsupported error branch for every other name. It removes inherited-key admission without changing the native mappings or conversion payload behavior. The appended regression covers the actual three counterexamples, all Object.prototype own names, ordinary unknown/empty and all seven declared positives. No further actionable correction finding.",
+    "candidate": {
+      "commit": "d27a26dd20ebf71a27f212fca84484467fb7fa0f",
+      "parent": "77e6db65b767ca7d60d50008964e71e913fe1cf8",
+      "tree": "bf99d324ac508b948ae4fd596bbe0a88a7214e93",
+      "directParentVerified": true,
+      "branch": "candidate/catalogue-conversion-refusal-20261019",
+      "isolatedCheckout": ".temp/worktrees/catalogue-conversion-refusal-candidate-20261019",
+      "changedPathCount": 2,
+      "diffSummary": {
+        "insertions": 21,
+        "deletions": 2
+      },
+      "changedPaths": [
+        {
+          "path": "packages/conversion/src/index.ts",
+          "change": "modified",
+          "baseBlob": "2e9229364cf18fa397e1d33da37d80621ec7d531",
+          "baseSHA256": "2bf55b5e7a05d269d455bbd5e567909910a86a8a47cbcb51045ce763be570e72",
+          "baseBytes": 2741,
+          "candidateBlob": "4d07ac212265d7b2f3ac14b6df4906609e16526c",
+          "candidateSHA256": "2677ab1def56c86886377a7308615da5238e98a37355a3158153e89a455773b5",
+          "candidateBytes": 2886,
+          "insertions": 6,
+          "deletions": 2
+        },
+        {
+          "path": "tests/qa/unit/conversion-library.test.ts",
+          "change": "modified",
+          "baseBlob": "a5d78aa53fe08166f7aff10898968ec6ba1e4807",
+          "baseSHA256": "f78376be42e27099bbe974f250f29572701334d1a33993a5f5b9e83539e36e30",
+          "baseBytes": 3806,
+          "candidateBlob": "a03831624e9c8b95144308d1da00cef0a2ec057d",
+          "candidateSHA256": "c9dc12dc0ca2c34dc3490c489cf97d849f4fced40b0149ab586448c9cdb939ec",
+          "candidateBytes": 4638,
+          "insertions": 15,
+          "deletions": 0
+        }
+      ],
+      "unchangedPackageBlobs": [
+        {
+          "path": "packages/conversion/package.json",
+          "baseBlob": "946ba903846f0e8a734988322072eb34a95cc625",
+          "candidateBlob": "946ba903846f0e8a734988322072eb34a95cc625",
+          "baseSHA256": "a05f73f96a6d9f4d590913192b838d78c5e7f8305f7361978cf6309d5e88bf85",
+          "candidateSHA256": "a05f73f96a6d9f4d590913192b838d78c5e7f8305f7361978cf6309d5e88bf85",
+          "changed": false
+        },
+        {
+          "path": "packages/conversion/src/bangumi.ts",
+          "baseBlob": "26e11897c263e140a0438e11b698e58c0548e35c",
+          "candidateBlob": "26e11897c263e140a0438e11b698e58c0548e35c",
+          "baseSHA256": "98f49e86a7a3f7e7ec4c81613b017bc17059548558a427524b378d3fadbaf93c",
+          "candidateSHA256": "98f49e86a7a3f7e7ec4c81613b017bc17059548558a427524b378d3fadbaf93c",
+          "changed": false
+        },
+        {
+          "path": "packages/conversion/src/errors.ts",
+          "baseBlob": "2e5c4f66c14b6a6f2f8e94fe37bd4e87e2e737c9",
+          "candidateBlob": "2e5c4f66c14b6a6f2f8e94fe37bd4e87e2e737c9",
+          "baseSHA256": "ef8aa4000953066c9c7236dac582a31548e094f63da9e87cc92b6eeb1a7b56ed",
+          "candidateSHA256": "ef8aa4000953066c9c7236dac582a31548e094f63da9e87cc92b6eeb1a7b56ed",
+          "changed": false
+        }
+      ],
+      "authoredCorrectionOwner": "root",
+      "reviewMethod": "Read the complete two-path immutable correction diff and verify all five resulting file blobs from Git against the receipt; verify original and retained case bodies directly. Reuse supplied root portable-test/focused-type results and prior matching owner gates. No candidate tests rerun by this reviewer in this correction turn."
+    },
+    "receipt": {
+      "path": ".temp/audit-remediation-20261019/two-hour-sprint/conversion-refusal-correction/receipt.json",
+      "sha256": "4462c63f6b1f3d4010e6df4245149ed546dbea788bb13f5222922d33ffe55ce0",
+      "localCopy": ".temp/review/conversion-refusal-correction/receipt.json",
+      "helperRole": "Read-only source/evidence inventory, not another reviewer and not executor of the supplied root checks."
+    },
+    "findingDisposition": {
+      "id": "CONV-REFUSAL-1",
+      "status": "resolved-for-corrected-candidate",
+      "blocksCorrectedCandidateAcceptance": false,
+      "originalFindingRemainsConfirmedAgainst": "77e6db65b767ca7d60d50008964e71e913fe1cf8",
+      "sourceReason": "vndbNativeKinds is a nonexported module-private Map with seven string entries. get(kind) returns undefined for undeclared keys, including Object.prototype members; the existing !native guard then throws ProviderConversionError(unsupported). Each admitted native value remains the same truthy string. No new identity assignment, permission, conversion framework, network or citation behavior is introduced.",
+      "originalCounterexamples": [
+        {
+          "namespace": "constructor",
+          "correctedOutcome": "ProviderConversionError with basis unsupported",
+          "basisOfReview": "Direct Map/guard inspection; included in the root-executed supplied regression."
+        },
+        {
+          "namespace": "__proto__",
+          "correctedOutcome": "ProviderConversionError with basis unsupported",
+          "basisOfReview": "Direct Map/guard inspection; included in the root-executed supplied regression."
+        },
+        {
+          "namespace": "toString",
+          "correctedOutcome": "ProviderConversionError with basis unsupported",
+          "basisOfReview": "Direct Map/guard inspection; included in the root-executed supplied regression."
+        }
+      ],
+      "positiveAndOrdinaryRefusalBehavior": "The seven vn/release/character/staff/producer/tag/trait mappings are byte-equivalent string pairs; not-a-kind and empty are included in the appended refusal loop. Common output construction, ID admission, MusicBrainz branch, Bangumi code and error class are unchanged.",
+      "regressionAssessment": "The test catches the real public converter result and asserts ProviderConversionError and basis unsupported in its body; successful conversion leaves refusal undefined and fails. All seven positive results are asserted. No mock, skip, weakened test or unsafe type cast. as const retains literal tuple types.",
+      "sameClassDisposition": "The former arbitrary-string object lookup is removed. No other code changes introduce prototype-bearing allowlist indexing; the prior bounded same-class inspection remains applicable.",
+      "originalNegativeProof": {
+        "job": "job:2bb7a72f-9b89-43fd-8ba7-a9e131777658",
+        "pass": 2,
+        "fail": 3,
+        "expectCalls": 21,
+        "outcomeAssertionsReached": true,
+        "logSHA256VerifiedUnchanged": true,
+        "record": "The original actionableFindings, checks, reproducer and actual three FAIL results above are preserved verbatim as historical evidence, not relabeled as a current failure."
+      },
+      "additionalActionableFindings": []
+    },
+    "testPreservation": {
+      "originalPortableCases": [
+        {
+          "name": "external provider conversion preserves exact supplied primitives and rejects unsupported enrichment",
+          "sha256": "45ca3f46d5cdebad47198612c422fe1bcf5459a1f58c13cfd55d6b9948a8765c",
+          "unchangedFromOriginalAndReviewedBase": true
+        },
+        {
+          "name": "the exported conversion package runs when copied away from Main and importer code",
+          "sha256": "699a5eef026d40975ceac8fcead42f96c2a15bc693d7dba541651236c1d0cbaf",
+          "unchangedFromOriginalAndReviewedBase": true
+        },
+        {
+          "name": "Bangumi explicit conversion shares the external pure transformation and preserves repeated source values",
+          "sha256": "b91da025bb3b06268df29c9d10c349a8a8e7c8618b4814379905a2c0b3af457c",
+          "unchangedFromOriginalAndReviewedBase": true
+        }
+      ],
+      "entireReviewedBaseTestFileIsByteExactCandidatePrefix": true,
+      "newRegression": {
+        "name": "VNDB namespaces accept only declared kinds and refuse inherited object members",
+        "sha256": "6df5e02307a1f2bbe3b73b8513d39bba9b42b769ce1f77cd729e2c1f411f02ac",
+        "bytes": 830
+      },
+      "correctedPortableCaseCount": 4,
+      "retainedSourceFileSHA256": "9a9b2244df5cb54f052a5bf297eaeb0df53735d74e965e19f917449571afa129",
+      "retainedSourceCases": [
+        {
+          "name": "native retained validation reads explicit results instead of invoking provider transformations",
+          "sha256": "a0ac04d42aa7c68086630b20798c33dfda99f98d6aa01df55ce4971c9bc44c2b",
+          "unchangedFromOriginalAndPreviousReview": true,
+          "executedAgainstCurrentMain": false
+        },
+        {
+          "name": "legacy native source reads also validate saved conversion output without transforming the provider again",
+          "sha256": "6e98a57f3262ab568de6d4253b21794bb0d71c8af3a46ffba4be7e9d40e4bfbe",
+          "unchangedFromOriginalAndPreviousReview": true,
+          "executedAgainstCurrentMain": false
+        }
+      ],
+      "sourceExecutionClaim": false,
+      "originalAuthorshipAndSourceWorkPreserved": true,
+      "sourceLimit": "Both Source-only bodies remain byte-identical in the owner retained file; they are not part of the four portable cases and are not claimed executed against current main."
+    },
+    "checks": {
+      "reviewerExecutedSourceChecks": "Verified direct parent, exact two-path diff, all five resulting blobs, byte-identical original three case bodies and entire base test prefix, both retained Source bodies, prior negative log hash and unchanged accepted A19 report. These are source/evidence integrity checks, not rerun runtime tests.",
+      "rootSuppliedEvidence": {
+        "source": "The manager same-scope resume note and frozen receipt identify root-executed targeted results for this correction. Supplied results are reused; neither this reviewer nor the receipt helper executed these sessions.",
+        "targetedPortableTests": {
+          "session": 34698,
+          "status": "passed",
+          "tests": 4,
+          "fail": 0,
+          "expectCalls": 49,
+          "priorMatchingSession": 66305,
+          "executedByReviewer": false,
+          "rawOutputInspectedByReviewer": false,
+          "exactCommandAvailableToReviewer": false
+        },
+        "focusedTypes": {
+          "session": 78996,
+          "status": "passed",
+          "explicitFileCount": 4,
+          "executedByReviewer": false,
+          "rawOutputInspectedByReviewer": false,
+          "exactCommandAvailableToReviewer": false
+        },
+        "historicalTypeDiagnostic": {
+          "session": 43435,
+          "status": "failed-then-corrected",
+          "reportedReason": "Regression array literals needed literal tuple typing.",
+          "correction": "as const on the seven namespace/native pairs; no unsafe cast.",
+          "reportedBy": "Manager resume note",
+          "rawOutputInspectedByReviewer": false,
+          "currentFailureClaim": false
+        },
+        "proofLimit": "The receipt helper explicitly did not inspect raw root session output or receive exact commands. This report attributes session results to the manager/root supply, not independent re-execution or helper validation; the reviewed file identities and regression contents were independently verified."
+      },
+      "priorOwnerEvidenceReused": {
+        "job": "job:612220da-7240-4d36-9ff6-ecaee7e4c9ba",
+        "record": "The original checks.reusedUnchangedOwnerEvidence above remains unchanged: original portable cases, focused four-file types and selected owner lint/AST/guards/inference passed on the original five-file candidate. The two changed blobs require correction-specific evidence, supplied separately here. No fresh lint/guard run on the corrected package is claimed from the old job."
+      },
+      "documentationAndWorkerGates": [
+        {
+          "command": "task docs:check",
+          "status": "passed",
+          "job": "job:3c9b63cc-43cd-430f-af32-3e3c4ab13fea",
+          "log": ".temp/goal/jobs/3c9b63cc-43cd-430f-af32-3e3c4ab13fea.1.log",
+          "sha256": "ee412534dfdebfdad03763b929c69891978459b0cc593c185e0d185393c1e53f",
+          "result": "13 checks passed; 259 Markdown files checked for local links, fragments and design navigation. External URLs, runtime behavior and JSON review semantics are not covered."
+        },
+        {
+          "command": "task goal -- check",
+          "status": "passed",
+          "job": "job:3c9b63cc-43cd-430f-af32-3e3c4ab13fea",
+          "log": ".temp/goal/jobs/3c9b63cc-43cd-430f-af32-3e3c4ab13fea.2.log",
+          "sha256": "20100c4abd25419f2e0f15dfda2b3fa81104b06cafae42d63bfe23f7798b4cbd",
+          "result": "Only the report changed: AST and one selected repository guard passed; no TypeScript workspace/source lint/brief-named tests. This gate does not rerun corrected package tests.",
+          "fullOutput": {
+            "path": ".temp/goal/check/run-61CtT0/output.log",
+            "sha256": "9f58ce83d1065bfdd1c6330d6962116ee6bfc474a43fd60f78385fcaf22ec87d"
+          }
+        }
+      ],
+      "dependencyPreflight": {
+        "dependencyInstallWouldRun": false,
+        "installsPerformed": false
+      }
+    },
+    "preservation": {
+      "originalReviewCommit": "5011f702c22ef4c8f61cc70df03e1e3f08314693",
+      "originalReviewReportBlob": "1fe9636d2e3d6e3d3b10c22dec12037a07af0f15",
+      "originalReviewReportSHA256": "e46894f57c0a45b2af2212d5f99ef81756a39558b4471f219fb4ab34e4a5dc99",
+      "allOriginalReportFieldsUnchanged": true,
+      "priorA19ReportBlob": "f314de0649d2b20ff09a550c7a880b44950f6929",
+      "priorA19ReportUnchanged": true,
+      "characterizationsAndLimits": "All malformed Bangumi optional-field, VNDB scalar coercion, language, aliasing and portability observations remain in their original fields. They remain recorded limits rather than additional unreported correction findings. The original request-changes disposition still applies to the original 77e6db65 candidate; it is superseded only for this exact corrected pin."
+    },
+    "limits": [
+      "This accepts only d27a26dd20ebf71a27f212fca84484467fb7fa0f for the bounded standalone library correction. It closes no original catalogue class and establishes no Source/native/citation integration, browser proof or general malformed-provider schema contract.",
+      "Root-supplied four-test and four-file type results are reused without reviewer re-execution or raw session inspection. Existing portability/distribution/runtime limits remain unchanged.",
+      "No product edits, tests edited by reviewer, installs, services, network capture, accounts, shared datasets, browser/corpus work, architecture research, new framework/owner or landing."
+    ],
+    "candidateLandedByReviewer": false,
+    "next": "Manager may perform its separate final landing of the exact accepted corrected pin after this report is committed. Retain authored conversion and independent Source work and all accepted A19 evidence; no original class closure follows."
+  }
 }
