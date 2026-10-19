@@ -7,7 +7,7 @@ import type { SourceIntakeStore, StagedSourceObservation } from './intake.ts';
 import { conversionChanged, mappingUnverified, sourceNotFound, supportUnavailable,
   type RetainedConversionRequest, type RetainedRecordBinding } from './field-support-contract.ts';
 import { canonicalDigest, SOURCE_NORMALIZATION, sourceId, sourceIri,
-  verifyRetainedRecord } from './retained-record-normalization.ts';
+  verifyRetainedRecord, verifyRetainedEvidence } from './retained-record-normalization.ts';
 
 export interface RetainedConversion {
   profile: 'source-retained-record-conversion-v1'; state: 'staged'; conversion: string;
@@ -22,7 +22,7 @@ interface RetainedRow {
   id: string; conversion_id: string; principal_id: string; record_id: string;
   request: RetainedConversionRequest; request_digest: string; normalization_revision: string;
   normalization_rule: string; created_at: Date; field_inventory: RetainedInventory[];
-  projection?: { profile: string; recordDigest: string; inventoryDigest?: string };
+  projection?: { profile: string; recordDigest: string; inventoryDigest?: string; fieldPlan?: DatasetFieldPlan; fieldPlanDigest?: string };
 }
 export interface RetainedFieldCustody {
   request: RetainedConversionRequest; observations: StagedSourceObservation[];
@@ -40,8 +40,9 @@ export async function retainedFieldPlan(request: RetainedConversionRequest): Pro
     intakes: intakes.map(({ index: _index, ...part }) => part) },
     { releaseCorrespondence: !request.mappingRevision.endsWith('-retained-map-v1') });
 }
-export async function retainedInventory(request: RetainedConversionRequest): Promise<RetainedInventory[]> {
-  return (await retainedFieldPlan(request)).fields.flatMap(field => field.evidence.map(evidence => ({
+export async function retainedInventory(request: RetainedConversionRequest,
+  plan?: DatasetFieldPlan): Promise<RetainedInventory[]> {
+  return (plan ?? await retainedFieldPlan(request)).fields.flatMap(field => field.evidence.map(evidence => ({
     grain: request.retained.identity.namespace,
     field: evidence.path.slice(1), pointer: evidence.path,
     disposition: field.disposition, reason: field.reason, role: field.role,
@@ -97,7 +98,8 @@ export class SourceRetainedRecordStore {
       [request.mappingRevision, request.retained.identity.provider, request.retained.identity.namespace])).rows[0];
     if (registered?.normalization_revision !== verified.normalizationRevision) return mappingUnverified();
     const requestDigest = canonicalDigest({ domain: 'source-retained-record-conversion-v1', principalId, request });
-    const fieldInventory = await retainedInventory(request);
+    const fieldPlan = await retainedFieldPlan(request);
+    const fieldInventory = await retainedInventory(request,fieldPlan);
     const borrowed = contentSessionClient(this.pool), client = borrowed ?? await this.pool.connect();
     try {
       await client.query('BEGIN');
@@ -116,7 +118,7 @@ export class SourceRetainedRecordStore {
         VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (observation_id,mapping_revision) DO NOTHING RETURNING id`,
       [Bun.randomUUIDv7(), observationId, principalId, request.mappingRevision, request.retained.payload.byteDigest,
         JSON.stringify({ profile: 'source-retained-record-projection-v1', recordDigest: request.retained.recordDigest,
-          inventoryDigest: canonicalDigest(fieldInventory) }),
+          inventoryDigest: canonicalDigest(fieldInventory),fieldPlan,fieldPlanDigest: canonicalDigest(fieldPlan) }),
         JSON.stringify(fieldInventory)]);
       const conversion = (await client.query<{ id: string }>(`SELECT id FROM source.conversion
         WHERE observation_id=$1 AND mapping_revision=$2 AND principal_id=$3`,
@@ -157,6 +159,7 @@ export class SourceRetainedRecordStore {
 
   async evidence(principalId: string, conversionId: string): Promise<{
     conversion: RetainedConversion; request: RetainedConversionRequest;
+    fieldPlan: DatasetFieldPlan | null;
     record: DatasetRecord; payload: Record<string, unknown>; rule: string; observations: StagedSourceObservation[];
   } | null> {
     const id = sourceId(conversionId);
@@ -168,7 +171,7 @@ export class SourceRetainedRecordStore {
     if (row.normalization_revision !== SOURCE_NORMALIZATION
       || row.request_digest !== canonicalDigest({ domain: 'source-retained-record-conversion-v1', principalId, request: row.request })) return supportUnavailable();
     const observations = await this.observations(principalId, row.request);
-    const verified = verifyRetainedRecord(row.request, observations);
+    const verified = verifyRetainedEvidence(row.request, observations,row.normalization_rule);
     // The immutable inventory is the projection made at conversion time, not a
     // fresh projection through today's producer. New native admissions verify
     // their exact field/value separately; a mapper update cannot rewrite replay.
@@ -177,6 +180,9 @@ export class SourceRetainedRecordStore {
       || row.projection.recordDigest !== row.request.retained.recordDigest
       || (row.projection.inventoryDigest !== undefined
         && row.projection.inventoryDigest !== canonicalDigest(row.field_inventory))) return supportUnavailable();
-    return { conversion: result(row), request: row.request, ...verified, observations };
+    const fieldPlan = row.projection.fieldPlan ?? null;
+    if (fieldPlan && (row.projection.fieldPlanDigest !== canonicalDigest(fieldPlan)
+      || fieldPlan.source.recordDigest !== row.request.retained.recordDigest)) return supportUnavailable();
+    return { conversion: result(row), request: row.request, ...verified, observations,fieldPlan };
   }
 }

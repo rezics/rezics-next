@@ -1,3 +1,4 @@
+import { convertProviderRecord, ProviderConversionError } from '../../../../../packages/conversion/src/index.ts';
 import { createHash } from 'node:crypto';
 import { canonicalJson } from '../../../../../scripts/lib/canonical-json.ts';
 import type { DatasetRecord } from '../../../../../scripts/datasets/types.ts';
@@ -80,36 +81,19 @@ export function reconstructRetainedPayload(input: RetainedRecordInput,
   return { bytes, value };
 }
 
-/** The bare JSON formats have explicit normalization rules. Enriched archive data
- * absent from a retained API response cannot be supplied by the caller's record. */
+/** Compatibility boundary: Source owns refusal semantics; the external library
+ * owns only the existing pure provider transformation. */
 function normalizedBareRecord(identity: RetainedRecordInput['identity'], data: Record<string, unknown>): DatasetRecord {
-  const { provider, namespace: kind, externalId } = identity;
-  if (String(data.id) !== externalId) return conversionChanged('record');
-  if (provider === 'musicbrainz') {
-    const text = rowObject(data['text-representation']);
-    return { key: identity.key, provider, kind, externalId,
-      title: typeof data.title === 'string' ? data.title : typeof data.name === 'string' ? data.name : `${kind} ${externalId}`,
-      language: typeof text?.language === 'string' ? text.language : 'und',
-      sourceUrl: `https://musicbrainz.org/${kind}/${externalId}`, data,
-      native: ['release-group', 'recording', 'work'].includes(kind) ? 'work' : kind === 'release' ? 'release'
-        : kind === 'artist' ? data.type === 'Person' ? 'person' : 'organization' : 'source-only',
-      ...(['release-group', 'recording'].includes(kind) ? { semanticTypes: [kind === 'release-group'
-        ? 'https://schema.org/MusicAlbum' : 'https://schema.org/MusicRecording'] } : {}) };
+  try { return convertProviderRecord(identity,data); }
+  catch (error) {
+    if (error instanceof ProviderConversionError) {
+      return error.basis === 'record' ? conversionChanged('record') : mappingUnverified();
+    }
+    throw error;
   }
-  if (provider === 'vndb') {
-    const native = ({ vn: 'work', release: 'release', character: 'character', staff: 'person',
-      producer: 'organization', tag: 'concept', trait: 'concept' } as const)[kind as 'vn'];
-    if (!native) return mappingUnverified();
-    return { key: identity.key, provider, kind, externalId, title: String(data.name ?? externalId),
-      language: String(data.olang ?? data.lang ?? 'und'), sourceUrl: `https://vndb.org/${externalId}`,
-      data, native, ...(kind === 'vn' ? { semanticTypes: ['https://schema.org/VideoGame'] } : {}) };
-  }
-  // Bangumi archive enrichment has additional fields and omission rules. Only
-  // the exact retained DatasetRecord envelope can certify that combined record.
-  return mappingUnverified();
 }
 
-export function verifyRetainedRecord(request: RetainedConversionRequest,
+function retainedBasis(request: RetainedConversionRequest,
   observations: readonly StagedSourceObservation[]) {
   const input = request.retained, identity = input.identity;
   if (request.profile !== 'source-retained-record-conversion-v1'
@@ -124,6 +108,12 @@ export function verifyRetainedRecord(request: RetainedConversionRequest,
     || !SHA256.test(input.payload.byteDigest) || !Number.isSafeInteger(input.payload.byteLength)
     || input.payload.byteLength < 1) return supportUnavailable();
   const payload = reconstructRetainedPayload(input, observations);
+  return { input, identity, payload };
+}
+
+export function verifyRetainedRecord(request: RetainedConversionRequest,
+  observations: readonly StagedSourceObservation[]) {
+  const { input,identity,payload } = retainedBasis(request,observations);
   let record: DatasetRecord;
   let rule: string;
   if (payload.value.format === 'rezics-dataset-record-v1') {
@@ -136,4 +126,20 @@ export function verifyRetainedRecord(request: RetainedConversionRequest,
   }
   if (!record || canonicalJson(record) !== canonicalJson(input.record)) return conversionChanged('record');
   return { record, payload: payload.value, normalizationRevision: SOURCE_NORMALIZATION, rule };
+}
+
+/** Validate current custody against an already accepted explicit conversion.
+ * The accepted rule comes from immutable Source storage, never this request.
+ * Provider transformations belong only to the explicit conversion command. */
+export function verifyRetainedEvidence(request: RetainedConversionRequest,
+  observations: readonly StagedSourceObservation[], acceptedRule: string) {
+  const { input,identity,payload } = retainedBasis(request,observations);
+  if (acceptedRule === 'dataset-record-envelope-v1') {
+    if (payload.value.format !== 'rezics-dataset-record-v1'
+      || payload.value.snapshot !== input.snapshot.id || payload.value.digest !== input.snapshot.digest
+      || canonicalJson(payload.value.record) !== canonicalJson(input.record)) return conversionChanged('record');
+  } else if (acceptedRule === `${identity.provider}-bare-record-v1`) {
+    if (canonicalJson(payload.value) !== canonicalJson(input.record.data)) return conversionChanged('record');
+  } else return mappingUnverified();
+  return { record: input.record,payload: payload.value,normalizationRevision: SOURCE_NORMALIZATION,rule: acceptedRule };
 }

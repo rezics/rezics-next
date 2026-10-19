@@ -472,3 +472,44 @@ test('Source evidence windows preserve the evidence owner projection, hidden pos
     .rejects.toBeInstanceOf(WorkReadMoved);
   await expect(hiddenSession.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
 });
+
+
+test('source synopsis admission consumes the saved explicit conversion, preserving provenance, text and reuse checks', async () => {
+  const principalId = randomUUID(), original = record('vndb');
+  original.data.description = '  First line\r\nSecond line\t' + 'long'.repeat(3000);
+  original.data.description_language = '';
+  const { evidence,binding,conversions } = await retain(principalId,original,true);
+  expect(evidence.fieldPlan).not.toBeNull();
+  const saved = (await pool.query<{ projection: { fieldPlan: unknown; fieldPlanDigest: string } }>(
+    'SELECT projection FROM source.conversion WHERE id=$1',[binding.conversion.slice(-36)])).rows[0]!;
+  expect(saved.projection.fieldPlan).toEqual(evidence.fieldPlan);
+  expect(saved.projection.fieldPlanDigest).toBe(canonicalDigest(evidence.fieldPlan));
+  await expect(pool.query('UPDATE source.conversion SET projection=$1 WHERE id=$2',
+    ['{}',binding.conversion.slice(-36)])).rejects.toMatchObject({ code: '23514' });
+  let permitted = true, checks = 0;
+  const store = new SourceRetainedFieldSupportStore(pool,{} as WorkActivationEnvironment,
+    {} as Pick<AccessAdmissionRegistry,'withOwnerAuthority'>,conversions,{
+      authorizeReuse: async (_principal,_actor,custody) => {
+        checks++; expect(custody.sourceRecord).toBe(binding.sourceRecord);
+        expect(custody.observations).toHaveLength(2);
+        if (!permitted) throw new SourceFieldProblem(403,'rights_denied','Reuse denied');
+      },
+    });
+  const intent = { profile: 'work-editorial-field-control-v1' as const,work: sourceIri(randomUUID()),
+    field: 'synopsis' as const,expectedWorkHead: sourceIri(randomUUID()),
+    basis: { contentHead: null,head: null,epoch: '0',protection: null },value: original.data.description as string,
+    language: { state: 'value' as const,value: '' },origin: 'source' as const,
+    source: { record: binding.sourceRecord,observation: binding.intakes[0]!.observation,
+      conversion: binding.conversion,mapping: binding.mappingRevision },actingSubject: sourceIri(randomUUID()) };
+  const principal = { token: 'controlled-account-port' } as unknown as Parameters<typeof store.admitSynopsis>[0];
+  await store.admitSynopsis(principal,principalId,intent);
+  expect(checks).toBe(1);
+  await expect(store.admitSynopsis(principal,principalId,{ ...intent,value: intent.value.trim() }))
+    .rejects.toMatchObject({ status: 409,basis: 'native-value' });
+  await expect(store.admitSynopsis(principal,principalId,{ ...intent,language: { state: 'omitted' } }))
+    .rejects.toMatchObject({ status: 409,basis: 'native-value' });
+  permitted = false;
+  await expect(store.admitSynopsis(principal,principalId,{ ...intent,value: 'different' }))
+    .rejects.toMatchObject({ status: 403,code: 'rights_denied' });
+  expect((await conversions.evidence(principalId,binding.conversion))!.fieldPlan).toEqual(evidence.fieldPlan);
+});

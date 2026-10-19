@@ -10,7 +10,6 @@ import type { SourceRetainedRecordStore, RetainedFieldCustody } from './retained
 import type { FieldSupportResult } from './withdrawal.ts';
 import type { NativeFieldControlIntent } from './field-control-native.ts';
 import { suppliedLanguage } from './field-control-language.ts';
-import { retainedFieldPlan } from './retained-record.ts';
 import { currentWorkReadSession, WorkReadMoved, type WorkReadSession } from '../work/read-session.ts';
 import type { PublicRetainedFieldEvidence, SourceRetainedRecordEvidenceOwner } from './retained-evidence.ts';
 import { coordinateInvalid, sourceNotFound, supportChanged, supportUnavailable,
@@ -133,7 +132,8 @@ export class SourceRetainedFieldSupportStore {
     if (source.mapping !== binding.mappingRevision || source.observation !== binding.intakes[0]?.observation) {
       return supportChanged('conversion');
     }
-    const plan = await retainedFieldPlan(evidence.request);
+    const plan = evidence.fieldPlan;
+    if (!plan) return supportUnavailable();
     const candidate = plan.fields.find(field => field.role === 'description' && field.disposition === 'candidate'
       && field.native?.owner === 'work-editorial'
       && (field.native.property?.value.kind === 'string' || field.native.property?.value.kind === 'language-string')

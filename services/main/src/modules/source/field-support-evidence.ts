@@ -1,10 +1,10 @@
 import { canonicalJson } from '../../../../../scripts/lib/canonical-json.ts';
 import type { DatasetNativeField } from '../../../../../scripts/datasets/native/fields.ts';
-import { retainedFieldPlan, type SourceRetainedRecordStore } from './retained-record.ts';
+import type { SourceRetainedRecordStore } from './retained-record.ts';
 import { canonicalDigest } from './retained-record-normalization.ts';
 import { suppliedLanguage } from './field-control-language.ts';
 import { coordinateInvalid, mappingUnverified, supportChanged, type RetainedSupportRequest,
-  type RetainedFieldCoordinate, type RetainedSupportAdmission } from './field-support-contract.ts';
+  supportUnavailable, type RetainedFieldCoordinate, type RetainedSupportAdmission } from './field-support-contract.ts';
 
 export type RetainedEvidence = NonNullable<Awaited<ReturnType<SourceRetainedRecordStore['evidence']>>>;
 export interface VerifiedRetainedField {
@@ -77,7 +77,8 @@ export async function verifyRetainedField(input: RetainedSupportRequest,
     && (input.native.owner === 'release' || input.native.owner === 'realization') ? input.native.component : null;
   if (input.sourceOccurrence !== null) return coordinateInvalid();
   if (input.occurrence !== component) return supportChanged('native-target');
-  const plan = await retainedFieldPlan(evidence.request);
+  const plan = evidence.fieldPlan;
+  if (!plan) return supportUnavailable();
   const candidates = plan.fields.filter(candidate => candidate.evidence.some(item =>
     item.path === field.pointer && item.ordinal === field.ordinal
     && Object.hasOwn(item, 'language') === Object.hasOwn(field, 'language')

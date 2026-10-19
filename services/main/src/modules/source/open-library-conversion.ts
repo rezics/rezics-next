@@ -192,6 +192,18 @@ function stable(value: unknown, depth = 0): string {
   return JSON.stringify(value) ?? 'null';
 }
 
+/** An immutable explicit conversion already binds its output to these bytes.
+ * Native consumers revalidate custody/integrity, never rerun its converter. */
+function verifyConversionBytes(observation: StagedSourceObservation, digest: string): void {
+  if (observation.retention !== 'retained' || !observation.rawBytesBase64
+    || observation.byteDigest !== digest) throw new SourceConversionUnavailable('source conversion lost retained bytes');
+  const bytes = Buffer.from(observation.rawBytesBase64,'base64');
+  if (bytes.toString('base64') !== observation.rawBytesBase64 || bytes.length !== observation.byteLength
+    || createHash('sha256').update(bytes).digest('hex') !== digest) {
+    throw new SourceConversionUnavailable('source conversion differs from retained observation');
+  }
+}
+
 export class OpenLibraryConversionStore {
   constructor(private readonly pool: Pool, private readonly intake: SourceIntakeStore) {}
 
@@ -216,11 +228,11 @@ export class OpenLibraryConversionStore {
     }
     const observation = await this.intake.read(principalId, row.observation_id);
     if (!observation) throw new SourceConversionUnavailable('source conversion lost its observation');
-    const projected = await this.projectMapped(observation, row.mapping_revision);
-    if (row.source_digest !== observation.byteDigest || stable(row.projection) !== stable(projected.values)
-      || stable(row.field_inventory) !== stable(projected.inventory)) {
-      throw new SourceConversionUnavailable('source conversion differs from retained observation');
-    }
+    verifyConversionBytes(observation,row.source_digest);
+    const projected = await this.validateMapped(observation,row.mapping_revision,{
+      values: row.projection as MappedSourceValues,
+      inventory: row.field_inventory as MappedSourceConversion['fieldInventory'],
+    });
     const conversion: MappedSourceConversion = { profile: 'source-mapped-conversion-v1', state: 'staged',
       conversion: `https://rezics.com/id/${row.id}`, observation: observation.observation,
       mappingRevision: row.mapping_revision, sourceDigest: row.source_digest,
@@ -229,7 +241,11 @@ export class OpenLibraryConversionStore {
   }
 
   private async projectMapped(observation: StagedSourceObservation, mapping: string) {
-    const projected = projectRegisteredSourceMapping(observation, mapping);
+    return this.validateMapped(observation,mapping,projectRegisteredSourceMapping(observation,mapping));
+  }
+
+  private async validateMapped(observation: StagedSourceObservation, mapping: string,
+    projected: { values: MappedSourceValues; inventory: MappedSourceConversion['fieldInventory'] }) {
     const declarations = (await contentConnection(this.pool).query<{ provider: string; namespace: string;
       grain: string; field_key: string; disposition: string; native_target: string | null }>(`
       SELECT m.provider,m.namespace,d.grain,d.field_key,d.disposition,d.native_target
@@ -339,12 +355,13 @@ export class OpenLibraryConversionStore {
     const observation = await this.intake.read(principalId,
       conversion.observation.split('/').at(-1)!);
     if (!observation) throw new SourceConversionUnavailable('source conversion lost its observation');
-    const projected = projectOpenLibraryWork(observation);
-    if (conversion.sourceDigest !== projected.sourceDigest
-      || stable(conversion.projection) !== stable(projected.projection)
-      || stable(conversion.fieldInventory) !== stable(projected.fieldInventory)) {
-      throw new SourceConversionUnavailable('source conversion differs from retained observation');
-    }
+    verifyConversionBytes(observation,conversion.sourceDigest);
+    if (conversion.mappingRevision !== OPEN_LIBRARY_WORK_MAPPING
+      || observation.profile !== 'source-acquisition-v1'
+      || observation.capture?.profile !== 'open-library-work-acquisition-v1'
+      || observation.provider !== 'open-library' || observation.namespace !== 'work'
+      || observation.coverage.scope !== 'open-library-work-response-v1'
+      || !observation.coverage.complete) throw new SourceConversionUnavailable('source conversion basis differs');
     return { conversion, observation, credits: conversion.projection.authorRefs?.map(ref => ({ ...ref,
       provider: 'open-library', namespace: 'author', role: 'author' as const })) ?? null };
   }
