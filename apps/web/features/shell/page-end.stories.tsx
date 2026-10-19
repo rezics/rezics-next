@@ -81,6 +81,7 @@ async function verifyPageEnd({ canvasElement }: { canvasElement: HTMLElement }) 
   await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
   const bottomNavigation = canvasElement.querySelector<HTMLElement>('nav.fixed');
   if (bottomNavigation && getComputedStyle(bottomNavigation).display !== 'none') {
+    await expect(document.documentElement.scrollHeight).toBeGreaterThan(innerHeight);
     await expect(footer.getBoundingClientRect().bottom).toBeLessThanOrEqual(bottomNavigation.getBoundingClientRect().top);
   }
   await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(innerWidth);
@@ -88,9 +89,15 @@ async function verifyPageEnd({ canvasElement }: { canvasElement: HTMLElement }) 
 
 export const DesktopLight: Story = { play: verifyPageEnd };
 export const DesktopDark: Story = { args: { theme: 'dark' }, globals: { theme: 'dark' }, play: verifyPageEnd };
-export const PhoneLight: Story = { globals: { viewport: { value: 'phone' } }, play: verifyPageEnd };
+// A scrollable body makes clearance depend on padding after the footer, rather than
+// unused viewport space beneath a short page.
+const scrollingBody = <div className="min-h-[110dvh]">{meta.args.children}</div>;
+export const PhoneLight: Story = {
+  args: { children: scrollingBody }, globals: { viewport: { value: 'phone' } }, play: verifyPageEnd,
+};
 export const PhoneDark: Story = {
-  args: { theme: 'dark' }, globals: { theme: 'dark', viewport: { value: 'phone' } }, play: verifyPageEnd,
+  args: { theme: 'dark', children: scrollingBody },
+  globals: { theme: 'dark', viewport: { value: 'phone' } }, play: verifyPageEnd,
 };
 
 export const WithoutPageEnd: Story = {
