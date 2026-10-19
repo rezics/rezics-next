@@ -27,10 +27,9 @@ function rational(value: { numerator: number; denominator: number }): ExactRatio
 }
 
 /**
- * Exact scaling of numeric amounts. A count such as an egg scales even when the
- * line was marked not-scalable. Salt, spices and leavening scale through a
- * doubling or a halving; a larger change keeps the written amount and says so.
- * The kitchen line is display only — `amount` stays the exact rational.
+ * The authored qualifier governs exact numeric scaling. Ingredient names and
+ * recognized units cannot override it. Kitchen advice and rounded display text
+ * do not change the exact amount or the retained source text.
  */
 export function scaleIngredients(records: readonly OccurrenceRecord[], factor: ExactRational): ScaledIngredient[] {
   const checkedFactor = exactRational(factor.numerator, factor.denominator);
@@ -44,15 +43,13 @@ export function scaleIngredients(records: readonly OccurrenceRecord[], factor: E
     const unit = recognizeUnit(unitText);
     const name = ingredientName(line);
     const judgment = judgmentOf(name ?? line.originalText.value);
-    const countOverride = line.scaling === 'not-scalable' && unit?.kind === 'count'
-      && line.parseStatus !== 'unparsed' && sourceAmount !== undefined;
-    const holdJudgment = Boolean(judgment) && line.scaling === 'linear' && line.parseStatus !== 'unparsed'
+    const showJudgment = Boolean(judgment) && line.scaling === 'linear' && line.parseStatus !== 'unparsed'
       && sourceAmount !== undefined && largeRatio(checkedFactor);
     const reason = line.parseStatus === 'unparsed' ? 'unparsed' as const
       : line.scaling === 'non-linear' ? 'non-linear' as const
-        : line.scaling === 'not-scalable' && !countOverride ? 'not-scalable' as const
+        : line.scaling === 'not-scalable' ? 'not-scalable' as const
           : undefined;
-    const apply = !reason && !holdJudgment && sourceAmount !== undefined;
+    const apply = !reason && sourceAmount !== undefined;
     const amount = sourceAmount ? (apply ? scaleExact(sourceAmount, checkedFactor) : sourceAmount) : undefined;
     const amountUpper = sourceUpper ? (apply ? scaleExact(sourceUpper, checkedFactor) : sourceUpper) : undefined;
     return [{ occurrence: record.occurrence, originalText: line.originalText.value,
@@ -65,7 +62,7 @@ export function scaleIngredients(records: readonly OccurrenceRecord[], factor: E
       ...presentQuantity({ original: line.originalText.value, name, ...(unitText ? { unitText } : {}),
         ...(unit ? { unit } : {}), ...(amount ? { amount } : {}), ...(amountUpper ? { amountUpper } : {}),
         changed: apply && checkedFactor.numerator !== checkedFactor.denominator,
-        ...(holdJudgment && judgment ? { judgment } : {}) }) }];
+        ...(showJudgment && judgment ? { judgment } : {}) }) }];
   });
 }
 

@@ -41,26 +41,49 @@ test('thirds, halves and quarters use kitchen fractions', () => {
     .toBe('2 ¼ cups flour');
 });
 
-test('a count marked not-scalable still scales and pluralizes', () => {
+test('a recognized count cannot override an authored not-scalable quantity', () => {
   const [scaled] = scaleIngredients([line('1 egg', 1, 1, 'egg', { scaling: 'not-scalable' })],
     { numerator: 2n, denominator: 1n });
-  expect(scaled).toMatchObject({ line: '2 eggs', hint: '1 egg', scaled: true, amount: { numerator: 2n, denominator: 1n } });
-  expect(scaled?.reason).toBeUndefined();
+  expect(scaled).toMatchObject({ line: '1 egg', originalText: '1 egg', scaled: false,
+    amount: { numerator: 1n, denominator: 1n }, reason: 'not-scalable' });
+  expect(scaled?.hint).toBeUndefined();
   expect(scaled?.alternateLine).toBeUndefined();
 });
 
-test('salt and leavening scale through a doubling and hold beyond it', () => {
+test('kitchen advice does not override exact authored linear amounts', () => {
   const doubled = scaleIngredients([line('1/4 teaspoon salt', 1, 4, 'teaspoon')], { numerator: 2n, denominator: 1n })[0];
   expect(doubled).toMatchObject({ line: '½ teaspoon salt', scaled: true, amount: { numerator: 1n, denominator: 2n } });
   expect(doubled?.judgment).toBeUndefined();
   const quadrupled = scaleIngredients([line('1/4 teaspoon salt', 1, 4, 'teaspoon')],
     { numerator: 4n, denominator: 1n })[0];
-  expect(quadrupled).toMatchObject({ line: '¼ teaspoon salt', scaled: false, judgment: 'seasoning',
-    amount: { numerator: 1n, denominator: 4n } });
-  expect(quadrupled?.hint).toBeUndefined();
+  expect(quadrupled).toMatchObject({ line: '1 teaspoon salt', scaled: true, judgment: 'seasoning',
+    amount: { numerator: 1n, denominator: 1n }, originalText: '1/4 teaspoon salt', hint: '1/4 teaspoon salt' });
   const powder = scaleIngredients([line('2 teaspoons baking powder', 2, 1, 'teaspoons')],
     { numerator: 4n, denominator: 1n })[0];
-  expect(powder).toMatchObject({ line: '2 teaspoons baking powder', judgment: 'leavening', scaled: false });
+  expect(powder).toMatchObject({ line: '8 teaspoons baking powder', judgment: 'leavening', scaled: true,
+    amount: { numerator: 8n, denominator: 1n }, hint: '2 teaspoons baking powder' });
+});
+
+test('numeric ranges retain the exact source policy without changing repeated ingredient identities', () => {
+  for (const scaling of ['linear', 'non-linear', 'not-scalable'] as const) {
+    for (const parseStatus of ['parsed', 'partial', 'unparsed'] as const) {
+      const first = line('1/3–2/3 egg', 1, 3, 'egg', { scaling, parseStatus,
+        amountUpper: { numerator: 2, denominator: 3 } });
+      const second = { ...structuredClone(first), occurrence: 'https://rezics.com/id/00000000-0000-4000-8000-000000000004' };
+      const original = structuredClone([first, second]);
+      const scaled = scaleIngredients([first, second], { numerator: 3n, denominator: 4n });
+      const applies = scaling === 'linear' && parseStatus !== 'unparsed';
+      expect(scaled.map(item => item.occurrence)).toEqual([first.occurrence, second.occurrence]);
+      for (const item of scaled) {
+        expect(item.amount).toEqual(applies ? { numerator: 1n, denominator: 4n } : { numerator: 1n, denominator: 3n });
+        expect(item.amountUpper).toEqual(applies ? { numerator: 1n, denominator: 2n } : { numerator: 2n, denominator: 3n });
+        expect(item.scaled).toBe(applies);
+        expect(item.reason).toBe(parseStatus === 'unparsed' ? 'unparsed' : scaling === 'linear' ? undefined : scaling);
+        expect(item.originalText).toBe('1/3–2/3 egg');
+      }
+      expect([first, second]).toEqual(original);
+    }
+  }
 });
 
 test('grams offer ounces and an unknown unit stays as written', () => {

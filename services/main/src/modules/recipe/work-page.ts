@@ -10,7 +10,7 @@ import { CompositionUnavailable, compositionForMainVersion, readCompositionHeade
 import { readCompositionPage, readStructureMeasures, selectWorkCompositionRevision } from '../structure/read.ts';
 import { STRUCTURE_LIMITS, type OccurrenceRecord, type RecipeMeasure } from '../structure/format.ts';
 import { scaleIngredients } from './operations.ts';
-import { exactRational, type ExactRational } from './quantity.ts';
+import { exactRational, InexactQuantity, scaleExact, type ExactRational } from './quantity.ts';
 import { compositionTargetReader } from '../composition/disclosure-read.ts';
 import { structureProfileFor } from '../structure/profiles.ts';
 import { isAdoptedInstruction, readRecipeInstructions } from './instructions.ts';
@@ -209,8 +209,23 @@ export async function readRecipeHierarchyPage(input: {
   pagesRead += walked.pagesRead;
   const next = stack.length > 0 ? encodeCursor({ v: 1, structure: input.structure, revision: input.revision,
     servings: pinnedServings, factor, stack }) : undefined;
+  let ingredients: ReturnType<typeof scaled>;
+  let displayedMeasures: RecipeMeasure[];
+  try {
+    ingredients = scaled(occurrences, factor);
+    // These are repeated observations, not ingredient totals. Keep each source
+    // measure and its qualification; only whole-recipe nutrients follow servings.
+    displayedMeasures = measures.map(measure => {
+      if (measure.kind !== 'nutrient' || measure.basis !== 'whole-recipe') return measure;
+      const value = scaleExact(exactRational(BigInt(measure.value.numerator), BigInt(measure.value.denominator)), factor);
+      return { ...measure, value: { numerator: Number(value.numerator), denominator: Number(value.denominator) } };
+    });
+  } catch (error) {
+    if (error instanceof InexactQuantity) throw new WorkReadLimit('Scaled Recipe quantity exceeds its exact bound');
+    throw error;
+  }
   const result = { profile: 'recipe-work-page-v1' as const, structure: input.structure, revision: input.revision,
-    occurrences, measures, ingredients: scaled(occurrences, factor), ...(next ? { next } : {}),
+    occurrences, measures: displayedMeasures, ingredients, ...(next ? { next } : {}),
     cost: { pages: measureReads + parentReads + emptyReads + dataReads, pagesRead,
       occurrences: occurrences.length } };
   if (Buffer.byteLength(JSON.stringify(result)) > RECIPE_WORK_PAGE_BYTES) {
