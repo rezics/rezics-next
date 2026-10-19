@@ -12,6 +12,42 @@ import { readPublishedStructuredWorkSource, readWorkPublicationParents,
 import { readMetadataHeader, recordedDisplayText, selectedMetadata } from './metadata-read.ts';
 import { selectedPublicationAttribution } from './sourced-structure-publication.ts';
 import { readSerialStatistics } from './summary-serial.ts';
+import type { NavigationOperation } from '../query/navigation-contract.ts';
+
+/** Legacy anchors remain useful discovery names; their operations carry the
+ * actual POST body. Resource operations name the mounted native GET owner. */
+export function workHeaderNavigation(work: string) {
+  const path = `/v1/works/${work.slice(-36)}`;
+  const links = { versions: '/v1/query#work-versions', classifications: `${path}/classifications`,
+    adoptions: '/v1/query#work-adoptions', ratings: `/v1/resources/${work.slice(-36)}/ratings`,
+    history: `${path}/history`, credits: `${path}/credits`, metadata: `${path}/metadata`,
+    editions: `${path}/editions`, releases: `${path}/releases`, realizations: `${path}/realizations` };
+  const navigation = {
+    versions: { kind: 'query', method: 'POST', href: '/v1/query', operationId: 'postV1Query',
+      responseProfile: 'query-v1', request: { profile: 'template-query-v1',
+        query: 'https://rezics.com/query/work-versions', revision: 1, parameters: { roots: [work] }, limit: 20 } },
+    classifications: { kind: 'resource', method: 'GET', href: links.classifications,
+      operationId: 'getV1WorksByIdClassifications', responseProfile: null },
+    adoptions: { kind: 'query', method: 'POST', href: '/v1/query', operationId: 'postV1Query',
+      responseProfile: 'query-v1', request: { profile: 'template-query-v1',
+        query: 'https://rezics.com/query/work-adoptions', revision: 1, parameters: { roots: [work] }, limit: 20 } },
+    ratings: { kind: 'resource', method: 'GET', href: links.ratings,
+      operationId: 'getV1ResourcesByResourceRatings', responseProfile: 'work-rating-read-v1' },
+    history: { kind: 'resource', method: 'GET', href: links.history,
+      operationId: 'getV1WorksByIdHistory', responseProfile: null },
+    credits: { kind: 'resource', method: 'GET', href: links.credits,
+      operationId: 'getV1WorksByIdCredits', responseProfile: 'template-result-v1' },
+    metadata: { kind: 'resource', method: 'GET', href: links.metadata,
+      operationId: 'getV1WorksByIdMetadata', responseProfile: null },
+    editions: { kind: 'resource', method: 'GET', href: links.editions,
+      operationId: 'getV1WorksByIdEditions', responseProfile: null },
+    releases: { kind: 'resource', method: 'GET', href: links.releases,
+      operationId: 'getV1WorksByIdReleases', responseProfile: null },
+    realizations: { kind: 'resource', method: 'GET', href: links.realizations,
+      operationId: 'getV1WorksByIdRealizations', responseProfile: null },
+  } satisfies Record<keyof typeof links, NavigationOperation>;
+  return { links, navigation };
+}
 
 export type WorkCard = Static<typeof workCard>;
 export interface WorkBasis { card: Omit<WorkCard, 'chapterCount' | 'wordCount' | 'lastUpdatedAt'>;
@@ -219,7 +255,6 @@ export async function readWorkHeader(session: WorkReadSession, work: string) {
       throw error;
     }
   }
-  const path = `/v1/works/${work.slice(-36)}`;
   const attribution = await selectedPublicationAttribution(session, basis.structuredPublication);
   return { profile: 'work-read-v1' as const, ...basis.card,
     chapterCount: stats?.chapterCount ?? null, wordCount: stats?.wordCount ?? null,
@@ -238,7 +273,5 @@ export async function readWorkHeader(session: WorkReadSession, work: string) {
     mainVersionRevision: basis.mainRevision, mainVersionLabel: selected.mainVersionLabel,
     selectedLanguage: basis.selectedLanguage, sourcePosition: { ...session.position,
       ...(session.options.localBasis ? { dependencyToken: basis.dependencyToken } : {}) },
-    links: { versions: '/v1/query#work-versions', classifications: `${path}/classifications`,
-      adoptions: '/v1/query#work-adoptions', ratings: `${path}/ratings`, history: `${path}/history`, credits: `${path}/credits`,
-      metadata: `${path}/metadata`, editions: `${path}/editions` } };
+    ...workHeaderNavigation(work) };
 }
