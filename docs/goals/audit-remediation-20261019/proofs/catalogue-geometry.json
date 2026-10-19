@@ -1,0 +1,1747 @@
+{
+  "format": "catalogue-geometry-proof-v1",
+  "worker": "G-2832",
+  "goal": "audit-remediation-20261019",
+  "date": "2026-10-19",
+  "result": "partial",
+  "acceptance": "Do not close all three findings or claim real catalogue/persona proof. Shared catalogue fixtures pass geometry observations; Zone compound breakpoint fails an actual independent assertion; live Web cannot start.",
+  "pins": {
+    "renderedSource": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+    "renderedBranchLineage": "wave/audit-20261019",
+    "reportBranch": "goal/g-2832",
+    "reportBase": "42f8b873b4608b661e0b4153f2340c5c0e28cc07",
+    "authoredCommits": [
+      "4fb0b1279b7fb7de0c31894d6636347549803d0a",
+      "336f90d39af0ed0ab8a0ada3b5d2727d14e58b40"
+    ],
+    "sourceCleanDuringRendering": true,
+    "sourceProofSeparateFromAdministrativeChecks": true,
+    "modelRequested": "codex-1 / gpt-6.1-sol / xhigh",
+    "fallbackOrNestedAgentsUsed": false,
+    "sourceFilePins": "source-pins.json in private bundle"
+  },
+  "independentSourceReview": {
+    "completeAuthoredCommitsReviewed": true,
+    "files": [
+      {
+        "path": "apps/web/features/catalogue/catalogue-grid.tsx",
+        "gitBlob": "85ab940c06a66b57a6c335ccd5d06ea0122f7cb0",
+        "sha256": "03ac6bdd366c5121183f3fa7486ada19ddeecc7805236d24a83c89788a34a3ec"
+      },
+      {
+        "path": "apps/web/features/catalogue/catalogue-layout.stories.tsx",
+        "gitBlob": "be31b6d816c74264c9b12b68ae5178627706fd87",
+        "sha256": "9231f54cc235c41d798e319022a4b099cf10a98aec1d40d4622993b9c46f227f"
+      },
+      {
+        "path": "apps/web/features/catalogue/catalogue-layout.test.tsx",
+        "gitBlob": "d039ef28e288c9258c80b0ea46c2941dee705844",
+        "sha256": "59e4819c70659c052dbc445249fc5d0a892bf439ea76b306682ba8ef1c22f916"
+      },
+      {
+        "path": "apps/web/features/catalogue/work-shelf.tsx",
+        "gitBlob": "8d09830e9bb38b1b9379df1c2e5f9db05a06aa6c",
+        "sha256": "5abca6627023846bbeac4442f254bb56ede3b3e0e755ae48180354f758eeedfe"
+      },
+      {
+        "path": "apps/web/features/catalogue/work-tile.tsx",
+        "gitBlob": "60303c76df069b775bfbb12305488dc2c699024a",
+        "sha256": "aa5a55248e100e24061b41c7aafa9093a082239758146d1e59041b641aae84cd"
+      },
+      {
+        "path": "apps/web/features/discover/resource-card.tsx",
+        "gitBlob": "baa0220bc6d7a88646a03495bfc6b5115e1af4a4",
+        "sha256": "86b832efb551aa9defd639344d29cc0992b39e2bb8494ffdbe14f66e9acc7298"
+      },
+      {
+        "path": "apps/web/features/discover/resource-list.tsx",
+        "gitBlob": "81749c80312e47fb29f7342d0f65a3d21ce071c2",
+        "sha256": "2b3f6dc1c76a18d664b28d287a6acb4064decfe5076e388ff4c7644df16b5696"
+      },
+      {
+        "path": "apps/web/features/work-page/also-enjoyed-row.tsx",
+        "gitBlob": "edac5c3b1f818901783574c1d42f774020b8bd48",
+        "sha256": "9affbf5e277e92ba9a8ba38fba6930e9eb0990ff89a082881d8eb33ebbfad82d"
+      },
+      {
+        "path": "packages/ui/src/components/work-cover.stories.tsx",
+        "gitBlob": "0195e051e75f51cf53e18b1059b604ce83870b79",
+        "sha256": "7019126666cd609a7ee475ad015f68a3b604d960766caea99167d1824b737bbf"
+      },
+      {
+        "path": "packages/ui/src/components/work-cover.tsx",
+        "gitBlob": "e64eb64b426cace334e0011ef9e7fabeea21b01e",
+        "sha256": "2fc33d7aad15350bc3610e727d0bd1972af7bef7c28d89945e3867426ac3d72a"
+      },
+      {
+        "path": "scripts/static/web-continuations.inventory.json",
+        "gitBlob": "30fdd9547f67686298480661b6dc1ec4fc14dd73",
+        "sha256": "789db2bc30369002618149c93aa74463ff77fc2d4169acb4a9eed2627f97709d"
+      }
+    ],
+    "inputs": [
+      "review/G-2754.md",
+      "review/G-2754-attempt-4.md",
+      "review/execution-reset.md",
+      "review/catalogue-geometry-findings.json"
+    ],
+    "conclusions": [
+      "CatalogueGrid uses available container width and bounded 8rem auto-fill tracks; ordinary server grid precedes ResizeObserver 4px spans including 24px spacing. Sparse row placement preserves DOM order rather than backfilling earlier holes. Height observation and children changes remeasure natural content.",
+      "WorkTile removes the common portrait slot, leaves kind-specific cover ratio and places title just below cover. WorkGrid, WorkShelf and AlsoEnjoyedRow share bounded browse previews, including one-item grids. Preview WorkCover is distinct from detail, compact row and icon roles.",
+      "IdentityCard owner change in discover/resource-card.tsx is included: min-w-0, stacked default, container-dependent horizontal layout from 14rem, break-words labels and heading. Rendered long Latin and existing CJK examples inspected.",
+      "The exact pin includes later resource-card changes for named resource dispatch, optional type label and /e/ routing; this material slice was reviewed. The pin also has subsequent continuation inventory changes; authored change merely updates an existing hash, not guard semantics. No assertion or inventory edit made by this worker.",
+      "ZoneBrowse remains a viewport-count consumer with a separate 15rem facet column at lg and four result tracks at the same breakpoint. max-w-32 does not prevent shrinking below 128 when its track is 88px. This is the remaining source/runtime defect.",
+      "Authored catalogue stories omit headingLevel=2 under their h1. Default h3 titles cause the normal afterEach accessibility assertion to fail in all six story states. Story play geometry completion is not a green story gate."
+    ],
+    "reviewOnly": true,
+    "productSourceFixes": []
+  },
+  "execution": {
+    "recordingPrefix": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --",
+    "cwd": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2832",
+    "qaEntry": "bun scripts/goal/goalctl.ts test",
+    "browser": "Repository scripts/qa/story-browser.ts Playwright provider, headless Chromium, reduced motion; Browser MCP unavailable. Existing stories use the normal Task harness and assertions; private geometry tests use the same Task admission and provider, not Storybook play/axe certification.",
+    "jobs": [
+      {
+        "id": "3f6fbbcb-7bf5-437c-b15b-fb0b35e739b8",
+        "command": "bun scripts/goal/goalctl.ts test apps/web/features/catalogue/catalogue-layout.stories.tsx packages/ui/src/components/work-cover.stories.tsx",
+        "qaId": "20261019t045836-4365c6",
+        "exit": 201,
+        "result": "6 catalogue stories fail in applyAfterEach axe heading-order; all story play assertions completed. All 14 WorkCover stories pass. Job wake class harness does not erase the actual a11y assertion failure.",
+        "log": "jobs/3f6fbbcb-7bf5-437c-b15b-fb0b35e739b8.log"
+      },
+      {
+        "id": "aef83b76-ecfc-4d83-9be2-eaa1221b8609",
+        "command": "bun scripts/goal/goalctl.ts test .temp/catalogue-geometry-G-2832/geometry.test.ts apps/web/features/catalogue/catalogue-layout.test.tsx",
+        "exit": 0,
+        "result": "Only 4 existing catalogue-layout unit tests ran (17 expectations); Bun omitted hidden .temp without leading ./; no browser proof in this run.",
+        "log": "jobs/aef83b76-ecfc-4d83-9be2-eaa1221b8609.log"
+      },
+      {
+        "id": "e651c0bc-1925-4f39-9803-eecbbd028421",
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/catalogue-geometry-G-2832/geometry.test.ts",
+        "exit": 1,
+        "result": "Private wrapper initially omitted named browser file; Task admission refused wide QA before browser outcome. No product result.",
+        "log": "jobs/e651c0bc-1925-4f39-9803-eecbbd028421.log"
+      },
+      {
+        "id": "7cc82bab-adab-4494-87a1-47e64743a98d",
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/catalogue-geometry-G-2832/geometry.test.ts",
+        "exit": 1,
+        "result": "Private configuration module mode rejected top-level await; browser not reached. Corrected private package.json type=module only.",
+        "log": "jobs/7cc82bab-adab-4494-87a1-47e64743a98d.log"
+      },
+      {
+        "id": "ca5809fe-8815-441a-b35d-dbec92762f80",
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/catalogue-geometry-G-2832/geometry.test.ts",
+        "exit": 1,
+        "result": "Native browser: full actual-shell/Works/sidebar matrix captures completed; first test then failed waiting for private data: image rejected by existing safe URL policy. Separate server-HTML/hydrateRoot test passed all 6 widths. This failed test is not a passing whole matrix assertion.",
+        "log": "jobs/ca5809fe-8815-441a-b35d-dbec92762f80.log"
+      },
+      {
+        "id": "140ccd0f-5c44-4e0a-b68c-bf48c2d982f8",
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/catalogue-geometry-G-2832/geometry.test.ts",
+        "selection": "delayed and failed|consumer Zone",
+        "exit": 1,
+        "result": "Native browser: delayed/failed images, pagination, reorder, keyboard, focus/scroll and RTL test passed after using original story-style Blob art. All 26 Zone matrix captures completed; consumer test then failed in private probe on ProfilePage WorkRow (no ul). Not a product assertion. Replaced private profile fixture with actual single-Book ProfileShelfPage consumer and split tests.",
+        "log": "jobs/140ccd0f-5c44-4e0a-b68c-bf48c2d982f8.log"
+      },
+      {
+        "id": "724fb4e7-765b-4f86-a36d-436100689093",
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/catalogue-geometry-G-2832/geometry.test.ts",
+        "selection": "consumer Zone|consumer single-Book",
+        "exit": 1,
+        "result": "Native browser: critical Zone boundary reaches independent geometry assertion and fails (128px to 88px); single-Book profile shelf test passes all 6 widths; 3 completed tests deliberately skipped.",
+        "log": "jobs/724fb4e7-765b-4f86-a36d-436100689093.log"
+      },
+      {
+        "id": "3a4584be-2611-4053-84ce-7f9a4d1858b3",
+        "step": 1,
+        "command": "bun scripts/goal/goalctl.ts test apps/web/features/catalogue/catalogue.stories.tsx apps/web/features/discover/resource-card.stories.tsx apps/web/features/work-page/also-enjoyed.stories.tsx apps/web/features/profile/profile-page.stories.tsx apps/web/features/zones/books-catalogue-browse.stories.tsx -t 'Readers Favorites|Grid$|Community Latin|Community Cjk|Person Cjk|Co Readers|Mixed Reasons|Author$|Shelf$|Populated Visitor|Search Results Visitor'",
+        "qaId": "20261019t051232-471147",
+        "exit": 0,
+        "result": "5 files, 11 selected existing stories passed, 60 skipped. Existing plays and normal accessibility assertions preserved.",
+        "log": "jobs/3a4584be-2611-4053-84ce-7f9a4d1858b3.1.log"
+      },
+      {
+        "id": "3a4584be-2611-4053-84ce-7f9a4d1858b3",
+        "step": 2,
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/catalogue-geometry-G-2832/live-startup.test.ts",
+        "exit": 1,
+        "result": "task web:dev -- --port 32832 exits 201 during RSC initialization: react-dom/server is not supported in React Server Components. No HTTP response; owned process group stopped and port closed.",
+        "log": "jobs/3a4584be-2611-4053-84ce-7f9a4d1858b3.2.log"
+      }
+    ],
+    "warnings": "@storybook/react-dom-shim optimizeDeps resolution and native-config ESM warnings appeared; tests still ran. Actual original failures are axe heading-order, not these warnings.",
+    "reproduction": {
+      "sourceRequirement": "Use a clean isolated checkout at renderedSource, with repository dependencies. Do not run product reproduction on the main-based report branch.",
+      "privateFiles": "Copy the bundled private probe files back to .temp/catalogue-geometry-G-2832/ within that isolated checkout. Preserve original product source and independent story assertions.",
+      "zoneAssertion": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test ./.temp/catalogue-geometry-G-2832/geometry.test.ts",
+      "expectedResult": "Corrected final wrapper selects consumer Zone and consumer single-Book: Zone outcome assertion fails at1024 expanded, profile passes. Other already-completed cases remain available in geometry.spec.tsx; their recorded selections/results are listed above."
+    }
+  },
+  "existingAssertionsReached": {
+    "catalogue-layout.stories.tsx": {
+      "states": [
+        "MixedCards",
+        "Phone",
+        "SmallPhone",
+        "RightToLeft",
+        "ContainerBreakpoints",
+        "PreviewConsumers"
+      ],
+      "playAssertionsCompleted": [
+        "dense same-column gaps 23.5 <= gap < 28.1; containment and visual DOM order",
+        "128px cover width and semantic aspect ratios",
+        "loaded image naturalWidth=900, lazy image, unchanged cover height",
+        "long identity remeasurement",
+        "Show more 12 results; reverse DOM headings; Next results 8 results",
+        "four consecutive keyboard tabs follow DOM links",
+        "all authored simulated available widths selected via existing chooseOption helper, All/Works same Work href and cover width",
+        "single result, WorkGrid, ResourceList, WorkShelf, AlsoEnjoyed bounded Book128x192 and title immediately below cover"
+      ],
+      "wholeStoryGate": "6 failed after plays: applyAfterEach heading-order accessibility assertions"
+    },
+    "work-cover.stories.tsx": {
+      "passed": 14,
+      "includes": [
+        "BrowsePreviews",
+        "BrokenImage"
+      ],
+      "BrowsePreviews": "All kind previews bounded at 128px and respective workCoverRatio. Actual PNG viewed."
+    },
+    "catalogue-layout.test.tsx": {
+      "passed": 4,
+      "expectations": 17,
+      "scope": "Existing server string/cover role/lazy-image tests only, no browser or live-route claim."
+    },
+    "consumerStories": {
+      "passed": 11,
+      "skipped": 60,
+      "states": [
+        "ReadersFavorites",
+        "Grid",
+        "CommunityLatin",
+        "CommunityCjk",
+        "PersonCjk",
+        "CoReaders",
+        "MixedReasons",
+        "Author",
+        "Shelf",
+        "PopulatedVisitor",
+        "SearchResultsVisitor"
+      ],
+      "assertions": "Existing shelves carousel navigation, AlsoEnjoyed page status/keyboard/conditional sections, profile author metadata/follow links/credits/continuation links, recorded Zone result/status/sort/query/cursor links and normal a11y all completed. Plain identity states inherit normal a11y checks; no new play asserted there."
+    }
+  },
+  "renderedMeasurements": {
+    "units": "CSS px; getBoundingClientRect and computed gridTemplateColumns in the live Chromium DOM. Native PNGs retain browser pixels. No screenshot inferred as a measurement.",
+    "requestedWidths": [
+      320,
+      390,
+      768,
+      1024,
+      1440,
+      1920
+    ],
+    "matrixWidths": [
+      320,
+      390,
+      639,
+      640,
+      641,
+      767,
+      768,
+      769,
+      1023,
+      1024,
+      1025,
+      1440,
+      1920
+    ],
+    "actualShellExpanded": [
+      {
+        "viewportWidth": 320,
+        "availableGridWidth": 288,
+        "columns": "128px 128px",
+        "cardWidth": 128,
+        "cardHeight": 300.75,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 390,
+        "availableGridWidth": 358,
+        "columns": "128px 128px",
+        "cardWidth": 128,
+        "cardHeight": 300.75,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 639,
+        "availableGridWidth": 607,
+        "columns": "128px 128px 128px 128px",
+        "cardWidth": 128,
+        "cardHeight": 300.75,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 640,
+        "availableGridWidth": 592,
+        "columns": "128px 128px 128px 128px",
+        "cardWidth": 128,
+        "cardHeight": 300.75,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 641,
+        "availableGridWidth": 593,
+        "columns": "128px 128px 128px 128px",
+        "cardWidth": 128,
+        "cardHeight": 300.75,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 767,
+        "availableGridWidth": 719,
+        "columns": "128px 128px 128px 128px 128px",
+        "cardWidth": 128,
+        "cardHeight": 300.75,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 768,
+        "availableGridWidth": 464,
+        "columns": "128px 128px 128px",
+        "cardWidth": 128,
+        "cardHeight": 300.75,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 769,
+        "availableGridWidth": 465,
+        "columns": "128px 128px 128px",
+        "cardWidth": 128,
+        "cardHeight": 300.75,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 1023,
+        "availableGridWidth": 719,
+        "columns": "128px 128px 128px 128px 128px",
+        "cardWidth": 128,
+        "cardHeight": 300.75,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 1024,
+        "availableGridWidth": 688,
+        "columns": "128px 128px 128px 128px",
+        "cardWidth": 128,
+        "cardHeight": 300.75,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 1025,
+        "availableGridWidth": 689,
+        "columns": "128px 128px 128px 128px",
+        "cardWidth": 128,
+        "cardHeight": 300.75,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 1440,
+        "availableGridWidth": 1072,
+        "columns": "128px 128px 128px 128px 128px 128px 128px",
+        "cardWidth": 128,
+        "cardHeight": 300.75,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 1920,
+        "availableGridWidth": 1072,
+        "columns": "128px 128px 128px 128px 128px 128px 128px",
+        "cardWidth": 128,
+        "cardHeight": 300.75,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      }
+    ],
+    "actualShellCollapsed": [
+      {
+        "viewportWidth": 320,
+        "availableGridWidth": 288,
+        "columns": "128px 128px",
+        "cardWidth": 128,
+        "cardHeight": 300.75,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 390,
+        "availableGridWidth": 358,
+        "columns": "128px 128px",
+        "cardWidth": 128,
+        "cardHeight": 300.75,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 639,
+        "availableGridWidth": 607,
+        "columns": "128px 128px 128px 128px",
+        "cardWidth": 128,
+        "cardHeight": 300.75,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 640,
+        "availableGridWidth": 592,
+        "columns": "128px 128px 128px 128px",
+        "cardWidth": 128,
+        "cardHeight": 300.75,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 641,
+        "availableGridWidth": 593,
+        "columns": "128px 128px 128px 128px",
+        "cardWidth": 128,
+        "cardHeight": 300.75,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 767,
+        "availableGridWidth": 719,
+        "columns": "128px 128px 128px 128px 128px",
+        "cardWidth": 128,
+        "cardHeight": 300.75,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 768,
+        "availableGridWidth": 648,
+        "columns": "128px 128px 128px 128px",
+        "cardWidth": 128,
+        "cardHeight": 300.75,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 769,
+        "availableGridWidth": 649,
+        "columns": "128px 128px 128px 128px",
+        "cardWidth": 128,
+        "cardHeight": 300.75,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 1023,
+        "availableGridWidth": 903,
+        "columns": "128px 128px 128px 128px 128px 128px",
+        "cardWidth": 128,
+        "cardHeight": 300.75,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 1024,
+        "availableGridWidth": 872,
+        "columns": "128px 128px 128px 128px 128px 128px",
+        "cardWidth": 128,
+        "cardHeight": 300.75,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 1025,
+        "availableGridWidth": 873,
+        "columns": "128px 128px 128px 128px 128px 128px",
+        "cardWidth": 128,
+        "cardHeight": 300.75,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 1440,
+        "availableGridWidth": 1072,
+        "columns": "128px 128px 128px 128px 128px 128px 128px",
+        "cardWidth": 128,
+        "cardHeight": 300.75,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 1920,
+        "availableGridWidth": 1072,
+        "columns": "128px 128px 128px 128px 128px 128px 128px",
+        "cardWidth": 128,
+        "cardHeight": 300.75,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      }
+    ],
+    "sampling": "26 mixed captures, 26 Works captures, 14 immediate sidebar-toggle captures. Full matrix completed in a test which later failed private image setup; numeric observations are not reported as a passing whole-test assertion. Existing ContainerBreakpoints play also completed its independent assertions.",
+    "sharedGrid": {
+      "cardAndCoverWidth": 128,
+      "bookCover": [
+        128,
+        192
+      ],
+      "gameCover": [
+        128,
+        72
+      ],
+      "documentCover": [
+        128,
+        170.65625
+      ],
+      "recipeCoverInShelves": [
+        128,
+        128
+      ],
+      "sameColumnGapRange": [
+        24.59375,
+        27.25
+      ],
+      "gapBudget": "24px plus <4px row rounding; no sampled hundreds-of-pixels holes in hydrated shared grid. API/DOM-preserving sparse placement is not unrestricted dense backfill.",
+      "maxPageHorizontalOverflow": 0,
+      "landscapeInternalPortraitSlot": "absent; title follows 72px game cover. Existing PreviewConsumers asserts heading gap <20px.",
+      "allVersusWorks": "same private Work ids, href and 128px cover in each of 26 paired states; this is component fixture evidence, not Search/Discover HTTP journey proof.",
+      "otherConsumers": "Actual shared WorkShelf and AlsoEnjoyedRow in AppShell measured 128px covers at all matrix widths, plus one-result WorkGrid128x192. Horizontal carousel clipping is distinct from stretching."
+    },
+    "identityLabels": {
+      "narrowCardWidth": 128,
+      "normalIdentityHeight": 121.25,
+      "expandedLongIdentityHeight": 236.75,
+      "labelBlockWidth": 94,
+      "labelBlockScrollWidth": 94,
+      "observation": "Long name wraps and card height grows; neighbours repack. Existing Latin and CJK story screenshots also inspected. Inline bdi reports clientWidth=scrollWidth=0, so those fields alone are not overflow proof; heading bounds and PNG were inspected.",
+      "headingBoundsInsideCards": true
+    },
+    "zoneExpanded": [
+      {
+        "viewportWidth": 320,
+        "availableGridWidth": 288,
+        "columns": "132px 132px",
+        "cardWidth": 128,
+        "cardHeight": 296.5,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 390,
+        "availableGridWidth": 358,
+        "columns": "167px 167px",
+        "cardWidth": 128,
+        "cardHeight": 296.5,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 639,
+        "availableGridWidth": 607,
+        "columns": "291.5px 291.5px",
+        "cardWidth": 128,
+        "cardHeight": 296.5,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 640,
+        "availableGridWidth": 592,
+        "columns": "181.328px 181.328px 181.328px",
+        "cardWidth": 128,
+        "cardHeight": 296.5,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 641,
+        "availableGridWidth": 593,
+        "columns": "181.656px 181.672px 181.672px",
+        "cardWidth": 128,
+        "cardHeight": 296.5,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 767,
+        "availableGridWidth": 719,
+        "columns": "223.656px 223.672px 223.672px",
+        "cardWidth": 128,
+        "cardHeight": 296.5,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 768,
+        "availableGridWidth": 464,
+        "columns": "138.656px 138.672px 138.672px",
+        "cardWidth": 128,
+        "cardHeight": 296.5,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 769,
+        "availableGridWidth": 465,
+        "columns": "139px 139px 139px",
+        "cardWidth": 128,
+        "cardHeight": 296.5,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 1023,
+        "availableGridWidth": 719,
+        "columns": "223.656px 223.672px 223.672px",
+        "cardWidth": 128,
+        "cardHeight": 296.5,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 1024,
+        "availableGridWidth": 424,
+        "columns": "88px 88px 88px 88px",
+        "cardWidth": 88,
+        "cardHeight": 257.25,
+        "firstCover": [
+          88,
+          132
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 1025,
+        "availableGridWidth": 425,
+        "columns": "88.25px 88.25px 88.25px 88.25px",
+        "cardWidth": 88.25,
+        "cardHeight": 257.625,
+        "firstCover": [
+          88.25,
+          132.375
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 1440,
+        "availableGridWidth": 808,
+        "columns": "184px 184px 184px 184px",
+        "cardWidth": 128,
+        "cardHeight": 296.5,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 1920,
+        "availableGridWidth": 808,
+        "columns": "184px 184px 184px 184px",
+        "cardWidth": 128,
+        "cardHeight": 296.5,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      }
+    ],
+    "zoneCollapsed": [
+      {
+        "viewportWidth": 320,
+        "availableGridWidth": 288,
+        "columns": "132px 132px",
+        "cardWidth": 128,
+        "cardHeight": 296.5,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 390,
+        "availableGridWidth": 358,
+        "columns": "167px 167px",
+        "cardWidth": 128,
+        "cardHeight": 296.5,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 639,
+        "availableGridWidth": 607,
+        "columns": "291.5px 291.5px",
+        "cardWidth": 128,
+        "cardHeight": 296.5,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 640,
+        "availableGridWidth": 592,
+        "columns": "181.328px 181.328px 181.328px",
+        "cardWidth": 128,
+        "cardHeight": 296.5,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 641,
+        "availableGridWidth": 593,
+        "columns": "181.656px 181.672px 181.672px",
+        "cardWidth": 128,
+        "cardHeight": 296.5,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 767,
+        "availableGridWidth": 719,
+        "columns": "223.656px 223.672px 223.672px",
+        "cardWidth": 128,
+        "cardHeight": 296.5,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 768,
+        "availableGridWidth": 648,
+        "columns": "200px 200px 200px",
+        "cardWidth": 128,
+        "cardHeight": 296.5,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 769,
+        "availableGridWidth": 649,
+        "columns": "200.328px 200.328px 200.328px",
+        "cardWidth": 128,
+        "cardHeight": 296.5,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 1023,
+        "availableGridWidth": 903,
+        "columns": "285px 285px 285px",
+        "cardWidth": 128,
+        "cardHeight": 296.5,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 1024,
+        "availableGridWidth": 608,
+        "columns": "134px 134px 134px 134px",
+        "cardWidth": 128,
+        "cardHeight": 296.5,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 1025,
+        "availableGridWidth": 609,
+        "columns": "134.25px 134.25px 134.25px 134.25px",
+        "cardWidth": 128,
+        "cardHeight": 296.5,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 1440,
+        "availableGridWidth": 808,
+        "columns": "184px 184px 184px 184px",
+        "cardWidth": 128,
+        "cardHeight": 296.5,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      },
+      {
+        "viewportWidth": 1920,
+        "availableGridWidth": 808,
+        "columns": "184px 184px 184px 184px",
+        "cardWidth": 128,
+        "cardHeight": 296.5,
+        "firstCover": [
+          128,
+          192
+        ],
+        "overflow": 0
+      }
+    ],
+    "zoneBoundaryFailure": {
+      "viewportBefore": 1023,
+      "viewportAfter": 1024,
+      "gridWidthBefore": 719,
+      "gridWidthAfter": 424,
+      "tracksBefore": "3 x approximately223.67",
+      "tracksAfter": "4 x88",
+      "bookCoverBefore": [
+        128,
+        192
+      ],
+      "bookCoverAfter": [
+        88,
+        132
+      ],
+      "widthReductionPercent": 31.25,
+      "collapsedRailAt1024": {
+        "gridWidth": 608,
+        "tracks": "4 x134",
+        "cover": [
+          128,
+          192
+        ]
+      },
+      "reproduction": "Mount ZoneFixture: actual AppShell expanded, RealmPageStory site books, officialBrowseModel grid, ZoneBrowse and cardRenderer. Set viewport1023x900 then1024x900. Native test consumer Zone browse critical compound breakpoint retains preview dimensions reaches expect(...128...).toBe(true) and fails.",
+      "source": [
+        "apps/web/features/zones/browse.tsx:125",
+        "apps/web/features/zones/browse.tsx:139"
+      ],
+      "assertionJob": "724fb4e7-765b-4f86-a36d-436100689093",
+      "evidence": [
+        "zone-expanded-1023.json",
+        "zone-expanded-1024.json",
+        "zone-expanded-1025.json",
+        "zone-consumer-summary.json",
+        "images/zone-critical-expanded-1024.png"
+      ]
+    },
+    "singleBookProfileShelf": {
+      "results": [
+        {
+          "viewportWidth": 320,
+          "availableGridWidth": 288,
+          "columns": "128px 128px",
+          "cardWidth": 128,
+          "cardHeight": 250.75,
+          "firstCover": [
+            128,
+            192
+          ],
+          "overflow": 0
+        },
+        {
+          "viewportWidth": 390,
+          "availableGridWidth": 358,
+          "columns": "128px 128px",
+          "cardWidth": 128,
+          "cardHeight": 250.75,
+          "firstCover": [
+            128,
+            192
+          ],
+          "overflow": 0
+        },
+        {
+          "viewportWidth": 768,
+          "availableGridWidth": 464,
+          "columns": "128px 128px 128px",
+          "cardWidth": 128,
+          "cardHeight": 250.75,
+          "firstCover": [
+            128,
+            192
+          ],
+          "overflow": 0
+        },
+        {
+          "viewportWidth": 1024,
+          "availableGridWidth": 688,
+          "columns": "128px 128px 128px 128px",
+          "cardWidth": 128,
+          "cardHeight": 250.75,
+          "firstCover": [
+            128,
+            192
+          ],
+          "overflow": 0
+        },
+        {
+          "viewportWidth": 1440,
+          "availableGridWidth": 1072,
+          "columns": "128px 128px 128px 128px 128px 128px 128px",
+          "cardWidth": 128,
+          "cardHeight": 250.75,
+          "firstCover": [
+            128,
+            192
+          ],
+          "overflow": 0
+        },
+        {
+          "viewportWidth": 1920,
+          "availableGridWidth": 1072,
+          "columns": "128px 128px 128px 128px 128px 128px 128px",
+          "cardWidth": 128,
+          "cardHeight": 250.75,
+          "firstCover": [
+            128,
+            192
+          ],
+          "overflow": 0
+        }
+      ],
+      "passedAssertionJob": "724fb4e7-765b-4f86-a36d-436100689093",
+      "consumer": "Actual ProfileShelfPage read shelf with one original story Book card, inside actual AppShell. Unfilled grid tracks do not stretch one result.",
+      "scope": "Fixture render; ProfilePage author overview uses intentional compact WorkRows and was separately checked in existing Author story."
+    }
+  },
+  "stateTransitions": {
+    "passingBrowserCaseJob": "140ccd0f-5c44-4e0a-b68c-bf48c2d982f8",
+    "images": {
+      "pendingCover": [
+        128,
+        192
+      ],
+      "loadedNaturalImage": [
+        900,
+        400
+      ],
+      "loadedCover": [
+        128,
+        192
+      ],
+      "failedCover": [
+        128,
+        192
+      ],
+      "fit": "Existing object-contain preserves source aspect inside Book semantic ratio; blue source rectangle is letterboxed, never distorted or cropped. Authored Blob image is not retained native artwork.",
+      "limit": "Initial private pending capture precedes full font/layout settling: cover y297 to257 and card height277.375 to300.75 by loaded capture. Cover dimensions stay fixed, but this probe does not establish zero whole-page layout shift or image-load focus/scroll preservation. Loaded and failed capture geometry is stable.",
+      "evidence": [
+        "pending-image-390.json",
+        "loaded-image-390.json",
+        "failed-image-390.json"
+      ]
+    },
+    "paginationAndOrder": {
+      "initialCount": 8,
+      "showMoreCount": 12,
+      "nextResultsCount": 8,
+      "reversedHeadingsMatch": true,
+      "sevenConsecutiveNativeKeyboardTabsMatch": true,
+      "keyboardExtra": {
+        "keyboard": [
+          {
+            "expected": "林美玲 · Lin Mei",
+            "actual": "林美玲 · Lin Mei",
+            "matches": true
+          },
+          {
+            "expected": "Rainy night recipes",
+            "actual": "Rainy night recipes",
+            "matches": true
+          },
+          {
+            "expected": "林美玲 · Lin Mei",
+            "actual": "林美玲 · Lin Mei",
+            "matches": true
+          },
+          {
+            "expected": "SitesResource 3",
+            "actual": "SitesResource 3",
+            "matches": true
+          },
+          {
+            "expected": "Letters after midnight",
+            "actual": "Letters after midnight",
+            "matches": true
+          },
+          {
+            "expected": "林美玲 · Lin Mei",
+            "actual": "林美玲 · Lin Mei",
+            "matches": true
+          },
+          {
+            "expected": "TopicsResource 6",
+            "actual": "TopicsResource 6",
+            "matches": true
+          }
+        ]
+      },
+      "limit": "Private set-state controls model result changes. They do not prove route cursor/history/native API behavior; existing consumer stories separately assert genuine recorded cursor links."
+    },
+    "focusAndScroll": {
+      "resize768to769": {
+        "before": {
+          "scrollY": 200,
+          "target": "The Lantern Atlas"
+        },
+        "after": {
+          "scrollY": 200,
+          "focusPreserved": true,
+          "sameNode": true
+        }
+      },
+      "sidebarToggle": {
+        "before": {
+          "scrollY": 200,
+          "target": "The Lantern Atlas"
+        },
+        "after": {
+          "scrollY": 160,
+          "focusPreserved": true,
+          "sameNode": true
+        }
+      },
+      "viewportTargetYBeforeAndAfter": 25,
+      "interpretation": "Same focused title DOM node survives resize and programmatic sidebar click. ScrollY200 stays200 across768to769; rail collapse reflows controls40px and scroll anchoring adjusts200to160, retaining title viewport y25. Absolute scrollY is not invariant. Programmatic button.click preserves focused title; this is not a claim that a pointer/keyboard-activated toggle itself should leave focus on the card.",
+      "limits": "No route navigation focus/history or asynchronous network/image scroll assertion."
+    },
+    "rtl": {
+      "capturedWidths": [
+        320,
+        390,
+        768,
+        1024,
+        1440,
+        1920
+      ],
+      "visualWidthsViewed": [
+        320,
+        768
+      ],
+      "existingStoryPlayCompleted": true,
+      "observation": "Direction mirrors columns and shell; DOM/API order remains source order. No translated RTL-language content/persona proof."
+    }
+  },
+  "serverVersusHydrated": {
+    "procedure": "Task/native browser command invokes bun ssr.tsx with React renderToString of ServerCatalogue, inserts saved HTML without hydrateRoot, waits layout and captures before state; then hydrateRoot with same component and captures after. Actual catalogue CSS imported in browser; h1 and headingLevel2 used in private fixture. The actual AppShell full-server import cannot be used unchanged by the standalone Bun renderer because its bundled font URL import is not supported there, so only ShellProvider plus ResourceList is server-rendered.",
+    "results": [
+      {
+        "width": 320,
+        "cardsBefore": 12,
+        "masonryBefore": null,
+        "cardsAfter": 12,
+        "masonryAfter": "true",
+        "recoverableHydrationErrors": [],
+        "coverBefore": [
+          128,
+          192
+        ],
+        "coverAfter": [
+          128,
+          192
+        ]
+      },
+      {
+        "width": 390,
+        "cardsBefore": 12,
+        "masonryBefore": null,
+        "cardsAfter": 12,
+        "masonryAfter": "true",
+        "recoverableHydrationErrors": [],
+        "coverBefore": [
+          128,
+          192
+        ],
+        "coverAfter": [
+          128,
+          192
+        ]
+      },
+      {
+        "width": 768,
+        "cardsBefore": 12,
+        "masonryBefore": null,
+        "cardsAfter": 12,
+        "masonryAfter": "true",
+        "recoverableHydrationErrors": [],
+        "coverBefore": [
+          128,
+          192
+        ],
+        "coverAfter": [
+          128,
+          192
+        ]
+      },
+      {
+        "width": 1024,
+        "cardsBefore": 12,
+        "masonryBefore": null,
+        "cardsAfter": 12,
+        "masonryAfter": "true",
+        "recoverableHydrationErrors": [],
+        "coverBefore": [
+          128,
+          192
+        ],
+        "coverAfter": [
+          128,
+          192
+        ]
+      },
+      {
+        "width": 1440,
+        "cardsBefore": 12,
+        "masonryBefore": null,
+        "cardsAfter": 12,
+        "masonryAfter": "true",
+        "recoverableHydrationErrors": [],
+        "coverBefore": [
+          128,
+          192
+        ],
+        "coverAfter": [
+          128,
+          192
+        ]
+      },
+      {
+        "width": 1920,
+        "cardsBefore": 12,
+        "masonryBefore": null,
+        "cardsAfter": 12,
+        "masonryAfter": "true",
+        "recoverableHydrationErrors": [],
+        "coverBefore": [
+          128,
+          192
+        ],
+        "coverAfter": [
+          128,
+          192
+        ]
+      }
+    ],
+    "outcome": "Readable ordinary server grid, bounded covers and source-order content precede hydration; packing is client-only, recoverable hydration error list empty at all6 widths. Server row gaps remain ordinary grid gaps.",
+    "evidence": [
+      "server-markup.html",
+      "server-hydration-summary.json",
+      "images/server-grid-320.png",
+      "images/hydrated-grid-320.png",
+      "images/server-grid-1440.png",
+      "images/hydrated-grid-1440.png"
+    ],
+    "assertionJob": "ca5809fe-8815-441a-b35d-dbec92762f80",
+    "limits": "Component server HTML/hydrateRoot proof only. Vitest environment already runs JS/CSS and is not a JS-disabled HTTP response from vinext. No live route SSR, full AppShell SSR or route hydration acceptance established."
+  },
+  "liveJourneys": {
+    "status": "blocked; not substituted by story fixtures",
+    "fixtureStage": {
+      "configuredProcedure": "local-development local-stack and local-web-auth procedures, docs/testing/audit-corpus.md and original consumer manifests",
+      "commandReached": "task urls; task env; private fixture existence inspection; task web:dev -- --port 32832",
+      "evidence": [
+        "task-urls.log",
+        "task-env.log",
+        "review/G-2791-attempt-4.md"
+      ],
+      "result": "No isolated AppHost or worktree .temp/audit-corpus recipe/manifests supplied; task urls advertises only main shared stack. G-2791 attempt4 handoff says RESULT: parked. G-2791 remains sole producer; no import, restore, reset, acquisition, alternate corpus or persona manufactured.",
+      "notExecuted": "Original corpus fixture restore/readiness/sign-in stage was not started: no existing compatible isolated recipe or consumer manifests were supplied. Shared stack URLs are diagnostic only."
+    },
+    "startup": {
+      "command": [
+        "task",
+        "web:dev",
+        "--",
+        "--port",
+        "32832"
+      ],
+      "sourcePin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+      "route": "http://127.0.0.1:32832/en/discover",
+      "stage": "start Web only; no corpus or persona preparation",
+      "isolatedFixtureRecipePresent": false,
+      "pid": 321301,
+      "lastTransportError": "TypeError: ECONNREFUSED: Unable to connect. Is the computer able to access the url?",
+      "exitCode": 201,
+      "finalExitCode": 201,
+      "stoppedOwnedProcessGroup": true,
+      "portClosed": true
+    },
+    "startupLog": "web-startup.log",
+    "failure": "react-dom/server is not supported in React Server Components. Child exits201 before HTTP; no response HTML file exists. G-2747 owns startup repair. Owned process group stopped and port32832 confirmed closed.",
+    "journeysNotExecuted": [
+      "real Search All versus Works",
+      "real Discover All versus Works",
+      "real shelf/recommendation navigation",
+      "original single-Book profile route",
+      "real Zone browse journey",
+      "real route SSR and hydration"
+    ],
+    "availableRecordedApiEvidence": "Existing books-catalogue-browse PopulatedVisitor and SearchResultsVisitor replay pinned genuine API response fixtures and complete sort/query/cursor assertions. They render Outcome public Realm generated fixture content and do not establish original/canonical content, live HTTP, actual personas, corpus readiness or cover rights/fidelity.",
+    "noWaiting": true
+  },
+  "findings": [
+    {
+      "id": "AUD-007",
+      "acceptance": "partial; shared component geometry verified, real corpus/route acceptance pending",
+      "verified": [
+        "Natural-height hydrated mixed packing, compact landscape cover slot, bounded same-column gaps, DOM order and keyboard after pagination/reorder at requested story states; actual shell widths measured.",
+        "Readable component server grid measured before hydration and remeasured after hydration separately.",
+        "Long identity and delayed/failed image boxes checked."
+      ],
+      "open": [
+        "Original route SSR/hydration, original Minecraft/native identities and real content journeys unavailable.",
+        "All six original catalogue stories still fail normal accessibility gate.",
+        "Private initial-image font/layout settling and untested network focus/scroll limit full transition claims."
+      ],
+      "doNotClose": true
+    },
+    {
+      "id": "AUD-008",
+      "acceptance": "failed in actual Zone consumer; repaired shared catalogue fixture boundaries verified",
+      "verified": [
+        "Shared grid128px cards through767/768/769,1023/1024/1025 and sidebar changes.",
+        "Focused card node/viewport anchor survives tested shell resize/toggle."
+      ],
+      "remainingDefect": "Expanded shell Zone grid1023to1024 reduces cover128to88 and result tracks223.67to88, with visibly truncated author/title text.",
+      "assertionReached": true,
+      "reproductionJob": "724fb4e7-765b-4f86-a36d-436100689093",
+      "doNotClose": true
+    },
+    {
+      "id": "AUD-013",
+      "acceptance": "partial; shared 128px role verified, Zone boundary legibility remains unresolved and real cover fidelity unproved",
+      "verified": [
+        "Books128x192, games128x72, document128x170.65625, recipes128x128, All/Works equality, bounded one-Book profile shelf and one-result grid.",
+        "Selected900x400 story artwork object-contained within same128x192 box; generated art distinct from imported art and intentional detail/row roles."
+      ],
+      "open": [
+        "Zone1024 expanded consumer shrinks same browse role to88x132.",
+        "No original retained native/canonical artwork, crop, rights or persona proof without corpus.",
+        "Existing recorded Zone stories are list mode and do not themselves assert grid sizes.",
+        "Original single-result official Zone browse positive-control fixture was not available; private official grid renders12 results, with single-result coverage limited to WorkGrid and ProfileShelfPage."
+      ],
+      "doNotClose": true
+    }
+  ],
+  "concreteDefects": [
+    {
+      "kind": "product geometry",
+      "source": "apps/web/features/zones/browse.tsx:139",
+      "description": "Viewport3to4 columns combines with lg15rem facets and shell rail. Result tracks undercut browse preview width at1024 expanded. Actual independent outcome assertion reached and failed."
+    },
+    {
+      "kind": "authored story accessibility",
+      "source": "apps/web/features/catalogue/catalogue-layout.stories.tsx:51",
+      "description": "h1 directly followed by ResourceList default h3 titles. All6 normal afterEach axe heading-order assertions fail after successful geometry plays. Independent original assertions preserved; no a11y disable or product fix."
+    },
+    {
+      "kind": "environment/startup",
+      "source": "task web:dev -- --port 32832",
+      "description": "Pinned vinext RSC startup rejects react-dom/server before HTTP. Existing G-2747 owner; no startup repair attempted."
+    }
+  ],
+  "screenshotsActuallyViewed": [
+    {
+      "path": ".artifacts/qa/20261019t045836-4365c6/story-screenshots/apps-web-features-catalogue-catalogue-layout.stories.tsx/MixedCards.png",
+      "sha256": "42366655e3ed4cd866baa30d50ece9eac1895788ee12c2c2d9b127ce78c4c68a",
+      "width": 1440,
+      "height": 1000,
+      "observation": "Original authored story actually viewed; compact kind-ratio previews and readable text. Final play state, not initial mixed set or live route.",
+      "bundlePath": "qa/20261019t045836-4365c6/story-screenshots/apps-web-features-catalogue-catalogue-layout.stories.tsx/MixedCards.png"
+    },
+    {
+      "path": ".artifacts/qa/20261019t045836-4365c6/story-screenshots/apps-web-features-catalogue-catalogue-layout.stories.tsx/Phone.png",
+      "sha256": "3b62bc24c730a0bdbc048d0ac9d3ee7fe88418a105c4774a8e27d244079c3105",
+      "width": 390,
+      "height": 844,
+      "observation": "Original authored story actually viewed; compact kind-ratio previews and readable text. Final play state, not initial mixed set or live route.",
+      "bundlePath": "qa/20261019t045836-4365c6/story-screenshots/apps-web-features-catalogue-catalogue-layout.stories.tsx/Phone.png"
+    },
+    {
+      "path": ".artifacts/qa/20261019t045836-4365c6/story-screenshots/apps-web-features-catalogue-catalogue-layout.stories.tsx/SmallPhone.png",
+      "sha256": "2d026a75113675a918b7507ab3470d9ddf2a9f678d33e3692fbc05c202ff4c4d",
+      "width": 320,
+      "height": 844,
+      "observation": "Original authored story actually viewed; compact kind-ratio previews and readable text. Final play state, not initial mixed set or live route.",
+      "bundlePath": "qa/20261019t045836-4365c6/story-screenshots/apps-web-features-catalogue-catalogue-layout.stories.tsx/SmallPhone.png"
+    },
+    {
+      "path": ".artifacts/qa/20261019t045836-4365c6/story-screenshots/apps-web-features-catalogue-catalogue-layout.stories.tsx/RightToLeft.png",
+      "sha256": "522439baa85d1f77bb23aad1c726671a698ad9418b25e82d8819284b68cfe5ae",
+      "width": 1440,
+      "height": 1000,
+      "observation": "Original authored story actually viewed; compact kind-ratio previews and readable text. Final play state, not initial mixed set or live route.",
+      "bundlePath": "qa/20261019t045836-4365c6/story-screenshots/apps-web-features-catalogue-catalogue-layout.stories.tsx/RightToLeft.png"
+    },
+    {
+      "path": ".artifacts/qa/20261019t045836-4365c6/story-screenshots/apps-web-features-catalogue-catalogue-layout.stories.tsx/ContainerBreakpoints.png",
+      "sha256": "0a40b8470495df66d807b521b57e3d3e730f25b22f69d6a105fc76d52a4d2267",
+      "width": 1920,
+      "height": 1080,
+      "observation": "Original authored story actually viewed; compact kind-ratio previews and readable text. Final play state, not initial mixed set or live route.",
+      "bundlePath": "qa/20261019t045836-4365c6/story-screenshots/apps-web-features-catalogue-catalogue-layout.stories.tsx/ContainerBreakpoints.png"
+    },
+    {
+      "path": ".artifacts/qa/20261019t045836-4365c6/story-screenshots/apps-web-features-catalogue-catalogue-layout.stories.tsx/PreviewConsumers.png",
+      "sha256": "af9aa0beb8bda827fd9ec6a61988d484be90c1a95520b967f60b7c11ea06e5e2",
+      "width": 1440,
+      "height": 1000,
+      "observation": "Original authored story actually viewed; compact kind-ratio previews and readable text. Final play state, not initial mixed set or live route.",
+      "bundlePath": "qa/20261019t045836-4365c6/story-screenshots/apps-web-features-catalogue-catalogue-layout.stories.tsx/PreviewConsumers.png"
+    },
+    {
+      "path": ".artifacts/qa/20261019t045836-4365c6/story-screenshots/packages-ui-src-components-work-cover.stories.tsx/BrowsePreviews.png",
+      "sha256": "d6d2ade8aeae5f6cb0523ffa738f57713a60abb6361bf1fa597fa47105d6b443",
+      "width": 1200,
+      "height": 900,
+      "observation": "Original BrowsePreviews actually viewed; bounded generated covers retain semantic aspect ratios.",
+      "bundlePath": "qa/20261019t045836-4365c6/story-screenshots/packages-ui-src-components-work-cover.stories.tsx/BrowsePreviews.png"
+    },
+    {
+      "path": ".temp/catalogue-geometry-G-2832/images/shell-expanded-320.png",
+      "sha256": "3d67adca557d6dc6afe7ad1ba6a57683f3543036fac18cb16b081711680dbbcc",
+      "width": 320,
+      "height": 900,
+      "observation": "Actual AppShell and PageContainer, initial mixed set. 128px covers, compact game aspect, stacked narrow identities and visible focused title.",
+      "bundlePath": "images/shell-expanded-320.png"
+    },
+    {
+      "path": ".temp/catalogue-geometry-G-2832/images/shell-expanded-390.png",
+      "sha256": "6e7ef935d0ef57d810d95f0db32baff913f793bba561607b8a7d37f1c95b5ca6",
+      "width": 390,
+      "height": 900,
+      "observation": "Actual AppShell and PageContainer, initial mixed set. 128px covers, compact game aspect, stacked narrow identities and visible focused title.",
+      "bundlePath": "images/shell-expanded-390.png"
+    },
+    {
+      "path": ".temp/catalogue-geometry-G-2832/images/shell-expanded-768.png",
+      "sha256": "314c82b1067b10e1fe03e9a6772191d7f8b3ee1259bdea77bffd8ec9f2583bda",
+      "width": 768,
+      "height": 900,
+      "observation": "Actual AppShell and PageContainer, initial mixed set. 128px covers, compact game aspect, stacked narrow identities and visible focused title.",
+      "bundlePath": "images/shell-expanded-768.png"
+    },
+    {
+      "path": ".temp/catalogue-geometry-G-2832/images/shell-expanded-1024.png",
+      "sha256": "5879ffae4ce1be4ec2dd85cf0a8d06630893bdfcab9ebfaa76a816bfdfca20b1",
+      "width": 1024,
+      "height": 900,
+      "observation": "Actual AppShell and PageContainer, initial mixed set. 128px covers, compact game aspect, stacked narrow identities and visible focused title.",
+      "bundlePath": "images/shell-expanded-1024.png"
+    },
+    {
+      "path": ".temp/catalogue-geometry-G-2832/images/shell-expanded-1440.png",
+      "sha256": "e9061f520ab28be8d2b629f8d40909bd1a8b9b24bf09c18b7e28ec97547daa20",
+      "width": 1440,
+      "height": 900,
+      "observation": "Actual AppShell and PageContainer, initial mixed set. 128px covers, compact game aspect, stacked narrow identities and visible focused title.",
+      "bundlePath": "images/shell-expanded-1440.png"
+    },
+    {
+      "path": ".temp/catalogue-geometry-G-2832/images/shell-expanded-1920.png",
+      "sha256": "a64c1f9a12abeb229cd2f9b5b53873ac822c8c43042140441f0ac949e2bafb00",
+      "width": 1920,
+      "height": 900,
+      "observation": "Actual AppShell and PageContainer, initial mixed set. 128px covers, compact game aspect, stacked narrow identities and visible focused title.",
+      "bundlePath": "images/shell-expanded-1920.png"
+    },
+    {
+      "path": ".temp/catalogue-geometry-G-2832/images/zone-expanded-1023.png",
+      "sha256": "5068839f7775c5e77908acc736cd57d8170405e6732dab233bd27dfb1ea64349",
+      "width": 1023,
+      "height": 900,
+      "observation": "Actual ZoneBrowse inside AppShell: expanded 1024 visibly shrinks covers and truncates titles; adjacent width/collapsed rail remain 128px.",
+      "bundlePath": "images/zone-expanded-1023.png"
+    },
+    {
+      "path": ".temp/catalogue-geometry-G-2832/images/zone-expanded-1024.png",
+      "sha256": "1967bba4748cbb6d5b0d7c0e7144fbbf968f3173cbffa1484a70190155c02581",
+      "width": 1024,
+      "height": 900,
+      "observation": "Actual ZoneBrowse inside AppShell: expanded 1024 visibly shrinks covers and truncates titles; adjacent width/collapsed rail remain 128px.",
+      "bundlePath": "images/zone-expanded-1024.png"
+    },
+    {
+      "path": ".temp/catalogue-geometry-G-2832/images/zone-collapsed-1024.png",
+      "sha256": "6d9158f839ea160da42775abfea67865a34ca278e4739dbe16349808b2e3e56b",
+      "width": 1024,
+      "height": 900,
+      "observation": "Actual ZoneBrowse inside AppShell: expanded 1024 visibly shrinks covers and truncates titles; adjacent width/collapsed rail remain 128px.",
+      "bundlePath": "images/zone-collapsed-1024.png"
+    },
+    {
+      "path": ".temp/catalogue-geometry-G-2832/images/server-grid-320.png",
+      "sha256": "4793519cb566d32c5d3b282c30436d91f256ea48b66b277c605b9d63b96804ed",
+      "width": 320,
+      "height": 900,
+      "observation": "Separate pre-hydrate server HTML and post-hydrate component snapshots. Server ordinary grid readable; client packs natural heights. No live HTTP SSR claim.",
+      "bundlePath": "images/server-grid-320.png"
+    },
+    {
+      "path": ".temp/catalogue-geometry-G-2832/images/hydrated-grid-320.png",
+      "sha256": "22901d55df35bd2a8e48397d36bb0f360889502ed842e2bfe7bf2a424a83f16b",
+      "width": 320,
+      "height": 900,
+      "observation": "Separate pre-hydrate server HTML and post-hydrate component snapshots. Server ordinary grid readable; client packs natural heights. No live HTTP SSR claim.",
+      "bundlePath": "images/hydrated-grid-320.png"
+    },
+    {
+      "path": ".temp/catalogue-geometry-G-2832/images/server-grid-1440.png",
+      "sha256": "89d0041a42e91181a27ecfdeaee520b8826b6a848decc7afb31c65076ab94138",
+      "width": 1440,
+      "height": 900,
+      "observation": "Separate pre-hydrate server HTML and post-hydrate component snapshots. Server ordinary grid readable; client packs natural heights. No live HTTP SSR claim.",
+      "bundlePath": "images/server-grid-1440.png"
+    },
+    {
+      "path": ".temp/catalogue-geometry-G-2832/images/hydrated-grid-1440.png",
+      "sha256": "1bddc51792568e5a0a3499da1854ad84ecbd46ddfdd998ccdc5813fe8796bbb4",
+      "width": 1440,
+      "height": 900,
+      "observation": "Separate pre-hydrate server HTML and post-hydrate component snapshots. Server ordinary grid readable; client packs natural heights. No live HTTP SSR claim.",
+      "bundlePath": "images/hydrated-grid-1440.png"
+    },
+    {
+      "path": ".temp/catalogue-geometry-G-2832/images/loaded-image-390.png",
+      "sha256": "68b0f658cc3d3071d9bb86048c6365f0ccc0f19957f522cf5a3021b6a066565a",
+      "width": 390,
+      "height": 844,
+      "observation": "Selected 900x400 authored SVG contained within fixed semantic Book box without stretching; failed image keeps bounded fallback.",
+      "bundlePath": "images/loaded-image-390.png"
+    },
+    {
+      "path": ".temp/catalogue-geometry-G-2832/images/failed-image-390.png",
+      "sha256": "4bc24b3a81fd8748f41449b898d1995216fa905752c8ec3c7344ffc89482688f",
+      "width": 390,
+      "height": 844,
+      "observation": "Selected 900x400 authored SVG contained within fixed semantic Book box without stretching; failed image keeps bounded fallback.",
+      "bundlePath": "images/failed-image-390.png"
+    },
+    {
+      "path": ".temp/catalogue-geometry-G-2832/images/expanded-identity-390.png",
+      "sha256": "aecba4109dcfb91ef524777e4c6d272b43dd6489efebfa0af375d543e9cafe69",
+      "width": 390,
+      "height": 844,
+      "observation": "Long identity wraps in 128px; keyboard focus visible after reversal; RTL mirrors layout; one-Book profile shelf retains 128x192 cover, as appropriate to file.",
+      "bundlePath": "images/expanded-identity-390.png"
+    },
+    {
+      "path": ".temp/catalogue-geometry-G-2832/images/reorder-keyboard-390.png",
+      "sha256": "52902838603c63067ddeacb813f9ce4a387a586a6a7c1fdb051fd8a67ddfc2d6",
+      "width": 390,
+      "height": 844,
+      "observation": "Long identity wraps in 128px; keyboard focus visible after reversal; RTL mirrors layout; one-Book profile shelf retains 128x192 cover, as appropriate to file.",
+      "bundlePath": "images/reorder-keyboard-390.png"
+    },
+    {
+      "path": ".temp/catalogue-geometry-G-2832/images/rtl-320.png",
+      "sha256": "656af3f3f8397acbd14800a91f080abdffe5664f2c1f6774850095d677f781c8",
+      "width": 320,
+      "height": 900,
+      "observation": "Long identity wraps in 128px; keyboard focus visible after reversal; RTL mirrors layout; one-Book profile shelf retains 128x192 cover, as appropriate to file.",
+      "bundlePath": "images/rtl-320.png"
+    },
+    {
+      "path": ".temp/catalogue-geometry-G-2832/images/rtl-768.png",
+      "sha256": "168d890e5651b335c3d06cff0be3991950adc28f669dbf5d96e1c22715dda015",
+      "width": 768,
+      "height": 900,
+      "observation": "Long identity wraps in 128px; keyboard focus visible after reversal; RTL mirrors layout; one-Book profile shelf retains 128x192 cover, as appropriate to file.",
+      "bundlePath": "images/rtl-768.png"
+    },
+    {
+      "path": ".temp/catalogue-geometry-G-2832/images/profile-single-320.png",
+      "sha256": "57060642f1b0e6a27d381ae12d816dfc8e6538788df8c9a4980726e17840a629",
+      "width": 320,
+      "height": 900,
+      "observation": "Long identity wraps in 128px; keyboard focus visible after reversal; RTL mirrors layout; one-Book profile shelf retains 128x192 cover, as appropriate to file.",
+      "bundlePath": "images/profile-single-320.png"
+    },
+    {
+      "path": ".temp/catalogue-geometry-G-2832/images/profile-single-1920.png",
+      "sha256": "13c253274abfb3cb55f44e99b9e971f8f6c496dacf02c95f2d93f4eca2366c61",
+      "width": 1920,
+      "height": 900,
+      "observation": "Long identity wraps in 128px; keyboard focus visible after reversal; RTL mirrors layout; one-Book profile shelf retains 128x192 cover, as appropriate to file.",
+      "bundlePath": "images/profile-single-1920.png"
+    },
+    {
+      "path": ".artifacts/qa/20261019t051232-471147/story-screenshots/apps-web-features-catalogue-catalogue.stories.tsx/ReadersFavorites.png",
+      "sha256": "53fa4ec0782a556327151046a11350199a6e10f380cfe4e895a54d32d61ebb2f",
+      "width": 1280,
+      "height": 860,
+      "observation": "Existing consumer story actually viewed; fixed browse previews or role-specific compact WorkRows; CJK labels wrap. Recorded Zone API replay is not live corpus/persona proof.",
+      "bundlePath": "qa/20261019t051232-471147/story-screenshots/apps-web-features-catalogue-catalogue.stories.tsx/ReadersFavorites.png"
+    },
+    {
+      "path": ".artifacts/qa/20261019t051232-471147/story-screenshots/apps-web-features-catalogue-catalogue.stories.tsx/Grid.png",
+      "sha256": "9123d22c8623ea94024cb53d0f685187f587fcc2bfb94d25ce8cdff643397aa9",
+      "width": 1280,
+      "height": 860,
+      "observation": "Existing consumer story actually viewed; fixed browse previews or role-specific compact WorkRows; CJK labels wrap. Recorded Zone API replay is not live corpus/persona proof.",
+      "bundlePath": "qa/20261019t051232-471147/story-screenshots/apps-web-features-catalogue-catalogue.stories.tsx/Grid.png"
+    },
+    {
+      "path": ".artifacts/qa/20261019t051232-471147/story-screenshots/apps-web-features-work-page-also-enjoyed.stories.tsx/CoReaders.png",
+      "sha256": "b133e94f5b1608bd62a3ec2f3948c1514f4d0b5aa5636120ffc5e230cae511c0",
+      "width": 1200,
+      "height": 900,
+      "observation": "Existing consumer story actually viewed; fixed browse previews or role-specific compact WorkRows; CJK labels wrap. Recorded Zone API replay is not live corpus/persona proof.",
+      "bundlePath": "qa/20261019t051232-471147/story-screenshots/apps-web-features-work-page-also-enjoyed.stories.tsx/CoReaders.png"
+    },
+    {
+      "path": ".artifacts/qa/20261019t051232-471147/story-screenshots/apps-web-features-work-page-also-enjoyed.stories.tsx/MixedReasons.png",
+      "sha256": "40b1ec6bfe635967b8fbfde6900c8257186ec34a657c60e75d47f5753bf88d0d",
+      "width": 1200,
+      "height": 900,
+      "observation": "Existing consumer story actually viewed; fixed browse previews or role-specific compact WorkRows; CJK labels wrap. Recorded Zone API replay is not live corpus/persona proof.",
+      "bundlePath": "qa/20261019t051232-471147/story-screenshots/apps-web-features-work-page-also-enjoyed.stories.tsx/MixedReasons.png"
+    },
+    {
+      "path": ".artifacts/qa/20261019t051232-471147/story-screenshots/apps-web-features-discover-resource-card.stories.tsx/CommunityLatin.png",
+      "sha256": "749ee84471405e1f06d93db4e6e8951453583d07d832d3d23d93b350e515f01c",
+      "width": 1200,
+      "height": 900,
+      "observation": "Existing consumer story actually viewed; fixed browse previews or role-specific compact WorkRows; CJK labels wrap. Recorded Zone API replay is not live corpus/persona proof.",
+      "bundlePath": "qa/20261019t051232-471147/story-screenshots/apps-web-features-discover-resource-card.stories.tsx/CommunityLatin.png"
+    },
+    {
+      "path": ".artifacts/qa/20261019t051232-471147/story-screenshots/apps-web-features-discover-resource-card.stories.tsx/CommunityCjk.png",
+      "sha256": "8fdec82883f2e00584a7efe9841916dbed18e5f91e1274e74795e41695ad8dce",
+      "width": 1200,
+      "height": 900,
+      "observation": "Existing consumer story actually viewed; fixed browse previews or role-specific compact WorkRows; CJK labels wrap. Recorded Zone API replay is not live corpus/persona proof.",
+      "bundlePath": "qa/20261019t051232-471147/story-screenshots/apps-web-features-discover-resource-card.stories.tsx/CommunityCjk.png"
+    },
+    {
+      "path": ".artifacts/qa/20261019t051232-471147/story-screenshots/apps-web-features-discover-resource-card.stories.tsx/PersonCjk.png",
+      "sha256": "78bf59afa4d2e0e4fe1cde87d04e33d0f3ebd38a7f1ce3071f922c501fda1f50",
+      "width": 1200,
+      "height": 900,
+      "observation": "Existing consumer story actually viewed; fixed browse previews or role-specific compact WorkRows; CJK labels wrap. Recorded Zone API replay is not live corpus/persona proof.",
+      "bundlePath": "qa/20261019t051232-471147/story-screenshots/apps-web-features-discover-resource-card.stories.tsx/PersonCjk.png"
+    },
+    {
+      "path": ".artifacts/qa/20261019t051232-471147/story-screenshots/apps-web-features-profile-profile-page.stories.tsx/Author.png",
+      "sha256": "2b183e399cc6925f4be62e06b3d904f2502ca5c39b55b3ec189821c63ed308b6",
+      "width": 1280,
+      "height": 860,
+      "observation": "Existing consumer story actually viewed; fixed browse previews or role-specific compact WorkRows; CJK labels wrap. Recorded Zone API replay is not live corpus/persona proof.",
+      "bundlePath": "qa/20261019t051232-471147/story-screenshots/apps-web-features-profile-profile-page.stories.tsx/Author.png"
+    },
+    {
+      "path": ".artifacts/qa/20261019t051232-471147/story-screenshots/apps-web-features-profile-profile-page.stories.tsx/Shelf.png",
+      "sha256": "138b73ad85eee984c60695219083d8eee355ca5b46aa4076e04922efe2320ab9",
+      "width": 1280,
+      "height": 860,
+      "observation": "Existing consumer story actually viewed; fixed browse previews or role-specific compact WorkRows; CJK labels wrap. Recorded Zone API replay is not live corpus/persona proof.",
+      "bundlePath": "qa/20261019t051232-471147/story-screenshots/apps-web-features-profile-profile-page.stories.tsx/Shelf.png"
+    },
+    {
+      "path": ".artifacts/qa/20261019t051232-471147/story-screenshots/apps-web-features-zones-books-catalogue-browse.stories.tsx/PopulatedVisitor.png",
+      "sha256": "4a624abf2a7aa5b3bc2a832639ae0c43cd05d96ca9a7f1e44de65cc37918a475",
+      "width": 1200,
+      "height": 900,
+      "observation": "Existing consumer story actually viewed; fixed browse previews or role-specific compact WorkRows; CJK labels wrap. Recorded Zone API replay is not live corpus/persona proof.",
+      "bundlePath": "qa/20261019t051232-471147/story-screenshots/apps-web-features-zones-books-catalogue-browse.stories.tsx/PopulatedVisitor.png"
+    },
+    {
+      "path": ".artifacts/qa/20261019t051232-471147/story-screenshots/apps-web-features-zones-books-catalogue-browse.stories.tsx/SearchResultsVisitor.png",
+      "sha256": "7b1eef0c3bc682935bfe25cf93e2db833373e3d6aae7c52fa064d6c123082a89",
+      "width": 1200,
+      "height": 900,
+      "observation": "Existing consumer story actually viewed; fixed browse previews or role-specific compact WorkRows; CJK labels wrap. Recorded Zone API replay is not live corpus/persona proof.",
+      "bundlePath": "qa/20261019t051232-471147/story-screenshots/apps-web-features-zones-books-catalogue-browse.stories.tsx/SearchResultsVisitor.png"
+    }
+  ],
+  "artifacts": {
+    "privateWorkingDirectory": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2832/.temp/catalogue-geometry-G-2832",
+    "translatedBundleDirectory": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2832/.temp/audit-remediation-20261019/proofs/catalogue-geometry-G-2832",
+    "requestedMainBundleDirectory": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/proofs/catalogue-geometry-G-2832/",
+    "copiedToMain": false,
+    "reason": "Current user scope and worker protocol make main checkout read-only; bundle is staged under the translated worktree path for manager copy. No approval requested.",
+    "inventory": "bundle-manifest.json with SHA256, bytes and PNG dimensions, including both viewed and unviewed captures. screenshotsActuallyViewed is the explicit eye-review subset.",
+    "reproducerFiles": [
+      "geometry.test.ts",
+      "geometry.spec.tsx",
+      "vitest.config.ts",
+      "fixtures.tsx",
+      "ssr.tsx",
+      "live-startup.test.ts"
+    ],
+    "reproducerLimit": "Private probes evolved between recorded setup corrections; final files reproduce the corrected fixture logic. Earlier scripts are documented by job logs and raw capture payloads, not represented as identical to final files. Completed browser cases were not rerun after unrelated probe corrections.",
+    "productSourcePreserved": true,
+    "sharedStatePreserved": true,
+    "otherWorktreesUntouched": true,
+    "ownedServersStopped": true
+  },
+  "administrativeChecks": {
+    "scope": "Only the main-based report branch after source proof. No product regression or main landing acceptance.",
+    "status": "passed",
+    "jobId": "e8a42b4f-ace2-42ba-a4e9-398e7c994b3e",
+    "commands": [
+      {
+        "command": "task docs:check",
+        "exit": 0,
+        "log": "jobs/e8a42b4f-ace2-42ba-a4e9-398e7c994b3e.1.log",
+        "result": "13 docs-check self-tests and 236 Markdown files passed; external URLs and runtime not tested."
+      },
+      {
+        "command": "task goal -- check",
+        "exit": 0,
+        "log": "jobs/e8a42b4f-ace2-42ba-a4e9-398e7c994b3e.2.log",
+        "result": "types: no TypeScript workspace changed; tests: no brief tests; lint: no source changed; AST passed; 1 of44 repository guards selected for the JSON report, passed."
+      }
+    ],
+    "checkOutput": "administration/goal-check-output.log",
+    "reportOnlyChecksDoNotEstablishRenderedSourceAcceptance": true
+  },
+  "managerNext": [
+    "Review and assign Zone compound-breakpoint correction and original catalogue-story heading-level repair to existing owner; keep independent assertions unchanged.",
+    "G-2747 restores Web startup; G-2791 supplies existing isolated original fixtures. Resume only unavailable real journeys, not completed story checks without relevant changes.",
+    "Copy staged private bundle to requested main private destination and integrate only this report commit as appropriate. No source fixes, full regression, land:auto or regression confirmation executed."
+  ]
+}
