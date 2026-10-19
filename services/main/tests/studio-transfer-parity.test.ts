@@ -434,7 +434,7 @@ test('Studio recent, created and title orders traverse 105 Works without losing 
   const edit = randomUUID();
   await pool.query(`INSERT INTO access.admission (id,principal_id,acting_subject,scope_id,action,
     idempotency_key,request_digest,authority_epoch,expires_at,state,graph_receipt,graph_outcome,
-    graph_data_epoch,graph_sequence,sealed_at) VALUES ($1,$2,$3,$4,'work.edit',$1::text,$5,0,
+    graph_data_epoch,graph_sequence,sealed_at) VALUES ($1::uuid,$2,$3,$4,'work.edit',$1::text,$5,0,
     now(),'sealed',$6,'succeeded','fixture',1,timestamptz '2026-09-02 12:00:00+00')`,
   [edit, owner.id, owner.actor, scope, digest(edit), `urn:rezics:receipt:${digest(edit).slice(0, 32)}`]);
   expect((await readStudioWorks(session(owner, r).value, owner.actor, { sort: 'recent' }))
