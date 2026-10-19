@@ -36,13 +36,13 @@ export function acknowledgedSemanticSupportOwners(work: AcknowledgedSourceNative
       const basis = await verifyAcknowledgedSemanticBasis(work,context.principal,{
         actingSubject: input.actingSubject,native,selected: context.selected,
       });
-      // Admission IDs and scopes come from the terminal receipt, never from a
-      // component/revision ID or a reconstructed action name.
-      const terminal = await readTerminal(work,native);
+      // The native owner resolves the actual terminal receipt. Do not reconstruct
+      // an admission ID, scope or operation from a component/revision ID.
+      const terminal = basis.commandReceipt;
       if (!terminal || terminal.outcome !== 'succeeded') return supportUnavailable();
       const component = native.kind === 'statement' ? native.statement : native.component;
       if (terminal.receipt !== basis.receipt || terminal.component !== component || terminal.revision !== basis.revision
-        || native.kind === 'statement' && (!('operation' in terminal) || terminal.operation !== basis.operation)
+        || terminal.operation !== basis.operation
         || terminal.dataEpoch !== basis.sourcePosition.dataEpoch || terminal.sequence !== basis.sourcePosition.sequence) {
         return supportChanged('native-head');
       }
@@ -51,7 +51,8 @@ export function acknowledgedSemanticSupportOwners(work: AcknowledgedSourceNative
         dataEpoch: terminal.dataEpoch,sequence: terminal.sequence,
         action: native.kind === 'statement' ? 'statement.record' : 'semantic.change',component,revision: basis.revision,
         semantic: { operation: basis.operation,manifest: basis.manifest,modelGeneration: basis.modelGeneration,
-          headGuarantee: basis.headGuarantee },
+          headGuarantee: basis.headGuarantee,commandReceipt: terminal,
+          ...(basis.occurrenceAdoption ? { occurrenceAdoption: basis.occurrenceAdoption } : {}) },
       };
       return acknowledgement;
     } catch (error) {

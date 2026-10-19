@@ -77,7 +77,9 @@ export interface VerifiedNativeAcknowledgement {
   receipt: string; admissionId: string; dataEpoch: string; sequence: string;
   scope: string; action: 'semantic.change' | 'statement.record' | 'work.edit';
   component: string; revision: string;
-  semantic?: Pick<VerifiedSemanticBasis, 'operation' | 'manifest' | 'modelGeneration' | 'headGuarantee'>;
+  semantic?: Pick<VerifiedSemanticBasis, 'operation' | 'manifest' | 'modelGeneration' | 'headGuarantee'>
+    // Earlier immutable acknowledgements predate the native owner's full receipt.
+    & Partial<Pick<VerifiedSemanticBasis, 'commandReceipt' | 'occurrenceAdoption'>>;
   editorial?: { workHead: string; controlHead: string; controlEpoch: string; protectionHead: string | null };
   release?: { currentHeads: { release: string; realization: string };
     correspondence: { work: string; release: ReleaseSourceNativeBasis['coverage']['realization'];

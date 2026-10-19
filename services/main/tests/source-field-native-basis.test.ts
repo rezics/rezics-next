@@ -76,7 +76,9 @@ test('Source passes independently resolved retained bytes and exact supplied lan
   const ack = await verifySourceNative(f.work.environment,input,owners,true,{ principal: nativePrincipal,selected: field.selected });
   expect(ack).toEqual({ receipt: f.receipt,admissionId: f.admissionId,scope: 'semantic:create:root',
     action: 'semantic.change',component: input.target,revision: f.revision,dataEpoch: nativeEpoch,sequence: '4',
-    semantic: { operation: f.operation,manifest: f.manifest,modelGeneration: f.generation,headGuarantee: 'verified-before-commit' } });
+    semantic: { operation: f.operation,manifest: f.manifest,modelGeneration: f.generation,headGuarantee: 'verified-before-commit',
+      commandReceipt: expect.objectContaining({ receipt: f.receipt,admissionId: f.admissionId,scope: 'semantic:create:root',
+        component: input.target,revision: f.revision,operation: f.operation }) } });
   // Resolve a second genuine retained selection first. A native claim matching
   // its own current property is insufficient when the source value/language differ.
   for (const [text,language] of [['改作','ja'],['原作','zh']] as const) {
@@ -147,7 +149,9 @@ test('Source settles an actual V2 acknowledgement, refuses missing coverage/adop
   expect(original.admission.native).toEqual(f.input.native);
   expect(original.headGuarantee).toBe('verified-before-commit');
   const saved = (await pool.query('SELECT native_acknowledgement FROM source.field_support_step WHERE id=$1',[attached.step.slice(-36)])).rows[0].native_acknowledgement;
-  expect(saved).toMatchObject({ admissionId: f.admissionId,scope: `statement:speak:${f.input.actingSubject}`,semantic: { operation: f.operation,manifest: f.manifest } });
+  expect(saved).toMatchObject({ admissionId: f.admissionId,scope: `statement:speak:${f.input.actingSubject}`,
+    semantic: { operation: f.operation,manifest: f.manifest,commandReceipt: { receipt: f.receipt,admissionId: f.admissionId,
+      scope: `statement:speak:${f.input.actingSubject}`,operation: f.operation,component: f.input.native.statement,revision: f.revision } } });
   const count = async () => (await pool.query('SELECT count(*)::integer AS n FROM source.field_support_step WHERE principal_id=$1',[r.principalId])).rows[0].n;
   const refused = async (request: RetainedSupportRequest,expected: object) => {
     await expect(store.attach(nativePrincipal,r.principalId,randomUUID(),request)).rejects.toMatchObject(expected);

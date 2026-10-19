@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { Parser, type Term } from 'n3';
 import type { SparqlResult } from '../../src/infrastructure/fuseki.ts';
 import type { VerifiedPrincipal } from '../../src/modules/access/admission.ts';
-import type { MainWorkDependencies } from '../../src/routes/dependencies.ts';
+import type { AcknowledgedSourceNativeDependencies } from '../../src/modules/source/field-support-acknowledged.ts';
 import { ownedTriples, SEMANTIC_CHANGE_FAMILY, type ResourceState } from '../../src/modules/semantic/change.ts';
 import { familyReceiptIri, sealComponentState } from '../../src/modules/semantic/command.ts';
 import { PROFILES } from '../../src/modules/semantic/schema.ts';
@@ -56,7 +56,7 @@ export async function semanticFixture() {
   manifest = await sealComponentState(env, component, PROFILES.resource, state);
   const work = { environment: env, access: { activePrincipalId: async () => active ? 'principal' : null,
     canReadSemanticResource: async () => true, canReadWork: async () => false } } as unknown as
-    Pick<MainWorkDependencies, 'environment' | 'access' | 'contextSelections'>;
+    AcknowledgedSourceNativeDependencies;
   const input: NativeBasisVerificationInput = { actingSubject: nativeId(8), native: { kind: 'component-property', owner: 'semantic',
     target: component, component, revision, receipt, property: state.properties[0]! },
     selected: { value: '原作', language: { state: 'value', value: 'ja' } } };
@@ -113,7 +113,7 @@ export async function statementFixture() {
     valueRdf: semanticValueRdf(meaning.value, () => nativeId(41)) });
   const work = { environment: env, access: { activePrincipalId: async () => 'principal',
     canReadSemanticResource: async () => true, canReadWork: async () => false } } as unknown as
-    Pick<MainWorkDependencies, 'environment' | 'access' | 'contextSelections'>;
+    AcknowledgedSourceNativeDependencies;
   const input = { actingSubject: actor,
     native: { kind: 'statement', owner: 'statement', target, statement, revision, receipt,
       predicate: meaning.predicate, relationDefinition: meaning.relationDefinition, value: meaning.value, context: 'global',
