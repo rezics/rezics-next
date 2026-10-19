@@ -6191,5 +6191,350 @@
       "noDuplicateProductChecks": true
     },
     "managerNext": "Select only the reviewed two-file delta, preserve the approved current-main Vinext patch and unrelated dependencies, and retain the source/runtime tier distinction. Root owns landing and original-class acceptance; no actionable source finding in this delta."
+  },
+  "browseProbeFirstSourceReview": {
+    "reviewedAtUtc": "2026-10-19T16:40:11.405383+00:00",
+    "reviewer": {
+      "worker": "G-2847",
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "independentSourceReview": true,
+      "fallback": false,
+      "nestedAgents": false
+    },
+    "scope": "First source review of only the two authored Browse-probe correction paths; original startup/navigation outcome and sole report-write claim retained.",
+    "sourcePin": "14164f4d3558ece0fd3dbfb91e0677482b478d9c",
+    "basePin": "f9e73f69bca2514b49b3024efce31772467a5285",
+    "mainComparisonPin": "475c770b339a80320dd97d2c6a15099ac7f21413",
+    "verdict": "APPROVE: no actionable findings for this two-path delta.",
+    "actionableFindings": [],
+    "changedFileDispositions": [
+      {
+        "path": "apps/web/features/zones/site-route.tsx",
+        "before": "5823d918afd530372047d39127a9ea923aa822b8",
+        "after": "1e6d8016e5101f16d297ad2e732dfd7fe4a97f9c",
+        "mainPreimage": "5823d918afd530372047d39127a9ea923aa822b8",
+        "sha256": "bcdd9860c199b7540123aed01719776b1d74e2e24efd9b7cb9b40ea67d2836e1",
+        "disposition": "approve",
+        "inspectedLines": [
+          81,
+          83,
+          223,
+          244,
+          264,
+          273,
+          286,
+          295,
+          296,
+          321,
+          418,
+          428,
+          474
+        ],
+        "reason": "Lines 264-272 constrain only the preliminary, otherwise discarded unpositioned read to the genuine single-segment browse path. Non-Browse mounted index/document/detail routes still load the view, compute reading selection, perform the mandatory positioned route read and, for details, the mandatory entity projection with its missing/denied disclosure handling. Browse mount precedence, exact 404+missing starter fallback, original query/cursor and replay-client propagation remain."
+      },
+      {
+        "path": "apps/web/features/zones/site-publication-read.test.ts",
+        "before": "163b155177fca3b18f27e965dc91199eedeb2bd0",
+        "after": "e65bdd262f0c17edaf352baf06f36962b54edcff",
+        "mainPreimage": "163b155177fca3b18f27e965dc91199eedeb2bd0",
+        "sha256": "c1ff48190885b4def1b8c65a63919fa73723fe32357e3b04fd4e4fde0c35266c",
+        "disposition": "approve",
+        "inspectedLines": [
+          54,
+          75,
+          84,
+          93,
+          101,
+          109,
+          151,
+          167,
+          182,
+          205
+        ],
+        "reason": "Three added behavior regressions assert the exact surviving read sequence: no preliminary detail probe plus positioned projection 404; browse mount precedence with cursor/position and projection 404; starter fallback only for an exact missing Browse mount, with the original task query and no fallback on unavailable. Existing complete-publication/root-metadata/whole-page versus region/missing assertions remain. Added module replacements delegate outside the selected probe scenarios and restore after the file."
+      }
+    ],
+    "boundedProductAudit": {
+      "principle": "Do not require a discarded unpositioned read before a mandatory positioned route/projection; do not bypass mounted Browse precedence or disclosure.",
+      "affectedSurfaces": [
+        "Attached Realm Site non-root mounted index/document/detail: preliminary probe omitted; shared downstream route/disclosure switch unchanged.",
+        "Single-segment browse: unpositioned probe retained to distinguish a real mount from a starter; missing-only fallback and cursor retained.",
+        "Root metadata/body and standalone Site: purposeful complete-publication or presentation reads remain unchanged; no broader removal of reads."
+      ],
+      "counterexampleNeedingNewExecution": null,
+      "unchangedInspectedDependencies": [
+        {
+          "path": "apps/web/features/realm/read.ts",
+          "blob": "2bef86fbf92dd68d63bd63b24a9f702ae1b3cbee",
+          "equalAt": [
+            "f9e73f69bca2514b49b3024efce31772467a5285",
+            "14164f4d3558ece0fd3dbfb91e0677482b478d9c",
+            "475c770b339a80320dd97d2c6a15099ac7f21413"
+          ]
+        },
+        {
+          "path": "apps/web/features/wiki/read.ts",
+          "blob": "ad382e613d2f8ccb9009e7e1482af1d388f85244",
+          "equalAt": [
+            "f9e73f69bca2514b49b3024efce31772467a5285",
+            "14164f4d3558ece0fd3dbfb91e0677482b478d9c",
+            "475c770b339a80320dd97d2c6a15099ac7f21413"
+          ]
+        },
+        {
+          "path": "apps/web/features/wiki/selection.ts",
+          "blob": "5c3ba6602c10dd2846176cb3416fc84291b90020",
+          "equalAt": [
+            "f9e73f69bca2514b49b3024efce31772467a5285",
+            "14164f4d3558ece0fd3dbfb91e0677482b478d9c",
+            "475c770b339a80320dd97d2c6a15099ac7f21413"
+          ]
+        },
+        {
+          "path": "apps/web/features/entity-page/read.ts",
+          "blob": "15c9ec836695c91f7dd1cb6a0708a45c46d793b2",
+          "equalAt": [
+            "f9e73f69bca2514b49b3024efce31772467a5285",
+            "14164f4d3558ece0fd3dbfb91e0677482b478d9c",
+            "475c770b339a80320dd97d2c6a15099ac7f21413"
+          ]
+        },
+        {
+          "path": "apps/web/features/realm/routes.tsx",
+          "blob": "2570aad00a68ca2ab6e9b766506e5b494e1283df",
+          "equalAt": [
+            "f9e73f69bca2514b49b3024efce31772467a5285",
+            "14164f4d3558ece0fd3dbfb91e0677482b478d9c",
+            "475c770b339a80320dd97d2c6a15099ac7f21413"
+          ]
+        },
+        {
+          "path": "apps/web/features/zones/attached-realm-site.test.ts",
+          "blob": "b10145e6d3e2d90a9195b79b1d5d5cc6253a9012",
+          "equalAt": [
+            "f9e73f69bca2514b49b3024efce31772467a5285",
+            "14164f4d3558ece0fd3dbfb91e0677482b478d9c",
+            "475c770b339a80320dd97d2c6a15099ac7f21413"
+          ]
+        }
+      ]
+    },
+    "mainIntegration": {
+      "selectedPreimagesEqual": true,
+      "comparisonPin": "475c770b339a80320dd97d2c6a15099ac7f21413",
+      "scope": "Only the two selected preimages and listed unchanged dependencies were compared. No whole-tree equivalence or product landing is asserted."
+    },
+    "reusedOwnerChecks": [
+      {
+        "job": "0f44db80-fa99-4fa0-908e-69831a9cce14",
+        "attempt": 39,
+        "focusedStep": {
+          "exit": 0,
+          "tests": 28,
+          "assertions": 297,
+          "files": [
+            "apps/web/features/zones/site-publication-read.test.ts",
+            "apps/web/features/zones/attached-realm-site.test.ts"
+          ],
+          "tier": "mocked route/unit behavior",
+          "pinLimit": "Pre-rebase owner run reused as dispatched; its unit output does not print an immutable checkedHead. Final reviewed source blobs are independently pinned above."
+        },
+        "staticStep": {
+          "exit": 201,
+          "types": "passed, 51.4s",
+          "guards": "failed, 10/45 selected; accepted-command timeout and projection-syntax comparison failures retained",
+          "inference": "task-change check passed within base margins; inherited baseline instantiation excess retained",
+          "lint": "passed",
+          "ast": "passed"
+        },
+        "overallExit": 201,
+        "overallResultClass": "assertion",
+        "historyPreserved": true
+      },
+      {
+        "job": "6974c137-ea55-4cd8-9f46-dc09249d276f",
+        "attempt": 40,
+        "checkedHead": "14164f4d3558ece0fd3dbfb91e0677482b478d9c",
+        "observedTypesOutput": "types: ok (50.8s)",
+        "jobRecordAtCapture": "parked; types step has no recorded ended/code and publication step has not recorded a start. Log success is not reported as settled job/publication completion.",
+        "settledCompletion": {
+          "exit": 0,
+          "resultClass": "passed",
+          "endedAtUtc": "2026-10-19T16:40:36.057000+00:00",
+          "stepExitCodes": [
+            0,
+            0,
+            0
+          ],
+          "typesAndPublicationCompleted": true,
+          "receipt": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/browse-probe-first-source-review/checks/6974c137-completion.json",
+            "bytes": 779,
+            "sha256": "df01251fb7d96a99daf3edd609e301f769b4df891bd1334b1d50f12ef9d5052d"
+          }
+        }
+      }
+    ],
+    "evidence": {
+      "privateDirectory": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/browse-probe-first-source-review",
+      "inputReceipt": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/browse-probe-first-source-review/review-inputs.json",
+        "sha256": "a44d42c3e81a75499b42d71d26ba5502dfc3bb0f5c9c20c7215c11de6677b918"
+      },
+      "artifacts": [
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/browse-probe-first-source-review/dispatch-manifest.json",
+          "bytes": 1769,
+          "sha256": "5bd9dbfb980b5ebac74d246e825ef619066de9b5f8b9f45a855fcc6a8638f4f0"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/browse-probe-first-source-review/authored-two-path.patch",
+          "bytes": 9232,
+          "sha256": "e40b8ceb9455abf9b153277cb4c8222dcec3f165205b9e0dd8e2e1780357a1ae"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/browse-probe-first-source-review/source/apps/web/features/zones/site-route.tsx",
+          "bytes": 28923,
+          "sha256": "bcdd9860c199b7540123aed01719776b1d74e2e24efd9b7cb9b40ea67d2836e1"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/browse-probe-first-source-review/source/apps/web/features/zones/site-publication-read.test.ts",
+          "bytes": 15236,
+          "sha256": "c1ff48190885b4def1b8c65a63919fa73723fe32357e3b04fd4e4fde0c35266c"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/browse-probe-first-source-review/source/apps/web/features/realm/read.ts",
+          "bytes": 12900,
+          "sha256": "c8a19289247d4a84fa0534522373b22b0731348ea00888335d3d4e55bea53d74"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/browse-probe-first-source-review/source/apps/web/features/wiki/read.ts",
+          "bytes": 7875,
+          "sha256": "df4bc40dafad1d4ec51fe0b4512ff6085117f450d75049220253ce9f61077c57"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/browse-probe-first-source-review/source/apps/web/features/wiki/selection.ts",
+          "bytes": 1096,
+          "sha256": "df8a8548c42a04456b010e48dbbe745dd48cb9707c04fb94f5da463df262bff5"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/browse-probe-first-source-review/source/apps/web/features/entity-page/read.ts",
+          "bytes": 5221,
+          "sha256": "c656827b541ae78ee74cf3c940623caed52a7d25b731647587947e13a213a8f6"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/browse-probe-first-source-review/source/apps/web/features/realm/routes.tsx",
+          "bytes": 19965,
+          "sha256": "33e415f63f8e411164ea935acb90e6235452d4db6fe20ec6ccf350031224623a"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/browse-probe-first-source-review/source/apps/web/features/zones/attached-realm-site.test.ts",
+          "bytes": 10405,
+          "sha256": "cfe29555ea74a2b1f3aac3a29105ebe017710451963830935ab4ce2049a754cc"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/browse-probe-first-source-review/checks/0f44db80-fa99-4fa0-908e-69831a9cce14.json",
+          "bytes": 1014,
+          "sha256": "021ff1c8701be1e6d36f4423e03583ac3a59fed6d2970c2752e03f51f4bedcc3"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/browse-probe-first-source-review/checks/0f44db80-fa99-4fa0-908e-69831a9cce14.1.log",
+          "bytes": 244,
+          "sha256": "0b34e5300982f2d2897020e63e87a626092618dbe63d213f427af595e37d5fa2"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/browse-probe-first-source-review/checks/0f44db80-fa99-4fa0-908e-69831a9cce14.2.log",
+          "bytes": 1917,
+          "sha256": "f2f3cb4e634884c20899a30e928c9cafe4142bfe05b4fd860aa9e53f7e028207"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/browse-probe-first-source-review/checks/0f44db80-fa99-4fa0-908e-69831a9cce14.log",
+          "bytes": 282,
+          "sha256": "fe391492a473c40a1326c2c40416793b7b2d7077e1b5d6c322bd224623c54666"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/browse-probe-first-source-review/checks/6974c137-ea55-4cd8-9f46-dc09249d276f.json",
+          "bytes": 761,
+          "sha256": "aecbf341df1bd9b8271b0efd2971ddbd63803b6185d3622eab969b661ea3251b"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/browse-probe-first-source-review/checks/6974c137-ea55-4cd8-9f46-dc09249d276f.1.log",
+          "bytes": 105,
+          "sha256": "fd5ad5cabce35fddc02d2c5c059bb1ba86ef8f624480d00e100d996ae45dca1b"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/browse-probe-first-source-review/checks/6974c137-ea55-4cd8-9f46-dc09249d276f.2.log",
+          "bytes": 220,
+          "sha256": "367ba9a88831b278a1bccbc6eb840af37063d3bb89e38dbc98c299d29b7c65f6"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/browse-probe-first-source-review/checks/6974c137-ea55-4cd8-9f46-dc09249d276f.log",
+          "bytes": 282,
+          "sha256": "1165530a930256b3738eb9febb1720deaa65d598a02d56d63fbb7d2158a83845"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/browse-probe-first-source-review/checks/run-9zObe0-output.log",
+          "bytes": 101937,
+          "sha256": "0559a796edfb18829996d77cdb577e659874fda65b83e581160106f4ea7df9f0"
+        }
+      ],
+      "completionAndReportChecks": [
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/browse-probe-first-source-review/checks/6974c137-completion.json",
+          "bytes": 779,
+          "sha256": "df01251fb7d96a99daf3edd609e301f769b4df891bd1334b1d50f12ef9d5052d"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/browse-probe-first-source-review/checks/5758c787-d454-4595-b5ac-df1128ac2c2d.1.log",
+          "bytes": 348,
+          "sha256": "4cc29486a275adb1213d3c3ed3a78848e5a36200dc48ac30cd26bc1de1082b1d"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/browse-probe-first-source-review/checks/5758c787-d454-4595-b5ac-df1128ac2c2d.2.log",
+          "bytes": 618,
+          "sha256": "73e619761a57eb687aa6647f032a95a8fadf046baa6f71dc276b839a143a8188"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/browse-probe-first-source-review/checks/report-run-wRWRHS-output.log",
+          "bytes": 2871,
+          "sha256": "cd892be591b2a76e1e93db3a9b7de894cd6ee0a9411d9f3c6f393c692a4f598f"
+        }
+      ]
+    },
+    "preservation": {
+      "branchPin": "67fda61ddefa3679f038f53917b8eee55f67b590",
+      "branchFields": 40,
+      "mainFields": 39,
+      "mainOnlyOrDifferentFields": [],
+      "existingFieldsModified": [],
+      "priorProofAndFailures": "All preceding source, runtime, navigation, private-identity and actual AT dispositions remain unchanged, including released reader custody and Home gaps."
+    },
+    "limits": [
+      "Source-only approval. No new runtime, browser, screenshot, assistive-technology or genuine API execution; no services or reader custody acquired.",
+      "The prior genuine 390px pass remains at its original pin. The original desktop assertion 3 remains open for the manager-owned bounded 1440px run after source integration.",
+      "The discarded Browse probe correction does not establish resolution of the separately observed cold dispatch interval or mandatory default-position projection refusal.",
+      "No class closure, broad readiness, unaffected dependency review or product landing is claimed. The manager owns integration and original acceptance."
+    ],
+    "reportValidation": {
+      "recordedJob": "5758c787-d454-4595-b5ac-df1128ac2c2d",
+      "result": "passed",
+      "exit": 0,
+      "commands": [
+        {
+          "command": "task docs:check",
+          "exit": 0,
+          "result": "13 tests; 259 Markdown files passed"
+        },
+        {
+          "command": "task goal -- check",
+          "exit": 0,
+          "result": "report-only selection: AST and 1/45 guards passed; no changed TypeScript/source or named test files"
+        }
+      ],
+      "checkRun": "run-wRWRHS",
+      "harnessNotice": "Check reported harness 1 commit behind main; no harness failure occurred. No rebase or repeated source checks."
+    }
   }
 }
