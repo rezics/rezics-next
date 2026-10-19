@@ -1452,6 +1452,14 @@ describe('isolated PostgreSQL migration rehearsal', () => {
       const health = (logs.stdout + logs.stderr).split('\n').flatMap(line => {
         const signal = line.match(/server process .* was terminated by signal (\d+)/);
         if (signal) return [`backend-signal-${signal[1]}`];
+        const exit = line.match(/server process .* exited with exit code (\d+)/);
+        if (exit) return [`backend-exit-${exit[1]}`];
+        if (line.includes('PANIC:')) return ['panic', ...[
+          'could not fsync', 'could not fdatasync', 'could not write', 'could not open',
+          'could not map', 'could not resize', 'could not flush', 'could not create',
+          'could not extend', 'could not read', 'could not remove', 'could not close',
+          'No space left on device', 'Cannot allocate memory',
+        ].filter(reason => line.includes(reason))];
         if (line.includes('terminating any other active server processes')) return ['server-crash-recovery'];
         if (line.includes('database system is ready to accept connections')) return ['ready'];
         return [];
