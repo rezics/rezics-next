@@ -14,7 +14,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.jena.fuseki.main.FusekiServer;
 import org.apache.jena.fuseki.main.sys.FusekiModules;
 import org.apache.jena.fuseki.server.Operation;
+import org.apache.jena.graph.NodeFactory;
 import org.apache.jena.query.QueryCancelledException;
+import org.apache.jena.query.ReadWrite;
 import org.apache.jena.sparql.core.DatasetGraphFactory;
 import org.junit.Test;
 
@@ -67,6 +69,13 @@ public class RequestReadBoundaryTest {
             }
         }
         Fixture() {
+            // GRAPH checks existence before reaching the blocking lookup.
+            data.begin(ReadWrite.WRITE);
+            try {
+                data.add(NodeFactory.createURI(CommandPolicy.CURRENT), NodeFactory.createURI("urn:rezics:test:subject"),
+                    NodeFactory.createURI(PREDICATE), NodeFactory.createLiteralString("seed"));
+                data.commit();
+            } finally { data.end(); }
             var command = Operation.alloc("urn:rezics:test:read-boundary", "command", "command");
             server = FusekiServer.create().port(0).fusekiModules(FusekiModules.empty())
                 .add("/data", data, false)
