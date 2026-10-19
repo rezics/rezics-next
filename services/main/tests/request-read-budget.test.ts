@@ -8,6 +8,7 @@ import { workRead, publicWorkRead, WorkReadUnavailable, WorkReadMoved, WorkReadL
   from '../src/modules/work/read-session.ts';
 import { publicLanguageRequest } from '../src/modules/display-language/public-request.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
+import { runWorkerTick } from '../src/worker-tick.ts';
 
 const queryResult = { results: { bindings: [{ epoch: { type: 'literal', value: 'epoch' },
   sequence: { type: 'literal', value: '1' } }] } };
@@ -29,6 +30,101 @@ function fixture(handler?: (request: Request) => Response | Promise<Response>) {
     access: { assertRecoveryOpen: async () => {} } } as unknown as MainWorkDependencies;
   return { graph, deps, headers, stop: () => server.stop(true) };
 }
+
+test.each(['preflight', 'declared'] as const)(
+  'budget exit clears callback and descendant context and restores the %s caller', async phase => {
+    await withFusekiReadRequest(request(), limits, async () => {
+      const check = async () => {
+        const caller = fusekiReadBudget.getStore();
+        expect(caller).toBeDefined();
+        expect(fusekiReadBudget.exit((value: number) => {
+          expect(fusekiReadBudget.getStore()).toBeUndefined();
+          return value;
+        }, 7)).toBe(7);
+        expect(fusekiReadBudget.getStore()).toBe(caller);
+
+        const detached = fusekiReadBudget.exit(async () => {
+          expect(fusekiReadBudget.getStore()).toBeUndefined();
+          await Promise.resolve();
+          expect(fusekiReadBudget.getStore()).toBeUndefined();
+          await delay(0);
+          expect(fusekiReadBudget.getStore()).toBeUndefined();
+          return 'detached';
+        });
+        expect(fusekiReadBudget.getStore()).toBe(caller);
+        expect(await detached).toBe('detached');
+        expect(fusekiReadBudget.getStore()).toBe(caller);
+
+        const reason = new Error('detached callback failed');
+        expect(() => fusekiReadBudget.exit((error: Error) => {
+          expect(fusekiReadBudget.getStore()).toBeUndefined();
+          throw error;
+        }, reason)).toThrow(reason);
+        expect(fusekiReadBudget.getStore()).toBe(caller);
+        await expect(fusekiReadBudget.exit(async () => {
+          await delay(0);
+          expect(fusekiReadBudget.getStore()).toBeUndefined();
+          throw reason;
+        })).rejects.toBe(reason);
+        expect(fusekiReadBudget.getStore()).toBe(caller);
+      };
+      if (phase === 'declared') await fusekiReadBudget.run(scope(3), check);
+      else await check();
+    });
+    expect(fusekiReadBudget.getStore()).toBeUndefined();
+  });
+
+test('a detached worker selects its own bounded allocation without renewing a cancelled caller', async () => {
+  const f = fixture();
+  const controller = new AbortController();
+  const reason = new Error('request left before the scheduled worker tick');
+  const callerBudget = scope(3, 3 * bytes);
+  const workerBudget = { ...scope(1, bytes), deadline: performance.now() + 1000 };
+  try {
+    await expect(withFusekiReadRequest(request(controller.signal), limits, async () => {
+      const root = fusekiReadBudget.getStore()!;
+      await f.graph.query('ASK {}');
+      await fusekiReadBudget.run(callerBudget, async () => {
+        const caller = fusekiReadBudget.getStore()!;
+        await f.graph.query('ASK {}');
+        expect([root.callsLeft, root.bytesLeft]).toEqual([1, bytes]);
+        expect([caller.callsLeft, caller.bytesLeft]).toEqual([2, 2 * bytes]);
+
+        // Like a request-triggered nudge, this timer inherits the caller before
+        // explicitly exiting it to create the worker tick and its own owner.
+        const detached = delay(0).then(() => {
+          expect(fusekiReadBudget.getStore()).toBe(caller);
+          expect(caller.signal.reason).toBe(reason);
+          return fusekiReadBudget.exit(() => runWorkerTick('main.request-budget.detached', () =>
+            withFusekiReadRequest(request(), { calls: 1, bytes, deadlineMs: 1000 }, () =>
+              fusekiReadBudget.run(workerBudget, async () => {
+                const worker = fusekiReadBudget.getStore()!;
+                expect(worker).not.toBe(caller);
+                expect(worker.signal.aborted).toBe(false);
+                expect(worker.deadline).toBeLessThanOrEqual(workerBudget.deadline);
+                await f.graph.query('ASK {}');
+                expect([worker.callsLeft, worker.bytesLeft]).toEqual([0, 0]);
+                await expect(f.graph.query('ASK {}')).rejects.toBeInstanceOf(FusekiReadBudgetExceeded);
+              }))));
+        });
+        const workerStopped = detached.catch(error => error);
+        controller.abort(reason);
+        await expect(f.graph.query('ASK {}')).rejects.toBe(reason);
+        expect(await workerStopped).toBeInstanceOf(FusekiReadBudgetExceeded);
+        expect(fusekiReadBudget.getStore()).toBe(caller);
+        expect(caller.signal.reason).toBe(reason);
+        await expect(f.graph.query('ASK {}')).rejects.toBe(reason);
+        expect([root.callsLeft, root.bytesLeft]).toEqual([1, bytes]);
+        expect([caller.callsLeft, caller.bytesLeft]).toEqual([2, 2 * bytes]);
+      });
+    })).rejects.toBe(reason);
+    expect(fusekiReadBudget.getStore()).toBeUndefined();
+    expect(f.headers).toHaveLength(3);
+    expect(f.headers.every(headers => Number(headers.get('x-rezics-read-budget-ms')) > 0)).toBe(true);
+    expect([workerBudget.callsLeft, workerBudget.bytesLeft]).toEqual([0, 0]);
+    expect([callerBudget.callsLeft, callerBudget.bytesLeft]).toEqual([2, 2 * bytes]);
+  } finally { controller.abort(); await f.stop(); }
+});
 
 test('preflight, plain nested scopes and sibling owners spend one request allocation', async () => {
   const f = fixture();
