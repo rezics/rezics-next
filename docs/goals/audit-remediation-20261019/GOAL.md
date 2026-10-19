@@ -8,6 +8,10 @@ codex-2 / GPT-6.1 Sol / ultra manager to each retained audit, with completion
 targeted for 16:00 Asia/Shanghai on 2026-10-19. It takes precedence over older
 execution sequencing and manager-model assignments below.
 
+The maintainer is reviewing the consolidated [module design draft](../../architecture/audit-module-design-review-20261019.md).
+Continue connecting and proving existing capabilities. Treat its proposed changes
+to module responsibilities as review proposals rather than already adopted design.
+
 The current [execution reset](execution-reset.md) delegates routine decisions and
 authorizes targeted proof of ready slices during unrelated builds. It supersedes
 prior internal Program-reading and global prove-phase holds.
