@@ -2,6 +2,7 @@ import { insert } from 'native-i18n';
 import type { EntityPageMessages } from '../messages.ts';
 
 export default {
+  sources: "来源、许可与证据",
   alternateSelf: "另一个自己",
   otherWorldCounterpart: "其他世界的对应角色",
   identityGlobal: "全站",
