@@ -78,7 +78,7 @@ type Story = StoryObj<typeof meta>;
 const populated: Story['play'] = async ({ canvasElement, args }) => {
   const canvas = within(canvasElement);
   const answers = closureAnswers(args.persona, args.state);
-  await expect(await canvas.findByRole('link', { name: 'Live member replied on Independent original source' })).toBeVisible();
+  await expect(await canvas.findByRole('link', { name: 'Live member replied on “Independent original source”' })).toBeVisible();
   await expect(canvas.getByText('Original reply by the credited live member Person.')).toHaveAttribute('lang', 'en');
   await expect(canvasElement).not.toHaveTextContent('Original closed-Realm reply source');
   await expect(canvasElement).not.toHaveTextContent('Original reply by the credited closed member Person.');
@@ -91,9 +91,9 @@ const populated: Story['play'] = async ({ canvasElement, args }) => {
   await expect(await canvas.findByText('Delivery cancelled')).toBeVisible();
   await userEvent.click(canvas.getAllByRole('button', { name: 'Delivery details' })[1]!);
   await expect(await canvas.findByText('Delivered')).toBeVisible();
-  await userEvent.click(canvas.getByRole('button', { name: 'Older notifications' }));
-  await waitFor(() => expect(canvas.getAllByRole('link', { name: 'Live member replied on Independent original source' })).toHaveLength(2));
-  await expect(canvas.queryByRole('button', { name: 'Older notifications' })).toBeNull();
+  await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
+  await waitFor(() => expect(canvas.getAllByRole('link', { name: 'Live member replied on “Independent original source”' })).toHaveLength(2));
+  await expect(canvas.queryByRole('button', { name: 'Show more' })).toBeNull();
   await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
 };
 
@@ -132,7 +132,7 @@ export const Error: Story = { args: { state: 'error' }, async play({ canvasEleme
 export const CountError: Story = { args: { state: 'count-error' }, async play({ canvasElement }) {
   const canvas = within(canvasElement);
   await expect(await canvas.findByRole('alert')).toHaveTextContent('Reference: closure-count-503');
-  await expect(canvas.getByRole('link', { name: 'Live member replied on Independent original source' })).toBeVisible();
+  await expect(canvas.getByRole('link', { name: 'Live member replied on “Independent original source”' })).toBeVisible();
   await expect(canvas.getByRole('status', { name: 'Unread badge' })).toBeEmptyDOMElement();
 } };
 export const DeliveryError: Story = { args: { state: 'delivery-error' }, async play({ canvasElement }) {
@@ -155,7 +155,7 @@ export const UncertainDelivery: Story = { args: { state: 'delivery-uncertain' },
 } };
 export const ContinuationDenied: Story = { args: { state: 'continuation-denied' }, async play({ canvasElement }) {
   const canvas = within(canvasElement);
-  await userEvent.click(await canvas.findByRole('button', { name: 'Older notifications' }));
+  await userEvent.click(await canvas.findByRole('button', { name: 'Show more' }));
   await expect(await canvas.findByRole('alert')).toHaveTextContent('Sign in to see your notifications');
   await expect(canvas.getByRole('link', { name: 'Sign in' })).toHaveAttribute('href', '/auth/start?next=%2Fen%2Fnotifications');
 } };
