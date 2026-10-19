@@ -57,6 +57,7 @@ export default {
 
   sections: '작품 메뉴', overview: '개요', contents: '목차', versions: '버전',
   discussion: '토론', history: '기록',
+  postMoreActions: '게시물 추가 작업', replyMoreActions: '답글 추가 작업',
 
   scope: '커뮤니티', global: '전체', realm: '커뮤니티', mine: '내 평점', chooseRealm: '커뮤니티 선택',
   adoptingRealms: '이 작품을 선정한 커뮤니티', noAdoptingRealms: '아직 이 작품을 선정한 커뮤니티가 없습니다.',

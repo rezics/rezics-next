@@ -57,6 +57,7 @@ export default {
 
   sections: 'Secciones de la obra', overview: 'Resumen', contents: 'Contenido', versions: 'Versiones',
   discussion: 'Debate', history: 'Historial',
+  postMoreActions: 'Más acciones para la publicación', replyMoreActions: 'Más acciones para la respuesta',
 
   scope: 'Comunidad', global: 'Todo el mundo', realm: 'Comunidad', mine: 'Tú', chooseRealm: 'Elegir una comunidad',
   adoptingRealms: 'Comunidades que destacan esta obra', noAdoptingRealms: 'Ninguna comunidad destaca esta obra todavía.',

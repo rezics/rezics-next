@@ -110,6 +110,7 @@ const en = {
 
   sections: 'Work sections', overview: 'Overview', contents: 'Contents', versions: 'Versions',
   discussion: 'Discussion', history: 'History',
+  postMoreActions: 'More actions for post', replyMoreActions: 'More actions for reply',
 
   scope: 'Community', global: 'Everyone', realm: 'Community', mine: 'You', chooseRealm: 'Choose a community',
   adoptingRealms: 'Communities that feature this Work', noAdoptingRealms: 'No community features this Work yet.',
