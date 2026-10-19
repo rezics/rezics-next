@@ -31,7 +31,7 @@ function item(n: number, work: string, title: string, language: string, kind: ke
   extra: Partial<InventoryWork> = {}): InventoryWork {
   return { id: work, mainVersion: id(600 + n), workRevision: id(700 + n), mainRevision: id(800 + n),
     title: { value: title, language }, relationship: 'authored', cover: cover(`key-${n}`), types: types[kind],
-    disclosure: 'restricted', state,
+    disclosure: 'restricted', state, chapterCount: kind === 'book' ? { value: 0, complete: true } : null,
     texts: [], submissions: [], createdAt: at(10 + n), updatedAt: at(20 + n), ...extra } as InventoryWork;
 }
 
@@ -40,7 +40,7 @@ const text = (contribution: string, language: string, draftHead: string, publish
 
 export const inventory: InventoryView = {
   page: { items: [
-    item(1, ids.serial, '雨夜书店', 'zh-hans', 'book', 'published', { disclosure: 'public',
+    item(1, ids.serial, '雨夜书店', 'zh-hans', 'book', 'published', { disclosure: 'public', chapterCount: { value: 3, complete: true },
       texts: [text(ids.texts.serial, 'zh-Hans', id(303), true)],
       submissions: [{ id: id(501).slice(-36), realm: ids.realms[1]!, state: 'pending', openedAt: at(24), updatedAt: at(25) }] }),
     item(3, ids.story, 'The Cartographer of Tides', 'en', 'document', 'draft',
@@ -48,7 +48,6 @@ export const inventory: InventoryView = {
     item(4, ids.recipe, 'Ginger lemon tea', 'en', 'recipe', 'published', { disclosure: 'public',
       texts: [text(ids.texts.recipe, 'en', id(302), true)] }),
   ], nextCursor: null, sourcePosition: position, count: { value: 3, kind: 'exact-page', total: null } } as never,
-  books: { [ids.serial]: { count: 3, more: false, published: 2 } },
 };
 
 /** Works the Agent imported or curates: other people wrote them, so Studio only opens them. */
@@ -58,7 +57,6 @@ export const curated: InventoryView = {
       texts: [text(id(205), 'en', id(305), true)] }),
     item(6, id(106), '西游记', 'zh-hans', 'book', 'published', { relationship: 'curated', disclosure: 'public' }),
   ], nextCursor: null, sourcePosition: position, count: { value: 2, kind: 'exact-page', total: null } } as never,
-  books: {},
 };
 
 const submission = (n: number, work: string, realm: string, state: Submission['state'], publicReason: string | null = null):
