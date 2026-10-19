@@ -1,6 +1,6 @@
 'use client';
 
-import { normalizeDocument, serializeDocument, withDocumentIds, type DocumentNode, type DocumentSnapshot } from '@rezics/document';
+import { normalizeDocument, withDocumentIds, type DocumentNode, type DocumentSnapshot } from '@rezics/document';
 import { type Editor as TiptapEditor, type JSONContent } from '@tiptap/core';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
@@ -30,19 +30,24 @@ import { NativeSelect, NativeSelectOption } from './native-select.tsx';
 import { SkeletonText } from './skeleton.tsx';
 import { editorSnapshot } from './rich-text-editor-snapshot.ts';
 import { editorUploads } from './rich-text-editor-uploads.ts';
+import { controlledEditorContent, removeEditorImages, sameEditorBlocks } from './rich-text-editor-recovery.tsx';
 
 export { richTextEditorLabels, type RichTextEditorLabels };
 
 export interface RichTextEditorRecovery {
   document: () => DocumentNode | undefined;
+  text: () => string | undefined;
+  focus: () => void;
   retrySnapshot: () => void;
   retryUploads: () => void;
   cancelUploads: () => void;
-  removeImages: () => void;
+  removeImages: (invalidOnly?: boolean) => void;
 }
 
 export interface RichTextEditorProps {
   value: DocumentSnapshot;
+  /** Raw editor-owned recovery takes precedence until its complete snapshot can be persisted. */
+  recoveryDocument?: DocumentNode;
   onChange: (document: DocumentSnapshot) => void;
   label: string;
   labels?: Partial<RichTextEditorLabels>;
@@ -80,16 +85,6 @@ export interface RichTextEditorProps {
 }
 
 type Selection = { from: number; to: number; content?: JSONContent[]; attrs?: JSONContent['attrs']; marks?: JSONContent['marks'] };
-
-function sameBlocks(a: DocumentSnapshot, b: DocumentSnapshot): boolean {
-  const left = a.doc.content ?? [], right = b.doc.content ?? [];
-  return a === b || (a.profile === b.profile && left.length === right.length && left.every((block, index) => block === right[index]));
-}
-
-/** Normalized blocks serialize from cache, so comparing a returned value with the last emitted one costs only what changed. */
-function sameDocument(a: DocumentSnapshot, b: DocumentSnapshot): boolean {
-  return sameBlocks(a, b) || serializeDocument(a) === serializeDocument(b);
-}
 
 function normalizeValue(value: DocumentSnapshot): DocumentSnapshot {
   try {
@@ -146,7 +141,7 @@ const ComposeActions = memo(function ComposeActions({ editor, labels, io }: { ed
 });
 
 /** A controlled Tiptap document editor. Initial hydration and controlled value updates never save a document. */
-export function RichTextEditor({ value, onChange, label, labels: labelOverrides, placeholder, lang, dir, className, compact = false, toolbarMode = 'contextual', pointerMode = 'auto', discussionKeyboardBar = false, onUploadImage, onEditImageLabels, resolveImageMetadata, imageMetadataScope,
+export function RichTextEditor({ value, recoveryDocument, onChange, label, labels: labelOverrides, placeholder, lang, dir, className, compact = false, toolbarMode = 'contextual', pointerMode = 'auto', discussionKeyboardBar = false, onUploadImage, onEditImageLabels, resolveImageMetadata, imageMetadataScope,
   disabled = false, readOnly = false, autoFocus = false, maxLength, onBlur, onFocus, onSave, onKeyDown, onSnapshotError, onSnapshotPending, onUploadStateChange, recoveryRef }: RichTextEditorProps) {
   const labels = useMemo(() => ({ ...richTextEditorLabels, ...labelOverrides }), [labelOverrides]);
   const lastEmitted = useRef<DocumentSnapshot | null>(null);
@@ -200,7 +195,7 @@ export function RichTextEditor({ value, onChange, label, labels: labelOverrides,
     try {
       const next = editorSnapshot(current.state.doc, latest.current.profile, blockCache.current);
       setSnapshotError(false);
-      if (!force && lastEmitted.current && sameBlocks(next, lastEmitted.current)) return;
+      if (!force && lastEmitted.current && sameEditorBlocks(next, lastEmitted.current)) return;
       latest.current.onSnapshotPending?.();
       lastEmitted.current = next;
       latest.current.onChange(next);
@@ -212,7 +207,7 @@ export function RichTextEditor({ value, onChange, label, labels: labelOverrides,
     }
   }
   const editor = useEditor({
-    extensions, content: initial.doc as JSONContent, immediatelyRender: false, shouldRerenderOnTransaction: false,
+    extensions, content: (recoveryDocument ?? initial.doc) as JSONContent, immediatelyRender: false, shouldRerenderOnTransaction: false,
     editable, autofocus: autoFocus, enableContentCheck: true,
     onUpdate: ({ editor: current }) => publish(current),
     onBlur: () => latest.current.onBlur?.(), onFocus: () => latest.current.onFocus?.(),
@@ -255,6 +250,8 @@ export function RichTextEditor({ value, onChange, label, labels: labelOverrides,
   }, [uploadRecovery]);
   useImperativeHandle(recoveryRef, () => ({
     document: () => editor?.getJSON() as DocumentNode | undefined,
+    text: () => editor?.getText(),
+    focus: () => { if (editor && editable) editor.view.focus(); },
     retrySnapshot: () => { if (editor) publish(editor, true); },
     retryUploads: () => {
       if (!editor || !editable) return;
@@ -265,15 +262,9 @@ export function RichTextEditor({ value, onChange, label, labels: labelOverrides,
       uploadRecovery.takeFailures();
       if (editor) publish(editor, true);
     },
-    removeImages: () => {
+    removeImages: (invalidOnly = false) => {
       if (!editor || !editable) return;
-      const images: Array<{ from: number; to: number }> = [];
-      editor.state.doc.descendants((node, position) => {
-        if (node.type.name === 'image') images.push({ from: position, to: position + node.nodeSize });
-      });
-      const transaction = editor.state.tr;
-      for (const image of images.reverse()) transaction.delete(image.from, image.to);
-      editor.view.dispatch(transaction);
+      editor.view.dispatch(removeEditorImages(editor.state, invalidOnly));
       publish(editor, true);
     },
   }));
@@ -294,11 +285,14 @@ export function RichTextEditor({ value, onChange, label, labels: labelOverrides,
   }
   useEffect(() => {
     if (!editor) return;
-    if (lastEmitted.current && sameDocument(initial, lastEmitted.current)) return;
-    lastEmitted.current = initial;
-    setSnapshotError(false);
-    editor.commands.setContent(initial.doc as JSONContent, { emitUpdate: false });
-  }, [editor, initial]);
+    const content = controlledEditorContent(initial, lastEmitted.current, editor.state.doc, recoveryDocument);
+    if (!content) return;
+    if (!recoveryDocument) {
+      lastEmitted.current = initial;
+      setSnapshotError(false);
+    }
+    editor.commands.setContent(content as JSONContent, { emitUpdate: false });
+  }, [editor, initial, recoveryDocument]);
   // An open link field belongs to the selection it was opened on.
   useEffect(() => {
     if (!editor) return;

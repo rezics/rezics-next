@@ -6,10 +6,10 @@ import {
   fromPlainText,
   parseDocument,
   parseStoredDocument,
-  serializeDocument,
 } from '@rezics/document';
 import { Button } from '@rezics/ui/button';
 import { RichTextEditor, type RichTextEditorProps, type RichTextEditorRecovery } from '@rezics/ui/rich-text-editor';
+import { readEditorRecovery } from '@rezics/ui/rich-text-editor-recovery';
 import { DownloadIcon, UploadIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -23,7 +23,7 @@ import type { ImageUploader } from '@rezics/ui/editor-image';
 
 export interface BodyEditorProps extends Omit<
   RichTextEditorProps,
-  'value' | 'onChange' | 'labels' | 'recoveryRef'
+  'value' | 'onChange' | 'labels' | 'recoveryRef' | 'recoveryDocument'
 > {
   value: string;
   onChange: (value: string) => void;
@@ -67,12 +67,13 @@ export function BodyEditor({
     ? references => resolveMediaMetadata(references, actingSubject) : undefined, [actingSubject]);
   const document = useMemo(() => {
     const source =
-      parseStoredDocument(recoveryValue ?? '') ?? parseStoredDocument(value) ??
+      parseStoredDocument(value) ??
       (legacyMarkdown ? fromMarkdown(value, 'blocks') : fromPlainText(value, 'blocks'));
     // The application editor can add blocks to Text imports. Opening or switching modes
     // never writes; an explicit edit saves the same nodes under the Blocks profile.
     return source.profile === 'text' ? { ...source, profile: 'blocks' as const } : source;
-  }, [value, legacyMarkdown, recoveryValue]);
+  }, [value, legacyMarkdown]);
+  const recoveryDocument = useMemo(() => readEditorRecovery(recoveryValue), [recoveryValue]);
   const upload = useRef<HTMLInputElement>(null);
   const [error, setError] = useState(false);
   const [imageError, setImageError] = useState(false);
@@ -132,6 +133,15 @@ export function BodyEditor({
     link.click();
     URL.revokeObjectURL(url);
   }
+  function currentDocument() {
+    return snapshotFailed.current
+      ? { ...document, doc: recovery.current?.document() ?? recoveryDocument ?? document.doc }
+      : publication.current() ?? document;
+  }
+  function exportDocument() {
+    // Raw recovery is deliberately not portable yet; export must not try to normalize it.
+    download(snapshotFailed.current && recoveryValue ? recoveryValue : JSON.stringify(currentDocument()), 'rezics.json', 'application/json');
+  }
   async function importFile(file: File) {
     try {
       if (file.size > 1_048_576) throw new Error('Document too large');
@@ -169,6 +179,7 @@ export function BodyEditor({
       <RichTextEditor
         {...props}
         value={document}
+        recoveryDocument={recoveryDocument}
         onChange={(next) => { snapshotFailed.current = false; void publication.publish(next); }}
         labels={t}
         compact={compact}
@@ -220,7 +231,7 @@ export function BodyEditor({
             type="button"
             variant="ghost"
             size="sm"
-            onClick={() => download(serializeDocument(publication.current() ?? document), 'rezics.json', 'application/json')}
+            onClick={exportDocument}
           >
             <DownloadIcon aria-hidden="true" />
             {t.exportDocument}
@@ -229,7 +240,7 @@ export function BodyEditor({
             type="button"
             variant="ghost"
             size="sm"
-            onClick={() => download(documentText(publication.current() ?? document), 'txt', 'text/plain;charset=utf-8')}
+            onClick={() => download(snapshotFailed.current ? recovery.current?.text() ?? '' : documentText(currentDocument()), 'txt', 'text/plain;charset=utf-8')}
           >
             <DownloadIcon aria-hidden="true" />
             {t.exportText}
@@ -246,20 +257,18 @@ export function BodyEditor({
         <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" size="sm" disabled={readOnly || disabled}
             onClick={() => {
+              recovery.current?.focus();
               if (failedUpload) recovery.current?.retryUploads();
               else if (snapshotFailed.current) recovery.current?.retrySnapshot();
               else void publication.retry();
             }}>{t.retrySave}</Button>
           <Button type="button" variant="ghost" size="sm" disabled={readOnly || disabled}
             onClick={() => {
+              recovery.current?.focus();
               if (failedUpload) recovery.current?.cancelUploads();
-              else recovery.current?.removeImages();
+              else recovery.current?.removeImages(snapshotFailed.current);
             }}>{failedUpload ? t.cancel : t.removeImages}</Button>
-          <Button type="button" variant="ghost" size="sm" onClick={() => {
-            const current = snapshotFailed.current ? { ...document, doc: recovery.current?.document() ?? document.doc }
-              : publication.current() ?? document;
-            download(snapshotFailed.current && recoveryValue ? recoveryValue : JSON.stringify(current), 'rezics.json', 'application/json');
-          }}>{t.exportDocument}</Button>
+          <Button type="button" variant="ghost" size="sm" onClick={exportDocument}>{t.exportDocument}</Button>
         </div>
       ) : null}
     </div>
