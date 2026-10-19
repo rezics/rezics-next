@@ -45,7 +45,7 @@ function fixture() {
     sourceReads++;
     return sourceReads > 1 && afterSource ? afterSource : source;
   } } as ContentCore;
-  const cursor = { read: async () => checkpoint } as ContentProjectionCursor;
+  const cursor = { read: async () => checkpoint } as unknown as ContentProjectionCursor;
   const env = { fuseki, lineage, objectDirectory: '.temp/content-readiness' };
   return { fuseki, queries, profiles,
     read: () => assertPublicContentSearchReady(env, content, cursor, 'content-test'),
