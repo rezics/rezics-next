@@ -199,6 +199,7 @@ export async function recipeWorkFrame({ host, workRef, id, work, locale, message
   const statements = projection.ok ? sectionOf(projection.data, 'statements') : undefined;
   const facts = statements ? await readLinkedStatements(host.main, actingSubject, statements.href) : undefined;
   const recipe = experience.typeSection ? await reads.readRecipe(experience.typeSection.href) : null;
+  const canCook = Boolean(recipe?.ok && recipe.data && (recipe.data.ingredients.length || recipe.data.instructions?.length));
   const zone = wikiZoneRead(projection, facts);
   const t = materializeData(messages, { locale });
   // A recipe does not render the cover rail. Native authors stay on the credit read; the cover
@@ -236,9 +237,8 @@ export async function recipeWorkFrame({ host, workRef, id, work, locale, message
       <WorkRecord work={work} locale={locale} messages={messages} />
     </>}
     sections={hubLabels(messages, plan)}
-    readAction={recipe?.ok && recipe.data && (recipe.data.ingredients.length || recipe.data.instructions?.length)
-      ? <WorkKindActions kind={experience.kind} workId={work.id} workRef={workRef} title={work.title.value} locale={locale}
-        messages={messages} words={shelfWords(experience, messages)} /> : null}
+    readAction={<WorkKindActions kind={experience.kind} workId={work.id} workRef={workRef} title={work.title.value} locale={locale}
+      messages={messages} words={shelfWords(experience, messages)} canCook={canCook} />}
     shortcuts={<>
       <ProvisionalNotice verification={work.verification} provenance={work.fieldProvenance} locale={locale} />
       {plan.includes('wiki') ? <WikiShortcutView realm={zone.ok ? zone.data : null} locale={locale} messages={messages} /> : null}
@@ -269,7 +269,8 @@ export async function recipeWorkOverview({ host, workRef, id, work, scope, local
   const section = experience.typeSection;
   const [recipe, statements, discussion, parts, wholes, relations, realizations, releases, populations,
     ratings, classifications, facets, adoptions, alsoEnjoyed, authority] = await Promise.all([
-    section ? recipeRegion({ host, id, work, href: section.href, locale, messages }) : Promise.resolve(null),
+    section ? recipeRegion({ host, id, work, href: section.href, locale, messages })
+      : Promise.resolve(<RegionFailure title={messages.recipeMethod} failure="unavailable" messages={messages} />),
     statementsSection ? readLinkedStatements(host.main, actingSubject, statementsSection.href) : Promise.resolve(null),
     discussionSection ? settleOpen(() => host.main.v1.resources({ resource: id }).discussion.get({
       query: { actingSubject },

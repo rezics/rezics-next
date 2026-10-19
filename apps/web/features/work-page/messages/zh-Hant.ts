@@ -238,6 +238,7 @@ export default {
   unitSystem: '單位', unitWritten: '照原寫法', unitUs: '美制', unitMetric: '公制', cookThis: '開始烹調', cookMode: '烹調模式',
   closeCookMode: '結束烹調模式', startTimer: '開始計時', pauseTimer: '暫停計時', restartTimer: '重新計時',
   recipeNotes: '備註', recipeUnstructured: '這份食譜尚未提供可換算的食材用量。',
+  cookUnavailableAction: '烹調', recipeUnavailable: '暫時無法提供烹調步驟。',
   // Machine-drafted; needs native review.
   showMoreRecipe: '顯示這道食譜的其餘部分', loadingMoreRecipe: '正在載入更多…',
   recipeContinueFailed: '無法載入這道食譜的其餘部分。已顯示的內容仍在。',

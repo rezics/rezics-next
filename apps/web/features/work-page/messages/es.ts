@@ -249,6 +249,7 @@ export default {
   unitUs: "EE. UU.",
   unitMetric: "Métrico",
   cookThis: "Preparar esta receta",
+  cookUnavailableAction: 'Cocinar', recipeUnavailable: 'Las instrucciones de preparación no están disponibles.',
   cookMode: "Modo de cocina",
   closeCookMode: "Cerrar el modo de cocina",
   startTimer: "Iniciar temporizador",

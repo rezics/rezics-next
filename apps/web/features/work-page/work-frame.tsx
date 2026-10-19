@@ -124,10 +124,13 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
     {sources}
   </WorkSources>;
   if (!showsBookControls(experience)) {
+    const recipeType = work.types.find(type => type === 'https://schema.org/Recipe');
     return <ReaderActionsProvider signedIn={signedIn} signInHref={signInHref ?? '/auth/start'}
       actingSubject={actingSubject} seed={readerSeed} ratingTarget={ratingTarget} actions={readerActions}>
       <PageContainer className="grid gap-7 max-lg:pb-24 [text-autospace:normal]">
-        <div data-work-identity className="grid min-w-0 gap-4 border-border/60 border-b pb-6">
+        <div data-work-identity data-subject-header={recipeType ? '' : undefined}
+          data-resource={recipeType ? work.id : undefined} data-semantic-type={recipeType}
+          className="grid min-w-0 gap-4 border-border/60 border-b pb-6">
           {reactions}
           <div className="grid min-w-0 content-start gap-3">
             {artHeader}

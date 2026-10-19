@@ -24,6 +24,7 @@ import { WorkKindActions } from './types/actions.tsx';
 import { RecipeExperience } from './types/recipe.tsx';
 import { HubExperience } from './types/hub.tsx';
 import { GuideExperience } from './types/guide.tsx';
+import { RegionFailure } from './region.tsx';
 import { projectionFor } from '../entity-page/fixtures.ts';
 import { workExperience } from '../entity-page/experience.ts';
 import type { RecipeWorkPage, HubWorkPage } from './types.ts';
@@ -33,16 +34,18 @@ function Framed({
   work = fixture.work,
   locale = 'en',
   hubText,
+  projectionMissing = false,
   children,
 }: {
   work?: WorkHeader;
   locale?: UiLocale;
   hubText?: string | null;
+  projectionMissing?: boolean;
   children: ReactNode;
 }) {
   // The page a Work gets comes from its projection, as the route reads it.
   const experience = workExperience(
-    projectionFor({
+    projectionMissing ? null : projectionFor({
       id: work.id.slice(-36),
       base: 'work',
       types: work.types,
@@ -68,6 +71,7 @@ function Framed({
             locale={locale}
             messages={messages[locale]}
             hubText={hubText}
+            canCook={!projectionMissing}
           />
         )
       }
@@ -111,6 +115,27 @@ const typedWork = (type: string, title: string): WorkHeader => ({
   chapterCount: null,
   wordCount: null,
 });
+
+function unavailableHub(type: 'PromptTemplate' | 'SkillPackage', title: string, phone = false): Story {
+  return {
+    args: { work: typedWork(`https://rezics.com/vocab/${type}`, title), projectionMissing: true,
+      children: <RegionFailure title={messages.en.hubUnavailable} failure="unavailable" messages={messages.en} /> },
+    globals: { locale: 'en', viewport: { value: phone ? 'phone' : 'desktop1440' } },
+    play: async ({ canvasElement }) => {
+      const canvas = within(canvasElement);
+      await expect(canvas.getByRole('heading', { level: 1, name: title })).toBeVisible();
+      const failure = canvas.getByRole('alert');
+      await expect(failure).toHaveTextContent(messages.en.hubUnavailable);
+      await expect(failure).toHaveTextContent(messages.en.regionUnavailable);
+      await expect(within(failure).getByRole('button', { name: messages.en.retry })).toBeEnabled();
+      await expect(canvas.queryByRole('button', { name: /Want to read|Copy prompt|Copy SKILL.md|Install/ })).toBeNull();
+      await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    },
+  };
+}
+
+export const PromptProjectionUnavailable: Story = unavailableHub('PromptTemplate', 'Known writing prompt');
+export const SkillProjectionUnavailablePhone: Story = unavailableHub('SkillPackage', 'Known publishing skill', true);
 
 const recipeStory: RecipeWorkPage = {
   profile: 'recipe-work-page-v1',

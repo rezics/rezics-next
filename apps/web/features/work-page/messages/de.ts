@@ -250,6 +250,7 @@ export default {
   unitUs: "US",
   unitMetric: "Metrisch",
   cookThis: "Jetzt kochen",
+  cookUnavailableAction: 'Kochen', recipeUnavailable: 'Die Kochanleitung ist nicht verfügbar.',
   cookMode: "Kochmodus",
   closeCookMode: "Kochmodus schließen",
   startTimer: "Timer starten",

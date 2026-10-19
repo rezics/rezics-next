@@ -35,6 +35,7 @@ export default {
   scaleHeld: '此用量保持原文。',
   unitSystem: '单位', unitWritten: '照原写法', unitUs: '美制', unitMetric: '公制',
   cookThis: '开始烹饪', cookMode: '烹饪模式', closeCookMode: '退出烹饪模式',
+  cookUnavailableAction: '烹饪', recipeUnavailable: '暂时无法提供烹饪步骤。',
   startTimer: '开始计时', pauseTimer: '暂停计时', restartTimer: '重新计时',
   recipeNotes: '备注', recipeUnstructured: '此食谱尚未添加可换算的食材用量。',
   // Machine-drafted; needs native review.

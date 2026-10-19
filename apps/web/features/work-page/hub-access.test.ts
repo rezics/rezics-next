@@ -9,9 +9,10 @@ import type { HubWorkPage } from './types.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { workHref } from './route.ts';
 import { seedServedTypes, servedTypes } from '../catalogue/type-fixtures.ts';
-import { projectionFor } from '../entity-page/fixtures.ts';
+import { noStatements, projectionFor } from '../entity-page/fixtures.ts';
 import { ShellProvider } from '../shell/shell-provider.tsx';
 import { messages as shellMessages } from '../shell/messages.ts';
+import { workExperience } from '../entity-page/experience.ts';
 
 const originalMain = { ...(await import('../api/main.ts')) };
 const originalHeaders = { ...(await import('next/headers')) };
@@ -28,6 +29,7 @@ let signedIn = false;
 let access: PlatformAccess = { groups: [], operations: [], generation: 'anonymous' };
 let reads = 0;
 let kind: 'prompt' | 'skill' = 'prompt';
+let projectionMode: 'ready' | 'unavailable' | 'missing-section' = 'ready';
 seedServedTypes();
 const typesFor = (kind: 'prompt' | 'skill') => [servedTypes.types.find(type => type.presentation === kind)!.type];
 let answer: { data: HubWorkPage | null; error: { status: number; value?: unknown } | null };
@@ -42,11 +44,18 @@ const restoreHeaders = replaceModule(import.meta.resolve('next/headers'), origin
 const restoreNavigation = replaceModule(import.meta.resolve('next/navigation'), originalNavigation, {
   usePathname: () => localizedPath(workHref(id), 'en'),
   useSearchParams: () => new URLSearchParams(),
+  useRouter: () => ({ refresh() {} }),
 });
 const restoreSession = replaceModule(import.meta.resolve('../auth/session.ts'), originalSession, { sessionAgentState: async () => null });
 const restoreProjection = replaceModule(import.meta.resolve('../entity-page/read.ts'), originalProjection, {
-  readEntityProjection: async () => ({ ok: true, data: projectionFor({ id, base: 'work', types: typesFor(kind),
-    name: work.title.value }) }),
+  // The current frame reads its fact/source collection before streaming Hub content.
+  readStatements: async () => ({ ok: true, data: { ...noStatements, resource: work.id } }),
+  readEntityProjection: async () => {
+    if (projectionMode === 'unavailable') return { ok: false, failure: 'unavailable' };
+    const data = projectionFor({ id, base: 'work', types: typesFor(kind), name: work.title.value });
+    return { ok: true, data: projectionMode === 'missing-section'
+      ? { ...data, sections: data.sections.filter(section => section.id !== kind) } : data };
+  },
 });
 const originalRead = { ...(await import('./read.ts')) };
 const restoreRead = replaceModule(import.meta.resolve('./read.ts'), originalRead, {
@@ -144,3 +153,30 @@ test('a temporary Hub failure remains recoverable for a permitted viewer', async
   answer = { data: null, error: { status: 503 } };
   expect(await readHubWorkPage(href)).toEqual({ ok: false, failure: 'unavailable', status: 503 });
 });
+
+for (const shownKind of ['prompt', 'skill'] as const) {
+  for (const mode of ['unavailable', 'missing-section'] as const) {
+    test(`known ${shownKind}: ${mode} keeps identity and a recoverable explanation without an invented publication read`, async () => {
+      kind = shownKind;
+      signedIn = true;
+      access = { groups: ['developer-extras'], operations: [], generation: mode };
+      projectionMode = mode;
+      reads = 0;
+      try {
+        const html = await productionPage();
+        expect(/<h1\b[^>]*>(.*?)<\/h1>/s.exec(html)?.[1]).toBe(work.title.value);
+        expect(html).toContain(messages.en.hubUnavailable);
+        expect(html).toContain(messages.en.regionUnavailable);
+        expect(html).toContain(messages.en.retry);
+        expect(html).not.toContain(publication.content);
+        expect(html).not.toContain('Want to read');
+        expect(reads).toBe(0);
+        access = { groups: [], operations: [], generation: 'closed' };
+        const section = await TypeExperience({ id, work: { ...work, types: typesFor(kind) }, locale: 'en',
+          messages: messages.en, experience: workExperience(null, typesFor(kind)) });
+        expect(section).toBeNull();
+        expect(reads).toBe(0);
+      } finally { projectionMode = 'ready'; }
+    });
+  }
+}

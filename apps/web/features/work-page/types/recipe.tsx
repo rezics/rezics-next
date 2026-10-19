@@ -471,7 +471,8 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, loc
         }} /> : null}
     </> : <>
       {editorLink}
-      <p className="text-muted-foreground text-sm">{t.recipeUnstructured}</p>
+      <p className="text-muted-foreground text-sm">{t.recipeUnavailable}</p>
+      {edit ? <p className="text-muted-foreground text-sm">{t.recipeUnstructured}</p> : null}
       {text ? <p className="whitespace-pre-wrap leading-7">{text}</p> : null}
     </>}
   </Region>;

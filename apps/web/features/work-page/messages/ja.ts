@@ -239,6 +239,7 @@ export default {
   closeCookMode: '調理モードを閉じる', startTimer: 'タイマーを開始', pauseTimer: 'タイマーを一時停止',
   restartTimer: 'タイマーをリセット', recipeNotes: 'メモ',
   recipeUnstructured: 'このレシピには、換算できる材料の分量がまだありません。',
+  cookUnavailableAction: '調理する', recipeUnavailable: '調理手順を表示できません。',
   // Machine-drafted; needs native review.
   showMoreRecipe: 'このレシピの続きを表示', loadingMoreRecipe: '続きを読み込み中…',
   recipeContinueFailed: 'このレシピの続きを読み込めませんでした。表示中の内容はそのままです。',

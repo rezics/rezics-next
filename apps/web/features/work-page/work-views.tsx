@@ -408,13 +408,19 @@ async function Adoption(props: ScopedProps) {
 }
 
 /** The Work's recipe, prompt, skill or guide, laid out from the section its projection listed. */
-export async function TypeExperience({ id, work, experience, locale, messages }: Common & { id: string; work: Header;
+export async function TypeExperience({ id, work, experience, locale, messages, client }: Common & { id: string; work: Header;
   experience: WorkExperience }) {
   const section = experience.typeSection;
   if (experience.kind === 'recipe' && section) {
     return recipeRegion({ host: await recipePageHost(), id, work, href: section.href, locale, messages });
   }
-  if ((experience.kind === 'prompt' || experience.kind === 'skill') && section) {
+  if (experience.kind === 'prompt' || experience.kind === 'skill') {
+    if (!section) {
+      if (!operationOpen('getV1HubWorksById', await readPlatformAccess(client))) return null;
+      const projection = await readEntityProjection(id, undefined, client);
+      return <RegionFailure title={messages.hubUnavailable} failure={projection.ok ? 'unavailable' : projection.failure}
+        messages={messages} />;
+    }
     const hub = await readHubWorkPage(section.href);
     if (!hub) return null;
     if (!hub.ok) return <RegionFailure title={messages.hubUnavailable} failure={hub.failure} messages={messages} />;
@@ -454,7 +460,7 @@ export async function WorkOverview({ workRef, id, work, scope, context, locale, 
     type={experience.kind === 'prompt' || experience.kind === 'skill'
       ? operationOpen('getV1HubWorksById', access) ? <Suspense fallback={<RegionSkeleton
         id="work-type-loading" title={work.title.value} label={loading} lines={5} />}>
-        <TypeExperience id={id} work={work} experience={experience} locale={locale} messages={messages} /></Suspense> : null
+        <TypeExperience id={id} work={work} experience={experience} locale={locale} messages={messages} client={client} /></Suspense> : null
       : experience.kind === 'book' || experience.kind === 'plain' ? null : specialist}
     about={<WorkAbout work={work} locale={locale} messages={messages} />}
     availability={<>

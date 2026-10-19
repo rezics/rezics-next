@@ -24,7 +24,7 @@ import type { RecipeWorkPage, WorkHeader } from './types.ts';
 const record = recipes as AnswerRecord;
 type Persona = AnswerPersona;
 type Locale = 'en' | 'zh-Hans' | 'ja';
-type Phase = 'published' | 'loading' | 'scale' | 'continuation';
+type Phase = 'published' | 'loading' | 'scale' | 'continuation' | 'null-body' | 'unavailable-body' | 'unavailable-projection';
 
 function sample(persona: Persona, label: string): AnswerSample {
   const found = record.personas[persona].find(item => item.label === label);
@@ -110,6 +110,8 @@ function RecordedRecipeReading({ persona, locale, phase }: { persona: Persona; l
     const headerSample = sample(persona, 'work-header');
     const actingSubject = actingSubjectOf(headerSample.path);
     const replay = recordedFetch(record, persona, selectionsFor(persona, phase), { pathPrefix: BFF_PREFIX });
+    const recipePath = new URL(sample(persona, 'recipe-start').path, 'https://recorded.invalid').pathname;
+    const projectionPath = new URL(sample(persona, 'page-projection').path, 'https://recorded.invalid').pathname;
     const note = (error: unknown) => {
       if (error instanceof DOMException && error.name === 'AbortError') return;
       const message = error instanceof Error ? error.message : 'Recipe read failed';
@@ -117,7 +119,21 @@ function RecordedRecipeReading({ persona, locale, phase }: { persona: Persona; l
       if (live) setFault(misses.current.join('\n'));
     };
     const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      try { return await replay.fetcher(input, init); }
+      try {
+        const response = await replay.fetcher(input, init);
+        const url = new URL(input instanceof Request ? input.url : String(input), window.location.origin);
+        const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
+        // These are explicit read-state fixtures over the recorded native identity and routing,
+        // not new captured API outcomes. The production frame and body consume the same state.
+        if (method === 'GET' && url.pathname.endsWith(recipePath)) {
+          if (phase === 'null-body') return Response.json(null);
+          if (phase === 'unavailable-body') return Response.json({ error: 'work_read_unavailable' }, { status: 503 });
+        }
+        if (phase === 'unavailable-projection' && method === 'GET' && url.pathname.endsWith(projectionPath)) {
+          return Response.json({ error: 'work_read_unavailable' }, { status: 503 });
+        }
+        return response;
+      }
       catch (error) {
         note(error);
         throw error;
@@ -222,6 +238,7 @@ async function expectPublished(canvasElement: HTMLElement, persona: Persona, loc
   const sauce = await canvas.findByRole('heading', { level: 4, name: 'Sauce' }, { timeout: 8000 });
   await expect(title).toBeVisible();
   await expect(title).toHaveAttribute('lang', header.title.language);
+  await expect(canvas.getByRole('button', { name: copy.cookThis })).toBeEnabled();
   await expect(sauce).toBeVisible();
   await expect(canvas.getByText(persona)).toBeVisible();
   const acting = actingSubjectOf(sample(persona, 'work-header').path);
@@ -229,7 +246,10 @@ async function expectPublished(canvasElement: HTMLElement, persona: Persona, loc
   await expect(canvas.getAllByRole('link', { name: 'Outcome owner' }).length).toBeGreaterThan(0);
   await expect(canvas.getByRole('heading', { name: copy.recipeMethod })).toBeVisible();
   await expect(canvas.getByText(shownLine(page.ingredients[0]!, 'written', page))).toBeVisible();
-  await expect(canvas.getByText(formatMeasure(yieldMeasure.value, yieldMeasure.unitText), { exact: false })).toBeVisible();
+  const yieldRow = within(canvas.getByRole('region', { name: copy.recipeMethod }))
+    .getByText(copy.recipeYield, { selector: 'dt' }).parentElement;
+  if (!yieldRow) throw new Error('Recipe yield row is missing');
+  await expect(within(yieldRow).getByText(formatMeasure(yieldMeasure.value, yieldMeasure.unitText), { exact: false })).toBeVisible();
   await expect(canvas.queryByRole('radio', { name: copy.unitWritten })).toBeNull();
   await expect(canvas.queryByRole('heading', { name: copy.recipeNotes })).toBeNull();
   await expect(canvas.queryByText('PRIVATE DRAFT')).toBeNull();
@@ -287,6 +307,60 @@ export const Operator: Story = published('operator', 'en', 'desktop');
 export const VisitorPhone: Story = published('visitor', 'en', 'phone');
 export const OwnerPhone: Story = published('owner', 'en', 'phone');
 export const ModeratorPhone: Story = published('moderator', 'en', 'phone');
+
+export const NullBody: Story = {
+  args: { phase: 'null-body' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const recorded = asHeader(sample('visitor', 'work-header').answer);
+    const title = await canvas.findByRole('heading', { level: 1, name: recorded.title.value }, { timeout: 8000 });
+    await expect(title).toBeVisible();
+    const header = canvasElement.querySelector<HTMLElement>('[data-subject-header]');
+    if (!header) throw new Error('Recipe identity header is missing');
+    await expect(canvasElement.querySelectorAll('[data-subject-header]')).toHaveLength(1);
+    await expect(header).toHaveAttribute('data-resource', recorded.id);
+    await expect(header).toHaveAttribute('data-semantic-type', 'https://schema.org/Recipe');
+    const cook = within(header).getByRole('button', { name: /^Cook$/ });
+    await expect(cook).toBeDisabled();
+    await expect(canvas.queryByRole('button', { name: /Want to read/ })).toBeNull();
+    const recipe = canvas.getByRole('region', { name: /^Recipe$/ });
+    await expect(recipe).toHaveTextContent('Cooking instructions are not available');
+    // A disabled native action cannot dispatch the event that opens cooking mode.
+    cook.click();
+    await expect(canvas.queryByRole('dialog', { name: messages.en.cookMode })).toBeNull();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    await expectNoReplayMiss(canvasElement);
+  },
+};
+
+export const NullBodyPhone: Story = {
+  ...NullBody,
+  globals: { locale: 'en', viewport: { value: 'phone' } },
+};
+
+export const UnavailableBody: Story = {
+  args: { phase: 'unavailable-body' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.findByRole('heading', { level: 1, name: 'Original paged sauce' }, { timeout: 8000 }))
+      .resolves.toBeVisible();
+    const header = canvasElement.querySelector<HTMLElement>('[data-subject-header]');
+    if (!header) throw new Error('Recipe identity header is missing');
+    await expect(header).toHaveAttribute('data-semantic-type', 'https://schema.org/Recipe');
+    await expect(within(header).getByRole('button', { name: /^Cook$/ })).toBeDisabled();
+    const failure = canvas.getAllByRole('alert').find(alert => within(alert).queryByText(/^Recipe$/));
+    if (!failure) throw new Error('Recipe read failure is missing');
+    await expect(failure).toHaveTextContent('Recipe');
+    await expect(failure).toHaveTextContent(messages.en.regionUnavailable);
+    await expect(within(failure).getByRole('button', { name: messages.en.retry })).toBeVisible();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+
+export const UnavailableProjection: Story = {
+  ...UnavailableBody,
+  args: { phase: 'unavailable-projection' },
+};
 
 export const Loading: Story = {
   args: { phase: 'loading' },

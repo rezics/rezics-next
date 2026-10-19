@@ -13,8 +13,10 @@ import { idOf, tabOf, type WorkAt } from '../route.ts';
 import { WorkTaskLink } from '../work-nav.tsx';
 
 /** Opens cooking mode on the recipe already on this page. */
-export function CookThisButton({ label, workRef }: { label: string; workRef: WorkAt }) {
+export function CookThisButton({ label, workRef, disabled = false }: { label: string; workRef: WorkAt; disabled?: boolean }) {
   const current = tabOf(usePathname(), workRef);
+  if (disabled) return <Button type="button" size="lg" pill disabled {...{ [ACTION_ATTRIBUTE]: '' }}>
+    <CookingPotIcon aria-hidden="true" />{label}</Button>;
   if (current !== 'overview') return <WorkTaskLink workRef={workRef} anchor="cook"
     className={buttonVariants({ size: 'lg', pill: true })}><CookingPotIcon aria-hidden="true" />{label}</WorkTaskLink>;
   return <Button type="button" size="lg" pill {...{ [ACTION_ATTRIBUTE]: '' }} onClick={() => {
@@ -27,20 +29,23 @@ export function CookThisButton({ label, workRef }: { label: string; workRef: Wor
  * The header action for the page the reader is already on: cook a recipe,
  * copy the published prompt or skill. A book keeps Read, drawn by the frame.
  */
-export function WorkKindActions({ kind, workId, workRef = idOf(workId) ?? workId, messages: t, hubText }: {
+export function WorkKindActions({ kind, workId, workRef = idOf(workId) ?? workId, messages: t, hubText, canCook = true }: {
   kind: ExperienceKind; workId: string; title: string; locale: UiLocale; messages: WorkPageMessages;
   workRef?: WorkAt;
   /** The shelf words in the Work's own verb (`shelfWords`); the reading words when left out. */
   words?: StatusWords;
   /** Published prompt or SKILL.md, when the header can copy it. */
   hubText?: string | null;
+  /** The current native recipe read has ingredients or instructions to cook. */
+  canCook?: boolean;
 }) {
   if (kind === 'book') return null;
   if (kind === 'guide') {
     return <WorkTaskLink workRef={workRef} anchor="guide-experience"
       className={buttonVariants({ size: 'lg', pill: true })}>{t.viewGuide}</WorkTaskLink>;
   }
-  if (kind === 'recipe') return <CookThisButton label={t.cookThis} workRef={workRef} />;
+  if (kind === 'recipe') return <CookThisButton label={canCook ? t.cookThis : t.cookUnavailableAction}
+    workRef={workRef} disabled={!canCook} />;
   if (kind === 'prompt' && hubText) {
     return <div {...{ [ACTION_ATTRIBUTE]: '' }}><CopyTextButton text={hubText} label={t.copyPrompt} copied={t.copied} failed={t.copyFailed}
       size="lg" className="rounded-full" /></div>;

@@ -40,6 +40,7 @@ const en = {
   scaleHeld: 'This amount stays as written.',
   unitSystem: 'Units', unitWritten: 'As written', unitUs: 'US', unitMetric: 'Metric',
   cookThis: 'Cook this', cookMode: 'Cooking mode', closeCookMode: 'Close cooking mode',
+  cookUnavailableAction: 'Cook', recipeUnavailable: 'Cooking instructions are not available.',
   startTimer: 'Start timer', pauseTimer: 'Pause timer', restartTimer: 'Restart timer',
   recipeNotes: 'Notes', recipeUnstructured: 'Measured ingredients have not been added to this recipe yet.',
   showMoreRecipe: 'Show more of this recipe', loadingMoreRecipe: 'Loading more…',
