@@ -49,10 +49,12 @@ export function BrowseContinuation({
   page,
   state,
   locale,
+  moreLabel,
 }: {
   page: ListPage<unknown>;
   state: BrowseState;
   locale: UiLocale;
+  moreLabel?: string;
 }) {
   const t = browseMessages[locale];
   const counts = materializeData(browseCounts[locale], { locale });
@@ -77,7 +79,7 @@ export function BrowseContinuation({
             rel="next"
             className={buttonVariants({ variant: 'outline', size: 'sm' })}
           >
-            {t.more}
+            {moreLabel ?? t.more}
           </Link>
         ) : null}
       </nav>

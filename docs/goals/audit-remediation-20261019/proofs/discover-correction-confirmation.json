@@ -1,0 +1,2322 @@
+{
+  "source_verdict": {
+    "status": "confirmed",
+    "review_id": "G-2853",
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "independent": true,
+      "nested_agents": false,
+      "fallback": false
+    },
+    "scope": "Changed ten-path implementation only; no new blocking source defect found in DSR-01..04 correction. Independently ready for manager-selected normal gated landing; original-class recommendations are separately bounded below. No main integration claimed.",
+    "source": "587576832d71c3c501b962f849a5c400c9f7bd73",
+    "tree": "847c3e0f3603a569fa233a14a78e4daec2087b44",
+    "publication_base": "af1527fcffcc3a49a28cd41ea07a71a3ee3eecd2",
+    "authored_commits": [
+      "cccc3841201e557283bf0ad9af9839e86d6ee926",
+      "587576832d71c3c501b962f849a5c400c9f7bd73"
+    ],
+    "confirmed_at": "2026-10-19T10:33:32.105030+00:00"
+  },
+  "per_file_manifest": [
+    {
+      "path": "apps/web/features/discover/browse-read.ts",
+      "publication_base_blob": "67c8918556f576f9b226b0af9928e13e5da71977",
+      "confirmed_source_blob": "af8723487c93bad0f38ffa0ab461de258b697068",
+      "inspection": "complete authored delta and applicable counterexample assertions read independently"
+    },
+    {
+      "path": "apps/web/features/discover/browse-search-state.test.ts",
+      "publication_base_blob": "46eaaf54b765120a9eb5cb203f72e4e5558afe78",
+      "confirmed_source_blob": "35f7694e69d557b3e8d49812aa98f7e98a0ee8fb",
+      "inspection": "complete authored delta and applicable counterexample assertions read independently"
+    },
+    {
+      "path": "apps/web/features/discover/chapter-text.stories.tsx",
+      "publication_base_blob": "f575d2bd974f6a7f2b8ea51aed80d5ef37f814c7",
+      "confirmed_source_blob": "d1c30d94e9ca6ed4dc103542bae1e4c05c9c1ac0",
+      "inspection": "complete authored delta and applicable counterexample assertions read independently"
+    },
+    {
+      "path": "apps/web/features/discover/chapter-text.tsx",
+      "publication_base_blob": "dcb0425677a4e51d61506cc0c6308ea5e61221b1",
+      "confirmed_source_blob": "44f8716f86b180628dd050023d19aa13581c1061",
+      "inspection": "complete authored delta and applicable counterexample assertions read independently"
+    },
+    {
+      "path": "apps/web/features/discover/discover-search.stories.tsx",
+      "publication_base_blob": "b3ccabf7015e8261d828b9ccf0fdc9b59ca5ebd3",
+      "confirmed_source_blob": "5cf9d24eac3541c650b33602ec511ba2db5fe6dd",
+      "inspection": "complete authored delta and applicable counterexample assertions read independently"
+    },
+    {
+      "path": "apps/web/features/discover/selection-controls.tsx",
+      "publication_base_blob": "27c0c2f28db4de20be7d7696c3860c4bc4f74f19",
+      "confirmed_source_blob": "2eb6d1250aad5c864c5853919d236a53d38f4d79",
+      "inspection": "complete authored delta and applicable counterexample assertions read independently"
+    },
+    {
+      "path": "apps/web/features/discover/selection-messages.ts",
+      "publication_base_blob": "8d6d7e22d996b0dd41030b51b103e83a0df8439f",
+      "confirmed_source_blob": "50e622357366251ebcdd4d0bceed53fa34410cc8",
+      "inspection": "complete authored delta and applicable counterexample assertions read independently"
+    },
+    {
+      "path": "apps/web/features/search/query.test.ts",
+      "publication_base_blob": null,
+      "confirmed_source_blob": "871dd1091f85c6c5ee6ec0489a3579350fe99efd",
+      "inspection": "complete authored delta and applicable counterexample assertions read independently"
+    },
+    {
+      "path": "apps/web/features/search/query.ts",
+      "publication_base_blob": "364fceb453a6e2bbaeb54f05503030710e75709d",
+      "confirmed_source_blob": "a9f1255d8e5e7b5497fcd75c6949035588582575",
+      "inspection": "complete authored delta and applicable counterexample assertions read independently"
+    },
+    {
+      "path": "scripts/static/web-continuations.inventory.json",
+      "publication_base_blob": "779e385a7e35f3425882132879637723e115ab71",
+      "confirmed_source_blob": "bd6cb65994729e2d2cfa92ebfd97e27d6dfb2283",
+      "inspection": "complete authored delta and applicable counterexample assertions read independently"
+    }
+  ],
+  "preserved_review": {
+    "path": ".temp/ref/site-discover-original-source-review.json",
+    "sha256": "0bfba902434f75dee12204eaabc3f0f796867d0cb922ce927488230b12159990",
+    "reviewed_source": "f84fbee119888f0b880badfd7eeb351543615908",
+    "preserved_unchanged": true,
+    "reviewer_archived_verified": true,
+    "original_23_paths": [
+      {
+        "path": "apps/web/features/discover/browse-read.ts",
+        "original_review_blob": "67c8918556f576f9b226b0af9928e13e5da71977",
+        "confirmed_source_blob": "af8723487c93bad0f38ffa0ab461de258b697068",
+        "exact_blob_reuse": false
+      },
+      {
+        "path": "apps/web/features/discover/browse-search-state.test.ts",
+        "original_review_blob": "46eaaf54b765120a9eb5cb203f72e4e5558afe78",
+        "confirmed_source_blob": "35f7694e69d557b3e8d49812aa98f7e98a0ee8fb",
+        "exact_blob_reuse": false
+      },
+      {
+        "path": "apps/web/features/discover/browse-state.ts",
+        "original_review_blob": "b643f91f9bd594d6421a636595d3a9325c3b5a8b",
+        "confirmed_source_blob": "b643f91f9bd594d6421a636595d3a9325c3b5a8b",
+        "exact_blob_reuse": true
+      },
+      {
+        "path": "apps/web/features/discover/browse-tabs.tsx",
+        "original_review_blob": "b694f2ba8dab7d86c9f356b2c387edf5d4b9e946",
+        "confirmed_source_blob": "ede86388b8dcb55a4c7e5db76feed7ff68316b4f",
+        "exact_blob_reuse": false
+      },
+      {
+        "path": "apps/web/features/discover/chapter-text-messages.ts",
+        "original_review_blob": "7b4e3118d205ad9d39362e303f72843ebaa6dfda",
+        "confirmed_source_blob": "7b4e3118d205ad9d39362e303f72843ebaa6dfda",
+        "exact_blob_reuse": true
+      },
+      {
+        "path": "apps/web/features/discover/chapter-text-read.ts",
+        "original_review_blob": "d775dcec7ac7c4d7d591a1954e912186edae6ef6",
+        "confirmed_source_blob": "d775dcec7ac7c4d7d591a1954e912186edae6ef6",
+        "exact_blob_reuse": true
+      },
+      {
+        "path": "apps/web/features/discover/chapter-text.stories.tsx",
+        "original_review_blob": "f575d2bd974f6a7f2b8ea51aed80d5ef37f814c7",
+        "confirmed_source_blob": "d1c30d94e9ca6ed4dc103542bae1e4c05c9c1ac0",
+        "exact_blob_reuse": false
+      },
+      {
+        "path": "apps/web/features/discover/chapter-text.tsx",
+        "original_review_blob": "dcb0425677a4e51d61506cc0c6308ea5e61221b1",
+        "confirmed_source_blob": "44f8716f86b180628dd050023d19aa13581c1061",
+        "exact_blob_reuse": false
+      },
+      {
+        "path": "apps/web/features/discover/discover-page.stories.tsx",
+        "original_review_blob": "2c6c9d3592853e1eb2295bcb8e1274ac0955069b",
+        "confirmed_source_blob": "2c6c9d3592853e1eb2295bcb8e1274ac0955069b",
+        "exact_blob_reuse": true
+      },
+      {
+        "path": "apps/web/features/discover/discover-search.stories.tsx",
+        "original_review_blob": "b3ccabf7015e8261d828b9ccf0fdc9b59ca5ebd3",
+        "confirmed_source_blob": "5cf9d24eac3541c650b33602ec511ba2db5fe6dd",
+        "exact_blob_reuse": false
+      },
+      {
+        "path": "apps/web/features/discover/discover-view.tsx",
+        "original_review_blob": "f737dd5aad59771c328500da2c1ff02ab73e23d0",
+        "confirmed_source_blob": "f737dd5aad59771c328500da2c1ff02ab73e23d0",
+        "exact_blob_reuse": true
+      },
+      {
+        "path": "apps/web/features/discover/load.ts",
+        "original_review_blob": "701916dcabd07b402dddf4037a663a6afc7995e5",
+        "confirmed_source_blob": "701916dcabd07b402dddf4037a663a6afc7995e5",
+        "exact_blob_reuse": true
+      },
+      {
+        "path": "apps/web/features/discover/resource-list.tsx",
+        "original_review_blob": "a8d8da88ad825c879109cc5b602ed8c2f313eb19",
+        "confirmed_source_blob": "a8d8da88ad825c879109cc5b602ed8c2f313eb19",
+        "exact_blob_reuse": true
+      },
+      {
+        "path": "apps/web/features/discover/search-recovery-read.test.ts",
+        "original_review_blob": "7d2f8dbeb042da2a63fb3834f411aa4b4c913a58",
+        "confirmed_source_blob": "7d2f8dbeb042da2a63fb3834f411aa4b4c913a58",
+        "exact_blob_reuse": true
+      },
+      {
+        "path": "apps/web/features/discover/search-recovery-read.ts",
+        "original_review_blob": "c5b3eedd1a42cbff27c0bc778a11ed61825f128a",
+        "confirmed_source_blob": "c5b3eedd1a42cbff27c0bc778a11ed61825f128a",
+        "exact_blob_reuse": true
+      },
+      {
+        "path": "apps/web/features/discover/search-recovery.tsx",
+        "original_review_blob": "8ad28bf6062e46ada0f26913f7440f419cfce752",
+        "confirmed_source_blob": "8ad28bf6062e46ada0f26913f7440f419cfce752",
+        "exact_blob_reuse": true
+      },
+      {
+        "path": "apps/web/features/discover/selection-controls.tsx",
+        "original_review_blob": "27c0c2f28db4de20be7d7696c3860c4bc4f74f19",
+        "confirmed_source_blob": "2eb6d1250aad5c864c5853919d236a53d38f4d79",
+        "exact_blob_reuse": false
+      },
+      {
+        "path": "apps/web/features/discover/selection-messages.ts",
+        "original_review_blob": "8d6d7e22d996b0dd41030b51b103e83a0df8439f",
+        "confirmed_source_blob": "50e622357366251ebcdd4d0bceed53fa34410cc8",
+        "exact_blob_reuse": false
+      },
+      {
+        "path": "apps/web/features/query/condition-bar.tsx",
+        "original_review_blob": "82f8fbbc03bf4ab173dcb38d52a079dc4b34432f",
+        "confirmed_source_blob": "82f8fbbc03bf4ab173dcb38d52a079dc4b34432f",
+        "exact_blob_reuse": true
+      },
+      {
+        "path": "apps/web/features/shell/search-field.stories.tsx",
+        "original_review_blob": "d6f6b1433c189fd7b1f0a18f811824fdea97e657",
+        "confirmed_source_blob": "d6f6b1433c189fd7b1f0a18f811824fdea97e657",
+        "exact_blob_reuse": true
+      },
+      {
+        "path": "apps/web/features/shell/search-field.tsx",
+        "original_review_blob": "8aac0484b7009644b09668872db31441d0684f93",
+        "confirmed_source_blob": "8aac0484b7009644b09668872db31441d0684f93",
+        "exact_blob_reuse": true
+      },
+      {
+        "path": "scripts/static/web-continuations.inventory.json",
+        "original_review_blob": "c46d540bbced108a9166b8e11a25cff17bfdafde",
+        "confirmed_source_blob": "bd6cb65994729e2d2cfa92ebfd97e27d6dfb2283",
+        "exact_blob_reuse": false
+      },
+      {
+        "path": "scripts/static/web-discover-continuations.test.ts",
+        "original_review_blob": "e5faca37382dd578e6991fba97b4c6d8fa974ec1",
+        "confirmed_source_blob": "e5faca37382dd578e6991fba97b4c6d8fa974ec1",
+        "exact_blob_reuse": true
+      }
+    ],
+    "material_dependencies": [
+      {
+        "path": "apps/web/features/search/query.ts",
+        "original_review_blob": "364fceb453a6e2bbaeb54f05503030710e75709d",
+        "confirmed_source_blob": "a9f1255d8e5e7b5497fcd75c6949035588582575"
+      },
+      {
+        "path": "apps/web/features/search/read.ts",
+        "original_review_blob": "f780a73f9f81ba9eabaacdedcf031760d1fd685c",
+        "confirmed_source_blob": "f780a73f9f81ba9eabaacdedcf031760d1fd685c"
+      },
+      {
+        "path": "apps/web/features/search/state.ts",
+        "original_review_blob": "0322801213b12610f7b7cf6ac94059fadb17b31a",
+        "confirmed_source_blob": "0322801213b12610f7b7cf6ac94059fadb17b31a"
+      },
+      {
+        "path": "apps/web/features/search/types.ts",
+        "original_review_blob": "685cb7bd1bcf0305eda9b5e92ca31701cf534cbb",
+        "confirmed_source_blob": "685cb7bd1bcf0305eda9b5e92ca31701cf534cbb"
+      },
+      {
+        "path": "apps/web/features/search/suggest.ts",
+        "original_review_blob": "1023e9c4e584e97b5e93d3f84b272396053006c5",
+        "confirmed_source_blob": "1023e9c4e584e97b5e93d3f84b272396053006c5"
+      },
+      {
+        "path": "apps/web/features/search/search-results.tsx",
+        "original_review_blob": "c695b58d9ea969ecbc5c2341f89ac8c248225a90",
+        "confirmed_source_blob": "c695b58d9ea969ecbc5c2341f89ac8c248225a90"
+      },
+      {
+        "path": "apps/web/features/discover/api.ts",
+        "original_review_blob": "ee0598bcf18c96942872c5ad81c681d3b3512997",
+        "confirmed_source_blob": "ee0598bcf18c96942872c5ad81c681d3b3512997"
+      },
+      {
+        "path": "apps/web/features/discover/server.ts",
+        "original_review_blob": "8b18727828ab85290961e5b0cc74eecff7dad9c6",
+        "confirmed_source_blob": "8b18727828ab85290961e5b0cc74eecff7dad9c6"
+      },
+      {
+        "path": "apps/web/features/discover/scope.ts",
+        "original_review_blob": "5b6a54a6b11f4b605558cf357daac2dd951f57ff",
+        "confirmed_source_blob": "5b6a54a6b11f4b605558cf357daac2dd951f57ff"
+      },
+      {
+        "path": "apps/web/features/discover/state.ts",
+        "original_review_blob": "87a76d682e14ddb47e1fe6c2d8c0feebd11e88db",
+        "confirmed_source_blob": "87a76d682e14ddb47e1fe6c2d8c0feebd11e88db"
+      },
+      {
+        "path": "apps/web/features/discover/notice.tsx",
+        "original_review_blob": "251bf543a53b8a9decae954e40e849a1be83a6e6",
+        "confirmed_source_blob": "251bf543a53b8a9decae954e40e849a1be83a6e6"
+      },
+      {
+        "path": "apps/web/features/catalogue/registry.ts",
+        "original_review_blob": "07c9b83486237e42cc5317ebfd9e3032e48a2bf2",
+        "confirmed_source_blob": "07c9b83486237e42cc5317ebfd9e3032e48a2bf2"
+      },
+      {
+        "path": "apps/web/features/shell/localized-link.tsx",
+        "original_review_blob": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba",
+        "confirmed_source_blob": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba"
+      },
+      {
+        "path": "apps/web/features/shell/current-page-visibility.ts",
+        "original_review_blob": "333e99eaf9999b943016387b2f08982d6508964e",
+        "confirmed_source_blob": "4580530fd0e47923f4bf9de65a0baba9292b2a45"
+      },
+      {
+        "path": "apps/web/features/shell/providers.tsx",
+        "original_review_blob": "dc0acd499702f3f6c524fb3ed1eb9790b717e151",
+        "confirmed_source_blob": "dc0acd499702f3f6c524fb3ed1eb9790b717e151"
+      },
+      {
+        "path": "apps/web/features/rights-mark/rights-mark.tsx",
+        "original_review_blob": "77b33711e55fc0459842a1b1a214fffff462004a",
+        "confirmed_source_blob": "77b33711e55fc0459842a1b1a214fffff462004a"
+      },
+      {
+        "path": "apps/web/features/discover/chapter-text-read.test.ts",
+        "original_review_blob": "ae6ed37d6559e004b7614e6cd5ad1583ee2e411e",
+        "confirmed_source_blob": "ae6ed37d6559e004b7614e6cd5ad1583ee2e411e"
+      },
+      {
+        "path": "services/main/src/modules/query/resource-contract.ts",
+        "original_review_blob": "213b291bd51daf1e28e71da4c64f39e9ca2d0bc5",
+        "confirmed_source_blob": "213b291bd51daf1e28e71da4c64f39e9ca2d0bc5"
+      }
+    ],
+    "dependency_exceptions": {
+      "apps/web/features/search/query.ts": "Directly inspected corrected dependency in this confirmation.",
+      "apps/web/features/discover/browse-tabs.tsx": "Only pb-1 to p-1 differs; G-2747 navigation source/proof reused under brief authority.",
+      "apps/web/features/shell/current-page-visibility.ts": "G-2747 navigation source/proof reused under brief authority; no repeat whole-source review."
+    },
+    "g2747_runtime_pin": "196a6f4a98413857dbf3e178d05ef65415035f29",
+    "ancestor_checks": {
+      "af1527fcffcc3a49a28cd41ea07a71a3ee3eecd2": true,
+      "f84fbee119888f0b880badfd7eeb351543615908": true,
+      "196a6f4a98413857dbf3e178d05ef65415035f29": true
+    }
+  },
+  "correction_findings": [
+    {
+      "id": "DSR-01",
+      "status": "confirmed repaired",
+      "source_evidence": "Resource reader validates returned nextCursor before match/budget return; shared infinite query compares entire opaque structured tokens using existing hashKey, with traversal-order refetch state and cached consumed inputs. Failure occurs before cyclic page acceptance; cached chapters survive.",
+      "retained_assertions": [
+        "resource fourth empty page null/A/B/C -> A/B/C/A",
+        "resource action-boundary repeated input and match-with-repeated-next",
+        "chapter same-token, two-token, fourth-page, cross-action cycles",
+        "valid refetch succeeds; newly cycling refetch preserves prior pages"
+      ],
+      "evidence_kind": "independent source inspection + reused executed unit/component proof; not genuine native cursor occurrence"
+    },
+    {
+      "id": "DSR-02",
+      "status": "confirmed repaired",
+      "source_evidence": "More/retry/restart share async bounded scan and focus intent. Retry retains continuation; restart atomically replaces page one only after successful load. Successful action focuses first new/useful chapter or summary; failures retain useful cached chapters.",
+      "retained_assertions": [
+        "RetryPreservesChapters keyboard Enter, identical second continuation, earlier chapter once, new link focus",
+        "RetryFocusesExhaustedStatus focuses exhausted status and retains earlier chapter",
+        "RestartFocusesFirstUsefulChapter retries undefined first-page token and focuses useful first chapter"
+      ],
+      "evidence_kind": "independent source + retained DOM story assertions and viewed screenshots; no actual screen-reader session"
+    },
+    {
+      "id": "DSR-03",
+      "status": "confirmed repaired",
+      "source_evidence": "Each deduplicated first/continued chapter hit passes its supplied factObligations unchanged to existing RightsMark. RightsMark returns null for unassessed.",
+      "retained_assertions": [
+        "SuppliedFactObligations first source/instrument/share-alike notice, continued source/instrument, first credit retained",
+        "UnassessedFactsStayUnassessed"
+      ],
+      "limit": "Example/Archive obligations are existing component fixtures. No native rights, excerpt, license assessment or metadata invented."
+    },
+    {
+      "id": "DSR-04",
+      "status": "confirmed repaired",
+      "source_evidence": "Exact phrase calls existing phraseStatus on proposed quoted query before go(); long input sets associated local alert and keeps focus/state. phraseStatus counts Unicode code points.",
+      "retained_assertions": [
+        "78 astral code points admitted with quotes and all active conditions",
+        "79 BMP and80 mixed astral/ASCII code points refused; no navigation, original query retained, focus retained",
+        "subsequent language removal preserves realm/topic/match/type/exclusion conditions"
+      ],
+      "limit": "Story router fixture validates destination, not genuine document navigation or native phrase semantics."
+    }
+  ],
+  "reused_checks": {
+    "final_job": "de64b5d5-67f6-4702-9eec-378bfe7c8afa",
+    "source": "587576832d71c3c501b962f849a5c400c9f7bd73",
+    "unit": {
+      "tests": 21,
+      "assertions": 81,
+      "failures": 0
+    },
+    "owner_qa": "20261019t074109-865564",
+    "stories": {
+      "qa": "20261019t074122-c93618",
+      "count": 29,
+      "files": [
+        "apps/web/features/discover/chapter-text.stories.tsx",
+        "apps/web/features/discover/discover-search.stories.tsx"
+      ],
+      "status": "pass; configured accessibility assertions included"
+    },
+    "affected_static_checks": {
+      "jobs": [
+        "8bac8d7c-91e7-436b-80c3-d2fad46971a7",
+        "d76e99a3-b12a-4c22-9156-a52ebd330f7f",
+        "5484d627-31c0-4df2-83f7-c76ae753e111"
+      ],
+      "scope": "Retained types/inference, lint, AST, selected guards and i18n with author-recorded rebase equivalence; not full native qualification."
+    },
+    "receipt": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2783/.temp/goal/jobs/de64b5d5-67f6-4702-9eec-378bfe7c8afa.log",
+    "unchanged_tiers_reexecuted": false,
+    "failed_historical_evidence_preserved": true
+  },
+  "retained_images_inspected": [
+    {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2783/.artifacts/qa/20261019t074122-c93618/story-screenshots/apps-web-features-discover-chapter-text.stories.tsx/RetryPreservesChapters.png",
+      "sha256": "65440c468096ff282d7c4e2dab4952970deb47668071f109d17a8a2e5090baf2",
+      "viewed_by_this_reviewer": true,
+      "kind": "retained component fixture screenshot, not genuine API or heard AT"
+    },
+    {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2783/.artifacts/qa/20261019t074122-c93618/story-screenshots/apps-web-features-discover-chapter-text.stories.tsx/RetryFocusesExhaustedStatus.png",
+      "sha256": "682364d77cc2419443f495599b6da70d039ea2ee1570ddbd5777a624a9597cdc",
+      "viewed_by_this_reviewer": true,
+      "kind": "retained component fixture screenshot, not genuine API or heard AT"
+    },
+    {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2783/.artifacts/qa/20261019t074122-c93618/story-screenshots/apps-web-features-discover-chapter-text.stories.tsx/RestartFocusesFirstUsefulChapter.png",
+      "sha256": "72e25718874745bc5c115fa1e22f0add8499304dcff56814350933fe23af6a11",
+      "viewed_by_this_reviewer": true,
+      "kind": "retained component fixture screenshot, not genuine API or heard AT"
+    },
+    {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2783/.artifacts/qa/20261019t074122-c93618/story-screenshots/apps-web-features-discover-chapter-text.stories.tsx/SuppliedFactObligations.png",
+      "sha256": "4e98f257ea758294f9c0b464e1e746682534d075f9818a07e9086079a1369aed",
+      "viewed_by_this_reviewer": true,
+      "kind": "retained component fixture screenshot, not genuine API or heard AT"
+    },
+    {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2783/.artifacts/qa/20261019t074122-c93618/story-screenshots/apps-web-features-discover-discover-search.stories.tsx/ExactPhrase79Unicode.png",
+      "sha256": "6d07ed7636867bc8c5438c8c8bf5befd0d028d3f61316a7d42e74208e92edf3e",
+      "viewed_by_this_reviewer": true,
+      "kind": "retained component fixture screenshot, not genuine API or heard AT"
+    },
+    {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2783/.artifacts/qa/20261019t074122-c93618/story-screenshots/apps-web-features-discover-discover-search.stories.tsx/ExactPhrase80Unicode.png",
+      "sha256": "3da365bac33da4a6a7e279169653002b62380f4c40b313c0d9bee3135079d8e8",
+      "viewed_by_this_reviewer": true,
+      "kind": "retained component fixture screenshot, not genuine API or heard AT"
+    }
+  ],
+  "original_acceptance_authority": {
+    "site_plan": "docs/goals/audit-remediation-20261019/site-plan.json",
+    "canonical_registry": "/home/edge/projects/rezics/rezics-next/.temp/site-audit-2026-10-18/round-3/all-findings.json",
+    "canonical_registry_sha256": "e2721c44e74305c694b02e81e757e4476c3a19de414d25b0689617316c5ebc3f",
+    "criteria_match_verbatim": true,
+    "staged_inventory": ".temp/ref/site-original-45-inventory.json"
+  },
+  "original_classes": [
+    {
+      "id": "D6-004",
+      "status": "requested original scoped URL/history and language/type assertions confirmed",
+      "original_criteria": [
+        {
+          "number": 1,
+          "text": "所有影响结果的条件都可理解、查看、编辑和清除；分享、Back/Forward 恢复同义状态；当前范围内改词保留条件。",
+          "status": "confirmed for the original scoped URL/history behavior",
+          "genuine_evidence": [
+            "9344f5be-72ef-44c7-9d39-c17ae5c97786: 1440 direct Fate/Works/Japanese/Game; local edit to CLANNAD retains tab/language/type; actual Back and Forward restore corresponding URL and search input; copied URL in a fresh anonymous dark 390 context and refresh retain conditions; individual language removal preserves query/type.",
+            "7e80683e-83bb-494a-8c08-ff8f8b985d13: actual 390 realm-scoped Fate -> CLANNAD edit and Back/Forward retain q/tab/lang/include/exclude/scope/realm/ci/ce/cm; People destination retains the same complete selection.",
+            "c706fefd-ff7e-486a-9bc2-026dbafb8ac1: content-language edit ja -> en and individual Game removal execute real navigations while retaining q=Fate/tab=works; eight then twelve genuine resource results match API identities in DOM order."
+          ],
+          "retained_evidence": "Existing URL roundtrip, exact-query, match-mode, inclusion/exclusion and editable condition fixtures/source remain identified in the preserved original report and corrected ten-path proof. Those assertions were not replayed as genuine native semantics.",
+          "limits": [
+            "Genuine browser identity was anonymous; no account fallback or claim of a new signed-in/personalized journey.",
+            "The realm/topic sequence returned an empty resource list with genuine 200 responses; it proves URL/control preservation and emitted scope/filter selection, not nonempty matches or independent native topic/phrase retrieval semantics.",
+            "The raw direct-selector check failed because the probe expected Include VideoGame; the genuine visible label is Include Game. Saved rendered DOM and inspected direct1440.png independently confirm the intended type condition. The failed receipt is preserved."
+          ]
+        },
+        {
+          "number": 2,
+          "text": "若全局搜索有意重置，事前明确范围并提供当前条件内的改词入口；语言与类型含义用 API/UI 同一序列证明。",
+          "status": "confirmed for the exercised original Discover API/UI sequence",
+          "genuine_evidence": [
+            "Captured resource-list-v1 POST /v1/query requests from real UI and replayed each unchanged against the same genuine backend: Fate/ja/Game -> CLANNAD/ja/Game -> CLANNAD/Game; statuses 200, result counts 16/1/1.",
+            "Remaining same-task change: Fate/ja/Game -> Fate/en/Game -> Fate/en/Works. Genuine English Game query returns eight VideoGame items; removing only Game returns twelve CreativeWork items including TVSeries, VideoObject and DigitalDocument. Content language stays en while UI locale stays en.",
+            "All five replayed states have exactly the same ordered identities as real rendered work links after decoding the existing 22-character SID address protocol. Full request/result pins and data freshness are recorded below.",
+            "Actual Discover search form action /en/discover retains active selectors in hidden fields. The scoped browser sequence retains realm/topics. This surface performs no intentional global reset; its visible Search within these conditions action names the local edit. No reset-disclosure success is inferred for another surface."
+          ],
+          "limits": [
+            "All resource replies report stale=true at data epoch 8c483e38-59e7-4d95-b27b-de9cd6742a3e, sequence 11954. This is genuine compatible prepared data, not fresh/full-catalogue qualification.",
+            "Chapter/text query 503 and realm facet query 422 are retained separately; neither is recast as a resource-query success nor used to hold this original URL/history and language/type class on D6-003."
+          ]
+        }
+      ],
+      "regression_assertions": [
+        {
+          "id": "D6-004/assertion-1",
+          "assert": "Active language/type/tab/include/case or exact conditions are visible, individually editable and preserved when changing the same-task query."
+        },
+        {
+          "id": "D6-004/assertion-2",
+          "assert": "Shared URLs and Back restore query and conditions, including mobile controls and signed-in context."
+        },
+        {
+          "id": "D6-004/assertion-3",
+          "assert": "Any intentional global reset is explicit, and the existing scope retains an obvious local query-edit action."
+        }
+      ],
+      "class_closure_recommended": true,
+      "recommendation_basis": "Combine unchanged applicable original source/fixture proof with the genuine direct/share/reload/local-edit/Back/Forward and same-operation language/type evidence below. This recommendation covers the original D6-004 conditions and scope/history class, not D6-003 query-intent/native retrieval or D6-005 facts. Manager retains closure and landing authority.",
+      "remaining_original_blockers_in_exercised_scope": []
+    },
+    {
+      "id": "AUD-009",
+      "status": "partial; actual default-section failure naming remains open",
+      "original_criteria": [
+        {
+          "number": 1,
+          "text": "搜索模式在正文主层级展示当前查询及匹配范围；探索模式先给可选内容分组或明确类型入口，不能只靠顶栏输入框辨认搜索任务。",
+          "status": "confirmed in exercised search/explore task states",
+          "genuine_evidence": [
+            "Real search pages en/zh-Hans at 1440 and390 show current book query in the body H1, current scope/conditions, and named resource/chapter result H2 regions; default Explore presents explicit type destinations before list states.",
+            "Actual successful Fate/CLANNAD resource pages, empty book resource pages and unavailable chapter pages retain body task and region headings."
+          ],
+          "limits": [
+            "No generic claim of all personas or native chapter success."
+          ]
+        },
+        {
+          "number": 2,
+          "text": "390首屏将当前目的地与主要结果/状态放到全局主题建议之前，条件可展开且保留已选值；Topics筛选与Topics目的地可区分。",
+          "status": "confirmed in exercised original 390 task layout",
+          "genuine_evidence": [
+            "390 search en/zh-Hans has selected Works and current language/type chips before results; Filter by topics / 按主题筛选 is a collapsed filter disclosure distinct from the Topics / 主题 destination.",
+            "When explicit realm/topic conditions are selected, Classics inclusion and Fantasy exclusion remain visible in the expanded topic disclosure after current query edits and actual Back/Forward; no unrelated global topic suggestion wall precedes task results.",
+            "G-2747 navigation source is an ancestor and its separate independent review/passing unchanged proof is reused. The current People destination was captured in the real scoped390 browser; no unchanged navigation tier replay."
+          ],
+          "limits": [
+            "Expanded filter editing can push results below the first fold; the primary collapsed search task is the first-screen assertion exercised here."
+          ]
+        },
+        {
+          "number": 3,
+          "text": "1440/390失败、空、加载和成功都保留区域名及当前条件；与D4-002当前项可见一起验收，不重复AUD-009的既有区段标题结论。",
+          "status": "fails default recommendation failure naming; other states partially confirmed",
+          "genuine_evidence": [
+            "Real 1440/390 resource success, empty state and chapter failure retain query/conditions and result H2 names in English/Simplified Chinese.",
+            "Default discovery sections fail with genuine work_read_budget_exceeded 422. The recommendation/group area renders only Couldn’t load this list / 无法加载此列表 and retry, without a visible or semantic group heading; the separate All results / 全部结果 H2 survives.",
+            "Pinned discover-view.tsx renders section H2 only in sections.ok; the failure branch directly returns Failure at line163. This unchanged original class gap is observed at all six requested default locale/width cases, not a newly introduced DSR correction defect."
+          ],
+          "limits": [
+            "No genuine loading transition was captured; retained loading/empty/error stories remain fixture evidence. No simulated response is substituted for the failed real operation."
+          ]
+        },
+        {
+          "number": 4,
+          "text": "默认发现页推荐区与全体结果有清楚的可见边界和名称，1440/768/390及en/zh-Hans下读者无需查看aria-label便可区分；视觉标题与语义标题层级一致。",
+          "status": "not satisfied on actual default failure pages; populated section boundary unproved",
+          "genuine_evidence": [
+            "All six default en/zh-Hans x1440/768/390 checks reach the heading assertion. All results / 全部结果 exists, but New sites / 新站点 is absent because the genuine discovery-sections call returns422. Original failed assertions and real screenshots are preserved.",
+            "The API resource-list default request also returns422 work_read_budget_exceeded. Named populated recommendation versus complete-result boundaries cannot be established from these genuine failures; retained populated fixtures remain explicitly fixtures."
+          ],
+          "limits": [
+            "Backend health ready200 does not establish operation success. No fresh catalogue, baseline restoration or fake product rows were prepared to force a pass."
+          ]
+        }
+      ],
+      "regression_assertions": [
+        {
+          "id": "AUD-009/assertion-1",
+          "assert": "Visible headings distinguish New sites and complete All results in English/Simplified Chinese at desktop/mobile, with matching semantic heading hierarchy."
+        },
+        {
+          "id": "AUD-009/assertion-2",
+          "assert": "Search presents its query/scope/results before unrelated global topics, including the 390px task view."
+        },
+        {
+          "id": "AUD-009/assertion-3",
+          "assert": "Topic controls state whether they filter results or navigate to a destination; spacing alone and hidden aria-labels do not carry the region meaning."
+        }
+      ],
+      "class_closure_recommended": false,
+      "remaining_original_blockers_in_exercised_scope": [
+        "Keep a named recommendation/group region around the actual sections failure, preserving its task identity alongside All results.",
+        "Obtain successful compatible genuine discovery-sections/default-resource operations within the existing data/read budget, then run only the missing original populated section-boundary and loading assertions at the specified widths/locales."
+      ]
+    }
+  ],
+  "execution": {
+    "product_changes": false,
+    "original_assertion_changes": false,
+    "data_preparation": false,
+    "account_fallback": false,
+    "main_writes_or_landing": false,
+    "genuine_checks": "completed bounded original checks; per-criterion results and retained failures below",
+    "recorded_job_bookkeeping": "goalctl owns permitted bookkeeping under main .temp/goal-orchestration",
+    "scratch_probe_only": true,
+    "source_frontend_edits": false
+  },
+  "product_audit": {
+    "invariant_classes": [
+      "opaque continuation progress",
+      "recovery preserves useful results and focus",
+      "supplied obligations survive fact rendering",
+      "local edits preserve admitted task state"
+    ],
+    "closure_rule": "Original D6-004 and AUD-009 remain separate; static/fixture success never substitutes for genuine API/UI evidence. No D6-003/005, D4-010, full-catalogue or all61 prerequisite.",
+    "original_class_assessment": {
+      "D6-004": "Original lost-context class: direct/share/history/local edits and API/UI language/type sequence now have genuine evidence plus applicable unchanged source/fixtures. Recommend original class closure with stated evidence limits; no broader native retrieval claim.",
+      "AUD-009": "Original region/task identity class: query/conditions and search result names persist, but actual recommendation failure loses its region name and default populated separation cannot be proved. Do not close."
+    },
+    "observed_remaining_instances": [
+      {
+        "priority": "original class remains open",
+        "principle": "A result section keeps a visible name in failure as well as success.",
+        "source_path": "apps/web/features/discover/discover-view.tsx",
+        "source_blob": "f737dd5aad59771c328500da2c1ff02ab73e23d0",
+        "source_line": 163,
+        "api_flow": "GET /v1/discovery/sections?limit=6&personalization=true ->422 work_read_budget_exceeded",
+        "ui_flow": "Default discovery -> unnamed group error -> named All results error at en/zh-Hans1440/768/390.",
+        "falsifying_acceptance": "On the genuine sections failure and on recovery, the original group/recommendation region keeps a visible H2 that matches its semantic name and remains distinct from All results.",
+        "guard_follow_up": "Owner should extend the existing Discover failure-state story/assertion around the section heading; no product fix or original assertion edit made by this reviewer.",
+        "not_to_do": "Do not hide the422, fabricate New sites rows or require unrelated chapter/fuzzy/excerpt qualification."
+      }
+    ]
+  },
+  "manager_next": "Select a small normal gated landing of the independently confirmed ten-path DSR correction and this report. The original D6-004 scoped URL/history and language/type class now has the requested genuine evidence and a bounded closure recommendation. Keep AUD-009 open for the actual unnamed sections failure and missing successful default-section boundary/loading evidence. Do not hold source readiness on unrelated native retrieval, excerpts, genuine chapter pages, fresh catalogue, all personas or all61 findings. Manager owns all landing and final class status changes.",
+  "genuine_evidence": {
+    "frontend": {
+      "source": "587576832d71c3c501b962f849a5c400c9f7bd73",
+      "tree": "847c3e0f3603a569fa233a14a78e4daec2087b44",
+      "url": "http://127.0.0.1:31853",
+      "process_source_directory": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2853/.temp/discover-confirmation/source",
+      "start_command": "task web:dev -- --port 31853",
+      "integrity": {
+        "source": "587576832d71c3c501b962f849a5c400c9f7bd73",
+        "tree": "847c3e0f3603a569fa233a14a78e4daec2087b44",
+        "verifiedAt": "2026-10-19T10:52:18.412589+00:00",
+        "tracked_blobs_checked": 9972,
+        "bytes": 227102695,
+        "mismatches": [],
+        "method": "git ls-tree recursively; Git blob SHA-1 of every archived tracked regular file and symlink target, excluding untracked runtime/cache/dependencies"
+      },
+      "dependency_setup": "Pinned git archive in this worktree; installed dependencies copied as hardlinks into isolated source node_modules to satisfy existing Vite filesystem policy. No tracked source/config/contract change. Untracked runtime outputs remain inside this worktree."
+    },
+    "backend": {
+      "source": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "process_source_directory": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "pid": 1372265,
+      "health_separate_from_operation_success": true,
+      "health_receipts": [
+        {
+          "run": "attempt2",
+          "health": {
+            "status": 200,
+            "body": {
+              "status": "ready",
+              "horizons": {
+                "sampledAt": "2026-10-19T10:41:41.251Z",
+                "writerVisibility": "all-sessions",
+                "notification": {
+                  "oldestPendingRowAgeSeconds": null,
+                  "oldestWriterAgeSeconds": null
+                },
+                "reviewRank": {
+                  "oldestPendingRowAgeSeconds": null,
+                  "oldestPendingRowAgeBasis": "none",
+                  "oldestWriterAgeSeconds": null
+                },
+                "editorial": {
+                  "oldestPendingRowAgeSeconds": null,
+                  "oldestWriterAgeSeconds": null
+                }
+              }
+            },
+            "at": "2026-10-19T10:41:41.420Z"
+          }
+        },
+        {
+          "run": "attempt3",
+          "health": {
+            "status": 200,
+            "body": {
+              "status": "ready",
+              "horizons": {
+                "sampledAt": "2026-10-19T10:45:28.434Z",
+                "writerVisibility": "all-sessions",
+                "notification": {
+                  "oldestPendingRowAgeSeconds": null,
+                  "oldestWriterAgeSeconds": 0.011
+                },
+                "reviewRank": {
+                  "oldestPendingRowAgeSeconds": null,
+                  "oldestPendingRowAgeBasis": "none",
+                  "oldestWriterAgeSeconds": 0.011
+                },
+                "editorial": {
+                  "oldestPendingRowAgeSeconds": null,
+                  "oldestWriterAgeSeconds": 0.011
+                }
+              }
+            },
+            "at": "2026-10-19T10:45:28.485Z"
+          }
+        },
+        {
+          "run": "final",
+          "health": {
+            "status": 200,
+            "body": {
+              "status": "ready",
+              "horizons": {
+                "sampledAt": "2026-10-19T10:50:21.680Z",
+                "writerVisibility": "all-sessions",
+                "notification": {
+                  "oldestPendingRowAgeSeconds": null,
+                  "oldestWriterAgeSeconds": null
+                },
+                "reviewRank": {
+                  "oldestPendingRowAgeSeconds": null,
+                  "oldestPendingRowAgeBasis": "none",
+                  "oldestWriterAgeSeconds": null
+                },
+                "editorial": {
+                  "oldestPendingRowAgeSeconds": null,
+                  "oldestWriterAgeSeconds": null
+                }
+              }
+            },
+            "at": "2026-10-19T10:50:21.804Z"
+          }
+        }
+      ],
+      "process_directory_rechecked": "/proc/1372265/cwd matches backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2 after browser runs. Health readiness is not a source-byte or query/index certification."
+    },
+    "transport": "real Chromium -> exact frontend -> recording forward proxy -> genuine Main; no response or product row fabrication",
+    "identity": "Anonymous public reader, fresh second context for shared390 URL. No account fallback.",
+    "browser": "Playwright headless Chromium;1440x1000,768x1000,390x844; en/zh-Hans; light and fresh shared390 dark. Emulation, not physical hardware or recorded heard speech.",
+    "run_intervals": [
+      {
+        "run": "attempt2",
+        "start": "2026-10-19T10:41:41.275Z",
+        "finish": "2026-10-19T10:44:05.670Z",
+        "browser_errors": [],
+        "cleanup": "Chromium, recording proxy and exact frontend stopped"
+      },
+      {
+        "run": "attempt3",
+        "start": "2026-10-19T10:45:28.424Z",
+        "finish": "2026-10-19T10:47:49.677Z",
+        "browser_errors": [],
+        "cleanup": "Chromium, recording proxy and exact frontend stopped"
+      },
+      {
+        "run": "final",
+        "start": "2026-10-19T10:50:21.772Z",
+        "finish": "2026-10-19T10:51:28.416Z",
+        "browser_errors": [],
+        "cleanup": "Chromium, recording proxy and exact frontend stopped"
+      }
+    ],
+    "resource_api_ui_sequence": [
+      {
+        "page": "direct1440",
+        "request": {
+          "profile": "resource-list-v1",
+          "context": "global",
+          "scope": {
+            "kind": "all"
+          },
+          "sort": "relevance",
+          "limit": 20,
+          "q": "Fate",
+          "filter": {
+            "all": [
+              {
+                "facet": "type",
+                "any": [
+                  "https://schema.org/CreativeWork"
+                ]
+              },
+              {
+                "facet": "type",
+                "any": [
+                  "https://schema.org/VideoGame"
+                ]
+              },
+              {
+                "facet": "language",
+                "any": [
+                  "ja"
+                ]
+              }
+            ]
+          }
+        },
+        "status": 200,
+        "selection": {
+          "context": "global",
+          "scope": {
+            "kind": "all"
+          },
+          "filter": {
+            "all": [
+              {
+                "facet": "type",
+                "any": [
+                  "https://schema.org/CreativeWork"
+                ]
+              },
+              {
+                "facet": "type",
+                "any": [
+                  "https://schema.org/VideoGame"
+                ]
+              },
+              {
+                "facet": "language",
+                "any": [
+                  "ja"
+                ]
+              }
+            ]
+          },
+          "text": {
+            "phrase": "Fate"
+          },
+          "sort": "relevance",
+          "pageSize": 20,
+          "facetRefs": [
+            "https://rezics.com/definition/facet-language-v1",
+            "https://rezics.com/definition/facet-type-v1"
+          ],
+          "semanticRevisions": []
+        },
+        "source_position": {
+          "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+          "sequence": "11954"
+        },
+        "stale": true,
+        "complete": true,
+        "count": {
+          "value": 16,
+          "kind": "exact"
+        },
+        "same_ordered_api_and_ui_identities": true,
+        "items": [
+          {
+            "id": "https://rezics.com/id/01a0fd3c-4146-71fa-aea0-2aea16f4eb5d",
+            "name": {
+              "value": "Fate/EXTELLA",
+              "language": "ja",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a0f53d-aefd-74c8-bb8b-a2adc9770f24",
+            "name": {
+              "value": "Fate/stay night",
+              "language": "ja",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a0fd3b-dfbe-70a8-897f-7a8f19cc103f",
+            "name": {
+              "value": "Fate/stay night",
+              "language": "ja",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a0f543-2e7f-7772-be8f-a89a41a88788",
+            "name": {
+              "value": "Fate/hollow ataraxia",
+              "language": "ja",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a0fd3c-91d2-7244-9a4c-f9c900155ac9",
+            "name": {
+              "value": "Fate/hollow ataraxia",
+              "language": "ja",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a0fd3b-f606-7068-8e36-2363b039727f",
+            "name": {
+              "value": "Fate/EXTRA CCC",
+              "language": "ja",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a0fd3b-fbaa-7719-a6f1-a89cd1cd215f",
+            "name": {
+              "value": "Fate/Side Moon",
+              "language": "ja",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a0fd3c-1219-74f8-ac13-c9a49607dda4",
+            "name": {
+              "value": "Fate/Zero The Adventure",
+              "language": "ja",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a0fd3c-465c-7284-a2e4-00cb742cccb3",
+            "name": {
+              "value": "Fate/EXTELLA LINK",
+              "language": "ja",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a0fd3c-67dc-7089-8149-d22f57450807",
+            "name": {
+              "value": "Fate/Empire of Dirt",
+              "language": "ja",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a0fd3c-dd98-7136-b9c0-308c5b49c956",
+            "name": {
+              "value": "FATE/COLUMNS NIGHT",
+              "language": "ja",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a0fd3c-e039-758f-bdf7-cacc0d9d6cae",
+            "name": {
+              "value": "Fate/parallele Welt",
+              "language": "ja",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a0fd3d-13d2-71c2-a964-ebcb06e2304c",
+            "name": {
+              "value": "Fate/Dear Night",
+              "language": "ja",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a0fd3d-37ec-7732-8470-19007dd92af5",
+            "name": {
+              "value": "THE SACRED TREASURES/FATE",
+              "language": "ja",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a0fd3c-a342-7391-b81c-b0eee7a30e4c",
+            "name": {
+              "value": "Fate/IF Unlimited Card Works",
+              "language": "ja",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a0fd3c-cf41-7438-8af1-3fbe4f96067f",
+            "name": {
+              "value": "女体めくり Fate編",
+              "language": "ja",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          }
+        ]
+      },
+      {
+        "page": "edited1440",
+        "request": {
+          "profile": "resource-list-v1",
+          "context": "global",
+          "scope": {
+            "kind": "all"
+          },
+          "sort": "relevance",
+          "limit": 20,
+          "q": "CLANNAD",
+          "filter": {
+            "all": [
+              {
+                "facet": "type",
+                "any": [
+                  "https://schema.org/CreativeWork"
+                ]
+              },
+              {
+                "facet": "type",
+                "any": [
+                  "https://schema.org/VideoGame"
+                ]
+              },
+              {
+                "facet": "language",
+                "any": [
+                  "ja"
+                ]
+              }
+            ]
+          }
+        },
+        "status": 200,
+        "selection": {
+          "context": "global",
+          "scope": {
+            "kind": "all"
+          },
+          "filter": {
+            "all": [
+              {
+                "facet": "type",
+                "any": [
+                  "https://schema.org/CreativeWork"
+                ]
+              },
+              {
+                "facet": "type",
+                "any": [
+                  "https://schema.org/VideoGame"
+                ]
+              },
+              {
+                "facet": "language",
+                "any": [
+                  "ja"
+                ]
+              }
+            ]
+          },
+          "text": {
+            "phrase": "CLANNAD"
+          },
+          "sort": "relevance",
+          "pageSize": 20,
+          "facetRefs": [
+            "https://rezics.com/definition/facet-language-v1",
+            "https://rezics.com/definition/facet-type-v1"
+          ],
+          "semanticRevisions": []
+        },
+        "source_position": {
+          "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+          "sequence": "11954"
+        },
+        "stale": true,
+        "complete": true,
+        "count": {
+          "value": 1,
+          "kind": "exact"
+        },
+        "same_ordered_api_and_ui_identities": true,
+        "items": [
+          {
+            "id": "https://rezics.com/id/01a0f542-72ad-717c-a6dd-b8670f3522d9",
+            "name": {
+              "value": "CLANNAD",
+              "language": "ja",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          }
+        ]
+      },
+      {
+        "page": "removed-language1440",
+        "request": {
+          "profile": "resource-list-v1",
+          "context": "global",
+          "scope": {
+            "kind": "all"
+          },
+          "sort": "relevance",
+          "limit": 20,
+          "q": "CLANNAD",
+          "filter": {
+            "all": [
+              {
+                "facet": "type",
+                "any": [
+                  "https://schema.org/CreativeWork"
+                ]
+              },
+              {
+                "facet": "type",
+                "any": [
+                  "https://schema.org/VideoGame"
+                ]
+              }
+            ]
+          }
+        },
+        "status": 200,
+        "selection": {
+          "context": "global",
+          "scope": {
+            "kind": "all"
+          },
+          "filter": {
+            "all": [
+              {
+                "facet": "type",
+                "any": [
+                  "https://schema.org/CreativeWork"
+                ]
+              },
+              {
+                "facet": "type",
+                "any": [
+                  "https://schema.org/VideoGame"
+                ]
+              }
+            ]
+          },
+          "text": {
+            "phrase": "CLANNAD"
+          },
+          "sort": "relevance",
+          "pageSize": 20,
+          "facetRefs": [
+            "https://rezics.com/definition/facet-type-v1"
+          ],
+          "semanticRevisions": []
+        },
+        "source_position": {
+          "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+          "sequence": "11954"
+        },
+        "stale": true,
+        "complete": true,
+        "count": {
+          "value": 1,
+          "kind": "exact"
+        },
+        "same_ordered_api_and_ui_identities": true,
+        "items": [
+          {
+            "id": "https://rezics.com/id/01a0f542-72ad-717c-a6dd-b8670f3522d9",
+            "name": {
+              "value": "CLANNAD",
+              "language": "ja",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          }
+        ]
+      },
+      {
+        "page": "language-en390",
+        "request": {
+          "profile": "resource-list-v1",
+          "context": "global",
+          "scope": {
+            "kind": "all"
+          },
+          "sort": "relevance",
+          "limit": 20,
+          "q": "Fate",
+          "filter": {
+            "all": [
+              {
+                "facet": "type",
+                "any": [
+                  "https://schema.org/CreativeWork"
+                ]
+              },
+              {
+                "facet": "type",
+                "any": [
+                  "https://schema.org/VideoGame"
+                ]
+              },
+              {
+                "facet": "language",
+                "any": [
+                  "en"
+                ]
+              }
+            ]
+          }
+        },
+        "status": 200,
+        "selection": {
+          "context": "global",
+          "scope": {
+            "kind": "all"
+          },
+          "filter": {
+            "all": [
+              {
+                "facet": "type",
+                "any": [
+                  "https://schema.org/CreativeWork"
+                ]
+              },
+              {
+                "facet": "type",
+                "any": [
+                  "https://schema.org/VideoGame"
+                ]
+              },
+              {
+                "facet": "language",
+                "any": [
+                  "en"
+                ]
+              }
+            ]
+          },
+          "text": {
+            "phrase": "Fate"
+          },
+          "sort": "relevance",
+          "pageSize": 20,
+          "facetRefs": [
+            "https://rezics.com/definition/facet-language-v1",
+            "https://rezics.com/definition/facet-type-v1"
+          ],
+          "semanticRevisions": []
+        },
+        "source_position": {
+          "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+          "sequence": "11954"
+        },
+        "stale": true,
+        "complete": true,
+        "count": {
+          "value": 8,
+          "kind": "exact"
+        },
+        "same_ordered_api_and_ui_identities": true,
+        "items": [
+          {
+            "id": "https://rezics.com/id/01a0fd3c-01dc-7198-ae7c-c2a8675f8bf2",
+            "name": {
+              "value": "Fate/Otome",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "requested"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a0fd3c-4e53-7071-a0ac-89575a6b6d1c",
+            "name": {
+              "value": "Fate/Valentine",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "requested"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a0fd3c-b787-771a-8018-18d342d4394f",
+            "name": {
+              "value": "Fate/Install",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "requested"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a0fd3c-43b2-71ee-bd16-49dcab882e4e",
+            "name": {
+              "value": "Fate/Grand Husbando",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "requested"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a0fd3c-716d-75fb-9d30-59b20a280dc7",
+            "name": {
+              "value": "Fate/Dream Coalescence",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "requested"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a1096c-642d-7006-bbf3-c4fe2b6872f0",
+            "name": {
+              "value": "Fate/stay night",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "requested"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a10a63-6a84-703d-9fdd-7aa493e4019a",
+            "name": {
+              "value": "Fate/stay night",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "requested"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a0fd3c-7537-7761-a32d-fc4245c46126",
+            "name": {
+              "value": "Fate/Zero the Visual Novel",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "requested"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          }
+        ]
+      },
+      {
+        "page": "type-removed390",
+        "request": {
+          "profile": "resource-list-v1",
+          "context": "global",
+          "scope": {
+            "kind": "all"
+          },
+          "sort": "relevance",
+          "limit": 20,
+          "q": "Fate",
+          "filter": {
+            "all": [
+              {
+                "facet": "type",
+                "any": [
+                  "https://schema.org/CreativeWork"
+                ]
+              },
+              {
+                "facet": "language",
+                "any": [
+                  "en"
+                ]
+              }
+            ]
+          }
+        },
+        "status": 200,
+        "selection": {
+          "context": "global",
+          "scope": {
+            "kind": "all"
+          },
+          "filter": {
+            "all": [
+              {
+                "facet": "type",
+                "any": [
+                  "https://schema.org/CreativeWork"
+                ]
+              },
+              {
+                "facet": "language",
+                "any": [
+                  "en"
+                ]
+              }
+            ]
+          },
+          "text": {
+            "phrase": "Fate"
+          },
+          "sort": "relevance",
+          "pageSize": 20,
+          "facetRefs": [
+            "https://rezics.com/definition/facet-language-v1",
+            "https://rezics.com/definition/facet-type-v1"
+          ],
+          "semanticRevisions": []
+        },
+        "source_position": {
+          "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+          "sequence": "11954"
+        },
+        "stale": true,
+        "complete": true,
+        "count": {
+          "value": 12,
+          "kind": "exact"
+        },
+        "same_ordered_api_and_ui_identities": true,
+        "items": [
+          {
+            "id": "https://rezics.com/id/01a0fd3c-01dc-7198-ae7c-c2a8675f8bf2",
+            "name": {
+              "value": "Fate/Otome",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "requested"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a0fd3c-4e53-7071-a0ac-89575a6b6d1c",
+            "name": {
+              "value": "Fate/Valentine",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "requested"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a0fd3c-b787-771a-8018-18d342d4394f",
+            "name": {
+              "value": "Fate/Install",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "requested"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a1096c-781e-73f1-a001-91189adcf761",
+            "name": {
+              "value": "Fate/Zero",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "requested"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/TVSeries"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a10a63-83f2-70b3-b115-0178c11c2630",
+            "name": {
+              "value": "Fate/Zero",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "requested"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/TVSeries"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a0fd3c-43b2-71ee-bd16-49dcab882e4e",
+            "name": {
+              "value": "Fate/Grand Husbando",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "requested"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a0fd3c-716d-75fb-9d30-59b20a280dc7",
+            "name": {
+              "value": "Fate/Dream Coalescence",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "requested"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a1096c-642d-7006-bbf3-c4fe2b6872f0",
+            "name": {
+              "value": "Fate/stay night",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "requested"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a10a63-6a84-703d-9fdd-7aa493e4019a",
+            "name": {
+              "value": "Fate/stay night",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "requested"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a0fd3c-7537-7761-a32d-fc4245c46126",
+            "name": {
+              "value": "Fate/Zero the Visual Novel",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "requested"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoGame"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a10a63-96be-727d-8075-c68494d49feb",
+            "name": {
+              "value": "Fate/Zero — Episode 24",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "requested"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/VideoObject"
+            ]
+          },
+          {
+            "id": "https://rezics.com/id/01a10a63-9999-7039-855d-39ac24fb6940",
+            "name": {
+              "value": "Fate/stay night — Heaven's Feel route",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "requested"
+            },
+            "types": [
+              "https://schema.org/CreativeWork",
+              "https://schema.org/DigitalDocument"
+            ]
+          }
+        ]
+      }
+    ],
+    "failed_genuine_operations": [
+      {
+        "evidence": ".temp/discover-confirmation/live-observations-attempt2.json",
+        "number": 48,
+        "at": "2026-10-19T10:42:15.487Z",
+        "operation": "GET /v1/onboarding/suggested-follows?locale=en",
+        "request": null,
+        "status": 503,
+        "response": {
+          "type": "https://rezics.com/problems/work_read_unavailable",
+          "title": "Work read is unavailable",
+          "status": 503,
+          "code": "work_read_unavailable"
+        },
+        "source": "587576832d71c3c501b962f849a5c400c9f7bd73",
+        "backend_source": "75409ac3c379a9f84212e48a8abdc6540c5c44a2"
+      },
+      {
+        "evidence": ".temp/discover-confirmation/live-observations-attempt2.json",
+        "number": 257,
+        "at": "2026-10-19T10:42:46.534Z",
+        "operation": "POST /v1/query",
+        "request": {
+          "context": "global",
+          "scope": {
+            "kind": "all"
+          },
+          "text": {
+            "phrase": "Fate"
+          },
+          "sort": "relevance",
+          "filter": {
+            "all": [
+              {
+                "facet": "type",
+                "any": [
+                  "https://schema.org/VideoGame"
+                ]
+              },
+              {
+                "facet": "language",
+                "any": [
+                  "ja"
+                ]
+              }
+            ]
+          },
+          "page": {
+            "size": 10
+          }
+        },
+        "status": 503,
+        "response": {
+          "type": "https://rezics.com/problems/search_index_unavailable",
+          "title": "Public text index is unavailable",
+          "status": 503,
+          "code": "search_index_unavailable"
+        },
+        "source": "587576832d71c3c501b962f849a5c400c9f7bd73",
+        "backend_source": "75409ac3c379a9f84212e48a8abdc6540c5c44a2"
+      },
+      {
+        "evidence": ".temp/discover-confirmation/live-observations-attempt2.json",
+        "number": 352,
+        "at": "2026-10-19T10:43:11.802Z",
+        "operation": "POST /v1/query",
+        "request": {
+          "profile": "resource-list-v1",
+          "context": "global",
+          "scope": {
+            "kind": "all"
+          },
+          "sort": "newest",
+          "limit": 20
+        },
+        "status": 422,
+        "response": {
+          "type": "https://rezics.com/problems/work_read_budget_exceeded",
+          "title": "Work read exceeds its budget",
+          "status": 422,
+          "code": "work_read_budget_exceeded"
+        },
+        "source": "587576832d71c3c501b962f849a5c400c9f7bd73",
+        "backend_source": "75409ac3c379a9f84212e48a8abdc6540c5c44a2"
+      },
+      {
+        "evidence": ".temp/discover-confirmation/live-observations-attempt2.json",
+        "number": 353,
+        "at": "2026-10-19T10:43:11.802Z",
+        "operation": "GET /v1/discovery/sections?limit=6&personalization=true",
+        "request": null,
+        "status": 422,
+        "response": {
+          "type": "https://rezics.com/problems/work_read_budget_exceeded",
+          "title": "Work read exceeds its budget",
+          "status": 422,
+          "code": "work_read_budget_exceeded"
+        },
+        "source": "587576832d71c3c501b962f849a5c400c9f7bd73",
+        "backend_source": "75409ac3c379a9f84212e48a8abdc6540c5c44a2"
+      },
+      {
+        "evidence": ".temp/discover-confirmation/live-observations-attempt2.json",
+        "number": 449,
+        "at": "2026-10-19T10:43:45.935Z",
+        "operation": "GET /v1/search/typeahead?prefix=boo&language=en",
+        "request": null,
+        "status": 503,
+        "response": {
+          "type": "https://rezics.com/problems/search_index_unavailable",
+          "title": "Public text index is unavailable",
+          "status": 503,
+          "code": "search_index_unavailable"
+        },
+        "source": "587576832d71c3c501b962f849a5c400c9f7bd73",
+        "backend_source": "75409ac3c379a9f84212e48a8abdc6540c5c44a2"
+      },
+      {
+        "evidence": ".temp/discover-confirmation/live-observations-attempt3.json",
+        "number": 412,
+        "at": "2026-10-19T10:46:56.353Z",
+        "operation": "POST /v1/query",
+        "request": {
+          "context": {
+            "realm": "https://rezics.com/id/01a0e90b-63b4-70ae-a08e-91a25abd19d5"
+          },
+          "scope": {
+            "kind": "all"
+          },
+          "text": {
+            "phrase": "Fate"
+          },
+          "sort": "relevance",
+          "filter": {
+            "all": [
+              {
+                "facet": "type",
+                "any": [
+                  "https://schema.org/VideoGame"
+                ]
+              },
+              {
+                "facet": "type",
+                "none": [
+                  "https://schema.org/Recipe"
+                ]
+              },
+              {
+                "facet": "language",
+                "any": [
+                  "ja"
+                ]
+              },
+              {
+                "facet": "concept",
+                "any": [
+                  "https://rezics.com/id/01a0e912-3cc5-728c-bca7-02fd0ee4bbb0"
+                ]
+              },
+              {
+                "facet": "concept",
+                "none": [
+                  "https://rezics.com/id/01a0e912-3e85-7285-a1d9-7c511ad5e657"
+                ]
+              }
+            ]
+          },
+          "page": {
+            "size": 10
+          }
+        },
+        "status": 422,
+        "response": {
+          "type": "https://rezics.com/problems/query_budget_exceeded",
+          "title": "Facet graph reads exceed the Query budget",
+          "status": 422,
+          "code": "query_budget_exceeded"
+        },
+        "source": "587576832d71c3c501b962f849a5c400c9f7bd73",
+        "backend_source": "75409ac3c379a9f84212e48a8abdc6540c5c44a2"
+      }
+    ],
+    "operation_failure_interpretation": {
+      "default_422": "Concrete genuine product/setup failure for original AUD-009 populated separation; additionally exposes an actual UI section naming gap. Not simulated success.",
+      "native_503_and_scoped_422": "Separate chapter/search operations; retained as failed exact requests. They do not invalidate resource200 proofs or block D6-004 on D6-003/D6-005/D4-010.",
+      "onboarding_503": "Incidental shell suggested-follows operation, outside this confirmation; retained without launching another journey."
+    },
+    "recorded_jobs": [
+      {
+        "job": "4662d897-00b7-4f4b-b03e-f1c04a6cd2de",
+        "status": "fail",
+        "log": ".temp/goal/jobs/4662d897-00b7-4f4b-b03e-f1c04a6cd2de.log",
+        "log_sha256": "ae6f5883a1fb51ac47668c619ba515c0412dfce76e092b80c7913c487b07ebca",
+        "interpretation": "Bun hidden test-path premise did not discover the file; original outcomes not reached."
+      },
+      {
+        "job": "3db8e551-e823-4077-9865-e5e4d59796dc",
+        "status": "fail",
+        "log": ".temp/goal/jobs/3db8e551-e823-4077-9865-e5e4d59796dc.log",
+        "log_sha256": "5de5e1b000e1bac3f83a8752a297f1334cbee8160e7a8a744a746e73e43d2744",
+        "interpretation": "Exact frontend initially failed Vite external font dependency admission (500). No Main operations; original outcomes not reached. Empty-form reset probe result is vacuous and not accepted. Corrected only isolated dependency placement."
+      },
+      {
+        "job": "9344f5be-72ef-44c7-9d39-c17ae5c97786",
+        "status": "fail",
+        "log": ".temp/goal/jobs/9344f5be-72ef-44c7-9d39-c17ae5c97786.log",
+        "log_sha256": "df38c80df8e6f73a403d96a3d440018175dcd5dfc8aef38802a0248e282df25a",
+        "interpretation": "Actual original scoped/history/search-layout checks ran. Direct type-label selector premise failed (Include VideoGame versus served Include Game); all six original default section-name assertions failed with genuine422. All other individual results preserved."
+      },
+      {
+        "job": "7e80683e-83bb-494a-8c08-ff8f8b985d13",
+        "status": "fail",
+        "log": ".temp/goal/jobs/7e80683e-83bb-494a-8c08-ff8f8b985d13.log",
+        "log_sha256": "94af831036be1ad8b24f82d5a40c3833968ab73f5f4ef5980459f78b5a90f1d0",
+        "interpretation": "Realm/topic mobile edit/history and People checks pass. Remaining language edit stops before its outcome on ambiguous Language label (locale form/combobox/content textbox); no product failure inferred for that step."
+      },
+      {
+        "job": "c706fefd-ff7e-486a-9bc2-026dbafb8ac1",
+        "status": "pass",
+        "log": ".temp/goal/jobs/c706fefd-ff7e-486a-9bc2-026dbafb8ac1.log",
+        "log_sha256": "475f9c9f226c3ef3275359bccce5e56f1e3a695c4933c5ccb7fd6dd7b5c7c608",
+        "interpretation": "Only missing content-language edit/type removal rerun using the content-language textbox role. 1 Bun test,3 assertions,0 failures,67.06s. No passing scoped/hierarchy file replay."
+      }
+    ],
+    "individual_check_results": [
+      {
+        "evidence": ".temp/discover-confirmation/live-observations-attempt2.json",
+        "checks": [
+          {
+            "id": "D6-004 direct URL + visible active selectors",
+            "status": "fail",
+            "error": "Error: expect(received).toBe(expected)\n\nExpected: 1\nReceived: 0\n",
+            "phase": "genuine UI"
+          },
+          {
+            "id": "D6-004 same-task edit retains language/type/tab",
+            "status": "pass"
+          },
+          {
+            "id": "D6-004 real Back restores query and conditions",
+            "status": "pass"
+          },
+          {
+            "id": "D6-004 real Forward restores edited query and conditions",
+            "status": "pass"
+          },
+          {
+            "id": "D6-004 shared URL fresh390context and refresh",
+            "status": "pass"
+          },
+          {
+            "id": "D6-004 individually clear language and preserve type/query",
+            "status": "pass"
+          },
+          {
+            "id": "D6-004 explicit global reset check",
+            "status": "pass"
+          },
+          {
+            "id": "AUD-009 default visible named sections en/1440",
+            "status": "fail",
+            "error": "Error: expect(received).toContain(expected)\n\nExpected to contain: \"New sites\"\nReceived: [ \"Official Zones\", \"All results\" ]\n",
+            "phase": "genuine UI"
+          },
+          {
+            "id": "AUD-009 default visible named sections en/768",
+            "status": "fail",
+            "error": "Error: expect(received).toContain(expected)\n\nExpected to contain: \"New sites\"\nReceived: [ \"Official Zones\", \"All results\" ]\n",
+            "phase": "genuine UI"
+          },
+          {
+            "id": "AUD-009 default visible named sections en/390",
+            "status": "fail",
+            "error": "Error: expect(received).toContain(expected)\n\nExpected to contain: \"New sites\"\nReceived: [ \"Official Zones\", \"All results\" ]\n",
+            "phase": "genuine UI"
+          },
+          {
+            "id": "AUD-009 default visible named sections zh-Hans/1440",
+            "status": "fail",
+            "error": "Error: expect(received).toContain(expected)\n\nExpected to contain: \"新站点\"\nReceived: [ \"官方专区\", \"全部结果\" ]\n",
+            "phase": "genuine UI"
+          },
+          {
+            "id": "AUD-009 default visible named sections zh-Hans/768",
+            "status": "fail",
+            "error": "Error: expect(received).toContain(expected)\n\nExpected to contain: \"新站点\"\nReceived: [ \"官方专区\", \"全部结果\" ]\n",
+            "phase": "genuine UI"
+          },
+          {
+            "id": "AUD-009 default visible named sections zh-Hans/390",
+            "status": "fail",
+            "error": "Error: expect(received).toContain(expected)\n\nExpected to contain: \"新站点\"\nReceived: [ \"官方专区\", \"全部结果\" ]\n",
+            "phase": "genuine UI"
+          },
+          {
+            "id": "AUD-009 query scope/results before topics en/1440",
+            "status": "pass"
+          },
+          {
+            "id": "AUD-009 query scope/results before topics en/390",
+            "status": "pass"
+          },
+          {
+            "id": "AUD-009 query scope/results before topics zh-Hans/1440",
+            "status": "pass"
+          },
+          {
+            "id": "AUD-009 query scope/results before topics zh-Hans/390",
+            "status": "pass"
+          },
+          {
+            "id": "D6-004 API/UI same query language/type sequence",
+            "status": "pass"
+          }
+        ]
+      },
+      {
+        "evidence": ".temp/discover-confirmation/live-observations-attempt3.json",
+        "checks": [
+          {
+            "id": "D6-004 genuine mobile realm/topic query edit preserves all current selectors",
+            "status": "pass"
+          },
+          {
+            "id": "D6-004 genuine mobile Back and Forward restore complete realm/topic conditions",
+            "status": "pass"
+          },
+          {
+            "id": "D6-004 People destination keeps query realm and Classics condition",
+            "status": "pass"
+          },
+          {
+            "id": "D6-004 language edit and type removal use matching real API/UI sequence",
+            "status": "fail",
+            "error": "Error: fill: Error: strict mode violation: getByLabel('Language', { exact: true }) resolved to 3 elements:\n    1) <form method=\"post\" data-locale-js=\"true\" aria-label=\"Language\" action=\"/locale/select\">…</form> aka getByRole('form', { name: 'Language' })\n    2) <button dir=\"ltr\" type=\"button\" role=\"combobox\" data-state=\"closed\" data-scope=\"select\" data-part=\"trigger\" aria-invalid=\"false\" aria-expanded=\"false\" aria-required=\"false\" aria-label=\"Language\" aria-haspopup=\"listbox\" data-slot=\"select-trigger\" id=\"select:_R_4mri_:trigger\" aria-controls=\"select:_R_4mri_:content\" aria-labelledby=\"select:_R_4mri_:label\" class=\"peer min-w-0 bg-primary/5 text-foreground md:text-sm rounded-xl border border-control shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)] hover:border-mut…>…</button> aka getByRole('combobox', { name: 'Language' })\n    3) <input value=\"ja\" type=\"text\" name=\"lang\" data-size=\"md\" maxlength=\"35\" data-slot=\"input\" placeholder=\"Any language\" class=\"peer w-full min-w-0 bg-primary/5 text-foreground text-base md:text-sm rounded-xl border border-control shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)] hover:border-muted-foreground placeholder:text-muted-foreground file:inline-flex file:h-7 file:items-center file:border-0 file:font-medium file:text-foreground file:text-sm transition-[color,box-shadow] outline-none focus-visible:outlin…/> aka getByRole('textbox', { name: 'Language' })\n\nCall log:\n\u001b[2m  - waiting for getByLabel('Language', { exact: true })\u001b[22m\n",
+            "phase": "missing realm/topic conditions"
+          }
+        ]
+      },
+      {
+        "evidence": ".temp/discover-confirmation/live-observations-final.json",
+        "checks": [
+          {
+            "id": "D6-004 language edit and type removal use matching real API/UI sequence",
+            "status": "pass"
+          }
+        ]
+      }
+    ],
+    "raw_evidence_manifest": [
+      {
+        "path": ".temp/discover-confirmation/live-attempt1.test.ts",
+        "sha256": "5b4d15a050539e5e1a0973c627cc15edd54dc984a949d00a5c0f6351bb271de5"
+      },
+      {
+        "path": ".temp/discover-confirmation/live-attempt2.test.ts",
+        "sha256": "5f63a1a88296db46cf853063d2ef45c38a38f0ba0e045a043cbfe59e5d1e329d"
+      },
+      {
+        "path": ".temp/discover-confirmation/live-attempt3.test.ts",
+        "sha256": "3a74390c7ebc56231dc6afef36007807461803485bf286050a2d249a2eaa3a55"
+      },
+      {
+        "path": ".temp/discover-confirmation/live-final.test.ts",
+        "sha256": "0077f9e3a6d199c3b7683904c5399e65fbeed9a0a69c6b26cfdbdd9773a3f9b2"
+      },
+      {
+        "path": ".temp/discover-confirmation/live-observations-attempt1.json",
+        "sha256": "023acf7e148eb0f9b6c23e9d5489e8a023db70abf0ab405a1420a981d2ce3be3"
+      },
+      {
+        "path": ".temp/discover-confirmation/live-observations-attempt2.json",
+        "sha256": "92bfeca4196c448d2a09c90951517ad9319e5298c615d45a77df328a20a943b2"
+      },
+      {
+        "path": ".temp/discover-confirmation/live-observations-attempt3.json",
+        "sha256": "307be509295235b9350d3b87011ea34b0fdcbeb2f112e3b62e5d0765ecddb82a"
+      },
+      {
+        "path": ".temp/discover-confirmation/live-observations-final.json",
+        "sha256": "c4e3445a14ea6c46ac005035082d03069111977c5d3cfdb2b03ac8e31d5de716"
+      },
+      {
+        "path": ".temp/discover-confirmation/api-ui-dom-comparison.json",
+        "sha256": "ece62c803d65c345ef514906efd626449636b064ff84b09f1bac57c4f833b204"
+      },
+      {
+        "path": ".temp/discover-confirmation/api-ui-dom-comparison-uuid-premise.json",
+        "sha256": "337900a8a1407c5561e04208237f2a7f5618682e78ee59283068689a1d2d4ff6"
+      },
+      {
+        "path": ".temp/discover-confirmation/source-integrity.json",
+        "sha256": "4c555a178c9faeac27b0fc8957cfed79c176c1016031a231317cdddec9fa4f2f"
+      },
+      {
+        "path": ".temp/discover-confirmation/cleanup-observations.json",
+        "sha256": "148307a058c71cc7de774e480713d7b38a58f55e7eb92108d813e920565f4c71"
+      }
+    ],
+    "rendered_images": [
+      {
+        "path": ".temp/discover-confirmation/back1440.png",
+        "sha256": "439f5c084de53a6bd4913a8f05e1fde6e31c1a6d9eb82c3ea29c369afa19ca8b",
+        "kind": "genuine Chromium rendered page; no product rows or responses fabricated",
+        "viewed_by_this_reviewer": false,
+        "rendered_dom": {
+          "path": ".temp/discover-confirmation/back1440.html",
+          "sha256": "88a5b1589b9ef72907a2a24abd6bf97ebfbddf1c66c7137846f8a122e64cbb39"
+        }
+      },
+      {
+        "path": ".temp/discover-confirmation/default-en-1440.png",
+        "sha256": "2766ceb58fc673e41183caf5ba2f0775b665250fe1e974bbed6632e265043dcf",
+        "kind": "genuine Chromium rendered page; no product rows or responses fabricated",
+        "viewed_by_this_reviewer": false,
+        "rendered_dom": {
+          "path": ".temp/discover-confirmation/default-en-1440.html",
+          "sha256": "aa9698c6e599c66086536f16d7d6ba62cbe8e2cb7a44232a42e0c810d384a120"
+        }
+      },
+      {
+        "path": ".temp/discover-confirmation/default-en-390.png",
+        "sha256": "38e99969daeed80ca5e31669d73b64f9b10fdf2bb975317c9f8e78e398e5453a",
+        "kind": "genuine Chromium rendered page; no product rows or responses fabricated",
+        "viewed_by_this_reviewer": true,
+        "rendered_dom": {
+          "path": ".temp/discover-confirmation/default-en-390.html",
+          "sha256": "57d281fdf13360fdd49157a416b7bf2629683610db1d5355310b8b6f326ad70d"
+        }
+      },
+      {
+        "path": ".temp/discover-confirmation/default-en-768.png",
+        "sha256": "bd2c285eb636cb5319c9801db99f6ff5df29fb20a185f4b85f74ce02770225ab",
+        "kind": "genuine Chromium rendered page; no product rows or responses fabricated",
+        "viewed_by_this_reviewer": false,
+        "rendered_dom": {
+          "path": ".temp/discover-confirmation/default-en-768.html",
+          "sha256": "1946def1de88384897ed2bb4f4f26c2549f20deb9287424b2bc2d181941ad988"
+        }
+      },
+      {
+        "path": ".temp/discover-confirmation/default-zh-Hans-1440.png",
+        "sha256": "afaafd12afb786473f772ee8b05ae92581fecc7d3644c467f5df9cd86df08b4a",
+        "kind": "genuine Chromium rendered page; no product rows or responses fabricated",
+        "viewed_by_this_reviewer": false,
+        "rendered_dom": {
+          "path": ".temp/discover-confirmation/default-zh-Hans-1440.html",
+          "sha256": "061307350dbb5a332545aee49b9461b718d40cf8d00bb4d70788923019a94e9a"
+        }
+      },
+      {
+        "path": ".temp/discover-confirmation/default-zh-Hans-390.png",
+        "sha256": "8dcef1a93ded34e9d26f4cba720d43508fee963fc64cbb0e6dd7633d208e465e",
+        "kind": "genuine Chromium rendered page; no product rows or responses fabricated",
+        "viewed_by_this_reviewer": false,
+        "rendered_dom": {
+          "path": ".temp/discover-confirmation/default-zh-Hans-390.html",
+          "sha256": "ede82e2e1feeec49f6b1e1891dd12cd062c359e66bda096e883b0f9269341150"
+        }
+      },
+      {
+        "path": ".temp/discover-confirmation/default-zh-Hans-768.png",
+        "sha256": "71cd538fcd61c6d4832b01c8feaa12fcc41d6e897d859834cbf62c663235693f",
+        "kind": "genuine Chromium rendered page; no product rows or responses fabricated",
+        "viewed_by_this_reviewer": true,
+        "rendered_dom": {
+          "path": ".temp/discover-confirmation/default-zh-Hans-768.html",
+          "sha256": "63f1d31db286aa50af2f6bae555c1d00130307772b50add2f590ba10aaf6ea9c"
+        }
+      },
+      {
+        "path": ".temp/discover-confirmation/direct1440.png",
+        "sha256": "439f5c084de53a6bd4913a8f05e1fde6e31c1a6d9eb82c3ea29c369afa19ca8b",
+        "kind": "genuine Chromium rendered page; no product rows or responses fabricated",
+        "viewed_by_this_reviewer": true,
+        "rendered_dom": {
+          "path": ".temp/discover-confirmation/direct1440.html",
+          "sha256": "f8345f533a23766374e9309b83d1a876f8a22e4cf52345f263b42abdbf13fdea"
+        }
+      },
+      {
+        "path": ".temp/discover-confirmation/edited1440.png",
+        "sha256": "ba6d0df6555c09782fd0d0f54edefe7b63b6f5c428a32420e174df9c8225f2ad",
+        "kind": "genuine Chromium rendered page; no product rows or responses fabricated",
+        "viewed_by_this_reviewer": false,
+        "rendered_dom": {
+          "path": ".temp/discover-confirmation/edited1440.html",
+          "sha256": "af94af50196f94869d3323ed2e5e77cb8c7877ab3ac3db116502528ff8f89f85"
+        }
+      },
+      {
+        "path": ".temp/discover-confirmation/language-en390.png",
+        "sha256": "a2bd8d6e719854750d18d7be5615d5b48830f41655baa398529950010c777639",
+        "kind": "genuine Chromium rendered page; no product rows or responses fabricated",
+        "viewed_by_this_reviewer": true,
+        "rendered_dom": {
+          "path": ".temp/discover-confirmation/language-en390.html",
+          "sha256": "26e473472071353da665b24c6a96d5d0ff09a3658681d2aebdfc8c83c505cc2b"
+        }
+      },
+      {
+        "path": ".temp/discover-confirmation/removed-language1440.png",
+        "sha256": "4a5974930065f183afc2e99ba84c4cf293644f8137aa2fa7d4b14ecaaba3fa22",
+        "kind": "genuine Chromium rendered page; no product rows or responses fabricated",
+        "viewed_by_this_reviewer": false,
+        "rendered_dom": {
+          "path": ".temp/discover-confirmation/removed-language1440.html",
+          "sha256": "651fea073e47c0c16d4a80e00e42a9a6ed57ba630f2558e90130a339bf9a6e56"
+        }
+      },
+      {
+        "path": ".temp/discover-confirmation/scoped-after390.png",
+        "sha256": "601f355fc6f5ad2f9cbd4a960ac67533d04932a774a4c38a97bf069f6dc0ccae",
+        "kind": "genuine Chromium rendered page; no product rows or responses fabricated",
+        "viewed_by_this_reviewer": false,
+        "rendered_dom": {
+          "path": ".temp/discover-confirmation/scoped-after390.html",
+          "sha256": "5c130a81ae4cb01df2707db52e6984d139c2fe03eee57c2901af32f148e4891b"
+        }
+      },
+      {
+        "path": ".temp/discover-confirmation/scoped-before390.png",
+        "sha256": "85a0b545e9af9225bec50dff5696b5163555c9ab338b2fbbd06a0eff164430ba",
+        "kind": "genuine Chromium rendered page; no product rows or responses fabricated",
+        "viewed_by_this_reviewer": false,
+        "rendered_dom": {
+          "path": ".temp/discover-confirmation/scoped-before390.html",
+          "sha256": "fdfd957238d799a1f87cfb802073f5a3b893cdf927fb83ed8321f3ba0b59664b"
+        }
+      },
+      {
+        "path": ".temp/discover-confirmation/scoped-history390.png",
+        "sha256": "7c13dd4f2b70d66c5eea5ce037380fac5a306c3378e342ba32fc1e5eb3389778",
+        "kind": "genuine Chromium rendered page; no product rows or responses fabricated",
+        "viewed_by_this_reviewer": false,
+        "rendered_dom": {
+          "path": ".temp/discover-confirmation/scoped-history390.html",
+          "sha256": "4d298353b53e7312bf2b714c52c7343010ed59282ed77dfc20f2fcd71b54501d"
+        }
+      },
+      {
+        "path": ".temp/discover-confirmation/scoped-people390.png",
+        "sha256": "78909e757fb45a73de3393f03729f80038513c8dd07196e42f84179563fa05c8",
+        "kind": "genuine Chromium rendered page; no product rows or responses fabricated",
+        "viewed_by_this_reviewer": true,
+        "rendered_dom": {
+          "path": ".temp/discover-confirmation/scoped-people390.html",
+          "sha256": "218b4d14f4c490f425b82ace55536b03bf205842cce5288cdea48c18712a7904"
+        }
+      },
+      {
+        "path": ".temp/discover-confirmation/search-en-1440.png",
+        "sha256": "81e4d391bc1ad5339fbe331622aa486c8e5525fd8b9c767fac2609c66807e434",
+        "kind": "genuine Chromium rendered page; no product rows or responses fabricated",
+        "viewed_by_this_reviewer": true,
+        "rendered_dom": {
+          "path": ".temp/discover-confirmation/search-en-1440.html",
+          "sha256": "cb677b95ba2877282bdb934cd44e2b981feb30c306e04aea06a166f84b423188"
+        }
+      },
+      {
+        "path": ".temp/discover-confirmation/search-en-390.png",
+        "sha256": "e5635f56b017f6bef0481aa47b4a973cc7a258c4689fb6c52c81b88e0815672e",
+        "kind": "genuine Chromium rendered page; no product rows or responses fabricated",
+        "viewed_by_this_reviewer": false,
+        "rendered_dom": {
+          "path": ".temp/discover-confirmation/search-en-390.html",
+          "sha256": "5e02b244b49a81d11d6a41cb0d2d2aeacfbacbe5b0e46de8f0575cb1e5c33447"
+        }
+      },
+      {
+        "path": ".temp/discover-confirmation/search-zh-Hans-1440.png",
+        "sha256": "2755b1831a83263428ccc30773890c5d5a51ce5b4ac87743d1143204d98e4b7d",
+        "kind": "genuine Chromium rendered page; no product rows or responses fabricated",
+        "viewed_by_this_reviewer": false,
+        "rendered_dom": {
+          "path": ".temp/discover-confirmation/search-zh-Hans-1440.html",
+          "sha256": "f8a0c8d3b5c3bcb3e96c327f503076dab24056a4b47beb9bbdbe966c1861214b"
+        }
+      },
+      {
+        "path": ".temp/discover-confirmation/search-zh-Hans-390.png",
+        "sha256": "83858d6e1fefbf8c28d32175760fb112d40f885528bdc651fade2f23b8d079bd",
+        "kind": "genuine Chromium rendered page; no product rows or responses fabricated",
+        "viewed_by_this_reviewer": true,
+        "rendered_dom": {
+          "path": ".temp/discover-confirmation/search-zh-Hans-390.html",
+          "sha256": "282bac28a5c79cfe57adb128ba46d66326e5be12e27963d2471bb4037b771ee1"
+        }
+      },
+      {
+        "path": ".temp/discover-confirmation/shared390.png",
+        "sha256": "42898030aa05e6039cae1b2e3194aca47049e6c9ae36d8d3de32ee1d1771f9c0",
+        "kind": "genuine Chromium rendered page; no product rows or responses fabricated",
+        "viewed_by_this_reviewer": false
+      },
+      {
+        "path": ".temp/discover-confirmation/type-removed390.png",
+        "sha256": "85e7a131c8fb996864b48ea6f5f5dea063b06fc9bf3a0937275ca807c9977384",
+        "kind": "genuine Chromium rendered page; no product rows or responses fabricated",
+        "viewed_by_this_reviewer": true,
+        "rendered_dom": {
+          "path": ".temp/discover-confirmation/type-removed390.html",
+          "sha256": "84abdc58faa58834b3a564db53968b44b48c9fec68f38a36609a86b681a1f6ce"
+        }
+      }
+    ],
+    "cleanup_port_observations": [
+      {
+        "port": 31853,
+        "listening": false
+      },
+      {
+        "port": 31854,
+        "listening": false
+      }
+    ],
+    "preservation": "Original source report, authored assertions and every failed job/check remain unchanged. Scratch probes correct only setup/selectors and run the remaining assertions; no product implementation edits. UUID-literal DOM comparison premise is retained separately; actual UI uses existing SID hrefs, whose decoded ordered identities agree with all five genuine API states."
+  },
+  "verification": {
+    "report_json": "Parsed successfully; original criteria equal staged canonical inventory verbatim; preserved G2835 report SHA-256 unchanged; ten manifest blobs match immutable source.",
+    "recorded_job": "4c8609f2-767c-4199-9a0c-f98f397d4b2f",
+    "launcher": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job",
+    "docs_check": {
+      "command": "task docs:check",
+      "status": "pass",
+      "exit_status": 0,
+      "result": "13 documentation-tool tests;250 Markdown files checked for local links, fragments and design navigation. No external URL/runtime claim.",
+      "path": ".temp/goal/jobs/4c8609f2-767c-4199-9a0c-f98f397d4b2f.1.log",
+      "sha256": "21c8dcbdadd499757c4fc2db15f2e369ea13aa0070364b410b3f2d3c39d59749"
+    },
+    "goal_check": {
+      "command": "task goal -- check",
+      "status": "pass",
+      "exit_status": 0,
+      "result": "types/lint: no TypeScript/source changed; tests: none named in brief; AST pass; selected repository guard one-language-parser-debt:2tests/6assertions,0failures. Report-only guard result is separate from retained affected-source QA.",
+      "path": ".temp/goal/jobs/4c8609f2-767c-4199-9a0c-f98f397d4b2f.2.log",
+      "sha256": "79ed9f15c16dd6ff21105c65ffc8efa62dfc8ed1043f85645a4f95f7eff8ca19"
+    },
+    "combined_receipt": {
+      "path": ".temp/goal/jobs/4c8609f2-767c-4199-9a0c-f98f397d4b2f.log",
+      "sha256": "e3a00d83a28aa9b85b5aa60e03cf0a6319b07f45e988530c79e3ec4eea5e0e11"
+    },
+    "goal_check_report": ".temp/goal/check/run-VeAzHK/output.log",
+    "automatic_rebase": {
+      "performed_by": "task goal -- check, not manual integration",
+      "old_report_head": "cb1015f5977b9757547afd72545ee4acfd476c44",
+      "new_report_head": "b0e89cfabf7ba11c3f05cbc1a1d1ffd19052d967",
+      "source_confirmation_commit": "612e90592c33fe9a11d84d38acb869c31b268208",
+      "pinned_frontend_source_unchanged": true,
+      "applicable_instruction_and_site_plan_delta": "none"
+    },
+    "scope": "Only claimed JSON is tracked. Temporary probes/evidence remain ignored under .temp. No unchanged implementation unit/story tier replay; final repository guard selected by required worker check.",
+    "main_integration_claimed": false
+  },
+  "completed_at": "2026-10-19T10:57:40.658864+00:00"
+}
