@@ -111,7 +111,7 @@ export function AnimeHubRecordedPage({ persona, actingSubject, main, workId, kin
     </div>;
   }
   if (!dated?.header.ok || !dated.statements) return null;
-  const action = identity ? nextAction({ start: null, progress: identity.progress, preference: identity.preference,
+  const action = identity ? nextAction({ start: null, progress: identity.progress.ok ? identity.progress : null, preference: identity.preference,
     releases: dated.releases.ok ? dated.releases.data.items.length : 0 }) : null;
   const experience = workExperience(dated.projection.ok ? dated.projection.data : null, dated.header.data.types);
   return <div className="grid min-w-0 gap-3" lang={locale}>
