@@ -146,6 +146,9 @@ export interface AuditRecipe {
   /** An explicit current-product preparation pin, separate from historical
    * consumer baseline expectations. Absence preserves the baseline workflow. */
   productRevision?: string;
+  /** Measured private input staging before this producer's inspection. Charge
+   * it to preparation, rather than resetting the existing 600-second budget. */
+  inputPreparationMs?: number;
   /** Pins from the independent import matrix are checked even if imports=[]:
    * supporting source evidence must not silently substitute a later snapshot. */
   imports: AuditImport[]; evidence: AuditEvidence[];

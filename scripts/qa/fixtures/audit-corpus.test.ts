@@ -79,6 +79,8 @@ test('explicit current-product admission keeps the historical baseline distinct 
   ]);
   expect(auditProductBlockers(undefined, current)).toEqual(auditBaselineBlockers());
   expect(() => assertAuditRecipe({ ...candidate, productRevision: 'latest' })).toThrow('invalid current product pin');
+  for (const inputPreparationMs of [-1, NaN, Infinity])
+    expect(() => assertAuditRecipe({ ...candidate, inputPreparationMs })).toThrow('invalid earlier input preparation duration');
 });
 
 test('restore rejects raw-update, ephemeral and unobserved storage modes before starting writers', () => {
@@ -562,7 +564,7 @@ test('a retained catalogue requires its original operator and exact native ledge
   expect(() => assertAuditOriginals(duplicate)).toThrow('resource binding is duplicated');
 });
 
-test('earlier source inspection consumes the existing budget and cannot open owners after expiry', async () => {
+test('input staging and source inspection consume one budget and cannot open owners after expiry', async () => {
   let now = 0;
   const budget = new FixtureWorkBudget(600_000, () => now);
   budget.includeElapsedWork(100);
@@ -571,7 +573,7 @@ test('earlier source inspection consumes the existing budget and cannot open own
   expect(budget.remaining()).toBe(599_800);
   for (const invalid of [-1, Infinity, NaN]) expect(() => budget.includeElapsedWork(invalid)).toThrow('nonnegative finite');
 
-  const input = inspection(); input.inspectionMs = 600_000;
+  const input = inspection(); input.inspectionMs = 510_000; input.recipe.inputPreparationMs = 90_000;
   const runtime = { async open() { throw new Error('must never open'); } } as unknown as AuditRuntime;
   const adapter = auditCorpusAdapter(root, input, runtime, join(directory(), 'sources'));
   const context: SourceContext = { key: sourceKey(adapter.specification), directory: directory(), backup: directory(), budget: new FixtureWorkBudget(600_000) };

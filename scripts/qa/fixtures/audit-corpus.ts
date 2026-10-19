@@ -176,6 +176,8 @@ export function assertAuditRecipe(value: unknown): asserts value is AuditRecipe 
   requireFact(Object.keys(value.manifests).sort().join() === Object.keys(auditConsumers).sort().join(), 'provide exactly one projection for each existing consumer');
   const recipe = value as unknown as AuditRecipe;
   requireFact(recipe.productRevision === undefined || /^[a-f0-9]{40}$/u.test(recipe.productRevision), 'invalid current product pin');
+  requireFact(recipe.inputPreparationMs === undefined || Number.isFinite(recipe.inputPreparationMs)
+    && recipe.inputPreparationMs >= 0, 'invalid earlier input preparation duration');
   for (const input of recipe.imports) requireFact(input.native === undefined || typeof input.native === 'boolean', 'invalid native import mode');
   requireFact(recipe.unknownControls === undefined || Array.isArray(recipe.unknownControls)
     && recipe.unknownControls.every(name => /^[a-z][a-z0-9-]*$/u.test(name))
@@ -538,6 +540,8 @@ export function auditCorpusAdapter(checkout: string, inspection: AuditInspection
         .map(name => [name, `https://rezics.com/id/${randomUUID()}`])));
       try {
         chargeInspection(context);
+        context.budget.includeElapsedWork(inspection.recipe.inputPreparationMs ?? 0);
+        context.budget.remaining();
         session = await runtime.open(inspection, context.budget, event => recorder.event(event));
         recorder.bind('realms', json(session.realms));
         recorder.bind('identities', { empty: await session.emptyIdentity(inspection.recipe.emptyIdentityRealm) });
