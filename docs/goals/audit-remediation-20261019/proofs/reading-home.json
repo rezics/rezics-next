@@ -1,10 +1,10 @@
 {
-  "version": 1,
+  "version": 2,
   "goal": "audit-remediation-20261019",
   "worker": "G-2831",
   "status": "partial",
   "recordedAtUTC": "2026-10-19T05:19:10.615488+00:00",
-  "summary": "Rendered reading-first hierarchy and anonymous Home content are verified on the requested wave pin. Recorded Books has phone document overflow; eight supplied Storybook cases fail. Live collection persistence and transfer acceptance are unverified because isolated fixture/corpus prerequisites are unavailable. Neither finding is claimed fully closed on main.",
+  "summary": "Published 27665b2 native reading correction independently verified: original native 100/200/400 assertions and fresh-tab keyboard access to both actions pass for Library and recorded Books. D4-011 original anonymous Home criteria remain met by retained exact-source/API proof; unrelated failures do not hold that class. D4-003 genuine successful populated Library/API criterion remains unproved. No product integration or regression confirmation on main is claimed.",
   "provenance": {
     "execution": "Independent Codex-1/GPT-6.1 Sol/xhigh worker; no nested agents or fallback.",
     "worktree": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2831",
@@ -580,5 +580,1012 @@
       "quote": "For an ordinary worker task, never push, never touch the main checkout or `.temp/vault/`, never rebase or merge `main`",
       "effect": "Report stays on the dispatch main-based worker branch; copying the artifact bundle into main is left to the manager, consistent with the user write restriction."
     }
-  }
+  },
+  "lastUpdatedAtUTC": "2026-10-19T10:32:14.643118+00:00",
+  "historyInterpretation": {
+    "originalReportCommit": "4a90cf6dd3ec99facb7e064aabff7c5c984a9f62",
+    "originalProductPin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+    "historicalSections": [
+      "recordedAtUTC",
+      "provenance",
+      "evidenceClasses",
+      "qa",
+      "observations",
+      "defects",
+      "livePrerequisites",
+      "findingAcceptance",
+      "administrative",
+      "artifacts",
+      "handoff"
+    ],
+    "interpretation": "The listed sections retain the accepted original report and its then-current prerequisites verbatim as JSON values. Current results and acceptance are in latestVerification. Later passing diagnostics do not erase any original failure.",
+    "originalArtifactManifestSha256": "b38ca16ab02e2a946a7ed6eb9db8eb039432a7a2631f5a3e6399398d4f636ceb",
+    "originalArtifactBundleChanged": false,
+    "originalCounts": {
+      "unit": {
+        "passed": 17,
+        "failed": 0
+      },
+      "stories": {
+        "passed": 107,
+        "failed": 8
+      },
+      "independentRendered": {
+        "passed": 9,
+        "failed": 1
+      },
+      "diagnostics": {
+        "passed": 2,
+        "failed": 0
+      }
+    }
+  },
+  "latestVerification": {
+    "recordedAtUTC": "2026-10-19T10:32:14.643118+00:00",
+    "status": "native-correction-verified; D4-003-live-premise-unavailable; D4-011-original-anonymous-criteria-met",
+    "execution": "Same independent Codex-1/GPT-6.1 Sol/xhigh verifier; no fallback or nested agents. Only the final four-file native correction and material integration were reviewed; unchanged baseline reviews were reused.",
+    "source": {
+      "productAndOriginalTestPin": "27665b2ef1ac0841d62664b243dfc8192d6a13c9",
+      "productTree": "4a6d3edcc24f16d0287c60ccfca77541ae7a6f06",
+      "publication": "Published wave/audit-20261019 pin; publication receipt retained in source/producer-handoff.json. Prior ea211 unpublished-correction provenance stays in verificationHistory.",
+      "reportBranch": "goal/g-2831",
+      "reportBranchPriorCommit": "53ea50a1cce88229b2878988f466f3a0dd1c1011",
+      "reportMainBase": "82df58d2ba1d9d377b591126e7f4dfa42f27f02e",
+      "productCleanBeforeAndAfter": true,
+      "receipts": [
+        "source/product-pin-before.json",
+        "source/product-pin-after.json",
+        "source/report-branch.json"
+      ],
+      "originalTestChanges": [],
+      "productChanges": [],
+      "differentBases": "Native product checks ran detached at the exact published product pin. Administrative checks on the main-based report branch prove no product integration on main.",
+      "backend": "No genuine backend used or altered for these story/replay native checks. Prior real anonymous Home/API proof retains its exact Web ea211 and served Main75409ac3c379a9f84212e48a8abdc6540c5c44a2 receipts in the unchanged repaired bundle. No fresh backend compatibility, authenticated read, persistence or transfer result is inferred."
+    },
+    "sourceReview": {
+      "completed": true,
+      "independentChangedSliceReviews": 1,
+      "reused": "Original complete df384dd741/a84cb90bb8 and a5524d1dce selective-integration reviews remain valid and were not repeated.",
+      "changedSlice": [
+        "apps/web/features/library/row-parts.tsx",
+        "apps/web/features/library/reading-focus.test-utils.ts",
+        "apps/web/features/library/reading-first.stories.tsx",
+        "apps/web/features/library/books-library-recorded.stories.tsx"
+      ],
+      "reviewedBehavior": [
+        "Reading action uses 112px scroll margin and centers itself on focus-visible keyboard focus with inline nearest; pointer focus does not force scroll.",
+        "Two added short-window regression stories preserve supplied content/assertions and use trusted Tab after setup. They do not themselves establish fresh-tab native keyboard behavior.",
+        "Material styles.css, Library page/progress and app-shell bytes match the previously reviewed ea211 source; the row action change is the bounded production delta."
+      ],
+      "materialIdentityReceipt": "source/material-source-identities.json",
+      "sourcePatch": "source/native-correction.patch",
+      "newBlockingSourceDefects": [],
+      "limits": "This is the authorized bounded reading-focus review, not a second whole-wave/startup/controller or full-persona review."
+    },
+    "qa": [
+      {
+        "job": "04da6789-9367-4f95-9ff5-87150842c498",
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/reading-home-native-verify-G-2831/capture.test.ts",
+        "pin": "27665b2ef1ac0841d62664b243dfc8192d6a13c9",
+        "exitStatus": 1,
+        "originalNativeZoom": {
+          "passed": 1,
+          "failed": 0,
+          "reach": "Nine actual native zoom/document states across Library, recorded Books and Home at 100/200/400; six first-action focus/scroll clearance checks."
+        },
+        "freshKeyboard": {
+          "passed": 0,
+          "failed": 1,
+          "assertionReach": "Action-count initialization failed before keyboard outcome assertions; five-second default found zero actions."
+        },
+        "retention": "initial-keyboard-setup-attempt/",
+        "assertionPreservation": "source/original-native-preservation.json; only artifact root and font/two-frame settle differ from prior original native probe. All original outcome assertions preserved."
+      },
+      {
+        "job": "6d8788f2-d9b0-45e2-9ae6-baf5444555e9",
+        "command": "env READING_HOME_NATIVE_PROBE=native-keyboard.spec.ts bun scripts/goal/goalctl.ts test ./.temp/reading-home-native-verify-G-2831/capture.test.ts",
+        "exitStatus": 1,
+        "assertionReach": "Keyboard-order assertion reached after all Library100/200/400 states passed; Books100 stopped after its first action at Your progress.",
+        "classification": "Independent query false positive: matches(summary) mistook per-card progress for global goals/stats/import/export. Not a confirmed product order defect.",
+        "retention": "summary-query-attempt/",
+        "causalReceipt": "source/summary-query-correction.json"
+      },
+      {
+        "job": "03b2cc37-d4eb-42b5-bb05-0dd0098a73c3",
+        "command": "env READING_HOME_NATIVE_PROBE=native-keyboard.spec.ts bun scripts/goal/goalctl.ts test ./.temp/reading-home-native-verify-G-2831/capture.test.ts",
+        "exitStatus": 0,
+        "passed": 1,
+        "failed": 0,
+        "reach": "Six fresh tabs; twelve reading actions. BODY and scroll0 before natural Tab; actual native zoom100/200/400; focus-visible, global secondary-tool order, header/nav clearance, horizontal second-card access and zero document overflow all asserted.",
+        "results": "native-keyboard/results.json",
+        "provider": "Existing Playwright provider through Task web:e2e and ordinary QA admission. No admission bypass or new browser provider.",
+        "qaId": "No separate Storybook QA run ID emitted for this private Bun-to-Task browser wrapper; recorded job ID and admitted Task command are retained."
+      }
+    ],
+    "nativeAssessment": {
+      "method": "Full Chromium persistent context, native extension chrome.tabs.setZoom/getZoom with actual devicePixelRatio1/2/4, CSS zoom1. Outer window1440x1000; content1440x913,720x456,360x228. New page per surface/scale. Storybook installed embed=true disables story play to avoid scripted pre-focus; real story source/content unchanged. No programmatic focus, click, scroll or DOM/content mutation prepares fresh keyboard tabs.",
+      "embeddedPremise": "source/embedded-story-premise.json",
+      "measurements": [
+        {
+          "surface": "library",
+          "nativeZoom": 1,
+          "cssViewport": [
+            1440,
+            913
+          ],
+          "initialActiveTag": "BODY",
+          "initialScroll": [
+            0,
+            0
+          ],
+          "tabPresses": 23,
+          "actions": [
+            {
+              "index": 0,
+              "top": 361,
+              "bottom": 393,
+              "headerBottom": 65,
+              "navigationTop": 913,
+              "left": 680,
+              "right": 782.671875,
+              "rowScrollLeft": 0,
+              "documentScrollX": 0,
+              "focusVisible": true
+            },
+            {
+              "index": 1,
+              "top": 303,
+              "bottom": 335,
+              "headerBottom": 65,
+              "navigationTop": 913,
+              "left": 957.328125,
+              "right": 1060,
+              "rowScrollLeft": 0,
+              "documentScrollX": 0,
+              "focusVisible": true
+            }
+          ]
+        },
+        {
+          "surface": "library",
+          "nativeZoom": 2,
+          "cssViewport": [
+            720,
+            456
+          ],
+          "initialActiveTag": "BODY",
+          "initialScroll": [
+            0,
+            0
+          ],
+          "tabPresses": 18,
+          "actions": [
+            {
+              "index": 0,
+              "top": 228,
+              "bottom": 260,
+              "headerBottom": 65,
+              "navigationTop": 391.5,
+              "left": 136,
+              "right": 238.6640625,
+              "rowScrollLeft": 0,
+              "documentScrollX": 0,
+              "focusVisible": true
+            },
+            {
+              "index": 1,
+              "top": 228,
+              "bottom": 260,
+              "headerBottom": 65,
+              "navigationTop": 391.5,
+              "left": 480,
+              "right": 582.6640625,
+              "rowScrollLeft": 0,
+              "documentScrollX": 0,
+              "focusVisible": true
+            }
+          ]
+        },
+        {
+          "surface": "library",
+          "nativeZoom": 3.9999999999999996,
+          "cssViewport": [
+            360,
+            228
+          ],
+          "initialActiveTag": "BODY",
+          "initialScroll": [
+            0,
+            0
+          ],
+          "tabPresses": 18,
+          "actions": [
+            {
+              "index": 0,
+              "top": 120,
+              "bottom": 152,
+              "headerBottom": 105,
+              "navigationTop": 163.25,
+              "left": 128,
+              "right": 230.65625,
+              "rowScrollLeft": 0,
+              "documentScrollX": 0,
+              "focusVisible": true
+            },
+            {
+              "index": 1,
+              "top": 120,
+              "bottom": 152,
+              "headerBottom": 105,
+              "navigationTop": 163.25,
+              "left": 177.296875,
+              "right": 279.953125,
+              "rowScrollLeft": 241.5,
+              "documentScrollX": 0,
+              "focusVisible": true
+            }
+          ]
+        },
+        {
+          "surface": "recorded-books",
+          "nativeZoom": 1,
+          "cssViewport": [
+            1440,
+            913
+          ],
+          "initialActiveTag": "BODY",
+          "initialScroll": [
+            0,
+            0
+          ],
+          "tabPresses": 22,
+          "actions": [
+            {
+              "index": 0,
+              "top": 325,
+              "bottom": 357,
+              "headerBottom": 65,
+              "navigationTop": 913,
+              "left": 680,
+              "right": 760.15625,
+              "rowScrollLeft": 0,
+              "documentScrollX": 0,
+              "focusVisible": true
+            },
+            {
+              "index": 1,
+              "top": 325,
+              "bottom": 357,
+              "headerBottom": 65,
+              "navigationTop": 913,
+              "left": 957.328125,
+              "right": 1060,
+              "rowScrollLeft": 0,
+              "documentScrollX": 0,
+              "focusVisible": true
+            }
+          ]
+        },
+        {
+          "surface": "recorded-books",
+          "nativeZoom": 2,
+          "cssViewport": [
+            720,
+            456
+          ],
+          "initialActiveTag": "BODY",
+          "initialScroll": [
+            0,
+            0
+          ],
+          "tabPresses": 17,
+          "actions": [
+            {
+              "index": 0,
+              "top": 228,
+              "bottom": 260,
+              "headerBottom": 65,
+              "navigationTop": 391.5,
+              "left": 136,
+              "right": 216.1484375,
+              "rowScrollLeft": 0,
+              "documentScrollX": 0,
+              "focusVisible": true
+            },
+            {
+              "index": 1,
+              "top": 228,
+              "bottom": 260,
+              "headerBottom": 65,
+              "navigationTop": 391.5,
+              "left": 480,
+              "right": 582.6640625,
+              "rowScrollLeft": 0,
+              "documentScrollX": 0,
+              "focusVisible": true
+            }
+          ]
+        },
+        {
+          "surface": "recorded-books",
+          "nativeZoom": 3.9999999999999996,
+          "cssViewport": [
+            360,
+            228
+          ],
+          "initialActiveTag": "BODY",
+          "initialScroll": [
+            0,
+            0
+          ],
+          "tabPresses": 17,
+          "actions": [
+            {
+              "index": 0,
+              "top": 120,
+              "bottom": 152,
+              "headerBottom": 105,
+              "navigationTop": 163.25,
+              "left": 128,
+              "right": 208.14453125,
+              "rowScrollLeft": 0,
+              "documentScrollX": 0,
+              "focusVisible": true
+            },
+            {
+              "index": 1,
+              "top": 120,
+              "bottom": 152,
+              "headerBottom": 105,
+              "navigationTop": 163.25,
+              "left": 177.296875,
+              "right": 279.953125,
+              "rowScrollLeft": 241.5,
+              "documentScrollX": 0,
+              "focusVisible": true
+            }
+          ]
+        }
+      ],
+      "screenshotsViewed": "screenshots-viewed.json",
+      "newScreenshotsViewed": 11,
+      "readingActionAt400": "Both actions on both surfaces occupy y120..152 between actual header105 and navigation163.25. Second card row scrollLeft241.5; document scrollX0 and scrollWidth360.",
+      "visualLimits": "At native400 the usable vertical area is only58.25 CSS pixels: the focused action is visible with its ring, while parts of the title/metadata remain above the fixed header. This proof establishes keyboard action access/clearance, not that a complete card fits in that strip.",
+      "producerResultsKeptSeparate": {
+        "receipt": "source/producer-handoff.json",
+        "affectedStories": "17/17 producer affected stories passed, QA20261019t095011-b90d3c; not reclassified as an independent rerun.",
+        "producerLimitNowResolved": "Producer fresh-tab natural keyboard limitation is independently resolved for these two fixtures at all three native scales.",
+        "remainingProducerLimits": "Populated genuine Library, persistence/transfers and positive games continuation remain unproved; those are separate from bounded native correction acceptance."
+      }
+    },
+    "premiseAndRuntimeObservations": [
+      {
+        "kind": "initialization",
+        "result": "First attempt found zero actions after5seconds. The readiness correction waits for the actual region up to120seconds and retains exact count2. Later renders took3.5–5.6seconds. Original cause not fully diagnosed; blank automatic runner screenshots do not establish a blank product page.",
+        "assertionsChanged": false
+      },
+      {
+        "kind": "query",
+        "result": "Existing card progress summary is a valid intermediate Tab stop. Only the global secondary-tools predicate was narrowed to the exact English outer disclosure label; no focus/geometry/overflow assertion changed. Original authored tests/stories untouched.",
+        "proof": "source/summary-query-correction.patch"
+      },
+      {
+        "kind": "story-autoplay-at-inherited-native400",
+        "result": "Original native probe passed its external assertions, while Storybook console separately recorded existing Books autoplay expectation457<=163.25. Tabs share native origin zoom, so the new Books tab can begin at inherited400 before the external loop resets100. Its autoplay initial-screen check is authored for requested normal viewports, not that228px high zoom window. Fresh-keyboard embed mode intentionally disables autoplay; the new screenshots and twelve measured actions are independent evidence, not a claim clearing every console assertion.",
+        "evidence": "storybook.log:25",
+        "status": "retained separately; no supplied assertion rewritten or declared passed at unsupported dimensions"
+      },
+      {
+        "kind": "runtime-network",
+        "result": "Story shell logged nonblocking404/aborted notification requests in isolated Storybook. No successful real backend answer is inferred from fixture rendering."
+      }
+    ],
+    "priorEvidenceReused": {
+      "reportCommitBeforeManagerRebase": "2e17ba24ef1c497d835d99dec4e01a846a4b3c4b",
+      "reportCommitAfterManagerRebase": "53ea50a1cce88229b2878988f466f3a0dd1c1011",
+      "source": "ea211df7617b5dddf6e086d597c9a6f48ea2474b",
+      "bundle": ".temp/audit-remediation-20261019/proofs/reading-home-G-2831-repaired-ea211df/",
+      "unchangedResults": "17 passing units,116 passing supplied stories and10 passing unchanged independent rendered probes; prior failures on92b8 and prior native failures/diagnostics stay separately pinned. No passing diagnostic erases a prior failure.",
+      "screenshots": "Existing actual1440x1000/390x844, widths/locales, empty states and36 viewed screenshots retained unchanged.",
+      "home": "Original anonymousHome1440/390 criteria already passed using real anonymous API answers/source identities. Reused as instructed; Home is not held on Book data, unrelated Top URL, suggested-follows503, signed-in feed401 or Library native400."
+    },
+    "unavailableOriginalPremises": {
+      "library": {
+        "file": "apps/web/tests/library.e2e.ts",
+        "started": false,
+        "assertionReached": false,
+        "firstUnavailablePremise": "beforeAll invokes library-seed.ts to create a Book and await Main stabilization, then the suite mutates status shelves. A genuine existing command-created eligible Book/owned collection with isolated restore was not established for this approved existing member. Running this unchanged setup would duplicate corpus preparation and risk shared fixture mutations."
+      },
+      "transferSelections": [
+        "apps/web/tests/library-import.e2e.ts",
+        "apps/web/tests/g-743-library.e2e.ts",
+        "apps/web/tests/g-855-library-import.e2e.ts",
+        "apps/web/tests/g-855-library-export.e2e.ts",
+        "apps/web/tests/g-855-library-roundtrip.e2e.ts",
+        "apps/web/tests/g-856-library-import.e2e.ts",
+        "apps/web/tests/g-856-library-export.e2e.ts",
+        "apps/web/tests/g-856-formats.e2e.ts",
+        "apps/web/tests/g-856-library-roundtrip.e2e.ts",
+        "apps/web/tests/books-catalogue-export.e2e.ts",
+        "apps/web/tests/books-interrupted-export.e2e.ts"
+      ],
+      "transferStatus": "Not started; outcome assertions not reached. Existing G-2791/G-2778 owners must supply genuine command-created collection/Book/copies, compatible backup/restores and retained intake/response/source bindings for this fixture. No compatible ready premise was established; unavailable prerequisites are not assertion failures or a claim that no corpus exists anywhere.",
+      "booksInterruptedExport": "prepareBook/prepareBookCopies requires the real Book/copies and its authority context REZICS_WEB_AUTH_PRIVATE_PATH, ACCESS_DATABASE_URL and REZICS_QA_RUN_ID. Fixture identity alone is insufficient; no duplicate producer, invented Book/cursor/API answer or shared reset was used.",
+      "homeMemberAuthorityCase": "G-431 member case requires its own fresh isolated authority state/platform-grant write; excluded explicitly from the original Home run. Anonymous Home was run independently without waiting for Book data.",
+      "owners": [
+        "G-2791",
+        "G-2778",
+        "G-2747",
+        "G-2847"
+      ],
+      "notWaitingForPrerequisites": true
+    },
+    "findingAcceptance": [
+      {
+        "id": "D4-003",
+        "status": "bounded-rendered-and-native-correction-accepted; genuine-successful-Library-API-criterion-unproved",
+        "originalCriteriaRead": "source/original-findings.json",
+        "criteria": [
+          {
+            "criterion": "Resumable work plus useful Open/Continue in actual requested-size first screen with fixed shell",
+            "result": "Pass in prior reading-first/recorded Books1440x1000 and390x844 fixtures. Native focus/scroll correction independently passes now at100/200/400 with both actions, including fresh-tab natural keyboard."
+          },
+          {
+            "criterion": "Goals, stats, import/export remain usable and secondary; zero-month stats do not displace primary task",
+            "result": "Prior unchanged rendered/Tab/Enter/Space checks pass; native Tab reaches both actions before the global tools disclosure. Card-level Your progress may appear between cards and is not the global tools disclosure."
+          },
+          {
+            "criterion": "Both recorded stories and actual successful API state; empty/populated organized by primary task",
+            "result": "Recorded/constructed fixture states pass within retained scope. Genuine successful populated Library API state remains unproved; identity200 alone is insufficient."
+          }
+        ],
+        "remaining": [
+          "Eligible isolated owned populated collection/read state and compatible restore bindings for genuine Library acceptance remain unavailable to this verifier.",
+          "Transfer/roundtrip/interrupted-Book selections retain their own exact genuine corpus/authority prerequisites and were not run. They are not an invented prerequisite for already-ready anonymous Home or bounded source/native review."
+        ],
+        "scopeLimits": [
+          "No positive games continuation inferred from an empty replay; no all-Library/persona or games-corpus condition added to bounded review."
+        ],
+        "mainAcceptance": false,
+        "regressionConfirmed": false
+      },
+      {
+        "id": "D4-011",
+        "status": "all-original-anonymous-Home-criteria-met-on-verified-ea211-source; main-finding-acceptance-due",
+        "originalCriteriaRead": "source/original-findings.json",
+        "criteria": [
+          {
+            "criterion": "Anonymous390x844 has at least two useful complete titles/previews after necessary navigation, without dismissing notice",
+            "result": "Pass in retained fixture and genuine anonymous API-backed Home screenshots; useful source titles/previews retained."
+          },
+          {
+            "criterion": "At1440 without recommendations, readable main content has no reserved empty column",
+            "result": "Pass in retained Home layout and empty-recommendation proof."
+          },
+          {
+            "criterion": "Global join and row follow have hierarchy; content first without dismissing notice",
+            "result": "Pass in retained anonymous content-first proof and supplied Home selection."
+          }
+        ],
+        "notFindingBlockers": [
+          "Unrelated original Home Top-sort URL assertion remains a retained failure.",
+          "Signed-in feed read401 and suggested follows503 remain separate live/runtime observations.",
+          "Library native400 and missing Book corpus are not D4-011 anonymous-Home acceptance requirements."
+        ],
+        "mainAcceptance": false,
+        "regressionConfirmed": false,
+        "next": "Manager may accept the original D4-011 criteria using retained exact-source proof and its selected Home integration receipt; this report does not assert product integration or regression confirmation on the main report branch."
+      }
+    ],
+    "administrative": {
+      "status": "passed",
+      "scope": "Required docs:check and proportional Goal check on the report branch only.",
+      "trackedChanges": [
+        "docs/goals/audit-remediation-20261019/proofs/reading-home.json"
+      ],
+      "ownedServerStop": {
+        "pid": 1045416,
+        "group": 1045416,
+        "time": "2026-10-19T10:29:56.967553+00:00",
+        "signal": "SIGTERM",
+        "listeningAfterStop": false,
+        "verifiedAtUTC": "2026-10-19T10:30:25.464414+00:00"
+      },
+      "otherOwnersServersAltered": false,
+      "job": "9b994584-ab66-4a91-938b-98e0431af4b0",
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "docs": "Passed:13 checker tests and250 Markdown files; links/fragments/design navigation. JSON semantics and product runtime are outside docs:check.",
+      "goal": {
+        "types": "ok; no TypeScript workspace changed, skipped",
+        "tests": "ok; no test files named in brief, skipped",
+        "lint": "ok; no source file changed, skipped",
+        "ast": "ok",
+        "guards": "ok;1/45 selected for changed proof path"
+      },
+      "administrativeHarnessNote": "Harness reported one commit behind main; checks all passed. No rebase/merge or shared bookkeeping repair performed.",
+      "logs": [
+        "jobs/9b994584-ab66-4a91-938b-98e0431af4b0.1.log",
+        "jobs/9b994584-ab66-4a91-938b-98e0431af4b0.2.log",
+        "administrative/goal-check-output.log"
+      ]
+    },
+    "artifacts": {
+      "privateBundle": ".temp/reading-home-native-verify-G-2831/",
+      "localHandoffCopy": ".temp/audit-remediation-20261019/proofs/reading-home-G-2831-native-27665/",
+      "managerCopyDestination": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/proofs/reading-home-G-2831-native-27665/",
+      "copyStatus": "Prepared and hash-verified inside worker write boundary; manager must copy safe sibling to main. Original bundles/manifests verified unchanged.",
+      "manifest": "artifact-manifest.json",
+      "screenshotsViewed": "screenshots-viewed.json",
+      "privateExclusions": "Persistent browser profiles and any XDG/cache/credential storage excluded. Native story API replays are not live persistence acceptance.",
+      "verifiedSafeCopyFiles": 114,
+      "bytes": 5735235,
+      "manifestSHA256": "4ea32b59255a7cd415e7705cb15487dd556559d8b411b3f53222991610f8aaa1",
+      "verifiedViewedScreenshots": 11,
+      "priorBundleIntegrity": "source/prior-bundles-unchanged.json"
+    },
+    "handoff": {
+      "result": "partial",
+      "completed": "Published native correction source review, original native assertions and missing fresh-tab native keyboard proof complete.",
+      "blockers": "No blocker for bounded native correction or original D4-011 anonymous class. D4-003 genuine successful populated Library/API premise remains unavailable; retained transfer selections have independent missing premises.",
+      "ownerChanges": [],
+      "proposedTasks": "No new task or account fallback. Existing G-2791/G-2778 retain genuine collection/corpus and restore preparation; existing runtime/Home owners retain unrelated observed failures.",
+      "next": "Land report only, copy safe native artifact sibling, accept bounded native correction and consider D4-011 original finding criteria from retained proof. Resume only unavailable genuine selectors when their own existing-owner prerequisites are ready. No land:auto or regression confirmation.",
+      "instructionBoundary": {
+        "file": "docs/goals/worker.md",
+        "quote": "For an ordinary worker task, never push, never touch the main checkout or `.temp/vault/`, never rebase or merge `main`",
+        "effect": "Report stays on the dispatch main-based worker branch; copying the artifact bundle into main is left to the manager, consistent with the user write restriction."
+      }
+    }
+  },
+  "verificationHistory": [
+    {
+      "recordedAtUTC": "2026-10-19T07:42:02.839755+00:00",
+      "status": "partial",
+      "execution": "Codex-1/GPT-6.1 Sol/xhigh; no fallback or nested agents. No product or original-test changes, shared refresh/reset/import, corpus production, full regression, automatic landing or main acceptance.",
+      "source": {
+        "productAndOriginalTestPin": "ea211df7617b5dddf6e086d597c9a6f48ea2474b",
+        "productTree": "a88248dcfb40b3a9fad615939a08be827dbbc1bb",
+        "startupCandidateBase": "a27bcfc6bad849dd912cbd3f721de5defeba1c86",
+        "finalAuthoredCorrection": "a5524d1dce5f470d5df63dd95327caf71432d011",
+        "publicationProvenance": "The final correction was not observed pushed to wave in the supplied immutable receipt. The manager explicitly authorized this unpublished correction through the selective candidate; no later publication is asserted.",
+        "reportBranch": "goal/g-2831",
+        "reportMainBase": "5ad2b48190039f63606ddaca167d89df80cdc2a9",
+        "differentBases": "Product/source/browser checks ran detached and clean at the selective candidate. The report branch and its administrative checks establish no product integration result on main.",
+        "provenanceReceipt": "source/site-reading-home-candidate.json",
+        "independentIntegrationVerification": "source/integration-verified.json",
+        "finalProductAndTestPins": "source/final-product-and-test-pins.json",
+        "imports": [
+          {
+            "authored": "df384dd741ae35efad598cace6410343c64fa91a",
+            "imported": "6717638c2bdbed2d6a15c07e33b70e2955420284",
+            "changedLineSha256": "3ba4de35aa0f12f6ae6b071442cba248fe5686b23a38ffd76c139355d6fba3c2",
+            "sameChangedBytes": true
+          },
+          {
+            "authored": "a84cb90bb879fc2529d446f33a37b677df399ac6",
+            "imported": "de6815f350b8f05d07a3d4d49a06ffb6a433884a",
+            "changedLineSha256": "52bc2c3fc085e559300b440b4a3187150105c77d3ac16875840cb5f391048418",
+            "sameChangedBytes": true
+          },
+          {
+            "authored": "a5524d1dce5f470d5df63dd95327caf71432d011",
+            "imported": "ea211df7617b5dddf6e086d597c9a6f48ea2474b",
+            "changedLineSha256": "915d97d7efee2a45f86749ce2578a4c9e0b8934e8e133640a4fd798f303243d3",
+            "sameChangedBytes": true
+          }
+        ],
+        "backendServedRevision": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "backendReceipt": "source/backend-served-revision.json",
+        "backendDifference": "Existing Main PID 1372265 served from the recorded backend revision, different from Web candidate. No backend refresh was performed; startup owner checks/review were not duplicated."
+      },
+      "sourceReview": {
+        "priorReviewReused": "Complete df384dd741/a84cb90bb8 review, including changed transfer entry setup, remains in the original report/bundle; not repeated.",
+        "newReviewCount": 1,
+        "newReviewScope": "Complete six-file final correction and actual minimal integration/material dependencies, during actual verification.",
+        "patch": "source/a5524d1dce.patch",
+        "conclusions": [
+          "Library progress summary now contains its absolute screen-reader title in a relative positioning context, removing the observed offscreen title contribution to document overflow.",
+          "Recipe shelf links use inline-flex/min-h-8, retaining real public/private shelf content and providing the measured 32px target height.",
+          "Shell assertions ignore hidden/zero-height navigation; closed details assertions test native closed visibility. These repair exact previous fixture/query premises while retaining the reading/shell and closed-tools outcomes.",
+          "Reading tools use trusted browser Tab/Enter/Space, preserve two reading actions before tools, closed-child skipping and goal controls, and add a phone case. Home menu awaits focus before original Arrow/Enter/Escape assertions.",
+          "Original Home/Shell product bytes are preserved through integration. Library shelf-navigation focus padding is the relevant intervening layout dependency; startup source review remains with G-2747/G-2847.",
+          "No independent rendered assertion was weakened or rewritten: only its private artifact output root differs. Supplied real content and recorded answer identities remain unchanged."
+        ],
+        "independentProbeReceipt": "source/independent-probe-preservation.json"
+      },
+      "qa": {
+        "recording": "All jobs use main checkout goalctl job from this worktree. Tests use local goalctl test and Task with normal QA admission; browser work uses the existing Playwright provider, one Chromium worker and explicit selections.",
+        "jobWrapper": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- <command>",
+        "captureCommand": "bun scripts/goal/goalctl.ts test ./.temp/reading-home-repaired-G-2831/capture.test.ts",
+        "suppliedSelection": {
+          "job": "527e4f2b-6fd4-4637-9f44-879ebfa7e249",
+          "log": "jobs/527e4f2b-6fd4-4637-9f44-879ebfa7e249.1.log",
+          "qaId": "20261019t071922-008e4b",
+          "command": "bun scripts/goal/goalctl.ts test apps/web/features/library/reading-first.stories.tsx apps/web/features/library/books-library-recorded.stories.tsx apps/web/features/library/games-library-recorded.stories.tsx apps/web/features/library/visual-novels-library-recorded.stories.tsx apps/web/features/library/library-contract.stories.tsx apps/web/features/home/home-page.stories.tsx apps/web/features/library/library-page.test.tsx apps/web/features/home/home-page.test.tsx",
+          "unit": {
+            "passed": 17,
+            "failed": 0,
+            "expects": 69
+          },
+          "stories": {
+            "passed": 116,
+            "failed": 0,
+            "files": 6
+          },
+          "reach": "Entire original six-story-file/two-unit-file selection, preserving supplied assertions and their original width/locale decorators. The source owner added a phone keyboard variant, hence 116 rather than the historical 115 stories. Passing this selection is fixture evidence, not live transfer acceptance.",
+          "artifacts": "qa/20261019t071922-008e4b/"
+        },
+        "unchangedIndependentRendered": {
+          "job": "527e4f2b-6fd4-4637-9f44-879ebfa7e249",
+          "log": "jobs/527e4f2b-6fd4-4637-9f44-879ebfa7e249.2.log",
+          "command": "env READING_HOME_SELECTION=rendered.spec.ts bun scripts/goal/goalctl.ts test ./.temp/reading-home-repaired-G-2831/capture.test.ts",
+          "passed": 10,
+          "failed": 0,
+          "assertionsUnchanged": true,
+          "reach": [
+            "Reading-first and recorded Books useful Continue/Open actions clear the actual shell at 1440x1000 and 390x844; first reading content precedes secondary goals/stats/transfer tools.",
+            "Two Continue actions precede tools in Tab order; Enter opens; Tab reaches Edit goal; Shift+Tab returns; Space closes/reopens; closed tools are skipped; existing goal changes from 12 to 20; import input enabled and download control reachable.",
+            "Horizontal reading-card access and document width, useful empty Library/Home destinations, two authored anonymous Home titles/previews, and no reserved empty rail column.",
+            "320 CSS-pixel reflow retained as a distinct check; it is not native zoom."
+          ],
+          "evidence": [
+            "rendered.spec.ts.results.json",
+            "runtime/",
+            "source/independent-probe-preservation.json"
+          ]
+        },
+        "originalHome": {
+          "job": "6239bd5d-81a8-4b0b-9c64-1ae7fc85cfab",
+          "log": "jobs/6239bd5d-81a8-4b0b-9c64-1ae7fc85cfab.1.log",
+          "command": "env READING_HOME_SELECTION=home.e2e.ts bun scripts/goal/goalctl.ts test ./.temp/reading-home-repaired-G-2831/capture.test.ts",
+          "taskSelection": "task web:e2e -- --config .temp/reading-home-repaired-G-2831/playwright.config.ts home.e2e.ts --grep-invert G-431:",
+          "passed": 3,
+          "failed": 1,
+          "passedReach": "Korean filter URL, phone zh-Hans fixed navigation/no overflow, anonymous notification sign-in path.",
+          "failure": {
+            "file": "apps/web/tests/home.e2e.ts",
+            "case": "signed out, Home is All · Best with the sort menu in view and filters kept in the URL",
+            "assertionLine": 37,
+            "assertionReached": true,
+            "expected": "/en?sort=top at end of URL",
+            "actual": "http://127.0.0.1:43131/en after Top menu item click, still unchanged at 5s assertion timeout",
+            "classification": "Original browser outcome assertion failure; introduction by the candidate is not established.",
+            "evidence": [
+              "home.e2e.ts.results.json",
+              "output/apps-web-tests-home.e2e.ts-82bad-and-filters-kept-in-the-URL/error-context.md"
+            ]
+          },
+          "excluded": "G-431: member authority/grant case was not run: it requires an isolated fresh authority state and performs a platform grant write; that prerequisite was not established for the approved existing member fixture."
+        },
+        "additionalBrowserRuns": [
+          {
+            "job": "fcba7e8f-310b-4c94-aa19-8d21a00d927c",
+            "step": 1,
+            "selection": "live.spec.ts",
+            "passed": 2,
+            "failed": 0,
+            "reach": "Supported OAuth sign-in, actual MainSessionAgent 200, Web visits and bounded HTTP/document-width checks; no settled feed/persisted collection acceptance."
+          },
+          {
+            "job": "fcba7e8f-310b-4c94-aa19-8d21a00d927c",
+            "step": 2,
+            "selection": "zoom.spec.ts",
+            "passed": 0,
+            "failed": 1,
+            "reach": "Profile preference zoom was ignored (DPR 1 rather than 2); harness premise failure, not native zoom product proof."
+          },
+          {
+            "job": "d63d80f5-06db-4d5a-9203-db4ae6dd76ba",
+            "step": 1,
+            "selection": "settled-live.spec.ts",
+            "passed": 1,
+            "failed": 0,
+            "reach": "Diagnostic captures actual anonymous posts/API answers and signed-in loading snapshot. Signed-in aria-busy settle predicate does not establish loaded content."
+          },
+          {
+            "job": "d63d80f5-06db-4d5a-9203-db4ae6dd76ba",
+            "step": 2,
+            "selection": "native-zoom.spec.ts",
+            "passed": 0,
+            "failed": 1,
+            "reach": "Exact float equality 4 versus 3.9999999999999996; harness precision error retained."
+          },
+          {
+            "job": "dcfeca57-9f59-45e5-9153-8dbe0b2c6072",
+            "step": 1,
+            "selection": "fresh-live.spec.ts",
+            "passed": 0,
+            "failed": 1,
+            "reach": "Fresh supported sign-in returned to Home; erroneous BFF /api/main/v1/me/session-agent probe returned Work-contract 400 before identity assertion could pass. Not proof of MainSessionAgent ineligibility."
+          },
+          {
+            "job": "527e4f2b-6fd4-4637-9f44-879ebfa7e249",
+            "step": 3,
+            "selection": "native-zoom.spec.ts",
+            "passed": 0,
+            "failed": 1,
+            "reach": "Asset route callback disposed after context closed; harness cleanup failure retained."
+          },
+          {
+            "job": "e6bd50b5-5c00-4cd4-87c7-e6343212a3a6",
+            "selection": "native-zoom.spec.ts",
+            "passed": 0,
+            "failed": 1,
+            "reach": "Wrong navigation query selected static desktop sidebar at y65. Corrected to original independent fixed/visible/nonzero navigation predicate; original failed measurements retained."
+          },
+          {
+            "job": "05d91042-cf11-43d3-889d-b1e970876d1e",
+            "selection": "native-zoom.spec.ts",
+            "passed": 0,
+            "failed": 1,
+            "reach": "Actual native Library 400% direct-focus/scroll top-clearance assertion reached and failed (top64 < header105). Books/Home layout assertions later in this case were not reached."
+          },
+          {
+            "job": "cbbdfbe0-53aa-4aed-8ec2-1b8bdf9ab83a",
+            "selection": "zoom-diagnostic.spec.ts",
+            "passed": 1,
+            "failed": 0,
+            "reach": "Native engine zoom/DPR mechanism and nine captured states; diagnostic has no passing layout-clearance assertion and does not clear the previous failure."
+          }
+        ],
+        "captureConfiguration": "capture.test.ts and playwright.config.ts retained; browser result JSON/logs record exact cases and assertion stacks. Bun capture wrapper failures assert child status; product outcome reach is described separately above.",
+        "additionalBrowserCommandTemplate": "env READING_HOME_SELECTION=<selection> bun scripts/goal/goalctl.ts test ./.temp/reading-home-repaired-G-2831/capture.test.ts; native zoom jobs 527e4f2b step3, e6bd50b5 and 05d91042 also set READING_HOME_ZOOM_ORIGIN=http://127.0.0.1:6283."
+      },
+      "renderedAssessment": {
+        "requestedViewports": [
+          "1440x1000",
+          "390x844"
+        ],
+        "screenshotsViewed": {
+          "manifest": "screenshots-viewed.json",
+          "count": 36,
+          "includesSha256AndDimensions": true
+        },
+        "library": [
+          "Reading-first hierarchy, actual reading action within the shell, horizontal card access, disclosure Tab/Enter/Space and secondary goal/import/download controls pass the unchanged independent probes at both requested sizes.",
+          "Recorded Books phone document width is now 390 at viewport390; historical width559 failure remains in the original pin/bundle. Recipe target-size and supplied keyboard/Home menu cases pass on the repaired pin.",
+          "Visual-novel reading retains real recorded Open/progress content; empty state retains useful first-use destinations. All supplied original real/recorded content and assertions were preserved.",
+          "Recorded games populated story shows three works and a Currently reading count of two but no reading preview/action. Its unchanged replay does not provide positive games continuation evidence; do not infer that acceptance from a generic passing story."
+        ],
+        "home": [
+          "Authored anonymous Home provides two useful titles and previews before welcome guidance, empty state retains Discover/Join/Sign in, and absent recommendations reserve no empty desktop column. Independent desktop content grid remains one 736px column.",
+          "Actual anonymous Home separately displays four current API-backed articles at both requested sizes; two useful titles/previews fit between phone header and navigation. These are live observations, not story replacements.",
+          "Initial live screenshots were loading skeletons; signed-in snapshots remain insufficient for useful feed/continuation acceptance. Passing HTTP/document-width diagnostics do not turn these into content passes."
+        ],
+        "nativeZoom": {
+          "method": "Private Chromium extension uses chrome.tabs.setZoom/getZoom in the bundled full Chromium. Engine DPR 1/2/4 and CSS zoom 1 independently measured; no CSS zoom or device-scale emulation substituted.",
+          "references": [
+            "https://developer.chrome.com/docs/extensions/reference/api/tabs#method-setZoom",
+            "https://playwright.dev/docs/chrome-extensions"
+          ],
+          "outerWindow": "1440x1000; actual browser content 1440x913 at100%, 720x456 at200%, 360x228 at400%. Requested 1440x1000 viewport proof is separate.",
+          "screenshots": "CDP Page.captureScreenshot without clip produced actual 1440x913 compositor PNGs in zoom-diagnostic/. Earlier Playwright viewport-null screenshots cropped to CSS dimensions are retained but excluded from native visual acceptance.",
+          "measuredResults": "zoom-diagnostic/results.json",
+          "states": 9,
+          "documentWidths": "Library, recorded Books and Home document widths equal innerWidth 1440/720/360 at100/200/400%. No horizontal overflow measured in these fixture states.",
+          "readingClearance": "Library and Books clear at100%. After explicit scrollIntoViewIfNeeded both clear at200% (action y172..204; header bottom65, navigation top391.5). At400% both measure action y64..96 under header bottom105, navigation top163.25; actual compositor screenshots were inspected.",
+          "failedAssertion": {
+            "job": "05d91042-cf11-43d3-889d-b1e970876d1e",
+            "file": ".temp/reading-home-repaired-G-2831/native-zoom.spec.ts",
+            "case": "native browser tab zoom at 100, 200 and 400 percent",
+            "assertionReached": true,
+            "readingActionTop": 64,
+            "requiredMinimum": 105,
+            "cssViewport": "360x228",
+            "evidence": [
+              "native-zoom.spec.ts.results.json",
+              "browser-zoom/story-library-4x-focused-bounds.json",
+              "output-native-zoom.spec.ts/"
+            ]
+          },
+          "limitation": "This is a bounded direct-focus plus explicit-scroll clearance failure. The reading link remains focused across zoom transitions; this is not a demonstrated fresh Tab-navigation failure. Native sequential keyboard usability and full Home zoom usability remain unaccepted. A passing measurement diagnostic does not clear this assertion.",
+          "harnessCorrections": "source/zoom-harness-corrections.json; exact equality, asset-route cleanup and incorrect static-navigation/cover-link queries are separated from product outcome failures, with original attempts retained."
+        }
+      },
+      "liveEvidence": {
+        "fixture": "source/site-auth-fixture.json; existing approved rezics-dev member with an owned isolated Web/browser/session, not a newly seeded dataset or isolated backend clone.",
+        "signIn": "Existing signInAtAccounts supported OAuth PKCE helper; private state kept 0600, never committed or copied into the shareable handoff bundle.",
+        "identity": {
+          "status": 200,
+          "body": {
+            "profile": "session-agent-v1",
+            "sessionAgent": {
+              "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+              "revision": "b013125c-f576-4f2d-b0a3-b01861605213",
+              "eligible": true
+            },
+            "mainAgent": {
+              "actingSubject": null,
+              "revision": null,
+              "eligible": false
+            },
+            "initialActingSubject": null
+          }
+        },
+        "sourceIdentities": "source/live-api-identities.json",
+        "anonymousFeed": {
+          "request": "GET /v1/feed?scope=all&sort=best&language=en&limit=20",
+          "status": 200,
+          "response": "settled-live/anonymous-feed.json",
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11923"
+          },
+          "items": 4,
+          "twoUsefulTitles": [
+            "AUDIT D2 interaction book",
+            "25. Minestra di mattoncini di ricotta"
+          ],
+          "twoUsefulPreviews": [
+            "AUDIT D2 introduction. This is original audit fixture content created to exercise interaction flows.",
+            "Recipe preview includes its title and Ingredients, ricotta, parmigiano and eggs from the retained actual response."
+          ],
+          "rendered": "settled-live/rendered.json and anonymous-home-1440.png/anonymous-home-390.png; both screenshots viewed.",
+          "injectedOrInventedContent": false
+        },
+        "recommendations": {
+          "request": "GET /v1/onboarding/suggested-follows?locale=en",
+          "status": 503,
+          "code": "work_read_unavailable",
+          "response": "settled-live/anonymous-suggested-follows.json"
+        },
+        "signedQueries": {
+          "requests": [
+            "/v1/feed?scope=following&sort=best&language=en&limit=20",
+            "/v1/me/shelves?limit=20",
+            "/v1/me/continue?limit=6"
+          ],
+          "status": 401,
+          "code": "account_assertion_denied",
+          "responses": [
+            "settled-live/signed-feed.json",
+            "settled-live/shelves.json",
+            "settled-live/continue.json"
+          ],
+          "limitation": "Requests used the earlier stored browser credential context and actingSubject. These exact answers are retained; auth freshness/request premise remains unresolved. Earlier genuine MainSessionAgent eligible200 is not negated by assuming global fixture ineligibility."
+        },
+        "signedUI": "Live Library UI displayed a zero-work empty state at both sizes; no successful shelf API answer was retained, so this does not establish persisted inventory, emptiness or collection acceptance. Home snapshots show zero articles/loading; the diagnostic aria-busy predicate was insufficient because zero-item feed loading uses a status element.",
+        "freshSignInProbe": {
+          "status": 400,
+          "code": "invalid_request",
+          "request": "/api/main/v1/me/session-agent",
+          "response": "fresh-live/session-agent.json",
+          "classification": "Incorrect BFF Work-contract route premise; failed before the intended identity200 assertion. No finding that supported Main identity is unavailable."
+        },
+        "otherRetainedAnswers": "live/api-answers.json records actual BFF notifications/preferences200, independently of feed success.",
+        "runtimeObservations": "Owned Web server log contains hydration warnings for data-aria-hidden/style caret attributes and web_render_failed Network connection lost. No causal attribution to the reading correction or startup regression is established; startup remains with its existing owners."
+      },
+      "unavailableOriginalPremises": {
+        "library": {
+          "file": "apps/web/tests/library.e2e.ts",
+          "started": false,
+          "assertionReached": false,
+          "firstUnavailablePremise": "beforeAll invokes library-seed.ts to create a Book and await Main stabilization, then the suite mutates status shelves. A genuine existing command-created eligible Book/owned collection with isolated restore was not established for this approved existing member. Running this unchanged setup would duplicate corpus preparation and risk shared fixture mutations."
+        },
+        "transferSelections": [
+          "apps/web/tests/library-import.e2e.ts",
+          "apps/web/tests/g-743-library.e2e.ts",
+          "apps/web/tests/g-855-library-import.e2e.ts",
+          "apps/web/tests/g-855-library-export.e2e.ts",
+          "apps/web/tests/g-855-library-roundtrip.e2e.ts",
+          "apps/web/tests/g-856-library-import.e2e.ts",
+          "apps/web/tests/g-856-library-export.e2e.ts",
+          "apps/web/tests/g-856-formats.e2e.ts",
+          "apps/web/tests/g-856-library-roundtrip.e2e.ts",
+          "apps/web/tests/books-catalogue-export.e2e.ts",
+          "apps/web/tests/books-interrupted-export.e2e.ts"
+        ],
+        "transferStatus": "Not started; outcome assertions not reached. Existing G-2791/G-2778 owners must supply genuine command-created collection/Book/copies, compatible backup/restores and retained intake/response/source bindings for this fixture. No compatible ready premise was established; unavailable prerequisites are not assertion failures or a claim that no corpus exists anywhere.",
+        "booksInterruptedExport": "prepareBook/prepareBookCopies requires the real Book/copies and its authority context REZICS_WEB_AUTH_PRIVATE_PATH, ACCESS_DATABASE_URL and REZICS_QA_RUN_ID. Fixture identity alone is insufficient; no duplicate producer, invented Book/cursor/API answer or shared reset was used.",
+        "homeMemberAuthorityCase": "G-431 member case requires its own fresh isolated authority state/platform-grant write; excluded explicitly from the original Home run. Anonymous Home was run independently without waiting for Book data.",
+        "owners": [
+          "G-2791",
+          "G-2778",
+          "G-2747",
+          "G-2847"
+        ],
+        "notWaitingForPrerequisites": true
+      },
+      "findingAcceptance": [
+        {
+          "id": "D4-003",
+          "status": "requested-size-rendered-repairs-verified-live-and-zoom-acceptance-incomplete",
+          "verified": [
+            "Useful reading action precedes tools and clears actual shell at both requested sizes in reading-first/Books fixtures.",
+            "Original Books phone overflow and recipe target defect no longer reproduce on the repaired pin; supplied keyboard/disclosure cases and unchanged independent horizontal/Tab/Enter/Space/secondary-tool assertions pass.",
+            "Original real/recorded content and assertions preserved; empty/VN states inspected."
+          ],
+          "remaining": [
+            "Live populated Library/continuation and collection persistence not established; genuine transfer/roundtrip/interrupted-Book original prerequisites unavailable.",
+            "Native400% direct-focus/scroll reading action under fixed header in Library/Books; fresh sequential keyboard path not established.",
+            "Games replay does not supply a positive reading preview/action, so games continuation acceptance remains limited.",
+            "No product integration/finding acceptance on main or regression confirmation."
+          ],
+          "mainAcceptance": false,
+          "regressionConfirmed": false
+        },
+        {
+          "id": "D4-011",
+          "status": "fixture-and-live-anonymous-previews-verified-signed-in-and-original-url-outcome-incomplete",
+          "verified": [
+            "Two useful authored anonymous titles/previews, useful empty destinations and no reserved empty rail column at requested sizes.",
+            "Actual anonymous Home has at least two useful API-backed community titles/previews at both requested sizes, with full answer/source identities retained.",
+            "Supplied Home TabMenu passes on repaired pin; original Home Korean-filter, phone-navigation and anonymous-sign-in paths pass."
+          ],
+          "remaining": [
+            "Original Home Top-sort URL outcome assertion fails after click.",
+            "Signed-in useful feed/continuation not established; 401 read premises and incorrect fresh BFF identity probe remain distinct from earlier supported identity200.",
+            "Live suggestions return503; native Home full usability acceptance remains due.",
+            "No product integration/finding acceptance on main or regression confirmation."
+          ],
+          "mainAcceptance": false,
+          "regressionConfirmed": false
+        }
+      ],
+      "administrative": {
+        "status": "passed",
+        "scope": "Documentation/Goal checks on main-based report branch, separate from clean product/test candidate checks.",
+        "trackedChanges": [
+          "docs/goals/audit-remediation-20261019/proofs/reading-home.json"
+        ],
+        "ownedServersStopped": [
+          {
+            "pid": 2177072,
+            "port": 43131,
+            "listening": false,
+            "stoppedAt": 1792394353.475598
+          },
+          {
+            "pid": 2531189,
+            "port": 6283,
+            "listening": false,
+            "stoppedAt": 1792395281.1899147
+          }
+        ],
+        "otherOwnersServersAltered": false,
+        "job": "7535be31-b8fb-424e-8c45-b858c4fff231",
+        "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+        "docs": "Passed: 13 checker tests, 249 Markdown files, local links/fragments/navigation; external URLs, JSON content and runtime behavior not validated.",
+        "goal": {
+          "types": "ok; no TypeScript workspace changed, skipped",
+          "tests": "ok; no test files named in brief, skipped",
+          "lint": "ok; no source file changed, skipped",
+          "ast": "ok",
+          "guards": "ok; 1/44 selected for changed proof path"
+        },
+        "logs": [
+          "jobs/7535be31-b8fb-424e-8c45-b858c4fff231.1.log",
+          "jobs/7535be31-b8fb-424e-8c45-b858c4fff231.2.log",
+          "administrative/goal-check-output.log"
+        ]
+      },
+      "artifacts": {
+        "privateBundle": ".temp/reading-home-repaired-G-2831/",
+        "localHandoffCopy": ".temp/audit-remediation-20261019/proofs/reading-home-G-2831-repaired-ea211df/",
+        "managerCopyDestination": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/proofs/reading-home-G-2831-repaired-ea211df/",
+        "copyStatus": "Prepared inside the worker write boundary; manager must copy the safe handoff sibling to main. Original accepted bundle/manifest is retained unchanged.",
+        "manifest": "artifact-manifest.json",
+        "screenshotsViewed": "screenshots-viewed.json",
+        "privateExclusions": "Browser storageState, all browser profiles and XDG config/cache remain private in this worktree and are excluded from the safe handoff. Retained safe API answers contain no credentials.",
+        "verifiedSafeCopyFiles": 357,
+        "verifiedViewedScreenshots": 36,
+        "originalManifestFilesVerifiedUnchanged": 200
+      },
+      "handoff": {
+        "result": "partial",
+        "existingOwnerFollowups": [
+          "G-2752: triage bounded native400% fixed-header clearance and missing positive games continuation coverage without weakening original assertions.",
+          "Home owner: original Top-sort URL outcome failure; preserve the failure until causal repair is independently verified.",
+          "G-2747/G-2847: retain startup/runtime ownership; resolve signed-in read/auth request premise separately from original identity200.",
+          "G-2791/G-2778: provide genuine owned collection/Book/copies and compatible restore/intake bindings for the remaining original selectors."
+        ],
+        "next": "Review/land report only, copy the new safe artifact sibling into main without altering the original bundle, retain both finding-level acceptance items open, and resume each available selector only after its own genuine prerequisite exists.",
+        "instructionBoundary": {
+          "file": "docs/goals/worker.md",
+          "quote": "For an ordinary worker task, never push, never touch the main checkout or `.temp/vault/`, never rebase or merge `main`",
+          "effect": "Report stays on the dispatch main-based worker branch; copying the artifact bundle into main is left to the manager, consistent with the user write restriction."
+        }
+      }
+    }
+  ]
 }
