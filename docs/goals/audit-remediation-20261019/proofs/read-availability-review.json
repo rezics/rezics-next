@@ -4283,5 +4283,466 @@
       "harnessNotice": "Four commits behind main notice; selected checks passed. No rebase, fallback or repeated product suite.",
       "receiptFinalization": "Only report receipt metadata finalized after successful checks; source, assertions, decisions and all historical fields unchanged."
     }
+  },
+  "zoneSummarySelectionReview": {
+    "recordedAtUtc": "2026-10-19T13:00:02.565218+00:00",
+    "scope": "Current authorized original Zone/wiki read dependency slice; two-file correction only. All earlier review, D5004/D5-001 evidence and original assertions retained.",
+    "reviewer": {
+      "worker": "G-2846",
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "independent": true,
+      "authoredReviewedChanges": false,
+      "nestedAgents": false,
+      "fallback": false
+    },
+    "pins": {
+      "candidate": "1261812f6d7a574e200351f9ec7037c9abe440f9",
+      "base": "df431a1822669a9935799963e8ee7410f21e2089",
+      "source": "8e4c323147718bf06cfa821b11f795ed527eba9c",
+      "sourceParent": "ecb8e124fa7a75de42d79670a1377b3ed95c22cc",
+      "checkedSource": "5567cb921d3a5959e67eb74a3578445ce8456cb2",
+      "currentMainObserved": "bfbc8a7048dc6311755a3f41fbeac3a66ca73c9a",
+      "tree": "15b52d840c91f0cb024461a449bf4b82d37df445",
+      "peerHeadVerified": "1261812f6d7a574e200351f9ec7037c9abe440f9",
+      "peerClean": true,
+      "manifest": [
+        {
+          "path": "services/main/src/modules/zone/route.ts",
+          "baseBlob": "d58b133e1c8c1b725cc26403edac3449389e2fd5",
+          "correctedBlob": "d028d00dcd300dd5b70964f1463001b10f3bee31",
+          "sha256": "cc812fe8ba58eea7a57453711cdb5d5c5fdd4778975b12d664b919e0a9492508",
+          "equalsPublishedAndChecked": true,
+          "currentMainMatchesParent": true
+        },
+        {
+          "path": "services/main/tests/g-630-zone-route.test.ts",
+          "baseBlob": "fbb6b50f13fd5414e8c5498da78b8e7ae25c10f3",
+          "correctedBlob": "abcb09dc64458cd5d53901a815ff7e2613dd528e",
+          "sha256": "8fe4266734457aa9e997e1dc491b2668f48e63add36509c3894deddc6944c95c",
+          "equalsPublishedAndChecked": true,
+          "currentMainMatchesParent": true
+        }
+      ],
+      "originalLiveTest": {
+        "path": "tests/qa/integration/g-920-wiki-readers.test.ts",
+        "blob": "c6927602b9f279a6687dc23461b8b2ae05d4ffd2",
+        "sha256": "6d1b17eda64ac3ab4ba4f94a29a085bbe759a422d0b08ecd8668d4c65886544e",
+        "equalsCandidateBaseSourceAndCurrentMain": true
+      },
+      "receiptSha256": "01161a8b33631f10c368df163d6fb458a9a189683d439316ac7657b855bbc5a8"
+    },
+    "verdict": {
+      "source": "APPROVE",
+      "blockingFindings": [],
+      "basis": "Independent actual two-file diff and material call-site/final-fence inspection; no blocking source defect found. Source approval precedes live execution and does not close an audit class.",
+      "eligibleSourceDelta": "Only the exact two reviewed blobs, subject to normal manager landing; other current-main owners preserved."
+    },
+    "reviewCoverage": [
+      {
+        "path": "services/main/src/modules/zone/route.ts",
+        "lines": [
+          179,
+          182,
+          184,
+          203,
+          205,
+          208,
+          212
+        ],
+        "observation": "Map.has retains explicit null and available selections. Stable distinct unknown IDs alone are fetched in groups of at most 50. Returned values are rebuilt from each caller target, preserving order, duplicates and unavailable positions. Actual new summary/avatar reads still register their closing dependencies."
+      },
+      {
+        "path": "services/main/src/modules/media/summary.ts",
+        "lines": [
+          874,
+          918,
+          973
+        ],
+        "observation": "Unchanged summary owner maps every requested reference to an available or unavailable result, including merged sources; therefore absent native rows become explicit cached null rather than repeated unknown lookups. Inspected only this contract needed by the correction."
+      },
+      {
+        "path": "services/main/src/modules/zone/route.ts",
+        "lines": [
+          120,
+          157,
+          163,
+          265,
+          292,
+          309,
+          318,
+          324,
+          334,
+          337
+        ],
+        "observation": "Each request retry creates a new RouteRead and summary map. Actual selected dependencies and current authority are fenced before output, including unchanged graph positions. A changed name or disclosure causes a bounded fresh attempt. Existing shared allocation, signal/deadline checks and final abandonment check remain; no new cross-request or cross-attempt authority cache."
+      },
+      {
+        "path": "services/main/src/modules/work/read-session.ts",
+        "lines": [
+          171,
+          201,
+          218
+        ],
+        "observation": "Registered selected owner values are compared with actual rereads; current realm/principal/recovery authority checks remain. This material dependency inspection is not a repeat review of the shared read-session implementation."
+      },
+      {
+        "path": "services/main/tests/g-630-zone-route.test.ts",
+        "lines": [
+          260,
+          272,
+          287,
+          301,
+          312,
+          324,
+          335,
+          347,
+          469
+        ],
+        "observation": "Eight additive tests exercise batch count, unavailable reuse across ranges, stable order/duplicates, navigation/detail reuse, separate requests, changed-name retry and closing disclosure without graph movement. Existing private-grant revocation and unrelated-write behavior remain. Cancellation is source-reviewed here, not claimed as a new live abort assertion."
+      }
+    ],
+    "productAudit": {
+      "applied": true,
+      "invariant": "Repeated selection must reuse only this attempt's exact result, including unavailability, while preserving caller cardinality/order and actual closing disclosure/authority validation.",
+      "affectedConsumers": [
+        "Zone presentation/navigation and repeated mounts",
+        "Collection index visible-member admission and positional final projection",
+        "Collection detail mount/source final projection",
+        "Document and direct public Work route selection"
+      ],
+      "coverage": "Inspected all targets/target call sites in the changed route owner; shared summary selection now supplies all of them. No second occurrence of the redundant-selection cause found within this authorized owner. Existing route tests cover membership/private-mount/current-grant boundaries.",
+      "newConfirmedDefects": [],
+      "limits": "No claim of all read surfaces, global cancellation/drain, six-persona browser journeys, D4-007 eligible-account recovery or D4-008 Book body/navigation at 1440/390 and same-revision retry."
+    },
+    "reusedExactByteChecks": {
+      "source": "5567cb921d3a5959e67eb74a3578445ce8456cb2",
+      "job": "8855eea3-7659-44d9-b3cb-a903dbb93fdb",
+      "owner": {
+        "command": "task goal:unit-files -- services/main/tests/g-630-zone-route.test.ts --reporter junit --reporter-outfile .temp/goal/zone-summary-owner-final.xml",
+        "exitCode": 0,
+        "executed": 18,
+        "passed": 18,
+        "failed": 0,
+        "skipped": 0,
+        "assertions": 321,
+        "receipt": ".temp/read-availability-review/zone-cache-126181/producer-owner.xml"
+      },
+      "static": {
+        "command": "task goal -- check --only types,lint,guards",
+        "exitCode": 0,
+        "types": "passed",
+        "inference": "passed",
+        "lint": "passed",
+        "ast": "passed",
+        "guards": "passed; 24/45 guards selected for these two paths",
+        "receipt": ".temp/read-availability-review/zone-cache-126181/static_log.log"
+      },
+      "sequenceCaveat": "Third producer step failed a non-fast-forward push; check steps passed independently. Rebased publication job 76578e13-ff1c-48aa-bffb-94d3ff42aa00 passed with both checked blobs unchanged. No unchanged check replayed by G-2846."
+    },
+    "historicalReachedFailures": {
+      "run": "20261019t080412-b0bf74",
+      "owner": "G-2758",
+      "logs": [
+        "logs/integration-1.log",
+        "logs/integration-r1.log"
+      ],
+      "assertion": "tests/qa/integration/g-920-wiki-readers.test.ts:816 expected two entity/role name batches; received four after correct names and one type batch. Both original attempt and independent retry failed.",
+      "retryCounts": {
+        "passed": 0,
+        "failed": 1,
+        "assertions": 80
+      },
+      "laterAssertions": "Quote withholding, positional privacy and later reader assertions were unreached in those attempts.",
+      "retainedCopies": ".temp/read-availability-review/zone-cache-126181/historical-g920",
+      "notRelabelledAsCurrentProof": true
+    },
+    "execution": {
+      "status": "executed; timeout in original test body; live qualification pending",
+      "command": "bun scripts/goal/goalctl.ts slot -- task --dir .temp/read-availability-zone-execution goal -- test tests/qa/integration/g-920-wiki-readers.test.ts",
+      "selection": "Unchanged entire single-case file; no hyphenated selector, overlay, assertion, timeout or fixture edits.",
+      "pins": {
+        "directory": ".temp/read-availability-zone-execution",
+        "head": "1261812f6d7a574e200351f9ec7037c9abe440f9",
+        "status": "",
+        "nodeModules": "symlink to own worktree; identical package.json and yarn.lock at own HEAD and candidate",
+        "overlay": null,
+        "runnerAndDependencyManifest": [
+          {
+            "path": "Taskfile.yml",
+            "blob": "30cfc2093436fab2cc18a589404a2f589783f7c7",
+            "sha256": "9ebb829d62cd74ab42b1fa2bd4ad2786cd9ef8d16e61ef4f3637d9a40693516f"
+          },
+          {
+            "path": "scripts/goal/goalctl.ts",
+            "blob": "79ae1a7484acc4d6cd793c79aae05d5a94d61273",
+            "sha256": "cf06b6b0727f466917913fc2a607194323c43037439b8636ce8bc84342d6ccac"
+          },
+          {
+            "path": "scripts/goal/admission.ts",
+            "blob": "40721852e918194f49888c5b2496fcc9b381f77c",
+            "sha256": "85f46663491c2835525524c9f6af87e173dc6531a2e1927a15b8bf13e520536b"
+          },
+          {
+            "path": "scripts/qa/bootstrap.ts",
+            "blob": "4404aa1c2c2087f44c0cba8eb4f000982c6ca96e",
+            "sha256": "a1ae68baba2446c09b573c981a0c7c75cf17e12d1f2376fe8d498513b8306d48"
+          },
+          {
+            "path": "scripts/qa/isolated-integration-files.ts",
+            "blob": "d761e190e64bf0957def227623b301aa7e0b99e8",
+            "sha256": "3f5964d176fa193268a2079854343428a8184f18366905c93fa936599336d0f3"
+          },
+          {
+            "path": "tests/qa/integration/media-support.ts",
+            "blob": "547b14832c1529de99d933471dfa1cf872279c5b",
+            "sha256": "fe49d14654c61058ab0284b2fb0e84df9f166a03ea97b39f86e6360015701243"
+          },
+          {
+            "path": "tests/qa/integration/support/query-cost-meter.ts",
+            "blob": "03207139c79ff6ea9f6401dfffa72b32aafa6d85",
+            "sha256": "c9d13ad1587f06002bf4ce1f423b1d90fe9df79eeb67af40137fd16679ffcaee"
+          },
+          {
+            "path": "infra/dev/compose.yaml",
+            "blob": "f0c9d6ae17d570c57d92fe96454094dcf02a6f1f",
+            "sha256": "b45b3537365bcd9ab2745c3d8b4853196180f3a3f78dc33e3906d43585d00320"
+          },
+          {
+            "path": "yarn.lock",
+            "blob": "239124b3f025a9beeb23d08d75adfbdbcc18c366",
+            "sha256": "5473e2ac8b308af7e28929652f8882e71e11d81728d567d6324ca7c65eb0ac30"
+          },
+          {
+            "path": "services/main/src/composition.ts",
+            "blob": "07babe5bc0761cb07eac904becbc3bfa90689a37",
+            "sha256": "d29ef79000981f1f1824c6e12c5cee6f7a11b00fd968b84c1f85b27f8bda35d6"
+          },
+          {
+            "path": "services/main/src/app.ts",
+            "blob": "8353342a81e60f13750355d702950a8676307547",
+            "sha256": "e9bca4d25e17ec729d861b77b86e9823d902ae453bf5d68160b7250067bed762"
+          },
+          {
+            "path": "scripts/qa/test.ts",
+            "blob": "81c4fa2ae7770c68b359f86ae910069aca509c08",
+            "sha256": "3f57d88efe82ff83e300594443f5c8bb824711003525ff3db615ef15a2165a80"
+          },
+          {
+            "path": "scripts/qa/cli.ts",
+            "blob": "e6770de45d4e8511693c48fa20b7e0738d41dcf0",
+            "sha256": "8ba1141697413c310ff3fc6b80654e5fe7310591d9fb7c9ab57f869557d952a9"
+          },
+          {
+            "path": "scripts/qa/integration-reset.ts",
+            "blob": "ca61763cb3552fcc1045e76d858004747403d945",
+            "sha256": "a8c395101a5f4f97f17236fa2d2b78284fb2b68a4bfa0b0dd221be2c15d25ef3"
+          },
+          {
+            "path": "services/main/migrations/access/2605_discovery_refresh_disposition.sql",
+            "blob": "43b36a41e6d3d3ea6ad540f8153098494cd59317",
+            "sha256": "ef134594fd78c03871e1fd18e7e9364b29deaa13c96df71f39ccf01e6414d90f"
+          }
+        ],
+        "nativeBefore": {
+          "imageId": "sha256:1f130a1afc35d1e286f7b30a12d2afd56b4e623f7ceef3501939f6e79db010bc",
+          "repoDigests": [
+            "rezics/fuseki@sha256:1f130a1afc35d1e286f7b30a12d2afd56b4e623f7ceef3501939f6e79db010bc"
+          ],
+          "tag": "rezics/fuseki:6.2.0-cmd0.5.43-6699b42ecd5d"
+        },
+        "nativeAfter": {
+          "imageId": "sha256:1f130a1afc35d1e286f7b30a12d2afd56b4e623f7ceef3501939f6e79db010bc",
+          "repoDigests": [
+            "rezics/fuseki@sha256:1f130a1afc35d1e286f7b30a12d2afd56b4e623f7ceef3501939f6e79db010bc"
+          ]
+        },
+        "postRunHead": "1261812f6d7a574e200351f9ec7037c9abe440f9",
+        "postRunStatus": "",
+        "cleanup": {
+          "project": "rezics-qa-20261019t130035-bc1b06-1",
+          "containers": [],
+          "volumes": [],
+          "reportedCleanupMs": 16592
+        }
+      },
+      "fixture": "Existing startMediaStack(g-920, {profileCredits:true}) uses fresh isolated Access/Content/PostgreSQL/Jena/object fixture and exact candidate Main composition; no frontend, retained full catalogue, backup restore or peer lifecycle needed.",
+      "assertionReach": "JUnit and raw test output report 228 expect calls, one executed case, zero passes and one TimeoutError. No named failing outcome assertion or final progress marker is emitted. The exact last completed assertion and per-section success cannot be certified from this evidence. Count is reach, not a claim that all 228 expectations or later outcomes passed.",
+      "actual": {
+        "job": "5f59cb6f-6895-494f-b2d8-acbb39e9cf87",
+        "exitCode": 201,
+        "resultClass": "timeout",
+        "qaRun": "20261019t130035-bc1b06",
+        "source": {
+          "head": "1261812f6d7a574e200351f9ec7037c9abe440f9",
+          "fingerprint": "c541f8f48836c91b0f71b431e4cc82acb98badc39bde8b75d5f2f44b6b35a109",
+          "clean": true
+        },
+        "sourceStable": true,
+        "shard": {
+          "project": "20261019t130035-bc1b06-1",
+          "files": [
+            "tests/qa/integration/g-920-wiki-readers.test.ts"
+          ],
+          "status": "failed",
+          "stage": "test",
+          "budgetMs": 480000,
+          "resourceClass": "ordinary",
+          "startupMs": 21538,
+          "bootstrapMs": 6426,
+          "fileFailures": {
+            "tests/qa/integration/g-920-wiki-readers.test.ts": "timeout"
+          },
+          "failureClass": "timeout",
+          "elapsedMs": 185751,
+          "missingFiles": [],
+          "cleanupMs": 16592
+        },
+        "counts": {
+          "executed": 1,
+          "passed": 0,
+          "failed": 1,
+          "errors": 0,
+          "skipped": 0,
+          "assertionsReached": 228,
+          "timeoutFailures": 1
+        },
+        "acceptanceIdCounts": {
+          "uncovered": 292,
+          "partial-pass": 0,
+          "passed": 0,
+          "failed": 0
+        },
+        "deadline": {
+          "budgetMs": 21600000,
+          "activeElapsedMs": 232189,
+          "admissionWaitMs": 84496,
+          "waitDeadline": 1792436435528
+        },
+        "cleanup": {
+          "project": "rezics-qa-20261019t130035-bc1b06-1",
+          "containers": [],
+          "volumes": [],
+          "reportedCleanupMs": 16592
+        },
+        "image": {
+          "imageId": "sha256:1f130a1afc35d1e286f7b30a12d2afd56b4e623f7ceef3501939f6e79db010bc",
+          "repoDigests": [
+            "rezics/fuseki@sha256:1f130a1afc35d1e286f7b30a12d2afd56b4e623f7ceef3501939f6e79db010bc"
+          ]
+        }
+      },
+      "artifactDirectory": ".temp/read-availability-review/zone-cache-126181/run-20261019t130035-bc1b06",
+      "rawJobLog": ".temp/read-availability-review/zone-cache-126181/job-5f59cb6f.log",
+      "failure": "Original one-case timeout at 180000ms; Bun measured case 180001.831ms and shard 185751ms. The shard budget was 480000ms and overall active budget 21600000ms; this was not the shard or admission deadline. The fixture reached test assertions after normal startup/bootstrap, so it is not a pre-execution setup refusal.",
+      "rawDiagnosticLimits": [
+        "Warnings say Safety responders are not configured and Work name scope is not prepared; the retained pre-fix run has the same warnings. Neither warning is established as the timeout cause.",
+        "Native stack tail still contains successful query/command responses at termination. PostgreSQL reports an open-transaction connection EOF when the test process terminates. No deadlock or server crash is established by these lines.",
+        "No native source-refusal or statement-subject-locality artifact was emitted. This absence does not identify the precise timed-out source line.",
+        "No raw HTTP body or per-assertion phase trace is exported by this timed-out unchanged case. Later privacy/withdrawal results remain unconfirmed rather than reconstructed from aggregate assertion counts."
+      ],
+      "migrationAndNativeObservation": {
+        "preparation": "Supported fresh disposable QA lifecycle; startup 21538ms and shared bootstrap 6426ms, then actual fixture assertions. No retained backup or catalogue transition used.",
+        "accessMigration": "Pinned services/main/migrations/access/2605_discovery_refresh_disposition.sql is in the candidate ordered Access migration directory. Successful supported bootstrap migrates that directory before graph/SQL template cloning. No individual applied-row receipt is exported; no manual SQL state edit or adoption was performed.",
+        "nativeTag": "rezics/fuseki:6.2.0-cmd0.5.43-6699b42ecd5d",
+        "imageIdAndRepoDigest": {
+          "imageId": "sha256:1f130a1afc35d1e286f7b30a12d2afd56b4e623f7ceef3501939f6e79db010bc",
+          "repoDigests": [
+            "rezics/fuseki@sha256:1f130a1afc35d1e286f7b30a12d2afd56b4e623f7ceef3501939f6e79db010bc"
+          ]
+        },
+        "attestation": "Candidate Compose selects this tag; before/after local image inspections agree. Successful supported bootstrap checks command-module health against the Compose version. No separate live-container image inspection was captured before teardown; no image build or historical downgrade occurred."
+      },
+      "cleanup": {
+        "project": "rezics-qa-20261019t130035-bc1b06-1",
+        "containers": [],
+        "volumes": [],
+        "reportedCleanupMs": 16592
+      },
+      "rerun": "No automatic retry or second run; unchanged owner/static checks and earlier D5004 passes were not replayed."
+    },
+    "ownedReportChecks": {
+      "status": "passed",
+      "job": "768d4c25-e0bd-410e-be6d-042f71b5aebc",
+      "commands": [
+        {
+          "command": "task docs:check",
+          "exitCode": 0,
+          "tests": 13,
+          "passed": 13,
+          "failed": 0,
+          "markdownFiles": 249
+        },
+        {
+          "command": "task goal -- check",
+          "exitCode": 0,
+          "types": "not applicable; no TypeScript workspace changed",
+          "tests": "none named in brief",
+          "lint": "not applicable; no source file changed",
+          "ast": "passed (0.4s)",
+          "guards": {
+            "selected": "1/44 guard files",
+            "executed": 2,
+            "passed": 2,
+            "failed": 0,
+            "skipped": 0,
+            "assertions": 6
+          }
+        }
+      ],
+      "artifactDirectory": ".temp/read-availability-review/zone-cache-126181/report-checks",
+      "qualification": "These report checks certify no additional product behavior."
+    },
+    "evidence": ".temp/read-availability-review/zone-cache-126181",
+    "remainingOriginalOwners": "D4-007/D4-008 UI/data/proof cells, original D5-001 mixed workload/50 notifications and other audit classes remain with existing owners. This review adds no such prerequisite to the ready two-file correction.",
+    "runtimeOutcomes": [
+      {
+        "originalAssertion": "Original Zone entity/role name-summary count expected two rather than four (line 816, anonymous and signed positional loop)",
+        "disposition": "Source correction approved; owner test proves two actual selection/fence batches. Current native case timed out with 228 aggregate expectations; no line-816 assertion failure was logged, but a complete original G920 pass and exact per-position reach are not certified."
+      },
+      {
+        "originalAssertion": "Quote withholding and positional privacy (lines 825-931)",
+        "disposition": "Not individually certified by this timed-out run; aggregate count cannot replace a named reached result."
+      },
+      {
+        "originalAssertion": "Publication/statement physical and wall/RPC/response bounds (lines 933-1229)",
+        "disposition": "Not certified. No locality artifact emitted; unknown exact stopping point."
+      },
+      {
+        "originalAssertion": "Cursor invalidation, relation/statement withdrawal and current publication authority (lines 1231-1451)",
+        "disposition": "Not certified; no complete-case result."
+      }
+    ],
+    "actionableRuntimePrerequisite": {
+      "id": "G2846-G920-QUALIFICATION-TIMEOUT",
+      "classification": "Reached test-body timeout; source cause and last outcome location unconfirmed",
+      "severity": "P2 qualification blocker; no confirmed new product source defect",
+      "owners": [
+        "G-2790 (existing Zone source owner)",
+        "existing G920 test/lifecycle owner (retained G-2758 execution)"
+      ],
+      "path": "tests/qa/integration/g-920-wiki-readers.test.ts",
+      "line": 33,
+      "timeoutDeclarationLine": 1456,
+      "smallestReproduction": "On exact 1261812f6d7a574e200351f9ec7037c9abe440f9 and native 6699b42ecd5d: task goal -- test tests/qa/integration/g-920-wiki-readers.test.ts through recorded Goal job and isolated QA admission. Job 5f59cb6f-6895-494f-b2d8-acbb39e9cf87 / run 20261019t130035-bc1b06 reaches 228 expects then original 180s timeout.",
+      "next": "Existing owner must localize the timed-out phase using supported retained diagnostics/tracing and resolve the cause within the unchanged test, fixture, timeout and assertions before another selected execution is justified. No caller-defined receipt, new corpus or lowered assertion is needed or authorized by this report."
+    },
+    "finalDisposition": {
+      "sourceOnlyLanding": "APPROVE exact two-file delta after this independent source review and reused exact-byte affected checks, subject to normal manager gate. Live timeout is retained separately; no automatic landing performed.",
+      "originalG920Qualification": "PENDING: one original selected case executed and timed out. The historical two batch-count failures remain intact; current source approval and owner units do not replace the uncompleted native outcome.",
+      "classClosure": "None. D4-007, D4-008, original D5-001 and unrelated read classes remain with existing owners; completed D5004 proof and its separately retained missing-media-invalid clause are unchanged.",
+      "productEditsByReviewer": false,
+      "assertionEditsByReviewer": false,
+      "mainOrPeerWrites": false
+    },
+    "completedAtUtc": "2026-10-19T13:09:24.394536+00:00",
+    "publication": {
+      "scope": "Only docs/goals/audit-remediation-20261019/proofs/read-availability-review.json; normal task handoff, no push or main mutation",
+      "retainedHistory": "All 29 prior top-level values remain equal to the pre-Zone snapshot. Existing D5004 40-assertion PASS and earlier 32/53-assertion history, notification source/repair reviews and all failures are preserved.",
+      "sourceVerdict": "APPROVE exact two-file delta",
+      "runtimeVerdict": "INCOMPLETE: original G920 one-case timeout, 228 expect calls; no claim of complete native success",
+      "completedAtUtc": "2026-10-19T13:10:29.937220+00:00"
+    }
   }
 }
