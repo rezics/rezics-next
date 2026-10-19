@@ -5112,5 +5112,156 @@
       "blockers": [],
       "next": "Manager can accept the affected D2-005 focus delta with prior original evidence, copy the verified focused bundle to main, and route incidental SSR fallback observation to existing startup owners. No full regression or unchanged review required."
     }
-  ]
+  ],
+  "initialNotificationReadRecoveryFirstReview": {
+    "productPin": "8acbfa2abde8b79f885f5ed399405b0dca716ea0",
+    "parent": "c1a51d5f8476e2ebfec2dc99132d14a2997faec3",
+    "sourceReview": {
+      "productPin": "8acbfa2abde8b79f885f5ed399405b0dca716ea0",
+      "parent": "c1a51d5f8476e2ebfec2dc99132d14a2997faec3",
+      "review": "One first independent review of exactly11 changed paths and six new initial-read stories; no unchanged control or accepted-case review replay.",
+      "changedPaths": [
+        "apps/web/features/settings/messages.ts",
+        "apps/web/features/settings/messages/de.ts",
+        "apps/web/features/settings/messages/es.ts",
+        "apps/web/features/settings/messages/fr.ts",
+        "apps/web/features/settings/messages/ja.ts",
+        "apps/web/features/settings/messages/ko.ts",
+        "apps/web/features/settings/messages/zh-Hans.ts",
+        "apps/web/features/settings/messages/zh-Hant.ts",
+        "apps/web/features/settings/notification-settings.stories.tsx",
+        "apps/web/features/settings/notification-settings.tsx",
+        "apps/web/features/settings/use-recovery-focus.ts"
+      ],
+      "materialDependencies": [
+        {
+          "path": "yarn.lock",
+          "sha256": {
+            "c1a51d5f8476e2ebfec2dc99132d14a2997faec3": "5473e2ac8b308af7e28929652f8882e71e11d81728d567d6324ca7c65eb0ac30",
+            "8acbfa2abde8b79f885f5ed399405b0dca716ea0": "5473e2ac8b308af7e28929652f8882e71e11d81728d567d6324ca7c65eb0ac30",
+            "e96e4846d049d3958695e30ff7e67dacc1af93e9": "5473e2ac8b308af7e28929652f8882e71e11d81728d567d6324ca7c65eb0ac30"
+          },
+          "unchangedFromDeltaParent": true,
+          "sameAsPriorGenuineE96": true
+        },
+        {
+          "path": "package.json",
+          "sha256": {
+            "c1a51d5f8476e2ebfec2dc99132d14a2997faec3": "507787932c026b08db8c45a0673da53ee42a8668bda84cfc5e2d4a62d30afdb4",
+            "8acbfa2abde8b79f885f5ed399405b0dca716ea0": "507787932c026b08db8c45a0673da53ee42a8668bda84cfc5e2d4a62d30afdb4",
+            "e96e4846d049d3958695e30ff7e67dacc1af93e9": "507787932c026b08db8c45a0673da53ee42a8668bda84cfc5e2d4a62d30afdb4"
+          },
+          "unchangedFromDeltaParent": true,
+          "sameAsPriorGenuineE96": true
+        },
+        {
+          "path": "apps/web/package.json",
+          "sha256": {
+            "c1a51d5f8476e2ebfec2dc99132d14a2997faec3": "f0b29308365ed08148f73ba83b3c5f6c5b5e890c1df2d547ece26b541ad7965f",
+            "8acbfa2abde8b79f885f5ed399405b0dca716ea0": "f0b29308365ed08148f73ba83b3c5f6c5b5e890c1df2d547ece26b541ad7965f",
+            "e96e4846d049d3958695e30ff7e67dacc1af93e9": "f0b29308365ed08148f73ba83b3c5f6c5b5e890c1df2d547ece26b541ad7965f"
+          },
+          "unchangedFromDeltaParent": true,
+          "sameAsPriorGenuineE96": true
+        },
+        {
+          "path": ".yarnrc.yml",
+          "sha256": {
+            "c1a51d5f8476e2ebfec2dc99132d14a2997faec3": "3a5fa848917bb984a50f6fe6c270e3b8270b2c1a1b905c5c7727c9263e35dc7b",
+            "8acbfa2abde8b79f885f5ed399405b0dca716ea0": "3a5fa848917bb984a50f6fe6c270e3b8270b2c1a1b905c5c7727c9263e35dc7b",
+            "e96e4846d049d3958695e30ff7e67dacc1af93e9": "3a5fa848917bb984a50f6fe6c270e3b8270b2c1a1b905c5c7727c9263e35dc7b"
+          },
+          "unchangedFromDeltaParent": true,
+          "sameAsPriorGenuineE96": true
+        },
+        {
+          "path": "apps/web/features/api/preferences.ts",
+          "sha256": {
+            "c1a51d5f8476e2ebfec2dc99132d14a2997faec3": "3e467e033cc423ed9a4ae2b5022fcf7956e42944f6c5dd50edea9b01fb24227c",
+            "8acbfa2abde8b79f885f5ed399405b0dca716ea0": "3e467e033cc423ed9a4ae2b5022fcf7956e42944f6c5dd50edea9b01fb24227c",
+            "e96e4846d049d3958695e30ff7e67dacc1af93e9": "3e467e033cc423ed9a4ae2b5022fcf7956e42944f6c5dd50edea9b01fb24227c"
+          },
+          "unchangedFromDeltaParent": true,
+          "sameAsPriorGenuineE96": true
+        },
+        {
+          "path": "apps/web/features/api/platform-access.ts",
+          "sha256": {
+            "c1a51d5f8476e2ebfec2dc99132d14a2997faec3": "52f778399ed7051b884fc1273308ebd4dee3d5fb0ea42222ff303af44c84a22e",
+            "8acbfa2abde8b79f885f5ed399405b0dca716ea0": "52f778399ed7051b884fc1273308ebd4dee3d5fb0ea42222ff303af44c84a22e",
+            "e96e4846d049d3958695e30ff7e67dacc1af93e9": "52f778399ed7051b884fc1273308ebd4dee3d5fb0ea42222ff303af44c84a22e"
+          },
+          "unchangedFromDeltaParent": true,
+          "sameAsPriorGenuineE96": true
+        },
+        {
+          "path": "apps/web/tests/account-sign-in.ts",
+          "sha256": {
+            "c1a51d5f8476e2ebfec2dc99132d14a2997faec3": "a52d9c42a7fb4599a4b54bf7170f8f2747772a04506bcaa29537553135c3befb",
+            "8acbfa2abde8b79f885f5ed399405b0dca716ea0": "a52d9c42a7fb4599a4b54bf7170f8f2747772a04506bcaa29537553135c3befb",
+            "e96e4846d049d3958695e30ff7e67dacc1af93e9": "a52d9c42a7fb4599a4b54bf7170f8f2747772a04506bcaa29537553135c3befb"
+          },
+          "unchangedFromDeltaParent": true,
+          "sameAsPriorGenuineE96": true
+        },
+        {
+          "path": "scripts/dev/config.ts",
+          "sha256": {
+            "c1a51d5f8476e2ebfec2dc99132d14a2997faec3": "ac4141dc80ffbbae8b60a40cd8ab83f0f276be061a1d4f355065fa4736dc9396",
+            "8acbfa2abde8b79f885f5ed399405b0dca716ea0": "ac4141dc80ffbbae8b60a40cd8ab83f0f276be061a1d4f355065fa4736dc9396",
+            "e96e4846d049d3958695e30ff7e67dacc1af93e9": "ac4141dc80ffbbae8b60a40cd8ab83f0f276be061a1d4f355065fa4736dc9396"
+          },
+          "unchangedFromDeltaParent": true,
+          "sameAsPriorGenuineE96": true
+        }
+      ],
+      "verdict": "pass; no source blocker found in bounded delta",
+      "observations": [
+        "Initial choices remain null through read failure; no default switch or save path rendered while unknown.",
+        "Failure/local retry and pending share polite atomic status and describedBy. Pending handler ignores duplicate activation; each attempt uses no-store GET.",
+        "Retry-owned focus stays on retry through repeated failure, then targets first native switch after real choices load; existing moved-focus cancellation retained.",
+        "Generalized recovery hook changes only target type from button to HTMLElement, with existing button default.",
+        "All eight locale changes remove obsolete full-page reload instruction; existing localized retry/pending copy reused.",
+        "No Person preference API/payload, backend, display, control implementation or existing scenario assertion changed.",
+        "Six affected stories cover pending/repeated failure/success, aria states, no PUT/defaults, natural keyboard continuation and width at390/1440. Reused owner results are declared doubles."
+      ],
+      "ownerChecks": {
+        "pendingRun": "20261019t154135-371ff2: two pending stories passed; four later outcomes initially failed because the new assertion expected aria-disabled=false rather than omitted attribute; original failed output retained.",
+        "correctedRun": "20261019t154248-99beea: four repeated-failure/recovery stories passed after correcting only the new enabled-state assertion.",
+        "typesLintGuards": "run-apnfez; owner job0452a588-6674-4dde-b8d6-c954fe8bc05b step3 passed types/lint/AST/9of45guards.",
+        "inference": "Task delta within margins, inherited main baseline failure retained: base=head26951811 versus threshold26950993.650000002 (baseline25667613,+5%). Web38766048→38766382; eden17510437 unchanged. No guard weakened; merge still requires recorded baseline."
+      },
+      "sourceDefects": [],
+      "genuineProof": "pending; source/story evidence alone does not close AUD002 initial notification read recovery."
+    },
+    "reviewer": "G-2829; codex-1/GPT-6.1 Sol/xhigh; independent, no fallback or nested agents.",
+    "sourceVerdict": "pass: no blocker found in exactly11 changed Settings paths and six new affected initial-read stories. Independent of prior accepted genuine proof.",
+    "originalAcceptedClasses": "D2-005/D4-001/D4-004/D4-005 and prior22 genuine Settings cases remain accepted per latest manager continuation; not rerun or reopened.",
+    "ownerStoryScreenshots": {
+      "method": "All six retained owner PNGs opened with view_image during first independent source/story review; no new Storybook run.",
+      "imagesActuallyViewed": [
+        "owner-evidence/20261019t154135-371ff2/InitialReadPendingDesktop.png",
+        "owner-evidence/20261019t154135-371ff2/InitialReadPendingPhone.png",
+        "owner-evidence/20261019t154248-99beea/InitialReadRecoveryDesktop.png",
+        "owner-evidence/20261019t154248-99beea/InitialReadRecoveryPhone.png",
+        "owner-evidence/20261019t154248-99beea/InitialReadRepeatedFailureDesktop.png",
+        "owner-evidence/20261019t154248-99beea/InitialReadRepeatedFailurePhone.png"
+      ],
+      "observations": [
+        "Pending390/1440: local spinner, focus ring and loading status visible; no choices shown.",
+        "Repeated failure: focused localized retry visible; GermanPhone wraps within card.",
+        "Recovery390/1440: actual owner story double has loaded matrix with focus on second Replies Push control after native Tab. Story values are doubles, not API receipts."
+      ]
+    },
+    "genuineInitialReadProof": {
+      "status": "pending",
+      "scope": "Only missing AUD002 initial notification GET503→local retry/pending→repeated failure→unmodified genuine successful GET at390/1440; no PUT/default writes."
+    },
+    "retainedEvidence": {
+      "bundle": ".temp/settings-initial-read-8acbfa2abde8/",
+      "handoffBundle": ".temp/audit-remediation-20261019/proofs/settings-feedback-G-2829-initial-read-8acbfa2abde8/",
+      "mainCopyCompleted": false,
+      "managerCopyRequired": true
+    }
+  }
 }
