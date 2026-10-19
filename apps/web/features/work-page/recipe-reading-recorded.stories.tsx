@@ -254,6 +254,8 @@ async function expectPublished(canvasElement: HTMLElement, persona: Persona, loc
   const acting = actingSubjectOf(sample(persona, 'work-header').path);
   await expect(canvas.getByText(`· ${acting ?? 'none'}`)).toBeVisible();
   await expect(canvas.getAllByRole('link', { name: 'Outcome owner' }).length).toBeGreaterThan(0);
+  await expect(within(canvas.getByRole('region', { name: copy.credits }))
+    .getByRole('link', { name: 'Outcome owner' })).toBeVisible();
   await expect(canvas.getByRole('heading', { name: copy.recipeMethod })).toBeVisible();
   await expect(canvas.getByText(shownLine(page.ingredients[0]!, 'written', page))).toBeVisible();
   const yieldRow = within(canvas.getByRole('region', { name: copy.recipeMethod }))

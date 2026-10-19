@@ -26,6 +26,7 @@ test('source author, importer as transcriber, director and artist stay distinct 
   for (const locale of Object.keys(messages) as (keyof typeof messages)[]) {
     const html = renderToStaticMarkup(createElement(WorkCredits, { agentCredits: { ok: true, data: { items: [], nextCursor: null } },
       credits, source, locale, messages: messages[locale] }));
+    expect(html).toContain(`role="region" aria-label="${messages[locale].credits}"`);
     expect(html).toContain(messages[locale].transcribedBy);
     expect(html).toContain(messages[locale].directedBy);
     expect(html).toContain(messages[locale].artworkBy);
@@ -37,6 +38,20 @@ test('source author, importer as transcriber, director and artist stay distinct 
     expect(html).toContain(source.url);
     expect(html).not.toContain('/authors/');
   }
+});
+
+test('credits expose actual participant roles and links without manufacturing an absent participant', () => {
+  const html = renderToStaticMarkup(createElement(WorkCredits, { locale: 'en', messages: messages.en,
+    agentCredits: { ok: true, data: { nextCursor: null, items: [
+      { id: 'author-credit', role: 'author', displayName: 'Actual author', agent: 'https://rezics.com/id/00000000-0000-4000-8000-000000000001' },
+      { id: 'translator-credit', role: 'translator', displayName: 'Actual translator', agent: 'https://rezics.com/id/00000000-0000-4000-8000-000000000002' },
+    ] } }, credits: { ok: true, data: { nextCursor: null, items: [] } } }));
+  expect(html).toContain('role="region" aria-label="Credits"');
+  expect(html).toContain('Author: ');
+  expect(html).toContain('Translated by');
+  expect(html).toMatch(/<a[^>]*href="[^"]+"[^>]*><bdi[^>]*>Actual author<\/bdi><\/a>/);
+  expect(html).toMatch(/<a[^>]*href="[^"]+"[^>]*><bdi[^>]*>Actual translator<\/bdi><\/a>/);
+  expect(html).not.toContain('Performer');
 });
 
 test('an explicitly unknown source author remains unknown, without assigning authorship to the importer', () => {
