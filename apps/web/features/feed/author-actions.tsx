@@ -89,11 +89,11 @@ function OwnedAuthorActions({ target, actingSubject, locale, signInHref, api, on
   const requestVersion = useRef(0);
 
   useEffect(() => {
-    if (busy || !mode || !failure && !receipt) return;
+    if (busy || !mode || !failure && !receipt && !notice) return;
     // Disabling a submitting button can move focus to the document body.
     const frame = requestAnimationFrame(() => (resultAction.current ?? closeAction.current)?.focus());
     return () => cancelAnimationFrame(frame);
-  }, [busy, mode, failure, receipt]);
+  }, [busy, mode, failure, receipt, notice]);
 
   function remember(nextBody = body, nextBasis = basis, retained: string | null = recoveryBody ?? null) {
     try {
