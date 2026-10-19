@@ -1,8 +1,10 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { browserMainApi } from '../features/api/browser.ts';
+import { browserMaintainers } from '../features/work-maintainers/api.ts';
 import { copyOf } from '../features/work-maintainers/messages.ts';
-import { MaintainerPanel } from '../features/work-maintainers/panel.tsx';
+import { MaintainerPanel, WorkMaintainers } from '../features/work-maintainers/panel.tsx';
 import { maintainerChangeKey, maintainerProblem, maintainerRows, maintainerTarget, showAdd, showRemove } from '../features/work-maintainers/rules.ts';
 
 const owner = 'https://rezics.com/id/00000000-0000-4000-8000-0000000000a1';
@@ -14,6 +16,74 @@ const names = {
   [lin]: { displayName: '林晓', handle: null },
 };
 const t = copyOf('en');
+
+test('WorkMaintainers server renders its loading state without a browser or a request', () => {
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  const send = spyOn(globalThis, 'fetch').mockImplementation(Object.assign(async () => {
+    throw new Error('Server rendering must not request maintainers');
+  }, { preconnect: fetch.preconnect }));
+  try {
+    Reflect.deleteProperty(globalThis, 'window');
+    expect(typeof window).toBe('undefined');
+    const html = renderToStaticMarkup(createElement(WorkMaintainers, {
+      work: owner, actingSubject: owner, locale: 'en',
+    }));
+    expect(html).toContain('aria-busy="true"');
+    expect(html).toContain(t.loading);
+    expect(send).not.toHaveBeenCalled();
+  } finally {
+    send.mockRestore();
+    if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
+  }
+});
+
+test('an injected maintainer client keeps its actor, profile retry and command wire without a browser', async () => {
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  const calls: { url: URL; init: RequestInit }[] = [];
+  const roster = { work: owner, generation: '7', owner, maintainers: [owner, maren] };
+  let profiles = 0;
+  const fetcher = Object.assign(async (input: RequestInfo | URL, init: RequestInit = {}) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    calls.push({ url, init });
+    if (url.pathname.endsWith('/maintainers')) return Response.json(roster);
+    if (url.pathname.includes('/agents/')) {
+      if (++profiles === 1) return Response.json({ code: 'read_basis_changed' }, { status: 409 });
+      return Response.json(names[maren]);
+    }
+    if (url.pathname.includes('/handles/')) return Response.json({ id: lin, ...names[lin] });
+    return Response.json({ ...roster, replayed: true });
+  }, { preconnect: fetch.preconnect });
+  try {
+    Reflect.deleteProperty(globalThis, 'window');
+    const source = browserMaintainers(owner, browserMainApi('https://rezics.com', { fetcher }));
+    expect(await source.read(owner)).toEqual(roster);
+    expect(await source.names([maren])).toEqual({ [maren]: names[maren] });
+    expect(await source.resolve('@lin_mei')).toEqual({ id: lin, name: names[lin] });
+    expect(await source.resolve(maren)).toEqual({ id: maren, name: names[maren] });
+    expect(await source.change({ work: owner, actingSubject: owner, target: lin, action: 'add',
+      expectedGeneration: '7', key: 'same-generation-change' })).toEqual({
+      status: 200, code: null, title: null, roster, replayed: true,
+    });
+    expect(calls.map(({ url }) => url.pathname)).toEqual([
+      `/api/main/v1/works/${owner.slice(-36)}/maintainers`,
+      `/api/main/v1/agents/${maren.slice(-36)}`, `/api/main/v1/agents/${maren.slice(-36)}`,
+      '/api/main/v1/handles/lin_mei', `/api/main/v1/agents/${maren.slice(-36)}`,
+      '/api/main/v1/work-maintainer-changes',
+    ]);
+    for (const { init } of calls) expect(init.credentials).toBe('same-origin');
+    for (const { url } of calls.slice(1, -1)) expect(url.searchParams.get('actingSubject')).toBe(owner);
+    expect(calls[2]!.url.href).toBe(calls[1]!.url.href);
+    const command = calls.at(-1)!.init;
+    expect(command.method).toBe('POST');
+    expect(new Headers(command.headers).get('idempotency-key')).toBe('same-generation-change');
+    expect(JSON.parse(String(command.body))).toEqual({
+      profile: 'work-maintainer-change-v1', work: owner, actingSubject: owner, target: lin,
+      action: 'add', expectedGeneration: '7',
+    });
+  } finally {
+    if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
+  }
+});
 
 function markup(viewer: string, maintainers: readonly string[]) {
   const rows = maintainerRows({ viewer, owner, maintainers, names });
