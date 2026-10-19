@@ -1,8 +1,9 @@
 # Product completeness state
 
-Checkpoint e7c18155 retains checkpoint 8e35eb3d and covers handled
-task:G-2826:29, task:G-2826:32 and mail:25d8ef39-b565-41a6-9a38-7cf11005cd04.
-The covered turns ended at 14:30:07Z, 14:54:24Z and 14:54:18Z respectively;
+Checkpoint 99c97f67 retains checkpoint e7c18155 and covers handled
+mail:739c0a87-4873-48a3-8162-66c091b2e898 and
+mail:9bc35314-023a-4a45-bb6e-883017374a5e.
+The covered turns ended at 15:15:59Z and 15:35:38Z respectively;
 measures were read at this checkpoint and may include later activity. Other
 event turns retain their own dispositions.
 
@@ -306,6 +307,34 @@ evidence, in-flight headroom, at least one-third about reserve and no paid Claud
 fallback. Unknown capacity admits nothing; no arbitrary worker cap or live-PID
 replacement is authorized.
 
+Mail 739c0a87 records two 60-second CPU-admission failures at 4/4 permits:
+Web types passed, but the metadata guard analyzers never started. Product
+verified diagnosis SHA-256
+8e53336b31e3006e1d21a244e66bd776f31a0a873a035d39ae28bf5ae7ba21f4.
+Three retained ready-runtime wrappers, rather than active compilation, held
+permits. Reported worker/job exit did not establish consumer-lease release.
+Product mailed Program G-2791's brief path and the actual custody question,
+and coordinated with audit through durable mail and product-to-site.md:
+existing catalogue/Program lifecycle owners reconcile borrowers, then use the
+supported producer stop operation only for an explicitly released endpoint.
+A still-needed runtime's idle-wait admission repair belongs to its existing
+owner. This changes no peer brief or G-2823 scope and starts no duplicate task.
+
+Mail 9bc35314 supplies the subsequent actual release: supporting6/supporting8
+used the existing producer Task stop/stop-music at 15:31:18Z; both stopped
+receipts at 15:31:29Z record cleanupErrors[] and failed=false. Base
+Main35809's wrapper/driver 3169002/3169021 and music Main46315's
+1052314/1052345 exited; their permits were absent, with observed occupancy
+2/4 rather than 4/4. Preserve this receipt at
+`.temp/audit-remediation-20261019/two-hour-sprint/catalogue-runtime-released-actual-1532.json`.
+KEEP C27 Main46787/root90662 and Book Main46775 remain; shared Main3001,
+original data/jobs, ready/backup and genuine proof artifacts stay preserved.
+Source0526 capture was unaffected. Do not repeat stop markers, remove permit
+rows, terminate peer processes or change admission/budgets. These operational
+receipts establish neither a metadata guard pass nor a product assertion
+failure, additional proved row or finding closure. Both covered mails are
+acknowledged, at 15:15:46Z and 15:35:28Z respectively.
+
 G-2823's partial implementation landing succeeded at
 dacacd7ae871c4a67f56eeb2eea71b76e053c4ee; do not repeat or close it. It includes
 nine commits ending at 3010e2cde73b226fe94db8f9a33b38775294d454 and
@@ -397,8 +426,8 @@ custody rather than another setup experiment. Event-29's storage-reader harness
 cause was corrected through the existing owner reader in the accepted finite
 comparison. G-2823 owns bounded fixture recovery and causal cleanup repair. The
 unclassified wakes and one retained other-kind refusal still need tooling
-disposition. The three successful manager turns for the covered events recorded
-6,097,532 input/38,138 output tokens, including 5,801,600 cached input. These
+disposition. The two successful manager turns for the covered events recorded
+981,277 input/8,886 output tokens, including 909,184 cached input. These
 exclude this checkpoint and do not establish a comparable manager/worker share.
 Product has no live worker and two open tasks.
 Latest recorded efficiency window remains 2026-10-18T08:36:08Z–20:36:08Z:
@@ -417,6 +446,8 @@ with the remaining test/report review and affected gates, then consumes its
 landing-result mail before closing verified. No new D5-006 proof or review is due.
 Site still owes G-2842's landed identity. Preserve G-2826's accepted runtime
 evidence and its distinct setup and over-budget preparation failures.
+Existing catalogue/Program lifecycle owners retain the remaining endpoint
+leases; the two completed runtime releases need no repeated stop operation.
 Audit retains finding closure, focused native fixes and
 tooling gates; Program's existing controller owner owes reviewed fingerprint and
 activation receipts. No watcher, duplicate assignment/landing or worker/landing
