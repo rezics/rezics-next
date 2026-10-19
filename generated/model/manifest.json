@@ -1077,6 +1077,11 @@
       "file": "shapes/semantic-definition-v1.ttl"
     },
     {
+      "id": "semantic-definition-v2",
+      "sha256": "fc4ed843cea04c13d9fac64b9056455cf316977d8ff7f4c40856ac5879cf6d7c",
+      "file": "shapes/semantic-definition-v2.ttl"
+    },
+    {
       "id": "semantic-model-generation-v1",
       "sha256": "16d519183b325de019c55dc5ca2c5bf140b246ba4bb81609b16e386d431595f0",
       "file": "shapes/semantic-model-generation-v1.ttl"
@@ -1140,6 +1145,11 @@
       "id": "statement-v1",
       "sha256": "0456c753fb7f85c36a1c58664b1f763425b162382bc198f4e46c0656432fa953",
       "file": "shapes/statement-v1.ttl"
+    },
+    {
+      "id": "statement-v2",
+      "sha256": "f491f13329de73fd3e216a94ef691692a92785553b718c19bbdfce2bd5ea5f2d",
+      "file": "shapes/statement-v2.ttl"
     },
     {
       "id": "structure-book-v1",
@@ -2114,6 +2124,16 @@
       "type": "http://www.w3.org/1999/02/22-rdf-syntax-ns#Statement",
       "routes": [
         {
+          "profile": "statement-v2",
+          "shape": "https://rezics.com/definition/statement-v2/statement-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/statement-v2"
+            }
+          ]
+        },
+        {
           "profile": "statement-v1",
           "shape": "https://rezics.com/definition/statement-v1/statement-shape",
           "when": []
@@ -2667,6 +2687,16 @@
     {
       "type": "https://rezics.com/vocab/DefinitionRevision",
       "routes": [
+        {
+          "profile": "semantic-definition-v2",
+          "shape": "https://rezics.com/definition/semantic-definition-v2/revision-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/semantic-definition-v2"
+            }
+          ]
+        },
         {
           "profile": "semantic-definition-v1",
           "shape": "https://rezics.com/definition/semantic-definition-v1/revision-shape",
@@ -3648,6 +3678,16 @@
       "type": "https://rezics.com/vocab/SemanticDefinition",
       "routes": [
         {
+          "profile": "semantic-definition-v2",
+          "shape": "https://rezics.com/definition/semantic-definition-v2/definition-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/semantic-definition-v2"
+            }
+          ]
+        },
+        {
           "profile": "semantic-definition-v1",
           "shape": "https://rezics.com/definition/semantic-definition-v1/definition-shape",
           "when": []
@@ -3707,6 +3747,16 @@
     {
       "type": "https://rezics.com/vocab/StatementRevision",
       "routes": [
+        {
+          "profile": "statement-v2",
+          "shape": "https://rezics.com/definition/statement-v2/revision-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/statement-v2"
+            }
+          ]
+        },
         {
           "profile": "statement-v1",
           "shape": "https://rezics.com/definition/statement-v1/revision-shape",
@@ -4398,6 +4448,7 @@
     "contexts/rights-offering-v1.jsonld": "833a3c951d2cced7d21996b567735a5005f8336b96b42735135633c11daa2355",
     "contexts/semantic-annotation-v1.jsonld": "15e08572d951513ddac7b9e3c1d1f2315d520a0b03c67d418271872d98b85f7d",
     "contexts/semantic-definition-v1.jsonld": "a455850c8e286d4953be2778e82b5d208e30ece15bf8fc33ee107eb9eb2ae77b",
+    "contexts/semantic-definition-v2.jsonld": "a455850c8e286d4953be2778e82b5d208e30ece15bf8fc33ee107eb9eb2ae77b",
     "contexts/semantic-model-generation-v1.jsonld": "7c41fe9b34d5c5703d5aac1881ee9372a8c3582b1b566356071251920d54e1d6",
     "contexts/semantic-resource-v1.jsonld": "1e4076b5fccc395826ee5cbb8c0336972f5d787dcb5be5c713ccdd87b1529541",
     "contexts/semantic-rule-v1.jsonld": "f275d7bc7a7fca4f1408e983e0dac046d98754cbd7de7ec74550360581be006f",
@@ -4411,6 +4462,7 @@
     "contexts/space-zone-v1.jsonld": "1406d146fda1f35aff2b9d3a79c2de4cbcec4048413af39b4b7423167651cfd1",
     "contexts/statement-decision-v1.jsonld": "6fde37ebce49b673eca2752de6e7041553b3d2f2a7fdcbf26b6466b2c6af32fd",
     "contexts/statement-v1.jsonld": "57c727b2d9fd498be2920ceed104b251965b24472248beb55cd804b9418cc22b",
+    "contexts/statement-v2.jsonld": "1d28d0ff2b7be89807cc71b0a35052a3693a30e23cfd1e316e918a4c36dea666",
     "contexts/structure-book-v1.jsonld": "eb28283f3d1f5f9325581a641f211f124d284707479cc7ef68830263079c54b2",
     "contexts/structure-composition-v1.jsonld": "ced94ccfdc446be7bdd7e030ef7df74854098a17aa91248d9f6b2896e5b0c81d",
     "contexts/structure-work-composition-v1.jsonld": "e4f9043b7b1dc4d1bb6d11cbb8ce0b2bd79b50597da0841f87d8b56aa0c940e3",
@@ -4543,6 +4595,7 @@
     "shapes/rights-offering-v1.ttl": "dd10150cfac446923dbb9ac8501f47a0a24bb292dd0eb4ddbad9449ed1746f85",
     "shapes/semantic-annotation-v1.ttl": "d195472baf5db656b7086c576e95e0f17f057c95ebd766e3789bdecf033835a8",
     "shapes/semantic-definition-v1.ttl": "c4755adab864370f58a4b27067ecd9aa6e4d4923ef97249364b4b34a76147e3e",
+    "shapes/semantic-definition-v2.ttl": "fc4ed843cea04c13d9fac64b9056455cf316977d8ff7f4c40856ac5879cf6d7c",
     "shapes/semantic-model-generation-v1.ttl": "16d519183b325de019c55dc5ca2c5bf140b246ba4bb81609b16e386d431595f0",
     "shapes/semantic-resource-v1.ttl": "0ebbb7cd1f04b9adb75ecb0504013195561e38a8e59a398937b95e3c679bfd99",
     "shapes/semantic-rule-v1.ttl": "bf01a1cebd44c8ec698e408e49fe2bd08cb41aeccb8ffb88b2bf99fadbba29a2",
@@ -4556,6 +4609,7 @@
     "shapes/space-zone-v1.ttl": "dfe09fb0e4f2bc850e1f561f8f32dfdc3bf6f7070166c0b04fe8cd54ab273803",
     "shapes/statement-decision-v1.ttl": "f5d5c72e0473c6abd0816c0cddceb6c70c8075a47a4d2eeb81b28f9e598b2490",
     "shapes/statement-v1.ttl": "0456c753fb7f85c36a1c58664b1f763425b162382bc198f4e46c0656432fa953",
+    "shapes/statement-v2.ttl": "f491f13329de73fd3e216a94ef691692a92785553b718c19bbdfce2bd5ea5f2d",
     "shapes/structure-book-v1.ttl": "5598fd9d04b2729c3008a647c92c03c9f1580b5c103dbe2e1a84f10e226e6242",
     "shapes/structure-composition-v1.ttl": "1b6f33eae08a2779caee4b0335ad6f823be4f41ec3f6dd070a3c4ea70de5fd1c",
     "shapes/structure-work-composition-v1.ttl": "f8b3030ccf4b0bcc882dc360452ec471e4f9d2f9ea125a09120b990a2eda7566",
@@ -4596,8 +4650,8 @@
     "shapes/zone-capability-v1.ttl": "a7296e09f052999c0578caa2894ebdbd272cedd04357e4f291e2506e73eed611",
     "shapes/zone-presentation-v1.ttl": "6aecbd83013a8a9f9e2dc712d26b6450df29554f2f2c7d6174c2897b418bece7",
     "shapes/zone-presentation-v2.ttl": "e331efea63e2bfb3ce883fb4d005ab63d7dd976973e43fd1599f655eef3ea730",
-    "packages/model/src/generated/profiles.ts": "b91aff519de72198fb258f36efec40b0e3251075e7325a09cdcc36123659669e",
-    "packages/model/src/generated/schemas.ts": "a77ea8319a04adbf2206f47410989eda7866f87c61086bbaf5fce6f23886b473",
-    "packages/model/src/generated/vocabulary.ts": "e0fe8a0f4e5499000640110172ae314cae4ef1d3b6bb11037e7177caec75b60f"
+    "packages/model/src/generated/profiles.ts": "1068f86cd162999c0ef45d820f0424bbf81bd645cd669ebf598d14d62c2519a3",
+    "packages/model/src/generated/schemas.ts": "270089259acf49af74f7dc99cadd955d494dd20a85da081df3504872dd50094d",
+    "packages/model/src/generated/vocabulary.ts": "e17e1b6c583b51d3810bc439758633cdd11b6824b18754fad720f3918da9db0f"
   }
 }

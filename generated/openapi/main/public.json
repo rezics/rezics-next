@@ -899169,6 +899169,11 @@
                         {
                           "additionalProperties": false,
                           "properties": {
+                            "basis": {
+                              "maxLength": 128,
+                              "minLength": 1,
+                              "type": "string"
+                            },
                             "code": {
                               "const": "unsupported_model_revision",
                               "type": "string"
@@ -901125,6 +901130,11 @@
                     {
                       "additionalProperties": false,
                       "properties": {
+                        "basis": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
                         "code": {
                           "type": "string"
                         },
@@ -901190,6 +901200,11 @@
                     {
                       "additionalProperties": false,
                       "properties": {
+                        "basis": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
                         "code": {
                           "const": "unsupported_model_revision",
                           "type": "string"
