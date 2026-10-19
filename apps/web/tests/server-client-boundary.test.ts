@@ -3,8 +3,10 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import ts from 'typescript-6';
 import { addressFailureResponse } from '../features/address/edge.ts';
+import { resourceHref } from '../features/address/path.ts';
 import { getTranslation } from '../i18n/server.ts';
 import { uiLocales } from '../i18n/define.ts';
+import { localizedPath } from '../i18n/locale.ts';
 
 interface Reference { file: string; name: string }
 interface Module {
@@ -183,7 +185,7 @@ test('pre-shell recovery documents retain localized tasks and HTTP failure seman
   for (const locale of uiLocales) {
     const { data: t } = await getTranslation('shell', [locale]);
     for (const status of [404, 410, 429, 503] as const) {
-      const url = new URL(`https://web.test/${locale}/e/missing/?type=lists&after=opaque%2Bcursor&tag=a&tag=b`);
+      const url = new URL(`${localizedPath(resourceHref('/e/', 'missing'), locale)}/?type=lists&after=opaque%2Bcursor&tag=a&tag=b`, 'https://web.test');
       const response = await addressFailureResponse(url, locale, status, '9');
       expect(response.status).toBe(status);
       expect(response.headers.get('content-type')).toBe('text/html; charset=utf-8');
