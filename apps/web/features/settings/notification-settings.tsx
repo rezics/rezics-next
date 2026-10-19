@@ -130,7 +130,9 @@ export function NotificationSettings({
         )
       : null,
   );
-  const [status, setStatus] = useState('');
+  const [loadState, setLoadState] = useState<'loading' | 'failed' | 'loaded'>(preview ? 'loaded' : 'loading');
+  const [loadAttempt, setLoadAttempt] = useState(0);
+  const loadRecoveryFocus = useRecoveryFocus<HTMLElement>(loadState === 'loading');
   const [saving, setSaving] = useState('');
   const recoveryFocus = useRecoveryFocus(!!saving);
   const inFlight = useRef(false);
@@ -155,17 +157,18 @@ export function NotificationSettings({
   useEffect(() => {
     if (preview) return;
     let active = true;
+    setLoadState('loading');
     void readChoices()
       .then((value) => {
-        if (active) setChoices(value);
+        if (active) { setChoices(value); setLoadState('loaded'); }
       })
       .catch(() => {
-        if (active) setStatus(t.notificationUnavailable);
+        if (active) setLoadState('failed');
       });
     return () => {
       active = false;
     };
-  }, [preview, t]);
+  }, [preview, t, loadAttempt]);
   const save = async (choice: NotificationChoice, checked: boolean) => {
     if (inFlight.current || preview) return;
     inFlight.current = true;
@@ -276,6 +279,9 @@ export function NotificationSettings({
                           {channelLabel}</span>
                         <div className="flex justify-center">
                         <Switch
+                          ref={topic === choices[0]?.topic && channel === 'inbox' ? element => {
+                            loadRecoveryFocus.target.current = element?.querySelector('input') ?? null;
+                          } : undefined}
                           size="sm"
                           aria-label={`${label} · ${channelLabel}`}
                           aria-describedby={statusId}
@@ -308,9 +314,25 @@ export function NotificationSettings({
             })}
           </div>
         ) : (
-          <p role="status" className="text-muted-foreground text-sm">
-            {status || '…'}
-          </p>
+          <div className="grid justify-items-start gap-3">
+            <p id={`${feedbackId}-load`} role="status" aria-live="polite" aria-atomic="true"
+              className="text-muted-foreground text-sm">
+              {loadState === 'failed' ? t.notificationUnavailable : t.personRefreshing}
+            </p>
+            {loadState === 'failed' || loadAttempt > 0 ? (
+              <Button ref={element => { loadRecoveryFocus.target.current = element; }}
+                type="button" variant="soft" className="h-auto min-h-9 max-w-full whitespace-normal"
+                isLoading={loadState === 'loading'} aria-describedby={`${feedbackId}-load`}
+                onClick={() => {
+                  if (loadState === 'loading') return;
+                  loadRecoveryFocus.remember();
+                  setLoadState('loading');
+                  setLoadAttempt(current => current + 1);
+                }}>
+                {t.reviewLatest}
+              </Button>
+            ) : null}
+          </div>
         )}
       </CardContent>
     </Card>
