@@ -1,13 +1,14 @@
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
-import { Region } from '../work-page/region.tsx';
 import { copyOf } from './messages.ts';
 
 /** All hosts share the same page-end landmark; the supplied content keeps its own attribution. */
 export function SubjectSources({ locale, children }: { locale: UiLocale; children: ReactNode }) {
-  return <Region id="sources" title={copyOf(locale).sources} className="scroll-mt-20 border-border/60 border-t pt-6">
+  return <footer role="contentinfo" aria-labelledby="sources"
+    className="grid min-w-0 scroll-mt-20 content-start gap-4 border-border/60 border-t pt-6">
+    <h2 id="sources" className="font-semibold text-xl tracking-tight">{copyOf(locale).sources}</h2>
     <div data-subject-sources className="grid min-w-0 gap-4 text-sm">{children}</div>
-  </Region>;
+  </footer>;
 }
 
 /** Never turn an arbitrary stored value into an executable URL. */
