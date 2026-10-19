@@ -5,7 +5,7 @@ import { Input } from '@rezics/ui/input';
 import { cn } from '@rezics/ui/utils';
 import { Clock3Icon, PencilIcon, XIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
-import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react';
+import { type FormEvent, type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import type { UiLocale } from '../../../i18n/define.ts';
 import { browserMainApi } from '../../api/browser.ts';
 import { appendRecipePage, readRecipePage } from '../../recipe-editor/pages.ts';
@@ -326,12 +326,15 @@ export function RecipeFacts({ page, messages: t }: { page: ReadableRecipe; messa
 }
 
 /** Yield, times, ingredients and method, shared by the Work page and the editor's preview. */
-export function RecipeContent({ page, units, messages: t, notes, controls, columns = true, recordingFetch }: {
+export function RecipeContent({ page, units, messages: t, notes, controls, columns = true, recordingFetch, nutritionKnown = false }: {
   page: ReadableRecipe; units: Units; messages: WorkPageMessages; notes?: string | null; controls?: ReactNode;
   /** Side by side from the `md` viewport. A narrow preview stacks instead. */
   columns?: boolean;
   recordingFetch?: typeof fetch;
+  /** Only a successful structured Recipe read establishes absence; an empty editor draft does not. */
+  nutritionKnown?: boolean;
 }) {
+  const nutritionHeading = useId();
   return <div className="grid gap-4">
     <RecipeFacts page={page} messages={t} />
     {controls}
@@ -341,6 +344,10 @@ export function RecipeContent({ page, units, messages: t, notes, controls, colum
       <section className="grid content-start gap-3"><h3 className="font-semibold text-lg">{t.method}</h3>
         <Steps page={page} units={units} messages={t} recordingFetch={recordingFetch} /></section>
     </div>
+    {nutritionKnown && !page.measures.some(item => item.kind === 'nutrient') ? <section aria-labelledby={nutritionHeading} className="grid gap-2">
+      <h3 id={nutritionHeading} className="font-semibold text-lg">{t.recipeNutrition}</h3>
+      <p className="text-muted-foreground text-sm">{t.recipeNutritionNotProvided}</p>
+    </section> : null}
     {notes ? <section className="grid gap-2"><h3 className="font-semibold">{t.recipeNotes}</h3>
       <p className="whitespace-pre-wrap leading-7">{notes}</p></section> : null}
   </div>;
@@ -498,7 +505,7 @@ export function RecipeExperience({ resource, initial, href, actingSubject, text,
   return <Region id="recipe-experience" title={t.recipeMethod}>
     {page ? <>
       <div aria-busy={busy || continuing || undefined} className="grid gap-4">
-        <RecipeContent page={page} units={units} messages={t} notes={text} recordingFetch={recordingFetch} controls={<>
+        <RecipeContent page={page} units={units} messages={t} notes={text} recordingFetch={recordingFetch} nutritionKnown controls={<>
           {controls}
           {!recipeMethodReady(page) ? <p className="text-muted-foreground text-sm">
             {page.next ? t.recipeCookNeedsMore : t.recipeUnavailable}</p> : null}
