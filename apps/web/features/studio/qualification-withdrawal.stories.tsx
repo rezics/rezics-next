@@ -61,7 +61,7 @@ export const WithdrawAndReload: Story = {
     let dialog = within(await within(document.body).findByRole('dialog'));
     await userEvent.click(dialog.getByRole('button', { name: t.withdraw }));
     await expect(await dialog.findByRole('status')).toHaveTextContent(t.qualificationWithdrawn);
-    await userEvent.click(dialog.getByRole('button', { name: t.close }));
+    await userEvent.click(dialog.getByText(t.close, { selector: 'button' }));
     await userEvent.click(canvas.getByRole('button', { name: 'Reopen chapter' }));
     await userEvent.click(canvas.getByRole('button', { name: t.qualification }));
     dialog = within(await within(document.body).findByRole('dialog'));

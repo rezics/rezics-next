@@ -156,7 +156,7 @@ export function ChapterEditor({
       placeholderDirection={interfaceDirection[locale]}
       back={{
         href: workHref(agent, book.id, 'chapters'),
-        label: t.backToChapters,
+        label: `${t.backToChapters}: ${book.title.value}`,
         title: book.title,
       }}
       context={[

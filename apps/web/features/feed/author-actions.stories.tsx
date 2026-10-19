@@ -6,6 +6,9 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { AuthorActions } from './author-actions.tsx';
 import { authorFixture as f, authorTarget, authorTransport } from './author-fixtures.ts';
 import { authorMessages } from './author-messages.ts';
+import { DiscussionCard, type DiscussionPost } from './discussion-card.tsx';
+import { FeedProvider } from './feed-context.tsx';
+import { messages } from './messages.ts';
 
 type Options = Parameters<typeof authorTransport>[0];
 interface Props { locale?: UiLocale; options?: Options; signedIn?: boolean; foreign?: boolean }
@@ -61,6 +64,34 @@ export const OwnedAndForeign: Story = {
   },
 };
 
+export const NormalPostMenus: Story = {
+  render: () => {
+    const post: DiscussionPost = { kind: 'discussion', href: '/r/fiction/discussions/author-post',
+      vote: { id: f.placement, vote: null, score: 3, revision: null, open: false },
+      realm: null, author: { id: f.actor, name: 'Mei', handle: null }, authorTarget,
+      time: '2026-09-28T12:00:00Z', title: 'Rain at the station', body: f.body,
+      language: 'en', work: null, comments: { value: 1, kind: 'exact' } };
+    return <FeedProvider locale="en" messages={messages} now={Date.parse('2026-09-28T13:00:00Z')}
+      signedIn actingSubject={f.actor} signInHref="/auth/start?next=%2Fen" avatarQuery="" tab="all" followedRealms={null}>
+      <main className="mx-auto max-w-2xl py-4">
+        <DiscussionCard post={post} />
+        <DiscussionCard post={{ ...post, kind: 'reply', href: `${post.href}/reply`, title: null,
+          author: { id: f.other, name: 'Ari', handle: null }, authorTarget: { ...authorTarget, author: f.other } }} />
+      </main>
+    </FeedProvider>;
+  },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getAllByRole('button', { name: authorMessages.en.menu })).toHaveLength(1);
+    const trigger = canvas.getByRole('button', { name: authorMessages.en.menu });
+    const rect = trigger.getBoundingClientRect();
+    await expect(trigger.contains(document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2))).toBe(true);
+    await userEvent.click(trigger);
+    await expect(await within(document.body).findByRole('menuitem', { name: authorMessages.en.edit })).toBeVisible();
+    await expect(within(document.body).getByRole('menuitem', { name: authorMessages.en.placement })).toBeVisible();
+  },
+};
+
 export const ForeignObject: Story = {
   args: { foreign: true },
   async play({ canvasElement }) {
@@ -80,11 +111,10 @@ export const Correction: Story = {
     const dialog = await open(canvasElement);
     const editor = dialog.getByRole('textbox', { name: authorMessages.en.body });
     await userEvent.click(editor);
-    await userEvent.keyboard('{End}');
     await userEvent.type(editor, ' Corrected wording.');
     await userEvent.click(dialog.getByRole('button', { name: authorMessages.en.save }));
     await expect(await dialog.findByRole('status')).toHaveTextContent(authorMessages.en.corrected);
-    await userEvent.click(dialog.getByRole('button', { name: authorMessages.en.close }));
+    await userEvent.click(dialog.getByText(authorMessages.en.close, { selector: 'button' }));
     await waitFor(() => expect(within(canvasElement).getByRole('button', { name: authorMessages.en.menu })).toHaveFocus());
   },
 };
@@ -164,6 +194,29 @@ export const ExpiredSession: Story = {
     await userEvent.click(dialog.getByRole('button', { name: authorMessages.en.save }));
     await expect(await dialog.findByRole('alert')).toHaveTextContent(authorMessages.en.signIn);
     await expect(dialog.getByRole('link', { name: authorMessages.en.signInAction })).toBeVisible();
+  },
+};
+
+export const KeyboardRetry: Story = {
+  args: { options: { fail: 'draft' } },
+  async play({ canvasElement }) {
+    const t = authorMessages.en;
+    const trigger = within(canvasElement).getByRole('button', { name: t.menu });
+    trigger.focus();
+    await userEvent.keyboard('{ArrowDown}');
+    await within(document.body).findByRole('menu');
+    await userEvent.keyboard('{Enter}');
+    const dialog = within(await within(document.body).findByRole('dialog', { name: t.edit }));
+    await dialog.findByRole('textbox', { name: t.body });
+    const save = dialog.getByRole('button', { name: t.save });
+    save.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(await dialog.findByRole('alert')).toHaveTextContent(t.failed);
+    await expect(dialog.getByRole('button', { name: t.retry })).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await expect(await dialog.findByRole('status')).toHaveTextContent(t.corrected);
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(trigger).toHaveFocus());
   },
 };
 

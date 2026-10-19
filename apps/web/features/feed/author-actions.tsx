@@ -182,7 +182,10 @@ function OwnedAuthorActions({ target, actingSubject, locale, signInHref, api, on
     requestAnimationFrame(() => trigger.current?.focus());
   };
   return <>
-    <Menu onSelect={({ value }) => open(value === 'edit' ? 'edit' : 'withdraw')}>
+    <Menu onSelect={({ value }) => {
+      // Let the menu finish restoring focus before the dialog takes it.
+      if (value === 'edit' || value === 'withdraw') requestAnimationFrame(() => open(value));
+    }}>
       <MenuTrigger ref={trigger} aria-label={t.menu}
         className="relative z-10 inline-flex size-9 shrink-0 items-center justify-center rounded-full text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">
         <EllipsisIcon aria-hidden="true" className="size-4" />

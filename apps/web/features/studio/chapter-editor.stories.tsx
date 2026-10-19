@@ -54,7 +54,7 @@ export const FirstDraft: Story = {
     const canvas = within(canvasElement);
     const editor = canvas.getByRole('textbox', { name: 'Chapter text' });
     await expect(editor).toHaveAttribute('lang', 'zh-Hans');
-    await expect(canvas.getByRole('link', { name: 'Back to the chapters' })).toHaveTextContent('雨夜书店');
+    await expect(canvas.getByRole('link', { name: 'Back to the chapters: 雨夜书店' })).toHaveTextContent('雨夜书店');
     await expect(canvas.getByRole('button', { name: 'Publish' })).toBeDisabled();
     await userEvent.type(editor, '末班车到站时，整座站台只有她一个人。', { delay: 20 });
     await waitFor(() => expect(status(canvasElement)).toHaveTextContent(/^Saved · /));
