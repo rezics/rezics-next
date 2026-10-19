@@ -1,0 +1,339 @@
+{
+  "schemaVersion": 1,
+  "status": "executed-native-failure",
+  "source": {
+    "revision": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+    "refAtPin": "wave/audit-20261019",
+    "initialRevision": "ebe3e9a06572b748307150aab29ec0499944e654",
+    "initiallyClean": true,
+    "pinCount": 1,
+    "pinnedAtUtc": "2026-10-19T04:07:30.447711+00:00",
+    "fixedDuringExecution": true,
+    "worktree": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2822",
+    "sourceDigests": ".temp/native-request-boundary/source.json"
+  },
+  "execution": {
+    "nativeSuiteInvocations": 1,
+    "jobId": "abf164bf-fe8f-4f55-a16e-c5a78997c1c6",
+    "qaRunId": "20261019t040741-001c63",
+    "buildRef": "6g9kn399klolxqivzh3xd51kf",
+    "command": "REZICS_QA_ARTIFACT_ROOT=\"$PWD/.temp/native-request-boundary/qa\" bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task goal -- test --result-file .temp/native-request-boundary/qa-result.json infra/jena/tests/native-module-suite.test.ts",
+    "taskRoute": "task goal -- test invokes bun scripts/goal/goalctl.ts test, admits the named owner file, and calls the same pinned runNativeModuleSuite used by task jena:test. task jena:test itself was inspected, not invoked a second time.",
+    "jenaTestTask": "bun scripts/qa/host-admission.ts --gib 4 -- bun scripts/qa/native-module-suite.ts",
+    "nativeRunner": "docker build --progress plain --target module-test --file <worktree>/infra/jena/Dockerfile <worktree> (DOCKER_BUILDKIT=1)",
+    "maven": "mvn -B -ntp -DexcludedGroups=com.rezics.jena.ExternalFixture -DargLine=-Xmx384m -DforkCount=1 -DreuseForks=false package",
+    "mavenImage": "maven:3.9.16-eclipse-temurin-21@sha256:c2a2c58516d160f43b50f12baa427ca86989e0bc942609e04aff61da5d9a7d74",
+    "qaAdmission": "Ordinary QA slot and harness memory admission; QA queue 82ms, admission wait 270ms. No shared application stack or dataset was started/refreshed.",
+    "startedAtUtc": "2026-10-19T04:07:42.565062061Z",
+    "finishedAtUtc": "2026-10-19T04:29:23.252790293Z",
+    "ownerElapsedSeconds": 1301.829622657,
+    "exitCodes": {
+      "maven": 1,
+      "docker": 1,
+      "qaSelector": 1,
+      "recordedTask": 201
+    },
+    "classification": "JUnit execution reached; Maven failed on 10 assertions and 2 test errors. Not a compile, container-startup or timeout failure.",
+    "excludedCategory": "com.rezics.jena.ExternalFixture",
+    "runtimeImageRequired": false,
+    "sourceOrAssertionEdits": false,
+    "reruns": 0
+  },
+  "counts": {
+    "nativeMaven": {
+      "executed": 571,
+      "failures": 10,
+      "errors": 2,
+      "skipped": 0,
+      "passed": 559,
+      "classReports": 75
+    },
+    "selectedThreeClasses": {
+      "executed": 18,
+      "passed": 12,
+      "failures": 6,
+      "errors": 0,
+      "skipped": 0
+    },
+    "qaWrapperJUnit": {
+      "xmlReports": 1,
+      "executed": 1,
+      "passed": 0,
+      "failures": 1,
+      "skipped": 0
+    },
+    "method": "All 75 Maven class summaries sum exactly to the final 571/10/2/0 total. Native counts are not inferred from the single Bun wrapper test."
+  },
+  "targetResults": [
+    {
+      "class": "RequestReadBoundaryTest",
+      "counts": {
+        "executed": 3,
+        "failures": 2,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 1,
+        "maven_log_line": 845
+      },
+      "passed": [
+        "invalidAllocationsNeverEnterTheEngine"
+      ],
+      "failures": [
+        {
+          "case": "RequestReadBoundaryTest.clientCancellationReleasesNativeExecutionWithinGrace",
+          "kind": "assertion",
+          "message": "java.lang.AssertionError: native engine never entered",
+          "maven_log_line": 846
+        },
+        {
+          "case": "RequestReadBoundaryTest.wallAllocationAbortsOrdinaryAndTemplateEnginesWithoutDiagnostics",
+          "kind": "assertion",
+          "message": "java.lang.AssertionError: native engine never entered",
+          "maven_log_line": 862
+        }
+      ],
+      "premise": "Both failures are fixture.started.await assertions at RequestReadBoundaryTest.java:107/123, in the first ordinary-query iteration. They precede deadline-release or pending.cancel(true), 300ms release and fresh-retry assertions; the template iterations were not reached."
+    },
+    {
+      "class": "RequestReadCaptureBoundaryTest",
+      "counts": {
+        "executed": 9,
+        "failures": 4,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 5,
+        "maven_log_line": 885
+      },
+      "passed": [
+        "queryDeadlineLeavesHeldPublicationWithoutLaterWork",
+        "deltaReadinessDeadlineLeavesHeldPublicationWithoutLaterWork",
+        "exactUnitDeadlineLeavesHeldPublicationWithoutLaterWork",
+        "prefixDeadlineLeavesHeldPublicationWithoutLaterWork",
+        "templatesRetainTheirBoundedModelReadDuringPublication"
+      ],
+      "failures": [
+        {
+          "case": "RequestReadCaptureBoundaryTest.deltaReadinessDisconnectLeavesHeldPublicationWithoutLaterWork",
+          "kind": "assertion",
+          "message": "java.lang.AssertionError: native capture remained inside the servlet past 300ms grace while publication was held",
+          "maven_log_line": 886
+        },
+        {
+          "case": "RequestReadCaptureBoundaryTest.prefixDisconnectLeavesHeldPublicationWithoutLaterWork",
+          "kind": "assertion",
+          "message": "java.lang.AssertionError: native capture remained inside the servlet past 300ms grace while publication was held",
+          "maven_log_line": 903
+        },
+        {
+          "case": "RequestReadCaptureBoundaryTest.exactUnitDisconnectLeavesHeldPublicationWithoutLaterWork",
+          "kind": "assertion",
+          "message": "java.lang.AssertionError: native capture remained inside the servlet past 300ms grace while publication was held",
+          "maven_log_line": 920
+        },
+        {
+          "case": "RequestReadCaptureBoundaryTest.queryDisconnectLeavesHeldPublicationWithoutLaterWork",
+          "kind": "assertion",
+          "message": "java.lang.AssertionError: native capture remained inside the servlet past 300ms grace while publication was held",
+          "maven_log_line": 937
+        }
+      ],
+      "deadlineOutcomes": "QUERY, DELTA, EXACT_UNIT and PREFIX: departed servlet exits by deadline + unchanged 300ms grace while publication holder remains through grace + 50ms; typed deadline cause, zero transaction/engine starts and no retained transaction/interrupt; independent reader survives then succeeds after holder release, fresh retry succeeds, departed counters remain zero.",
+      "disconnectOutcome": "All four reach real capture contention, start an unaffected waiting reader and successfully cancel the pending client future. All fail the native 300ms servlet-exit assertion at RequestReadCaptureBoundaryTest.java:199 while the publication holder remains. Typed cause, no-later-work, survivor completion and fresh-retry assertions after that point are not reached; finally releases the holder.",
+      "additionalEvidence": "queryDisconnect also suppresses TransactionException: Can't expel: Active transactions (log lines 953-960); the primary failure remains the 300ms release assertion.",
+      "templateOutcome": "templatesRetainTheirBoundedModelReadDuringPublication passes with held publication: HTTP 200, observed transaction, no retained transaction/interrupt/cancellation."
+    },
+    {
+      "class": "ConsistentReadCaptureTest",
+      "counts": {
+        "executed": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 6,
+        "maven_log_line": 344
+      },
+      "passed": [
+        "unrelatedOpenWriterDoesNotDelayOrMixTheCapturedCut",
+        "laterCommitCannotChangeRdfQueriesOrNestedProofOfCapturedRead",
+        "qualifiedReplayUsesItsCapturedCommitInsteadOfAPreCaptureWriterEpochSample",
+        "unqualifiedCaptureRemainsExplicitAndReleasesItsTransactionAndReader",
+        "nestedSourceBackedPostingProofBorrowsTheCapturedCommittedReader",
+        "productionQueryKeepsItsCaptureWhileLazyRowsAreWrittenToHttp"
+      ],
+      "outcomes": "Atomic committed RDF/Lucene capture survives an unrelated open writer and later publication; nested source-backed proofs borrow the captured reader; replay uses captured commit rather than a stale epoch; unqualified capture stays explicit and releases reader/transaction; lazy HTTP rows keep the old cut and the next request sees the new cut."
+    }
+  ],
+  "otherNativeFailures": [
+    {
+      "case": "ContentSearchQualificationTest.qualifiesCanonicalAndRetainedOwnerDigestsWithoutAdmittingMissingCoverage",
+      "kind": "error",
+      "message": "com.rezics.jena.ContentSearchQualification$Refusal: Content publication qualification is unresolved",
+      "maven_log_line": 367,
+      "stage": "Content qualification Refusal in fixture.audit; later case assertions not reached."
+    },
+    {
+      "case": "ContentSearchQualificationTest.closedPredecessorApprovalAndLargeClosedInventoryRemainComplete",
+      "kind": "error",
+      "message": "com.rezics.jena.ContentSearchQualification$Refusal: Content publication qualification is unresolved",
+      "maven_log_line": 413,
+      "stage": "Content qualification Refusal in fixture.audit; later case assertions not reached."
+    },
+    {
+      "case": "PublicTextRestartTest.transientContentVerificationFailureRetriesWithoutReplacingItsCommittedSource",
+      "kind": "assertion",
+      "message": "java.lang.AssertionError: expected:<null> but was:<urn:rezics:text-index-generation:11111111-1111-4111-8111-111111111111>",
+      "maven_log_line": 701,
+      "stage": "Outcome assertion at PublicTextRestartTest.java:436 expected null generation, received a generation IRI."
+    },
+    {
+      "case": "QueryCutQualificationTest.scopedSourceHeadRemovalDeletesOnlyItsCandidateAndKeepsQualifiedSibling",
+      "kind": "assertion",
+      "message": "java.lang.AssertionError: expected:<true> but was:<false>",
+      "maven_log_line": 760,
+      "stage": "Fixture.publish qualification assertion (ConsistentReadCaptureTest.java:157), called at QueryCutQualificationTest.java:205; later scoped-removal assertions not reached."
+    },
+    {
+      "case": "SearchDeltaJournalTest.nativePhysicalCopiesCancelAcrossOrdinarySlimAndCatalogueBulkWriters",
+      "kind": "assertion",
+      "message": "java.lang.AssertionError: {rebuildAttempts=0, reason=generation-unqualified, recovery=scheduled, recoveryAttempts=0, available=false} expected:<true> but was:<false>",
+      "maven_log_line": 981,
+      "stage": "cancellationSnapshot qualification assertion (SearchDeltaJournalTest.java:655), called by cancellationAcrossWriters:740; later cancellation outcome not proved."
+    },
+    {
+      "case": "SearchDeltaJournalTest.nativeFinalPrecommitCancellationRollsBackEveryBulkOutcomeAndKeepsContentProof",
+      "kind": "assertion",
+      "message": "java.lang.AssertionError: {rebuildAttempts=0, reason=generation-unqualified, recovery=scheduled, recoveryAttempts=0, available=false} expected:<true> but was:<false>",
+      "maven_log_line": 1000,
+      "stage": "cancellationSnapshot qualification assertion (SearchDeltaJournalTest.java:655), called by cancellationAcrossWriters:740; later cancellation outcome not proved."
+    }
+  ],
+  "artifactRetention": {
+    "base": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2822",
+    "artifacts": [
+      {
+        "path": ".temp/native-request-boundary/source.json",
+        "bytes": 23615,
+        "sha256": "10bbdc97bfe5485a1e62b27d53c77ad874c8c9d39aa736a5e44af6e6d4e22fd4"
+      },
+      {
+        "path": ".temp/native-module-suite/de5a2295-4448-401d-9f94-bd340360ca7f.log",
+        "bytes": 120054,
+        "sha256": "e49f74bb0d4da9134dfc4d29c4ea225fd0951c188aa6a378999b5febcf6f9451"
+      },
+      {
+        "path": ".temp/native-request-boundary/native-summary.json",
+        "bytes": 15731,
+        "sha256": "5ead35f9dc74c5559ae5cca218da279c3caffe4bde3ed1e7e74f31f3f2074849"
+      },
+      {
+        "path": ".temp/native-request-boundary/build-record.json",
+        "bytes": 7574,
+        "sha256": "6e4c5313581174ee536145bf008be3a8d2eda56f90c8fee74e5dfe8b0d53749c"
+      },
+      {
+        "path": ".temp/native-request-boundary/native-suite.dockerbuild",
+        "bytes": 39489,
+        "sha256": "10732c8b4bbae043d3da5ac7bf50e0fcb2352e5a6cb2b6128b78d01f7f4e80fa"
+      },
+      {
+        "path": ".temp/native-request-boundary/qa-result.json",
+        "bytes": 315,
+        "sha256": "938da05340cebf522f2a80ada355cc2dbdf0a8e186a8160d994f9a1446a6eace"
+      },
+      {
+        "path": ".temp/native-request-boundary/qa/20261019t040741-001c63/owner.xml",
+        "bytes": 13916,
+        "sha256": "c3a1998e3b0d7be162f93eab7deefe7fcfc7345fd570d21037c1f311702b12d8"
+      },
+      {
+        "path": ".temp/native-request-boundary/qa/20261019t040741-001c63/logs/owner.log",
+        "bytes": 7509,
+        "sha256": "08ea62debba9eba14ee424ae08af46ff02af851138893e172577f13eec198c16"
+      },
+      {
+        "path": ".temp/native-request-boundary/qa/20261019t040741-001c63/logs/memory-admission.log",
+        "bytes": 143,
+        "sha256": "69a064003ea9a74cb248795e17b17beac573a8ca908f5b19b1e46e60faa25626"
+      },
+      {
+        "path": ".temp/native-request-boundary/qa/20261019t040741-001c63/summary.md",
+        "bytes": 545,
+        "sha256": "be15898df90fa3fae5712f30f0143b51703ff97e1ffe1f0c1242fbdcaf7923a6"
+      },
+      {
+        "path": ".temp/native-request-boundary/qa/20261019t040741-001c63/acceptance.json",
+        "bytes": 162655,
+        "sha256": "278924b5ec5d2fb5c3201a4508340067fd273e72e89517b30752f0df4252b471"
+      },
+      {
+        "path": ".temp/native-request-boundary/qa/20261019t040741-001c63/run-deadline.json",
+        "bytes": 115,
+        "sha256": "100401e5d0e4e78dfe7cf57e5f6782fa001dce23ce9e6acdba8453e50ede2a8f"
+      },
+      {
+        "path": ".temp/goal/jobs/abf164bf-fe8f-4f55-a16e-c5a78997c1c6.log",
+        "bytes": 1253,
+        "sha256": "f51ec98d1e3d970042078d725245df82e5823af47309494924cbd5de65b46d4f"
+      },
+      {
+        "path": ".temp/goal/jobs/5326a070-d88c-4aa8-9b84-3631ea83d339.1.log",
+        "bytes": 532,
+        "sha256": "ec396759f9db0c398702885cf4e1e8d8d50aeeabcb5fd83520287d70bc86489e"
+      },
+      {
+        "path": ".temp/goal/jobs/5326a070-d88c-4aa8-9b84-3631ea83d339.2.log",
+        "bytes": 359,
+        "sha256": "e4595dbf3d52874e47eb5a9d5e12a281d2e8f9dbaf88b4515a149a3a4ba64560"
+      },
+      {
+        "path": ".temp/goal/jobs/5326a070-d88c-4aa8-9b84-3631ea83d339.3.log",
+        "bytes": 505,
+        "sha256": "4557def0c21d5c1097d8441c81627866ab630f37c7f3ed534213be325d240827"
+      },
+      {
+        "path": ".temp/goal/check/run-q5lqLT/output.log",
+        "bytes": 2869,
+        "sha256": "f249222941e51e6d3d3759976a61d37a289dfc7eb64692bb1ff828bcbc2c19ad"
+      }
+    ],
+    "nativeSurefireXmlExported": false,
+    "limitation": "The existing module-test runner only preserves Docker/Maven console output. Its failing RUN produced no image from which /build/target/surefire-reports could be copied. Retained complete emitted Maven summaries/stack traces, parsed class counts, QA wrapper JUnit and Docker build bundle; native XML and per-passing-case timing are unavailable. No second build or alternate runner was invented."
+  },
+  "remainingProof": {
+    "D5-001": "Real Main API signed-in notification-reader journeys under deadline/disconnect, shared allocation and mixed load; transport release within unchanged 100ms, no later owner work, independent reader and fresh retry. Native disconnect release is currently failing.",
+    "D5-002": "Real Main API Discover visitor/default legal list with original allocation and call count, concurrent normal traffic, cancellation and retry; this native suite does not establish list success or latency.",
+    "D5-003": "Real Main API body-search reader over growing healthy corpus: no foreground population qualification, latency, qualification transitions and mixed-load cancellation/retry. Content qualification/restart failures above require concrete fixes or fixture corrections before claiming success.",
+    "transport100ms": "Not executed by this native selection; unchanged source assertion remains in services/main/tests/request-read-budget.test.ts:191.",
+    "closure": "None of D5-001/002/003 is closed by native component execution, including the passing consistent-capture cases."
+  },
+  "followUp": [
+    "Fix disconnect release across query, delta readiness, exact-unit and prefix capture; preserve the 300ms assertion and verify no late transaction/engine, surviving reader and fresh retry.",
+    "Correct or diagnose the two general native engine-entry premises before claiming execution-release coverage, retaining the original bounds.",
+    "Resolve all six additional qualification/restart failures from this run; the report preserves exact cases and failure stages.",
+    "Add failure-safe native Surefire report export to the supported runner so future failures retain native XML without a second suite execution."
+  ],
+  "checks": {
+    "recordedJobId": "5326a070-d88c-4aa8-9b84-3631ea83d339",
+    "recordedSequence": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then \"task docs:check\" --then \"python3 .temp/native-request-boundary/validate-proof.py\" -- env GOAL_CHECK_PREPARED_TREE=<worktree> task goal -- check",
+    "workerCheck": {
+      "status": "passed",
+      "exitCode": 0,
+      "log": ".temp/goal/jobs/5326a070-d88c-4aa8-9b84-3631ea83d339.1.log",
+      "detail": "AST and 1/45 path-selected repository guards passed. No TypeScript/source edits or brief test files; native proof was not repeated. GOAL_CHECK_PREPARED_TREE preserved the fixed source revision."
+    },
+    "documentation": {
+      "status": "passed",
+      "exitCode": 0,
+      "log": ".temp/goal/jobs/5326a070-d88c-4aa8-9b84-3631ea83d339.2.log",
+      "detail": "13 checker tests and documentation links/navigation passed (235 Markdown files)."
+    },
+    "artifactCountValidation": {
+      "status": "passed",
+      "exitCode": 0,
+      "log": ".temp/goal/jobs/5326a070-d88c-4aa8-9b84-3631ea83d339.3.log",
+      "finalValidation": ".temp/native-request-boundary/validation.json",
+      "detail": "Parsed JSON; checked artifact hashes, all 75 class summaries against the 571-test Maven total, 18 declared target methods, all 12 native failure/error records and the distinct one-test wrapper XML; verified fixed source digests and report-only diff."
+    }
+  },
+  "cleanup": "No owned running container or application stack was created; retained BuildKit history and all worktree artifacts. Shared resources were left running."
+}
