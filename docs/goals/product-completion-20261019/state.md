@@ -1,9 +1,10 @@
 # Product completeness state
 
-Checkpoint 8e35eb3d retains checkpoint 75536914 and covers handled
-task:G-2826:23 and task:G-2826:26. The covered turns ended at 13:37:35Z and
-14:05:01Z; measures were read at this checkpoint and may include later activity.
-Other event turns retain their own dispositions.
+Checkpoint e7c18155 retains checkpoint 8e35eb3d and covers handled
+task:G-2826:29, task:G-2826:32 and mail:25d8ef39-b565-41a6-9a38-7cf11005cd04.
+The covered turns ended at 14:30:07Z, 14:54:24Z and 14:54:18Z respectively;
+measures were read at this checkpoint and may include later activity. Other
+event turns retain their own dispositions.
 
 Scope remains domain-leading completeness across supported domains, including
 specialist jobs, with API outcomes first and actual rendered/interaction proof.
@@ -201,8 +202,9 @@ History adoption and owner migrations succeeded, but their original preparation
 exceeded 600 seconds and reached no outcome assertion. Separately authorized
 151,986 ms recovery and 41,968 ms fresh derivative restore do not retrospectively
 qualify it. SQL comparisons and 102 unchanged immutable objects supply partial
-preservation evidence; an empty generic graph query proves no RDF preservation,
-and complete native publication/rights-metadata equivalence remains unproved.
+preservation evidence; an empty generic graph query proves no RDF preservation.
+The then-missing native/publication-rights comparison was accepted later at the
+named fixture tier below; it does not qualify that over-budget preparation.
 
 Event task:G-2826:23 retained bbffa8327be7 as a backup-location setup refusal
 before restore, public requests or outcome assertions, not a product failure.
@@ -230,27 +232,50 @@ worker execution. No supplemental Zone/rating tests, reopened finding, new
 D5-006 runtime, repeated review or landing of that evidence is due. Program and
 site received corrective mails 756e08d9 and 5f4cec67.
 
-The same codex-1/GPT-6.1 Sol/xhigh worker was resumed for only G-2826's finite
-native/publication-rights preservation comparison, with no nested agents.
-Use the retained context-selection fixture's original and compatible derivative
-backups with the baseline/fixed-wave pins above, exact source/image pins and
-parent lineage. Do not substitute original-boundary Zone/rating producer
-backups or let a branch rebase change the executed immutable source.
+Event task:G-2826:29 retained report 09134ba5be and job
+bb80485f-16b6-4e9d-a860-ead87e4eca83 as a post-smoke proof-harness failure:
+the temporary reader selected local-only readComponentState for an S3-capable
+Work revision. Nonempty baseline reads reached smoke within budget, but no
+component payload or cross-source comparison was verified. This establishes no
+lost bytes, product defect or missing operation. Decision 09e2133a93, dated by
+f04269ebae for the finite resume gate, authorized one reader correction and one
+comparison by the same codex-1/GPT-6.1 Sol/xhigh worker, without nested agents.
+Use the pinned owner's readWorkComponentState with its actual isolated
+workObjects wiring; preserve existing profile/digest checks, read budgets,
+backup lineage, source/image pins and every prior failure. No replacement
+reader, storage substitution or production change was authorized.
 
-Compare actual nonempty identities/revisions, question scales/steps,
-observations, follows, authority/revocation, publication decisions/rights
-metadata and retained bytes through existing supported owner/public reads.
-Cover every existing preservation fact, retain request/read receipts and
-digests, and justify migration-derived differences. Empty queries, unchanged
-directory files, passing rating outcomes and absent observations do not suffice.
-A missing field or supported comparison returns blocked once with exact missing
-evidence/operation and its existing owner; no improvised tooling or unchanged
-setup replay. Append only rating-context-selection.json; retain recorded Task
-jobs, QA admission, affected report/static checks and docs:check, frozen digest
-and all earlier failures, and the 600-second preparation/restore ceiling.
-No repeated outcome suite, new fixture/corpus/producer/account/grant, guard or
-manifest bypass, production change or shared lifecycle operation is authorized.
-D5-006's accepted closure does not discharge this distinct prerequisite.
+Event task:G-2826:32 accepted handoff
+cf8f84193d5e11e6fb7ac3c2720a016218902304; decision f1792f86d9 is on main.
+All 21 artifact/check hashes and both unchanged manifests were verified.
+The finite preservation comparison matches 29 groups across 62 revisions,
+including actual observations/follows, 17 Access tables, nonempty revocation,
+publication rights/default selections/presentation licences and 122 directly
+compared objects, 55,934 bytes per copy. Exact baseline/fixed-wave restores
+through smoke took 43,488/56,423 ms, within the unchanged 600-second ceiling;
+both owned cleanups passed. Recorded runtime bd58704e and report/static/docs
+job 55e8a327 passed. This satisfies the distinct preservation prerequisite only
+for named fixture facts through existing owner/public reads; it establishes no
+unrelated-store or migration-added-schema equivalence and leaves the original
+setup, budget and reader failures intact.
+
+Site's corroborating mail 25d8ef39 was acknowledged at 14:54:12Z and its
+acknowledgement was confirmed at this checkpoint. No unchanged outcome or
+preservation rerun, supplemental audit assertion, new API, product row or
+frontend acceptance follows; D5-006 remains closed on its prior composed proof.
+G-2825's report remains landed and closed verified, without another landing.
+
+The accepted composition joins this comparison to G-2826's frozen
+inventory/selection results, superseding the partial-landing/preservation hold
+and event-29's no-landing instruction. One full landing with normal affected
+gates and the first independent codex-1/GPT-6.1 Sol/xhigh review of the remaining
+test/report delta is due. The already published original-boundary report needs
+no repeated proof, review or landing. Event-32 mailed Program about the shared
+train delaying its decision commit; that commit has since reached main, but
+no landing command, landing result or closure is recorded. G-2826 remains
+exited with no landing lock at this checkpoint. A later execution event starts
+the single composed landing; its result event closes verified only when no
+brief work remains. This checkpoint changes no brief or worker instruction.
 
 Audit retains G-2822's frozen native proof at 92b8a78f: initially six
 ConsistentReadCapture passes, two RequestReadBoundary failures and four
@@ -362,19 +387,20 @@ proof. Small main batches need affected checks and codex-1/xhigh review;
 coordinate publication. Final full regression/confirmation precedes wave merge.
 
 Checkpoint measures: first attempts 9/14 (64%; today 3/8, 38%); landed median
-4.5 attempts, maximum 41 (G-2823); 94.9M input/825.2k output; tokens per proved
+4.5 attempts, maximum 41 (G-2823); 100.2M input/874.2k output; tokens per proved
 row unavailable. Tool counts include job wakes and open partial-landing
-continuations. Four environment attempts, one step continuation and five fixes;
-85 job wakes: 30 passes, 35 assertion failures, two environment failures,
-16 harness failures and two unclassified. The common history/setup cause remains
+continuations. Five environment attempts, one step continuation and five fixes;
+89 job wakes: 33 passes, 35 assertion failures, two environment failures,
+17 harness failures and two unclassified. The common history/setup cause remains
 with G-2842; event-23's backup-location cause received supported checkout-local
-custody rather than another setup experiment. G-2823 owns bounded fixture
-recovery and causal cleanup repair. The
+custody rather than another setup experiment. Event-29's storage-reader harness
+cause was corrected through the existing owner reader in the accepted finite
+comparison. G-2823 owns bounded fixture recovery and causal cleanup repair. The
 unclassified wakes and one retained other-kind refusal still need tooling
-disposition. The two successful manager turns for the covered events recorded
-3,175,207 input/29,460 output tokens, including 3,001,216 cached input. These
+disposition. The three successful manager turns for the covered events recorded
+6,097,532 input/38,138 output tokens, including 5,801,600 cached input. These
 exclude this checkpoint and do not establish a comparable manager/worker share.
-Product has one live worker and two open tasks.
+Product has no live worker and two open tasks.
 Latest recorded efficiency window remains 2026-10-18T08:36:08Z–20:36:08Z:
 552.47M processed input, 527.63M cached; 37% other-session share cannot establish
 manager-only share and omits older-started sessions. No comparable savings or
@@ -385,10 +411,10 @@ Next event owners: product consumes G-2823's identified-fixture/causal handoff,
 requires demonstrated cleanup repair and reviewed follow-up landing, then
 executes delegated normal refresh and finishes runtime proof. Audit consumes
 G-2825's landed report and fixture through G-2829's separate Settings repair
-prerequisite and routes residual site acceptance to existing owners. Program has
-the G-2826 correction retiring the unstarted partial-landing request. Product
-consumes the already resumed worker's finite context-selection preservation
-handoff before a composed landing decision; no new D5-006 proof or review is due.
+prerequisite and routes residual site acceptance to existing owners. Product
+starts G-2826's accepted single composed landing against decision f1792f86d9,
+with the remaining test/report review and affected gates, then consumes its
+landing-result mail before closing verified. No new D5-006 proof or review is due.
 Site still owes G-2842's landed identity. Preserve G-2826's accepted runtime
 evidence and its distinct setup and over-budget preparation failures.
 Audit retains finding closure, focused native fixes and
