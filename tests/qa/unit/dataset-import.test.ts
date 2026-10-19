@@ -1837,18 +1837,22 @@ test('development auth registers and installs a public client, consents and exch
       expect(new Headers(init?.headers).get('x-account-reason')).toBeTruthy();
       const body = JSON.parse(String(init?.body));
       expect(body).not.toHaveProperty('skip_consent');
+      expect(body.scope.split(' ')).toEqual(expect.arrayContaining(['source:convert', 'source:adopt']));
       return response({ client_id: 'public-dataset-client' }, 201);
     }
     if (url.pathname === '/api/account/installations/public-dataset-client')
       return response({ error: 'not_found' }, 404);
     if (url.pathname === '/api/account/installation-changes') {
-      expect(JSON.parse(String(init?.body))).toHaveProperty('change', 'install');
+      const body = JSON.parse(String(init?.body));
+      expect(body).toHaveProperty('change', 'install');
+      expect(body.scopes).toEqual(expect.arrayContaining(['source:convert', 'source:adopt']));
       return response({ state: 'active' });
     }
     if (url.pathname === '/api/account/policies')
       return response({ acceptanceRequired: false, policies: [] });
     if (url.pathname === '/api/auth/oauth2/authorize') {
       expect(url.searchParams.get('code_challenge_method')).toBe('S256');
+      expect(url.searchParams.get('scope')?.split(' ')).toEqual(expect.arrayContaining(['source:convert', 'source:adopt']));
       return new Response(null, {
         status: 302,
         headers: {
@@ -1880,11 +1884,14 @@ test('development auth registers and installs a public client, consents and exch
       }
       return response({ status: 'activated' }, 201);
     }
-    if (url.pathname === '/v1/agents') return response({ agent: iri(7777), state: 'active' }, 201);
+    if (url.pathname === '/v1/agents') {
+      expect(new Headers(init?.headers).get('idempotency-key')).toBe(`dataset-operator:${sha256(userId)}`);
+      return response({ agent: iri(7777), state: 'active' }, 201);
+    }
     throw new Error(`Unexpected auth route ${url.pathname}`);
   }) as typeof fetch;
   const scope =
-    'openid agent:create work:create work:edit work:read source:intake source:read classification:define classification:decide statement:write semantic:read rights:assess';
+    'openid agent:create work:create work:edit work:read source:intake source:read source:convert source:adopt classification:define classification:decide statement:write semantic:read rights:assess';
   const clientPath = join(
     repository,
     '.temp/datasets',
