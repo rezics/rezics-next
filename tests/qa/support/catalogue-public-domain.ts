@@ -3,7 +3,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { createCorpusBackupDriver } from '../../../scripts/load/corpus-backup-driver.ts';
-import { publicDomainBaseline, privateRecipeText, type PublicDomainCorpus,
+import type { AuditFilePin } from '../fixtures/audit-corpus-contract.ts';
+import { publicDomainBaseline, privateRecipeText, assertPublicDomainOriginalWorks, assertPublicDomainNativeCreation, type PublicDomainCorpus,
   type PublicRecipe, type RecipePage, type SourceQuote } from '../fixtures/catalogue-public-domain.ts';
 import { grantPersonaFixtureAuthority } from './persona-fixture-authority.ts';
 import { assertAuditExecution } from './audit-execution.ts';
@@ -37,6 +38,30 @@ function sourceQuote(quote: SourceQuote): void {
     throw new Error(`Public corpus quote is absent from frozen source: ${quote.file}`);
 }
 
+function admissionJson(pin: AuditFilePin, label: string): unknown {
+  if (!pin || typeof pin.file !== 'string' || typeof pin.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(pin.sha256))
+    throw new Error(`TEST PREMISE: ${label} needs an existing producer file/digest pin`);
+  try {
+    const bytes = readFileSync(localFile(pin.file));
+    if (createHash('sha256').update(bytes).digest('hex') !== pin.sha256) throw new Error('digest differs');
+    return JSON.parse(bytes.toString('utf8'));
+  } catch (error) {
+    throw new Error(`TEST PREMISE: ${label} pinned evidence is invalid: ${pin.file}`, { cause: error });
+  }
+}
+
+/** Fixture admission only; genuine source, rights, structure and publication checks still follow. */
+export function assertPublicDomainWorkAdmission(corpus: Pick<PublicDomainCorpus, 'originals' | 'importedWorks'>,
+  targets: ReadonlyArray<Pick<PublicRecipe, 'work' | 'creationReceipt'> & { mainVersion?: string }>): void {
+  assertPublicDomainOriginalWorks(corpus.importedWorks, admissionJson(corpus.originals, 'original 113 association ledger'));
+  for (const target of targets) {
+    if (corpus.importedWorks.includes(target.work) && target.creationReceipt === undefined) continue;
+    const pin = target.creationReceipt;
+    if (!pin) throw new Error(`TEST PREMISE: additional native Work ${target.work} is missing its creation receipt`);
+    assertPublicDomainNativeCreation(target, admissionJson({ file: pin.path, sha256: pin.sha256 }, 'native creation receipt'));
+  }
+}
+
 export function loadPublicDomainCorpus(): PublicDomainCorpus {
   const path = '.temp/goal/public-domain-corpus.json';
   if (!existsSync(path)) throw new Error(`TEST PREMISE: missing ${path}; prepare one isolated command-created corpus `
@@ -53,10 +78,11 @@ export function loadPublicDomainCorpus(): PublicDomainCorpus {
   if (corpus.importedWorks.length !== 113 || new Set(corpus.importedWorks).size !== 113)
     throw new Error('TEST PREMISE: retain all 113 original imported Work identities');
   const recipes = [corpus.richRecipe, corpus.noNutritionRecipe, ...corpus.nutritionRecipes];
+  assertPublicDomainWorkAdmission(corpus, [...recipes, corpus.book]);
   for (const item of recipes) {
-    if (!corpus.importedWorks.includes(item.work) || !item.source.author || !item.source.observation
+    if (!item.source.author || !item.source.observation
       || !item.ingredients.length || !item.steps.length)
-      throw new Error('TEST PREMISE: real recipes need original identity, source attribution and nonempty structure');
+      throw new Error('TEST PREMISE: real recipes need source attribution and nonempty structure');
     const serving = item.measures.find(measure => measure.value.kind === 'servings')?.value.value;
     if (!serving || serving.numerator <= 0 || serving.denominator <= 0
       || new Set(item.order).size !== item.order.length
@@ -90,10 +116,10 @@ export function loadPublicDomainCorpus(): PublicDomainCorpus {
   if (!corpus.nutritionRecipes.some(item => item.substitutions.length))
     throw new Error('TEST PREMISE: missing author-declared exact substitute occurrence evidence');
   const book = corpus.book;
-  if (!corpus.importedWorks.includes(book.work) || book.releases.length < 2 || book.chapters.length < 2
+  if (book.releases.length < 2 || book.chapters.length < 2
     || book.chapters.some(chapter => chapter.bodyText.length < 200
       || !chapter.body.exact.replace(/\s+/gu, ' ').includes(chapter.bodyText.replace(/\s+/gu, ' ').trim())))
-    throw new Error('TEST PREMISE: real Book needs original identity, genuine releases and meaningful chapter bodies');
+    throw new Error('TEST PREMISE: real Book needs genuine releases and meaningful chapter bodies');
   for (const evidence of [book.description.evidence, book.author.evidence,
     ...book.releases.map(item => item.evidence), ...book.chapters.map(item => item.body)]) sourceQuote(evidence);
   return corpus;
