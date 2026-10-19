@@ -79,7 +79,7 @@ export const Latest: Story = {
       }),
     ).toHaveAttribute('href', localizedPath(spaceHref('fiction', 'community'), 'en'));
     await expect(rows[0]).toHaveTextContent('in Fiction · 小说');
-    await expect(canvas.getByText('Aria Wang 王雅')).toBeVisible();
+    await expect(canvas.getByRole('heading', { level: 2, name: 'Aria Wang 王雅' })).toBeVisible();
     await expect(canvas.getByText('Followed you')).toBeVisible();
     await expect(canvas.getByText('This notification is no longer available.')).toBeVisible();
     await expect(canvas.getAllByText('Unread')).toHaveLength(3);
@@ -100,7 +100,7 @@ export const MoreOnRequest: Story = {
     await expect(newest).toHaveTextContent('Also: chapter four is up!');
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
     await expect(await canvas.findByText('Followed you')).toBeVisible();
-    await expect(canvas.getByText('Aria Wang 王雅')).toBeVisible();
+    await expect(canvas.getByRole('heading', { level: 2, name: 'Aria Wang 王雅' })).toBeVisible();
     await expect(canvas.getAllByRole('listitem')[0]).toBe(newest);
     await expect(canvas.getAllByRole('listitem').at(-1)).toHaveTextContent('This notification is no longer available.');
     await expect(args.calls).toEqual(['page:older:1:105:50']);
@@ -172,12 +172,12 @@ export const ContinuationReset: Story = {
   async play({ canvasElement, args }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByText('Followed you')).toBeVisible();
-    await expect(canvas.getByText('Aria Wang 王雅')).toBeVisible();
+    await expect(canvas.getByRole('heading', { level: 2, name: 'Aria Wang 王雅' })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
     await expect(await canvas.findByRole('link', { name: 'A correction was revised' })).toBeVisible();
     await expect(canvas.getAllByRole('listitem')).toHaveLength(1);
     await expect(canvas.queryByText('Followed you')).toBeNull();
-    await expect(canvas.queryByText('Aria Wang 王雅')).toBeNull();
+    await expect(canvas.queryByRole('heading', { level: 2, name: 'Aria Wang 王雅' })).toBeNull();
     await expect(canvas.getByText('Unread')).toBeVisible();
     await expect(canvas.queryByRole('button', { name: 'Show more' })).toBeNull();
     await userEvent.click(canvas.getByRole('button', { name: 'Mark all as read' }));
