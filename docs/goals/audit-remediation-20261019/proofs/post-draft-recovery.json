@@ -15,7 +15,9 @@
     "recordedJobImplementation": "main checkout scripts/goal/goalctl.ts, as explicitly requested; commands run from worker root",
     "mainHeadObservedAtReportPreparation": "2dcaf19d79ff6ace7c4b631f5416ef389f13fbb2",
     "originalSourceUnchanged": true,
-    "supplementalTestPin": "Private harness copies with sha256 in bundle manifest; product/original tests remain at exact product pin."
+    "supplementalTestPin": "Private harness copies with sha256 in bundle manifest; product/original tests remain at exact product pin.",
+    "reportBaseAfterAdministrativeRebase": "2dcaf19d79ff6ace7c4b631f5416ef389f13fbb2",
+    "reportCommitChecked": "43036a454eecc204bc1e155d121aea1110d9e1fb"
   },
   "isolation": {
     "productCheckout": ".temp/post-draft-product",
@@ -382,7 +384,36 @@
     ]
   },
   "administrativeChecks": {
-    "status": "pending recorded docs:check and goal check after report commit; no brief tests specified"
+    "status": "passed",
+    "job": "4fb4af12-226b-41ad-ab80-85f0d4c05bc8",
+    "recordingWrapper": [
+      "bun",
+      "/home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts",
+      "job",
+      "--then",
+      "task goal -- check",
+      "--",
+      "task docs:check"
+    ],
+    "steps": [
+      {
+        "command": "task docs:check",
+        "exitStatus": 0,
+        "result": "13 checker tests passed; 236 Markdown files checked; links/fragments/navigation. No runtime claim."
+      },
+      {
+        "command": "task goal -- check",
+        "exitStatus": 0,
+        "result": "types/lint: no source changed; tests: no test files named in brief; ast passed; guards passed (1/44 selected for changed report path)."
+      }
+    ],
+    "output": ".temp/goal/check/run-sslzeQ/output.log",
+    "automaticReportRebase": {
+      "before": "b4b1bb006f148f09fc4a5d9f0faa8026ce5c5f44",
+      "after": "43036a454eecc204bc1e155d121aea1110d9e1fb",
+      "note": "goal check automatically rebased the administrative report worktree onto main and ran task install. Independent product checkout stayed clean at 92b8a78f1cb06fb4a02703f2b471b80d1d069199; no product rerun or regression claim."
+    },
+    "commitMaintenance": "Initial report commit succeeded; automatic pack-refs printed a reference-transaction hook rejection. No manual ref maintenance performed. Subsequent required checks passed."
   },
   "next": [
     "Keep D2-003 open; route snapshot rollback/current-text loss to G-2748 with original failure and matrix evidence.",
@@ -394,5 +425,6 @@
   "harnessWarnings": [
     "Failed to resolve dependency: @storybook/react-dom-shim, present in client optimizeDeps.include (persists as warning after successful local install; not itself the later assertion failure).",
     "QA acceptance coverage remains unqualified; targeted pass is not full regression or durable backend acceptance."
-  ]
+  ],
+  "recordedAt": "2026-10-19T05:24:00Z"
 }
