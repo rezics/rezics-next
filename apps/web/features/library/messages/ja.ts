@@ -2,6 +2,7 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { LibraryMessages } from '../messages.ts';
 
 export default {
+  libraryTools: '目標・統計・インポートとエクスポート',
   title: 'ライブラリ',
   description: '本棚と、読書中の作品、持っている本、記録した貸し借りをまとめて管理できます。',
   workCount: plural({ one: insert('{{count}}作品'), other: insert('{{count}}作品') }, { count: asValue(number()) }),
