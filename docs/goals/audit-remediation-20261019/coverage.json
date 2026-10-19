@@ -169,9 +169,18 @@
       "severity": "P1",
       "sourceConfidence": "intermittent",
       "title": "一次 SSR useState 异常使开发错误遮罩盖住 Discover",
-      "status": "build-dispatched",
+      "status": "closed",
       "owner": "G-2747",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "AUD-006",
+          "assessedMain": "6430441893f5c3609efd97b3921a21a85eab0707",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     },
     {
       "id": "D2-003",
@@ -232,9 +241,18 @@
       "severity": "P1",
       "sourceConfidence": "confirmed",
       "title": "发帖把一次尝试当作已提交内容，写入前失败也锁死草稿",
-      "status": "build-dispatched",
+      "status": "closed",
       "owner": "G-2748",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "D2-002",
+          "assessedMain": "6430441893f5c3609efd97b3921a21a85eab0707",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     },
     {
       "id": "D3-001",
@@ -423,9 +441,18 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "手机详情导航浮层缺少 Escape、外点关闭与一致的焦点行为",
-      "status": "build-briefed",
+      "status": "closed",
       "owner": "G-2757",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "D1-002",
+          "assessedMain": "6430441893f5c3609efd97b3921a21a85eab0707",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     },
     {
       "id": "D1-003",
@@ -441,9 +468,18 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "非书籍散文正文沿用全宽容器，指南缺少阅读行宽",
-      "status": "build-briefed",
+      "status": "closed",
       "owner": "G-2757",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "D1-005",
+          "assessedMain": "6430441893f5c3609efd97b3921a21a85eab0707",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     },
     {
       "id": "D2-005",
@@ -553,9 +589,18 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "Home把获客横幅与空侧栏放在内容之前，首屏没有证明值得关注什么",
-      "status": "build-briefed",
+      "status": "closed",
       "owner": "G-2752",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "D4-011",
+          "assessedMain": "6430441893f5c3609efd97b3921a21a85eab0707",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     },
     {
       "id": "D4-014",

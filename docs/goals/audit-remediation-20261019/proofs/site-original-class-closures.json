@@ -1,8 +1,8 @@
 {
-  "recordedAt": "2026-10-19T10:12:05.984284+00:00",
+  "recordedAt": "2026-10-19T11:08:00.051108+00:00",
   "manager": "site",
   "goal": "audit-remediation-20261019",
-  "assessedMain": "82df58d2ba1d9d377b591126e7f4dfa42f27f02e",
+  "assessedMain": "6430441893f5c3609efd97b3921a21a85eab0707",
   "basis": "Original applicable acceptance and assertions, without adding unrelated classes or full-domain journeys. Product-audit class tracing applied; unchanged exact proof reused.",
   "findings": [
     {
@@ -1224,6 +1224,1057 @@
           "Other complete Settings journeys or full-domain personas",
           "New screen-reader heard-speech recording requirement"
         ]
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "id": "AUD-006",
+      "status": "closed",
+      "acceptedAt": "2026-10-19T10:40:32.331391+00:00",
+      "main": "87c7c6c8f94aa04dc822864fcfc7ae656254dcdb",
+      "productCommit": "ef5aa531bc144b5db45514acea377819d929e438",
+      "originalAcceptanceVerbatim": [
+        "匿名首页→Discover→搜索往返及多断点重复导航无同类SSR hook异常、client-render fallback或开发遮罩；开发态和生产构建分别检查。仅关闭遮罩不通过。"
+      ],
+      "skill": {
+        "skill": ".agents/skills/product-audit/SKILL.md",
+        "activity": "Read-only invariant-level closure assessment of original anonymous runtime journeys; no new job, review, source edit or ledger change.",
+        "job": "Anonymous visitor repeatedly navigates Home→Discover→search and returns across breakpoints, in independent development and production runs.",
+        "invariant": "No same-class SSR hook exception, client-render fallback or covering development overlay; product errors remain visible."
+      },
+      "originalAssertionsChanged": false,
+      "independentReview": {
+        "task": "G-2847",
+        "trackedReport": {
+          "path": "docs/goals/audit-remediation-20261019/proofs/startup-navigation-review.json",
+          "sha256": "a4df573663ceab662b87b521b60f3790cb4cdf4aab445cb8f89387442d9b867b",
+          "bytes": 74738
+        },
+        "reviewer": {
+          "engine": "codex-1",
+          "model": "gpt-6.1-sol",
+          "effort": "xhigh",
+          "independent_source_review": true,
+          "nested_agents": false,
+          "fallback_reviewer": false
+        },
+        "sourceVerdict": "complete for the actual selective candidate; no new confirmed startup/navigation source defect found",
+        "reviewedCandidate": "a27bcfc6bad849dd912cbd3f721de5defeba1c86",
+        "sourceManifest": {
+          "path": ".temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/source-review-manifest.json",
+          "sha256": "f4772325099614456791f2179b8b9be442a6ad1128b9b0768842600acd949486",
+          "bytes": 9388
+        },
+        "exactReviewedRows": [
+          {
+            "path": "apps/web/tests/dependency-environments.test.ts",
+            "candidate_blob": "dec30ba944d262bdb2c78f8477dd282fe10acf12",
+            "review": "independently inspected candidate source/diff"
+          },
+          {
+            "path": "apps/web/vite.config.ts",
+            "candidate_blob": "5340e037be04b55b3499adb537984ee440edcb61",
+            "review": "independently inspected candidate source/diff"
+          },
+          {
+            "path": "scripts/qa/repository-guards.ts",
+            "candidate_blob": "d631175d52be9d6b5ce3a9928425cf3b42145db9",
+            "review": "independently inspected candidate source/diff"
+          }
+        ],
+        "selectedCommitProvenance": {
+          "source": "4fa4cbd1692bd7a701e6bdf993d56fdb43175635",
+          "candidate": "d301d2a6bbc30e24626ab911346f55061b8415a0",
+          "reason": "React environment dependency optimization"
+        },
+        "classAssessment": "Pure proposal selector shared between route/client; native escaped recovery avoids the eager server renderer at Worker startup; browser dependencies scoped to client and pure localization/style dependencies prebundled in both server environments. Providers product source unchanged; repeated isolated SSR test cannot identify the original intermittent cause.",
+        "historicalLimit": "The original report did not grant whole-site closure. Reuse here is only its already completed source review for these exact blobs. Later real G2825 proof is separate; current private401/403 and other navigation classes are not optimizer slice dependencies."
+      },
+      "assertionResults": [
+        {
+          "original": "Anonymous Home→Discover→search round trip and repeated breakpoints",
+          "result": "PASS",
+          "evidence": "Each mode:16 actual five-step journeys,2 widths×2 locales×2 actual themes×2 repeats; expected and visited URLs match."
+        },
+        {
+          "original": "No same SSR hook exception/client-render fallback/development overlay",
+          "result": "PASS",
+          "evidence": "Both modes:80/80 runtimeClean;32 captured SSR documents each have no SSR failure marker/error template;80 settled visit observations each have no fallback markers, pageerror or overlay.48 client transitions per mode have no document Response and are not relabelled independent SSR/HTTP200."
+        },
+        {
+          "original": "Development and production checked separately",
+          "result": "PASS",
+          "evidence": "Distinct development-followup and production-followup raw results at196a. Actual historical production task web:build and ready production execution are in site-runtime-optimizer-candidate.json."
+        },
+        {
+          "original": "Cannot pass by disabling overlay only",
+          "result": "PASS",
+          "evidence": "Independent G2847 source review plus exact two-path optimizer/test slice. Configuration scopes dependency graphs and prepares pure helpers; it does not suppress overlays or swallow render exceptions."
+        }
+      ],
+      "evidenceReceipt": ".temp/audit-remediation-20261019/two-hour-sprint/site-AUD-006-original-acceptance.json",
+      "proofCommit": "271b7e40b3713782eec2148443c0e3b53f65a059",
+      "verifiedActualMainDependencyBlobs": [
+        {
+          "path": "apps/web/vite.config.ts",
+          "blobs": {
+            "87c7c6c8f94aa04dc822864fcfc7ae656254dcdb": "5340e037be04b55b3499adb537984ee440edcb61",
+            "196a6f4a98413857dbf3e178d05ef65415035f29": "5340e037be04b55b3499adb537984ee440edcb61",
+            "177a52f74a4e2ed215a85eff7450786e9d2bd69b": "5340e037be04b55b3499adb537984ee440edcb61"
+          },
+          "exact": true
+        },
+        {
+          "path": "apps/web/tests/dependency-environments.test.ts",
+          "blobs": {
+            "87c7c6c8f94aa04dc822864fcfc7ae656254dcdb": "dec30ba944d262bdb2c78f8477dd282fe10acf12",
+            "196a6f4a98413857dbf3e178d05ef65415035f29": "dec30ba944d262bdb2c78f8477dd282fe10acf12",
+            "177a52f74a4e2ed215a85eff7450786e9d2bd69b": "dec30ba944d262bdb2c78f8477dd282fe10acf12"
+          },
+          "exact": true
+        },
+        {
+          "path": "scripts/qa/repository-guards.ts",
+          "blobs": {
+            "87c7c6c8f94aa04dc822864fcfc7ae656254dcdb": "d631175d52be9d6b5ce3a9928425cf3b42145db9",
+            "196a6f4a98413857dbf3e178d05ef65415035f29": "d631175d52be9d6b5ce3a9928425cf3b42145db9",
+            "177a52f74a4e2ed215a85eff7450786e9d2bd69b": "d631175d52be9d6b5ce3a9928425cf3b42145db9"
+          },
+          "exact": true
+        },
+        {
+          "path": "yarn.lock",
+          "blobs": {
+            "87c7c6c8f94aa04dc822864fcfc7ae656254dcdb": "239124b3f025a9beeb23d08d75adfbdbcc18c366",
+            "196a6f4a98413857dbf3e178d05ef65415035f29": "239124b3f025a9beeb23d08d75adfbdbcc18c366",
+            "177a52f74a4e2ed215a85eff7450786e9d2bd69b": "239124b3f025a9beeb23d08d75adfbdbcc18c366"
+          },
+          "exact": true
+        },
+        {
+          "path": "package.json",
+          "blobs": {
+            "87c7c6c8f94aa04dc822864fcfc7ae656254dcdb": "5b83cc84bb8984bbb72f1056d2ecc9463973fde3",
+            "196a6f4a98413857dbf3e178d05ef65415035f29": "5b83cc84bb8984bbb72f1056d2ecc9463973fde3",
+            "177a52f74a4e2ed215a85eff7450786e9d2bd69b": "5b83cc84bb8984bbb72f1056d2ecc9463973fde3"
+          },
+          "exact": true
+        },
+        {
+          "path": "apps/web/package.json",
+          "blobs": {
+            "87c7c6c8f94aa04dc822864fcfc7ae656254dcdb": "788bd74341217c9fb7f655e00ccd902d64210f5b",
+            "196a6f4a98413857dbf3e178d05ef65415035f29": "788bd74341217c9fb7f655e00ccd902d64210f5b",
+            "177a52f74a4e2ed215a85eff7450786e9d2bd69b": "788bd74341217c9fb7f655e00ccd902d64210f5b"
+          },
+          "exact": true
+        },
+        {
+          "path": ".yarnrc.yml",
+          "blobs": {
+            "87c7c6c8f94aa04dc822864fcfc7ae656254dcdb": "18e7483343c144cd6b21f5c31726b973198d333c",
+            "196a6f4a98413857dbf3e178d05ef65415035f29": "18e7483343c144cd6b21f5c31726b973198d333c",
+            "177a52f74a4e2ed215a85eff7450786e9d2bd69b": "18e7483343c144cd6b21f5c31726b973198d333c"
+          },
+          "exact": true
+        },
+        {
+          "path": "scripts/ops/production-env.ts",
+          "blobs": {
+            "87c7c6c8f94aa04dc822864fcfc7ae656254dcdb": "b5b467ec55e54bc578a8c37661b69ab8677de177",
+            "196a6f4a98413857dbf3e178d05ef65415035f29": "b5b467ec55e54bc578a8c37661b69ab8677de177",
+            "177a52f74a4e2ed215a85eff7450786e9d2bd69b": "b5b467ec55e54bc578a8c37661b69ab8677de177"
+          },
+          "exact": true
+        },
+        {
+          "path": "apps/web/features/shell/providers.tsx",
+          "blobs": {
+            "87c7c6c8f94aa04dc822864fcfc7ae656254dcdb": "dc0acd499702f3f6c524fb3ed1eb9790b717e151",
+            "196a6f4a98413857dbf3e178d05ef65415035f29": "dc0acd499702f3f6c524fb3ed1eb9790b717e151",
+            "177a52f74a4e2ed215a85eff7450786e9d2bd69b": "dc0acd499702f3f6c524fb3ed1eb9790b717e151"
+          },
+          "exact": true
+        }
+      ],
+      "limits": {
+        "productionFalseFlags": 14,
+        "meaning": "The raw keyboardHydrated oracle is false on14 production visits. Those observations have no captured pageerror, fallback marker or overlay and remain runtimeClean. They do not establish universal keyboard hydration or absence of unrelated interaction defects. The original canonical runtime error criterion does not require this independent boolean to be true on every observation.",
+        "emptyMain": "One production back-home DOM snapshot (0041-history-390-zh-Hans-dark-2-back-home) has empty main/headings while keyboardHydrated=true and no captured error/marker/overlay. Preserve this limit; do not claim all160 snapshots prove complete visible content or data success."
+      },
+      "plannedRegressionDistinction": {
+        "sitePlanRegressionAssertions": [
+          {
+            "id": "AUD-006/assertion-1",
+            "assert": "Repeated Home -> Discover -> search -> Books navigation across audit breakpoints has no useState/server-render fallback, pageerror or development overlay."
+          },
+          {
+            "id": "AUD-006/assertion-2",
+            "assert": "Development and production are checked independently; capture and diagnose the parentNode follow-up instead of asserting a shared cause."
+          },
+          {
+            "id": "AUD-006/assertion-3",
+            "assert": "Do not pass by suppressing the overlay or swallowing the underlying render exception."
+          }
+        ],
+        "Books": "The16 follow-up cycles execute Home→Discover→search→back Discover→back Home. No Books URL appears in retained initial/follow-up visits, so do not describe them as a Home→Discover→search→Books run. Books was added in site-plan regression wording, not the verbatim canonical acceptance; it is not used as an unrelated hold on original runtime closure.",
+        "parentNode": "No pageerror, parentNode or same hook/fallback event appears in these runs. Existing historical parentNode observation remains distinct; no shared-root-cause claim is made."
+      },
+      "missingOriginalAssertions": [],
+      "recording": "Append class closure JSON+coverage after alreadycaptured0243 Settingsclosurelands; no passing product rerun required.",
+      "assessedMain": "6430441893f5c3609efd97b3921a21a85eab0707",
+      "closureRecordedAt": "2026-10-19T11:08:00.051108+00:00",
+      "canonicalSource": ".temp/site-audit-2026-10-18/round-3/all-findings.json#issues[id=AUD-006]",
+      "closureIntentProvenance": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-AUD-006-accepted-closure.json",
+        "sha256": "8c06738210f707e6e24f90b33332b44e98b449531b8537bb59d780b4efd272e3"
+      },
+      "bookkeeping": "Manager accepted closure integrated through normal Task snapshot; unchanged passing original proof reused, no new runtime or independent review."
+    },
+    {
+      "schemaVersion": 1,
+      "id": "D4-011",
+      "status": "closed",
+      "acceptedAt": "2026-10-19T10:56:39.964668+00:00",
+      "main": "e9bff8c44b5317168b38c954b405938b458bd1e1",
+      "productCommit": "d3650f3e2c0e5e98ff6d5f8e3984ccc4f0ee5e41",
+      "originalAcceptanceVerbatim": [
+        "匿名390×844保留必要导航后，首屏能完整扫读至少两条有标题及有效预览的内容，再决定关注/注册；Welcome可压缩、放后或按用户选择展开。",
+        "1440下无可推荐rail不保持大片空配额；主列保持适宜行长并增加有用内容或清楚的内容分组。",
+        "全局加入与逐行关注有清楚主次，关键内容不靠关闭提示才能出现。"
+      ],
+      "originalAssertionsChanged": false,
+      "skill": ".agents/skills/product-audit/SKILL.md",
+      "evidence": {
+        "closureMap": ".temp/audit-remediation-20261019/two-hour-sprint/site-D4-011-original-closure-map-d365.json",
+        "sha256": "91748125ca79809c98d90f5047a7e590407ba7627cc005759f73446b5a1f4f7c",
+        "independentProof": {
+          "owner": "G-2831",
+          "account": "codex-1",
+          "model": "gpt-6.1-sol",
+          "effort": "xhigh",
+          "fallback": false,
+          "actualReportPin": "2e17ba24ef1c497d835d99dec4e01a846a4b3c4b",
+          "mainProofBlob": "4d0e6665a6dc2a93269ddeee529235915a3851bb",
+          "testedProductPin": "ea211df7617b5dddf6e086d597c9a6f48ea2474b",
+          "compatibleGenuineBackend": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+          "proofPath": "docs/goals/audit-remediation-20261019/proofs/reading-home.json",
+          "actualReportByteEqualMain": true,
+          "native3suitesNotRelevant": true
+        },
+        "originalCriterionWitnesses": [
+          {
+            "criterion": 1,
+            "originalVerbatim": "匿名390×844保留必要导航后，首屏能完整扫读至少两条有标题及有效预览的内容，再决定关注/注册；Welcome可压缩、放后或按用户选择展开。",
+            "status": "PASS with original applicable evidence and exact landed Home source",
+            "witness": "Original unchanged independent anonymous Home390 test at rendered.spec.ts:105 checks both titles and both previews fully between actual header and phone navigation. Genuine anonymous GET200 returns4actualarticles at source11923; retained phonePNG personally viewed again at this manager reconciliation shows first2complete titled previews without dismissal. Welcome follows the feed.",
+            "evidenceRefs": [
+              "latestVerification.qa.unchangedIndependentRendered",
+              "latestVerification.liveEvidence.anonymousFeed",
+              "runtime/home-390.json",
+              "settled-live/anonymous-feed.json",
+              "settled-live/anonymous-home-390.png",
+              "source/live-api-identities.json"
+            ]
+          },
+          {
+            "criterion": 2,
+            "originalVerbatim": "1440下无可推荐rail不保持大片空配额；主列保持适宜行长并增加有用内容或清楚的内容分组。",
+            "status": "PASS with original applicable evidence and exact landed Home source",
+            "witness": "Original unchanged independent1440 Home test proves railContent=false, a single grid column and Posts width<=736px. Actual desktopPNG has useful API-backed main content with no reserved empty recommended rail. HomePage data marker uses presence of useful Rail content; exact source is on main.",
+            "evidenceRefs": [
+              "latestVerification.qa.unchangedIndependentRendered",
+              "runtime/home-layout-1440.json",
+              "runtime/home-1440.json",
+              "settled-live/anonymous-home-1440.png",
+              "apps/web/features/home/home-page.tsx",
+              "apps/web/features/home/rail.tsx"
+            ]
+          },
+          {
+            "criterion": 3,
+            "originalVerbatim": "全局加入与逐行关注有清楚主次，关键内容不靠关闭提示才能出现。",
+            "status": "PASS with original applicable evidence and exact landed Home source",
+            "witness": "Exact reviewed HomePage renders posts before Welcome; compact Welcome global join/sign-in actions are secondary. Two useful previews already fit without closing a notice; per-row Follow remains adjacent to its community. Original Home composition units and supplied Home story assertions pass; retained actual phone/desktop images show content first and necessary nav sign-in retained.",
+            "evidenceRefs": [
+              "latestVerification.sourceReview",
+              "latestVerification.qa.suppliedSelection",
+              "apps/web/features/home/home-page.test.tsx",
+              "apps/web/features/home/home-page.stories.tsx",
+              "apps/web/features/home/welcome.tsx",
+              "settled-live/anonymous-home-390.png",
+              "settled-live/anonymous-home-1440.png"
+            ]
+          }
+        ]
+      },
+      "rootManagerPersonallyViewedExistingScreenshots": [
+        "settled-live/anonymous-home-390.png",
+        "settled-live/anonymous-home-1440.png"
+      ],
+      "remainingOriginalAssertions": [],
+      "bookkeeping": "Manager accepted closure integrated through normal Task snapshot; unchanged passing original proof reused, no new runtime or independent review.",
+      "assessedMain": "6430441893f5c3609efd97b3921a21a85eab0707",
+      "closureRecordedAt": "2026-10-19T11:08:00.051108+00:00",
+      "canonicalSource": ".temp/site-audit-2026-10-18/round-3/all-findings.json#issues[id=D4-011]",
+      "closureIntentProvenance": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-D4-011-accepted-closure.json",
+        "sha256": "6a679440e55af5fb14577e087c865adbcf271df1dad304e77e3c366991549be2"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "id": "D2-002",
+      "status": "closed",
+      "acceptedAt": "2026-10-19T11:02:32.971567+00:00",
+      "authority": "Root manager explicitly accepted the original three criteria in this continuation and instructed this temp intent; no closure bookkeeping performed here.",
+      "main": "e9bff8c44b5317168b38c954b405938b458bd1e1",
+      "productCommit": "e9bff8c44b5317168b38c954b405938b458bd1e1",
+      "originalAcceptanceVerbatim": [
+        "在首个服务端变更前的任何读取失败后，全部草稿字段仍可编辑，且可以取消或重新选择目标；不要求清除浏览器存储。",
+        "已有变更时按确切回执/阶段限制可修改字段，并提供保留文字的取消或安全续做；同键重试不重复贴文。",
+        "失败后刷新并恢复身份时能继续编辑或明确取消；1440 与 390 布局均可键盘/触控完成。"
+      ],
+      "originalAssertionsChanged": false,
+      "skill": ".agents/skills/product-audit/SKILL.md",
+      "evidence": {
+        "closureMap": ".temp/audit-remediation-20261019/two-hour-sprint/site-D2-002-original-closure-map-e9bff8.json",
+        "sha256": "f2a860d9612ae9443e6190ae73297f0d0ce4e92fd845796d4f6738babbfa6ea4",
+        "independentProof": {
+          "owner": "G-2830",
+          "account": "codex-1",
+          "model": "gpt-6.1-sol",
+          "effort": "xhigh",
+          "fallback": false,
+          "actualReportPin": "885ee22cd9a8dcad0fcbb7fae83ff11d81ed43c4",
+          "mainProofBlob": "daf5ce270732ecbffb442de1bb64602e00bc08f6",
+          "testedProductPin": "dabebfed5276f2847ee763b8575a030edfc1b1ff",
+          "compatibleGenuineBackend": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+          "proofPath": "docs/goals/audit-remediation-20261019/proofs/post-draft-recovery.json",
+          "actualReportByteEqualMain": true
+        },
+        "originalCriterionWitnesses": [
+          {
+            "number": 1,
+            "id": "D2-002/assertion-1",
+            "originalAcceptance": "在首个服务端变更前的任何读取失败后，全部草稿字段仍可编辑，且可以取消或重新选择目标；不要求清除浏览器存储。",
+            "originalRegressionAssertion": "Before the first mutation, any prerequisite read failure leaves title, body, language, spoiler, community and Work editable and allows cancel/retarget.",
+            "status": "pass at frozen frontend/backend pins",
+            "evidence": [
+              "input-recovery/result.json: all eight allSixEditableBeforeWrite, failedIntentReload, naturalCancelAndContinue, languageSelectableDuringRecovery, workRetargetControl and communityRetargetControl outcomes",
+              "live/result.json: four preflightEditableCancelable outcomes; existing accepted source review and prerequisite-stage tests"
+            ],
+            "actualOutcome": "Original main-version selection prerequisite 503 is browser injected once before publication writes. All six fields remain editable/enabled before and after full reload of the failed intent. Cancel preserves the complete draft; title/body/language/spoiler changes and target controls work with natural keyboard and emulated touch.",
+            "boundary": "Failure injection reproduces the original prerequisite-read failure; it is not an actual backend outage. Zero publication mutations means no draft/identity/placement writes, not zero unrelated Main writes. Cancel-or-retarget is the original criterion; this adds no all-picker-results prerequisite. Existing genuine Community reselection four cases and Work selection/reload zh-Hans/1440 remain separate evidence."
+          },
+          {
+            "number": 2,
+            "id": "D2-002/assertion-2",
+            "originalAcceptance": "已有变更时按确切回执/阶段限制可修改字段，并提供保留文字的取消或安全续做；同键重试不重复贴文。",
+            "originalRegressionAssertion": "After a mutation receipt, restrictions and resume use the exact completed stage; safe exit retains the draft and retries reuse the same intent/key.",
+            "status": "pass at frozen frontend/backend pins",
+            "evidence": [
+              "live/result.json: four realAcknowledgedPlacementRetry outcomes from job b91a5aa4-c986-4dfe-923e-15f23001f283",
+              "receipt-inspection.json: exact operation/body/receipt equivalence and complete thread readback",
+              "Previously accepted source review and stage/receipt tests; retained rendered acknowledged-operation states"
+            ],
+            "actualOutcome": "One actual draft 201 and reply identity 201 per case. The actual placement 201 is captured, then its browser response is dropped. The failed attempt retains acknowledged stages and current text across full reload; Retry sends the same placement operation/key/body and returns genuine 200 replayed=true with matching reply, placement and revision. No additional draft/identity POST; a thread GET200 contains one matching complete document.",
+            "boundary": "Reuses four completed genuine publication cases and exact-receipt stage evidence; no new publication run. Scope is these acknowledged operations and readbacks, not a global duplicate count, backend restart or backup-restore durability claim. Browser transport interception does not fabricate backend receipts."
+          },
+          {
+            "number": 3,
+            "id": "D2-002/assertion-3",
+            "originalAcceptance": "失败后刷新并恢复身份时能继续编辑或明确取消；1440 与 390 布局均可键盘/触控完成。",
+            "originalRegressionAssertion": "Reload and desktop/mobile keyboard/touch recovery need no localStorage surgery, including restored pre-write failed intent.",
+            "status": "pass at frozen frontend/backend pins",
+            "evidence": [
+              "input-recovery/result.json: eight failedIntentReload, naturalCancelAndContinue and completeEditsAndLanguageSurviveReload outcomes",
+              "input-recovery/screenshots-viewed.json: twelve actual PNG inspections",
+              "input-recovery/source-equivalence.json: clean exact frontend and 26 retained authored fingerprints"
+            ],
+            "actualOutcome": "Supported sign-in validates the eligible actor; each owned context restores identity and the failed pre-write intent by full page reload. At 1440 and 390 in English and Simplified Chinese UI, keyboard Tab/Enter/Space or native emulated touch reaches Cancel, edits current title/body, selects zh-Hans content language, toggles spoiler, reloads the complete current document and opens destination search controls. No localStorage write/clear/surgery after initial fixture entry, no programmatic focus repair.",
+            "boundary": "Touch is Chromium hasTouch/isMobile emulation with Locator.tap, not physical hardware or a heard screen-reader test. Automatic Cancel focus remains BODY; natural Tab recovery completes and is the original assertion. Content language selection, editor lang and stored language survive reload; English UI remains English and Chinese UI remains Chinese."
+          }
+        ],
+        "exactSource26": true,
+        "materialExactTrees": 6,
+        "materialExactFiles": 24,
+        "sharedDifferences": "Explicit bounded compatible shell navigation, request lifetime/diagnostics and Account refresh differences in closure map; no stronger whole-tree byte-equality claim.",
+        "verifiedEvidenceEntries": 424,
+        "bundleManifests": [
+          {
+            "path": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/artifact-manifest.json",
+            "bytes": 37138,
+            "sha256": "e231c3610df31c89ee6c06a401d32df8ac8acfcc915b41b875c8d0dbe26170fd",
+            "verifiedEntries": 164,
+            "allEntriesVerified": true
+          },
+          {
+            "path": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/repaired-dabebfed5276/artifact-manifest.json",
+            "bytes": 53136,
+            "sha256": "b1d953f7e624a0bdb8215f0ba8d42d7b9b75a9de83f8b0fd6cbeadc8a0a9c8b0",
+            "verifiedEntries": 260,
+            "allEntriesVerified": true
+          }
+        ],
+        "actualInputCases": 8,
+        "actualAcknowledgedPublicationCases": 4
+      },
+      "remainingOriginalAssertions": [],
+      "retainedLimits": [
+        "D2-003 genuine media-use403 blocks genuine stable-image metadata/reopen proof. Its original failed image/SlashMenu/Retry warning-absence premises and unresolved low-level audit exception remain recorded.",
+        "Automatic focus immediately after Cancel is BODY; natural Tab recovery completes18phone/20desktop without programmatic repair. Existing owner handles automatic focus improvement.",
+        "Three earlier actual Worksearch_index_unavailable503 outcomes remain; original cancel-or-retarget does not add all-search-results-matrix prerequisite.",
+        "Touch is Chromium hasTouch/isMobile native tap emulation, not physical hardware or heard screen-reader speech."
+      ],
+      "bookkeeping": "Manager accepted closure integrated through normal Task snapshot; unchanged passing original proof reused, no new runtime or independent review.",
+      "assessedMain": "6430441893f5c3609efd97b3921a21a85eab0707",
+      "closureRecordedAt": "2026-10-19T11:08:00.051108+00:00",
+      "canonicalSource": ".temp/site-audit-2026-10-18/round-3/all-findings.json#issues[id=D2-002]",
+      "closureIntentProvenance": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-D2-002-accepted-closure.json",
+        "sha256": "e4f41f8e8d2bb4610f28e8a63f410dbfdee4483eeabcadec1cb65fb80c5b355d"
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "id": "D1-002",
+      "status": "closed",
+      "acceptedAt": "2026-10-19T11:07:37.203346+00:00",
+      "authority": "Root explicitly accepted all four original applicable criteria and instructed this temp intent. No closure bookkeeping performed here.",
+      "main": "6430441893f5c3609efd97b3921a21a85eab0707",
+      "productCommit": "a82c2511ab9141e377d30ff3769043f8a9637b7b",
+      "additionalReviewedProductCommits": [
+        "65f74f7dca0733328473b7f83b9e8782bcb424a5",
+        "5dc95a3db3d9cb9273332bbd78223f0fdeff010d"
+      ],
+      "originalAcceptanceVerbatim": [
+        "键盘 Enter/Space、触摸点击均可打开，Escape 关闭并把焦点还给触发按钮；外点关闭，关闭后正文可操作。",
+        "点击任一导航项、切换 Work 子视图或浏览器前进后退后，浮层状态与当前页面一致。",
+        "采用导航 disclosure 或完整菜单模式中的一种并完整实现其语义；不要求普通导航链接冒充 menuitem，也不无条件把焦点锁在浮层。",
+        "1440/1024/768 的可见导航与 390 的折叠导航提供等价去向，焦点可见且不被底栏覆盖。"
+      ],
+      "originalAssertionsChanged": false,
+      "skill": ".agents/skills/product-audit/SKILL.md",
+      "evidence": {
+        "closureMap": ".temp/audit-remediation-20261019/two-hour-sprint/site-D1-original-acceptance-reconciliation.json",
+        "sha256": "4fea3031233f08bb325531a68f00f9dd471533516555fcee06a737d354bcfa55",
+        "currentMainCompatibilityAddendum": ".temp/audit-remediation-20261019/two-hour-sprint/site-D1-original-closure-addendum-6430441893.json",
+        "addendumSha256": "900be2ac4a9e0df41e5980bd6d26ce1f628e646d085873a2331479f1e132f19c",
+        "independentSourceReview": {
+          "path": "docs/goals/audit-remediation-20261019/proofs/catalogue-work-detail-review.json",
+          "mainBlob": "d3b7cd4b5a35cf2ffbb48ab3daffe3d99c5dc8d5",
+          "mainSha256": "ef6ab28445865b5f01226af1195cb60d3501db06712cd4b23e7a6003bae0d8a1",
+          "reportCommit": "5dc95a3db3d9cb9273332bbd78223f0fdeff010d",
+          "owner": "G-2841",
+          "account": "codex-1",
+          "model": "gpt-6.1-sol",
+          "effort": "xhigh",
+          "fallback": false,
+          "checkpoints": [
+            "finalCandidateResolutionCheckpoint",
+            "boundedActionGroupCheckpoint",
+            "boundedSourceFooterCheckpoint"
+          ],
+          "noFreshReview": true,
+          "laterMainReportAppendix": "Main adds boundedCreditsCookCheckpoint and managerCallerCorrection, updates top-level disposition/acceptance; all three D1 navigation/Frame/footer checkpoints deep-equal retained5dc report. This is not a fresh review or erasure of new unrelated Cook finding."
+        },
+        "originalCriterionWitnesses": [
+          {
+            "criterion": 1,
+            "canonicalVerbatim": "键盘 Enter/Space、触摸点击均可打开，Escape 关闭并把焦点还给触发按钮；外点关闭，关闭后正文可操作。",
+            "assessmentStatus": "satisfied at native navigation pin; owning implementation byte-identical on pinned main",
+            "sourcePaths": [
+              "apps/web/features/work-page/work-nav.tsx",
+              "apps/web/features/work-page/work-tabs.tsx",
+              "apps/web/features/work-page/route.ts"
+            ],
+            "existingIndependentReviewCheckpoints": [
+              "finalCandidateResolutionCheckpoint"
+            ],
+            "evidenceRefs": [
+              "nativeNavigationResult",
+              "passingNavigationTrace",
+              "nativeGuideEscape",
+              "nativeGuideTouch"
+            ],
+            "assessment": "Actual Enter/Space opens, Escape closes and focuses trigger with visible focus; real hasTouch/isMobile tap opens/toggles, outside heading click/tap dismisses. The page heading remains operable after outside dismissal.",
+            "missingApplicableAssertion": null
+          },
+          {
+            "criterion": 2,
+            "canonicalVerbatim": "点击任一导航项、切换 Work 子视图或浏览器前进后退后，浮层状态与当前页面一致。",
+            "assessmentStatus": "satisfied by native route/history assertions plus shared dismiss implementation",
+            "sourcePaths": [
+              "apps/web/features/work-page/work-nav.tsx",
+              "apps/web/features/work-page/work-tabs.tsx",
+              "apps/web/features/work-page/route.ts"
+            ],
+            "existingIndependentReviewCheckpoints": [
+              "finalCandidateResolutionCheckpoint"
+            ],
+            "evidenceRefs": [
+              "nativeNavigationResult",
+              "passingNavigationTrace",
+              "nativeGuideForward"
+            ],
+            "assessment": "Actual Contents link, back and forward all leave disclosure closed. Every navigation item shares dismiss handling; pathname/search, popstate/hashchange listeners dismiss. This does not claim every separate Work product journey was replayed.",
+            "missingApplicableAssertion": null
+          },
+          {
+            "criterion": 3,
+            "canonicalVerbatim": "采用导航 disclosure 或完整菜单模式中的一种并完整实现其语义；不要求普通导航链接冒充 menuitem，也不无条件把焦点锁在浮层。",
+            "assessmentStatus": "satisfied navigation-disclosure semantics",
+            "sourcePaths": [
+              "apps/web/features/work-page/work-nav.tsx",
+              "apps/web/features/work-page/work-tabs.tsx",
+              "apps/web/features/work-page/route.ts"
+            ],
+            "existingIndependentReviewCheckpoints": [
+              "finalCandidateResolutionCheckpoint"
+            ],
+            "evidenceRefs": [
+              "nativeNavigationResult",
+              "passingNavigationTrace"
+            ],
+            "assessment": "Button owns aria-controls and aria-expanded; grouped navigation contains ordinary anchors with no menuitem role. Escape/outside/blur dismiss paths and no unconditional focus trap. Actual native assertion finds zero menuitems.",
+            "missingApplicableAssertion": null
+          },
+          {
+            "criterion": 4,
+            "canonicalVerbatim": "1440/1024/768 的可见导航与 390 的折叠导航提供等价去向，焦点可见且不被底栏覆盖。",
+            "assessmentStatus": "satisfied at all four original widths",
+            "sourcePaths": [
+              "apps/web/features/work-page/work-nav.tsx",
+              "apps/web/features/work-page/work-tabs.tsx",
+              "apps/web/features/work-page/route.ts",
+              "apps/web/features/work-page/work-frame.tsx"
+            ],
+            "existingIndependentReviewCheckpoints": [
+              "finalCandidateResolutionCheckpoint",
+              "boundedActionGroupCheckpoint"
+            ],
+            "evidenceRefs": [
+              "nativeNavigationResult",
+              "nativeNavigationFocus390",
+              "nativeNavigationFocus768",
+              "nativeNavigationFocus1024",
+              "nativeNavigationFocus1440"
+            ],
+            "assessment": "At390/768/1024/1440 actual seven destination labels/hrefs equal; keyboard History focus is focus-visible, in viewport and elementFromPoint-uncovered. Viewed390/1440 screenshots show ring clear of bottom controls. Frame later changes are not byte-identical to2f, but separately reviewed and Guide7516 frame matches main; nav/tabs/route are exact2f blobs.",
+            "missingApplicableAssertion": null
+          }
+        ],
+        "nativeEvidence": {
+          "frontendPin": "2f1d01d177fd4fab041fcd7b144086818d7b602b",
+          "receiptRef": "nativeNavigationReceipt",
+          "resultRef": "nativeNavigationResult",
+          "grep": "D1-002|anime-connections|fate-editions",
+          "result": {
+            "stats": {
+              "startTime": "2026-10-19T07:36:36.003Z",
+              "duration": 166354.788,
+              "expected": 8,
+              "skipped": 0,
+              "unexpected": 0,
+              "flaky": 0
+            },
+            "tests": [
+              {
+                "title": "D1-002 original Guide: keyboard touch Escape outside navigation and browser history",
+                "status": "passed",
+                "error": null
+              },
+              {
+                "title": "D1-002 operational touch target threshold is44px",
+                "status": "passed",
+                "error": null
+              },
+              {
+                "title": "D1-002 original Guide: genuine touch opens closes and dismisses",
+                "status": "passed",
+                "error": null
+              },
+              {
+                "title": "D1-002 original Guide: four widths expose equivalent view destinations and visible focus",
+                "status": "passed",
+                "error": null
+              },
+              {
+                "title": "D1-003 original anime-connections at 390: actual current view Overview scope and reading choices",
+                "status": "passed",
+                "error": null
+              },
+              {
+                "title": "D1-003 original anime-connections at 1440: actual current view Overview scope and reading choices",
+                "status": "passed",
+                "error": null
+              },
+              {
+                "title": "D1-003 original fate-editions at 390: actual current view Overview scope and reading choices",
+                "status": "passed",
+                "error": null
+              },
+              {
+                "title": "D1-003 original fate-editions at 1440: actual current view Overview scope and reading choices",
+                "status": "passed",
+                "error": null
+              }
+            ]
+          }
+        },
+        "proofArtifacts": {
+          "nativeGuideEscape": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-2f1d01d177fd-1792395297395/results/navigation.e2e.ts-D1-002-o-7b611-igation-and-browser-history/guide-390-escape-focus.png",
+            "sha256": "1232ace2683af2bc39d57506d94d98865e7fd469da0984ee6f41b71228c51a51",
+            "bytes": 58144,
+            "kind": "actual native Guide interaction screenshot"
+          },
+          "nativeGuideForward": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-2f1d01d177fd-1792395297395/results/navigation.e2e.ts-D1-002-o-7b611-igation-and-browser-history/guide-390-contents-after-forward.png",
+            "sha256": "ed824e7880a62051ebc519f0ab1b80f617844d7de6ef700f72cc599c049c81f9",
+            "bytes": 55923,
+            "kind": "actual native Guide interaction screenshot"
+          },
+          "nativeGuideTouch": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-2f1d01d177fd-1792395297395/results/navigation.e2e.ts-D1-002-o-14b15--opens-closes-and-dismisses/guide-390-touch-dismissed.png",
+            "sha256": "e32a75e74eab0d768ab5d43717d7095a05c9d82c602afb620c397c1566803ecd",
+            "bytes": 52491,
+            "kind": "actual native Guide interaction screenshot"
+          },
+          "nativeNavigationFocus1024": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-2f1d01d177fd-1792395297395/results/navigation.e2e.ts-D1-002-o-e88ba-tinations-and-visible-focus/guide-1024-navigation-focus.png",
+            "sha256": "bb004801ec2cb0226af57bfbe73f2a6c0423bf43a95aacb6fe4b21e836441d53",
+            "bytes": 91383,
+            "kind": "actual native Guide navigation focus screenshot"
+          },
+          "nativeNavigationFocus1440": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-2f1d01d177fd-1792395297395/results/navigation.e2e.ts-D1-002-o-e88ba-tinations-and-visible-focus/guide-1440-navigation-focus.png",
+            "sha256": "541cc758a4ad02a995a94405d8d35e5b8f5509ed7bd2439471e43aa7a8e30cd0",
+            "bytes": 94112,
+            "kind": "actual native Guide navigation focus screenshot",
+            "screenshotVisuallyInspectedInThisReconciliation": true
+          },
+          "nativeNavigationFocus390": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-2f1d01d177fd-1792395297395/results/navigation.e2e.ts-D1-002-o-e88ba-tinations-and-visible-focus/guide-390-navigation-focus.png",
+            "sha256": "0f7839665fe8d25a600c7642231daccc6e0f5c482c08bc16269b51e0f87caee2",
+            "bytes": 46343,
+            "kind": "actual native Guide navigation focus screenshot",
+            "screenshotVisuallyInspectedInThisReconciliation": true
+          },
+          "nativeNavigationFocus768": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-2f1d01d177fd-1792395297395/results/navigation.e2e.ts-D1-002-o-e88ba-tinations-and-visible-focus/guide-768-navigation-focus.png",
+            "sha256": "c8cff499c08002a9e0d55075ed6abb4364725905cd7dfbf5db49743c26d78bad",
+            "bytes": 87520,
+            "kind": "actual native Guide navigation focus screenshot"
+          },
+          "nativeNavigationResult": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-2f1d01d177fd-1792395297395/result.json",
+            "sha256": "cd9221ea3a29f055efdcbd3c176393d9ba964b59973d3338181a75564c76b67a",
+            "bytes": 17768,
+            "kind": "existing native browser run evidence"
+          },
+          "passingNavigationTrace": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-2f1d01d177fd-1792395297395/results/navigation.e2e.ts-D1-002-o-e88ba-tinations-and-visible-focus/trace.zip",
+            "sha256": "9a464a898e62947d7548e79ece2a968ba03fd6ecd07675971df2dc5fff2c521c",
+            "bytes": 8356129,
+            "kind": "existing Playwright trace with archived executed assertion source"
+          }
+        }
+      },
+      "rootManagerPersonallyViewedExistingScreenshots": [
+        "nativeGuide390focus",
+        "longEnglish1440",
+        "longChinese390",
+        "ShortGuide"
+      ],
+      "remainingOriginalAssertions": [],
+      "retainedLimits": [
+        "Native runtime occurred at2f, not a fresh e9main run. Manifest pins exact shared implementation equivalence; later frame delta separately reviewed.",
+        "44px operational threshold is a separate passing test, not added to canonical four criteria.",
+        "No independent review, new test, catalogue owner change or closure mutation performed in this reconciliation."
+      ],
+      "bookkeeping": "Manager accepted closure integrated through normal Task snapshot; unchanged passing original proof reused, no new runtime or independent review.",
+      "assessedMain": "6430441893f5c3609efd97b3921a21a85eab0707",
+      "closureRecordedAt": "2026-10-19T11:08:00.051108+00:00",
+      "canonicalSource": ".temp/site-audit-2026-10-18/round-3/all-findings.json#issues[id=D1-002]",
+      "closureIntentProvenance": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-D1-002-accepted-closure.json",
+        "sha256": "4f2f60ce0ba6ebab4a43c3c2c67718f35eea6ed1ba8e66fc27f387fc8bb1f40d"
+      },
+      "currentMainDependencyAddendum": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-D1-original-closure-addendum-6430441893.json",
+        "sha256": "900be2ac4a9e0df41e5980bd6d26ce1f628e646d085873a2331479f1e132f19c",
+        "checkedMain": "6430441893f5",
+        "sameRelevantReviewCheckpoints": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "id": "D1-005",
+      "status": "closed",
+      "acceptedAt": "2026-10-19T11:07:37.203346+00:00",
+      "authority": "Root explicitly accepted all four original applicable criteria and instructed this temp intent. No closure bookkeeping performed here.",
+      "main": "6430441893f5c3609efd97b3921a21a85eab0707",
+      "productCommit": "a82c2511ab9141e377d30ff3769043f8a9637b7b",
+      "additionalReviewedProductCommits": [
+        "65f74f7dca0733328473b7f83b9e8782bcb424a5",
+        "5dc95a3db3d9cb9273332bbd78223f0fdeff010d"
+      ],
+      "originalAcceptanceVerbatim": [
+        "散文阅读栏有明确最大行宽；可采用 60–80ch 作为此英文指南的候选并以真实中英文长段落验证，不能直接用整个 1072px 主区。",
+        "目录和事实可在宽屏旁列；窄屏折叠为可访问的目录入口、事实披露，正文顺序不变且没有横向溢出。",
+        "只有一个章节且标题与页面相同的短指南不堆叠冗余目录和重复题名；保留真实层级，不改变作者正文。",
+        "表格、代码、图片、配方操作区可使用适合它们的宽度，不能为修正文行宽而一律收窄全部非书籍内容。"
+      ],
+      "originalAssertionsChanged": false,
+      "skill": ".agents/skills/product-audit/SKILL.md",
+      "evidence": {
+        "closureMap": ".temp/audit-remediation-20261019/two-hour-sprint/site-D1-original-acceptance-reconciliation.json",
+        "sha256": "4fea3031233f08bb325531a68f00f9dd471533516555fcee06a737d354bcfa55",
+        "currentMainCompatibilityAddendum": ".temp/audit-remediation-20261019/two-hour-sprint/site-D1-original-closure-addendum-6430441893.json",
+        "addendumSha256": "900be2ac4a9e0df41e5980bd6d26ce1f628e646d085873a2331479f1e132f19c",
+        "independentSourceReview": {
+          "path": "docs/goals/audit-remediation-20261019/proofs/catalogue-work-detail-review.json",
+          "mainBlob": "d3b7cd4b5a35cf2ffbb48ab3daffe3d99c5dc8d5",
+          "mainSha256": "ef6ab28445865b5f01226af1195cb60d3501db06712cd4b23e7a6003bae0d8a1",
+          "reportCommit": "5dc95a3db3d9cb9273332bbd78223f0fdeff010d",
+          "owner": "G-2841",
+          "account": "codex-1",
+          "model": "gpt-6.1-sol",
+          "effort": "xhigh",
+          "fallback": false,
+          "checkpoints": [
+            "finalCandidateResolutionCheckpoint",
+            "boundedActionGroupCheckpoint",
+            "boundedSourceFooterCheckpoint"
+          ],
+          "noFreshReview": true,
+          "laterMainReportAppendix": "Main adds boundedCreditsCookCheckpoint and managerCallerCorrection, updates top-level disposition/acceptance; all three D1 navigation/Frame/footer checkpoints deep-equal retained5dc report. This is not a fresh review or erasure of new unrelated Cook finding."
+        },
+        "originalCriterionWitnesses": [
+          {
+            "criterion": 1,
+            "canonicalVerbatim": "散文阅读栏有明确最大行宽；可采用 60–80ch 作为此英文指南的候选并以真实中英文长段落验证，不能直接用整个 1072px 主区。",
+            "assessmentStatus": "satisfied rendered long-prose layout; native short body corroboration",
+            "sourcePaths": [
+              "apps/web/features/work-page/types/guide.tsx",
+              "apps/web/features/work-page/work-frame.tsx",
+              "apps/web/features/work-page/record.tsx",
+              "apps/web/features/work-page/work-sources.tsx"
+            ],
+            "existingIndependentReviewCheckpoints": [
+              "originalReviewCheckpoint",
+              "finalCandidateResolutionCheckpoint",
+              "boundedActionGroupCheckpoint"
+            ],
+            "evidenceRefs": [
+              "storyReviewedLog",
+              "guideProbeLog",
+              "storyLongEnglish1440",
+              "storyLongEnglish1024",
+              "storyLongEnglish768",
+              "storyLongEnglish390",
+              "storyLongChinese1440",
+              "storyLongChinese1024",
+              "storyLongChinese768",
+              "storyLongChinese390",
+              "storyFinalActionLog",
+              "storyFinalEnglish1440",
+              "storyFinalEnglish390",
+              "nativeShortGuide1440"
+            ],
+            "assessment": "Guide article alone has max-w70ch and min-w0/anywhere wrapping. Existing Browser Mode plays measured actual loaded-font70ch+1 and no overflow at all four widths with meaningful long English/Chinese paragraphs; original limit unchanged, probe fixed font settlement. Guide renderer is byte-identical4048/native7516/review/main. Later final English1440/390 also passed with final frame. These are rendered Storybook long paragraphs, not native long multilingual API responses.",
+            "missingApplicableAssertion": null
+          },
+          {
+            "criterion": 2,
+            "canonicalVerbatim": "目录和事实可在宽屏旁列；窄屏折叠为可访问的目录入口、事实披露，正文顺序不变且没有横向溢出。",
+            "assessmentStatus": "satisfied scoped layout/disclosure assertions; native long-content journey not claimed",
+            "sourcePaths": [
+              "apps/web/features/work-page/types/guide.tsx",
+              "apps/web/features/work-page/work-frame.tsx",
+              "apps/web/features/work-page/record.tsx",
+              "apps/web/features/work-page/work-sources.tsx"
+            ],
+            "existingIndependentReviewCheckpoints": [
+              "originalReviewCheckpoint",
+              "finalCandidateResolutionCheckpoint",
+              "boundedSourceFooterCheckpoint"
+            ],
+            "evidenceRefs": [
+              "storyReviewedLog",
+              "storyLongChinese1440",
+              "storyLongChinese390",
+              "storyFactsPhone",
+              "storyFactsDesktop",
+              "unitOriginalLog",
+              "nativeShortGuide390"
+            ],
+            "assessment": "At wide widths Guide contents sit beside the70ch article; narrow widths use native summary/details ToC with ordinary links. Record facts/evidence use native disclosures. Existing Browser Mode plays opened ToC and keyboard evidence disclosure, verified links/focus and no horizontal overflow. Source/unit preserve author paragraph/section order. Native short Guide screenshot confirms narrow article within actual app; no claim that native long/CJK bodies were acquired.",
+            "missingApplicableAssertion": null
+          },
+          {
+            "criterion": 3,
+            "canonicalVerbatim": "只有一个章节且标题与页面相同的短指南不堆叠冗余目录和重复题名；保留真实层级，不改变作者正文。",
+            "assessmentStatus": "satisfied same-title short Guide source/Storybook plus native screenshot",
+            "sourcePaths": [
+              "apps/web/features/work-page/types/guide.tsx",
+              "apps/web/features/work-page/work-frame.tsx",
+              "apps/web/features/work-page/record.tsx",
+              "apps/web/features/work-page/work-sources.tsx"
+            ],
+            "existingIndependentReviewCheckpoints": [
+              "originalReviewCheckpoint",
+              "finalCandidateResolutionCheckpoint",
+              "boundedActionGroupCheckpoint"
+            ],
+            "evidenceRefs": [
+              "storyShortGuide",
+              "storyInitialLog",
+              "unitOriginalLog",
+              "nativeGuideReceipt",
+              "nativeGuideResult",
+              "nativeShortGuide1440",
+              "nativeShortGuide390"
+            ],
+            "assessment": "One same-title section suppresses duplicate body heading and ToC while retaining author paragraphs. Initial broad Storybook run had ShortGuide passing (other12 failures retained); selected final19 did not rerun it. Existing native7516 1440/390 healthy original Guide body121chars shows one page title, no redundant body title/ToC. Native test titles are original C22/C26 header cells; no invented D1-specific automated assert is claimed.",
+            "missingApplicableAssertion": null
+          },
+          {
+            "criterion": 4,
+            "canonicalVerbatim": "表格、代码、图片、配方操作区可使用适合它们的宽度，不能为修正文行宽而一律收窄全部非书籍内容。",
+            "assessmentStatus": "satisfied source restriction plus existing independent Recipe layout proof",
+            "sourcePaths": [
+              "apps/web/features/work-page/types/guide.tsx",
+              "apps/web/features/work-page/work-frame.tsx",
+              "apps/web/features/work-page/record.tsx",
+              "apps/web/features/work-page/work-sources.tsx",
+              "apps/web/features/work-page/types/actions.tsx"
+            ],
+            "existingIndependentReviewCheckpoints": [
+              "originalReviewCheckpoint",
+              "finalCandidateResolutionCheckpoint"
+            ],
+            "evidenceRefs": [
+              "storyReviewedLog",
+              "storyRecipeUnits",
+              "storyRecipeContinuation"
+            ],
+            "assessment": "70ch constraint is attached only to GuideExperience article, not shared WorkFrame/PageContainer or all nonBook layouts. Independent Recipe action/ingredient/method regions retain their own width/container and ordered continuation in existing passing Browser Mode screenshots. Table/code/image width freedoms are source-level nonrestriction; no separate native table/code/image journey is represented.",
+            "missingApplicableAssertion": null
+          }
+        ],
+        "nativeEvidence": {
+          "frontendPin": "7516ad235015f6b916b0e187bc2901de67f8e874",
+          "receiptRef": "nativeGuideReceipt",
+          "resultRef": "nativeGuideResult",
+          "result": {
+            "stats": {
+              "startTime": "2026-10-19T07:59:31.020Z",
+              "duration": 29892.017,
+              "expected": 2,
+              "skipped": 0,
+              "unexpected": 0,
+              "flaky": 0
+            },
+            "tests": [
+              {
+                "title": "C22 C26 / visitor / work rich header at 1440",
+                "status": "passed",
+                "error": null
+              },
+              {
+                "title": "C22 C26 / visitor / work rich header at 390",
+                "status": "passed",
+                "error": null
+              }
+            ]
+          },
+          "nativeBodyLength": 121
+        },
+        "proofArtifacts": {
+          "guideProbeLog": {
+            "path": ".temp/worktrees/catalogue-work-candidate-20261019/.temp/work-guide-final.log",
+            "sha256": "018eb0b42c0a42ae1e2dff18ab48566cc376570edb4c5f5be573b4db6193e0b5",
+            "bytes": 1642,
+            "kind": "existing Task check output; reused, not rerun"
+          },
+          "nativeGuideReceipt": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-7516ad235015-1792396694928/run-receipt.json",
+            "sha256": "7a2a0744b3e91f75e78d0ebf5360fbda05186208bc0460ce975e8f75872ab763",
+            "bytes": 4483,
+            "kind": "existing native browser run evidence"
+          },
+          "nativeGuideResult": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-7516ad235015-1792396694928/result.json",
+            "sha256": "e0d8dba65ac4cfc2ca14993e63149ecc6f60ecfc8de60aa0a176b4e89f94344f",
+            "bytes": 6150,
+            "kind": "existing native browser run evidence"
+          },
+          "nativeShortGuide1440": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-7516ad235015-1792396694928/results/guide-header.e2e.ts-C22-C26-visitor-work-rich-header-at-1440/test-finished-1.png",
+            "sha256": "5d1d07a300addb8ba6549494bb8d95e9a6dae99d62c3eb5f6fc887eb6ff99d3e",
+            "bytes": 91400,
+            "kind": "actual healthy native short Guide screenshot; 121-character body",
+            "screenshotVisuallyInspectedInThisReconciliation": true
+          },
+          "nativeShortGuide390": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/trace/selected-original/run-7516ad235015-1792396694928/results/guide-header.e2e.ts-C22-C26-visitor-work-rich-header-at-390/test-finished-1.png",
+            "sha256": "a9beb6bb641f79a3c55177e0cc325ad6308177ac326471b486ad73fb70bd8ab7",
+            "bytes": 52767,
+            "kind": "actual healthy native short Guide screenshot; 121-character body",
+            "screenshotVisuallyInspectedInThisReconciliation": true
+          },
+          "storyFactsDesktop": {
+            "path": ".temp/worktrees/catalogue-work-candidate-20261019/.temp/work-story-reviewed/apps-web-features-work-page-work-detail-contract.stories.tsx/SourcesAndEvidence.png",
+            "sha256": "ace07dc920ce6c2aa6883a8f47ed3b81e0d02cbcbea42021c4b36c926fa8ea1e",
+            "bytes": 99332,
+            "kind": "rendered Storybook native keyboard disclosure/facts evidence"
+          },
+          "storyFactsPhone": {
+            "path": ".temp/worktrees/catalogue-work-candidate-20261019/.temp/work-story-reviewed/apps-web-features-work-page-work-detail-contract.stories.tsx/MobileSourcesAndEvidence.png",
+            "sha256": "4a203f47075f6bc7015e79c7e5fc06a20e045020e28413f85661bc3d21c279c8",
+            "bytes": 63580,
+            "kind": "rendered Storybook native keyboard disclosure/facts evidence"
+          },
+          "storyFinalActionLog": {
+            "path": ".temp/worktrees/catalogue-work-candidate-20261019/.temp/work-guide-actions-story-verified.log",
+            "sha256": "a178f0205704e52ba290dc55ed9aecf9e769ba67362a4453d1f194c19309bf65",
+            "bytes": 1693,
+            "kind": "existing Task check output; reused, not rerun"
+          },
+          "storyFinalEnglish1440": {
+            "path": ".temp/worktrees/catalogue-work-candidate-20261019/.temp/work-guide-actions-final/apps-web-features-work-page-work-detail-contract.stories.tsx/LongEnglish1440.png",
+            "sha256": "04c5f5a7704a1a620830934170ce2e95ed689049215d8c8c315cee41329bc86a",
+            "bytes": 111410,
+            "kind": "later rendered Storybook long English Guide with final production frame",
+            "screenshotVisuallyInspectedInThisReconciliation": true
+          },
+          "storyFinalEnglish390": {
+            "path": ".temp/worktrees/catalogue-work-candidate-20261019/.temp/work-guide-actions-final/apps-web-features-work-page-work-detail-contract.stories.tsx/LongEnglish390.png",
+            "sha256": "bee3a2a15e2ee209d8fe88c0b32debd49e9cc2e69fa88b7a5ca0cf874d7b4084",
+            "bytes": 51650,
+            "kind": "later rendered Storybook long English Guide with final production frame",
+            "screenshotVisuallyInspectedInThisReconciliation": true
+          },
+          "storyInitialLog": {
+            "path": ".temp/worktrees/catalogue-work-candidate-20261019/.temp/work-story.log",
+            "sha256": "37f5df51b3462eedb3c3c1ce6bce2455b43b676a1fbe94478db3d984e7c6286b",
+            "bytes": 52056,
+            "kind": "existing Task check output; reused, not rerun"
+          },
+          "storyLongChinese1024": {
+            "path": ".temp/worktrees/catalogue-work-candidate-20261019/.temp/work-story-reviewed/apps-web-features-work-page-work-detail-contract.stories.tsx/LongChinese1024.png",
+            "sha256": "22f8eea7c6f69f1fd44792a14d6f0cdb54235ae04fec77ae4deb6602723c8ab0",
+            "bytes": 118307,
+            "kind": "rendered Storybook meaningful long-prose fixture screenshot"
+          },
+          "storyLongChinese1440": {
+            "path": ".temp/worktrees/catalogue-work-candidate-20261019/.temp/work-story-reviewed/apps-web-features-work-page-work-detail-contract.stories.tsx/LongChinese1440.png",
+            "sha256": "888cdb86d40bd1b5b21bbd633a506069d9d05b04da6e40f3bc235d01b8964b26",
+            "bytes": 209775,
+            "kind": "rendered Storybook meaningful long-prose fixture screenshot",
+            "screenshotVisuallyInspectedInThisReconciliation": true
+          },
+          "storyLongChinese390": {
+            "path": ".temp/worktrees/catalogue-work-candidate-20261019/.temp/work-story-reviewed/apps-web-features-work-page-work-detail-contract.stories.tsx/LongChinese390.png",
+            "sha256": "3b9446d3c76c56b026fe0cc50b0ed462a60486f3319c99dce95c8450bcd7168b",
+            "bytes": 90609,
+            "kind": "rendered Storybook meaningful long-prose fixture screenshot",
+            "screenshotVisuallyInspectedInThisReconciliation": true
+          },
+          "storyLongChinese768": {
+            "path": ".temp/worktrees/catalogue-work-candidate-20261019/.temp/work-story-reviewed/apps-web-features-work-page-work-detail-contract.stories.tsx/LongChinese768.png",
+            "sha256": "86602419a83af9c2b9c9cec03146d43869c853ff664d0f8163907e0406e197ca",
+            "bytes": 170293,
+            "kind": "rendered Storybook meaningful long-prose fixture screenshot"
+          },
+          "storyLongEnglish1024": {
+            "path": ".temp/worktrees/catalogue-work-candidate-20261019/.temp/work-story-reviewed/apps-web-features-work-page-work-detail-contract.stories.tsx/LongEnglish1024.png",
+            "sha256": "31c98ea2f54d19450705bdbae9fcb97268aa903ecabae0a5d5681b8d03eca4c8",
+            "bytes": 75737,
+            "kind": "rendered Storybook meaningful long-prose fixture screenshot"
+          },
+          "storyLongEnglish1440": {
+            "path": ".temp/worktrees/catalogue-work-candidate-20261019/.temp/work-story-reviewed/apps-web-features-work-page-work-detail-contract.stories.tsx/LongEnglish1440.png",
+            "sha256": "5ee84dcc360d06dc15a0d950ca2792c288584c1be6cf39ef29639c1feee14481",
+            "bytes": 108905,
+            "kind": "rendered Storybook meaningful long-prose fixture screenshot",
+            "screenshotVisuallyInspectedInThisReconciliation": true
+          },
+          "storyLongEnglish390": {
+            "path": ".temp/worktrees/catalogue-work-candidate-20261019/.temp/work-story-reviewed/apps-web-features-work-page-work-detail-contract.stories.tsx/LongEnglish390.png",
+            "sha256": "14315c98665324fc8843ab8b7af876d45ba2f4788ca1f6235e3bdc19b9536280",
+            "bytes": 51113,
+            "kind": "rendered Storybook meaningful long-prose fixture screenshot"
+          },
+          "storyLongEnglish768": {
+            "path": ".temp/worktrees/catalogue-work-candidate-20261019/.temp/work-story-reviewed/apps-web-features-work-page-work-detail-contract.stories.tsx/LongEnglish768.png",
+            "sha256": "a878d870ccf8a9ea89a505dc7240face74a8f271848a346ad82fe6470d494a48",
+            "bytes": 87761,
+            "kind": "rendered Storybook meaningful long-prose fixture screenshot"
+          },
+          "storyRecipeContinuation": {
+            "path": ".temp/worktrees/catalogue-work-candidate-20261019/.temp/work-story-reviewed/apps-web-features-work-page-work-views.stories.tsx/RecipeContinues.png",
+            "sha256": "f5a27c369e7ff01ceb2b3f584413b4f569ea28683dd1b9727292d67eb5d24b4e",
+            "bytes": 53591,
+            "kind": "rendered Storybook independent Recipe region widths/content order; not a native Recipe task claim"
+          },
+          "storyRecipeUnits": {
+            "path": ".temp/worktrees/catalogue-work-candidate-20261019/.temp/work-story-reviewed/apps-web-features-work-page-work-views.stories.tsx/UnitsAsWritten.png",
+            "sha256": "9d105ec993de7d3060e95aa5e1906f9cd1155e67302cd047b7af682082a40d0c",
+            "bytes": 59410,
+            "kind": "rendered Storybook independent Recipe region widths/content order; not a native Recipe task claim"
+          },
+          "storyReviewedLog": {
+            "path": ".temp/worktrees/catalogue-work-candidate-20261019/.temp/work-story-reviewed.log",
+            "sha256": "fc56143a2138b7d56f106e137f2cf19583c1e17cd23a2fb568e54dcd61b6797c",
+            "bytes": 1887,
+            "kind": "existing Task check output; reused, not rerun"
+          },
+          "storyShortGuide": {
+            "path": ".temp/worktrees/catalogue-work-candidate-20261019/.temp/work-story-screenshots/apps-web-features-work-page-work-detail-contract.stories.tsx/ShortGuide.png",
+            "sha256": "02a4ffec9a544793542fc6b69f3e0f91bf420193869bfae052509ccbb34157ee",
+            "bytes": 51962,
+            "kind": "rendered Storybook short same-title Guide; present in initial 81-pass/12-fail run, not rerun in final selected 19",
+            "screenshotVisuallyInspectedInThisReconciliation": true
+          },
+          "unitOriginalLog": {
+            "path": ".temp/worktrees/catalogue-work-candidate-20261019/.temp/work-unit-final.log",
+            "sha256": "074f1e8bf1c8559063d7812a2959a5d3d8d17739ac4d4b5e08def16cda6529fe",
+            "bytes": 789,
+            "kind": "existing Task check output; reused, not rerun"
+          }
+        }
+      },
+      "rootManagerPersonallyViewedExistingScreenshots": [
+        "nativeGuide390focus",
+        "longEnglish1440",
+        "longChinese390",
+        "ShortGuide"
+      ],
+      "remainingOriginalAssertions": [],
+      "retainedLimits": [
+        "Long English/Chinese proof is actual rendered meaningful Storybook fixture content; backend/body acquisition and a native long/CJK Guide journey were not proved.",
+        "Native7516 body is121chars. Its receipt explicitly says those C22/C26 cells alone cannot close D1-005 long-and-short acceptance; this reconciliation combines the separate long-prose rendered proof with that native corroboration.",
+        "Guide-specific presentation criteria do not add a new native corpus, all-Book/Recipe journey or catalogue31 hold.",
+        "Source/body renderer exactness is recorded; the entire initial Storybook graph/frame is not asserted unchanged. Current final frame is exact7516/c17 and independently reviewed; current footer delta is separately reviewed.",
+        "No status is changed to closed by this receipt."
+      ],
+      "bookkeeping": "Manager accepted closure integrated through normal Task snapshot; unchanged passing original proof reused, no new runtime or independent review.",
+      "assessedMain": "6430441893f5c3609efd97b3921a21a85eab0707",
+      "closureRecordedAt": "2026-10-19T11:08:00.051108+00:00",
+      "canonicalSource": ".temp/site-audit-2026-10-18/round-3/all-findings.json#issues[id=D1-005]",
+      "closureIntentProvenance": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-D1-005-accepted-closure.json",
+        "sha256": "75f09bc2e8927cc9467856f4c6be808db3fd3b59342d1a2a4832a43b4d31c3b7"
+      },
+      "currentMainDependencyAddendum": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-D1-original-closure-addendum-6430441893.json",
+        "sha256": "900be2ac4a9e0df41e5980bd6d26ce1f628e646d085873a2331479f1e132f19c",
+        "checkedMain": "6430441893f5",
+        "sameRelevantReviewCheckpoints": true
       }
     }
   ]
