@@ -1,10 +1,6 @@
 import { NextRequest } from 'next/server';
-import { createElement } from 'react';
-import { renderToReadableStream } from 'react-dom/server.browser';
-import { SearchXIcon, TriangleAlertIcon } from 'lucide-react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { getTranslation } from '../../i18n/server.ts';
-import { EmptyState } from '../shell/empty-state.tsx';
 import { displayLanguages } from '../../i18n/display-languages.ts';
 import { LOCALE_COOKIE, pathLocale, resolveLocale, withoutLocale } from '../../i18n/locale.ts';
 import { readAddress, type ResolvedAddress } from './client.ts';
@@ -18,28 +14,37 @@ import { serviceOrigin } from '../api/origins.ts';
 import { mainReadHeaders } from '../api/main-read.ts';
 import { serverRead, withServerRequest } from '../api/server-read.ts';
 
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;',
+    '"': '&quot;', "'": '&#39;' })[character]!);
+}
+
 /** Admission failures precede the app shell. Keep their HTTP status and a
- * complete, localized recovery document, including the exact attempted task. */
+ * complete, localized recovery document, including the exact attempted task.
+ * The Worker entry executes in the RSC environment: pre-shell HTML must not
+ * import react-dom/server, whose react-server export deliberately throws. */
 export async function addressFailureResponse(url: URL, locale: UiLocale,
   status: 404 | 410 | 429 | 503, retryAfter?: string): Promise<Response> {
   const { data: t } = await getTranslation('shell', [locale]);
   const missing = status === 404 || status === 410;
   const title = missing ? t.notFoundTitle : t.errorTitle;
-  const link = (href: string, label: string) => createElement('a', { href }, label);
-  const stream = await renderToReadableStream(createElement('html', { lang: locale },
-    createElement('head', null,
-      createElement('meta', { charSet: 'utf-8' }),
-      createElement('meta', { name: 'viewport', content: 'width=device-width, initial-scale=1' }),
-      createElement('title', null, `${title} · REZICS`),
-      createElement('style', null, 'html{color-scheme:light dark;font:100%/1.6 system-ui}body{margin:0}main{max-width:42rem;margin:12vh auto;padding:1.5rem;overflow-wrap:anywhere}svg{width:2rem;height:2rem}h1{font-size:1.75rem}a{display:inline-block;margin:.5rem 1rem .5rem 0;text-underline-offset:.2em}a:focus-visible{outline:3px solid;outline-offset:4px}')),
-    createElement('body', null, createElement('main', null,
-      createElement(EmptyState, { icon: missing ? SearchXIcon : TriangleAlertIcon,
-        title, description: missing ? t.notFoundBody : t.errorBody, headingLevel: 1,
-        ...(!missing ? { role: 'alert' as const, tone: 'destructive' as const } : {}) },
-        ...(!missing ? [link(url.pathname + url.search, t.retry)] : []),
-        link(`/${locale}/discover${url.searchParams.get('type') === 'lists' ? '?type=lists' : ''}`, t.searchWorks),
-        link(`/${locale}`, t.backHome))))));
-  return new Response(stream, { status, headers: { 'content-type': 'text/html; charset=utf-8',
+  const link = (href: string, label: string) => `<a href="${escapeHtml(href)}">${escapeHtml(label)}</a>`;
+  // The same decorative Lucide search-x / triangle-alert paths, without a React import.
+  const icon = missing
+    ? '<path d="m13.5 8.5-5 5"></path><path d="m8.5 8.5 5 5"></path><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path>'
+    : '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"></path><path d="M12 9v4"></path><path d="M12 17h.01"></path>';
+  const document = `<!DOCTYPE html><html lang="${escapeHtml(locale)}"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${escapeHtml(title)} · REZICS</title>
+<style>html{color-scheme:light dark;font:100%/1.6 system-ui}body{margin:0}main{max-width:42rem;margin:12vh auto;padding:1.5rem;overflow-wrap:anywhere}svg{width:2rem;height:2rem}h1{font-size:1.75rem}a{display:inline-block;margin:.5rem 1rem .5rem 0;text-underline-offset:.2em}a:focus-visible{outline:3px solid;outline-offset:4px}</style>
+</head><body><main><div data-slot="empty-state"${missing ? '' : ' role="alert"'}>
+<span><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icon}</svg></span>
+<h1>${escapeHtml(title)}</h1><p>${escapeHtml(missing ? t.notFoundBody : t.errorBody)}</p><div>
+${missing ? '' : link(url.pathname + url.search, t.retry)}
+${link(`/${locale}/discover${url.searchParams.get('type') === 'lists' ? '?type=lists' : ''}`, t.searchWorks)}
+${link(`/${locale}`, t.backHome)}
+</div></div></main></body></html>`;
+  return new Response(document, { status, headers: { 'content-type': 'text/html; charset=utf-8',
     'cache-control': 'no-store', 'x-robots-tag': 'noindex', 'referrer-policy': 'no-referrer',
     ...(!missing ? { 'retry-after': retryAfter ?? '5' } : {}) } });
 }
