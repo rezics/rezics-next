@@ -1,0 +1,939 @@
+{
+  "schemaVersion": 1,
+  "reviewedAtUtc": "2026-10-19T13:13:40.942684+00:00",
+  "goal": "audit-remediation-20261019",
+  "worker": "G-2849",
+  "reviewer": {
+    "engine": "codex-1",
+    "model": "gpt-6.1-sol",
+    "effort": "xhigh",
+    "independentImplementationInspection": true,
+    "accountFallback": false,
+    "delegation": false
+  },
+  "reviewKind": "bounded independent implementation and native command-boundary review",
+  "status": "owner-correction-required-for-bootstrap-native-validation",
+  "conclusion": {
+    "action": "Return the exact bootstrap writer/native validation counterexample to G-2800. Keep the already accepted query and registry reports unchanged.",
+    "finding": "The actual retained bootstrap writer emits product graph writes with validations: []. Java CommandService.validateScope rejects all four captured V1/V2 Agent/external envelopes with product data requires profile validation.",
+    "evidenceLevel": "Actual TS writer capture plus reproduced production Java helper outcome assertions; controlled owner/command-boundary evidence, not an installed public API result.",
+    "otherReviewedDelta": "No additional counterexample identified in the explicit V2 model selection, physical successor binding dispatch, exact stored pins, original receipt preservation or optional publication/origin metadata changes within this bounded review.",
+    "productAcceptance": false,
+    "classClosure": false
+  },
+  "pins": {
+    "delivered": "c6fe65a55551065e117e9ac81efd436e6b33341d",
+    "workerBase": "d46a9ab3bfc0898b4cd410b76fdd5e0f9eb54c59",
+    "managerDecision": "6a2c630a29e5576eb90743ecaed4b520755d7416",
+    "scope": "Union of five authored parent diffs, not the whole intervening wave range.",
+    "increments": [
+      {
+        "commit": "c3a586211806c5d6f53bf944d3d6ad1703801f6d",
+        "parent": "6032598f2dc54ffe110ee5ba7dde34f98a0ddea8",
+        "subject": "feat(model): admit explicit Performer credit profiles without reinterpreting V1",
+        "paths": [
+          "generated/model/contexts/native-agent-credit-v2.jsonld",
+          "generated/model/contexts/work-author-credit-v2.jsonld",
+          "generated/model/manifest.json",
+          "generated/model/shapes/native-agent-credit-v2.ttl",
+          "generated/model/shapes/work-author-credit-v2.ttl",
+          "model/compiler/registry.ts",
+          "model/definitions/native-agent-credit-v2.ts",
+          "model/definitions/native-agent-credit-v2.ttl",
+          "model/definitions/work-author-credit-v2.ts",
+          "model/definitions/work-author-credit-v2.ttl",
+          "model/tests/credit-performer-turtle.test.ts",
+          "packages/model/src/generated/profiles.ts",
+          "packages/model/src/generated/schemas.ts",
+          "packages/model/src/generated/vocabulary.ts",
+          "services/main/src/modules/semantic/association.ts",
+          "services/main/tests/semantic-association.test.ts"
+        ],
+        "parentDiffSha256": "8332983eda9a02bc7d51fb5e6df703d3f2ecfc78ec8304a9c221a6a1e9bfa013"
+      },
+      {
+        "commit": "4f86a440c883cf68abb2f22a59f5a15439ef2583",
+        "parent": "db740a99bdb94542746499fa490156f17aae0213",
+        "subject": "test(model): type the exact V1 credit binding comparison",
+        "paths": [
+          "model/tests/credit-performer-turtle.test.ts"
+        ],
+        "parentDiffSha256": "fc84b1128327f77e5a01fdea6a02dde96402f200c65ea3ffae81a87da30e8cb2"
+      },
+      {
+        "commit": "3c2e024a840394ea8e850c15f1fb17be893f8266",
+        "parent": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+        "subject": "fix(work): bootstrap retained credit bindings with exact command metadata",
+        "paths": [
+          "services/main/src/modules/work/credit-association-origin.ts",
+          "services/main/src/modules/work/credit-association-read.ts",
+          "services/main/src/modules/work/credit-association-write.ts",
+          "services/main/tests/credit-retained-reads.test.ts"
+        ],
+        "parentDiffSha256": "448dee352b6609f58fd3c2fc3772940369c92ca1cbd37a55b867c8fd554e8fb3"
+      },
+      {
+        "commit": "56156f4728c3262cfecf29b44699293c40d51a5d",
+        "parent": "6b34ae1833028628173880738ad3be4051a73b87",
+        "subject": "fix(work): admit native Performer through exact successor profiles",
+        "paths": [
+          "infra/jena/command-module/src/main/java/com/rezics/jena/BindingPolicy.java",
+          "infra/jena/command-module/src/main/java/com/rezics/jena/CanonicalPolicy.java",
+          "infra/jena/command-module/src/main/java/com/rezics/jena/CommandService.java",
+          "infra/jena/command-module/src/test/java/com/rezics/jena/CreditBindingPolicyTest.java",
+          "services/main/src/modules/profiles/credits.ts",
+          "services/main/src/modules/work/author-credit.ts",
+          "services/main/src/modules/work/credit-verification.ts",
+          "services/main/tests/credit-native-verifiers.test.ts",
+          "services/main/tests/credit-performer-admission.test.ts",
+          "services/main/tests/credit-retained-reads.test.ts"
+        ],
+        "parentDiffSha256": "2b4238ae17f347e67cd7156e07cb157703842b990d12dd9c733ede9426668429"
+      },
+      {
+        "commit": "c6fe65a55551065e117e9ac81efd436e6b33341d",
+        "parent": "56156f4728c3262cfecf29b44699293c40d51a5d",
+        "subject": "chore: pin Fuseki image for credit successor admission",
+        "paths": [
+          "docs/development/toolchain.md",
+          "infra/dev/compose.yaml",
+          "scripts/dev/release-manifest.ts"
+        ],
+        "parentDiffSha256": "1e222e1f18ae2bbcf97c5214bc600dfeaacb589325adf3871294afecf34d683a"
+      }
+    ],
+    "allFiveCommitsAreAncestorsOfDelivered": true,
+    "authoredParentDiffUnionEqualsFrozen32Paths": true,
+    "noOtherFinalPathLastChangeOutsideTheseFiveCommits": true,
+    "all32FrozenBlobsAndSha256MatchGitObjects": true,
+    "all32OwnerCheckoutFilesMatchFrozenFinalBytes": true,
+    "all32SnapshotFilesRemainUnmodifiedAfterDiagnostics": true
+  },
+  "frozenInputs": {
+    "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2849/.temp/native-credit-successor-review/inputs.json",
+    "sha256": "d1452cd37ca9f289a72fb74723f2167e3c67e82849ffc2209b139347bca4015e",
+    "originalReadOnlyPath": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/native-credit-incremental-review-inputs.json",
+    "format": "catalogue-native-credit-incremental-review-v1",
+    "createdAt": "2026-10-19T12:46:27.785489+00:00"
+  },
+  "ownerHandoff": {
+    "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2849/.temp/native-credit-successor-review/owner-handoff.txt",
+    "sha256": "185f154d3ca5b4446cf0f98d028cf7da1b61ac5ba2cc3d90691378fec38726e8",
+    "originalReadOnlyPath": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/credit-performer-v2-publication.txt",
+    "mail": "mail:ada067ab-20a8-47f4-bebf-a7bdd872a17e",
+    "use": "Implementation provenance and check receipts only. Conclusions below come from actual parent diffs, frozen implementations and the independent diagnostic."
+  },
+  "exactFiles": [
+    {
+      "path": "docs/development/toolchain.md",
+      "blob": "b44d7ecc270eb3dcd2d3a537c6021ccf4d2d8939",
+      "sha256": "17b7329418fd5801515e1b9afddafbb988b9cfd3fc929d638dc2fcb380a4fb3f",
+      "lastChange": "c6fe65a55551065e117e9ac81efd436e6b33341d"
+    },
+    {
+      "path": "generated/model/contexts/native-agent-credit-v2.jsonld",
+      "blob": "e1315ad6ba8efe3986422d85f640617cd8e65a40",
+      "sha256": "3dfaf1974ae35ebaaafc48d2c5d1b2b52690a3027f0cacfaf00e357ef72ccf5f",
+      "lastChange": "c3a586211806c5d6f53bf944d3d6ad1703801f6d"
+    },
+    {
+      "path": "generated/model/contexts/work-author-credit-v2.jsonld",
+      "blob": "4111c56fccc619b5b63c5d0af4dbed921175eec2",
+      "sha256": "1fd534059e7dddc60845e915f4de70cf6a5ced2b710c21e007b3ac4430cec790",
+      "lastChange": "c3a586211806c5d6f53bf944d3d6ad1703801f6d"
+    },
+    {
+      "path": "generated/model/manifest.json",
+      "blob": "e857699823639514b957b3e802dee16eea98e8ca",
+      "sha256": "4a9bb21ae5940dc18295b0f17d60aa8890a6094d8832e5a10aadbc2efa9281e7",
+      "lastChange": "c3a586211806c5d6f53bf944d3d6ad1703801f6d"
+    },
+    {
+      "path": "generated/model/shapes/native-agent-credit-v2.ttl",
+      "blob": "ce143d55bcbcdc8d2c4d6c1bb7207c8a4a169e2a",
+      "sha256": "79a0b3b6a7bbf8314cbcc70b5178c94b3dc1ce7559e6eade873c2792d4b16b8b",
+      "lastChange": "c3a586211806c5d6f53bf944d3d6ad1703801f6d"
+    },
+    {
+      "path": "generated/model/shapes/work-author-credit-v2.ttl",
+      "blob": "bf9f20e4c3d68fefa08a0eb6f95555ceea8895da",
+      "sha256": "48e2f78abb9e38070c8a46d5d8b838ac141f6ce9e41a846079c79c3acf09989a",
+      "lastChange": "c3a586211806c5d6f53bf944d3d6ad1703801f6d"
+    },
+    {
+      "path": "infra/dev/compose.yaml",
+      "blob": "d7180aca88dd7f4db69d50f9f3b60087f68cc596",
+      "sha256": "427db9c653afb8fce055df2c298b7796680a2822786cfd27eaf691c1f3016c03",
+      "lastChange": "c6fe65a55551065e117e9ac81efd436e6b33341d"
+    },
+    {
+      "path": "infra/jena/command-module/src/main/java/com/rezics/jena/BindingPolicy.java",
+      "blob": "31d327b6fafa10ea5f71de0a5cf5d73ae8b3193c",
+      "sha256": "dccb64aa27f08aa32f6b5a2300cce8a32b5b79eeb51faa013e0e40e099cfa253",
+      "lastChange": "56156f4728c3262cfecf29b44699293c40d51a5d"
+    },
+    {
+      "path": "infra/jena/command-module/src/main/java/com/rezics/jena/CanonicalPolicy.java",
+      "blob": "8ead15ff464e6d78219d22ed0226147d73331d1d",
+      "sha256": "cdb39ad448226893f0654f6c19799d8f565a74bbfa4af8fd127f9a6bfeeff8ca",
+      "lastChange": "56156f4728c3262cfecf29b44699293c40d51a5d"
+    },
+    {
+      "path": "infra/jena/command-module/src/main/java/com/rezics/jena/CommandService.java",
+      "blob": "4fd880a22b60b58c6b08773538067b040ba8ede5",
+      "sha256": "1e9b9dce3703cacf96200cd80bf92ff47cf60e8e0b8382b7197ef9d5533e837d",
+      "lastChange": "56156f4728c3262cfecf29b44699293c40d51a5d"
+    },
+    {
+      "path": "infra/jena/command-module/src/test/java/com/rezics/jena/CreditBindingPolicyTest.java",
+      "blob": "51049b4d9d5c1c54cc14aa998257e6d6e220b7b1",
+      "sha256": "cfcc32ec0f1351f0791befd7d8d12ec426554ecffa3315dbf7dc3d430c5a08ea",
+      "lastChange": "56156f4728c3262cfecf29b44699293c40d51a5d"
+    },
+    {
+      "path": "model/compiler/registry.ts",
+      "blob": "f2610f79b8f069e3a8ec790303f56aba6aa3dd38",
+      "sha256": "f74fb0d95a539eb0ec873d1e8145fb7ae54e0c8b9f6233f10b7bde8065309071",
+      "lastChange": "c3a586211806c5d6f53bf944d3d6ad1703801f6d"
+    },
+    {
+      "path": "model/definitions/native-agent-credit-v2.ts",
+      "blob": "b0c0db172c4eaa21e22c876693fd023f86881378",
+      "sha256": "0310c9bca565694c8e3d2ea1b63e97376f422650eca896930f6063a4660af1dd",
+      "lastChange": "c3a586211806c5d6f53bf944d3d6ad1703801f6d"
+    },
+    {
+      "path": "model/definitions/native-agent-credit-v2.ttl",
+      "blob": "ce143d55bcbcdc8d2c4d6c1bb7207c8a4a169e2a",
+      "sha256": "79a0b3b6a7bbf8314cbcc70b5178c94b3dc1ce7559e6eade873c2792d4b16b8b",
+      "lastChange": "c3a586211806c5d6f53bf944d3d6ad1703801f6d"
+    },
+    {
+      "path": "model/definitions/work-author-credit-v2.ts",
+      "blob": "45e1b88b6a8e210b4f20dbe78b50be2a33822baf",
+      "sha256": "4bb71ecdc24f5d286bbb93f144dcffc61c8c4c67c0daef4e1d0c761a664ec26f",
+      "lastChange": "c3a586211806c5d6f53bf944d3d6ad1703801f6d"
+    },
+    {
+      "path": "model/definitions/work-author-credit-v2.ttl",
+      "blob": "bf9f20e4c3d68fefa08a0eb6f95555ceea8895da",
+      "sha256": "48e2f78abb9e38070c8a46d5d8b838ac141f6ce9e41a846079c79c3acf09989a",
+      "lastChange": "c3a586211806c5d6f53bf944d3d6ad1703801f6d"
+    },
+    {
+      "path": "model/tests/credit-performer-turtle.test.ts",
+      "blob": "616dbf9a8314f8504969777a90a1f546c906f6ac",
+      "sha256": "e35972617077002155ca4ccfeb6755dfc310e2f08be280b2edc748cc0c09b94a",
+      "lastChange": "4f86a440c883cf68abb2f22a59f5a15439ef2583"
+    },
+    {
+      "path": "packages/model/src/generated/profiles.ts",
+      "blob": "4223913958a2c959fc68b941ad1256413577a301",
+      "sha256": "0d9cd42e0b354429cef8c42197b3ca50eb5baf9932e2ed422100cffcc19b660b",
+      "lastChange": "c3a586211806c5d6f53bf944d3d6ad1703801f6d"
+    },
+    {
+      "path": "packages/model/src/generated/schemas.ts",
+      "blob": "242239ce919f54b62b307229f22e6dd178f99033",
+      "sha256": "4836b832e7a41b19dfcc705ae864f313c5467b875e702fac13e832408787fd12",
+      "lastChange": "c3a586211806c5d6f53bf944d3d6ad1703801f6d"
+    },
+    {
+      "path": "packages/model/src/generated/vocabulary.ts",
+      "blob": "2a19238ea9110b6191ba8c865f10292994661690",
+      "sha256": "144a54285e92bbb03936c04d7285821813001592b505f35e57f56d4e44c3ce26",
+      "lastChange": "c3a586211806c5d6f53bf944d3d6ad1703801f6d"
+    },
+    {
+      "path": "scripts/dev/release-manifest.ts",
+      "blob": "8d3500e1167d258fc5ff8ce826a30951f2eb4a2a",
+      "sha256": "e88037ce6242b4c1f9a1bc727862bac5d4558c23333651e139b47d795526763d",
+      "lastChange": "c6fe65a55551065e117e9ac81efd436e6b33341d"
+    },
+    {
+      "path": "services/main/src/modules/profiles/credits.ts",
+      "blob": "4ab31d58767e8f7f97b3c015421ca24644ee82b1",
+      "sha256": "fa7053a7e53f54382e8227a9ff10a8c29010219fdf6ba9a83398b70abd3cd8d4",
+      "lastChange": "56156f4728c3262cfecf29b44699293c40d51a5d"
+    },
+    {
+      "path": "services/main/src/modules/semantic/association.ts",
+      "blob": "6a7fd89fec64768e8c5f20159964117e971b0df7",
+      "sha256": "e8093eeff5802d95203a109757dafd634aacc7fcb7d07dc0405fa7fdfa12d210",
+      "lastChange": "c3a586211806c5d6f53bf944d3d6ad1703801f6d"
+    },
+    {
+      "path": "services/main/src/modules/work/author-credit.ts",
+      "blob": "86c960a4ac5836776d51832be2970defa62f69ac",
+      "sha256": "60a765c864c71490138cc6773f0a7c20d291e3b3439280c70021a3706d843ca8",
+      "lastChange": "56156f4728c3262cfecf29b44699293c40d51a5d"
+    },
+    {
+      "path": "services/main/src/modules/work/credit-association-origin.ts",
+      "blob": "8d8118729d9a89b54a9d981ced43a9e79b761923",
+      "sha256": "c41334d261d0864d239acc8fd203c2610690c770c0e2621d9f583a0293df9257",
+      "lastChange": "3c2e024a840394ea8e850c15f1fb17be893f8266"
+    },
+    {
+      "path": "services/main/src/modules/work/credit-association-read.ts",
+      "blob": "fbe556b5bd1570aa73959daf5939f9a89c3824e1",
+      "sha256": "4e5e5eb8ec65031055f96f9fe09290473d5bfbf2d3b5b924513c9aa501634da4",
+      "lastChange": "3c2e024a840394ea8e850c15f1fb17be893f8266"
+    },
+    {
+      "path": "services/main/src/modules/work/credit-association-write.ts",
+      "blob": "e3df2cd713be67b985945ab785ff34c659e0ecff",
+      "sha256": "b6f518957a8cea8c0110837161f77205fd17a9d7f0f7577d5a11e2791c945d62",
+      "lastChange": "3c2e024a840394ea8e850c15f1fb17be893f8266"
+    },
+    {
+      "path": "services/main/src/modules/work/credit-verification.ts",
+      "blob": "52db8cca7f316548d816203a7e7730e32cf88425",
+      "sha256": "60cafb450e51ce5a843add1f53d1fe48b30e5e12bcc07211623a08659326b353",
+      "lastChange": "56156f4728c3262cfecf29b44699293c40d51a5d"
+    },
+    {
+      "path": "services/main/tests/credit-native-verifiers.test.ts",
+      "blob": "eec05462956fd79d32b4f0c307452b8021ce8b81",
+      "sha256": "7a80935f7e74d0371a4daf3f950088b35ff7c3d91748bb54b266ede595a740c3",
+      "lastChange": "56156f4728c3262cfecf29b44699293c40d51a5d"
+    },
+    {
+      "path": "services/main/tests/credit-performer-admission.test.ts",
+      "blob": "6296e912a5f61fc73366f089f86898780e84af21",
+      "sha256": "ec4a463fd883b965f0e93f56764cefbfbb507016f573cfebc528b80d1b3d5bac",
+      "lastChange": "56156f4728c3262cfecf29b44699293c40d51a5d"
+    },
+    {
+      "path": "services/main/tests/credit-retained-reads.test.ts",
+      "blob": "ab924ec564cafaec1ca30c866f39633836eacd65",
+      "sha256": "e35bf9af53ecba8fc907609a4188ddf54d940984d643c382be1da9120e11a7fb",
+      "lastChange": "56156f4728c3262cfecf29b44699293c40d51a5d"
+    },
+    {
+      "path": "services/main/tests/semantic-association.test.ts",
+      "blob": "a4daf21d421856e54781099e7d5a69eac0c57f8c",
+      "sha256": "569c0c98c45c2707beecb7bfb1a0cd98699672b478280fe80ec1971c09547648",
+      "lastChange": "c3a586211806c5d6f53bf944d3d6ad1703801f6d"
+    }
+  ],
+  "preservedAcceptedReports": [
+    {
+      "path": "docs/goals/audit-remediation-20261019/proofs/catalogue-query-credit-privacy-review.json",
+      "acceptedReviewCommit": "5c1f50ae0012cd3d0f728059d4c0e500d54eed19",
+      "sha256": "932e9988230d884a6585a2df4c03a371bfb73945940e50405a7bc430354dd922",
+      "disposition": "byte-for-byte preserved; no rereview or suite rerun"
+    },
+    {
+      "path": "docs/goals/audit-remediation-20261019/proofs/catalogue-supporting-registry-review.json",
+      "acceptedReviewCommit": "d46a9ab3bfc0898b4cd410b76fdd5e0f9eb54c59",
+      "sha256": "9080de934c3808d1096925b7b2eacb3514bb82df858b37d64cb05e7aef6d8429",
+      "disposition": "byte-for-byte preserved; no rereview or suite rerun"
+    }
+  ],
+  "implementationInspection": [
+    {
+      "area": "V1 history and explicit V2 profiles",
+      "sources": [
+        "model/definitions/native-agent-credit-v2.ts",
+        "model/definitions/native-agent-credit-v2.ttl",
+        "model/definitions/work-author-credit-v2.ts",
+        "model/definitions/work-author-credit-v2.ttl",
+        "model/compiler/registry.ts",
+        "generated/model/manifest.json",
+        "packages/model/src/generated/profiles.ts",
+        "packages/model/src/generated/schemas.ts",
+        "packages/model/src/generated/vocabulary.ts"
+      ],
+      "checked": [
+        "Both V1 authored .ts and .ttl files are byte-identical from the model increment parent to the delivered pin. V1 Turtle SHA256: native-agent-credit-v1 307be7d1ac523958e6b5e9c83210288214ce2bf53a2046202b8c2f7e35d3c0de; work-author-credit-v1 c24cb44e45b1b096f5a26862e4fe6ecd1aa862db2af26c33f1a6cb624bf1e732.",
+        "Six V1 roles remain author, translator, editor, director, artist and animation-studio. Each successor adds only explicit performer; opaque provider/namespace/key strings select no role.",
+        "Removing exactly the two new V2 entries from profiles and the four guarded V2 routes from canonical reproduces the complete pre-increment manifest arrays. commandModule and bindingDemands are unchanged. Existing default V1 routes retain their order and fields.",
+        "The external successor copies the actual V1 binding declaration with demandedBy: []; compiler binding read and graph dispatch explicitly include V2. No second type-level demand or native Agent binding demand is introduced.",
+        "The four new context/shape artifact hashes match frozen bytes. Only the three generated TypeScript artifact hashes change among existing manifest artifact entries. V2 Turtle equals the corresponding generated shape. Native V2 SHA256 79a0b3b6a7bbf8314cbcc70b5178c94b3dc1ce7559e6eade873c2792d4b16b8b; external V2 SHA256 48e2f78abb9e38070c8a46d5d8b838ac141f6ce9e41a846079c79c3acf09989a.",
+        "The model test typing increment adds only a non-null assertion to the existing exact binding comparison; it does not alter an assertion or fixture value."
+      ],
+      "limits": "Source and artifact comparisons plus existing exact-owner proof; no new model suite or full generator rerun by this reviewer."
+    },
+    {
+      "area": "Native admission, stored physical pins and original receipt",
+      "sources": [
+        "services/main/src/modules/work/author-credit.ts",
+        "services/main/src/modules/profiles/credits.ts",
+        "services/main/src/modules/work/credit-verification.ts"
+      ],
+      "checked": [
+        "creditProfile uses the actual generated manifest/selectCommandProfile and the native/external participant alternative. Explicit performer selects its matching V2; missing or cross-family stored pins do not acquire validity from current defaults.",
+        "authorCreditTriples pins the exact V2 model on current credit and pins model/shape on its revision. authorCreditValidations uses matching registered V2 credit/revision shapes; external participants retain the full current/revisions/receipts/control graph set and bound tuple, while Agent shapes retain their existing two-graph/no-demand behavior.",
+        "verifyCreditModelPins requires URI model/shape equality, a participant/role-compatible registered family and a matching current selector for V2. Historical unpinned V1 Agent retirement remains possible; it cannot be used as a newly fabricated authored owner witness.",
+        "Six-role native digest framing remains the V1 public framing for both participant families. Owner tests freeze all twelve old native command digests. Successor framing is explicit and owner reads use the actual stored modelRevision.",
+        "readCreditOwnerWitness resolves one actual successful original creation/adoption receipt, checks its admission-family IRI, credit/revision/Work/expected head, scope, epoch/sequence and digest, and rejects receipt or revision substitution. Logical retained/public V1 tags do not overwrite stored V2 physical provenance.",
+        "readCreditOwnerHead and the existing creditOwnerGuard retain credit retirement/protection/erasure, original receipt and current Work/credit head checks; identity reads fence dataset lineage, restore hold and current model generation separately."
+      ],
+      "limits": "No public native credit command or live corpus was exercised. This does not independently certify all unchanged owner paths."
+    },
+    {
+      "area": "Production Java successor enforcement",
+      "sources": [
+        "infra/jena/command-module/src/main/java/com/rezics/jena/CanonicalPolicy.java",
+        "infra/jena/command-module/src/main/java/com/rezics/jena/BindingPolicy.java",
+        "infra/jena/command-module/src/main/java/com/rezics/jena/CommandService.java",
+        "infra/jena/command-module/src/test/java/com/rezics/jena/CreditBindingPolicyTest.java"
+      ],
+      "checked": [
+        "For already demanded subjects CanonicalPolicy selects the successor binding if the selected profile declares one. Types without a binding demand and the fixed Global exception retain existing behavior.",
+        "BindingPolicy dispatches work-author-credit-v2 through the existing complete authorCredit semantic binding checks. V2 is not allowed to fall through to only generic binding validation.",
+        "CommandService parseValidations admits the exact external successor receipt/control graph set; existing complete graph-set enforcement and bound-focus checks still apply.",
+        "The six owner Java cases cover explicit successor/V1 default, exact pins, prohibited external Agent inference, other receipts/Work/head/participant/qualification values, omitted/historical/mixed bindings, exact graph set and Global/no-demand compatibility.",
+        "The independently captured bootstrap envelope reaches a different production gate: validateScope rejects productData with an empty validation list before canonical or binding checks. This is the reproduced finding below."
+      ]
+    },
+    {
+      "area": "Bootstrap identity, optional settlement and original command metadata",
+      "sources": [
+        "services/main/src/modules/work/credit-association-origin.ts",
+        "services/main/src/modules/work/credit-association-read.ts",
+        "services/main/src/modules/work/credit-association-write.ts"
+      ],
+      "checked": [
+        "RetainedCreditSelection accepts only a stored native selection or an exact Source/publication selection. The loader derives Work, expected native head, participant, role, ordinal and original receipt from the corresponding owner; request data cannot supply a complete witness.",
+        "Identity read bases carry the full live principal separately from serializable IdentityPosition. Identity verification retains callback revalidation, expiry and consent/disclosure identity checks, source sequence and current model-generation fences without requiring public activation.",
+        "The public association read still requires independently complete activation and coverage. A missing activation/coverage owner remains unavailable. Internal identity/bootstrap results are not public witnesses or coverage.",
+        "A purely native stored credit with no citation fields needs no Source loader, converter or evidence capture. Source-derived stored credits keep the original public stored-credit tuple and require the actual sourceIntent support plus an origin commit guard. Source/publication and independent citation fields retain their concrete typed owners.",
+        "beforeCommit publication is optional for bootstrap. When supplied its actual nonempty guard, prepare/complete/abandon lifecycle remains checked; optional settlement does not become a mandatory annotation or conversion step.",
+        "New compatibility writes generate an operation independent of credit/revision/admission IDs, store it on revision and receipt, and seal the actual current model generation. Read/replay requires operation agreement and sealed generation and returns those original values after current generation changes. Missing historical metadata remains unavailable; no replacement is fabricated.",
+        "The original writer still passes validations: [] to sendSemanticWrite. Bootstrap/publication separation does not exempt its current and revisions writes from Java native profile validation."
+      ]
+    },
+    {
+      "area": "Generated runtime image references",
+      "sources": [
+        "docs/development/toolchain.md",
+        "infra/dev/compose.yaml",
+        "scripts/dev/release-manifest.ts"
+      ],
+      "checked": [
+        "The last increment changes only three generated references from 6.2.0-cmd0.5.43-594fa7318a91 to rezics/fuseki:6.2.0-cmd0.5.43-da8046d5e38e. The owner generation log records that exact tag and the compiled module/profile copies. This reviewer did not refresh or deploy a service."
+      ]
+    }
+  ],
+  "dependencyContext": {
+    "meaning": "These frozen unchanged files were read only to trace the actual caller/runtime boundary. Other wave work is not inherited review approval.",
+    "files": [
+      {
+        "path": "services/main/src/modules/semantic/command.ts",
+        "blob": "2d671ee800a517dc652ef3cd885dc9c4df317316",
+        "sha256": "3807177a9ed9bdaf241f163e6170d935127b12c298eec127bab9d7fe519506cb"
+      },
+      {
+        "path": "services/main/src/modules/work/credit-attribution.ts",
+        "blob": "e73b1b4412fcec643bcebbbce7af722bd87e9fb6",
+        "sha256": "f1403de976ec0963362514c2954afd2cf5af7c6370d7676f99cf20a5c3483ba3"
+      },
+      {
+        "path": "services/main/src/modules/work/credit-association-state.ts",
+        "blob": "047e82eb8ade897916eec2513dcb83dfa5af5163",
+        "sha256": "64a8714529615f0a8d2af1eae672606f65f3bdb4ae399c925973a7f4cf3f3f6a"
+      },
+      {
+        "path": "services/main/src/modules/work/credit-roles.ts",
+        "blob": "22a744cface0644845d4771af3664eafcdd7605d",
+        "sha256": "cde1f2a04b7d9ce19bf5bf0c580123cda9bc706c22b532073b8277829665bdb0"
+      },
+      {
+        "path": "services/main/src/routes/dependencies.ts",
+        "blob": "733a6d5b7f8f18c57837c2c67f127d003afef237",
+        "sha256": "bc39c4e61f839764064e605e9d19743aa70da4eac6f414e39600bab1657865d9"
+      },
+      {
+        "path": "infra/jena/command-module/src/main/java/com/rezics/jena/CommandPolicy.java",
+        "blob": "9aee356d3b4ec5204dfe04a6adbbb709c5ce3ea7",
+        "sha256": "2c98daf2726b87c4008d4e351d91d852d10ba654b746cb26a7467d676b83d229"
+      },
+      {
+        "path": "infra/jena/command-module/src/main/java/com/rezics/jena/ProfileRegistry.java",
+        "blob": "bdf652da840dc17afe26cc9d1af646f7e3908ed3",
+        "sha256": "d80ef04b95052ed9c544a6cd45034294984724716cbaa0b9ff27235e861f35fb"
+      }
+    ],
+    "missingOrIncompatible": [
+      {
+        "kind": "reproduced-incompatible-command-envelope",
+        "finding": "native-credit-bootstrap-empty-validations",
+        "detail": "The bootstrap writer does not satisfy the delivered native product validation contract."
+      },
+      {
+        "kind": "source-inspected-installation-limit",
+        "detail": "At the delivered pin, loadRetainedCreditBinding and bindRetainedCreditAssociation have no production caller under services/main/src. The new origin module is an exported owner API, not an installed public bootstrap route.",
+        "requiredOwner": "Existing relation-change integration owner; not a new route or a whole-wave prerequisite."
+      },
+      {
+        "kind": "source-inspected-missing-runtime-adapters",
+        "detail": "RetainedCreditOriginLoaders.sourceBinding, selectedPublication and nativeAttribution are typed ports here, with no concrete assignment under services/main/src. originGuard likewise has only its writer declaration/use at this pin. Missing selected Source/publication/field support must remain explicitly unavailable.",
+        "requiredOwner": "Existing Source/publication/citation settlement owners for the selected optional use case; no dependency for ordinary native credit/manual citation."
+      }
+    ]
+  },
+  "semanticBoundaries": [
+    "Provider/namespace/key strings remain qualified external participant data. Neither their labels nor descriptive Person/Organization types confer Account-issued Agent authority.",
+    "Only an explicit admitted native role selects Performer. No provider-derived role mapping or implicit conversion is added.",
+    "Ordinary native APIs and manual citations call no provider transform and need no converter, mapper registration or captured evidence bytes merely to cite a Source.",
+    "Optional retained derivation, current Source support/rights settlement and query activation/coverage remain separate explicit authorities. Native identity is not a citation-field or rights receipt.",
+    "No change or rerun was made to accepted query authority/privacy assertions, supporting registry census, original identities, data or rendered acceptance."
+  ],
+  "reusedOwnerChecks": {
+    "provenance": "Read actual G-2800 handoff, recorded job logs, QA acceptance metadata and selected native log. All 32 final owner checkout file hashes equal the frozen final blobs. Historical dirty-tree QA fingerprints are retained below; a passing selected check is not full qualification.",
+    "records": [
+      {
+        "runId": "20261019t120258-68f6df",
+        "source": {
+          "head": "e299a8ecccee0cd945ef93062cbbc8656386be5b",
+          "fingerprint": "c604d48d501dbc0524e0a21665a291b13d6b2d9cad62c5deab6a85da343781fa",
+          "clean": false
+        },
+        "sourceStable": true,
+        "fullQualification": false,
+        "tiers": [
+          {
+            "name": "unit",
+            "status": "passed",
+            "elapsedMs": 209
+          },
+          {
+            "name": "owner",
+            "status": "failed",
+            "elapsedMs": 18479,
+            "failureClass": "assertion"
+          }
+        ],
+        "artifacts": [
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.artifacts/qa/20261019t120258-68f6df/acceptance.json",
+            "sha256": "0e419632874e468dabca96922f45c3cad66ac74c070a1c9c0606355dd2f97ad1"
+          },
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.artifacts/qa/20261019t120258-68f6df/logs/owner.log",
+            "sha256": "c526efa90aedc2161d788dac724eb12ccc95dc91607d77e3e7fae67c937c660d",
+            "summary": "149 pass\n 1 fail\n 2714 expect() calls\nRan 150 tests across 5 files. [18.45s]"
+          },
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.artifacts/qa/20261019t120258-68f6df/logs/unit.log",
+            "sha256": "0481982fa000743c0126bd75453e991d0e9b05b78c952e463ff6c170a1ebe215",
+            "summary": "45 pass\n 0 fail\n 201 expect() calls\nRan 45 tests across 1 file. [193.00ms]"
+          },
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.artifacts/qa/20261019t120258-68f6df/owner.xml",
+            "sha256": "09a1cd4b34be78e5e66d24b5202236c1d597226f595a24279f27c86771a1114d"
+          },
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.artifacts/qa/20261019t120258-68f6df/unit.xml",
+            "sha256": "49e9f62f9418456360c155c428a263434137b0e5f0a0aafd2c2d65345758d643"
+          }
+        ]
+      },
+      {
+        "runId": "20261019t120437-1359d7",
+        "source": {
+          "head": "e299a8ecccee0cd945ef93062cbbc8656386be5b",
+          "fingerprint": "a712ce03a529faa5c34f98a8d7a62b92d995ad484534e3798184b06af4c11fc4",
+          "clean": false
+        },
+        "sourceStable": true,
+        "fullQualification": false,
+        "tiers": [
+          {
+            "name": "owner",
+            "status": "passed",
+            "elapsedMs": 7337
+          }
+        ],
+        "artifacts": [
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.artifacts/qa/20261019t120437-1359d7/acceptance.json",
+            "sha256": "31045004c3ec4b7c61ee45604fd8cc9a3a83a300c071a5675964f253c501fdff"
+          },
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.artifacts/qa/20261019t120437-1359d7/logs/owner.log",
+            "sha256": "8175ac134cfe84859697aa16a7cac0984a172de86ccc56955b6e9de092116bfc",
+            "summary": "82 pass\n 0 fail\n 1253 expect() calls\nRan 82 tests across 1 file. [7.31s]"
+          },
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.artifacts/qa/20261019t120437-1359d7/owner.xml",
+            "sha256": "365b6234cd692058347e5d45f95d4f275580e14cb7e0c17b86a671619a1a43fd"
+          }
+        ]
+      },
+      {
+        "job": "550a4fba-d94f-422e-9281-e8a382b2c927",
+        "logs": [
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/goal/jobs/550a4fba-d94f-422e-9281-e8a382b2c927.1.log",
+            "sha256": "9575bd6cdb44e85538b9e3f28103a63ad337f77e53ff767bd210e1a43d9d6ee3"
+          },
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/goal/jobs/550a4fba-d94f-422e-9281-e8a382b2c927.log",
+            "sha256": "75a66e5a7dad5253eb6a373d1b49b61b2a4071c7d033ea4c08cb6e25306351fd"
+          }
+        ]
+      },
+      {
+        "job": "55f82618-e89c-4ac6-aeaa-08a4d5e50ef5",
+        "logs": [
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/goal/jobs/55f82618-e89c-4ac6-aeaa-08a4d5e50ef5.1.log",
+            "sha256": "8ada5892652a3fc060d5741d57d736a5525ebe90c92d47466784ae2778517f2b"
+          },
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/goal/jobs/55f82618-e89c-4ac6-aeaa-08a4d5e50ef5.2.log",
+            "sha256": "91f07beafa09e79b5e32def69b784d864e2703efe44940f822b4441e397a1f25"
+          },
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/goal/jobs/55f82618-e89c-4ac6-aeaa-08a4d5e50ef5.log",
+            "sha256": "4be21b41b4b8fd68091a6277bc124353cf305eb73bd8089a8485073789efc796"
+          }
+        ]
+      },
+      {
+        "job": "c7552ef9-5f4e-46d2-8324-16dc8d98bda1",
+        "logs": [
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/goal/jobs/c7552ef9-5f4e-46d2-8324-16dc8d98bda1.1.log",
+            "sha256": "30cdcff7d372ccc6b25ae0a4ee5ebbb04f55de50f62fb70d3cbba95b3e75e6d5"
+          },
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/goal/jobs/c7552ef9-5f4e-46d2-8324-16dc8d98bda1.2.log",
+            "sha256": "d60f95e7a244ffcfb7874b13ea31eee64424af28a2c1e801caa0e632ad77d02a"
+          },
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/goal/jobs/c7552ef9-5f4e-46d2-8324-16dc8d98bda1.log",
+            "sha256": "6fc627da00fa15156815d05393d1e6634b76d294c4678e4e3a23a7f50cd448a8"
+          }
+        ]
+      },
+      {
+        "job": "82e390ea-1b3b-4a38-b431-8d168ae0abb3",
+        "logs": [
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/goal/jobs/82e390ea-1b3b-4a38-b431-8d168ae0abb3.1.log",
+            "sha256": "9f0d4be64af37868941a410c1737223020f1ffca6afea1f1073c31e67d506a17"
+          },
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/goal/jobs/82e390ea-1b3b-4a38-b431-8d168ae0abb3.2.log",
+            "sha256": "a770ee62df30ee7f16e1175af74d7cda2d38cf9ef822019e490017ebcc131c23"
+          },
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/goal/jobs/82e390ea-1b3b-4a38-b431-8d168ae0abb3.log",
+            "sha256": "1c693094e46c289794acc195586ef3362a6ebbb0fb21f7fe7dfe7630de94be21"
+          }
+        ]
+      },
+      {
+        "job": "f0a04371-5d9d-4589-95d1-af0e1a0d83df",
+        "logs": [
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/goal/jobs/f0a04371-5d9d-4589-95d1-af0e1a0d83df.1.log",
+            "sha256": "f813638173cc1d7032f8efbf2029f38b20ec25889268fb589d86e7e95ce02952"
+          },
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/goal/jobs/f0a04371-5d9d-4589-95d1-af0e1a0d83df.2.log",
+            "sha256": "8d879dd7733689ea9c0ce9a7000b8b5de5208fb036711d2f4b4e84b364649723"
+          },
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/goal/jobs/f0a04371-5d9d-4589-95d1-af0e1a0d83df.log",
+            "sha256": "a915bdb83a02f9abb77f3de03828caf8a6e98fa2c24f5343e84e0a532524eeb2"
+          }
+        ]
+      }
+    ],
+    "initialSelectedChecks": {
+      "job": "550a4fba-d94f-422e-9281-e8a382b2c927",
+      "qa": "20261019t120258-68f6df",
+      "unit": {
+        "pass": 45,
+        "fail": 0,
+        "assertions": 201
+      },
+      "owner": {
+        "pass": 149,
+        "fail": 1,
+        "assertions": 2714
+      },
+      "failedCase": "retained performer reads preserve the original native credit and allocations",
+      "failure": "retained native credit owner unavailable",
+      "classification": "Outcome assertion rejected because the controlled stored Performer revision/current fixture still supplied V1 pins; not silently treated as pass or deleted."
+    },
+    "subsequentFixtureCorrection": {
+      "job": "55f82618-e89c-4ac6-aeaa-08a4d5e50ef5",
+      "qa": "20261019t120437-1359d7",
+      "file": "services/main/tests/credit-retained-reads.test.ts",
+      "pass": 82,
+      "fail": 0,
+      "assertions": 1253,
+      "actualPatch": "56156f47 changes only fixture value.modelRevision for explicit Performer and the returned model/shape/currentModel fields in this file. The retained Performer outcome assertion and all other test bodies are unchanged.",
+      "notAWholeRerun": "Other unchanged files passed in the original selection and were not repeated."
+    },
+    "java": {
+      "job": "c7552ef9-5f4e-46d2-8324-16dc8d98bda1",
+      "selection": "CreditBindingPolicyTest",
+      "pass": 6,
+      "fail": 0,
+      "errors": 0,
+      "record": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/native-module-suite/a73e5ad8-a623-4083-b8ad-bcc4fac3c930.json",
+        "sha256": "95cb2d6bee10c0974781f93fc2978df271993afde48e07d1fd25b8879dd407a7"
+      },
+      "log": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/native-module-suite/a73e5ad8-a623-4083-b8ad-bcc4fac3c930.log",
+        "sha256": "5eab4c71190cd7790c4506710b89adb5de297449a0473e36e91f2021dba60648"
+      },
+      "limit": "Selected model/binding helper checks, not the retained bootstrap writer envelope."
+    },
+    "guardsAndGeneration": [
+      "c7552ef9: affected types/lint/guards/inference/AST passed.",
+      "82e390ea-1b3b-4a38-b431-8d168ae0abb3: post-rebase task gen and types/inference passed; gen produced the delivered Fuseki image tag.",
+      "f0a04371-5d9d-4589-95d1-af0e1a0d83df: docs check and owner wave publication passed; this reviewer performed no publication.",
+      "The owner disclosed an earlier test-data Record typing correction and a Java negative-case Work/scope setup correction. They are setup corrections, not independent public outcome failures."
+    ]
+  },
+  "findings": [
+    {
+      "id": "native-credit-bootstrap-empty-validations",
+      "severity": "high",
+      "status": "reproduced-command-boundary-assertion-owner-correction-required",
+      "productOutcomeStatus": "No installed public outcome failure established.",
+      "class": "Composed writer envelope omits the native runtime validation contract while controlled owner transport accepts it.",
+      "affectedPaths": [
+        {
+          "path": "services/main/src/modules/work/credit-association-write.ts",
+          "line": 226,
+          "symbol": "bind / sendSemanticWrite validations: []"
+        },
+        {
+          "path": "services/main/src/modules/semantic/command.ts",
+          "line": 270,
+          "symbol": "sendSemanticWrite passes write.validations unchanged"
+        },
+        {
+          "path": "infra/jena/command-module/src/main/java/com/rezics/jena/CommandService.java",
+          "line": 1517,
+          "symbol": "validateScope productData/empty-validations guard"
+        }
+      ],
+      "trigger": "An otherwise owner-approved first retained binding of an existing native credit, including explicit Performer, prepares current rv:associationHead and retained revision/participation writes.",
+      "expected": "The actual writer envelope can pass the native product profile-validation scope gate before bootstrap can claim physical command admission.",
+      "actual": {
+        "status": "invalid",
+        "report": "product data requires profile validation"
+      },
+      "cause": "bind sends validations: [] even though CommandPolicy.parse finds nonempty current and revisions footprints. CommandService.validateScope unconditionally refuses productData with no validations. Optional publication or identity-only preparation does not bypass that contract.",
+      "provenance": "The empty list predates the five authored increments in the retained writer dependency; 3c2e024a newly exposes first binding without publication while retaining the incompatible envelope. This is an unresolved composition dependency of the delivered bootstrap slice, not an accusation that the V2 binding dispatch introduced it.",
+      "reproduction": {
+        "pin": "c6fe65a55551065e117e9ac81efd436e6b33341d",
+        "job": "3ccb0276-41a1-43ae-bcbe-2ec8436eab12",
+        "allFrozenImplementationBytesUnchanged": true,
+        "tsCapture": {
+          "command": "bun scripts/goal/goalctl.ts test ./.temp/native-credit-successor-review/snapshot/services/main/tests/independent-native-credit-bootstrap-review.test.ts",
+          "pass": 4,
+          "fail": 0,
+          "assertions": 100,
+          "purpose": "Reuse exact owner fixture prefix; call actual loadRetainedCreditBinding and bindRetainedCreditAssociation with activation disabled and no beforeCommit; record the exact CommandEnvelope at the transport boundary.",
+          "fixturePrefix": {
+            "sourcePrefixBytes": 27697,
+            "sha256": "94da6b945abc78df672a08047e55f0f171cda3593f6bf052ee6d202157a73211",
+            "marker": "for (const agent of [true, false]) test(`closed retained selection"
+          },
+          "source": {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2849/.temp/native-credit-successor-review/snapshot/services/main/tests/independent-native-credit-bootstrap-review.test.ts",
+            "sha256": "15b3948c39fcc4e6d884458d5a9e3631370aa5bc21a6b6492b22a1b525aa651c"
+          }
+        },
+        "nativeCheck": {
+          "command": "task --dir .temp/native-credit-successor-review/snapshot jena:test -- --tests NativeCreditBootstrapReviewTest",
+          "pass": 0,
+          "fail": 4,
+          "errors": 0,
+          "skipped": 0,
+          "outcomeAssertionReached": true,
+          "setupFailure": false,
+          "nativeRecord": {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2849/.temp/native-credit-successor-review/snapshot/.temp/native-module-suite/dc73c46a-db7d-411e-83ba-5694d2dce35b.json",
+            "sha256": "faa058eda3a30eb7f4791dfabbae5600d84642be4056580be40a099c8f873fd5"
+          },
+          "nativeLog": {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2849/.temp/native-credit-successor-review/snapshot/.temp/native-module-suite/dc73c46a-db7d-411e-83ba-5694d2dce35b.log",
+            "sha256": "f2cc1aa9f75bfa36601eab36a3f5bf9ae7140ff87df7fcfe4ab15c57333827d8"
+          },
+          "jobWrapperResultClass": "harness",
+          "observedFailureClass": "Four JUnit assertNull outcome assertions; native build/parse/profile loading completed, zero test errors.",
+          "purpose": "Load each captured envelope and the delivered registry; parse its actual SPARQL footprint with CommandPolicy.parse; invoke unchanged CommandService.validateScope on that plan and the actual empty validation list."
+        },
+        "cases": [
+          {
+            "name": "historicalAgentBootstrap",
+            "assertionLine": 47,
+            "assertionReached": true,
+            "result": "expected null, got invalid/product data requires profile validation"
+          },
+          {
+            "name": "historicalExternalBootstrap",
+            "assertionLine": 47,
+            "assertionReached": true,
+            "result": "expected null, got invalid/product data requires profile validation"
+          },
+          {
+            "name": "performerAgentBootstrap",
+            "assertionLine": 47,
+            "assertionReached": true,
+            "result": "expected null, got invalid/product data requires profile validation"
+          },
+          {
+            "name": "performerExternalBootstrap",
+            "assertionLine": 47,
+            "assertionReached": true,
+            "result": "expected null, got invalid/product data requires profile validation"
+          }
+        ],
+        "limits": [
+          "The TS graph transport is the owner fixture and emulates success; this is used only to capture the real writer envelope, not to claim a native commit.",
+          "The Java check invokes the production scope helper with an in-memory dataset. Its rejection occurs before reading any dataset triples, canonical validation or bindings. It proves the necessary scope contract is incompatible, not that every earlier/later whole-command invariant passes.",
+          "The diagnostic freezes the exact delivered envelope premise, including its empty validation list. A corrected envelope needs an owner test with the corresponding real native data/validations; do not manufacture a permissive scope exception, relax the guard or treat this narrow diagnostic as full public acceptance.",
+          "No HTTP service, installed route, live graph/corpus or persona was used; no installed public leak or public acceptance failure is inferred."
+        ]
+      },
+      "ownerAction": "G-2800 should repair the retained writer/runtime composition against the existing canonical, binding and validation-graph requirements, then check the actual emitted command in the native runtime. Keep all original receipt/authority/support fences and original independent assertions. No new workflow, conversion, broad wave rerun or corpus prerequisite is required to address this counterexample."
+    }
+  ],
+  "diagnosticReproduction": {
+    "directory": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2849/.temp/native-credit-successor-review",
+    "snapshotProcedure": "Extract git archive of the exact delivered pin under this worktree .temp; symlink only this worker node_modules; add two diagnostic tests and one captured-envelope resource. No frozen implementation or original test file is edited.",
+    "captureTest": {
+      "sha256": "15b3948c39fcc4e6d884458d5a9e3631370aa5bc21a6b6492b22a1b525aa651c",
+      "prefixFromExactFile": "services/main/tests/credit-retained-reads.test.ts",
+      "prefix": {
+        "sourcePrefixBytes": 27697,
+        "sha256": "94da6b945abc78df672a08047e55f0f171cda3593f6bf052ee6d202157a73211",
+        "marker": "for (const agent of [true, false]) test(`closed retained selection"
+      },
+      "appendedSource": "\nimport { writeFileSync as writeReviewFile } from 'node:fs';\nconst reviewEnvelopes: unknown[] = [];\nfor (const agent of [true, false]) for (const role of ['artist', 'performer'] as const) {\n  test(`independent review captures actual ${agent ? 'Agent' : 'external'} ${role} bootstrap command`, async () => {\n    const f = fixture(agent, role);\n    try {\n      const w = f.enableBinding();\n      delete f.deps.owners.activation;\n      f.live.activation = false; f.live.coverage = false;\n      const selection: RetainedCreditBindingRequest = { retained: {\n        profile: agent ? 'native-agent-credit-v1' : 'work-author-credit-v1', credit: f.value.credit,\n        origin: { kind: 'stored-credit', revision: f.value.revision } },\n        mappingRevision: f.state.mapping.revision, attributionSupports: [], expectedAssociationHead: null };\n      const loaded = await loadRetainedCreditBinding(w.deps, principal, selection);\n      const created = await bindRetainedCreditAssociation(w.deps, { principal,\n        actingSubject: f.value.actingSubject, input: loaded.input, admission: await w.admission(loaded.input) });\n      expect(f.commands).toHaveLength(1);\n      const command = f.commands[0]!;\n      expect(command.update).toContain('rv:associationHead');\n      expect(command.update).toContain('rv:RetainedCreditAssociationRevision');\n      expect(created.compatibilityReceipt).toBe(command.receipt);\n      reviewEnvelopes.push({ agent, role, command });\n      writeReviewFile(join(import.meta.dir, '../../../infra/jena/command-module/src/test/resources/g2849-bootstrap-commands.json'),\n        JSON.stringify({ pin: 'c6fe65a55551065e117e9ac81efd436e6b33341d', envelopes: reviewEnvelopes }, null, 2) + '\\n');\n    } finally { f.clean(); }\n  });\n}\n"
+    },
+    "nativeTest": {
+      "sha256": "51e847715b9ed58b7c74dc3a2a4cc0877604a0309248d17476c3841746b0c069",
+      "source": "package com.rezics.jena;\n\nimport static org.junit.Assert.*;\nimport java.lang.reflect.Method;\nimport java.nio.file.Files;\nimport java.nio.file.Path;\nimport java.util.List;\nimport java.util.Map;\nimport java.util.Set;\nimport org.apache.jena.atlas.json.JSON;\nimport org.apache.jena.atlas.json.JsonObject;\nimport org.apache.jena.query.DatasetFactory;\nimport org.apache.jena.sparql.core.DatasetGraph;\nimport org.junit.Test;\n\n/** Actual TS writer envelopes, checked with the unchanged native scope validator. */\npublic class NativeCreditBootstrapReviewTest {\n    @SuppressWarnings(\"unchecked\")\n    private void acceptsWriterEnvelope(boolean agent, String role) throws Exception {\n        JsonObject captured = JSON.parse(Files.readString(Path.of(\"src/test/resources/g2849-bootstrap-commands.json\")));\n        assertEquals(\"c6fe65a55551065e117e9ac81efd436e6b33341d\", captured.get(\"pin\").getAsString().value());\n        assertEquals(4, captured.get(\"envelopes\").getAsArray().size());\n        JsonObject command = null;\n        for (var item : captured.get(\"envelopes\").getAsArray()) {\n            var entry = item.getAsObject();\n            if (entry.get(\"agent\").getAsBoolean().value() == agent\n                && entry.get(\"role\").getAsString().value().equals(role)) command = entry.get(\"command\").getAsObject();\n        }\n        assertNotNull(command);\n        String receipt = command.get(\"receipt\").getAsString().value();\n        String update = command.get(\"update\").getAsString().value();\n        assertEquals(0, command.get(\"validations\").getAsArray().size());\n        CommandPolicy.Plan plan = CommandPolicy.parse(update, receipt);\n        assertFalse(plan.current().isEmpty());\n        assertFalse(plan.revisions().isEmpty());\n        var profiles = ProfileRegistry.load(Path.of(\"profiles\"));\n        var service = new CommandService(profiles, \"1\".repeat(64).getBytes(),\n            \"2\".repeat(64).getBytes(), \"3\".repeat(64).getBytes());\n        Method scope = CommandService.class.getDeclaredMethod(\"validateScope\", DatasetGraph.class,\n            String.class, CommandPolicy.Plan.class, List.class, Set.class, Set.class, Set.class, Map.class);\n        scope.setAccessible(true);\n        var data = DatasetFactory.createTxnMem().asDatasetGraph();\n        try {\n            Map<String, Object> actual = (Map<String, Object>) scope.invoke(service, data, receipt, plan,\n                List.of(), Set.of(), Set.of(), Set.of(), Map.of());\n            System.out.println(\"G2849 \" + (agent ? \"Agent\" : \"external\") + \" \" + role + \" scope result: \" + actual);\n            assertNull(\"Actual retained bootstrap writer must pass the native product scope gate\", actual);\n        } finally { data.close(); }\n    }\n\n    @Test public void historicalAgentBootstrap() throws Exception { acceptsWriterEnvelope(true, \"artist\"); }\n    @Test public void historicalExternalBootstrap() throws Exception { acceptsWriterEnvelope(false, \"artist\"); }\n    @Test public void performerAgentBootstrap() throws Exception { acceptsWriterEnvelope(true, \"performer\"); }\n    @Test public void performerExternalBootstrap() throws Exception { acceptsWriterEnvelope(false, \"performer\"); }\n}\n"
+    },
+    "capturedResource": {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2849/.temp/native-credit-successor-review/snapshot/infra/jena/command-module/src/test/resources/g2849-bootstrap-commands.json",
+      "sha256": "318fa527a68777e9b297adc4df93131adab91321ae97d00485be5093b756022c",
+      "content": {
+        "pin": "c6fe65a55551065e117e9ac81efd436e6b33341d",
+        "envelopes": [
+          {
+            "agent": true,
+            "role": "artist",
+            "command": {
+              "receipt": "urn:rezics:receipt:6d21126e9d7856f411867585cea90b5f3e8bca067f07ea84df4c42f8662d33d9",
+              "digest": "82e435e8784f1263c726b74b84836e761ecb5ab43cc794b7d41c96d3a42ea160",
+              "update": "PREFIX rv: <https://rezics.com/vocab/>\n    DELETE {\n      GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence ?n }\n      \n    }\n    INSERT {\n      GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence ?next }\n      GRAPH <urn:rezics:graph:current> { <https://rezics.com/id/00000000-0000-4000-8000-000000000002> rv:associationHead <https://rezics.com/id/89898cbb-4776-5b6f-a697-1284ab910183> }\n      GRAPH <urn:rezics:graph:revisions> { <https://rezics.com/id/89898cbb-4776-5b6f-a697-1284ab910183> a rv:RetainedCreditAssociationRevision, rv:RevisionAnchor ;\n        rv:component <https://rezics.com/id/00000000-0000-4000-8000-000000000002> ; rv:work <https://rezics.com/id/00000000-0000-4000-8000-000000000001> ; rv:creditRevision <https://rezics.com/id/00000000-0000-4000-8000-000000000005> ;\n        \n        rv:operation <https://rezics.com/id/01a15446-df0a-76c7-9626-7d1ef770cced> ; rv:manifest <urn:rezics:sha256:84d19e0a2b896668e0cc75dc16ca479dd3b3bb7b36d46ebd5365c04340da0fa0> ; rv:modelGeneration <urn:rezics:model-generation:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb> ;\n        rv:modelRevision <https://rezics.com/definition/retained-credit-associations-v1> ; rv:shapeRevision <https://rezics.com/definition/retained-credit-associations-v1> ;\n        rv:participation <https://rezics.com/id/d81e68b4-ac34-56f9-a66d-1db222a1359f>, <https://rezics.com/id/e06276c0-b831-5db7-a577-a068ddab0f6c> ;\n        rv:datasetId <urn:rezics:dataset:product> ; rv:dataEpoch \"credit-epoch\" ; rv:sequence ?next .\n        <https://rezics.com/id/d81e68b4-ac34-56f9-a66d-1db222a1359f> a rv:RetainedCreditParticipation ; rv:occurrence <https://rezics.com/id/00000000-0000-4000-8000-000000000002> .\n<https://rezics.com/id/e06276c0-b831-5db7-a577-a068ddab0f6c> a rv:RetainedCreditParticipation ; rv:occurrence <https://rezics.com/id/00000000-0000-4000-8000-000000000002> . }\n      GRAPH <urn:rezics:graph:receipts> { <urn:rezics:receipt:6d21126e9d7856f411867585cea90b5f3e8bca067f07ea84df4c42f8662d33d9> a rv:OperationReceipt ;\n        rv:requestDigest \"82e435e8784f1263c726b74b84836e761ecb5ab43cc794b7d41c96d3a42ea160\" ; rv:admissionId \"00000000-0000-4000-8000-0000000000c8\" ;\n        rv:authorityEpoch \"7\" ; rv:admittedScope \"work:edit:https://rezics.com/id/00000000-0000-4000-8000-000000000001\" ;\n        rv:outcome rv:Succeeded ; rv:operation <https://rezics.com/id/01a15446-df0a-76c7-9626-7d1ef770cced> ; rv:component <https://rezics.com/id/00000000-0000-4000-8000-000000000002> ; rv:revision <https://rezics.com/id/89898cbb-4776-5b6f-a697-1284ab910183> ;\n      rv:compatibilityProfile <https://rezics.com/definition/retained-credit-associations-v1> ;\n       rv:datasetId <urn:rezics:dataset:product> ;\n        rv:dataEpoch \"credit-epoch\" ; rv:sequence ?next . }\n      GRAPH <urn:rezics:graph:outbox> { <urn:rezics:outbox:ff358685a7ed602eb7d032b4da8efedbf776faab2e760e0d848c6a02b1f9e3e7> a rv:OutboxBatch ; rv:dataEpoch \"credit-epoch\" ;\n        rv:sequence ?next ; rv:eventCount 1 ; rv:event <urn:rezics:event:c4229f701a165f0592863bb3b8b80c140e47a19f70647a6378d036b549ed10fb> .\n        <urn:rezics:event:c4229f701a165f0592863bb3b8b80c140e47a19f70647a6378d036b549ed10fb> a rv:RetainedCreditAssociationChangedEvent ;\n          rv:ordinal 0 ; rv:action \"relation.change\" ;\n          rv:receipt <urn:rezics:receipt:6d21126e9d7856f411867585cea90b5f3e8bca067f07ea84df4c42f8662d33d9> . }\n    }\n    WHERE {\n      GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:dataEpoch \"credit-epoch\" ;\n    rv:routingEpoch \"routing-1\" ; rv:sequence ?n . }\n  FILTER NOT EXISTS { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:restoreHold true } }\n      GRAPH <urn:rezics:graph:revisions> { <urn:rezics:model-generation:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb> a rv:ModelGeneration, rv:RevisionAnchor ;\n      rv:component <urn:rezics:model:product> ; rv:entailmentProfile rv:NoEntailment ;\n      rv:identityInference rv:Excluded ; rv:validationPosture rv:RejectOnViolation ;\n      rv:modelRevision <https://rezics.com/definition/semantic-model-generation-v1> ; rv:shapeRevision <https://rezics.com/definition/semantic-model-generation-v1> ;\n      rv:operation ?modelGenerationOperation ; rv:dataEpoch ?modelGenerationEpoch ;\n      rv:sequence ?modelGenerationSequence }\n    GRAPH <urn:rezics:graph:receipts> { <urn:rezics:receipt:30f3f8cbef36296cb458143a44dc9b06f736f98a19f8b22e29c077c54e5c4d76> a rv:OperationReceipt ;\n      rv:operation ?modelGenerationOperation ; rv:outcome rv:Succeeded ;\n      rv:dataEpoch ?modelGenerationEpoch ; rv:sequence ?modelGenerationSequence }\n    GRAPH <urn:rezics:graph:current> { <urn:rezics:model:product> rv:generationHead <urn:rezics:model-generation:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb> }\n    GRAPH <urn:rezics:graph:current> { <https://rezics.com/id/00000000-0000-4000-8000-00000000001e> rv:definitionHead <https://rezics.com/id/00000000-0000-4000-8000-000000000020> }\n    GRAPH <urn:rezics:graph:revisions> { <https://rezics.com/id/00000000-0000-4000-8000-000000000020> rv:lifecycle rv:Active .\n      FILTER NOT EXISTS { <https://rezics.com/id/00000000-0000-4000-8000-000000000020> a rv:ErasedRevision } } GRAPH <urn:rezics:graph:current> {\n    <https://rezics.com/id/00000000-0000-4000-8000-000000000001> a <https://schema.org/CreativeWork> ; rv:head <https://rezics.com/id/00000000-0000-4000-8000-000000000003> .\n    <https://rezics.com/id/00000000-0000-4000-8000-000000000002> rv:work <https://rezics.com/id/00000000-0000-4000-8000-000000000001> ; rv:creditRevision <https://rezics.com/id/00000000-0000-4000-8000-000000000005> .\n    FILTER NOT EXISTS { <https://rezics.com/id/00000000-0000-4000-8000-000000000002> rv:creditRevision ?otherCreditHead . FILTER(?otherCreditHead != <https://rezics.com/id/00000000-0000-4000-8000-000000000005>) }\n    FILTER NOT EXISTS { <https://rezics.com/id/00000000-0000-4000-8000-000000000001> rv:head ?otherWorkHead . FILTER(?otherWorkHead != <https://rezics.com/id/00000000-0000-4000-8000-000000000003>) }\n    FILTER NOT EXISTS { <https://rezics.com/id/00000000-0000-4000-8000-000000000002> rv:retiredBy ?creditRetirement }\n    FILTER NOT EXISTS { <https://rezics.com/id/00000000-0000-4000-8000-000000000002> rv:protectionHead ?creditProtection }\n  }\n  GRAPH <urn:rezics:graph:receipts> { <urn:rezics:receipt:12a5e84d12c4407204a5bbb69f0e378e68ecb2a2fbb546599b74ddd89bfa49d7> a rv:OperationReceipt ; rv:outcome rv:Succeeded ;\n    rv:creditRevision <https://rezics.com/id/00000000-0000-4000-8000-000000000005> ; rv:requestDigest \"873330ecc4fa4c3e57863392096e610385d167b2903bb262efe58d52fd5af3b5\" . }\n  FILTER NOT EXISTS { GRAPH <urn:rezics:graph:revisions> { <https://rezics.com/id/00000000-0000-4000-8000-000000000005> a rv:ErasedRevision } }\n  FILTER NOT EXISTS { GRAPH <urn:rezics:graph:current> {\n  ?erasedVariant rv:resource <https://rezics.com/id/00000000-0000-4000-8000-000000000001> ; rv:contentPublicationHead ?erasedPublication }\n  GRAPH <urn:rezics:graph:revisions> { ?erasedPublication rv:contentRevision ?erasedRevision .\n    ?erasedRevision a rv:ErasedRevision } }\n  FILTER NOT EXISTS { GRAPH <urn:rezics:graph:current> { <https://rezics.com/id/00000000-0000-4000-8000-000000000001> rv:head ?erasedWorkHead }\n    GRAPH <urn:rezics:graph:revisions> { ?erasedWorkHead a rv:ErasedRevision } }\n  FILTER NOT EXISTS { GRAPH <urn:rezics:graph:current> { <https://rezics.com/id/00000000-0000-4000-8000-000000000001> rv:protectionHead ?protection } }  \n    \n      FILTER NOT EXISTS { GRAPH <urn:rezics:graph:current> { <https://rezics.com/id/00000000-0000-4000-8000-000000000002> rv:associationHead ?existingAssociationHead } }\n      FILTER NOT EXISTS { GRAPH <urn:rezics:graph:revisions> { <https://rezics.com/id/d81e68b4-ac34-56f9-a66d-1db222a1359f> rv:occurrence ?otherOccurrence . FILTER(?otherOccurrence != <https://rezics.com/id/00000000-0000-4000-8000-000000000002>) } }\nFILTER NOT EXISTS { GRAPH <urn:rezics:graph:revisions> { <https://rezics.com/id/e06276c0-b831-5db7-a577-a068ddab0f6c> rv:occurrence ?otherOccurrence . FILTER(?otherOccurrence != <https://rezics.com/id/00000000-0000-4000-8000-000000000002>) } }\n      FILTER NOT EXISTS { GRAPH <urn:rezics:graph:revisions> { <https://rezics.com/id/89898cbb-4776-5b6f-a697-1284ab910183> ?revisionP ?revisionO } }\n      FILTER NOT EXISTS { GRAPH <urn:rezics:graph:receipts> { <urn:rezics:receipt:6d21126e9d7856f411867585cea90b5f3e8bca067f07ea84df4c42f8662d33d9> ?p ?o } }\n      BIND(?n + 1 AS ?next)\n    }",
+              "validations": [],
+              "deadlineMs": 10000
+            }
+          },
+          {
+            "agent": true,
+            "role": "performer",
+            "command": {
+              "receipt": "urn:rezics:receipt:6d21126e9d7856f411867585cea90b5f3e8bca067f07ea84df4c42f8662d33d9",
+              "digest": "782df66d9b6c41b2f5c44510d38522c242a3ff9719cef88fb67169099e0d66ca",
+              "update": "PREFIX rv: <https://rezics.com/vocab/>\n    DELETE {\n      GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence ?n }\n      \n    }\n    INSERT {\n      GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence ?next }\n      GRAPH <urn:rezics:graph:current> { <https://rezics.com/id/00000000-0000-4000-8000-000000000002> rv:associationHead <https://rezics.com/id/89898cbb-4776-5b6f-a697-1284ab910183> }\n      GRAPH <urn:rezics:graph:revisions> { <https://rezics.com/id/89898cbb-4776-5b6f-a697-1284ab910183> a rv:RetainedCreditAssociationRevision, rv:RevisionAnchor ;\n        rv:component <https://rezics.com/id/00000000-0000-4000-8000-000000000002> ; rv:work <https://rezics.com/id/00000000-0000-4000-8000-000000000001> ; rv:creditRevision <https://rezics.com/id/00000000-0000-4000-8000-000000000005> ;\n        \n        rv:operation <https://rezics.com/id/01a15446-dffb-7196-96dc-3c830a5b25fb> ; rv:manifest <urn:rezics:sha256:9de7ec5ef938399670fb85d559159996e90a62a9044a6403701e9f2d28e3a542> ; rv:modelGeneration <urn:rezics:model-generation:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb> ;\n        rv:modelRevision <https://rezics.com/definition/retained-credit-associations-v1> ; rv:shapeRevision <https://rezics.com/definition/retained-credit-associations-v1> ;\n        rv:participation <https://rezics.com/id/d81e68b4-ac34-56f9-a66d-1db222a1359f>, <https://rezics.com/id/e06276c0-b831-5db7-a577-a068ddab0f6c> ;\n        rv:datasetId <urn:rezics:dataset:product> ; rv:dataEpoch \"credit-epoch\" ; rv:sequence ?next .\n        <https://rezics.com/id/d81e68b4-ac34-56f9-a66d-1db222a1359f> a rv:RetainedCreditParticipation ; rv:occurrence <https://rezics.com/id/00000000-0000-4000-8000-000000000002> .\n<https://rezics.com/id/e06276c0-b831-5db7-a577-a068ddab0f6c> a rv:RetainedCreditParticipation ; rv:occurrence <https://rezics.com/id/00000000-0000-4000-8000-000000000002> . }\n      GRAPH <urn:rezics:graph:receipts> { <urn:rezics:receipt:6d21126e9d7856f411867585cea90b5f3e8bca067f07ea84df4c42f8662d33d9> a rv:OperationReceipt ;\n        rv:requestDigest \"782df66d9b6c41b2f5c44510d38522c242a3ff9719cef88fb67169099e0d66ca\" ; rv:admissionId \"00000000-0000-4000-8000-0000000000c8\" ;\n        rv:authorityEpoch \"7\" ; rv:admittedScope \"work:edit:https://rezics.com/id/00000000-0000-4000-8000-000000000001\" ;\n        rv:outcome rv:Succeeded ; rv:operation <https://rezics.com/id/01a15446-dffb-7196-96dc-3c830a5b25fb> ; rv:component <https://rezics.com/id/00000000-0000-4000-8000-000000000002> ; rv:revision <https://rezics.com/id/89898cbb-4776-5b6f-a697-1284ab910183> ;\n      rv:compatibilityProfile <https://rezics.com/definition/retained-credit-associations-v1> ;\n       rv:datasetId <urn:rezics:dataset:product> ;\n        rv:dataEpoch \"credit-epoch\" ; rv:sequence ?next . }\n      GRAPH <urn:rezics:graph:outbox> { <urn:rezics:outbox:ff358685a7ed602eb7d032b4da8efedbf776faab2e760e0d848c6a02b1f9e3e7> a rv:OutboxBatch ; rv:dataEpoch \"credit-epoch\" ;\n        rv:sequence ?next ; rv:eventCount 1 ; rv:event <urn:rezics:event:c4229f701a165f0592863bb3b8b80c140e47a19f70647a6378d036b549ed10fb> .\n        <urn:rezics:event:c4229f701a165f0592863bb3b8b80c140e47a19f70647a6378d036b549ed10fb> a rv:RetainedCreditAssociationChangedEvent ;\n          rv:ordinal 0 ; rv:action \"relation.change\" ;\n          rv:receipt <urn:rezics:receipt:6d21126e9d7856f411867585cea90b5f3e8bca067f07ea84df4c42f8662d33d9> . }\n    }\n    WHERE {\n      GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:dataEpoch \"credit-epoch\" ;\n    rv:routingEpoch \"routing-1\" ; rv:sequence ?n . }\n  FILTER NOT EXISTS { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:restoreHold true } }\n      GRAPH <urn:rezics:graph:revisions> { <urn:rezics:model-generation:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb> a rv:ModelGeneration, rv:RevisionAnchor ;\n      rv:component <urn:rezics:model:product> ; rv:entailmentProfile rv:NoEntailment ;\n      rv:identityInference rv:Excluded ; rv:validationPosture rv:RejectOnViolation ;\n      rv:modelRevision <https://rezics.com/definition/semantic-model-generation-v1> ; rv:shapeRevision <https://rezics.com/definition/semantic-model-generation-v1> ;\n      rv:operation ?modelGenerationOperation ; rv:dataEpoch ?modelGenerationEpoch ;\n      rv:sequence ?modelGenerationSequence }\n    GRAPH <urn:rezics:graph:receipts> { <urn:rezics:receipt:30f3f8cbef36296cb458143a44dc9b06f736f98a19f8b22e29c077c54e5c4d76> a rv:OperationReceipt ;\n      rv:operation ?modelGenerationOperation ; rv:outcome rv:Succeeded ;\n      rv:dataEpoch ?modelGenerationEpoch ; rv:sequence ?modelGenerationSequence }\n    GRAPH <urn:rezics:graph:current> { <urn:rezics:model:product> rv:generationHead <urn:rezics:model-generation:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb> }\n    GRAPH <urn:rezics:graph:current> { <https://rezics.com/id/00000000-0000-4000-8000-00000000001e> rv:definitionHead <https://rezics.com/id/00000000-0000-4000-8000-000000000020> }\n    GRAPH <urn:rezics:graph:revisions> { <https://rezics.com/id/00000000-0000-4000-8000-000000000020> rv:lifecycle rv:Active .\n      FILTER NOT EXISTS { <https://rezics.com/id/00000000-0000-4000-8000-000000000020> a rv:ErasedRevision } } GRAPH <urn:rezics:graph:current> {\n    <https://rezics.com/id/00000000-0000-4000-8000-000000000001> a <https://schema.org/CreativeWork> ; rv:head <https://rezics.com/id/00000000-0000-4000-8000-000000000003> .\n    <https://rezics.com/id/00000000-0000-4000-8000-000000000002> rv:work <https://rezics.com/id/00000000-0000-4000-8000-000000000001> ; rv:creditRevision <https://rezics.com/id/00000000-0000-4000-8000-000000000005> .\n    FILTER NOT EXISTS { <https://rezics.com/id/00000000-0000-4000-8000-000000000002> rv:creditRevision ?otherCreditHead . FILTER(?otherCreditHead != <https://rezics.com/id/00000000-0000-4000-8000-000000000005>) }\n    FILTER NOT EXISTS { <https://rezics.com/id/00000000-0000-4000-8000-000000000001> rv:head ?otherWorkHead . FILTER(?otherWorkHead != <https://rezics.com/id/00000000-0000-4000-8000-000000000003>) }\n    FILTER NOT EXISTS { <https://rezics.com/id/00000000-0000-4000-8000-000000000002> rv:retiredBy ?creditRetirement }\n    FILTER NOT EXISTS { <https://rezics.com/id/00000000-0000-4000-8000-000000000002> rv:protectionHead ?creditProtection }\n  }\n  GRAPH <urn:rezics:graph:receipts> { <urn:rezics:receipt:12a5e84d12c4407204a5bbb69f0e378e68ecb2a2fbb546599b74ddd89bfa49d7> a rv:OperationReceipt ; rv:outcome rv:Succeeded ;\n    rv:creditRevision <https://rezics.com/id/00000000-0000-4000-8000-000000000005> ; rv:requestDigest \"fd2b2acc223f772489477e1b7789ce9119e4c775584e1acdbea4f3444884fd47\" . }\n  FILTER NOT EXISTS { GRAPH <urn:rezics:graph:revisions> { <https://rezics.com/id/00000000-0000-4000-8000-000000000005> a rv:ErasedRevision } }\n  FILTER NOT EXISTS { GRAPH <urn:rezics:graph:current> {\n  ?erasedVariant rv:resource <https://rezics.com/id/00000000-0000-4000-8000-000000000001> ; rv:contentPublicationHead ?erasedPublication }\n  GRAPH <urn:rezics:graph:revisions> { ?erasedPublication rv:contentRevision ?erasedRevision .\n    ?erasedRevision a rv:ErasedRevision } }\n  FILTER NOT EXISTS { GRAPH <urn:rezics:graph:current> { <https://rezics.com/id/00000000-0000-4000-8000-000000000001> rv:head ?erasedWorkHead }\n    GRAPH <urn:rezics:graph:revisions> { ?erasedWorkHead a rv:ErasedRevision } }\n  FILTER NOT EXISTS { GRAPH <urn:rezics:graph:current> { <https://rezics.com/id/00000000-0000-4000-8000-000000000001> rv:protectionHead ?protection } }  \n    \n      FILTER NOT EXISTS { GRAPH <urn:rezics:graph:current> { <https://rezics.com/id/00000000-0000-4000-8000-000000000002> rv:associationHead ?existingAssociationHead } }\n      FILTER NOT EXISTS { GRAPH <urn:rezics:graph:revisions> { <https://rezics.com/id/d81e68b4-ac34-56f9-a66d-1db222a1359f> rv:occurrence ?otherOccurrence . FILTER(?otherOccurrence != <https://rezics.com/id/00000000-0000-4000-8000-000000000002>) } }\nFILTER NOT EXISTS { GRAPH <urn:rezics:graph:revisions> { <https://rezics.com/id/e06276c0-b831-5db7-a577-a068ddab0f6c> rv:occurrence ?otherOccurrence . FILTER(?otherOccurrence != <https://rezics.com/id/00000000-0000-4000-8000-000000000002>) } }\n      FILTER NOT EXISTS { GRAPH <urn:rezics:graph:revisions> { <https://rezics.com/id/89898cbb-4776-5b6f-a697-1284ab910183> ?revisionP ?revisionO } }\n      FILTER NOT EXISTS { GRAPH <urn:rezics:graph:receipts> { <urn:rezics:receipt:6d21126e9d7856f411867585cea90b5f3e8bca067f07ea84df4c42f8662d33d9> ?p ?o } }\n      BIND(?n + 1 AS ?next)\n    }",
+              "validations": [],
+              "deadlineMs": 10000
+            }
+          },
+          {
+            "agent": false,
+            "role": "artist",
+            "command": {
+              "receipt": "urn:rezics:receipt:6d21126e9d7856f411867585cea90b5f3e8bca067f07ea84df4c42f8662d33d9",
+              "digest": "85b5940758b4143f85d65921bff398d68da2c546bbf06da0a82d7f034cf27616",
+              "update": "PREFIX rv: <https://rezics.com/vocab/>\n    DELETE {\n      GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence ?n }\n      \n    }\n    INSERT {\n      GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence ?next }\n      GRAPH <urn:rezics:graph:current> { <https://rezics.com/id/00000000-0000-4000-8000-000000000002> rv:associationHead <https://rezics.com/id/89898cbb-4776-5b6f-a697-1284ab910183> }\n      GRAPH <urn:rezics:graph:revisions> { <https://rezics.com/id/89898cbb-4776-5b6f-a697-1284ab910183> a rv:RetainedCreditAssociationRevision, rv:RevisionAnchor ;\n        rv:component <https://rezics.com/id/00000000-0000-4000-8000-000000000002> ; rv:work <https://rezics.com/id/00000000-0000-4000-8000-000000000001> ; rv:creditRevision <https://rezics.com/id/00000000-0000-4000-8000-000000000005> ;\n        \n        rv:operation <https://rezics.com/id/01a15446-e0fd-7275-b013-83f60cd5dbd4> ; rv:manifest <urn:rezics:sha256:1ce34026e5330433b92b4ff0a74f07cdd0dd4bc75c6963d2fa69b82108b564d1> ; rv:modelGeneration <urn:rezics:model-generation:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb> ;\n        rv:modelRevision <https://rezics.com/definition/retained-credit-associations-v1> ; rv:shapeRevision <https://rezics.com/definition/retained-credit-associations-v1> ;\n        rv:participation <https://rezics.com/id/d81e68b4-ac34-56f9-a66d-1db222a1359f>, <https://rezics.com/id/e06276c0-b831-5db7-a577-a068ddab0f6c> ;\n        rv:datasetId <urn:rezics:dataset:product> ; rv:dataEpoch \"credit-epoch\" ; rv:sequence ?next .\n        <https://rezics.com/id/d81e68b4-ac34-56f9-a66d-1db222a1359f> a rv:RetainedCreditParticipation ; rv:occurrence <https://rezics.com/id/00000000-0000-4000-8000-000000000002> .\n<https://rezics.com/id/e06276c0-b831-5db7-a577-a068ddab0f6c> a rv:RetainedCreditParticipation ; rv:occurrence <https://rezics.com/id/00000000-0000-4000-8000-000000000002> . }\n      GRAPH <urn:rezics:graph:receipts> { <urn:rezics:receipt:6d21126e9d7856f411867585cea90b5f3e8bca067f07ea84df4c42f8662d33d9> a rv:OperationReceipt ;\n        rv:requestDigest \"85b5940758b4143f85d65921bff398d68da2c546bbf06da0a82d7f034cf27616\" ; rv:admissionId \"00000000-0000-4000-8000-0000000000c8\" ;\n        rv:authorityEpoch \"7\" ; rv:admittedScope \"work:edit:https://rezics.com/id/00000000-0000-4000-8000-000000000001\" ;\n        rv:outcome rv:Succeeded ; rv:operation <https://rezics.com/id/01a15446-e0fd-7275-b013-83f60cd5dbd4> ; rv:component <https://rezics.com/id/00000000-0000-4000-8000-000000000002> ; rv:revision <https://rezics.com/id/89898cbb-4776-5b6f-a697-1284ab910183> ;\n      rv:compatibilityProfile <https://rezics.com/definition/retained-credit-associations-v1> ;\n       rv:datasetId <urn:rezics:dataset:product> ;\n        rv:dataEpoch \"credit-epoch\" ; rv:sequence ?next . }\n      GRAPH <urn:rezics:graph:outbox> { <urn:rezics:outbox:ff358685a7ed602eb7d032b4da8efedbf776faab2e760e0d848c6a02b1f9e3e7> a rv:OutboxBatch ; rv:dataEpoch \"credit-epoch\" ;\n        rv:sequence ?next ; rv:eventCount 1 ; rv:event <urn:rezics:event:c4229f701a165f0592863bb3b8b80c140e47a19f70647a6378d036b549ed10fb> .\n        <urn:rezics:event:c4229f701a165f0592863bb3b8b80c140e47a19f70647a6378d036b549ed10fb> a rv:RetainedCreditAssociationChangedEvent ;\n          rv:ordinal 0 ; rv:action \"relation.change\" ;\n          rv:receipt <urn:rezics:receipt:6d21126e9d7856f411867585cea90b5f3e8bca067f07ea84df4c42f8662d33d9> . }\n    }\n    WHERE {\n      GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:dataEpoch \"credit-epoch\" ;\n    rv:routingEpoch \"routing-1\" ; rv:sequence ?n . }\n  FILTER NOT EXISTS { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:restoreHold true } }\n      GRAPH <urn:rezics:graph:revisions> { <urn:rezics:model-generation:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb> a rv:ModelGeneration, rv:RevisionAnchor ;\n      rv:component <urn:rezics:model:product> ; rv:entailmentProfile rv:NoEntailment ;\n      rv:identityInference rv:Excluded ; rv:validationPosture rv:RejectOnViolation ;\n      rv:modelRevision <https://rezics.com/definition/semantic-model-generation-v1> ; rv:shapeRevision <https://rezics.com/definition/semantic-model-generation-v1> ;\n      rv:operation ?modelGenerationOperation ; rv:dataEpoch ?modelGenerationEpoch ;\n      rv:sequence ?modelGenerationSequence }\n    GRAPH <urn:rezics:graph:receipts> { <urn:rezics:receipt:30f3f8cbef36296cb458143a44dc9b06f736f98a19f8b22e29c077c54e5c4d76> a rv:OperationReceipt ;\n      rv:operation ?modelGenerationOperation ; rv:outcome rv:Succeeded ;\n      rv:dataEpoch ?modelGenerationEpoch ; rv:sequence ?modelGenerationSequence }\n    GRAPH <urn:rezics:graph:current> { <urn:rezics:model:product> rv:generationHead <urn:rezics:model-generation:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb> }\n    GRAPH <urn:rezics:graph:current> { <https://rezics.com/id/00000000-0000-4000-8000-00000000001e> rv:definitionHead <https://rezics.com/id/00000000-0000-4000-8000-000000000020> }\n    GRAPH <urn:rezics:graph:revisions> { <https://rezics.com/id/00000000-0000-4000-8000-000000000020> rv:lifecycle rv:Active .\n      FILTER NOT EXISTS { <https://rezics.com/id/00000000-0000-4000-8000-000000000020> a rv:ErasedRevision } } GRAPH <urn:rezics:graph:current> {\n    <https://rezics.com/id/00000000-0000-4000-8000-000000000001> a <https://schema.org/CreativeWork> ; rv:head <https://rezics.com/id/00000000-0000-4000-8000-000000000003> .\n    <https://rezics.com/id/00000000-0000-4000-8000-000000000002> rv:work <https://rezics.com/id/00000000-0000-4000-8000-000000000001> ; rv:creditRevision <https://rezics.com/id/00000000-0000-4000-8000-000000000005> .\n    FILTER NOT EXISTS { <https://rezics.com/id/00000000-0000-4000-8000-000000000002> rv:creditRevision ?otherCreditHead . FILTER(?otherCreditHead != <https://rezics.com/id/00000000-0000-4000-8000-000000000005>) }\n    FILTER NOT EXISTS { <https://rezics.com/id/00000000-0000-4000-8000-000000000001> rv:head ?otherWorkHead . FILTER(?otherWorkHead != <https://rezics.com/id/00000000-0000-4000-8000-000000000003>) }\n    FILTER NOT EXISTS { <https://rezics.com/id/00000000-0000-4000-8000-000000000002> rv:retiredBy ?creditRetirement }\n    FILTER NOT EXISTS { <https://rezics.com/id/00000000-0000-4000-8000-000000000002> rv:protectionHead ?creditProtection }\n  }\n  GRAPH <urn:rezics:graph:receipts> { <urn:rezics:receipt:12a5e84d12c4407204a5bbb69f0e378e68ecb2a2fbb546599b74ddd89bfa49d7> a rv:OperationReceipt ; rv:outcome rv:Succeeded ;\n    rv:creditRevision <https://rezics.com/id/00000000-0000-4000-8000-000000000005> ; rv:requestDigest \"c08d3e24e208b334400f31e5fcb86fc6f33f84bbcc9227b2c4c15c33153de77e\" . }\n  FILTER NOT EXISTS { GRAPH <urn:rezics:graph:revisions> { <https://rezics.com/id/00000000-0000-4000-8000-000000000005> a rv:ErasedRevision } }\n  FILTER NOT EXISTS { GRAPH <urn:rezics:graph:current> {\n  ?erasedVariant rv:resource <https://rezics.com/id/00000000-0000-4000-8000-000000000001> ; rv:contentPublicationHead ?erasedPublication }\n  GRAPH <urn:rezics:graph:revisions> { ?erasedPublication rv:contentRevision ?erasedRevision .\n    ?erasedRevision a rv:ErasedRevision } }\n  FILTER NOT EXISTS { GRAPH <urn:rezics:graph:current> { <https://rezics.com/id/00000000-0000-4000-8000-000000000001> rv:head ?erasedWorkHead }\n    GRAPH <urn:rezics:graph:revisions> { ?erasedWorkHead a rv:ErasedRevision } }\n  FILTER NOT EXISTS { GRAPH <urn:rezics:graph:current> { <https://rezics.com/id/00000000-0000-4000-8000-000000000001> rv:protectionHead ?protection } }  \n    \n      FILTER NOT EXISTS { GRAPH <urn:rezics:graph:current> { <https://rezics.com/id/00000000-0000-4000-8000-000000000002> rv:associationHead ?existingAssociationHead } }\n      FILTER NOT EXISTS { GRAPH <urn:rezics:graph:revisions> { <https://rezics.com/id/d81e68b4-ac34-56f9-a66d-1db222a1359f> rv:occurrence ?otherOccurrence . FILTER(?otherOccurrence != <https://rezics.com/id/00000000-0000-4000-8000-000000000002>) } }\nFILTER NOT EXISTS { GRAPH <urn:rezics:graph:revisions> { <https://rezics.com/id/e06276c0-b831-5db7-a577-a068ddab0f6c> rv:occurrence ?otherOccurrence . FILTER(?otherOccurrence != <https://rezics.com/id/00000000-0000-4000-8000-000000000002>) } }\n      FILTER NOT EXISTS { GRAPH <urn:rezics:graph:revisions> { <https://rezics.com/id/89898cbb-4776-5b6f-a697-1284ab910183> ?revisionP ?revisionO } }\n      FILTER NOT EXISTS { GRAPH <urn:rezics:graph:receipts> { <urn:rezics:receipt:6d21126e9d7856f411867585cea90b5f3e8bca067f07ea84df4c42f8662d33d9> ?p ?o } }\n      BIND(?n + 1 AS ?next)\n    }",
+              "validations": [],
+              "deadlineMs": 10000
+            }
+          },
+          {
+            "agent": false,
+            "role": "performer",
+            "command": {
+              "receipt": "urn:rezics:receipt:6d21126e9d7856f411867585cea90b5f3e8bca067f07ea84df4c42f8662d33d9",
+              "digest": "f76813f8ff822eb0b75b934f3a89ce3689149a662b8ed0efb90f9d8a1e43ef29",
+              "update": "PREFIX rv: <https://rezics.com/vocab/>\n    DELETE {\n      GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence ?n }\n      \n    }\n    INSERT {\n      GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:sequence ?next }\n      GRAPH <urn:rezics:graph:current> { <https://rezics.com/id/00000000-0000-4000-8000-000000000002> rv:associationHead <https://rezics.com/id/89898cbb-4776-5b6f-a697-1284ab910183> }\n      GRAPH <urn:rezics:graph:revisions> { <https://rezics.com/id/89898cbb-4776-5b6f-a697-1284ab910183> a rv:RetainedCreditAssociationRevision, rv:RevisionAnchor ;\n        rv:component <https://rezics.com/id/00000000-0000-4000-8000-000000000002> ; rv:work <https://rezics.com/id/00000000-0000-4000-8000-000000000001> ; rv:creditRevision <https://rezics.com/id/00000000-0000-4000-8000-000000000005> ;\n        \n        rv:operation <https://rezics.com/id/01a15446-e25d-7626-80e9-2a31b682e331> ; rv:manifest <urn:rezics:sha256:8e09451bc442ccdb3dd011bdf0fedc8914cbca5d2574d51eb1182b4bdd16df3f> ; rv:modelGeneration <urn:rezics:model-generation:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb> ;\n        rv:modelRevision <https://rezics.com/definition/retained-credit-associations-v1> ; rv:shapeRevision <https://rezics.com/definition/retained-credit-associations-v1> ;\n        rv:participation <https://rezics.com/id/d81e68b4-ac34-56f9-a66d-1db222a1359f>, <https://rezics.com/id/e06276c0-b831-5db7-a577-a068ddab0f6c> ;\n        rv:datasetId <urn:rezics:dataset:product> ; rv:dataEpoch \"credit-epoch\" ; rv:sequence ?next .\n        <https://rezics.com/id/d81e68b4-ac34-56f9-a66d-1db222a1359f> a rv:RetainedCreditParticipation ; rv:occurrence <https://rezics.com/id/00000000-0000-4000-8000-000000000002> .\n<https://rezics.com/id/e06276c0-b831-5db7-a577-a068ddab0f6c> a rv:RetainedCreditParticipation ; rv:occurrence <https://rezics.com/id/00000000-0000-4000-8000-000000000002> . }\n      GRAPH <urn:rezics:graph:receipts> { <urn:rezics:receipt:6d21126e9d7856f411867585cea90b5f3e8bca067f07ea84df4c42f8662d33d9> a rv:OperationReceipt ;\n        rv:requestDigest \"f76813f8ff822eb0b75b934f3a89ce3689149a662b8ed0efb90f9d8a1e43ef29\" ; rv:admissionId \"00000000-0000-4000-8000-0000000000c8\" ;\n        rv:authorityEpoch \"7\" ; rv:admittedScope \"work:edit:https://rezics.com/id/00000000-0000-4000-8000-000000000001\" ;\n        rv:outcome rv:Succeeded ; rv:operation <https://rezics.com/id/01a15446-e25d-7626-80e9-2a31b682e331> ; rv:component <https://rezics.com/id/00000000-0000-4000-8000-000000000002> ; rv:revision <https://rezics.com/id/89898cbb-4776-5b6f-a697-1284ab910183> ;\n      rv:compatibilityProfile <https://rezics.com/definition/retained-credit-associations-v1> ;\n       rv:datasetId <urn:rezics:dataset:product> ;\n        rv:dataEpoch \"credit-epoch\" ; rv:sequence ?next . }\n      GRAPH <urn:rezics:graph:outbox> { <urn:rezics:outbox:ff358685a7ed602eb7d032b4da8efedbf776faab2e760e0d848c6a02b1f9e3e7> a rv:OutboxBatch ; rv:dataEpoch \"credit-epoch\" ;\n        rv:sequence ?next ; rv:eventCount 1 ; rv:event <urn:rezics:event:c4229f701a165f0592863bb3b8b80c140e47a19f70647a6378d036b549ed10fb> .\n        <urn:rezics:event:c4229f701a165f0592863bb3b8b80c140e47a19f70647a6378d036b549ed10fb> a rv:RetainedCreditAssociationChangedEvent ;\n          rv:ordinal 0 ; rv:action \"relation.change\" ;\n          rv:receipt <urn:rezics:receipt:6d21126e9d7856f411867585cea90b5f3e8bca067f07ea84df4c42f8662d33d9> . }\n    }\n    WHERE {\n      GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:dataEpoch \"credit-epoch\" ;\n    rv:routingEpoch \"routing-1\" ; rv:sequence ?n . }\n  FILTER NOT EXISTS { GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:restoreHold true } }\n      GRAPH <urn:rezics:graph:revisions> { <urn:rezics:model-generation:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb> a rv:ModelGeneration, rv:RevisionAnchor ;\n      rv:component <urn:rezics:model:product> ; rv:entailmentProfile rv:NoEntailment ;\n      rv:identityInference rv:Excluded ; rv:validationPosture rv:RejectOnViolation ;\n      rv:modelRevision <https://rezics.com/definition/semantic-model-generation-v1> ; rv:shapeRevision <https://rezics.com/definition/semantic-model-generation-v1> ;\n      rv:operation ?modelGenerationOperation ; rv:dataEpoch ?modelGenerationEpoch ;\n      rv:sequence ?modelGenerationSequence }\n    GRAPH <urn:rezics:graph:receipts> { <urn:rezics:receipt:30f3f8cbef36296cb458143a44dc9b06f736f98a19f8b22e29c077c54e5c4d76> a rv:OperationReceipt ;\n      rv:operation ?modelGenerationOperation ; rv:outcome rv:Succeeded ;\n      rv:dataEpoch ?modelGenerationEpoch ; rv:sequence ?modelGenerationSequence }\n    GRAPH <urn:rezics:graph:current> { <urn:rezics:model:product> rv:generationHead <urn:rezics:model-generation:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb> }\n    GRAPH <urn:rezics:graph:current> { <https://rezics.com/id/00000000-0000-4000-8000-00000000001e> rv:definitionHead <https://rezics.com/id/00000000-0000-4000-8000-000000000020> }\n    GRAPH <urn:rezics:graph:revisions> { <https://rezics.com/id/00000000-0000-4000-8000-000000000020> rv:lifecycle rv:Active .\n      FILTER NOT EXISTS { <https://rezics.com/id/00000000-0000-4000-8000-000000000020> a rv:ErasedRevision } } GRAPH <urn:rezics:graph:current> {\n    <https://rezics.com/id/00000000-0000-4000-8000-000000000001> a <https://schema.org/CreativeWork> ; rv:head <https://rezics.com/id/00000000-0000-4000-8000-000000000003> .\n    <https://rezics.com/id/00000000-0000-4000-8000-000000000002> rv:work <https://rezics.com/id/00000000-0000-4000-8000-000000000001> ; rv:creditRevision <https://rezics.com/id/00000000-0000-4000-8000-000000000005> .\n    FILTER NOT EXISTS { <https://rezics.com/id/00000000-0000-4000-8000-000000000002> rv:creditRevision ?otherCreditHead . FILTER(?otherCreditHead != <https://rezics.com/id/00000000-0000-4000-8000-000000000005>) }\n    FILTER NOT EXISTS { <https://rezics.com/id/00000000-0000-4000-8000-000000000001> rv:head ?otherWorkHead . FILTER(?otherWorkHead != <https://rezics.com/id/00000000-0000-4000-8000-000000000003>) }\n    FILTER NOT EXISTS { <https://rezics.com/id/00000000-0000-4000-8000-000000000002> rv:retiredBy ?creditRetirement }\n    FILTER NOT EXISTS { <https://rezics.com/id/00000000-0000-4000-8000-000000000002> rv:protectionHead ?creditProtection }\n  }\n  GRAPH <urn:rezics:graph:receipts> { <urn:rezics:receipt:12a5e84d12c4407204a5bbb69f0e378e68ecb2a2fbb546599b74ddd89bfa49d7> a rv:OperationReceipt ; rv:outcome rv:Succeeded ;\n    rv:creditRevision <https://rezics.com/id/00000000-0000-4000-8000-000000000005> ; rv:requestDigest \"d3d73fecbf2e21dc85124943aeb7ac5b06c58e770fc4ce9cafae23d96ab5dd0e\" . }\n  FILTER NOT EXISTS { GRAPH <urn:rezics:graph:revisions> { <https://rezics.com/id/00000000-0000-4000-8000-000000000005> a rv:ErasedRevision } }\n  FILTER NOT EXISTS { GRAPH <urn:rezics:graph:current> {\n  ?erasedVariant rv:resource <https://rezics.com/id/00000000-0000-4000-8000-000000000001> ; rv:contentPublicationHead ?erasedPublication }\n  GRAPH <urn:rezics:graph:revisions> { ?erasedPublication rv:contentRevision ?erasedRevision .\n    ?erasedRevision a rv:ErasedRevision } }\n  FILTER NOT EXISTS { GRAPH <urn:rezics:graph:current> { <https://rezics.com/id/00000000-0000-4000-8000-000000000001> rv:head ?erasedWorkHead }\n    GRAPH <urn:rezics:graph:revisions> { ?erasedWorkHead a rv:ErasedRevision } }\n  FILTER NOT EXISTS { GRAPH <urn:rezics:graph:current> { <https://rezics.com/id/00000000-0000-4000-8000-000000000001> rv:protectionHead ?protection } }  \n    \n      FILTER NOT EXISTS { GRAPH <urn:rezics:graph:current> { <https://rezics.com/id/00000000-0000-4000-8000-000000000002> rv:associationHead ?existingAssociationHead } }\n      FILTER NOT EXISTS { GRAPH <urn:rezics:graph:revisions> { <https://rezics.com/id/d81e68b4-ac34-56f9-a66d-1db222a1359f> rv:occurrence ?otherOccurrence . FILTER(?otherOccurrence != <https://rezics.com/id/00000000-0000-4000-8000-000000000002>) } }\nFILTER NOT EXISTS { GRAPH <urn:rezics:graph:revisions> { <https://rezics.com/id/e06276c0-b831-5db7-a577-a068ddab0f6c> rv:occurrence ?otherOccurrence . FILTER(?otherOccurrence != <https://rezics.com/id/00000000-0000-4000-8000-000000000002>) } }\n      FILTER NOT EXISTS { GRAPH <urn:rezics:graph:revisions> { <https://rezics.com/id/89898cbb-4776-5b6f-a697-1284ab910183> ?revisionP ?revisionO } }\n      FILTER NOT EXISTS { GRAPH <urn:rezics:graph:receipts> { <urn:rezics:receipt:6d21126e9d7856f411867585cea90b5f3e8bca067f07ea84df4c42f8662d33d9> ?p ?o } }\n      BIND(?n + 1 AS ?next)\n    }",
+              "validations": [],
+              "deadlineMs": 10000
+            }
+          }
+        ]
+      }
+    },
+    "logs": [
+      {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2849/.temp/goal/jobs/3ccb0276-41a1-43ae-bcbe-2ec8436eab12.1.log",
+        "sha256": "4cde9b0d08326ab7ca3194673ec57aa1288b3a03c11d62563839012b44ac3c22"
+      },
+      {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2849/.temp/goal/jobs/3ccb0276-41a1-43ae-bcbe-2ec8436eab12.2.log",
+        "sha256": "6faef2aa511c65cdabb03a665a52f78125474ba95f466d473be6520459e66a54"
+      }
+    ]
+  },
+  "sourceObservationsNotProductFailures": [
+    "G-2764 separately owns the current resource-query-credit-composition fixture metadata. The handoff identifies absent model/shape/currentModel and operation/receiptOperation/modelGeneration fields. This source-inferred fixture drift was not rerun here, is not a live result and does not reopen the accepted query review.",
+    "Missing bootstrap route and Source adapters are observed installation limits. They are not evidence of a leak, not a newly imposed whole-wave gate and not prerequisites for ordinary native citation.",
+    "G-2799 inference-budget work is separate. No threshold, inference baseline or implementation was changed."
+  ],
+  "affectedChecksNotRun": [
+    "Accepted query/privacy eight-counterexample suite and accepted supporting registry suites/census: intentionally not rerun.",
+    "Existing CreditBindingPolicyTest and selected G-2800 native owner files: exact-owner evidence reused; no unchanged repeat.",
+    "G-2764 resource-query-credit-composition current fixture: owner follow-up, no claim of runtime result.",
+    "Installed public relation-change retained bootstrap and current Source/publication/citation adapters: no route or corpus proof performed.",
+    "Genuine native/API corpus acceptance, rendered 1440/390 A15/C23, catalogue class/persona closure and either original 113 epoch: not established by this review."
+  ],
+  "limitations": [
+    "This is a bounded review of the 32 frozen authored paths and necessary caller/runtime context only. No whole wave approval or public native acceptance is implied.",
+    "Existing owner QA sources were dirty-tree fingerprints, not this reviewer rerunning their entire historical tree. Their exact source/fingerprint/stability and failures are preserved. Final frozen blobs, owner checkout bytes and diagnostic snapshot bytes were independently compared.",
+    "No implementation mutation, main/peer worktree writes, main landing, shared service lifecycle, browser/network research, provider transformation, corpus preparation or data import was performed.",
+    "Only this newly claimed report is committed. Original assertions, accepted report histories, original IDs, digests and data remain unchanged."
+  ],
+  "recordedJobRunner": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- <command...> from the G-2849 worktree; targeted Bun capture through local bun scripts/goal/goalctl.ts test.",
+  "reportValidation": {
+    "status": "passed",
+    "recordedJob": "job:fbe13f72-8fa8-4375-9cfb-ad4f5c4424fd",
+    "runner": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job",
+    "steps": [
+      {
+        "command": "task docs:check",
+        "exit": 0,
+        "result": "13 checker tests passed; 249 Markdown files checked for local links, fragments and design navigation; no runtime behavior tested",
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2849/.temp/goal/jobs/fbe13f72-8fa8-4375-9cfb-ad4f5c4424fd.1.log",
+        "sha256": "7941957a7d4350303c4d590ed8fa06c7d2fdd638cca99a8820abcb806bf2378a"
+      },
+      {
+        "command": "task goal -- check",
+        "exit": 0,
+        "result": {
+          "types": "ok: no TypeScript workspace changed",
+          "tests": "ok: no test files named in brief",
+          "lint": "ok: no source file changed",
+          "ast": "ok",
+          "guards": "ok; 1/44 selected for claimed report paths"
+        },
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2849/.temp/goal/jobs/fbe13f72-8fa8-4375-9cfb-ad4f5c4424fd.2.log",
+        "sha256": "26b6a9349f3f66c0566a3be1e9447343f36805d8adc2ccbe2d5b1b17953b70fb"
+      }
+    ],
+    "gateOutput": {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2849/.temp/goal/check/run-ZzoI2D/output.log",
+      "sha256": "a2814b27f2f5ead326ae0aab9dac5b0200f9ad76ce629122b5268b1239a72414"
+    },
+    "scope": "Documentation-only proportional gate; neither the accepted suites nor the expected-failing native diagnostic was rerun.",
+    "preHandoffVerification": "All 32 frozen candidate blobs/SHA256 and snapshot bytes match the exact pin; both accepted reports retain their recorded SHA256; only this new report is staged."
+  }
+}
