@@ -1,0 +1,1670 @@
+{
+  "goal": "audit-remediation-20261019",
+  "worker": "G-2829",
+  "recordedAt": "2026-10-19T05:19:57.214580+00:00",
+  "reviewer": {
+    "requestedEngine": "Codex-1 / GPT-6.1 Sol / xhigh",
+    "fallbackUsed": false,
+    "nestedAgentsUsed": false,
+    "independence": "Independent review and rendered verification of G-2751; no product fixes or changes to original assertions."
+  },
+  "outcome": {
+    "result": "partial",
+    "allFindingsAccepted": false,
+    "D2-005": "partial: draft/busy/recovery story behavior verified; scrolled busy notice overlaps selected languages; authenticated refresh persistence unavailable.",
+    "D4-004": "rendered channel identification verified at first/middle/last rows in English, Japanese and German; full acceptance remains unconfirmed without signed-in/screen-reader journey and with mobile overflow.",
+    "D4-005": "failed: local feedback and retry work, but last-row conflict feedback is clipped at 390 and recovery requires scrolling or Tab."
+  },
+  "source": {
+    "productRef": "wave/audit-20261019",
+    "productPin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+    "isolatedProductCheckout": ".temp/settings-product",
+    "checkoutMethod": "Local shared clone inside worker private .temp; detached checkout at productPin. Dependency installation is local to this clone.",
+    "reportBranch": "goal/g-2829",
+    "reportBaseline": "b2e70b7766425207a55b7d8770218d16e544ebc6",
+    "reportBranchIsMainBased": true,
+    "pinFixedAcrossProductChecks": true,
+    "productTrackedDiffEmptyAfterChecks": true,
+    "productCodeChanged": false,
+    "originalAssertionsChanged": false,
+    "onlyCommittedPath": "docs/goals/audit-remediation-20261019/proofs/settings-feedback.json"
+  },
+  "sourceReview": {
+    "count": 1,
+    "authoredCommit": "e6cb5e65c108fb3e2fd899cf022b55d0ffd263a3",
+    "completeAuthoredPatchRead": true,
+    "patch": "authored.patch",
+    "files": [
+      "apps/web/features/settings/messages.ts",
+      "apps/web/features/settings/messages/de.ts",
+      "apps/web/features/settings/messages/es.ts",
+      "apps/web/features/settings/messages/fr.ts",
+      "apps/web/features/settings/messages/ja.ts",
+      "apps/web/features/settings/messages/ko.ts",
+      "apps/web/features/settings/messages/zh-Hans.ts",
+      "apps/web/features/settings/messages/zh-Hant.ts",
+      "apps/web/features/settings/notification-settings.stories.tsx",
+      "apps/web/features/settings/notification-settings.tsx",
+      "apps/web/features/settings/person-preferences.test.ts",
+      "apps/web/features/settings/person-preferences.ts",
+      "apps/web/features/settings/settings-sections.stories.tsx",
+      "apps/web/features/settings/settings-sections.tsx",
+      "scripts/static/web-continuations.inventory.json"
+    ],
+    "supportingFiles": [
+      "packages/ui/src/components/field.tsx",
+      "packages/ui/src/components/switch.tsx",
+      "apps/web/features/onboarding/language-picker.tsx",
+      "apps/web/features/settings/profile-settings.stories.tsx"
+    ],
+    "inputs": [
+      "inputs/G-2751-brief.md",
+      "inputs/G-2751-attempt-6.md",
+      "inputs/settings-findings.json",
+      "docs/goals/audit-remediation-20261019/execution-reset.md"
+    ],
+    "conclusion": "The patch retains accepted language drafts around unrelated preference saves, disables the shared domain during writes/review, clears stale success on a new draft, and uses per-choice notification feedback/retry. Rendered checks confirm those transitions with story responses; remaining composition defects are listed separately."
+  },
+  "method": {
+    "skills": [
+      "goal-worker",
+      "storybook-ui-review",
+      "local-development",
+      "product-audit"
+    ],
+    "browser": "Browser MCP unavailable. Original selected stories ran through Task Storybook Vitest/Chromium with normal goalctl QA admission. Supplemental screenshots use repository scripts/qa/story-browser.ts serveStoryAsset and repository-installed Playwright Chromium.",
+    "viewports": [
+      [
+        1440,
+        1000
+      ],
+      [
+        390,
+        844
+      ]
+    ],
+    "storyIds": "Official running /index.json retained as story-index.json.",
+    "supplementalCapture": "rendered-proof.ts starts task storybook -- --port 42829 in the pinned clone. Independent browser contexts intercept only same-origin /api/notification-preferences, use complete 45-choice matrices, gate the first PUT, then return 200/503/409. Native Space activates the switch; Enter activates recovery. Existing authored stories also run unchanged.",
+    "captureExitMeaning": "Exit zero records completed captures, not a passing QA suite. Raw answers were inspected for errors and state values; original assertion outcomes remain authoritative.",
+    "liveRegionBoundary": "MutationObserver captures DOM text/role/aria-live/aria-atomic changes beside the operated choice. No screen reader was run and no heard announcement is claimed.",
+    "receiptBoundary": "Every response and command in rendered/focused answers is simulated in the browser or authored story. There are no actual API receipts, authenticated writes, reload persistence proof, or estimates of live failure frequency.",
+    "instrumentationLimits": [
+      "General 18-case capture used an overly narrow direct control selector, so direct control/status fields there are null. Images, commands and MutationObserver entries remain valid. Focused capture resolves the labelled Ark root to its native switch and measures the associated status.",
+      "Focused native input geometry is 1x1 because the input is visually hidden; this is not the visible switch size.",
+      "Preference keyboard-recovered images use programmatic focus followed by Enter and do not prove a full Tab traversal. Natural Tab recovery was independently measured for notification last-row conflict at both sizes.",
+      "toBeVisible in original stories does not establish that an element is completely within the viewport. Independent screenshot/geometry inspection found the last conflict clipping."
+    ],
+    "sharedDataPolicy": "No new corpus, fixture import/reset/refresh, shared writes or shared account use. No full regression. Ports 42829 and 42830 started by these probes were stopped and observed closed."
+  },
+  "recordedJobLauncher": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- <command...>",
+  "checks": [
+    {
+      "job": "8c606c18-286e-43b1-808c-de172d8324ee",
+      "classification": "product QA",
+      "productPin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+      "qaId": "20261019t045512-e6b464",
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- sh -c 'cd .temp/settings-product && bun scripts/goal/goalctl.ts test apps/web/features/settings/settings-sections.stories.tsx apps/web/features/settings/notification-settings.stories.tsx apps/web/features/settings/profile-settings.stories.tsx'",
+      "exit": 201,
+      "resultClass": "harness",
+      "result": "32 tests: 10 passed, 22 failed. Outcome assertions were reached; this is not a setup-only failure.",
+      "evidence": "jobs/8c606c18-286e-43b1-808c-de172d8324ee.log",
+      "breakdown": {
+        "notifications": {
+          "passed": [
+            "NewWorkChannels",
+            "Phone",
+            "Japanese",
+            "GermanPhone",
+            "SaveEmailDigest",
+            "TopSavingPhone",
+            "TopSavedDesktop",
+            "MiddleFailureDesktop",
+            "LastConflictDesktop"
+          ],
+          "failed": [
+            "MiddleFailurePhone",
+            "LastConflictPhone",
+            "RetryFailure",
+            "ReviewConflictAndRetry",
+            "RefreshFailureAndRetry"
+          ],
+          "failure": "All five failures reached final document-width assertion at notification-settings.stories.tsx:167, 532 > 390; preceding saving/result/retry/revision assertions passed."
+        },
+        "settingsSections": {
+          "failed": [
+            "SlowPrivacySave",
+            "SlowSpoilerSavePhone",
+            "SavingPreferencesPhone",
+            "FailedSaveRetainsDraft",
+            "ConflictRetainsDraft",
+            "ConflictRefreshFailure"
+          ],
+          "behaviorAssertionsCompleted": true,
+          "failure": "All six authored interaction plays completed, then addon axe label-content-name-mismatch failed for LanguagePicker visible native-language text versus aria-label."
+        },
+        "profile": {
+          "passed": [
+            "NoIdentity"
+          ],
+          "failedA11y": [
+            "UnnamedPerson",
+            "Person",
+            "PenName",
+            "Cooldown",
+            "ProfileUnavailable",
+            "ReadingLanguages",
+            "ReadingLanguagesPhone"
+          ],
+          "failedWidth": {
+            "ChinesePhone": 448,
+            "TraditionalChinesePhone": 441,
+            "JapanesePhone": 539,
+            "KoreanPhone": 461
+          },
+          "viewportWidth": 390,
+          "failure": "Seven addon LanguagePicker name failures and four authored overflow failures at profile-settings.stories.tsx:140/153."
+        }
+      },
+      "warnings": "Unresolved optimizeDeps @storybook/react-dom-shim and checked/defaultChecked warning were logged; they did not prevent rendering or the reached assertions."
+    },
+    {
+      "job": "001a7502-ae0e-483d-aa46-9a3ad8219a34",
+      "classification": "private capture setup attempt",
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun .temp/settings-feedback-G-2829/rendered-proof.ts",
+      "exit": 1,
+      "result": "Own broad **/api/** route intercepted Vite /features/api/*.ts source modules and timed out before the independent case interaction. Not a product failure. One setup correction restricted the route to same-origin /api/. No product or original test changed.",
+      "evidence": [
+        "jobs/001a7502-ae0e-483d-aa46-9a3ad8219a34.log",
+        "rendered-answers-first-attempt.json",
+        "storybook-server-first-attempt.log"
+      ]
+    },
+    {
+      "job": "6d4564be-52d8-44c9-85e8-2eff1dc1fb6b",
+      "classification": "corrected rendered capture and bounded web startup probe",
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'bun .temp/settings-feedback-G-2829/web-startup.ts' -- bun .temp/settings-feedback-G-2829/rendered-proof.ts",
+      "exit": 0,
+      "steps": [
+        {
+          "command": "bun .temp/settings-feedback-G-2829/rendered-proof.ts",
+          "exit": 0,
+          "observedCases": 25,
+          "caseErrors": 0,
+          "log": "jobs/6d4564be-52d8-44c9-85e8-2eff1dc1fb6b.1.log"
+        },
+        {
+          "command": "bun .temp/settings-feedback-G-2829/web-startup.ts",
+          "exit": 0,
+          "result": "Diagnostic completed, no HTTP readiness observed; not a web startup pass.",
+          "log": "jobs/6d4564be-52d8-44c9-85e8-2eff1dc1fb6b.2.log"
+        }
+      ]
+    },
+    {
+      "job": "106ddbca-85f4-462e-91c4-c25f8dcce99e",
+      "classification": "focused DOM/focus capture",
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- env SETTINGS_FOCUSED_PROOF=1 bun .temp/settings-feedback-G-2829/rendered-proof.ts",
+      "exit": 0,
+      "observedCases": 4,
+      "caseErrors": 0,
+      "evidence": [
+        "focused-answers.json",
+        "jobs/106ddbca-85f4-462e-91c4-c25f8dcce99e.log"
+      ]
+    }
+  ],
+  "assertionsReached": {
+    "preferenceStories": [
+      "Slow privacy and spoiler saves disable the shared preference domain, including language buttons/search/save/spoiler select; accepted language order [en,ko,fr] survives the unrelated save.",
+      "503 failure retains draft and retry submits it; 409 refresh preserves accepted draft, reviews current version and retries against expectedVersion 8 rather than 7.",
+      "Conflict refresh failure keeps recovery state and allows loading latest before saving retained languages.",
+      "Changing the language draft after success clears the old receipt; subsequent submitted languages [ko,en,fr] match accepted order."
+    ],
+    "notificationStories": [
+      "Saving is local and switch remains at original value until success; all switches are disabled during a write.",
+      "503/409 retain original unchecked value; conflict refresh updates the other push choice without implying the email choice was saved.",
+      "503 retry uses expectedRevision 7; conflict retry uses 8; second command receives a new idempotency key.",
+      "Failed refresh can be reviewed again without a second write, followed by explicit retry."
+    ],
+    "focusedDisabledControls": {
+      "existing-preferences-saving-preferences-phone-1440": [
+        {
+          "name": "Remove English",
+          "disabled": true
+        },
+        {
+          "name": "Move Korean up",
+          "disabled": true
+        },
+        {
+          "name": "Remove Korean",
+          "disabled": true
+        },
+        {
+          "name": "Move French up",
+          "disabled": true
+        },
+        {
+          "name": "Remove French",
+          "disabled": true
+        },
+        {
+          "name": "Add Japanese",
+          "disabled": true
+        },
+        {
+          "name": "Add another language",
+          "disabled": true
+        },
+        {
+          "name": "Add German",
+          "disabled": true
+        },
+        {
+          "name": "Add Dutch",
+          "disabled": true
+        },
+        {
+          "name": "Save changes",
+          "disabled": true
+        },
+        {
+          "name": "Unread chapter spoilers",
+          "disabled": true
+        }
+      ],
+      "existing-preferences-saving-preferences-phone-390": [
+        {
+          "name": "Remove English",
+          "disabled": true
+        },
+        {
+          "name": "Move Korean up",
+          "disabled": true
+        },
+        {
+          "name": "Remove Korean",
+          "disabled": true
+        },
+        {
+          "name": "Move French up",
+          "disabled": true
+        },
+        {
+          "name": "Remove French",
+          "disabled": true
+        },
+        {
+          "name": "Add Japanese",
+          "disabled": true
+        },
+        {
+          "name": "Add another language",
+          "disabled": true
+        },
+        {
+          "name": "Add German",
+          "disabled": true
+        },
+        {
+          "name": "Add Dutch",
+          "disabled": true
+        },
+        {
+          "name": "Save changes",
+          "disabled": true
+        },
+        {
+          "name": "Unread chapter spoilers",
+          "disabled": true
+        }
+      ]
+    },
+    "independentNotificationMatrix": [
+      {
+        "case": "1440-reply-200",
+        "captureCompleted": true,
+        "error": null,
+        "simulatedWrites": [
+          {
+            "expectedRevision": "7",
+            "state": "enabled",
+            "idempotencyKey": "31e6de39-cac1-4ec9-b4ab-b0cb0ef2bf6c"
+          }
+        ],
+        "liveTexts": [
+          "…",
+          "Saving…",
+          "Notification choice saved."
+        ],
+        "evidence": "rendered-answers.json#1440-reply-200"
+      },
+      {
+        "case": "1440-reply-503",
+        "captureCompleted": true,
+        "error": null,
+        "simulatedWrites": [
+          {
+            "expectedRevision": "7",
+            "state": "enabled",
+            "idempotencyKey": "e3d9c1d9-2ff2-4c47-9418-31665b410716"
+          },
+          {
+            "expectedRevision": "7",
+            "state": "enabled",
+            "idempotencyKey": "ab77e64c-a282-4ff5-b344-ae5162b8a68e"
+          }
+        ],
+        "liveTexts": [
+          "…",
+          "Saving…",
+          "Could not save. Try again.",
+          "Notification choice saved."
+        ],
+        "evidence": "rendered-answers.json#1440-reply-503"
+      },
+      {
+        "case": "1440-reply-409",
+        "captureCompleted": true,
+        "error": null,
+        "simulatedWrites": [
+          {
+            "expectedRevision": "7",
+            "state": "enabled",
+            "idempotencyKey": "6ef00458-1446-44fd-99cd-08001861da8a"
+          },
+          {
+            "expectedRevision": "8",
+            "state": "enabled",
+            "idempotencyKey": "a90a43c5-bffb-4cd3-b5ae-a8fc9179a77f"
+          }
+        ],
+        "liveTexts": [
+          "…",
+          "Saving…",
+          "Loading latest choice…",
+          "Changed elsewhere. The latest choice is shown. Review it before saving again.",
+          "Notification choice saved."
+        ],
+        "evidence": "rendered-answers.json#1440-reply-409"
+      },
+      {
+        "case": "1440-review-200",
+        "captureCompleted": true,
+        "error": null,
+        "simulatedWrites": [
+          {
+            "expectedRevision": "7",
+            "state": "enabled",
+            "idempotencyKey": "db8e03e8-c870-46ee-88ff-a39ca034233c"
+          }
+        ],
+        "liveTexts": [
+          "…",
+          "Saving…",
+          "Notification choice saved."
+        ],
+        "evidence": "rendered-answers.json#1440-review-200"
+      },
+      {
+        "case": "1440-review-503",
+        "captureCompleted": true,
+        "error": null,
+        "simulatedWrites": [
+          {
+            "expectedRevision": "7",
+            "state": "enabled",
+            "idempotencyKey": "be882e33-0d47-4599-93a1-d5c5d58fe0a0"
+          },
+          {
+            "expectedRevision": "7",
+            "state": "enabled",
+            "idempotencyKey": "604ce2f8-a396-4d0b-bc7a-7047818eb6eb"
+          }
+        ],
+        "liveTexts": [
+          "…",
+          "Saving…",
+          "Could not save. Try again.",
+          "Notification choice saved."
+        ],
+        "evidence": "rendered-answers.json#1440-review-503"
+      },
+      {
+        "case": "1440-review-409",
+        "captureCompleted": true,
+        "error": null,
+        "simulatedWrites": [
+          {
+            "expectedRevision": "7",
+            "state": "enabled",
+            "idempotencyKey": "24d860a4-2d5c-40b6-9aab-0b240c6d20f0"
+          },
+          {
+            "expectedRevision": "8",
+            "state": "enabled",
+            "idempotencyKey": "00dcfd6d-ae5a-4f94-bfa8-05a8afb10f48"
+          }
+        ],
+        "liveTexts": [
+          "…",
+          "Saving…",
+          "Loading latest choice…",
+          "Changed elsewhere. The latest choice is shown. Review it before saving again.",
+          "Notification choice saved."
+        ],
+        "evidence": "rendered-answers.json#1440-review-409"
+      },
+      {
+        "case": "1440-proposal-reverted-200",
+        "captureCompleted": true,
+        "error": null,
+        "simulatedWrites": [
+          {
+            "expectedRevision": "7",
+            "state": "enabled",
+            "idempotencyKey": "a4dfb2ce-f193-4e75-b93c-dd42ea49b046"
+          }
+        ],
+        "liveTexts": [
+          "…",
+          "Saving…",
+          "Notification choice saved."
+        ],
+        "evidence": "rendered-answers.json#1440-proposal-reverted-200"
+      },
+      {
+        "case": "1440-proposal-reverted-503",
+        "captureCompleted": true,
+        "error": null,
+        "simulatedWrites": [
+          {
+            "expectedRevision": "7",
+            "state": "enabled",
+            "idempotencyKey": "f4b2906b-7793-451e-8bd7-60973fa72313"
+          },
+          {
+            "expectedRevision": "7",
+            "state": "enabled",
+            "idempotencyKey": "7bd1ac75-acb8-4567-8191-2b399ca62146"
+          }
+        ],
+        "liveTexts": [
+          "…",
+          "Saving…",
+          "Could not save. Try again.",
+          "Notification choice saved."
+        ],
+        "evidence": "rendered-answers.json#1440-proposal-reverted-503"
+      },
+      {
+        "case": "1440-proposal-reverted-409",
+        "captureCompleted": true,
+        "error": null,
+        "simulatedWrites": [
+          {
+            "expectedRevision": "7",
+            "state": "enabled",
+            "idempotencyKey": "97009c89-ccb6-4e83-bf31-3aab09c2ee3d"
+          },
+          {
+            "expectedRevision": "8",
+            "state": "enabled",
+            "idempotencyKey": "31fe64de-711f-4133-bc11-75ee29054eb2"
+          }
+        ],
+        "liveTexts": [
+          "…",
+          "Saving…",
+          "Loading latest choice…",
+          "Changed elsewhere. The latest choice is shown. Review it before saving again.",
+          "Notification choice saved."
+        ],
+        "evidence": "rendered-answers.json#1440-proposal-reverted-409"
+      },
+      {
+        "case": "390-reply-200",
+        "captureCompleted": true,
+        "error": null,
+        "simulatedWrites": [
+          {
+            "expectedRevision": "7",
+            "state": "enabled",
+            "idempotencyKey": "172ecb85-47a2-4965-9b25-867e683edf38"
+          }
+        ],
+        "liveTexts": [
+          "…",
+          "Saving…",
+          "Notification choice saved."
+        ],
+        "evidence": "rendered-answers.json#390-reply-200"
+      },
+      {
+        "case": "390-reply-503",
+        "captureCompleted": true,
+        "error": null,
+        "simulatedWrites": [
+          {
+            "expectedRevision": "7",
+            "state": "enabled",
+            "idempotencyKey": "4e824764-010f-44da-9db3-c2927ececd59"
+          },
+          {
+            "expectedRevision": "7",
+            "state": "enabled",
+            "idempotencyKey": "5dbe3b07-570f-43e5-a828-1abde9652864"
+          }
+        ],
+        "liveTexts": [
+          "…",
+          "Saving…",
+          "Could not save. Try again.",
+          "Notification choice saved."
+        ],
+        "evidence": "rendered-answers.json#390-reply-503"
+      },
+      {
+        "case": "390-reply-409",
+        "captureCompleted": true,
+        "error": null,
+        "simulatedWrites": [
+          {
+            "expectedRevision": "7",
+            "state": "enabled",
+            "idempotencyKey": "e96e8f3b-6c03-485b-a242-d543682dfb05"
+          },
+          {
+            "expectedRevision": "8",
+            "state": "enabled",
+            "idempotencyKey": "f686edaa-fa86-4914-99f4-3b257fea098d"
+          }
+        ],
+        "liveTexts": [
+          "…",
+          "Saving…",
+          "Loading latest choice…",
+          "Changed elsewhere. The latest choice is shown. Review it before saving again.",
+          "Notification choice saved."
+        ],
+        "evidence": "rendered-answers.json#390-reply-409"
+      },
+      {
+        "case": "390-review-200",
+        "captureCompleted": true,
+        "error": null,
+        "simulatedWrites": [
+          {
+            "expectedRevision": "7",
+            "state": "enabled",
+            "idempotencyKey": "9ed90787-6544-424d-8025-aa66c72f3a61"
+          }
+        ],
+        "liveTexts": [
+          "…",
+          "Saving…",
+          "Notification choice saved."
+        ],
+        "evidence": "rendered-answers.json#390-review-200"
+      },
+      {
+        "case": "390-review-503",
+        "captureCompleted": true,
+        "error": null,
+        "simulatedWrites": [
+          {
+            "expectedRevision": "7",
+            "state": "enabled",
+            "idempotencyKey": "e3f984e1-9e5b-471d-811a-d7f5f2b0ad47"
+          },
+          {
+            "expectedRevision": "7",
+            "state": "enabled",
+            "idempotencyKey": "b2937c95-b205-464c-9c4a-fd36aaeeda93"
+          }
+        ],
+        "liveTexts": [
+          "…",
+          "Saving…",
+          "Could not save. Try again.",
+          "Notification choice saved."
+        ],
+        "evidence": "rendered-answers.json#390-review-503"
+      },
+      {
+        "case": "390-review-409",
+        "captureCompleted": true,
+        "error": null,
+        "simulatedWrites": [
+          {
+            "expectedRevision": "7",
+            "state": "enabled",
+            "idempotencyKey": "61c0adcf-5da7-4420-b627-ea02c600a922"
+          },
+          {
+            "expectedRevision": "8",
+            "state": "enabled",
+            "idempotencyKey": "2ae27ccb-6775-4571-92ba-c97ba08e9745"
+          }
+        ],
+        "liveTexts": [
+          "…",
+          "Saving…",
+          "Loading latest choice…",
+          "Changed elsewhere. The latest choice is shown. Review it before saving again.",
+          "Notification choice saved."
+        ],
+        "evidence": "rendered-answers.json#390-review-409"
+      },
+      {
+        "case": "390-proposal-reverted-200",
+        "captureCompleted": true,
+        "error": null,
+        "simulatedWrites": [
+          {
+            "expectedRevision": "7",
+            "state": "enabled",
+            "idempotencyKey": "bca5d636-9bcc-4058-814c-f46f7ecbd1c4"
+          }
+        ],
+        "liveTexts": [
+          "…",
+          "Saving…",
+          "Notification choice saved."
+        ],
+        "evidence": "rendered-answers.json#390-proposal-reverted-200"
+      },
+      {
+        "case": "390-proposal-reverted-503",
+        "captureCompleted": true,
+        "error": null,
+        "simulatedWrites": [
+          {
+            "expectedRevision": "7",
+            "state": "enabled",
+            "idempotencyKey": "35c859ef-f841-4965-8adb-ee7630dee9ea"
+          },
+          {
+            "expectedRevision": "7",
+            "state": "enabled",
+            "idempotencyKey": "0ea98956-87a8-470f-9c45-75d33a315e72"
+          }
+        ],
+        "liveTexts": [
+          "…",
+          "Saving…",
+          "Could not save. Try again.",
+          "Notification choice saved."
+        ],
+        "evidence": "rendered-answers.json#390-proposal-reverted-503"
+      },
+      {
+        "case": "390-proposal-reverted-409",
+        "captureCompleted": true,
+        "error": null,
+        "simulatedWrites": [
+          {
+            "expectedRevision": "7",
+            "state": "enabled",
+            "idempotencyKey": "e1a05f65-143f-4fd8-8d3b-80d5b709d164"
+          },
+          {
+            "expectedRevision": "8",
+            "state": "enabled",
+            "idempotencyKey": "7c10fd21-8886-40ae-8e71-800d1bb0c45d"
+          }
+        ],
+        "liveTexts": [
+          "…",
+          "Saving…",
+          "Loading latest choice…",
+          "Changed elsewhere. The latest choice is shown. Review it before saving again.",
+          "Notification choice saved."
+        ],
+        "evidence": "rendered-answers.json#390-proposal-reverted-409"
+      }
+    ],
+    "focusedLastConflict": [
+      {
+        "case": "1440-proposal-reverted-409",
+        "naturalTabsToLocalRecovery": 1,
+        "saving": {
+          "viewport": {
+            "width": 1440,
+            "height": 1000
+          },
+          "scroll": {
+            "x": 0,
+            "y": 0
+          },
+          "documentWidth": 1440,
+          "control": {
+            "x": 944,
+            "y": 869.5,
+            "width": 1,
+            "height": 1,
+            "right": 945,
+            "bottom": 870.5,
+            "fullyInViewport": true,
+            "checked": false,
+            "disabled": true,
+            "name": "Correction reverted · Email digest",
+            "describedBy": "_r_0_-proposal-reverted:email"
+          },
+          "status": {
+            "x": 903,
+            "y": 888,
+            "width": 112,
+            "height": 16,
+            "right": 1015,
+            "bottom": 904,
+            "fullyInViewport": true,
+            "text": "Saving…",
+            "role": "status",
+            "live": "polite",
+            "atomic": "true"
+          }
+        },
+        "final": {
+          "viewport": {
+            "width": 1440,
+            "height": 1000
+          },
+          "scroll": {
+            "x": 0,
+            "y": 0
+          },
+          "documentWidth": 1440,
+          "control": {
+            "x": 944,
+            "y": 869.5,
+            "width": 1,
+            "height": 1,
+            "right": 945,
+            "bottom": 870.5,
+            "fullyInViewport": true,
+            "checked": false,
+            "disabled": false,
+            "name": "Correction reverted · Email digest",
+            "describedBy": "_r_0_-proposal-reverted:email"
+          },
+          "status": {
+            "x": 903,
+            "y": 888,
+            "width": 112,
+            "height": 80,
+            "right": 1015,
+            "bottom": 968,
+            "fullyInViewport": true,
+            "text": "Changed elsewhere. The latest choice is shown. Review it before saving again.",
+            "role": "status",
+            "live": "polite",
+            "atomic": "true"
+          }
+        },
+        "afterNaturalTab": {
+          "viewport": {
+            "width": 1440,
+            "height": 1000
+          },
+          "scroll": {
+            "x": 0,
+            "y": 12
+          },
+          "documentWidth": 1440,
+          "control": {
+            "x": 944,
+            "y": 857.5,
+            "width": 1,
+            "height": 1,
+            "right": 945,
+            "bottom": 858.5,
+            "fullyInViewport": true,
+            "checked": false,
+            "disabled": false,
+            "name": "Correction reverted · Email digest",
+            "describedBy": "_r_0_-proposal-reverted:email"
+          },
+          "status": {
+            "x": 903,
+            "y": 876,
+            "width": 112,
+            "height": 80,
+            "right": 1015,
+            "bottom": 956,
+            "fullyInViewport": true,
+            "text": "Changed elsewhere. The latest choice is shown. Review it before saving again.",
+            "role": "status",
+            "live": "polite",
+            "atomic": "true"
+          }
+        },
+        "afterEnter": {
+          "viewport": {
+            "width": 1440,
+            "height": 1000
+          },
+          "scroll": {
+            "x": 0,
+            "y": 0
+          },
+          "documentWidth": 1440,
+          "control": {
+            "x": 944,
+            "y": 869.5,
+            "width": 1,
+            "height": 1,
+            "right": 945,
+            "bottom": 870.5,
+            "fullyInViewport": true,
+            "checked": true,
+            "disabled": false,
+            "name": "Correction reverted · Email digest",
+            "describedBy": "_r_0_-proposal-reverted:email"
+          },
+          "status": {
+            "x": 903,
+            "y": 888,
+            "width": 112,
+            "height": 32,
+            "right": 1015,
+            "bottom": 920,
+            "fullyInViewport": true,
+            "text": "Notification choice saved.",
+            "role": "status",
+            "live": "polite",
+            "atomic": "true"
+          }
+        },
+        "evidence": "focused-answers.json#1440-proposal-reverted-409"
+      },
+      {
+        "case": "390-proposal-reverted-409",
+        "naturalTabsToLocalRecovery": 1,
+        "saving": {
+          "viewport": {
+            "width": 390,
+            "height": 844
+          },
+          "scroll": {
+            "x": 0,
+            "y": 844
+          },
+          "documentWidth": 532,
+          "control": {
+            "x": 288,
+            "y": 756.5,
+            "width": 1,
+            "height": 1,
+            "right": 289,
+            "bottom": 757.5,
+            "fullyInViewport": true,
+            "checked": false,
+            "disabled": true,
+            "name": "Correction reverted · Email digest",
+            "describedBy": "_r_0_-proposal-reverted:email"
+          },
+          "status": {
+            "x": 253,
+            "y": 775,
+            "width": 100,
+            "height": 16,
+            "right": 353,
+            "bottom": 791,
+            "fullyInViewport": true,
+            "text": "Saving…",
+            "role": "status",
+            "live": "polite",
+            "atomic": "true"
+          }
+        },
+        "final": {
+          "viewport": {
+            "width": 390,
+            "height": 844
+          },
+          "scroll": {
+            "x": 0,
+            "y": 844
+          },
+          "documentWidth": 532,
+          "control": {
+            "x": 288,
+            "y": 756.5,
+            "width": 1,
+            "height": 1,
+            "right": 289,
+            "bottom": 757.5,
+            "fullyInViewport": true,
+            "checked": false,
+            "disabled": false,
+            "name": "Correction reverted · Email digest",
+            "describedBy": "_r_0_-proposal-reverted:email"
+          },
+          "status": {
+            "x": 253,
+            "y": 775,
+            "width": 100,
+            "height": 96,
+            "right": 353,
+            "bottom": 871,
+            "fullyInViewport": false,
+            "text": "Changed elsewhere. The latest choice is shown. Review it before saving again.",
+            "role": "status",
+            "live": "polite",
+            "atomic": "true"
+          }
+        },
+        "afterNaturalTab": {
+          "viewport": {
+            "width": 390,
+            "height": 844
+          },
+          "scroll": {
+            "x": 0,
+            "y": 984
+          },
+          "documentWidth": 532,
+          "control": {
+            "x": 288,
+            "y": 616.5,
+            "width": 1,
+            "height": 1,
+            "right": 289,
+            "bottom": 617.5,
+            "fullyInViewport": true,
+            "checked": false,
+            "disabled": false,
+            "name": "Correction reverted · Email digest",
+            "describedBy": "_r_0_-proposal-reverted:email"
+          },
+          "status": {
+            "x": 253,
+            "y": 635,
+            "width": 100,
+            "height": 96,
+            "right": 353,
+            "bottom": 731,
+            "fullyInViewport": true,
+            "text": "Changed elsewhere. The latest choice is shown. Review it before saving again.",
+            "role": "status",
+            "live": "polite",
+            "atomic": "true"
+          }
+        },
+        "afterEnter": {
+          "viewport": {
+            "width": 390,
+            "height": 844
+          },
+          "scroll": {
+            "x": 0,
+            "y": 876
+          },
+          "documentWidth": 532,
+          "control": {
+            "x": 288,
+            "y": 724.5,
+            "width": 1,
+            "height": 1,
+            "right": 289,
+            "bottom": 725.5,
+            "fullyInViewport": true,
+            "checked": true,
+            "disabled": false,
+            "name": "Correction reverted · Email digest",
+            "describedBy": "_r_0_-proposal-reverted:email"
+          },
+          "status": {
+            "x": 253,
+            "y": 743,
+            "width": 100,
+            "height": 32,
+            "right": 353,
+            "bottom": 775,
+            "fullyInViewport": true,
+            "text": "Notification choice saved.",
+            "role": "status",
+            "live": "polite",
+            "atomic": "true"
+          }
+        },
+        "evidence": "focused-answers.json#390-proposal-reverted-409"
+      }
+    ]
+  },
+  "defects": [
+    {
+      "id": "notification-hidden-label-overflow",
+      "severity": "P2",
+      "confidence": "confirmed runtime; CSS source explanation is inference",
+      "scope": "NotificationSettings and localized Settings parent",
+      "expected": "390-wide settings should not have horizontal document overflow.",
+      "actual": "English document width 532, Japanese 539, German 563 at width 390. Original five notification stories and four localized profile stories fail their existing width assertions.",
+      "source": [
+        "apps/web/features/settings/notification-settings.tsx:251",
+        "apps/web/features/settings/notification-settings.tsx:253",
+        "packages/ui/src/components/field.tsx:23",
+        "packages/ui/src/components/field.tsx:30"
+      ],
+      "cause": "Rendered absolute sr-only FieldLabel can be 458px wide with nowrap (x74/right532). Field vertical orientation applies [&>.sr-only]:w-auto, overriding the visually hidden width. No CSS mutation was used to confirm this inference.",
+      "evidence": [
+        "rendered-answers.json#existing-notifications-phone",
+        "rendered-answers.json#existing-notifications-japanese",
+        "rendered-answers.json#existing-notifications-german-phone",
+        "jobs/8c606c18-286e-43b1-808c-de172d8324ee.log"
+      ],
+      "nextGuard": "Keep existing mobile document-width assertions; inspect computed sr-only geometry in all included locales after the owner fix."
+    },
+    {
+      "id": "last-conflict-feedback-clipped",
+      "severity": "P2",
+      "confidence": "confirmed screenshot and geometry",
+      "scope": "D4-005 last email choice",
+      "expected": "Result and recovery stay visibly associated with the just-operated item at both required sizes.",
+      "actual": "At 390x844, scrollY844, last switch is visible but conflict status spans y775..871, so its final lines and recovery are below the viewport. At 1440x1000 status y888..968 is visible but recovery extends below the bottom. One Tab scrolls to and focuses recovery at both sizes, and Enter succeeds; focus is recoverable.",
+      "source": [
+        "apps/web/features/settings/notification-settings.tsx:268",
+        "apps/web/features/settings/notification-settings.tsx:273"
+      ],
+      "evidence": [
+        "images/focused-390-proposal-reverted-409-final.png",
+        "images/focused-1440-proposal-reverted-409-final.png",
+        "images/focused-390-proposal-reverted-409-natural-tab.png",
+        "focused-answers.json"
+      ],
+      "nextGuard": "Measure complete status/recovery intersection with viewport after an asynchronous conflict resolves without an additional scroll; current toBeVisible assertions are insufficient."
+    },
+    {
+      "id": "busy-notice-overlaps-language-draft",
+      "severity": "P2",
+      "confidence": "confirmed visually; no new product assertion added",
+      "scope": "D2-005 saving state while inspecting Content at phone width",
+      "expected": "Saving status and retained selected language order remain readable together while scrolling.",
+      "actual": "In authored SavingPreferencesPhone at 390x844, scrolling to disabled Add another language search leaves the sticky busy notice over selected language rows, obscuring the first selected language and overlapping the second. Disabled semantics remain correct.",
+      "source": [
+        "apps/web/features/settings/settings-sections.tsx:239",
+        "apps/web/features/settings/settings-sections.tsx:240"
+      ],
+      "evidence": [
+        "images/focused-existing-preferences-saving-preferences-phone-390-content-disabled.png",
+        "images/focused-existing-preferences-saving-preferences-phone-1440-content-disabled.png",
+        "focused-answers.json#existing-preferences-saving-preferences-phone-390"
+      ],
+      "nextGuard": "Inspect the existing busy story at 390 after scrolling through language selection; preserve readability around sticky feedback."
+    },
+    {
+      "id": "language-picker-visible-name-mismatch",
+      "severity": "P2",
+      "confidence": "confirmed addon assertion",
+      "scope": "Shared LanguagePicker; pre-existing/shared source outside authored patch",
+      "expected": "Accessible button names contain their visible language text.",
+      "actual": "Add Japanese, Add German and Add Dutch aria-labels omit visible 日本語, Deutsch and Nederlands. Selected six preference stories and seven profile stories fail label-content-name-mismatch after interaction completion. Additional native names are reported in ReadingLanguages variants.",
+      "source": [
+        "apps/web/features/onboarding/language-picker.tsx:20",
+        "apps/web/features/onboarding/language-picker.tsx:76",
+        "apps/web/features/onboarding/language-picker.tsx:98"
+      ],
+      "evidence": [
+        "jobs/8c606c18-286e-43b1-808c-de172d8324ee.log"
+      ],
+      "nextGuard": "Retain addon axe checks for visible-label/name agreement; route a shared LanguagePicker fix to its owner."
+    }
+  ],
+  "acceptance": [
+    {
+      "finding": "D2-005",
+      "verdict": "partial / not closed",
+      "criteria": [
+        {
+          "requirement": "Busy preference domain visibly disables language interactions or preserves subsequent accepted edits.",
+          "result": "Rendered native disabled semantics and authored retained-order assertions pass. The scrolled phone busy notice overlaps language text."
+        },
+        {
+          "requirement": "Slow response, 503, conflict and quick edits do not overwrite accepted drafts or leave a stale receipt.",
+          "result": "Existing selected play assertions pass through slow-save, 503/retry, 409/version refresh, failed refresh recovery and post-success draft mutation. Simulated only."
+        },
+        {
+          "requirement": "At 1440 and 390 keyboard/touch users identify state; refreshed order matches the last accepted operation.",
+          "result": "Screenshots/native states and Enter reorder inspected; no physical touch or complete keyboard journey. Real authenticated reload persistence not reached because no isolated signed-in fixture is available."
+        }
+      ]
+    },
+    {
+      "finding": "D4-004",
+      "verdict": "rendered identification confirmed; complete finding acceptance unconfirmed",
+      "criteria": [
+        {
+          "requirement": "Every phone row identifies the three channels without remembering the column order.",
+          "result": "Actual first/middle/last screenshots in Phone, Japanese and GermanPhone show repeated local channel labels while scrolling."
+        },
+        {
+          "requirement": "Full accessible names and keyboard/screen-reader ordering correspond to topic, channel and state.",
+          "result": "Original role/name assertions and native Space/Enter interactions reached; complete names remain in DOM. Screen-reader operation/heard order was not tested. Horizontal overflow remains."
+        },
+        {
+          "requirement": "Inspect first/middle/last actual screenshots.",
+          "result": "Viewed all nine requested localized row images plus 18 independent final outcome images at both viewports."
+        }
+      ]
+    },
+    {
+      "finding": "D4-005",
+      "verdict": "failed / not closed",
+      "criteria": [
+        {
+          "requirement": "Saving/final 200, 503 and 409 feedback visibly belongs to first/middle/last control at 390 and 1440.",
+          "result": "Per-control feedback and saving verified, but last 409 result is clipped on phone and recovery is partly offscreen on desktop."
+        },
+        {
+          "requirement": "Failure retains original value, offers recovery and conflict does not imply saved.",
+          "result": "Original plays and independent cases verify these transitions; retries use fresh keys and current revision."
+        },
+        {
+          "requirement": "Keep status announcement and recoverable operation without modifying existing accounts.",
+          "result": "DOM status/polite/atomic updates and describedBy link verified; natural Tab/Enter recovery succeeds for last conflict at both sizes. Heard announcement unverified. Only browser-local responses were used."
+        }
+      ]
+    }
+  ],
+  "setupBlockers": [
+    {
+      "id": "isolated-signed-in-fixture-missing",
+      "assertionReached": false,
+      "missingPrerequisite": "An available worktree-isolated OAuth/signed-in fixture with its own state, supported configured Main/Auth/Web endpoints and Settings journey authority.",
+      "evidence": "Neither authorized worker root nor private product clone has .temp/stack state/fixture. task urls/task env expose the shared environment but no owned isolated signed-in fixture. Shared accounts/state were not used.",
+      "effect": "No real signed-in Settings journey, actual API write receipt, reload persistence, or full finding closure. Continue and complete independent story checks."
+    },
+    {
+      "id": "bounded-web-probe-no-readiness",
+      "assertionReached": false,
+      "command": "task web:dev -- --port 42830",
+      "evidence": [
+        "web-startup.json",
+        "web-startup.log"
+      ],
+      "actual": "25 readiness attempts with 400ms intervals and per-fetch 3s timeout yielded no HTTP response; process was stopped after the bounded probe. The diagnostic wrapper exited zero.",
+      "owner": "G-2747",
+      "limitation": "No startup root cause was established and the known G-2747 startup defect was not independently reproduced/confirmed. No startup repair was attempted."
+    }
+  ],
+  "screenshots": {
+    "retainedCount": 128,
+    "actuallyViewed": [
+      {
+        "path": "images/1440-reply-200-final.png",
+        "viewport": [
+          1440,
+          1000
+        ],
+        "sha256": "c67b3f89bb0579f2973e7d74317d33a88aee366956cf7327beaa8bc5f3d45360",
+        "observation": "Success is beside the operated email switch."
+      },
+      {
+        "path": "images/1440-reply-503-final.png",
+        "viewport": [
+          1440,
+          1000
+        ],
+        "sha256": "c97ceb7b2681fc3eb32fd3bebdfd0653b96981fdd2c5a359d010a493d914ce7f",
+        "observation": "Failure is beside the original unchecked email switch; local Turn on recovery is provided."
+      },
+      {
+        "path": "images/1440-reply-409-final.png",
+        "viewport": [
+          1440,
+          1000
+        ],
+        "sha256": "66a1de16bd2b09c60726830d4d704171c9c222725ab29f912949fa72c3e55807",
+        "observation": "Failure is beside the original unchecked email switch; local Turn on recovery is provided."
+      },
+      {
+        "path": "images/1440-reply-200-saving.png",
+        "viewport": [
+          1440,
+          1000
+        ],
+        "sha256": "84d9570f28b616ec7e3c33e4e71d711a9c7b2a023281a31d96e36ff5575290d3",
+        "observation": "Saving text is adjacent to the operated email switch; original value remains off and controls are disabled."
+      },
+      {
+        "path": "images/1440-review-200-final.png",
+        "viewport": [
+          1440,
+          1000
+        ],
+        "sha256": "49042ca1b16655cbc9491905deb2e8e8a89915d7aa103d6af5ef51c575aab225",
+        "observation": "Success is beside the operated email switch."
+      },
+      {
+        "path": "images/1440-review-503-final.png",
+        "viewport": [
+          1440,
+          1000
+        ],
+        "sha256": "da2eb59073d52dbdd1790aa99afab5eeabb2f562f771d0e87a10d8eb33881120",
+        "observation": "Failure is beside the original unchecked email switch; local Turn on recovery is provided."
+      },
+      {
+        "path": "images/1440-review-409-final.png",
+        "viewport": [
+          1440,
+          1000
+        ],
+        "sha256": "04ae392ab271caef19b8c188b9d96be24b60120b5cd8b34a3504f6328349a758",
+        "observation": "Failure is beside the original unchecked email switch; local Turn on recovery is provided."
+      },
+      {
+        "path": "images/1440-review-200-saving.png",
+        "viewport": [
+          1440,
+          1000
+        ],
+        "sha256": "51f989e3c8213936eb1acf035f23dba1fec65263bf9503d8eeec89e3a5957236",
+        "observation": "Saving text is adjacent to the operated email switch; original value remains off and controls are disabled."
+      },
+      {
+        "path": "images/1440-proposal-reverted-200-final.png",
+        "viewport": [
+          1440,
+          1000
+        ],
+        "sha256": "be82f5ca193cb46b725deacac8ef66b2efb5de01d9de824c0d0033d161ef554e",
+        "observation": "Success is beside the operated email switch."
+      },
+      {
+        "path": "images/1440-proposal-reverted-503-final.png",
+        "viewport": [
+          1440,
+          1000
+        ],
+        "sha256": "c38d9a98f415f3868f861c03b1a989a521fd53c4337aa16e24a949ef12c8668b",
+        "observation": "Failure is beside the original unchecked email switch; local Turn on recovery is provided."
+      },
+      {
+        "path": "images/1440-proposal-reverted-409-final.png",
+        "viewport": [
+          1440,
+          1000
+        ],
+        "sha256": "5eb250e47132c560adcee49b28dcd84e68b0e9e5d69a5269b8569c72b26f1630",
+        "observation": "Conflict text is visible; recovery button is partly below the viewport."
+      },
+      {
+        "path": "images/1440-proposal-reverted-200-saving.png",
+        "viewport": [
+          1440,
+          1000
+        ],
+        "sha256": "08f58e6ef9996ec147aa9911fc9604f61d2049f2a99ad54cfa192dc6b1befd12",
+        "observation": "Saving text is adjacent to the operated email switch; original value remains off and controls are disabled."
+      },
+      {
+        "path": "images/390-reply-200-final.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "7a8df4d20b906b2d2d0b5aae597e82c567a28efab63dd02dcaea1266a2d0d929",
+        "observation": "Success is beside the operated email switch."
+      },
+      {
+        "path": "images/390-reply-503-final.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "993569e9b0040db8e9db995f496aa41760ba9b6a542c21507624e20bc9f9c841",
+        "observation": "Failure is beside the original unchecked email switch; local Turn on recovery is provided."
+      },
+      {
+        "path": "images/390-reply-409-final.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "5d688f1c8f367eaa9c11e39fa172737d4a5931e03d9d6cad2468c4119596c099",
+        "observation": "Failure is beside the original unchecked email switch; local Turn on recovery is provided."
+      },
+      {
+        "path": "images/390-reply-200-saving.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "6d5f535f1018c23d36450d062a1f7dc687f4fcffe5815de9d65312bc15fadecd",
+        "observation": "Saving text is adjacent to the operated email switch; original value remains off and controls are disabled."
+      },
+      {
+        "path": "images/390-review-200-final.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "8fb1f8cdbf7384ddb24ee9cc226c4095b66ea504ab315e7d6b58bc96ccaeabec",
+        "observation": "Success is beside the operated email switch."
+      },
+      {
+        "path": "images/390-review-503-final.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "873094be67850902b6e3ba09895bd46241d6831c111eeeb08f8282a6efe74474",
+        "observation": "Failure is beside the original unchecked email switch; local Turn on recovery is provided."
+      },
+      {
+        "path": "images/390-review-409-final.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "4ce2d2989495b57a82026a6c76304eca03b0ff05185bf900be87de8dcfb364d0",
+        "observation": "Failure is beside the original unchecked email switch; local Turn on recovery is provided."
+      },
+      {
+        "path": "images/390-review-200-saving.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "80020e8c63fa267f5d8cb65550f9e364534b827b03be36ebdf492821a75a7828",
+        "observation": "Saving text is adjacent to the operated email switch; original value remains off and controls are disabled."
+      },
+      {
+        "path": "images/390-proposal-reverted-200-final.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "998b186a1df6a6978e5b32fde223e6ba06c24d1d5148a722b927ac0139c0bef5",
+        "observation": "Success is beside the operated email switch."
+      },
+      {
+        "path": "images/390-proposal-reverted-503-final.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "10c4c0076d63c0269bc08878a80274be18b511f8734bd82394232fef03a80e5b",
+        "observation": "Failure is beside the original unchecked email switch; local Turn on recovery is provided."
+      },
+      {
+        "path": "images/390-proposal-reverted-409-final.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "62badaa4a05093b51f178f11998ce6e3828258e347702f9bed5dd1987e37577d",
+        "observation": "Conflict message extends below viewport; recovery button is offscreen before another scroll or Tab."
+      },
+      {
+        "path": "images/390-proposal-reverted-200-saving.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "1d42ba27cbc651c919a79f5082d234c708bd535bf04aa8e8e1f160568abbc3d5",
+        "observation": "Saving text is adjacent to the operated email switch; original value remains off and controls are disabled."
+      },
+      {
+        "path": "images/existing-notifications-phone-row0.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "77082d1fe66ed6615a0bbaf26e1fe7d2f24f014d9442e6cfb9bc238c6c6a8aa1",
+        "observation": "All three localized channel labels remain visible with the row while scrolling. Japanese Email digest wraps to an additional line."
+      },
+      {
+        "path": "images/existing-notifications-phone-row8.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "e3e56e6016e1d7d47a94933e109bde1704e34822cda9365078c2c5a11ea738cd",
+        "observation": "All three localized channel labels remain visible with the row while scrolling. Japanese Email digest wraps to an additional line."
+      },
+      {
+        "path": "images/existing-notifications-phone-row14.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "53771d0df169ae2b91acb821c1cd8c083013dc42093d70877bf301165f65d4ee",
+        "observation": "All three localized channel labels remain visible with the row while scrolling. Japanese Email digest wraps to an additional line."
+      },
+      {
+        "path": "images/existing-notifications-japanese-row0.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "3ea6f37cf93b567fc04cf0149e75496fe9503749b2d30a7bdde64cebe712b4a8",
+        "observation": "All three localized channel labels remain visible with the row while scrolling. Japanese Email digest wraps to an additional line."
+      },
+      {
+        "path": "images/existing-notifications-japanese-row8.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "6ab272784bf25acdb35024e84e471fc372a7981c593b07d3a4752f9f02837d27",
+        "observation": "All three localized channel labels remain visible with the row while scrolling. Japanese Email digest wraps to an additional line."
+      },
+      {
+        "path": "images/existing-notifications-japanese-row14.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "e3a96ca768615a495b703cedb7c93e14278846e722e590e57f88c20970d512fa",
+        "observation": "All three localized channel labels remain visible with the row while scrolling. Japanese Email digest wraps to an additional line."
+      },
+      {
+        "path": "images/existing-notifications-german-phone-row0.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "fddaffde80c0d9766068bdc726043e1e1982ee193028e5fa02bc8116f1bcf5de",
+        "observation": "All three localized channel labels remain visible with the row while scrolling. Japanese Email digest wraps to an additional line."
+      },
+      {
+        "path": "images/existing-notifications-german-phone-row8.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "76589489cc2d01b8a7a57fa4ae36a90e6f8b28d569e5c688cf169d6235327fc9",
+        "observation": "All three localized channel labels remain visible with the row while scrolling. Japanese Email digest wraps to an additional line."
+      },
+      {
+        "path": "images/existing-notifications-german-phone-row14.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "6bf0a9a9009c64fe3c9d159b8aed4cd1e603e77516efe12a4fb6a5a294976de4",
+        "observation": "All three localized channel labels remain visible with the row while scrolling. Japanese Email digest wraps to an additional line."
+      },
+      {
+        "path": "images/existing-preferences-saving-preferences-phone-opening.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "c65add116ff5c7e7df5104ffdb1f19bbfd20a365b1f3eee884e43d81eab4da9e",
+        "observation": "Busy notice and disabled privacy controls are visible."
+      },
+      {
+        "path": "images/existing-preferences-slow-privacy-save-keyboard-recovered.png",
+        "viewport": [
+          1440,
+          1000
+        ],
+        "sha256": "c8d674dd74d9c30dc71258915f0a85cc5a909682fa2b9a2adbe0f1f0b2f04a19",
+        "observation": "English can be moved up after the authored slow-save flow settles."
+      },
+      {
+        "path": "images/existing-preferences-conflict-refresh-failure-keyboard-recovered.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "065f2f301ee9461ed5dfdaab4d97e435d19463dd399d072a23b83bbbc176ce0c",
+        "observation": "Language draft can be reordered after authored conflict/refresh recovery."
+      },
+      {
+        "path": "images/existing-profile-japanese-phone-opening.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "0dfa47683ab8b4a0d59fb9f7911c5ce8905389ba2e89157eaa8a41d81ceb23ad",
+        "observation": "Japanese Settings parent renders; channel labels repeat and the email label wraps."
+      },
+      {
+        "path": "images/focused-1440-proposal-reverted-409-final.png",
+        "viewport": [
+          1440,
+          1000
+        ],
+        "sha256": "5eb250e47132c560adcee49b28dcd84e68b0e9e5d69a5269b8569c72b26f1630",
+        "observation": "Unscrolled final conflict. Phone text is clipped; desktop recovery button is partly clipped."
+      },
+      {
+        "path": "images/focused-1440-proposal-reverted-409-natural-tab.png",
+        "viewport": [
+          1440,
+          1000
+        ],
+        "sha256": "dc9e2892c14a89e63340c1011d9820dcb8848d2f150301ce32a931b83bc5b4f2",
+        "observation": "One natural Tab reaches and outlines the local recovery button; browser scrolls it into view."
+      },
+      {
+        "path": "images/focused-existing-preferences-saving-preferences-phone-1440-content-disabled.png",
+        "viewport": [
+          1440,
+          1000
+        ],
+        "sha256": "2a154be7afd63cf347eefc7ff98fc608f1931939b3440f79e66c42c61026fcff",
+        "observation": "All language controls and spoiler select are disabled. At 390 the sticky busy notice overlaps selected language rows after scrolling to search."
+      },
+      {
+        "path": "images/focused-390-proposal-reverted-409-final.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "62badaa4a05093b51f178f11998ce6e3828258e347702f9bed5dd1987e37577d",
+        "observation": "Unscrolled final conflict. Phone text is clipped; desktop recovery button is partly clipped."
+      },
+      {
+        "path": "images/focused-390-proposal-reverted-409-natural-tab.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "88e4ca100abd39527f3f8a95367d4da7a1da68aeee87136e0b1f2061e3f0f56d",
+        "observation": "One natural Tab reaches and outlines the local recovery button; browser scrolls it into view."
+      },
+      {
+        "path": "images/focused-existing-preferences-saving-preferences-phone-390-content-disabled.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "bc40c5a513d5d57d9500af378c55bfef70bf0bba794b7aa755a3c0589d0e600b",
+        "observation": "All language controls and spoiler select are disabled. At 390 the sticky busy notice overlaps selected language rows after scrolling to search."
+      },
+      {
+        "path": "images/focused-390-proposal-reverted-409-retry.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "359dbb18a0593e294c257919a113cdbc0c3fa27f60cb0ddbd09843ab915d876d",
+        "observation": "Enter on the recovery button succeeds with local saved feedback and checked email switch."
+      },
+      {
+        "path": "qa/20261019t045512-e6b464/story-screenshots/apps-web-features-settings-notification-settings.stories.tsx/MiddleFailurePhone.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "873094be67850902b6e3ba09895bd46241d6831c111eeeb08f8282a6efe74474",
+        "observation": "Original story capture reviewed alongside its reached document-width assertion failure."
+      },
+      {
+        "path": "qa/20261019t045512-e6b464/story-screenshots/apps-web-features-settings-notification-settings.stories.tsx/LastConflictPhone.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "aa4fa51c54e5d3d03266a711afa88c1e99098bbc010ed3a056ac9539fc255dd5",
+        "observation": "Original story capture reviewed alongside its reached document-width assertion failure."
+      },
+      {
+        "path": "qa/20261019t045512-e6b464/story-screenshots/apps-web-features-settings-settings-sections.stories.tsx/ConflictRefreshFailure.png",
+        "viewport": [
+          390,
+          844
+        ],
+        "sha256": "cd4788f41323b72e7bae35640a403bfc81b8642e5d02fd89838696cdb4c87f8b",
+        "observation": "Authored refresh-recovery story ends with its language draft saved; addon accessible-name check still fails."
+      }
+    ],
+    "unlistedImages": "Retained but not claimed as visually inspected. First-attempt setup-error captures are excluded from acceptance evidence."
+  },
+  "retainedEvidence": {
+    "privateBundle": ".temp/settings-feedback-G-2829/",
+    "handoffBundle": ".temp/audit-remediation-20261019/proofs/settings-feedback-G-2829/",
+    "mainCopyCompleted": false,
+    "reason": "Latest explicit worker instruction makes main read-only even where the brief cites an absolute path. Requested main destination is translated to the same relative path in this worker; manager must copy the retained bundle into main.",
+    "managerRequestedMainDestination": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/proofs/settings-feedback-G-2829/"
+  },
+  "administrativeReportChecks": {
+    "scope": "Main-based report branch only. No product files or original assertions changed; these checks do not prove product behavior.",
+    "job": "43dd077e-f5e5-45f7-acac-bce7deec23cb",
+    "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+    "exit": 0,
+    "steps": [
+      {
+        "command": "task docs:check",
+        "exit": 0,
+        "result": "13 docs checker tests passed; 237 Markdown files checked for local links, fragments and design navigation. External URLs and runtime behavior not tested.",
+        "evidence": "jobs/43dd077e-f5e5-45f7-acac-bce7deec23cb.1.log"
+      },
+      {
+        "command": "task goal -- check",
+        "exit": 0,
+        "result": "types ok (no TypeScript workspace changed); tests ok (none named in brief); lint ok (no source changed); ast ok; guards ok (1/44 selected for changed proof path).",
+        "checkId": "run-okwLiF",
+        "evidence": [
+          "jobs/43dd077e-f5e5-45f7-acac-bce7deec23cb.2.log",
+          "administrative-check/output.log"
+        ]
+      }
+    ]
+  },
+  "instructionEffects": [
+    {
+      "file": ".agents/skills/goal-worker/SKILL.md",
+      "quote": "End that turn immediately with RESULT: parked, without a handoff, polling, reading logs or starting more work.",
+      "effect": "Recorded jobs parked and resumed the same worker; wake continuations consumed no fix round."
+    },
+    {
+      "file": "docs/goals/worker.md",
+      "quote": "Translate a main-checkout path into your worktree before editing it.",
+      "effect": "Retained bundle main destination translated into the worker. No writes to main beyond goalctl-owned bookkeeping."
+    }
+  ],
+  "ownerChanges": [],
+  "proposedTasks": [
+    "G-2751/settings owner: repair hidden-label overflow, last-row conflict feedback visibility and scrolled busy-notice overlap, then repeat only the affected evidence on an explicitly selected new pin.",
+    "Shared LanguagePicker owner: make accessible action names include visible localized language names and keep existing axe checks.",
+    "Manager/local-development owner: provide an available isolated signed-in fixture and its own state for real Settings receipt/reload verification; G-2747 continues to own startup repair."
+  ],
+  "next": "Manager reviews defects and partial acceptance, copies retained bundle to main under its own authority, and schedules owned repairs plus missing isolated signed-in proof. No source fix, landing or regression confirmation is claimed."
+}
