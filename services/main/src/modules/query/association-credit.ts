@@ -5,7 +5,7 @@ import {
   fenceRetainedCreditAssociationRead, openRetainedCreditAssociationRead,
   readRetainedCreditAssociationCandidates, readRetainedCreditAssociationView,
   RetainedCreditReadMoved, RetainedCreditReadUnavailable,
-  type RetainedCreditAssociationReadBasis, type RetainedCreditAssociationReadDependencies,
+  type RetainedCreditAssociationReadPosition, type RetainedCreditAssociationReadDependencies,
   type RetainedCreditAssociationReadOwners, type RetainedCreditAssociationView,
 } from '../work/credit-association-read.ts';
 import { WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
@@ -31,7 +31,7 @@ export const CREDIT_ASSOCIATION_WINDOW = 2;
  * implementation or permissive proof fallback is installed by this adapter. */
 export interface CreditAssociationProjectionOwner {
   basis(session: WorkReadSession, selection: AssociationSelection,
-    credit: RetainedCreditAssociationReadBasis): Promise<string>;
+    credit: RetainedCreditAssociationReadPosition): Promise<string>;
   read(session: WorkReadSession, selection: AssociationSelection,
     view: RetainedCreditAssociationView): Promise<AssociationCreditProjection | null>;
 }
@@ -45,9 +45,9 @@ function readerFor(session: WorkReadSession): VerifiedPrincipal {
   // The published credit reader currently requires a verified Account. Public
   // anonymous support belongs to that owner; never manufacture a principal.
   if (!principal) return unavailable('Anonymous retained credit reader is unavailable');
-  return { issuer: principal.issuer, subject: principal.subject,
-    ...(principal.emailVerified === undefined ? {} : { emailVerified: principal.emailVerified }),
-    ...(principal.contentEvidence === undefined ? {} : { contentEvidence: structuredClone(principal.contentEvidence) }) };
+  // The retained reader owns live Account validation and snapshots its authority.
+  // Preserve its callback, expiry and consent/disclosure metadata at this boundary.
+  return principal;
 }
 const equal = (a: unknown, b: unknown) => associationCanonical(a) === associationCanonical(b);
 function validation(view: RetainedCreditAssociationView | null) {
@@ -118,16 +118,22 @@ export async function readRetainedCreditAssociationPage(session: WorkReadSession
     }
     const projection = owners.creditProjection;
     if (!projection) return unavailable('Credit Statement, frame and evidence projection is unavailable');
+    // Only the serializable owner position reaches projections and cursors. The
+    // callback-bearing basis stays with the retained reader and its live fence.
+    const creditPosition: RetainedCreditAssociationReadPosition = {
+      sourcePosition: credit.sourcePosition, generation: credit.generation,
+      activation: credit.activation, reader: credit.reader,
+    };
     const readBasis = async () => {
-      const value = await projection.basis(session, structuredClone(selection), structuredClone(credit));
+      const value = await projection.basis(session, structuredClone(selection), structuredClone(creditPosition));
       if (!/^[0-9a-f]{64}$/.test(value)) return unavailable('Credit projection validation is unavailable');
       return value;
     };
     const projectionBasis = await readBasis();
-    const basis: AssociationReadBasis = { snapshot: { sourcePosition: credit.sourcePosition,
-      modelGeneration: credit.generation.generation }, reader: { principal: credit.reader,
+    const basis: AssociationReadBasis = { snapshot: { sourcePosition: creditPosition.sourcePosition,
+      modelGeneration: creditPosition.generation.generation }, reader: { principal: creditPosition.reader,
       actor: selection.presentation.actingSubject ?? null, viewer: session.viewer, languages: session.displayLanguages },
-      dependencies: { generation: credit.generation, activation: credit.activation, projection: projectionBasis } };
+      dependencies: { generation: creditPosition.generation, activation: creditPosition.activation, projection: projectionBasis } };
     const fenceBasis = async () => {
       await fenceRetainedCreditAssociationRead(deps, credit);
       if (await readBasis() !== projectionBasis) throw new AssociationStaleQuery(selection);

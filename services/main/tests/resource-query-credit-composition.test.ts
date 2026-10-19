@@ -306,3 +306,151 @@ test('admitted POST and opt-in GET fail closed until actual owners exist; other 
   const failure = associationReadFailure(new AssociationStaleQuery(normalized))!;
   expect(failure.status).toBe(409); expect(Value.Check(associationConflict, await failure.json())).toBe(true);
 });
+
+
+// Independent caller diagnostics: original fixture/assertions above remain byte-for-byte.
+// These are controlled-owner checks, not installed public outcome acceptance.
+test('independent caller: live Account revocation must still fence the composed credit page', async () => {
+  const f = fixture(1), selected = f.selection(), current = f.session(selected);
+  let revoked = false, validations = 0;
+  current.principal = { ...principal, currentAssertion: async () => {
+    validations++;
+    if (revoked) throw new Error('independent-account-revoked');
+    return principal;
+  } };
+  f.live.afterProjection = () => { revoked = true; };
+  await expect(withWorkReadSession(current, async () => {
+    const result = await readRetainedCreditAssociationPage(current, selected, f.owners, 'query');
+    await current.fenceDependencies();
+    await current.fenceAuthority();
+    return result;
+  })).rejects.toThrow('independent-account-revoked');
+  expect(validations).toBeGreaterThan(0);
+});
+
+test('independent caller: expiry on the enclosing principal must reach the retained reader', async () => {
+  const f = fixture(1), selected = f.selection(), current = f.session(selected);
+  current.principal = { ...principal, accountExpiresAt: Math.floor(Date.now() / 1000) - 1 } as typeof current.principal;
+  await expect(readRetainedCreditAssociationPage(current, selected, f.owners, 'query')).rejects.toThrow();
+});
+
+test('independent caller: public viewer live revocation must fence a global credit page', async () => {
+  const f = fixture(1), selected = f.selection(), prepared = f.session(selected);
+  let revoked = false;
+  const liveReader = { ...principal, currentAssertion: async () => {
+    if (revoked) throw new Error('independent-public-account-revoked');
+    return principal;
+  } };
+  const { disclosureViewer } = await import('../src/modules/disclosure/viewer.ts');
+  const current = new WorkReadSession(f.deps, prepared.request,
+    { ...prepared.options, publicViewer: disclosureViewer(liveReader) }, { ...prepared.position });
+  current.summaries = prepared.summaries;
+  f.live.afterProjection = () => { revoked = true; };
+  await expect(withWorkReadSession(current, async () => {
+    const result = await readRetainedCreditAssociationPage(current, selected, f.owners, 'query');
+    await current.fenceDependencies();
+    await current.fenceAuthority();
+    return result;
+  })).rejects.toThrow('independent-public-account-revoked');
+});
+
+for (const phase of ['empty-page', 'withheld-disclosure', 'withheld-coverage'] as const) {
+  test(`independent caller: ${phase} must close live Account revocation`, async () => {
+    const f = fixture(phase === 'empty-page' ? 0 : 1), selected = f.selection(), current = f.session(selected);
+    let revoked = false;
+    current.principal = { ...principal, currentAssertion: async () => {
+      if (revoked) throw new Error('independent-account-revoked');
+      return principal;
+    } };
+    if (phase === 'empty-page') {
+      const query = f.environment.fuseki.query.bind(f.environment.fuseki);
+      f.environment.fuseki.query = async (...args) => {
+        const value = await query(...args);
+        if (args[0].includes('SELECT ?work ?credit ?associationHead')) revoked = true;
+        return value;
+      };
+    } else if (phase === 'withheld-disclosure') {
+      current.summaries = async () => { revoked = true; return []; };
+    } else {
+      f.live.hidden.add(id(100));
+      const coverage = f.owners.retainedCredits!.coverage!;
+      f.owners.retainedCredits!.coverage = async (input) => { const value = await coverage(input); revoked = true; return value; };
+    }
+    await expect(withWorkReadSession(current, async () => {
+      const result = await readRetainedCreditAssociationPage(current, selected, f.owners, 'query');
+      await current.fenceDependencies();
+      await current.fenceAuthority();
+      return result;
+    })).rejects.toThrow('independent-account-revoked');
+  });
+}
+
+test('independent caller: changed live Account disclosure must restart the page', async () => {
+  const f = fixture(1), selected = f.selection(), current = f.session(selected);
+  let changed = false;
+  current.principal = { ...principal, emailVerified: true, currentAssertion: async () => ({ ...principal, emailVerified: !changed }) };
+  f.live.afterProjection = () => { changed = true; };
+  await expect(withWorkReadSession(current, async () => {
+    const result = await readRetainedCreditAssociationPage(current, selected, f.owners, 'query');
+    await current.fenceDependencies();
+    await current.fenceAuthority();
+    return result;
+  })).rejects.toBeInstanceOf(AssociationStaleQuery);
+});
+
+test('independent caller: an Account token expiring during hydration must refuse completion', async () => {
+  const { setSystemTime } = await import('bun:test');
+  const f = fixture(1), selected = f.selection(), current = f.session(selected);
+  const expiry = Math.floor(Date.now() / 1000) + 300;
+  current.principal = { ...principal, accountExpiresAt: expiry } as typeof current.principal;
+  f.live.afterProjection = () => setSystemTime(new Date((expiry + 1) * 1000));
+  try {
+    await expect(withWorkReadSession(current, async () => {
+      const result = await readRetainedCreditAssociationPage(current, selected, f.owners, 'query');
+      await current.fenceDependencies();
+      await current.fenceAuthority();
+      return result;
+    })).rejects.toThrow();
+  } finally { setSystemTime(); }
+});
+
+test('live Account authority stays with the retained reader while projections and renewed continuations use serializable positions', async () => {
+  const f = fixture(3), selected = f.selection({}, 1);
+  const identity = { ...principal, emailVerified: true, accountDisplayName: 'Reader', accountAuthMode: 'oauth',
+    accountClientId: 'catalogue-client', accountConsentId: 'consent', accountConsentGeneration: '7',
+    accountAudiences: ['https://main.example'], accountScopes: ['catalogue:read'] };
+  let expiry = Math.floor(Date.now() / 1000) + 300, validations = 0, projections = 0;
+  const currentAssertion = async () => { validations++; return { ...identity, accountExpiresAt: expiry }; };
+  const activation = f.owners.retainedCredits!.activation!;
+  f.owners.retainedCredits!.activation = async input => {
+    expect(input.principal).toMatchObject({ ...identity, accountExpiresAt: expiry });
+    expect(input.principal.currentAssertion).toBe(currentAssertion);
+    return activation(input);
+  };
+  const projection = f.owners.creditProjection!.basis;
+  f.owners.creditProjection!.basis = async (session, selection, position) => {
+    projections++;
+    expect(Object.keys(position).sort()).toEqual(['activation', 'generation', 'reader', 'sourcePosition']);
+    expect(position.reader).toEqual(identity);
+    expect(structuredClone(position)).toEqual(position);
+    return projection(session, selection, position);
+  };
+  const page = async (cursor?: string) => {
+    const current = f.session(selected, cursor);
+    const authority = { ...identity, accountExpiresAt: expiry, currentAssertion };
+    current.principal = authority;
+    return withWorkReadSession(current, async () => {
+      const result = await readRetainedCreditAssociationPage(current, selected, f.owners, 'query', cursor);
+      await current.fenceDependencies();
+      await current.fenceAuthority();
+      return result;
+    });
+  };
+  const first = await page();
+  expect(first.nextCursor).not.toBeNull();
+  expiry += 300;
+  const next = await page(first.nextCursor!);
+  expect((next.items as AssociationWitness[])[0]!.occurrence).not.toBe((first.items as AssociationWitness[])[0]!.occurrence);
+  expect(validations).toBeGreaterThan(0);
+  expect(projections).toBeGreaterThan(1);
+});
