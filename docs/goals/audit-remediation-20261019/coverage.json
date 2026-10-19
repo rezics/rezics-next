@@ -250,9 +250,11 @@
       "severity": "P1",
       "sourceConfidence": "confirmed",
       "title": "服务端路由调用客户端模块的普通函数，Proposals 列表在身份检查前崩溃",
-      "status": "build-dispatched",
+      "status": "closed",
       "owner": "G-2747",
-      "proof": []
+      "proof": [
+        "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json#D3-002"
+      ]
     },
     {
       "id": "D5-003",
@@ -522,9 +524,11 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "自动保存反馈放在45个开关之后，操作结果在手机屏外",
-      "status": "build-briefed",
+      "status": "closed",
       "owner": "G-2751",
-      "proof": []
+      "proof": [
+        "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json#D4-005"
+      ]
     },
     {
       "id": "D4-011",

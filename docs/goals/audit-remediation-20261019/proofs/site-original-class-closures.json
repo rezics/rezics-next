@@ -1,0 +1,173 @@
+{
+  "recordedAt": "2026-10-19T09:50:23.022826+00:00",
+  "manager": "site",
+  "goal": "audit-remediation-20261019",
+  "assessedMain": "3b34e7cd53e8bec9d346a5a2ccecced22ea512b5",
+  "basis": "Original applicable acceptance and assertions, without adding unrelated classes or full-domain journeys. Product-audit class tracing applied; unchanged exact proof reused.",
+  "findings": [
+    {
+      "id": "D3-002",
+      "status": "closed",
+      "originalAcceptanceVerbatim": [
+        "默认、?view=mine、?view=review-requested 以及未知 view 的约定回退均显示列表或明确的登录/身份/空/暂时不可用状态；匿名和登录账户均无该异常、开发遮罩或服务端渲染失败后的客户端回退。",
+        "纯查询解析与链接构造由服务端和客户端都能引用的纯模块拥有；消除两处越界调用，不能只关闭开发遮罩或把异常吞掉。",
+        "在开发和生产构建各验收 en/zh-Hans、1440/390、浅/深色，并设置能阻止普通函数跨 use client 边界调用的回归检查。"
+      ],
+      "originalRegressionAssertionsVerbatim": [
+        {
+          "id": "D3-002/assertion-1",
+          "assert": "The server route calls only pure server-safe list-query helpers; no ordinary function is invoked across a use-client boundary."
+        },
+        {
+          "id": "D3-002/assertion-2",
+          "assert": "Mine/review/invalid query views render before and after identity discovery without an HTTP-200 error overlay in development or production."
+        },
+        {
+          "id": "D3-002/assertion-3",
+          "assert": "Query fallback, links and selected view stay consistent between server and client."
+        }
+      ],
+      "canonicalSource": "docs/goals/audit-remediation-20261019/site-plan.json#D3-002",
+      "originalAssertionsChanged": false,
+      "productCommits": [
+        "5545a02a25",
+        "ba53ed87f1e5d21712ec7ff98f88a80313c34445"
+      ],
+      "independentReview": {
+        "task": "G-2847",
+        "account": "codex-1",
+        "model": "gpt-6.1-sol",
+        "effort": "xhigh",
+        "proof": "docs/goals/audit-remediation-20261019/proofs/startup-navigation-review.json",
+        "candidate": "a27bcfc6bad849dd912cbd3f721de5defeba1c86",
+        "reuse": "D3-002 source/guard class only; no new review-of-review"
+      },
+      "proofCommit": "271b7e40b3713782eec2148443c0e3b53f65a059",
+      "runtimeFrontend": "196a6f4a98413857dbf3e178d05ef65415035f29",
+      "sourceEquivalence": [
+        {
+          "path": "apps/web/app/[locale]/proposals/page.tsx",
+          "blobs": {
+            "5545a02a25": "5dc342bf632ee254219a1748639350ed9ec00042",
+            "196a6f4a98413857dbf3e178d05ef65415035f29": "5dc342bf632ee254219a1748639350ed9ec00042",
+            "60db1265e72b03f2bfa208c2a4d32055157fa88e": "5dc342bf632ee254219a1748639350ed9ec00042"
+          },
+          "allExact": true
+        },
+        {
+          "path": "apps/web/features/proposals/list-state.ts",
+          "blobs": {
+            "5545a02a25": "1dee921dce8704fbb3583e121081df542a8153e8",
+            "196a6f4a98413857dbf3e178d05ef65415035f29": "1dee921dce8704fbb3583e121081df542a8153e8",
+            "60db1265e72b03f2bfa208c2a4d32055157fa88e": "1dee921dce8704fbb3583e121081df542a8153e8"
+          },
+          "allExact": true
+        },
+        {
+          "path": "apps/web/features/proposals/list-state.test.ts",
+          "blobs": {
+            "5545a02a25": "84c896cca2b22d93b10a345fe8afdc08891ebf5e",
+            "196a6f4a98413857dbf3e178d05ef65415035f29": "84c896cca2b22d93b10a345fe8afdc08891ebf5e",
+            "60db1265e72b03f2bfa208c2a4d32055157fa88e": "84c896cca2b22d93b10a345fe8afdc08891ebf5e"
+          },
+          "allExact": true
+        },
+        {
+          "path": "apps/web/features/proposals/proposal-list.tsx",
+          "blobs": {
+            "5545a02a25": "dc937a4c01293942e2b8cb7d6ab91d691af267d1",
+            "196a6f4a98413857dbf3e178d05ef65415035f29": "dc937a4c01293942e2b8cb7d6ab91d691af267d1",
+            "60db1265e72b03f2bfa208c2a4d32055157fa88e": "dc937a4c01293942e2b8cb7d6ab91d691af267d1"
+          },
+          "allExact": true
+        }
+      ],
+      "guardBlob": "8844426b48a99c5d6b259db9a794235f4136bafb",
+      "effectiveRuntimeCombinations": 128,
+      "assertionResults": [
+        {
+          "id": "D3-002/assertion-1",
+          "result": "pass",
+          "evidence": "Pure list-state owner shared by both server calls and client; exact four blobs match tested196a and currentmain; guard rejects direct/alias/namespace/default/barrel ordinary client calls."
+        },
+        {
+          "id": "D3-002/assertion-2",
+          "result": "pass",
+          "evidence": "Development and production each64 effective combinations: fourviews ×twoidentity ×twolocale ×twowidth ×twoeffective-theme. Retained genuine preference correction/recovery and original failures."
+        },
+        {
+          "id": "D3-002/assertion-3",
+          "result": "pass",
+          "evidence": "Actual SSR+hydrated view/link/fallback checks pass across the above matrix; parser2tests12assertions and current guard3tests4assertions pass."
+        }
+      ],
+      "affectedCheck": {
+        "qaRun": "20261019t093010-1a8f63",
+        "tests": 21,
+        "assertions": 343,
+        "failures": 0,
+        "skipped": 0
+      },
+      "normalLandingGate": "manager-ee19e1d0-f978-4e4b-9726-56ade7e566c5",
+      "retainedEvidence": ".temp/audit-remediation-20261019/two-hour-sprint/site-d3-002-continuation-acceptance.json",
+      "scopeTrace": "Guard checks all server-route imports for the same cross-client ordinary-function invariant; no overlay suppression or swallowed exception. Voice-control AUD-012 and unread semantics belong independent findings."
+    },
+    {
+      "id": "D4-005",
+      "status": "closed",
+      "originalAcceptanceVerbatim": [
+        "在390与1440，顶部/中部/末行操作分别在成功、503和409时，把保存中与最终结果可视地关联到被操作项，不需找矩阵末端。",
+        "失败保留原值并给出明确的恢复方式；并发冲突的处理不暗示已保存。",
+        "保留status读屏公告，恢复后能继续操作；用浏览器内替身或专用审计账号验证，不修改既有账户。"
+      ],
+      "originalRegressionAssertionsVerbatim": [
+        {
+          "id": "D4-005/assertion-1",
+          "assert": "Pending, success, 503 and 409 feedback appears next to the changed notification row and is announced without moving the user away."
+        },
+        {
+          "id": "D4-005/assertion-2",
+          "assert": "Keep the actual confirmed value or clearly retained unsaved intent and a local retry, including concurrent row changes."
+        },
+        {
+          "id": "D4-005/assertion-3",
+          "assert": "At 390px and 1440px, the changed row around y198 cannot require finding the only error around y1176; retain the existing live-status semantics."
+        }
+      ],
+      "canonicalSource": "docs/goals/audit-remediation-20261019/site-plan.json#D4-005",
+      "originalAssertionsChanged": false,
+      "productCommit": "deeea871ea682525d52820a4102f4bb80809ba67",
+      "actualIndependentReview": "875a92971911d99e80ca2bb4d650ae085a080981",
+      "proofSourceCommit": "2a6e6c68eb14af8e9621418bb9bad2837d1e6522",
+      "proof": "docs/goals/audit-remediation-20261019/proofs/settings-feedback.json#genuineJourneyRuns/authenticated-e96e4846d049",
+      "runtimeFrontend": "e96e4846d049d3958695e30ff7e67dacc1af93e9",
+      "genuineBackendObserved": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "sourceEquivalence": "All16 product/story paths and actual proof blobs in site-settings-continuation-candidate.json equal currentmain. The unrelated inventory rows were preserved.",
+      "assertionResults": [
+        {
+          "id": "D4-005/assertion-1",
+          "result": "pass",
+          "evidence": "18 actual first/middle/last ×1440/390 ×success/503/409 cases: pending and final local feedback in inspected PNGs; polite atomic status DOM mutations preserved. Original acceptance concerns visible feedback and existing status semantics, not captured speech."
+        },
+        {
+          "id": "D4-005/assertion-2",
+          "result": "pass",
+          "evidence": "Real success/409 plus explicitly injected503 preserve confirmed values/unsaved intent; all12 failure/conflict cases locally recover with native Tab/Enter, real save receipt and reload persistence."
+        },
+        {
+          "id": "D4-005/assertion-3",
+          "result": "pass",
+          "evidence": "Both original widths reached all three row positions; feedback and retry stay beside changed row without seeking matrix end; dedicated audit fixture values restored after cases."
+        }
+      ],
+      "normalLandingGate": "manager-b010eec5-8066-455a-8074-a9985450cb76",
+      "original32Stories": {
+        "passed": 32,
+        "unitsPassed": 15,
+        "qaRun": "20261019t063638-162050"
+      },
+      "retainedEvidence": ".temp/audit-remediation-20261019/proofs/settings-feedback-G-2829-auth-e96e4846d049/",
+      "scopeTrace": "All row positions and success/error/conflict share local feedback owner. D2-005 PersonSettings BODY focus and D4-004 full45-switch traversal remain independent open findings. No heard-speech completion is claimed."
+    }
+  ]
+}
