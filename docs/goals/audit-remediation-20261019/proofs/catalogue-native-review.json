@@ -1,0 +1,192 @@
+{
+  "format": "catalogue-native-source-review-v1",
+  "goal": "audit-remediation-20261019",
+  "worker": "G-2837",
+  "date": "2026-10-19",
+  "reviewer": "codex-1 / gpt-6.1-sol / xhigh; independent review, no delegation or model fallback",
+  "disposition": "review-complete-with-unconfirmed-finding",
+  "acceptance": "One source-inferred Account-principal integration defect requires owner validation. No public defect was reproduced and no executable landing blocker was established. This review does not grant whole catalogue acceptance.",
+  "pins": {
+    "branch": "sprint/catalogue-native-20261019",
+    "candidate": "138ba7aab9d0b9a107ec32e711e3dccda9d72d58",
+    "base": "8c0e0853e2284b035c2bb00611486919f508415b",
+    "reportWorktreeHeadAtReview": "e13ed078724eb49db15bc1c07873fdac5db62203",
+    "exactDiffCommand": "git diff --no-ext-diff 8c0e0853e2284b035c2bb00611486919f508415b 138ba7aab9d0b9a107ec32e711e3dccda9d72d58",
+    "exactDiffSha256": "f88e1da4e85e285778fab2f7b7a7602760eba0aabbed491ae131cea77bdb84e7",
+    "originalToCandidateCommits": [
+      ["095ef14163707847227e00a939ccf3fddf341b2a", "347389d03e911ddfa493ad8656465e386d567da8"],
+      ["0a42315c4c8bb22d100ab69bb83cfdc8bcacdfe3", "a31b62a210bfced00eebaa931e4dd208198e4396"],
+      ["796db338919350797f6668e7f68419f9746f6784", "fdfdb0fb2e58c5ed3a33a5d452a961401cff628c"],
+      ["da3871c679b43df3e5e49e4d79e0125eb47d9d0b", "04163ebbdf2c441ce65625bb86abadb8befcc7f4"],
+      ["b2d1edb3bfcdcf01927d8af21ca8769ee3abf01c", "138ba7aab9d0b9a107ec32e711e3dccda9d72d58"]
+    ]
+  },
+  "scope": {
+    "method": "Read the exact base-to-candidate diff and candidate Git blobs, with supporting owner code. Candidate was not checked out over this report branch. Scratch imports used archived candidate files under this worktree's .temp.",
+    "candidateChangedPathsReviewed": [
+      "scripts/datasets/selection.ts",
+      "services/content/migrations/2603_source_archive_evidence.sql",
+      "services/main/src/modules/access/admission.ts",
+      "services/main/src/modules/media/imported-art.ts",
+      "services/main/src/modules/media/store.ts",
+      "services/main/src/modules/realization/source-basis.ts",
+      "services/main/src/modules/realization/source-verifier.ts",
+      "services/main/src/modules/release/source-verifier.ts",
+      "services/main/src/modules/source/archive-copy.ts",
+      "services/main/src/modules/source/archive-evidence.ts",
+      "services/main/src/modules/source/cover-evidence.ts",
+      "services/main/src/modules/source/credit-native-verifiers.ts",
+      "services/main/src/modules/source/release-native-verifier.ts",
+      "services/main/src/modules/work/author-credit.ts",
+      "services/main/src/modules/work/credit-association-read.ts",
+      "services/main/src/modules/work/credit-association-state.ts",
+      "services/main/src/modules/work/credit-verification.ts",
+      "services/main/tests/credit-native-verifiers.test.ts",
+      "services/main/tests/credit-retained-reads.test.ts",
+      "services/main/tests/imported-art-verifier.test.ts",
+      "services/main/tests/release-source-verifier.test.ts",
+      "services/main/tests/source-archive-copy.test.ts",
+      "services/main/tests/source-archive-evidence.test.ts",
+      "services/main/tests/support/retained-evidence-fixture.ts",
+      "services/main/tests/support/source-archive-fixture.ts",
+      "tests/qa/unit/dataset-selection.test.ts"
+    ],
+    "supportingPathsInspectedAtCandidate": [
+      "services/main/src/modules/account/verify-assertion.ts",
+      "services/main/src/modules/work/read-session.ts",
+      "services/main/src/modules/work/command-envelope.ts",
+      "services/main/src/modules/work/restore-lineage.ts",
+      "services/main/src/modules/disclosure/viewer.ts",
+      "services/main/src/modules/disclosure/read.ts",
+      "services/main/src/modules/semantic/generation-guard.ts",
+      "services/main/src/modules/release/command.ts",
+      "services/main/src/modules/realization/command.ts",
+      "scripts/datasets/vndb.ts"
+    ],
+    "excluded": [
+      "Unfinished Source field implementation and its acceptance claims outside this exact diff.",
+      "Whole catalogue integration, public route activation, real provider corpus and persona acceptance. Trusted owner dependency interfaces are not proof that those owners are installed."
+    ],
+    "originalIndependentOutcomeAssertionsPreserved": true,
+    "candidateCodeOrTestsChanged": false,
+    "sharedStackOrAccountChanges": false,
+    "captureRefreshImportResetOrAccountFallback": false
+  },
+  "sourceReview": [
+    {
+      "area": "Retained root selection",
+      "assessment": "Explicit roots and bounded optional Work expansion preserve source records, occurrence indexes, ordering, repeated edges, capture references and scope. Missing endpoints, unknown relations, context/frontier limits and uncaptured media remain visible. Preparation limits refuse atomically; complete means closure within the retained parent, not provider-wide completeness.",
+      "testInspection": "dataset-selection.test.ts covers VNDB contextual voice/cast/traits, Bangumi inverse voice and episode order, MusicBrainz repeated tracks, incomplete evidence, all budgets and identity preservation. Its two retained-parent cases require REZICS_DATASET_ROOT; neither was run here."
+    },
+    {
+      "area": "Archive and media custody",
+      "assessment": "Archive admission binds principal-owned retained observations, ordered parts, lengths and hashes to immutable persisted evidence. The bounded tar/COPY reader checks archive structure and exact row/field/ordinal coordinates. Acknowledged media verification reads the original principal-scoped sealed command, Use, selection head, imported provenance and object bytes, and rechecks source disposition and custody before returning.",
+      "testInspection": "Archive tests retain binary and row identity, reject tampering, cross-principal reads, wrong parts, unsupported containers and bounds. Media tests reject synthetic/unsealed receipts, another principal, wrong heads/values, altered bytes and withdrawn sources. The media fixture explicitly uses synthetic image bytes: this is owner acknowledgment coverage, not image decoding or public eligibility proof.",
+      "explicitLimits": "ImportedArtNativeVerifier returns unsupported-profile for VNDB archive media and portrait/screenshot roles. This is an explicit unsupported capability, not evidence of catalogue-wide media completion."
+    },
+    {
+      "area": "Native credit receipts and stale support",
+      "assessment": "The selected provider/namespace/participant/role/ordinal and revision are compared with stored native creation or Source-adoption witnesses. Verification reads the original command receipt and digest, admission/scope/epoch/sequence, then rechecks current owner heads and authority. Exact Source support coordinates are read twice; withdrawal invalidates evidence without deleting the native occurrence. Missing qualified participation owners do not create acknowledgments.",
+      "testInspection": "credit-native-verifiers.test.ts keeps replay read-only and covers receipt/component/revision substitution, provider collision, missing values versus explicit null, head movement, authority revocation, support-coordinate mismatch and concurrent withdrawal. Transport doubles are private owner tests, not public stack outcomes."
+    },
+    {
+      "area": "Release and realization correspondence",
+      "assessment": "Verification binds original owner receipts and exact native target/revision/selected value to stored state and coverage. Disclosure is checked for the touched Work, Release and Realization, then expected current heads are rechecked. Historical Realization text remains valid when explicitly covered; absent/uncovered fields are unavailable rather than borrowed from a newer head. The Source wrapper preserves exact tuple and language/value comparisons.",
+      "testInspection": "release-source-verifier.test.ts covers missing/mismatched receipts, state digest and coverage, head races, historical covered Realization, authority and disclosure denial, Source withdrawal and exact selected values. No public route outcome was run by this worker."
+    },
+    {
+      "area": "Sealed retained credit association reads",
+      "assessment": "Reads require sealed immutable compatibility revisions and trusted activation, mapping, coverage and attribution owners. Generation, graph/source position, activation and validation-token fences reject moved continuations. Candidate ordering uses (work, credit), limit plus one and a 1..256 page bound. Withheld or withdrawn support does not synthesize missing evidence or erase the native occurrence. Account-principal cloning is the source concern below.",
+      "testInspection": "credit-retained-reads.test.ts covers seal/tamper failures, absent owners, mapping and Statement coverage, same-IRI revisions, disclosure, source rights/withdrawal, page ordering/exhaustion and moving generations/positions. Its principal fixture lacks Account's currentAssertion function."
+    }
+  ],
+  "findings": [
+    {
+      "id": "NATIVE-REVIEW-01",
+      "priority": "P2",
+      "title": "Retained credit reads clone the live Account principal as structured data",
+      "classification": "source-inference; executable reproduction unconfirmed",
+      "landingBlockerConfirmed": false,
+      "location": { "path": "services/main/src/modules/work/credit-association-read.ts", "line": 223 },
+      "evidence": [
+        { "path": "services/main/src/modules/access/admission.ts", "line": 68, "detail": "VerifiedPrincipal permits currentAssertion, a function used for live authority revalidation." },
+        { "path": "services/main/src/modules/account/verify-assertion.ts", "line": 168, "detail": "AccountAssertionVerifier.verify returns that function as an enumerable own property for verified Account principals." },
+        { "path": "services/main/src/modules/work/credit-association-read.ts", "line": 223, "detail": "openRetainedCreditAssociationRead immediately calls structuredClone(principal). A function-valued property cannot be structured-cloned, so this is expected to throw DataCloneError before any activation/read work." },
+        { "path": "services/main/src/modules/work/credit-association-read.ts", "line": 250, "detail": "The basis retains reader: VerifiedPrincipal. The same class recurs in basis/input/owner-argument cloning at lines 234, 240, 250, 264, 283, 415, 472, 555, 593, 600, 611, 622, 666 and 673; changing only the first clone would not support a live principal throughout the read." },
+        { "path": "services/main/tests/credit-retained-reads.test.ts", "line": 43, "detail": "The reader fixture contains only issuer and subject, so existing owner tests do not exercise the Account-issued shape." },
+        { "path": "services/main/src/modules/work/read-session.ts", "line": 235, "detail": "The existing session separates cursor identity from currentAssertion and expiry while retaining live request verification." }
+      ],
+      "expectedImpact": "When a consumer passes the actual Account-verified principal into this owner, opening the retained credit read is expected to fail, preventing its collection or witness read. No installed public consumer or public HTTP failure was demonstrated by this review.",
+      "reproduction": {
+        "file": ".temp/catalogue-native-review/principal-clone.test.ts",
+        "case": "Account principal with currentAssertion opens the pinned retained-credit reader",
+        "recipe": "Import openRetainedCreditAssociationRead from the pinned candidate; pass {issuer, subject, currentAssertion: async () => identity} with graph/activation dependencies sufficient for the plain-identity control. Catch the result and assert it has reader.subject. The intended assertion expects success and must remain unchanged.",
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/catalogue-native-review/principal-clone.test.ts",
+        "tier": "Private owner probe with transport doubles; not a public outcome test.",
+        "outcomeAssertionRan": false,
+        "result": "Both attempts failed during module imports. Even the plain-principal control did not run. Runtime DataCloneError remains inferred from the pinned source, not reproduced."
+      },
+      "recommendation": "Owner should separate serializable continuation identity from the live principal, retain currentAssertion for authority/disclosure revalidation, and exercise open/fence/page/witness paths using the real Account-issued principal shape. Validate on the prepared candidate with original independent assertions unchanged."
+    }
+  ],
+  "checkedTests": {
+    "candidateSuitesExecutedByThisWorker": [],
+    "managerAffectedCandidateReceipts": "Not supplied to this worker. No manager result is claimed or replaced; unchanged candidate suites were inspected but not repeated.",
+    "recordingPrefix": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --",
+    "cwd": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2837",
+    "attempts": [
+      {
+        "job": "e007a262-f93a-443a-82e8-941bd6713879",
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/catalogue-native-review/principal-clone.test.ts",
+        "exit": 1,
+        "classification": "harness/import setup failure",
+        "outcomeAssertionRan": false,
+        "error": "Cannot find module '../../../../generated/model/manifest.json' from scratch tree services/main/src/infrastructure/profile.ts",
+        "log": ".temp/goal/jobs/e007a262-f93a-443a-82e8-941bd6713879.log",
+        "setupCorrection": "Extracted the exact candidate generated directory into the isolated scratch tree; no regeneration or candidate source change."
+      },
+      {
+        "job": "3d584553-ed97-4398-9a1c-bf67ce3fe529",
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/catalogue-native-review/principal-clone.test.ts",
+        "exit": 1,
+        "classification": "harness/import setup failure after the one correction",
+        "outcomeAssertionRan": false,
+        "error": "Cannot find module '../../../../account/src/deletion-recovery-set.ts' from scratch tree services/main/src/modules/work/restore-lineage.ts",
+        "summary": "0 pass, 1 fail, 1 import error; neither test body ran",
+        "log": ".temp/goal/jobs/3d584553-ed97-4398-9a1c-bf67ce3fe529.log"
+      }
+    ],
+    "protocolDisposition": {
+      "path": "docs/goals/worker.md",
+      "section": "After a review",
+      "instruction": "the reviewer gets one setup correction",
+      "effect": "Stopped reproduction after the corrected attempt still failed before an assertion. The finding is unconfirmed and uses no worker fix round; it is not an executable landing blocker."
+    }
+  },
+  "administrativeChecks": {
+    "status": "passed",
+    "job": "427cff4c-0f47-48ee-a78f-d3e04f550db3",
+    "commands": [
+      {
+        "command": "task docs:check",
+        "exit": 0,
+        "result": "13 checker self-tests and 238 Markdown files passed; local links, fragments and design navigation checked. This does not validate JSON schema or runtime behavior.",
+        "log": ".temp/goal/jobs/427cff4c-0f47-48ee-a78f-d3e04f550db3.1.log"
+      },
+      {
+        "command": "task goal -- check",
+        "exit": 0,
+        "result": "Types/lint: no source changes; tests: none named in brief; AST passed; 1/44 repository guards selected for the report path and passed.",
+        "log": ".temp/goal/jobs/427cff4c-0f47-48ee-a78f-d3e04f550db3.2.log",
+        "fullCheckOutput": ".temp/goal/check/run-f9EihK/output.log"
+      }
+    ],
+    "reportValidation": "Python JSON parsing passed and the reviewed-path inventory exactly matched all 26 base-to-candidate changed paths.",
+    "scope": "Report worktree checks only. They do not test or accept the pinned candidate."
+  },
+  "managerNext": [
+    "Attach the separately prepared affected-candidate check receipts without repeating unchanged suites.",
+    "Route NATIVE-REVIEW-01 for validation in the prepared candidate with the actual Account-principal shape; retain its unconfirmed status until an outcome assertion runs.",
+    "Integrate this report independently of candidate code; keep unfinished Source fields and whole catalogue acceptance outside this disposition."
+  ]
+}
