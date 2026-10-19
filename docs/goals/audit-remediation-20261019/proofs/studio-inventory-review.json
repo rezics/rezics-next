@@ -1,9 +1,9 @@
 {
   "goal": "audit-remediation-20261019",
   "worker": "G-2848",
-  "reportVersion": 2,
-  "reportedAtUtc": "2026-10-19T10:35:08.505785+00:00",
-  "result": "partial: affected 9e633ed stories and recorded navigation geometry pass; genuine browser acceptance blocked before sign-in by a missing startup dependency export",
+  "reportVersion": 3,
+  "reportedAtUtc": "2026-10-19T10:59:12.728718+00:00",
+  "result": "partial: genuine Curated marker histories and six actual Work focus rings proved; two Details rings obscured by SSR error, and authorized backend rejects current inventory query/count contract",
   "reviewer": {
     "engine": "codex-1",
     "model": "GPT-6.1 Sol",
@@ -4521,5 +4521,1860 @@
     },
     "completionBoundary": "Affected source/story corrections and recorded geometry pass; old af37 clipped geometry is historical, not a 9e633ed product failure. Genuine runtime navigation is blocked at /en 500 by the exact composition gap. Original genuine inventory/count/title/return/private assertions remain unproved. Existing Discover/Site/Library proof and owners retained; no finding or class closed, no automatic landing.",
     "next": "Manager/existing startup owner supplies the minimal compatible request-boundary source pin; retain all passing original and correction evidence and resume only the missing genuine browser assertions. Keep original inventory acceptance separate. No fresh corpus/old baseline restore/full AMGT requirement for this UI-only correction."
+  },
+  "runtimeCompatibilityVerification": {
+    "reportedAtUtc": "2026-10-19T10:59:12.728718+00:00",
+    "authority": "Same original G-2848 claims/outcome/authority/acceptance and codex-1/GPT-6.1 Sol/xhigh. Manager supplied exact c43a05f frontend plus existing 75409 backend for only the genuinely missing Curated histories at 390 and changed Work focus-ring geometry at 390/1440. No nested agents, account fallback, second reviewer, fresh catalogue, old restore, whole Storybook or full AMGT rerun.",
+    "historicalReadingRule": "This appended section is the current runtime disposition. Every earlier section, including original af37 failures, the 9e story/DOM successes, and the 9e missing-export setup failure, remains unchanged historical evidence at its stated pin. The old af37 clipping is not a reproduced c43 defect.",
+    "preservedReport": {
+      "originalIndependentCommit": "59030abdeb1d887ae33b29947e0c590048d2b69c",
+      "previousCorrectionCommit": "9c6a39b66bf6f8a6d366606c1b6d67463b15611b",
+      "workerRebaseHeadBeforeThisReport": "5695fc67c7d265888b5358892a74cae81f4c03ce",
+      "previousReportSha256": "2e3ce2cc4cec6818fd04641b709968311cc6a4ce83fb60ac81fb794520764351",
+      "allPriorEvidenceValuesPreserved": true,
+      "changedRootMetadataOnly": [
+        "reportVersion",
+        "reportedAtUtc",
+        "result"
+      ]
+    },
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independent": true,
+      "candidateAuthoredByReviewer": false,
+      "reviewCount": 1,
+      "nestedAgents": 0,
+      "accountOrModelFallback": false,
+      "existingIndependentReviewReuse": "No valid independent review of these exact bytes was found in supplied receipts; source receipt reviewPerformed=false. Existing producer and dependency evidence retained as such."
+    },
+    "pins": {
+      "originalReviewedProduct": {
+        "base": "82067635061c20a9a3d0301a63aa652bf120d14b",
+        "head": "af37c8991ffb8997c06f055279301fb9b173f842",
+        "reviewedPaths": "Original reviewedPaths: all 24 paths preserved, no repeated source review."
+      },
+      "previousFrontend": "9e633ed68c91b9782eeef6849358bd640d5c014e",
+      "currentFrontend": {
+        "head": "c43a05f54b8f80db57028ab08efc4dd277ad739d",
+        "singleParent": "9e633ed68c91b9782eeef6849358bd640d5c014e",
+        "tree": "4391e5b3772a97ffbc5add7e196238c10303ccde",
+        "externalCheckout": ".temp/worktrees/site-studio-runtime-compatible-candidate",
+        "externalCleanExactHeadVerifiedBeforeReading": true,
+        "ownedRuntimeClone": ".temp/studio-review/source",
+        "all35PriorPathsByteIdentical": true,
+        "onlyChangedPaths": [
+          "apps/web/features/api/server-read.ts",
+          "apps/web/features/api/server-fetch.ts"
+        ]
+      },
+      "mainRuntime": {
+        "source": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "actualBackendPointer": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "refresh": {
+          "revision": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+          "appHostHash": "e1afce481faa0c5912e120d55f9ca60a3682db085493002eef10c1c73216c9cc",
+          "appHostSession": "https://localhost:35195",
+          "refreshId": "069bf6dd9d89b2446c8f69a060b990f8"
+        },
+        "readiness": {
+          "status": 200,
+          "body": {
+            "status": "ready",
+            "horizons": {
+              "sampledAt": "2026-10-19T10:47:59.570Z",
+              "writerVisibility": "all-sessions",
+              "notification": {
+                "oldestPendingRowAgeSeconds": null,
+                "oldestWriterAgeSeconds": null
+              },
+              "reviewRank": {
+                "oldestPendingRowAgeSeconds": null,
+                "oldestPendingRowAgeBasis": "none",
+                "oldestWriterAgeSeconds": null
+              },
+              "editorial": {
+                "oldestPendingRowAgeSeconds": null,
+                "oldestWriterAgeSeconds": null
+              }
+            }
+          },
+          "at": "2026-10-19T10:48:00.131Z"
+        },
+        "studioInventoryContractCompatible": false,
+        "why": "Actual 75409 route has no q/sort query properties and additionalProperties=false, and its Book response has no chapterCount. Frontend c43 always supplies selected sort. This is an authorized UI runtime composition, not an integrated candidate Main inventory proof."
+      },
+      "nativeImage": {
+        "tag": "rezics/fuseki:6.2.0-cmd0.5.39-5bc9e305cb80",
+        "actualImageId": "sha256:028a5b9ceefbb15dc98b2f91085e00c4e4bcb1485ac5b197e6d29f1f020f49b2",
+        "sourceImageRebuiltHere": false
+      },
+      "schema": {
+        "ownerMigrationsRunHere": false,
+        "migrationHistoryNewlyQualifiedHere": false,
+        "scope": "UI-only continuation on the existing authorized shared backend; original count/API acceptance still not qualified by this runtime. No migration receipt invented or QA-bootstrap transition attempted."
+      },
+      "backup": {
+        "selectedOrRestoredHere": false,
+        "newCorpusOrCataloguePrepared": false,
+        "scope": "Existing retained shared development data was read in place as authorized for this correction. No backup modified, no isolated restore or preparation-budget claim, and no substitute for original four-chapter or 23-occurrence corpus."
+      },
+      "test": {
+        "originalOutcomeFilesExecutedHere": [],
+        "temporaryDiagnosticScripts": [
+          {
+            "path": ".temp/studio-review/runtime-c43.ts",
+            "sha256": "03654bce680d5d2793c9b64ff7550f5cebccf276086c4f19c7779faa3f51941d"
+          },
+          {
+            "path": ".temp/studio-review/runtime-c43-work.ts",
+            "sha256": "65b1fbdffabe418f1979a8b6676e6f8167710e8132e9b0fb5492f60f8ac4eec6"
+          },
+          {
+            "path": ".temp/studio-review/runtime-c43-work-recovery.ts",
+            "sha256": "ade0fa9cd7464cac3fa282def7ec4317ca62883da346ece9d84e3ff8722352c8"
+          }
+        ],
+        "originalAssertionsPendingRegistryAndFailingBodiesEdited": false
+      },
+      "runner": {
+        "workerTaskAndAdmissionSource": "5695fc67c7d265888b5358892a74cae81f4c03ce",
+        "webTaskAndProductSource": "c43a05f54b8f80db57028ab08efc4dd277ad739d",
+        "recordedJobExecutable": "/home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts",
+        "goalctlSha256ObservedAfterRuns": "cf06b6b0727f466917913fc2a607194323c43037439b8636ce8bc84342d6ccac",
+        "mainObservedAfterRuns": "e9bff8c44b5317168b38c954b405938b458bd1e1",
+        "exactMainHeadAtEachJobLaunch": "not independently persisted; do not substitute the later observed main head for product or test pins",
+        "admission": "Each runtime job: task goal -- slot; GOAL_ID=audit-remediation-20261019. Normal recorded Goal jobs from this worker worktree; one owned web dev server at a time."
+      },
+      "configuration": {
+        "web": "http://127.0.0.1:43149",
+        "main": "http://127.0.0.1:3001",
+        "accounts": "http://127.0.0.1:3004",
+        "issuer": "http://127.0.0.1:3004/api/auth",
+        "resource": "https://main.rezics.test",
+        "clientId": "QiHpuGHytLRPOMsszswKmWmEbBfiCkSY"
+      }
+    },
+    "sourceAndDependencyReuse": {
+      "receipt": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-studio-runtime-compatible-candidate.json",
+        "sha256": "4767c389f8f3900f12f935feefc0bdccfce33639fbe94acec071b71ba7bc581a",
+        "artifacts": {
+          "dependencies": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-studio-runtime-compatible-candidate/dependency-file-blob-manifest.json",
+            "sha256": "4aa1e18f8ad9bff1832d535042058e497966c3a97f0a28ebea9940da8a83d128",
+            "verified": true
+          },
+          "preservedStudio": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-studio-runtime-compatible-candidate/preserved-35-studio-paths.json",
+            "sha256": "2e37dbe5d40799dc9c8d93687de9a7bba558eab2fb234c61b5ee4dc1ca093059",
+            "verified": true
+          },
+          "minimalDependencyPatch": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-studio-runtime-compatible-candidate/request-boundary-dependencies.patch",
+            "sha256": "412c574819743d327d0ebf2e33e833444aec4e84e369a0562406b3cf8f809d0d",
+            "verified": true
+          },
+          "authorshipPatch": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-studio-runtime-compatible-candidate/authorship-preserving.patch",
+            "sha256": "579a8eee27d6b5f958319a3802d404e4d791fe43353ee170a7ceb8813957d3a3",
+            "verified": true
+          }
+        }
+      },
+      "actualBlobVerification": {
+        "head": "c43a05f54b8f80db57028ab08efc4dd277ad739d",
+        "parent": "9e633ed68c91b9782eeef6849358bd640d5c014e",
+        "cleanExactExternalBeforeRead": true,
+        "all35PriorManifestPathsUnchanged": [
+          {
+            "path": "apps/web/app/[locale]/studio/[agent]/page.tsx",
+            "blob": "75ec428a2fa2cdad6c5714810cf48ccd690558f8",
+            "unchanged": true
+          },
+          {
+            "path": "apps/web/features/address/client.ts",
+            "blob": "14a890bb2996661a8a19f2f2a562950d363a4c9b",
+            "unchanged": true
+          },
+          {
+            "path": "apps/web/features/address/edge.ts",
+            "blob": "43e3d1b7cf55c2f1dd390efbc06860b718044b8d",
+            "unchanged": true
+          },
+          {
+            "path": "apps/web/features/shell/current-page-visibility.test.ts",
+            "blob": "0786d38b74cf348725fecce81743193a7c93e1ce",
+            "unchanged": true
+          },
+          {
+            "path": "apps/web/features/shell/current-page-visibility.ts",
+            "blob": "4580530fd0e47923f4bf9de65a0baba9292b2a45",
+            "unchanged": true
+          },
+          {
+            "path": "apps/web/features/shell/localized-link.tsx",
+            "blob": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba",
+            "unchanged": true
+          },
+          {
+            "path": "apps/web/features/shell/navigation-focus.test-utils.ts",
+            "blob": "73119b78128e31d9e513a30a2e8f27e1d2f3e7ef",
+            "unchanged": true
+          },
+          {
+            "path": "apps/web/features/studio/fixtures.ts",
+            "blob": "b9d07c1df79828ba9c4268a454df23f0f1060017",
+            "unchanged": true
+          },
+          {
+            "path": "apps/web/features/studio/messages.ts",
+            "blob": "5c8e2b5e7b1d1c1907cc7db59b1e3cef298eda6d",
+            "unchanged": true
+          },
+          {
+            "path": "apps/web/features/studio/messages/de.ts",
+            "blob": "f7cbc00bc6699111280668b1e19191cdd0bc2f3a",
+            "unchanged": true
+          },
+          {
+            "path": "apps/web/features/studio/messages/es.ts",
+            "blob": "5ebf616667fd5abb78951edeea2d7ed920a22736",
+            "unchanged": true
+          },
+          {
+            "path": "apps/web/features/studio/messages/fr.ts",
+            "blob": "d74a4ba257a5753db86a2098c96d3e4982baa73f",
+            "unchanged": true
+          },
+          {
+            "path": "apps/web/features/studio/messages/ja.ts",
+            "blob": "cdba6d3cd9a8f8fca5663a66eb5c6f2b8d65fdcb",
+            "unchanged": true
+          },
+          {
+            "path": "apps/web/features/studio/messages/ko.ts",
+            "blob": "5d84d8907eadc6ad29af9998f39ca55acd774923",
+            "unchanged": true
+          },
+          {
+            "path": "apps/web/features/studio/messages/zh-Hans.ts",
+            "blob": "572f8b601fdcd22e592f5b102b3bb6aefc150654",
+            "unchanged": true
+          },
+          {
+            "path": "apps/web/features/studio/messages/zh-Hant.ts",
+            "blob": "9236ab79c0d2dc7f4779c6cbb9753d6b2f819b8a",
+            "unchanged": true
+          },
+          {
+            "path": "apps/web/features/studio/read.ts",
+            "blob": "3a726b274415c4289d8fe46f832a843c150919db",
+            "unchanged": true
+          },
+          {
+            "path": "apps/web/features/studio/studio-home.stories.tsx",
+            "blob": "e12fa175a1e61bffee6a918413c42e2f4734163b",
+            "unchanged": true
+          },
+          {
+            "path": "apps/web/features/studio/studio-home.tsx",
+            "blob": "c7d2187111f7a15b5dec4da69aa13cfe8110a342",
+            "unchanged": true
+          },
+          {
+            "path": "apps/web/features/studio/studio-work.tsx",
+            "blob": "7fb80382695f309d4e733354415e6c417a6efd17",
+            "unchanged": true
+          },
+          {
+            "path": "apps/web/features/studio/types.ts",
+            "blob": "fad3a36758ea8a5be9c59a35211c6db54bcad542",
+            "unchanged": true
+          },
+          {
+            "path": "apps/web/proxy.ts",
+            "blob": "b799068613488076a6c405ad9cf7ac6202c0ea15",
+            "unchanged": true
+          },
+          {
+            "path": "apps/web/tests/dependency-environments.test.ts",
+            "blob": "dec30ba944d262bdb2c78f8477dd282fe10acf12",
+            "unchanged": true
+          },
+          {
+            "path": "apps/web/tests/studio-inventory.test.ts",
+            "blob": "124aaaa6cce231a160036ead484b20fa3923b889",
+            "unchanged": true
+          },
+          {
+            "path": "apps/web/vite.config.ts",
+            "blob": "5340e037be04b55b3499adb537984ee440edcb61",
+            "unchanged": true
+          },
+          {
+            "path": "apps/web/worker/index.ts",
+            "blob": "d03cd1305fc127cef9b1aa6f6be86fd7a39d8d06",
+            "unchanged": true
+          },
+          {
+            "path": "generated/openapi/main/public.json",
+            "blob": "b1e3a38746218810dfabf17ae435e124eb479106",
+            "unchanged": true
+          },
+          {
+            "path": "scripts/static/web-continuations.inventory.json",
+            "blob": "6405c548981698e5250a4567a072abc5baf33ee5",
+            "unchanged": true
+          },
+          {
+            "path": "scripts/static/web-continuations.test.ts",
+            "blob": "6b235b24fdb2a486a2e51c7bc25ef653444ff8d3",
+            "unchanged": true
+          },
+          {
+            "path": "services/main/src/modules/studio/access.ts",
+            "blob": "e1a76597038a74975df36d5ec82f6166853bc6a2",
+            "unchanged": true
+          },
+          {
+            "path": "services/main/src/modules/studio/chapters.ts",
+            "blob": "bfd0fc170069cd912842352952742344ec3c28bd",
+            "unchanged": true
+          },
+          {
+            "path": "services/main/src/modules/studio/works.ts",
+            "blob": "e9bb2042c1626ddf9651068c42f2920e6a93c4d8",
+            "unchanged": true
+          },
+          {
+            "path": "services/main/src/routes/studio.ts",
+            "blob": "332c6b0ee18c92237863e9ecd8478a03ec501802",
+            "unchanged": true
+          },
+          {
+            "path": "services/main/tests/studio-inventory.test.ts",
+            "blob": "d4189db56e06da8d535ad9bc9601fbeadca93b98",
+            "unchanged": true
+          },
+          {
+            "path": "services/main/tests/studio-transfer-parity.test.ts",
+            "blob": "cd7af6f33696a3ab10852bfc0a92007913bbd828",
+            "unchanged": true
+          }
+        ],
+        "dependencyBlobs": {
+          "apps/web/features/api/server-read.ts": "4486ceb5072fbd9be6d455c95ad83cd6b629d2f4",
+          "apps/web/features/api/server-fetch.ts": "5dc162e45643cf34d789e24c56af204ac1d95b93"
+        },
+        "reviewRepeated": false,
+        "previousReportByteIdenticalAfterManagerRebase": true
+      },
+      "additionalVerification": "Checked all 35 preserved manifest entries and both dependency entries against actual c43 Git blobs; dependency file SHA256 also matched. Only these two paths differ from 9e. Clean external and owned runtime clone verified again after browser jobs.",
+      "existingDependencyReview": {
+        "task": "G-2847",
+        "reviewer": "codex-1/gpt-6.1-sol/xhigh",
+        "reportPin": "fa6e2e5be7f82faf7cbc0c0b4480d0d0fdab8d48",
+        "path": "docs/goals/audit-remediation-20261019/proofs/startup-navigation-review.json",
+        "blob": "a1a1be86c49aa4896075c9f009a22c9ef7337348",
+        "serverFetch": "Original G-2804 common-boundary review reused by G-2847; unchanged exact a27/31a/de8 bytes.",
+        "serverRead": "G-2847 corrected_candidate_delta_review source 31a, five_retained_findings_delta_review WEB-COLLECTION-STATUS explicitly inspects this file. Addressed in source and affected units; genuine late-document acceptance remains separate.",
+        "historicalRemaining31aFinding": "WEB-PRIVATE-IDENTITY denied-versus-outage belonged to auth/private readers; later same-reviewer de8 correction approval retained. Neither the auth producer nor private reader is imported here.",
+        "noRepeatedIndependentReview": true,
+        "checkReuse": {
+          "rerun": false,
+          "receipt": ".temp/audit-remediation-20261019/two-hour-sprint/site-web-boundary-approved-candidate/preserved-132-test-files.json",
+          "executedPin": "500c85e728312b8e8a49f02b898b6e62fe0f22e9",
+          "job": "7ed0226f-c914-4a7f-a7f9-6654e06620db",
+          "pass": 132,
+          "assertions": 1302,
+          "fourTrackedFilesByteIdentical": true,
+          "privateExecutableSha256": "809cd051a01d8c123b5c6f094e92cc3693478d64db3a6b51b3b682d7511c3e7c",
+          "originalPrivateExecutableAssertionsUnchanged": true,
+          "candidatePassNotClaimed": true,
+          "retainedStaticPin": "c47dce3cc92d417c8eea2f1698e4818582b7be6d",
+          "retainedStaticJob": "7ed0226f-c914-4a7f-a7f9-6654e06620db step2",
+          "retainedStaticRun": "run-OPL2mH",
+          "retainedFinalTypecheckPin": "de8fac2935cb59e61adfc18e98b55b9900751cb4",
+          "retainedFinalTypecheckJob": "51c35e9d-cd0f-411b-b8c2-d616f523403a step2",
+          "failureHistory": "The baseline new-consumer 401/403 failures remain in the retained artifacts. Six optional Hub fixture failures reproduced unchanged consumer before outcome assertions; both original failing jobs remain retained and are not labelled passes."
+        },
+        "exactDependencyBlobsMatchExecuted500cSource": true,
+        "wholeCandidatePassNotClaimed": true
+      },
+      "unchangedProofReused": "Original 24-path review/affected checks; producer 23/23 stories; independent four affected stories and 20 DOM probes/24 viewed PNGs at 9e. No new whole-candidate or dependency check pass claimed."
+    },
+    "checks": [
+      {
+        "job": "07e52b1f-5616-4cba-9e4f-12236affd741",
+        "command": "task goal -- slot -- bun .temp/studio-review/runtime-c43.ts",
+        "exit": 201,
+        "class": "setup/harness",
+        "assertionsReached": 0,
+        "result": "Main readiness 503 unavailable. Diagnostic read shortly after returned 200 ready without any shared resource change. Preserved initial evidence; bounded readiness wait added only to owned harness.",
+        "artifacts": ".temp/studio-review/runtime-c43-attempt1",
+        "resourceStop": "Original script recorded serverStopped=false before the killed child exit event. Subsequent process listing confirmed no owned port43149 process remained."
+      },
+      {
+        "job": "306b33e7-d63e-4d3b-93ab-4e7b8fe8705e",
+        "command": "task goal -- slot -- bun .temp/studio-review/runtime-c43.ts",
+        "exit": 0,
+        "class": "four geometry observations passed; product inventory failure also observed",
+        "assertionsReached": 4,
+        "result": "Genuine sign-in reached; Curated direct/reload/back/forward marker visible at390. Discovery probes with sort all returned400 and no Book was selected by that unsupported query. Exit0 is not inventory/title/count acceptance.",
+        "artifacts": ".temp/studio-review/runtime-c43"
+      },
+      {
+        "job": "fde28953-97fb-4234-aed9-a9c4e8a642ce",
+        "command": "task goal -- slot -- bun .temp/studio-review/runtime-c43-work.ts",
+        "exit": 201,
+        "class": "setup/harness",
+        "assertionsReached": 0,
+        "result": "Legacy read-only inventory/exact Work returned200 and a real Book; first Work route cold dynamic import failed, then Work sections wait timed out after60000ms. pageerror Cannot read properties of null (reading parentNode). No focus-ring outcome assertion executed.",
+        "artifacts": ".temp/studio-review/runtime-c43-work"
+      },
+      {
+        "job": "3b04a174-097c-43b5-aaea-6677da1030d2",
+        "command": "task goal -- slot -- bun .temp/studio-review/runtime-c43-work-recovery.ts",
+        "exit": 0,
+        "class": "eight geometry observations passed; manual visual qualification required",
+        "assertionsReached": 8,
+        "result": "After existing optimizer compilation settled, all four real Work tab routes at390/1440 measured focus Chapters then keyboard Tab to Introduction. Eight DOM geometry checks pass. Six actual rings are visible; Details at both widths is covered by a reproduced window-is-not-defined error overlay. Two pageerrors retained; no requestfailed events. Exit0 is not acceptance of those two obscured cases.",
+        "inProcessReloadActuallyNeeded": false,
+        "previousColdFailurePreserved": true,
+        "artifacts": ".temp/studio-review/runtime-c43-work-recovery"
+      },
+      {
+        "job": "77bfdaea-f27c-48c7-b9b4-ffdf5cbaec9e",
+        "command": "task docs:check",
+        "exit": 0,
+        "result": "13 tests passed;250 Markdown files checked for local links, fragments and design navigation. JSON proof parsed separately; runtime acceptance is not established by docs check.",
+        "log": ".temp/goal/jobs/77bfdaea-f27c-48c7-b9b4-ffdf5cbaec9e.log"
+      }
+    ],
+    "genuineApiStatusesAndAnswers": {
+      "credentialBoundary": "Only public endpoint configuration and proof paths are reported. Existing private fixture read through supported signInAtAccounts; own resulting browser storage state and raw private API answers remain under .temp with restrictive permissions. No credentials or storage contents in this report.",
+      "session": "Existing development member signed in genuinely; /v1/me/agents returned200. Work-only probe reused the just-established private browser session. No account/role/authority preparation.",
+      "harnessSessionAgentProbe": {
+        "status": 400,
+        "code": "invalid_request",
+        "classification": "Probe omitted the required session key header; not treated as a product authority denial or session-agent failure."
+      },
+      "frontendInventoryQueries": {
+        "status": 400,
+        "code": "invalid_request",
+        "title": "Request does not match the Work contract",
+        "queries": "authored/curated, limit20, sort=recent across first ten discovered eligible Agents; all20 returned400. Actual frontend direct/reload/history pages display Couldn’t load your works.",
+        "examplePath": "/v1/me/agents/71473997-6e2e-4e59-9044-01627a79e839/works?view=curated&limit=20&sort=recent",
+        "rawPrivateExample": ".temp/studio-review/runtime-c43/private/response-19.json",
+        "causeEvidence": "c43 features/studio/read.ts:150 sends sort; 75409 services/main/src/routes/studio.ts:55-62 omits q/sort and disallows additional properties."
+      },
+      "legacyDiscoveryForWorkGeometryOnly": {
+        "status": 200,
+        "path": "/v1/me/agents/0c0f9afd-168c-4826-97fa-5fb61eb8d605/works?view=authored&limit=20",
+        "items": 1,
+        "nextCursor": null,
+        "rawPrivatePath": ".temp/studio-review/runtime-c43-work-recovery/private/response-1.json",
+        "productionRequestModified": false,
+        "boundary": "The temporary harness used the backend’s supported old contract to locate retained data for Work focus geometry. The frontend production query was not adapted; its400 remains a current observed failure."
+      },
+      "exactWork": {
+        "status": 200,
+        "agent": "https://rezics.com/id/0c0f9afd-168c-4826-97fa-5fb61eb8d605",
+        "id": "https://rezics.com/id/01a10a71-e9d6-75b0-bbfe-136c368ec0c4",
+        "title": {
+          "value": "The Lantern Road 21ff96c6",
+          "language": "en"
+        },
+        "types": [
+          "https://schema.org/Book"
+        ],
+        "state": "published",
+        "relationship": "authored",
+        "sourcePosition": {
+          "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+          "sequence": "11954"
+        },
+        "requiredBookChapterCountPresent": false,
+        "rawPrivatePath": ".temp/studio-review/runtime-c43-work-recovery/private/response-2.json",
+        "boundary": "Exact retained title matches the actual Work header. Legacy list count/complete and Work publication state are not chapter totals; no definite zero or published-chapter subtotal inferred."
+      },
+      "browserResponseCapture": {
+        "homeEvidence": ".temp/studio-review/runtime-c43/evidence.json",
+        "workEvidence": ".temp/studio-review/runtime-c43-work-recovery/evidence.json",
+        "bodyAvailabilityLimit": "Some unrelated follow/feed response bodies were unavailable after navigation; exact capture failures retained. No such missing body is represented as an asserted Studio API result. Server-to-server internal Main responses are not browser-proxy response captures."
+      },
+      "countsTitleAndOriginalRecords": "No successful frontend inventory/count/title acceptance, no original four-chapter record rerun, no23-occurrence corpus rerun, no genuine100+ inventory proof. The retained Lantern Road record was used only for Work UI geometry, never as a replacement original counterexample."
+    },
+    "executedDomJourneys": {
+      "home": [
+        {
+          "width": 390,
+          "journey": "direct",
+          "url": "http://127.0.0.1:43149/en/studio/@agent-71473997-6e2e-4e59-9044-01627a79e839?view=curated",
+          "assertionReached": true,
+          "selectedMarkerVisibility": "proved",
+          "geometry": {
+            "nav": {
+              "x": 12,
+              "y": 334,
+              "right": 378,
+              "bottom": 380,
+              "width": 366,
+              "height": 46
+            },
+            "scrollLeft": 117,
+            "selected": {
+              "text": "Imported & curated",
+              "current": "page",
+              "focused": false,
+              "focusVisible": false,
+              "rect": {
+                "x": 226,
+                "y": 338,
+                "right": 374,
+                "bottom": 376,
+                "width": 148,
+                "height": 38
+              },
+              "outline": "oklab(0.743933 -0.0203648 -0.0928012 / 0.5) none 3px",
+              "outlineOffset": "0px",
+              "boxShadow": "none",
+              "outset": 0,
+              "painted": {
+                "left": 226,
+                "right": 374,
+                "top": 338,
+                "bottom": 376
+              },
+              "clips": [
+                {
+                  "tag": "NAV",
+                  "bounds": {
+                    "left": 12,
+                    "right": 378,
+                    "top": 334,
+                    "bottom": 379
+                  },
+                  "pass": true
+                }
+              ],
+              "unclipped": true
+            },
+            "focused": null
+          },
+          "screenshot": ".temp/studio-review/runtime-c43/home-direct-390.png",
+          "content": "Actual error pane; correct inventory content remains unproved."
+        },
+        {
+          "width": 390,
+          "journey": "refresh",
+          "url": "http://127.0.0.1:43149/en/studio/@agent-71473997-6e2e-4e59-9044-01627a79e839?view=curated",
+          "assertionReached": true,
+          "selectedMarkerVisibility": "proved",
+          "geometry": {
+            "nav": {
+              "x": 12,
+              "y": 334,
+              "right": 378,
+              "bottom": 380,
+              "width": 366,
+              "height": 46
+            },
+            "scrollLeft": 117,
+            "selected": {
+              "text": "Imported & curated",
+              "current": "page",
+              "focused": false,
+              "focusVisible": false,
+              "rect": {
+                "x": 226,
+                "y": 338,
+                "right": 374,
+                "bottom": 376,
+                "width": 148,
+                "height": 38
+              },
+              "outline": "oklab(0.743933 -0.0203648 -0.0928012 / 0.5) none 3px",
+              "outlineOffset": "0px",
+              "boxShadow": "none",
+              "outset": 0,
+              "painted": {
+                "left": 226,
+                "right": 374,
+                "top": 338,
+                "bottom": 376
+              },
+              "clips": [
+                {
+                  "tag": "NAV",
+                  "bounds": {
+                    "left": 12,
+                    "right": 378,
+                    "top": 334,
+                    "bottom": 379
+                  },
+                  "pass": true
+                }
+              ],
+              "unclipped": true
+            },
+            "focused": null
+          },
+          "screenshot": ".temp/studio-review/runtime-c43/home-refresh-390.png",
+          "content": "Actual error pane; correct inventory content remains unproved."
+        },
+        {
+          "width": 390,
+          "journey": "back",
+          "url": "http://127.0.0.1:43149/en/studio/@agent-71473997-6e2e-4e59-9044-01627a79e839?view=draft",
+          "assertionReached": true,
+          "selectedMarkerVisibility": "proved",
+          "geometry": {
+            "nav": {
+              "x": 12,
+              "y": 334,
+              "right": 378,
+              "bottom": 380,
+              "width": 366,
+              "height": 46
+            },
+            "scrollLeft": 0,
+            "selected": {
+              "text": "Drafts",
+              "current": "page",
+              "focused": false,
+              "focusVisible": false,
+              "rect": {
+                "x": 100,
+                "y": 338,
+                "right": 165,
+                "bottom": 376,
+                "width": 65,
+                "height": 38
+              },
+              "outline": "oklab(0.743933 -0.0203648 -0.0928012 / 0.5) none 3px",
+              "outlineOffset": "0px",
+              "boxShadow": "none",
+              "outset": 0,
+              "painted": {
+                "left": 100,
+                "right": 165,
+                "top": 338,
+                "bottom": 376
+              },
+              "clips": [
+                {
+                  "tag": "NAV",
+                  "bounds": {
+                    "left": 12,
+                    "right": 378,
+                    "top": 334,
+                    "bottom": 379
+                  },
+                  "pass": true
+                }
+              ],
+              "unclipped": true
+            },
+            "focused": null
+          },
+          "screenshot": ".temp/studio-review/runtime-c43/home-back-390.png",
+          "content": "Actual error pane; correct inventory content remains unproved."
+        },
+        {
+          "width": 390,
+          "journey": "forward",
+          "url": "http://127.0.0.1:43149/en/studio/@agent-71473997-6e2e-4e59-9044-01627a79e839?view=curated",
+          "assertionReached": true,
+          "selectedMarkerVisibility": "proved",
+          "geometry": {
+            "nav": {
+              "x": 12,
+              "y": 334,
+              "right": 378,
+              "bottom": 380,
+              "width": 366,
+              "height": 46
+            },
+            "scrollLeft": 117,
+            "selected": {
+              "text": "Imported & curated",
+              "current": "page",
+              "focused": false,
+              "focusVisible": false,
+              "rect": {
+                "x": 226,
+                "y": 338,
+                "right": 374,
+                "bottom": 376,
+                "width": 148,
+                "height": 38
+              },
+              "outline": "oklab(0.743933 -0.0203648 -0.0928012 / 0.5) none 3px",
+              "outlineOffset": "0px",
+              "boxShadow": "none",
+              "outset": 0,
+              "painted": {
+                "left": 226,
+                "right": 374,
+                "top": 338,
+                "bottom": 376
+              },
+              "clips": [
+                {
+                  "tag": "NAV",
+                  "bounds": {
+                    "left": 12,
+                    "right": 378,
+                    "top": 334,
+                    "bottom": 379
+                  },
+                  "pass": true
+                }
+              ],
+              "unclipped": true
+            },
+            "focused": null
+          },
+          "screenshot": ".temp/studio-review/runtime-c43/home-forward-390.png",
+          "content": "Actual error pane; correct inventory content remains unproved."
+        }
+      ],
+      "work": [
+        {
+          "width": 390,
+          "tab": "chapters",
+          "url": "http://127.0.0.1:43149/en/studio/@2VP8qHKd2zVwqZcWY6FAPe/works/01a10a71-e9d6-75b0-bbfe-136c368ec0c4?tab=chapters",
+          "documentStatus": 200,
+          "assertionReached": true,
+          "interaction": "Direct existing Work tab; focus Chapters then keyboard Tab to Introduction; no horizontal scrolling",
+          "geometryAssertion": true,
+          "actualViewedRing": "complete visible ring",
+          "geometry": {
+            "nav": {
+              "x": 12,
+              "y": 465,
+              "right": 378,
+              "bottom": 511,
+              "width": 366,
+              "height": 46
+            },
+            "scrollLeft": 0,
+            "selected": {
+              "text": "Chapters",
+              "current": "page",
+              "focused": false,
+              "focusVisible": false,
+              "rect": {
+                "x": 16,
+                "y": 469,
+                "right": 100,
+                "bottom": 507,
+                "width": 84,
+                "height": 38
+              },
+              "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) none 3px",
+              "outlineOffset": "0px",
+              "boxShadow": "none",
+              "outset": 0,
+              "painted": {
+                "left": 16,
+                "right": 100,
+                "top": 469,
+                "bottom": 507
+              },
+              "clips": [
+                {
+                  "tag": "NAV",
+                  "bounds": {
+                    "left": 12,
+                    "right": 378,
+                    "top": 465,
+                    "bottom": 511
+                  },
+                  "pass": true
+                }
+              ],
+              "unclipped": true
+            },
+            "focused": {
+              "text": "Introduction",
+              "current": null,
+              "focused": true,
+              "focusVisible": true,
+              "rect": {
+                "x": 104,
+                "y": 469,
+                "right": 207,
+                "bottom": 507,
+                "width": 103,
+                "height": 38
+              },
+              "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 1px",
+              "outlineOffset": "1px",
+              "boxShadow": "none",
+              "outset": 2,
+              "painted": {
+                "left": 102,
+                "right": 209,
+                "top": 467,
+                "bottom": 509
+              },
+              "clips": [
+                {
+                  "tag": "NAV",
+                  "bounds": {
+                    "left": 12,
+                    "right": 378,
+                    "top": 465,
+                    "bottom": 511
+                  },
+                  "pass": true
+                }
+              ],
+              "unclipped": true
+            }
+          },
+          "screenshot": ".temp/studio-review/runtime-c43-work-recovery/work-chapters-390-focus.png",
+          "focusCrop": ".temp/studio-review/runtime-c43-work-recovery/work-chapters-390-focus-crop.png"
+        },
+        {
+          "width": 390,
+          "tab": "text",
+          "url": "http://127.0.0.1:43149/en/studio/@2VP8qHKd2zVwqZcWY6FAPe/works/01a10a71-e9d6-75b0-bbfe-136c368ec0c4?tab=text",
+          "documentStatus": 200,
+          "assertionReached": true,
+          "interaction": "Direct existing Work tab; focus Chapters then keyboard Tab to Introduction; no horizontal scrolling",
+          "geometryAssertion": true,
+          "actualViewedRing": "complete visible ring",
+          "geometry": {
+            "nav": {
+              "x": 12,
+              "y": 465,
+              "right": 378,
+              "bottom": 511,
+              "width": 366,
+              "height": 46
+            },
+            "scrollLeft": 0,
+            "selected": {
+              "text": "Introduction",
+              "current": "page",
+              "focused": true,
+              "focusVisible": true,
+              "rect": {
+                "x": 104,
+                "y": 469,
+                "right": 207,
+                "bottom": 507,
+                "width": 103,
+                "height": 38
+              },
+              "outline": "oklab(0.743933 -0.0203648 -0.0928012 / 0.5) auto 1px",
+              "outlineOffset": "1px",
+              "boxShadow": "none",
+              "outset": 2,
+              "painted": {
+                "left": 102,
+                "right": 209,
+                "top": 467,
+                "bottom": 509
+              },
+              "clips": [
+                {
+                  "tag": "NAV",
+                  "bounds": {
+                    "left": 12,
+                    "right": 378,
+                    "top": 465,
+                    "bottom": 511
+                  },
+                  "pass": true
+                }
+              ],
+              "unclipped": true
+            },
+            "focused": {
+              "text": "Introduction",
+              "current": "page",
+              "focused": true,
+              "focusVisible": true,
+              "rect": {
+                "x": 104,
+                "y": 469,
+                "right": 207,
+                "bottom": 507,
+                "width": 103,
+                "height": 38
+              },
+              "outline": "oklab(0.743933 -0.0203648 -0.0928012 / 0.5) auto 1px",
+              "outlineOffset": "1px",
+              "boxShadow": "none",
+              "outset": 2,
+              "painted": {
+                "left": 102,
+                "right": 209,
+                "top": 467,
+                "bottom": 509
+              },
+              "clips": [
+                {
+                  "tag": "NAV",
+                  "bounds": {
+                    "left": 12,
+                    "right": 378,
+                    "top": 465,
+                    "bottom": 511
+                  },
+                  "pass": true
+                }
+              ],
+              "unclipped": true
+            }
+          },
+          "screenshot": ".temp/studio-review/runtime-c43-work-recovery/work-text-390-focus.png",
+          "focusCrop": ".temp/studio-review/runtime-c43-work-recovery/work-text-390-focus-crop.png"
+        },
+        {
+          "width": 390,
+          "tab": "details",
+          "url": "http://127.0.0.1:43149/en/studio/@2VP8qHKd2zVwqZcWY6FAPe/works/01a10a71-e9d6-75b0-bbfe-136c368ec0c4?tab=details",
+          "documentStatus": 200,
+          "assertionReached": true,
+          "interaction": "Direct existing Work tab; focus Chapters then keyboard Tab to Introduction; no horizontal scrolling",
+          "geometryAssertion": true,
+          "actualViewedRing": "obscured by genuine SSR error overlay; not accepted",
+          "geometry": {
+            "nav": {
+              "x": 12,
+              "y": 465,
+              "right": 378,
+              "bottom": 511,
+              "width": 366,
+              "height": 46
+            },
+            "scrollLeft": 0,
+            "selected": {
+              "text": "Details",
+              "current": "page",
+              "focused": false,
+              "focusVisible": false,
+              "rect": {
+                "x": 211,
+                "y": 469,
+                "right": 280,
+                "bottom": 507,
+                "width": 69,
+                "height": 38
+              },
+              "outline": "oklab(0.743933 -0.0203648 -0.0928012 / 0.5) none 3px",
+              "outlineOffset": "0px",
+              "boxShadow": "none",
+              "outset": 0,
+              "painted": {
+                "left": 211,
+                "right": 280,
+                "top": 469,
+                "bottom": 507
+              },
+              "clips": [
+                {
+                  "tag": "NAV",
+                  "bounds": {
+                    "left": 12,
+                    "right": 378,
+                    "top": 465,
+                    "bottom": 511
+                  },
+                  "pass": true
+                }
+              ],
+              "unclipped": true
+            },
+            "focused": {
+              "text": "Introduction",
+              "current": null,
+              "focused": true,
+              "focusVisible": true,
+              "rect": {
+                "x": 104,
+                "y": 469,
+                "right": 207,
+                "bottom": 507,
+                "width": 103,
+                "height": 38
+              },
+              "outline": "oklab(0.743933 -0.0203648 -0.0928012 / 0.5) auto 1px",
+              "outlineOffset": "1px",
+              "boxShadow": "none",
+              "outset": 2,
+              "painted": {
+                "left": 102,
+                "right": 209,
+                "top": 467,
+                "bottom": 509
+              },
+              "clips": [
+                {
+                  "tag": "NAV",
+                  "bounds": {
+                    "left": 12,
+                    "right": 378,
+                    "top": 465,
+                    "bottom": 511
+                  },
+                  "pass": true
+                }
+              ],
+              "unclipped": true
+            }
+          },
+          "screenshot": ".temp/studio-review/runtime-c43-work-recovery/work-details-390-focus.png",
+          "focusCrop": ".temp/studio-review/runtime-c43-work-recovery/work-details-390-focus-crop.png"
+        },
+        {
+          "width": 390,
+          "tab": "realms",
+          "url": "http://127.0.0.1:43149/en/studio/@2VP8qHKd2zVwqZcWY6FAPe/works/01a10a71-e9d6-75b0-bbfe-136c368ec0c4?tab=realms",
+          "documentStatus": 200,
+          "assertionReached": true,
+          "interaction": "Direct existing Work tab; focus Chapters then keyboard Tab to Introduction; no horizontal scrolling",
+          "geometryAssertion": true,
+          "actualViewedRing": "complete visible ring",
+          "geometry": {
+            "nav": {
+              "x": 12,
+              "y": 465,
+              "right": 378,
+              "bottom": 511,
+              "width": 366,
+              "height": 46
+            },
+            "scrollLeft": 0,
+            "selected": {
+              "text": "Realms",
+              "current": "page",
+              "focused": false,
+              "focusVisible": false,
+              "rect": {
+                "x": 284,
+                "y": 469,
+                "right": 355,
+                "bottom": 507,
+                "width": 71,
+                "height": 38
+              },
+              "outline": "oklab(0.743933 -0.0203648 -0.0928012 / 0.5) none 3px",
+              "outlineOffset": "0px",
+              "boxShadow": "none",
+              "outset": 0,
+              "painted": {
+                "left": 284,
+                "right": 355,
+                "top": 469,
+                "bottom": 507
+              },
+              "clips": [
+                {
+                  "tag": "NAV",
+                  "bounds": {
+                    "left": 12,
+                    "right": 378,
+                    "top": 465,
+                    "bottom": 511
+                  },
+                  "pass": true
+                }
+              ],
+              "unclipped": true
+            },
+            "focused": {
+              "text": "Introduction",
+              "current": null,
+              "focused": true,
+              "focusVisible": true,
+              "rect": {
+                "x": 104,
+                "y": 469,
+                "right": 207,
+                "bottom": 507,
+                "width": 103,
+                "height": 38
+              },
+              "outline": "oklab(0.743933 -0.0203648 -0.0928012 / 0.5) auto 1px",
+              "outlineOffset": "1px",
+              "boxShadow": "none",
+              "outset": 2,
+              "painted": {
+                "left": 102,
+                "right": 209,
+                "top": 467,
+                "bottom": 509
+              },
+              "clips": [
+                {
+                  "tag": "NAV",
+                  "bounds": {
+                    "left": 12,
+                    "right": 378,
+                    "top": 465,
+                    "bottom": 511
+                  },
+                  "pass": true
+                }
+              ],
+              "unclipped": true
+            }
+          },
+          "screenshot": ".temp/studio-review/runtime-c43-work-recovery/work-realms-390-focus.png",
+          "focusCrop": ".temp/studio-review/runtime-c43-work-recovery/work-realms-390-focus-crop.png"
+        },
+        {
+          "width": 1440,
+          "tab": "chapters",
+          "url": "http://127.0.0.1:43149/en/studio/@2VP8qHKd2zVwqZcWY6FAPe/works/01a10a71-e9d6-75b0-bbfe-136c368ec0c4?tab=chapters",
+          "documentStatus": 200,
+          "assertionReached": true,
+          "interaction": "Direct existing Work tab; focus Chapters then keyboard Tab to Introduction; no horizontal scrolling",
+          "geometryAssertion": true,
+          "actualViewedRing": "complete visible ring",
+          "geometry": {
+            "nav": {
+              "x": 308,
+              "y": 442,
+              "right": 1388,
+              "bottom": 488,
+              "width": 1080,
+              "height": 46
+            },
+            "scrollLeft": 0,
+            "selected": {
+              "text": "Chapters",
+              "current": "page",
+              "focused": false,
+              "focusVisible": false,
+              "rect": {
+                "x": 312,
+                "y": 446,
+                "right": 396,
+                "bottom": 484,
+                "width": 84,
+                "height": 38
+              },
+              "outline": "oklab(0.743933 -0.0203648 -0.0928012 / 0.5) none 3px",
+              "outlineOffset": "0px",
+              "boxShadow": "none",
+              "outset": 0,
+              "painted": {
+                "left": 312,
+                "right": 396,
+                "top": 446,
+                "bottom": 484
+              },
+              "clips": [
+                {
+                  "tag": "NAV",
+                  "bounds": {
+                    "left": 308,
+                    "right": 1388,
+                    "top": 442,
+                    "bottom": 488
+                  },
+                  "pass": true
+                }
+              ],
+              "unclipped": true
+            },
+            "focused": {
+              "text": "Introduction",
+              "current": null,
+              "focused": true,
+              "focusVisible": true,
+              "rect": {
+                "x": 400,
+                "y": 446,
+                "right": 503,
+                "bottom": 484,
+                "width": 103,
+                "height": 38
+              },
+              "outline": "oklab(0.743933 -0.0203648 -0.0928012 / 0.5) auto 1px",
+              "outlineOffset": "1px",
+              "boxShadow": "none",
+              "outset": 2,
+              "painted": {
+                "left": 398,
+                "right": 505,
+                "top": 444,
+                "bottom": 486
+              },
+              "clips": [
+                {
+                  "tag": "NAV",
+                  "bounds": {
+                    "left": 308,
+                    "right": 1388,
+                    "top": 442,
+                    "bottom": 488
+                  },
+                  "pass": true
+                }
+              ],
+              "unclipped": true
+            }
+          },
+          "screenshot": ".temp/studio-review/runtime-c43-work-recovery/work-chapters-1440-focus.png",
+          "focusCrop": ".temp/studio-review/runtime-c43-work-recovery/work-chapters-1440-focus-crop.png"
+        },
+        {
+          "width": 1440,
+          "tab": "text",
+          "url": "http://127.0.0.1:43149/en/studio/@2VP8qHKd2zVwqZcWY6FAPe/works/01a10a71-e9d6-75b0-bbfe-136c368ec0c4?tab=text",
+          "documentStatus": 200,
+          "assertionReached": true,
+          "interaction": "Direct existing Work tab; focus Chapters then keyboard Tab to Introduction; no horizontal scrolling",
+          "geometryAssertion": true,
+          "actualViewedRing": "complete visible ring",
+          "geometry": {
+            "nav": {
+              "x": 308,
+              "y": 442,
+              "right": 1388,
+              "bottom": 488,
+              "width": 1080,
+              "height": 46
+            },
+            "scrollLeft": 0,
+            "selected": {
+              "text": "Introduction",
+              "current": "page",
+              "focused": true,
+              "focusVisible": true,
+              "rect": {
+                "x": 400,
+                "y": 446,
+                "right": 503,
+                "bottom": 484,
+                "width": 103,
+                "height": 38
+              },
+              "outline": "oklab(0.743933 -0.0203648 -0.0928012 / 0.5) auto 1px",
+              "outlineOffset": "1px",
+              "boxShadow": "none",
+              "outset": 2,
+              "painted": {
+                "left": 398,
+                "right": 505,
+                "top": 444,
+                "bottom": 486
+              },
+              "clips": [
+                {
+                  "tag": "NAV",
+                  "bounds": {
+                    "left": 308,
+                    "right": 1388,
+                    "top": 442,
+                    "bottom": 488
+                  },
+                  "pass": true
+                }
+              ],
+              "unclipped": true
+            },
+            "focused": {
+              "text": "Introduction",
+              "current": "page",
+              "focused": true,
+              "focusVisible": true,
+              "rect": {
+                "x": 400,
+                "y": 446,
+                "right": 503,
+                "bottom": 484,
+                "width": 103,
+                "height": 38
+              },
+              "outline": "oklab(0.743933 -0.0203648 -0.0928012 / 0.5) auto 1px",
+              "outlineOffset": "1px",
+              "boxShadow": "none",
+              "outset": 2,
+              "painted": {
+                "left": 398,
+                "right": 505,
+                "top": 444,
+                "bottom": 486
+              },
+              "clips": [
+                {
+                  "tag": "NAV",
+                  "bounds": {
+                    "left": 308,
+                    "right": 1388,
+                    "top": 442,
+                    "bottom": 488
+                  },
+                  "pass": true
+                }
+              ],
+              "unclipped": true
+            }
+          },
+          "screenshot": ".temp/studio-review/runtime-c43-work-recovery/work-text-1440-focus.png",
+          "focusCrop": ".temp/studio-review/runtime-c43-work-recovery/work-text-1440-focus-crop.png"
+        },
+        {
+          "width": 1440,
+          "tab": "details",
+          "url": "http://127.0.0.1:43149/en/studio/@2VP8qHKd2zVwqZcWY6FAPe/works/01a10a71-e9d6-75b0-bbfe-136c368ec0c4?tab=details",
+          "documentStatus": 200,
+          "assertionReached": true,
+          "interaction": "Direct existing Work tab; focus Chapters then keyboard Tab to Introduction; no horizontal scrolling",
+          "geometryAssertion": true,
+          "actualViewedRing": "obscured by genuine SSR error overlay; not accepted",
+          "geometry": {
+            "nav": {
+              "x": 308,
+              "y": 442,
+              "right": 1388,
+              "bottom": 488,
+              "width": 1080,
+              "height": 46
+            },
+            "scrollLeft": 0,
+            "selected": {
+              "text": "Details",
+              "current": "page",
+              "focused": false,
+              "focusVisible": false,
+              "rect": {
+                "x": 507,
+                "y": 446,
+                "right": 576,
+                "bottom": 484,
+                "width": 69,
+                "height": 38
+              },
+              "outline": "oklab(0.743933 -0.0203648 -0.0928012 / 0.5) none 3px",
+              "outlineOffset": "0px",
+              "boxShadow": "none",
+              "outset": 0,
+              "painted": {
+                "left": 507,
+                "right": 576,
+                "top": 446,
+                "bottom": 484
+              },
+              "clips": [
+                {
+                  "tag": "NAV",
+                  "bounds": {
+                    "left": 308,
+                    "right": 1388,
+                    "top": 442,
+                    "bottom": 488
+                  },
+                  "pass": true
+                }
+              ],
+              "unclipped": true
+            },
+            "focused": {
+              "text": "Introduction",
+              "current": null,
+              "focused": true,
+              "focusVisible": true,
+              "rect": {
+                "x": 400,
+                "y": 446,
+                "right": 503,
+                "bottom": 484,
+                "width": 103,
+                "height": 38
+              },
+              "outline": "oklab(0.743933 -0.0203648 -0.0928012 / 0.5) auto 1px",
+              "outlineOffset": "1px",
+              "boxShadow": "none",
+              "outset": 2,
+              "painted": {
+                "left": 398,
+                "right": 505,
+                "top": 444,
+                "bottom": 486
+              },
+              "clips": [
+                {
+                  "tag": "NAV",
+                  "bounds": {
+                    "left": 308,
+                    "right": 1388,
+                    "top": 442,
+                    "bottom": 488
+                  },
+                  "pass": true
+                }
+              ],
+              "unclipped": true
+            }
+          },
+          "screenshot": ".temp/studio-review/runtime-c43-work-recovery/work-details-1440-focus.png",
+          "focusCrop": ".temp/studio-review/runtime-c43-work-recovery/work-details-1440-focus-crop.png"
+        },
+        {
+          "width": 1440,
+          "tab": "realms",
+          "url": "http://127.0.0.1:43149/en/studio/@2VP8qHKd2zVwqZcWY6FAPe/works/01a10a71-e9d6-75b0-bbfe-136c368ec0c4?tab=realms",
+          "documentStatus": 200,
+          "assertionReached": true,
+          "interaction": "Direct existing Work tab; focus Chapters then keyboard Tab to Introduction; no horizontal scrolling",
+          "geometryAssertion": true,
+          "actualViewedRing": "complete visible ring",
+          "geometry": {
+            "nav": {
+              "x": 308,
+              "y": 442,
+              "right": 1388,
+              "bottom": 488,
+              "width": 1080,
+              "height": 46
+            },
+            "scrollLeft": 0,
+            "selected": {
+              "text": "Realms",
+              "current": "page",
+              "focused": false,
+              "focusVisible": false,
+              "rect": {
+                "x": 580,
+                "y": 446,
+                "right": 651,
+                "bottom": 484,
+                "width": 71,
+                "height": 38
+              },
+              "outline": "oklab(0.743933 -0.0203648 -0.0928012 / 0.5) none 3px",
+              "outlineOffset": "0px",
+              "boxShadow": "none",
+              "outset": 0,
+              "painted": {
+                "left": 580,
+                "right": 651,
+                "top": 446,
+                "bottom": 484
+              },
+              "clips": [
+                {
+                  "tag": "NAV",
+                  "bounds": {
+                    "left": 308,
+                    "right": 1388,
+                    "top": 442,
+                    "bottom": 488
+                  },
+                  "pass": true
+                }
+              ],
+              "unclipped": true
+            },
+            "focused": {
+              "text": "Introduction",
+              "current": null,
+              "focused": true,
+              "focusVisible": true,
+              "rect": {
+                "x": 400,
+                "y": 446,
+                "right": 503,
+                "bottom": 484,
+                "width": 103,
+                "height": 38
+              },
+              "outline": "oklab(0.743933 -0.0203648 -0.0928012 / 0.5) auto 1px",
+              "outlineOffset": "1px",
+              "boxShadow": "none",
+              "outset": 2,
+              "painted": {
+                "left": 398,
+                "right": 505,
+                "top": 444,
+                "bottom": 486
+              },
+              "clips": [
+                {
+                  "tag": "NAV",
+                  "bounds": {
+                    "left": 308,
+                    "right": 1388,
+                    "top": 442,
+                    "bottom": 488
+                  },
+                  "pass": true
+                }
+              ],
+              "unclipped": true
+            }
+          },
+          "screenshot": ".temp/studio-review/runtime-c43-work-recovery/work-realms-1440-focus.png",
+          "focusCrop": ".temp/studio-review/runtime-c43-work-recovery/work-realms-1440-focus-crop.png"
+        }
+      ],
+      "geometrySummary": "Home390 nav x12..378 y334..380. Curated x226..374 y338..376, automatic scrollLeft117 on direct/reload/forward; Drafts x100..165 on back, scrollLeft0. Work390 nav x12..378 y465..511, focused Introduction x104..207 y469..507, painted x102..209 y467..509. Work1440 nav x308..1388 y442..488, focused x400..503 y446..484, painted x398..505 y444..486. Actual outline1px+offset1px; all measured clip-ancestor checks pass. Details visual obstruction prevents its measured geometry from proving actual visibility.",
+      "noManualHorizontalScroll": true,
+      "overlayDismissedOrErrorsSuppressed": false,
+      "workOrChapterEditingPerformed": false
+    },
+    "renderedEvidence": {
+      "actuallyViewedPngCount": 20,
+      "actuallyViewedPngs": [
+        ".temp/studio-review/runtime-c43/home-direct-390.png",
+        ".temp/studio-review/runtime-c43/home-refresh-390.png",
+        ".temp/studio-review/runtime-c43/home-back-390.png",
+        ".temp/studio-review/runtime-c43/home-forward-390.png",
+        ".temp/studio-review/runtime-c43-work-recovery/work-chapters-390-focus.png",
+        ".temp/studio-review/runtime-c43-work-recovery/work-chapters-390-focus-crop.png",
+        ".temp/studio-review/runtime-c43-work-recovery/work-text-390-focus.png",
+        ".temp/studio-review/runtime-c43-work-recovery/work-text-390-focus-crop.png",
+        ".temp/studio-review/runtime-c43-work-recovery/work-details-390-focus.png",
+        ".temp/studio-review/runtime-c43-work-recovery/work-details-390-focus-crop.png",
+        ".temp/studio-review/runtime-c43-work-recovery/work-realms-390-focus.png",
+        ".temp/studio-review/runtime-c43-work-recovery/work-realms-390-focus-crop.png",
+        ".temp/studio-review/runtime-c43-work-recovery/work-chapters-1440-focus.png",
+        ".temp/studio-review/runtime-c43-work-recovery/work-chapters-1440-focus-crop.png",
+        ".temp/studio-review/runtime-c43-work-recovery/work-text-1440-focus.png",
+        ".temp/studio-review/runtime-c43-work-recovery/work-text-1440-focus-crop.png",
+        ".temp/studio-review/runtime-c43-work-recovery/work-details-1440-focus.png",
+        ".temp/studio-review/runtime-c43-work-recovery/work-details-1440-focus-crop.png",
+        ".temp/studio-review/runtime-c43-work-recovery/work-realms-1440-focus.png",
+        ".temp/studio-review/runtime-c43-work-recovery/work-realms-1440-focus-crop.png"
+      ],
+      "inspection": "Viewed each full screenshot and each Work focus crop myself. Six Work states show complete ring and correct selected tab. Two Details crops show error-overlay content instead of the navigation; both full screenshots confirm obstruction. Both Chapters screenshots show a content-read error. Home screenshots show selected navigation and inventory error, never a successful inventory row.",
+      "prior24ViewedPngsReused": true,
+      "recordedStoriesAreNotGenuineApiProof": true
+    },
+    "currentObservedFailures": [
+      {
+        "id": "runtime-studio-inventory-contract-mismatch",
+        "owner": "Manager integration/runtime selection with G-2753 Studio producer; no implementation repair performed by this reviewer",
+        "classification": "reproduced genuine product failure of the authorized frontend/backend pair; not a reproduced defect of candidate Main bytes",
+        "frontend": "c43a05f54b8f80db57028ab08efc4dd277ad739d",
+        "backend": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "path": "apps/web/features/studio/read.ts",
+        "line": 150,
+        "backendPath": "services/main/src/routes/studio.ts",
+        "backendLines": [
+          55,
+          56,
+          57,
+          58,
+          59,
+          60,
+          61,
+          62
+        ],
+        "minimalReproduction": "Sign in with the supported existing fixture; open /en/studio/@agent-71473997-6e2e-4e59-9044-01627a79e839?view=curated on c43/75409. Actual pane cannot load. GET same Agent works with view=curated&limit=20&sort=recent returns400 invalid_request. Removing sort only in a diagnostic legacy lookup returns200 for the retained Author Notes Agent, and exact Work responds200.",
+        "expected": "The runtime Main supports the frontend inventory q/sort and explicit Book chapterCount contract.",
+        "actual": "75409 schema rejects q/sort and lacks chapterCount. No compatible integrated candidate Main chain is established by this authorized pair.",
+        "assertionReach": "Actual error pane and API400 reached; original inventory/title/count acceptance not reached.",
+        "screenshots": [
+          ".temp/studio-review/runtime-c43/home-direct-390.png"
+        ],
+        "repairBoundary": "Manager must choose an actually compatible Main product pin containing the unchanged reviewed Studio chain; do not alter production queries, assertions, data, or retained proof to fit the old Main. No fresh corpus/full AMGT prerequisite introduced."
+      },
+      {
+        "id": "runtime-details-ssr-window-obscures-work-navigation",
+        "owner": "Existing supported Web/startup boundary owner G-2825, with manager routing the unclaimed WorkMaintainers consumer; G-2747 shared navigation owner receives the visibility consequence. No second dependency review requested.",
+        "classification": "reproduced genuine browser runtime error, outside the two request-boundary dependency delta; not evidence that p-1 geometry regressed",
+        "source": "c43a05f54b8f80db57028ab08efc4dd277ad739d",
+        "path": "apps/web/features/api/browser.ts",
+        "line": 33,
+        "blob": "5b8c2d862068a9152b77de410bfefb247f047112",
+        "consumerPath": "apps/web/features/work-maintainers/panel.tsx",
+        "consumerLine": 123,
+        "consumerBlob": "143a922ec6afeb72e8c1ebe15981a9d26a199d61",
+        "intermediatePath": "apps/web/features/work-maintainers/api.ts",
+        "intermediateLine": 71,
+        "minimalReproduction": "Open the genuine retained Book Details route at390 or1440 on c43/75409; focus Chapters then keyboard Tab to Introduction. SSR initializes browserMaintainers from useState; browserMainApi default argument reads window.location.origin. Developer error overlay says window is not defined and covers the navigation.",
+        "observedError": "Switched to client rendering because the server rendering errored: window is not defined",
+        "assertionReach": "DOM selected-tab/focus/ring-bound measurements execute and pass; actual unobscured ring assertion remains unproved at both widths because the viewed screenshots show the error overlay.",
+        "navigationRectangles": {
+          "390": {
+            "nav": {
+              "x": 12,
+              "y": 465,
+              "right": 378,
+              "bottom": 511
+            },
+            "focusPaint": {
+              "left": 102,
+              "right": 209,
+              "top": 467,
+              "bottom": 509
+            }
+          },
+          "1440": {
+            "nav": {
+              "x": 308,
+              "y": 442,
+              "right": 1388,
+              "bottom": 488
+            },
+            "focusPaint": {
+              "left": 398,
+              "right": 505,
+              "top": 444,
+              "bottom": 486
+            }
+          }
+        },
+        "screenshots": [
+          ".temp/studio-review/runtime-c43-work-recovery/work-details-390-focus.png",
+          ".temp/studio-review/runtime-c43-work-recovery/work-details-1440-focus.png"
+        ],
+        "repairBoundary": "Return the observed consumer/default-window SSR failure to its existing owner. No source or original assertion edits here, no dismissal used to claim visible-ring success."
+      }
+    ],
+    "otherObservedLimits": {
+      "chaptersPane": "Both actual Chapters screenshots say Couldn’t load the chapters. Internal read response not independently captured; no cause invented and no count/product success claimed. Chapter editing and broader unchanged journey remain outside this correction.",
+      "coldFirstWorkRoute": {
+        "job": "fde28953-97fb-4234-aed9-a9c4e8a642ce",
+        "diagnosis": "Vite failed to fetch dynamically imported virtual layout-segment-context module during first Work route; then parentNode null error and Work sections unavailable.",
+        "correction": "Only one subsequent owned-server probe after compilation. No source/dependency/config assertion edit. All tab navigation then rendered; the additional in-process reload guard was never needed.",
+        "genuineOutcomeAssertionReachedInFailedAttempt": false
+      }
+    },
+    "currentOriginalCriteria": [
+      {
+        "id": "AUD-011-top-level",
+        "criterion": "Same Work real top-level chapter total",
+        "status": "unproved",
+        "evidence": [
+          "Source and stack-free count support only. Original retained four-chapter Work 01a14a2f-2a17-770f-91a6-1a90b29fb32a was not rerun."
+        ],
+        "genuineProductAcceptance": "unproved",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842"
+      },
+      {
+        "id": "AUD-011-volumes",
+        "criterion": "Same Work volume/nested-group chapter total",
+        "status": "unproved",
+        "evidence": [
+          "Nested-group occurrence unit test passed; genuine same-Work inventory not reached."
+        ],
+        "genuineProductAcceptance": "unproved",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842"
+      },
+      {
+        "id": "AUD-011-extras",
+        "criterion": "Same Work extras chapter total",
+        "status": "unproved",
+        "evidence": [
+          "Source traverses all active chapter occurrences; genuine extras journey not reached."
+        ],
+        "genuineProductAcceptance": "unproved",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842"
+      },
+      {
+        "id": "AUD-011-pagination",
+        "criterion": "Same Work paginated chapter total",
+        "status": "unproved",
+        "evidence": [
+          "Stack-free continuation/budget coverage passed; retained genuine 23-occurrence API corpus/backup not supplied or rerun. No substitute is claimed as original."
+        ],
+        "genuineProductAcceptance": "unproved",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842"
+      },
+      {
+        "id": "AUD-011-incomplete",
+        "criterion": "Incomplete scan never appears as definite zero",
+        "status": "proved",
+        "evidence": [
+          "Stack-free incomplete-count assertions passed; Incomplete Counts screenshots at 1440/390 show positive lower bound and unavailable unknown zero."
+        ],
+        "limit": "Proof is limited to source/tests/recorded rendering; genuine API acceptance remains unproved.",
+        "genuineProductAcceptance": "unproved",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842"
+      },
+      {
+        "id": "AUD-011-publication",
+        "criterion": "Publication facts remain correct and private drafts stay private",
+        "status": "unproved",
+        "evidence": [
+          "Source checks preserve acting-author fact queries and authority-first processing; genuine owner/other-persona API assertions not reached."
+        ],
+        "genuineProductAcceptance": "unproved",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842"
+      },
+      {
+        "id": "D4-014-title",
+        "criterion": "Locate a Work by title across complete authorized inventory, including CJK/normalization",
+        "status": "unproved",
+        "evidence": [
+          "227-candidate stack-free test and located/no-match stories passed; actual CJK input/form wiring measured. No large genuine inventory query reached."
+        ],
+        "genuineProductAcceptance": "unproved",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842",
+        "currentRuntimeLimit": "No successful current frontend inventory/title/order/count journey. Authorized backend 75409 does not implement the reviewed Studio inventory query/count contract. A supported legacy read located one real Book solely for the assigned Work navigation probe; this is not a replacement title/count or large-inventory corpus."
+      },
+      {
+        "id": "D4-014-order",
+        "criterion": "Explicit recent/created/title order across pages, full IRI ties",
+        "status": "unproved",
+        "evidence": [
+          "Source and stack-free order tests pass. 105-Work PostgreSQL case inspected but not executed. No genuine all-order/pagination journey."
+        ],
+        "genuineProductAcceptance": "unproved",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842",
+        "currentRuntimeLimit": "No successful current frontend inventory/title/order/count journey. Authorized backend 75409 does not implement the reviewed Studio inventory query/count contract. A supported legacy read located one real Book solely for the assigned Work navigation probe; this is not a replacement title/count or large-inventory corpus."
+      },
+      {
+        "id": "D4-014-large",
+        "criterion": "Sufficiently large genuine inventory (original recommendation 100 items crossing pages)",
+        "status": "unproved",
+        "evidence": [
+          "Recorded 105-Work story is not a genuine retained inventory. No replacement rich corpus prepared."
+        ],
+        "genuineProductAcceptance": "unproved",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842",
+        "currentRuntimeLimit": "No successful current frontend inventory/title/order/count journey. Authorized backend 75409 does not implement the reviewed Studio inventory query/count contract. A supported legacy read located one real Book solely for the assigned Work navigation probe; this is not a replacement title/count or large-inventory corpus."
+      },
+      {
+        "id": "D4-014-return",
+        "criterion": "Conditions preserved after Work open/back return",
+        "status": "unproved",
+        "evidence": [
+          "URL/return-condition unit tests pass. Story URL refresh/back/forward measured; actual signed-in Work open/back not reached."
+        ],
+        "genuineProductAcceptance": "unproved",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842",
+        "currentRuntimeLimit": "No successful current frontend inventory/title/order/count journey. Authorized backend 75409 does not implement the reviewed Studio inventory query/count contract. A supported legacy read located one real Book solely for the assigned Work navigation probe; this is not a replacement title/count or large-inventory corpus."
+      },
+      {
+        "id": "D4-014-not-three-cards",
+        "criterion": "Filtering applies before pagination, beyond three loaded cards",
+        "status": "proved",
+        "evidence": [
+          "Actual source and executed 227-candidate stack-free test filter/order the complete bounded authorized cut before slicing."
+        ],
+        "limit": "Source/test proof only; public API journey remains unproved.",
+        "genuineProductAcceptance": "unproved",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842"
+      },
+      {
+        "id": "D4-014-layout",
+        "criterion": "At 1440/390 title anchors each row; state/time/continue/chapters are repeatable and readable; secondary metadata recedes",
+        "status": "proved",
+        "evidence": [
+          "All recorded home states inspected at both widths; titles lead rows, count/state and actions stay readable, Details collapses type/language/review metadata."
+        ],
+        "limit": "Recorded-story visual evidence only; not genuine product acceptance.",
+        "genuineProductAcceptance": "unproved",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842"
+      },
+      {
+        "id": "D4-014-diversity",
+        "criterion": "Multiple states, long CJK/Latin titles and no-cover rows usable without returning to inventory start",
+        "status": "unproved",
+        "evidence": [
+          "Lifecycle, large inventory, Chinese, located Work and no-match inputs inspected at both widths and in dark/light themes; wrapping and bottom-page continuation reviewed."
+        ],
+        "limit": "Recorded layout is usable; genuine title location without returning to the inventory start remains unproved.",
+        "genuineProductAcceptance": "unproved",
+        "recordedLayoutStatus": "proved",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842",
+        "currentRuntimeLimit": "No successful current frontend inventory/title/order/count journey. Authorized backend 75409 does not implement the reviewed Studio inventory query/count contract. A supported legacy read located one real Book solely for the assigned Work navigation probe; this is not a replacement title/count or large-inventory corpus."
+      },
+      {
+        "id": "D4-002-Studio-home",
+        "criterion": "Studio views: direct links, refresh, back/forward and changed filters keep current destination/marker visible",
+        "status": "unproved",
+        "evidence": [
+          "Genuine signed-in c43a05f/75409 product routes: direct Curated, reload, back to Drafts, forward to Curated all retain fully visible current marker without manual horizontal scrolling. Four actual PNGs viewed.",
+          "The actual inventory pane displays Couldn’t load your works. Matching GET with sort=recent returns 400 invalid_request; backend route rejects additional query fields. Marker geometry success does not establish correct inventory content."
+        ],
+        "limit": "Current continuation proves the assigned navigation visibility subcriterion only. All unchanged story evidence retained; no Discover/Site/Library closure.",
+        "genuineProductAcceptance": "selected-marker visibility proved for the four assigned 390px histories; inventory content/complete original criterion unproved",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842",
+        "recordedStoryResult": "proved for the assigned changed delta at 9e633ed",
+        "currentRuntimeEvidence": "c43a05f54b8f80db57028ab08efc4dd277ad739d"
+      },
+      {
+        "id": "D4-002-Studio-work",
+        "criterion": "Work tabs: selection, content and focus agree with complete actual focus-ring edges at 390/1440",
+        "status": "unproved",
+        "evidence": [
+          "Existing genuine Book 01a10a71-e9d6-75b0-bbfe-136c368ec0c4 is returned by legacy inventory and exact Work API with HTTP 200. Actual Work header matches its retained title.",
+          "All four Work tab routes at 390/1440 return HTTP 200, select the requested destination, and place actual keyboard focus on Introduction after focus Chapters then Tab. All eight measured outline edges fit their navigation clipping ancestor.",
+          "All 16 Work PNGs were viewed. Chapters, Introduction and Realms show the complete focus ring at both widths. Details screenshots and their focus crops show a window is not defined developer error overlay covering the navigation; their geometric pass is not visible-ring acceptance.",
+          "Chapters content shows Couldn’t load the chapters at both widths. No actual chapter count or successful unchanged chapter-content journey is inferred."
+        ],
+        "limit": "Remaining original missing UI assertion: unobscured actual Details ring at 390/1440. Original selection/content proof from recorded stories remains separate; no new assertion or contract introduced.",
+        "genuineProductAcceptance": "eight DOM geometry probes pass; six actual rings visually proved, Details at both widths obscured by a reproduced SSR error overlay",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842",
+        "recordedStoryResult": "all eight changed ring geometry cases proved at 9e633ed",
+        "currentRuntimeEvidence": "c43a05f54b8f80db57028ab08efc4dd277ad739d"
+      },
+      {
+        "id": "D4-002-class-boundary",
+        "criterion": "Preserve original Discover/Site/Library evidence and avoid claiming entire navigation class closed",
+        "status": "proved",
+        "evidence": [
+          "Existing G-2747/G-2825 ownership retained; no broad unchanged navigation rerun or Discover closure claimed."
+        ],
+        "limit": "This records scope discipline, not closure of an original product finding.",
+        "genuineProductAcceptance": "no closure claimed",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842"
+      }
+    ],
+    "originalAcceptanceReach": {
+      "services/main/tests/studio-transfer-parity.test.ts": {
+        "executed": false,
+        "outcomeAssertionReached": false
+      },
+      "tests/qa/integration/outcomes/realm/studio-inventory.test.ts": {
+        "executed": false,
+        "sixPersonas": "all unproved",
+        "fourAdditionalFailingBodies": "all unproved; pending/failing declarations unchanged",
+        "outcomeAssertionReached": false
+      },
+      "tests/qa/integration/studio-heads.test.ts": {
+        "executed": false,
+        "outcomeAssertionReached": false
+      },
+      "tests/qa/integration/search-studio-chapter-content.test.ts": {
+        "executed": false,
+        "outcomeAssertionReached": false
+      },
+      "apps/web/tests/studio.e2e.ts": {
+        "executed": false,
+        "STUDIO01WiderAuthorJourney": "separate and unproved",
+        "outcomeAssertionReached": false
+      },
+      "originalFourChapterId": {
+        "id": "01a14a2f-2a17-770f-91a6-1a90b29fb32a",
+        "rerun": false
+      },
+      "independent23OccurrenceCorpusRerun": false,
+      "genuineLarge100PlusInventory": "unproved",
+      "genuineTitleCjkAllOrdersPaginationOpenBackNestedExtrasPrivateDisclosure": "not reached; no substituted fixture claimed"
+    },
+    "resourcesAndScope": {
+      "ownedWebPort": 43149,
+      "ownedServersStopped": true,
+      "stopEvidence": "Both completed runtime evidence files say serverStopped=true after checking the process group; final ps found no actual port43149 server. Initial503 attempt false stop flag was verified by a later process check.",
+      "externalCandidateAndOwnedCloneTrackedFilesClean": true,
+      "productionOrOriginalTestOrRegistryEdits": [],
+      "trackedReportOnly": true,
+      "sharedBackendOrNativeRestartedRefreshedResetImported": false,
+      "manualCatalogueAuthorityOrAccountChanges": false,
+      "normalUiSideEffect": "Initial existing signed-in /en journey issued the application’s normal feed-watermark PUT200; no manual seeding or Work/chapter mutation.",
+      "credentials": "Retained only in owned .temp private fixture storage state, never report contents.",
+      "schemaBackupAndOriginalPreparationNotRepeated": true,
+      "findingsClosed": [],
+      "automaticLanding": false
+    },
+    "completionBoundary": "Partial. The originally missing genuine Curated marker histories are now proved and six genuine Work rings visibly pass. Two Details visible-ring cases remain unproved due to the observed SSR error overlay. Required current product inventory/title/count behavior is not proved by the incompatible75409 API, aggregate complete flags, or recorded3章 placeholders. Original af37/9e evidence and all independent original acceptance distinctions remain intact.",
+    "next": "Manager route the two precise runtime composition/SSR issues to the existing owners, preserving this reviewer and all unchanged proof. Remaining narrow UI assertion is unobscured actual Details focus ring at390/1440. No unchanged suite, fresh catalogue, full AMGT rerun, new reviewer or new contract requested."
   }
 }
