@@ -4,7 +4,7 @@
   "worker": "G-2830",
   "engine": "codex-1 / GPT-6.1 Sol / xhigh; no fallback or nested agents",
   "result": "partial",
-  "conclusion": "D2-002 has positive rendered failure-injection evidence, but live reload/backend durability remain unverified. D2-003 fails an unchanged original outcome assertion: snapshot failure followed by Remove images or Retry loses current text and saves the prior body. Neither finding is closed.",
+  "conclusion": "D2-002 original three acceptance criteria and regression assertions pass at exact frontend dabebfed5276 and separately retained compatible backend 75409ac3c379. Existing four genuine acknowledged publication/replay/readback cases plus eight new full-page natural keyboard/emulated-touch recovery cases cover both widths and UI locales, including selected-language/current-edit reload continuity. D2-003 remains open because genuine image-use binding returns 403; repaired snapshot outcomes pass but genuine bound-image metadata/reopen/persistence outcomes remain unavailable. Original failed tests and the unreproduced low-level audit exception remain preserved and distinct.",
   "pins": {
     "reportBranch": "goal/g-2830",
     "reportBase": "8ee1db74ade97621b3a19e43d83b87482859c23b",
@@ -254,41 +254,75 @@
   "acceptanceByFinding": [
     {
       "id": "D2-002",
-      "status": "partial; keep open",
+      "status": "original three assertions pass; ready for manager acceptance at frozen pins",
+      "productPin": "dabebfed5276f2847ee763b8575a030edfc1b1ff",
+      "backendServedRevision": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
       "criteria": [
         {
-          "criterion": "Read failure before first write leaves all fields editable and attempt cancellable/reselectable",
-          "result": "pass in rendered injected stories, all four width/locale combinations; zero mocked publication calls"
+          "id": "D2-002/assertion-1",
+          "originalAcceptance": "在首个服务端变更前的任何读取失败后，全部草稿字段仍可编辑，且可以取消或重新选择目标；不要求清除浏览器存储。",
+          "originalRegressionAssertion": "Before the first mutation, any prerequisite read failure leaves title, body, language, spoiler, community and Work editable and allows cancel/retarget.",
+          "status": "pass at frozen frontend/backend pins",
+          "evidence": [
+            "input-recovery/result.json: all eight allSixEditableBeforeWrite, failedIntentReload, naturalCancelAndContinue, languageSelectableDuringRecovery, workRetargetControl and communityRetargetControl outcomes",
+            "live/result.json: four preflightEditableCancelable outcomes; existing accepted source review and prerequisite-stage tests"
+          ],
+          "actualOutcome": "Original main-version selection prerequisite 503 is browser injected once before publication writes. All six fields remain editable/enabled before and after full reload of the failed intent. Cancel preserves the complete draft; title/body/language/spoiler changes and target controls work with natural keyboard and emulated touch.",
+          "boundary": "Failure injection reproduces the original prerequisite-read failure; it is not an actual backend outage. Zero publication mutations means no draft/identity/placement writes, not zero unrelated Main writes. Cancel-or-retarget is the original criterion; this adds no all-picker-results prerequisite. Existing genuine Community reselection four cases and Work selection/reload zh-Hans/1440 remain separate evidence."
         },
         {
-          "criterion": "Acknowledged/unknown write restricts edits and safely resumes the same operation without duplicate submissions",
-          "result": "partial: rendered same key/body retry and synthetic receipt deduplication pass in all four; real durable backend outcome unverified"
+          "id": "D2-002/assertion-2",
+          "originalAcceptance": "已有变更时按确切回执/阶段限制可修改字段，并提供保留文字的取消或安全续做；同键重试不重复贴文。",
+          "originalRegressionAssertion": "After a mutation receipt, restrictions and resume use the exact completed stage; safe exit retains the draft and retries reuse the same intent/key.",
+          "status": "pass at frozen frontend/backend pins",
+          "evidence": [
+            "live/result.json: four realAcknowledgedPlacementRetry outcomes from job b91a5aa4-c986-4dfe-923e-15f23001f283",
+            "receipt-inspection.json: exact operation/body/receipt equivalence and complete thread readback",
+            "Previously accepted source review and stage/receipt tests; retained rendered acknowledged-operation states"
+          ],
+          "actualOutcome": "One actual draft 201 and reply identity 201 per case. The actual placement 201 is captured, then its browser response is dropped. The failed attempt retains acknowledged stages and current text across full reload; Retry sends the same placement operation/key/body and returns genuine 200 replayed=true with matching reply, placement and revision. No additional draft/identity POST; a thread GET200 contains one matching complete document.",
+          "boundary": "Reuses four completed genuine publication cases and exact-receipt stage evidence; no new publication run. Scope is these acknowledged operations and readbacks, not a global duplicate count, backend restart or backup-restore durability claim. Browser transport interception does not fabricate backend receipts."
         },
         {
-          "criterion": "Failure/reload/identity recovery supports continued editing/cancellation at 1440/390",
-          "result": "partial: component remount/localStorage recovery passes core cases; full-page signed-in journey blocked, one supplemental complete-text restoration mismatch unresolved, physical touch unverified"
+          "id": "D2-002/assertion-3",
+          "originalAcceptance": "失败后刷新并恢复身份时能继续编辑或明确取消；1440 与 390 布局均可键盘/触控完成。",
+          "originalRegressionAssertion": "Reload and desktop/mobile keyboard/touch recovery need no localStorage surgery, including restored pre-write failed intent.",
+          "status": "pass at frozen frontend/backend pins",
+          "evidence": [
+            "input-recovery/result.json: eight failedIntentReload, naturalCancelAndContinue and completeEditsAndLanguageSurviveReload outcomes",
+            "input-recovery/screenshots-viewed.json: twelve actual PNG inspections",
+            "input-recovery/source-equivalence.json: clean exact frontend and 26 retained authored fingerprints"
+          ],
+          "actualOutcome": "Supported sign-in validates the eligible actor; each owned context restores identity and the failed pre-write intent by full page reload. At 1440 and 390 in English and Simplified Chinese UI, keyboard Tab/Enter/Space or native emulated touch reaches Cancel, edits current title/body, selects zh-Hans content language, toggles spoiler, reloads the complete current document and opens destination search controls. No localStorage write/clear/surgery after initial fixture entry, no programmatic focus repair.",
+          "boundary": "Touch is Chromium hasTouch/isMobile emulation with Locator.tap, not physical hardware or a heard screen-reader test. Automatic Cancel focus remains BODY; natural Tab recovery completes and is the original assertion. Content language selection, editor lang and stored language survive reload; English UI remains English and Chinese UI remains Chinese."
         }
-      ]
+      ],
+      "acceptanceBoundary": "Original criterion allows cancel or retarget before publication writes and safe resume after exact receipts. Image403, all-matrix Work search availability, automatic focus repair, physical-device and heard-SR checks are not added prerequisites. Canonical finding status was not edited by this report worker."
     },
     {
       "id": "D2-003",
-      "status": "failed; keep open; P1 snapshot text-loss blocks acceptance",
+      "status": "partial; keep open; repaired snapshot loss no longer reproduced at candidate",
+      "productPin": "dabebfed5276f2847ee763b8575a030edfc1b1ff",
       "criteria": [
         {
-          "criterion": "Saved means current complete snapshot persisted; failure names retained version",
-          "result": "failed: incomplete status initially correct, but Retry or Remove saves old body and destroys current recovery text"
+          "criterion": "Snapshot failure and Retry/Remove preserve current document",
+          "result": "unchanged original SnapshotFailureKeepsCurrentText and new RetryThenRemoveKeepsCurrentDocument pass all four combinations; marked current text survives Retry, Remove, save and reopen; no source blocker in independent correction review"
         },
         {
-          "criterion": "Stable uploaded image nodes/text survive reload despite unavailable metadata",
-          "result": "partial: simulated stable references persist/remount in composer and compact body editor at all four combinations; genuine uploaded bytes/media-use receipts and full-page reload not reached"
+          "criterion": "Retained independent Retry and export assertions",
+          "result": "ExportRetained and current-document reopen pass all four. Retained RetryRetainsCurrentText fails all four at warning-absence premise before final text assertion; actual PNGs retain current text, invalid-image warning, retry/remove/export controls and editor focus. Preserve failure, do not weaken assertion or call it recurring text loss"
         },
         {
-          "criterion": "Retry/remove/export keep failure recoverable without claiming old text is current",
-          "result": "failed overall: valid binding failure retry/remove and raw export pass; malformed snapshot retry/remove lose current text; focus falls to BODY"
+          "criterion": "Stable genuine uploaded references survive unavailable metadata and reopening",
+          "result": "pass only with simulated stable references in rendered composer/body stories. Real reserve/bytes activation/inference return 201, but media-use binding returns 403, so no genuine bound-image metadata-outage/reload/persistence proof"
         },
         {
-          "criterion": "Device storage failure does not falsely report saved",
-          "result": "pass in all four deliberately injected browser quota cases; publishing stops before API writes when pending state cannot persist"
+          "criterion": "Device storage failure never falsely reports a saved draft",
+          "result": "all four rendered controlled storage-failure cases pass; not an actual disk failure. Phone screenshot crop does not display every lower recovery control"
+        },
+        {
+          "criterion": "Original low-level audit exception diagnosed",
+          "result": "unresolved: not reproduced or diagnosed. Real media-use 403 and original test setup failures are distinct evidence"
         }
       ]
     }
@@ -380,8 +414,13 @@
       "source fingerprints",
       "failed-case DOM records",
       "startup command/error",
-      "screenshots actually viewed"
-    ]
+      "screenshots actually viewed",
+      "separately pinned repaired correction review and 26-file integration fingerprints",
+      "real signed-in reload, publication replay/readback and image/search failure receipts",
+      "new private harness and 26 actually viewed PNG inventory",
+      "eight-case natural keyboard/native emulated touch and selected-language recovery receipts, 48 retained PNGs with 12 actual inspections, exact-source verification and preserved initial harness premise failure"
+    ],
+    "repairedInventory": "repaired-dabebfed5276/artifact-manifest.json (sha256 and bytes; includes administrative logs and report copy)"
   },
   "administrativeChecks": {
     "status": "passed",
@@ -416,15 +455,1134 @@
     "commitMaintenance": "Initial report commit succeeded; automatic pack-refs printed a reference-transaction hook rejection. No manual ref maintenance performed. Subsequent required checks passed."
   },
   "next": [
-    "Keep D2-003 open; route snapshot rollback/current-text loss to G-2748 with original failure and matrix evidence.",
-    "Resolve original document-editor story setup and SlashMenu test premise without weakening outcome assertions.",
-    "G-2747 owns Web startup; after a genuine isolated signed-in fixture exists, run targeted /submit full reload and backend receipt proof using retained corpus/backup.",
-    "Investigate en1440 missing character and retry focus loss; do not assert durable no-duplicate publication from synthetic receipts.",
-    "Manager copies private bundle to requested main location and lands only this report. No source fixes, land:auto or regression confirmation performed."
+    "Manager can accept original D2-002 assertions 1/2/3 using the separately pinned real publication and new eight-case natural input evidence; update canonical finding status through manager authority.",
+    "Keep D2-003 open; route genuine image-use 403 receipts to G-2748/G-2780. Complete only missing genuine stable bound-image metadata/reload/persistence outcomes at a frozen repaired pin. Original audit exception still requires reproduction before diagnosis.",
+    "Retain automatic BODY focus, Work search503, Retry warning-absence and original image/SlashMenu setup observations with existing owners; these do not add D2-002 acceptance gates or erase original failures.",
+    "Manager copies the retained worker bundle to requested main path. Worker filesystem boundary forbids that copy; only this proof JSON is committed. No product changes, land:auto, corpus preparation or full regression."
   ],
   "harnessWarnings": [
     "Failed to resolve dependency: @storybook/react-dom-shim, present in client optimizeDeps.include (persists as warning after successful local install; not itself the later assertion failure).",
     "QA acceptance coverage remains unqualified; targeted pass is not full regression or durable backend acceptance."
   ],
-  "recordedAt": "2026-10-19T05:17:06Z"
+  "recordedAt": "2026-10-19T09:57:12.725537+00:00",
+  "historicalScope": {
+    "originalProductAndTestPin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+    "preservedSections": [
+      "pins",
+      "isolation",
+      "commands",
+      "renderedMatrix",
+      "receipts",
+      "sourceReview",
+      "liveJourney",
+      "screenshots",
+      "testPremises",
+      "administrativeChecks",
+      "harnessWarnings"
+    ],
+    "meaning": "These retained sections describe the original accepted partial proof at 92b8a78f1c. Their zero-write, blocked-live and confirmed snapshot text-loss statements are historical. Current separately pinned results are under repairedVerification and current acceptanceByFinding; no original result, independent assertion or artifact was removed.",
+    "acceptedReportCommits": [
+      "43036a454e",
+      "1393dd6414",
+      "23dd4d3ee9"
+    ],
+    "originalConclusion": "D2-002 has positive rendered failure-injection evidence, but live reload/backend durability remain unverified. D2-003 fails an unchanged original outcome assertion: snapshot failure followed by Remove images or Retry loses current text and saves the prior body. Neither finding is closed.",
+    "originalAcceptanceByFinding": [
+      {
+        "id": "D2-002",
+        "status": "partial; keep open",
+        "criteria": [
+          {
+            "criterion": "Read failure before first write leaves all fields editable and attempt cancellable/reselectable",
+            "result": "pass in rendered injected stories, all four width/locale combinations; zero mocked publication calls"
+          },
+          {
+            "criterion": "Acknowledged/unknown write restricts edits and safely resumes the same operation without duplicate submissions",
+            "result": "partial: rendered same key/body retry and synthetic receipt deduplication pass in all four; real durable backend outcome unverified"
+          },
+          {
+            "criterion": "Failure/reload/identity recovery supports continued editing/cancellation at 1440/390",
+            "result": "partial: component remount/localStorage recovery passes core cases; full-page signed-in journey blocked, one supplemental complete-text restoration mismatch unresolved, physical touch unverified"
+          }
+        ]
+      },
+      {
+        "id": "D2-003",
+        "status": "failed; keep open; P1 snapshot text-loss blocks acceptance",
+        "criteria": [
+          {
+            "criterion": "Saved means current complete snapshot persisted; failure names retained version",
+            "result": "failed: incomplete status initially correct, but Retry or Remove saves old body and destroys current recovery text"
+          },
+          {
+            "criterion": "Stable uploaded image nodes/text survive reload despite unavailable metadata",
+            "result": "partial: simulated stable references persist/remount in composer and compact body editor at all four combinations; genuine uploaded bytes/media-use receipts and full-page reload not reached"
+          },
+          {
+            "criterion": "Retry/remove/export keep failure recoverable without claiming old text is current",
+            "result": "failed overall: valid binding failure retry/remove and raw export pass; malformed snapshot retry/remove lose current text; focus falls to BODY"
+          },
+          {
+            "criterion": "Device storage failure does not falsely report saved",
+            "result": "pass in all four deliberately injected browser quota cases; publishing stops before API writes when pending state cannot persist"
+          }
+        ]
+      }
+    ],
+    "originalNext": [
+      "Keep D2-003 open; route snapshot rollback/current-text loss to G-2748 with original failure and matrix evidence.",
+      "Resolve original document-editor story setup and SlashMenu test premise without weakening outcome assertions.",
+      "G-2747 owns Web startup; after a genuine isolated signed-in fixture exists, run targeted /submit full reload and backend receipt proof using retained corpus/backup.",
+      "Investigate en1440 missing character and retry focus loss; do not assert durable no-duplicate publication from synthetic receipts.",
+      "Manager copies private bundle to requested main location and lands only this report. No source fixes, land:auto or regression confirmation performed."
+    ]
+  },
+  "repairedVerification": {
+    "decision": "2026-10-19T06:49:34.073844+00:00 split repaired rendered and genuine composer acceptance",
+    "pins": {
+      "productAndOriginalTests": "dabebfed5276f2847ee763b8575a030edfc1b1ff",
+      "candidateBase": "a27bcfc6bad849dd912cbd3f721de5defeba1c86",
+      "candidateBranchRequested": "candidate/site-composer-20261019",
+      "correctionReviewed": "8c4fc20b3e2b203e388dbc470fd84a0f0be95316",
+      "originalReviewReused": "fd4e3c6be3f80a343d5e7b9a9c8e291652878435",
+      "workerReportHeadBeforeUpdate": "0a3b6b881eb70458e0bb9dff97599dfd866af41f",
+      "qaSourceDigest": "38cb3efc1da3",
+      "backendServedRevisionObserved": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "backendQualification": "Retained backend revision pointer and Account/Main process working directories observed separately from frontend pin; not a backend rebuild or immutable deployment attestation.",
+      "privateHarness": "Frozen copies and SHA256 inventory under repaired-dabebfed5276; source/original assertions unchanged."
+    },
+    "isolation": {
+      "checkout": ".temp/post-draft-repaired-product",
+      "method": "Independent shared-object clone detached at candidate; independent Yarn installation; source clean before and after runs.",
+      "privateComparisonBase": "Only this independent clone main ref is pinned to candidate base for affected check selection; main checkout refs and other worktrees untouched.",
+      "productChanges": [],
+      "originalAssertionChanges": [],
+      "sharedRefreshImportReset": false,
+      "newCorpus": false,
+      "data": "Existing sole producer/retained original audit identities and PNG reused; retained backup qualification did not establish a complete restorable physical backup, so no backup or restore claim.",
+      "servers": "Only owned exact-source frontend on 43127 started/stopped; occupied foreign 43125 server and shared backend left untouched.",
+      "cleanup": {
+        "finalLiveOwnedServerStopped": true,
+        "reselectionOwnedServerStopped": true,
+        "timeoutJobOwnedPidGoneAndPortClosed": true,
+        "placementRaceJobOwnedPidGoneAndPortClosed": true,
+        "stoppedOtherServers": false,
+        "originalD2002InputOwnedServerStopped": true
+      }
+    },
+    "sourceReview": {
+      "scope": "Reviewed only all eight repair files and actual minimal integration once. Accepted original fd4e review reused without repetition.",
+      "integration": "All 26 candidate changed files byte-match final authored source; manager receipt records exact original and repair imports with no extra imports or manual conflict edits.",
+      "evidence": "integration-source.json and correction.patch",
+      "checks": [
+        "BodyEditor memoizes saved body separately from raw current recovery; Retry/Remove preserve current text/marks and focus the editor.",
+        "Composer synchronizes draftRef/persistence merge; persistDraftBody clears recovery only after local storage succeeds and propagates storage errors.",
+        "Rich-text recovery validates raw envelope, initializes/compares controlled current document and removes only invalid image nodes while preserving valid images, text and marks.",
+        "New unit/story causal assertions cover failed Retry, invalid-image Remove, current-document save and reopen."
+      ],
+      "result": "No new source blocker found in correction or exact integration. Retained warning-absence assertion is incompatible with Retry keeping an unchanged invalid image; preserved for manager disposition."
+    },
+    "commands": [
+      {
+        "job": "74e2c450-f16c-47d6-b235-86e621c619f4",
+        "qa": "20261019t070322-a638b6",
+        "command": "bun --cwd .temp/post-draft-repaired-product scripts/goal/goalctl.ts test apps/web/features/post-composer/draft-body.test.ts packages/ui/src/components/rich-text-editor-snapshot.test.ts",
+        "result": "pass: 1 unit test/13 assertions and 7 owner tests/29 assertions; 8 tests total"
+      },
+      {
+        "job": "74e2c450-f16c-47d6-b235-86e621c619f4",
+        "qa": "20261019t070333-a97d00",
+        "command": "env STORYBOOK_BROWSER_LOG=<private-bundle>/story-browser.log bun --cwd .temp/post-draft-repaired-product scripts/goal/goalctl.ts test apps/web/.temp/verification/repaired-snapshot.stories.tsx apps/web/.temp/verification/additional-recovery.stories.tsx apps/web/.temp/verification/entry-restoration.stories.tsx apps/web/.temp/verification/body-matrix.stories.tsx --config ../../.temp/verification/vitest.config.ts",
+        "result": "40 passed, 4 failed of 44; all four retained RetryRetainsCurrentText fail at warning absence before final text assertion"
+      },
+      {
+        "job": "eac61ca5-6288-4573-8706-81d543e420e5",
+        "command": "task -d .temp/post-draft-repaired-product goal -- check --only types,lint",
+        "result": "pass: affected types, inference cost, lint and ast for exact 26-file candidate delta; private output run-qZxCVm retained. Final report guards are separate.",
+        "artifact": "candidate-check/output.log"
+      },
+      {
+        "job": "eac61ca5-6288-4573-8706-81d543e420e5",
+        "qa": "20261019t074115-de6b19",
+        "command": "env STORYBOOK_BROWSER_LOG=<private-bundle>/composer-browser.log bun --cwd .temp/post-draft-repaired-product scripts/goal/goalctl.ts test apps/web/.temp/verification/composer-matrix.stories.tsx --config ../../.temp/verification/vitest.config.ts",
+        "result": "24 passed of 24"
+      },
+      {
+        "job": "b91a5aa4-c986-4dfe-923e-15f23001f283",
+        "command": "bun --cwd .temp/post-draft-repaired-product scripts/goal/goalctl.ts slot -- task web:e2e -- .temp/verification/live-recovery.e2e.ts --config .temp/verification/live.playwright.config.ts",
+        "result": "pass: all four genuine text reload/preflight/cancel/edit/acknowledged placement retry cases"
+      },
+      {
+        "job": "6e4f4b75-e82f-4098-b3a9-1b4a330232a3",
+        "command": "bun --cwd .temp/post-draft-repaired-product scripts/goal/goalctl.ts slot -- task web:e2e -- .temp/verification/reselection.e2e.ts --config .temp/verification/reselection.playwright.config.ts",
+        "result": "failed at retained actual search API premise: Community reselection 4/4; Work and full reload 1/4; other three actual search_index_unavailable 503"
+      }
+    ],
+    "admission": "Every recorded job uses main goalctl from worker cwd. Story/unit QA uses goalctl test. Genuine named browser files use goalctl slot then Task web:e2e with repository Playwright provider and supported fixture; avoided test dispatcher fresh-stack/new-corpus provisioning to preserve authorized existing data. No full regression.",
+    "rendered": {
+      "matrix": {
+        "widths": [
+          1440,
+          390
+        ],
+        "locales": [
+          "en",
+          "zh-Hans"
+        ]
+      },
+      "counts": "64 passed and 4 premise failures across 68 executions; SnapshotFailureKeepsCurrentText repeats in two matrices. Not 68 distinct cases or an independent rerun of all 69 author tests.",
+      "passed": [
+        "Unchanged SnapshotFailureKeepsCurrentText: 4/4 in repaired-snapshot and 4/4 in composer matrix.",
+        "New RetryThenRemoveKeepsCurrentDocument: 4/4 including current marked text, retry/remove focus and save/reopen.",
+        "Retained ExportRetained: 4/4, current raw document present in actual captured export Blob.",
+        "Retained edit/reselect/reopen and lost-placement stories: 8/8; story remounts and synthetic receipts only.",
+        "EntryRestoration: 4/4 separately asserts entered body then restored body; no reproduction at new pin of old single-character discrepancy.",
+        "Body matrix: 16/16 stable synthetic image reference, retry binding, remove and cancel upload outcomes.",
+        "Composer matrix: 24/24 includes unwritten/cancel/unknown, current snapshot, simulated stable image and storage-unavailable cases."
+      ],
+      "failed": {
+        "case": "additional-recovery.stories.tsx RetryRetainsCurrentText",
+        "combinations": 4,
+        "location": "line 87 waitFor draftIncomplete warning to disappear",
+        "finalTextOutcomeReached": false,
+        "observed": "Current text and blue editor focus remain; unchanged invalid image remains unresolved; accurate incomplete/unsaved warning and retry/remove/export controls remain. Kept independent assertion byte-identical."
+      },
+      "originalFailures": "Retained historical five document-editor image stories and rich-text SlashMenu fail before outcome assertions; not reclassified as repaired outcomes. Original missing-character discrepancy remains unconfirmed; new entry/restoration pass does not diagnose old cause.",
+      "a11y": "Normal repository Storybook axe checks run after passed cases with no failures; repository skips afterEach a11y for failed cases. No whole-page live axe or physical touch claim.",
+      "warning": "@storybook/react-dom-shim optimizeDeps warning persists but does not prevent these cases from executing."
+    },
+    "live": {
+      "fixture": ".temp/audit-remediation-20261019/two-hour-sprint/site-auth-fixture.json (existing supported fixture; credentials never logged or bundled)",
+      "readiness": {
+        "command": "task web:dev -- --port 43127",
+        "cwd": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2830/.temp/post-draft-repaired-product",
+        "pid": 3063206,
+        "cleanSource": true,
+        "oauthMatchesFixture": true,
+        "status": 200,
+        "ready": true
+      },
+      "authentication": {
+        "method": "signInAtAccounts existing supported fixture",
+        "path": "/en/submit",
+        "status": 200,
+        "sessionAgent": {
+          "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+          "revision": "2940458f-6ec5-4c60-9566-54a35e5acff3",
+          "eligible": true
+        }
+      },
+      "started": "2026-10-19T07:46:09.809Z",
+      "finished": "2026-10-19T07:49:34.456Z",
+      "setup": "Publication matrix preselects existing retained audit identities into owned browser draft, then enters/edits through real UI; not itself a picker pass. Separate reselection probe uses genuine search and choice controls.",
+      "transportControlsExecuted": [
+        "One browser-injected selection preflight 503 per case",
+        "Forward real placement POST; capture backend 201 then drop browser response; reload and retry same operation"
+      ],
+      "transportControlNotReached": "Metadata-unavailable control named in initial harness metadata was never executed on a genuine bound image because media-use binding failed. Do not read planned control list as executed evidence.",
+      "fabricatedBackendReceipts": false,
+      "cases": [
+        {
+          "locale": "en",
+          "width": 1440,
+          "criteria": {
+            "realFullReload": true,
+            "preflightEditableCancelable": true,
+            "editAfterCancelSurvivesFullReload": true,
+            "realAcknowledgedPlacementRetry": true
+          },
+          "preflight": "One browser-injected 503 before writes; write count unchanged; title/body editable; Cancel focused and activated with Enter.",
+          "draftReload": "Entered title/body/spoiler and complete localStorage payload equal after full page reload; subsequent edited title/body survive another full reload.",
+          "placementOperation": "20661134-ea49-4e80-9386-3714ef50c0f6:place",
+          "sameRequestBody": true,
+          "acknowledgements": [
+            {
+              "status": 201,
+              "replayed": false,
+              "responseDeliberatelyLost": true
+            },
+            {
+              "status": 200,
+              "replayed": true,
+              "responseDeliberatelyLost": false
+            }
+          ],
+          "reply": "https://rezics.com/id/9ffba10e-f885-447b-9664-d5d8c0169c45",
+          "placement": "https://rezics.com/id/01a15321-8f5e-7617-8823-a34fefa170d9",
+          "revisionId": "1eab01b3-8f28-4a5d-939f-80dbc7600159",
+          "readback": {
+            "path": "/api/main/v1/realms/01a14f51-e6f3-741b-a2ab-2c5699f7db4c/threads/9ffba10e-f885-447b-9664-d5d8c0169c45?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839",
+            "status": 200,
+            "items": 1,
+            "sourcePosition": {
+              "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+              "sequence": "11944"
+            },
+            "title": "Recovery verification en 1440 edited",
+            "body": "Edited genuine document after cancellation.",
+            "spoiler": true,
+            "language": "en",
+            "completeDocumentInspected": true
+          },
+          "duplicateWriteScope": "One draft and one identity POST per case; same placement operation replays once with the same receipt; one matching item in retained thread read. No global database count or restart durability claim.",
+          "focus": {
+            "entered": "INPUT",
+            "restored": "BODY",
+            "preflight-503": "BODY",
+            "edited-restored": "BODY",
+            "publication-result": "BODY",
+            "acknowledged-retry": "BODY"
+          },
+          "horizontalOverflow": false
+        },
+        {
+          "locale": "en",
+          "width": 390,
+          "criteria": {
+            "realFullReload": true,
+            "preflightEditableCancelable": true,
+            "editAfterCancelSurvivesFullReload": true,
+            "realAcknowledgedPlacementRetry": true
+          },
+          "preflight": "One browser-injected 503 before writes; write count unchanged; title/body editable; Cancel focused and activated with Enter.",
+          "draftReload": "Entered title/body/spoiler and complete localStorage payload equal after full page reload; subsequent edited title/body survive another full reload.",
+          "placementOperation": "8666cab6-4a85-45ae-820c-7014e1958714:place",
+          "sameRequestBody": true,
+          "acknowledgements": [
+            {
+              "status": 201,
+              "replayed": false,
+              "responseDeliberatelyLost": true
+            },
+            {
+              "status": 200,
+              "replayed": true,
+              "responseDeliberatelyLost": false
+            }
+          ],
+          "reply": "https://rezics.com/id/99f4060e-1b8c-4506-ae9c-840a9efdf752",
+          "placement": "https://rezics.com/id/01a15322-231a-7281-bfae-965bf48bb187",
+          "revisionId": "2e3f2d86-d2ac-4ee4-ae83-eb902d541374",
+          "readback": {
+            "path": "/api/main/v1/realms/01a14f51-e6f3-741b-a2ab-2c5699f7db4c/threads/99f4060e-1b8c-4506-ae9c-840a9efdf752?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839",
+            "status": 200,
+            "items": 1,
+            "sourcePosition": {
+              "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+              "sequence": "11946"
+            },
+            "title": "Recovery verification en 390 edited",
+            "body": "Edited genuine document after cancellation.",
+            "spoiler": true,
+            "language": "en",
+            "completeDocumentInspected": true
+          },
+          "duplicateWriteScope": "One draft and one identity POST per case; same placement operation replays once with the same receipt; one matching item in retained thread read. No global database count or restart durability claim.",
+          "focus": {
+            "entered": "INPUT",
+            "restored": "BODY",
+            "preflight-503": "BODY",
+            "edited-restored": "BODY",
+            "publication-result": "BODY",
+            "acknowledged-retry": "BODY"
+          },
+          "horizontalOverflow": false
+        },
+        {
+          "locale": "zh-Hans",
+          "width": 1440,
+          "criteria": {
+            "realFullReload": true,
+            "preflightEditableCancelable": true,
+            "editAfterCancelSurvivesFullReload": true,
+            "realAcknowledgedPlacementRetry": true
+          },
+          "preflight": "One browser-injected 503 before writes; write count unchanged; title/body editable; Cancel focused and activated with Enter.",
+          "draftReload": "Entered title/body/spoiler and complete localStorage payload equal after full page reload; subsequent edited title/body survive another full reload.",
+          "placementOperation": "93d8cb77-c0c4-4a7a-b5cf-f22593e487ff:place",
+          "sameRequestBody": true,
+          "acknowledgements": [
+            {
+              "status": 201,
+              "replayed": false,
+              "responseDeliberatelyLost": true
+            },
+            {
+              "status": 200,
+              "replayed": true,
+              "responseDeliberatelyLost": false
+            }
+          ],
+          "reply": "https://rezics.com/id/cf9244ff-db51-43a9-97a7-a0dda1f42bbc",
+          "placement": "https://rezics.com/id/01a15322-9353-72f0-b02e-62b91c27e14b",
+          "revisionId": "d3ce6d73-da24-4036-a7e7-60cf98d3cfd1",
+          "readback": {
+            "path": "/api/main/v1/realms/01a14f51-e6f3-741b-a2ab-2c5699f7db4c/threads/cf9244ff-db51-43a9-97a7-a0dda1f42bbc?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839",
+            "status": 200,
+            "items": 1,
+            "sourcePosition": {
+              "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+              "sequence": "11948"
+            },
+            "title": "Recovery verification zh-Hans 1440 edited",
+            "body": "Edited genuine document after cancellation.",
+            "spoiler": true,
+            "language": "en",
+            "completeDocumentInspected": true
+          },
+          "duplicateWriteScope": "One draft and one identity POST per case; same placement operation replays once with the same receipt; one matching item in retained thread read. No global database count or restart durability claim.",
+          "focus": {
+            "entered": "INPUT",
+            "restored": "BODY",
+            "preflight-503": "BODY",
+            "edited-restored": "BODY",
+            "publication-result": "BODY",
+            "acknowledged-retry": "BODY"
+          },
+          "horizontalOverflow": false
+        },
+        {
+          "locale": "zh-Hans",
+          "width": 390,
+          "criteria": {
+            "realFullReload": true,
+            "preflightEditableCancelable": true,
+            "editAfterCancelSurvivesFullReload": true,
+            "realAcknowledgedPlacementRetry": true
+          },
+          "preflight": "One browser-injected 503 before writes; write count unchanged; title/body editable; Cancel focused and activated with Enter.",
+          "draftReload": "Entered title/body/spoiler and complete localStorage payload equal after full page reload; subsequent edited title/body survive another full reload.",
+          "placementOperation": "a34ee259-b891-44a8-8218-9dc144583e52:place",
+          "sameRequestBody": true,
+          "acknowledgements": [
+            {
+              "status": 201,
+              "replayed": false,
+              "responseDeliberatelyLost": true
+            },
+            {
+              "status": 200,
+              "replayed": true,
+              "responseDeliberatelyLost": false
+            }
+          ],
+          "reply": "https://rezics.com/id/f03c2db1-932a-44c7-920b-663c1e9af56c",
+          "placement": "https://rezics.com/id/01a15322-edf5-71eb-b830-c6856c849e09",
+          "revisionId": "fd955ac5-6cbd-4629-aeaa-b967ad40de94",
+          "readback": {
+            "path": "/api/main/v1/realms/01a14f51-e6f3-741b-a2ab-2c5699f7db4c/threads/f03c2db1-932a-44c7-920b-663c1e9af56c?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839",
+            "status": 200,
+            "items": 1,
+            "sourcePosition": {
+              "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+              "sequence": "11950"
+            },
+            "title": "Recovery verification zh-Hans 390 edited",
+            "body": "Edited genuine document after cancellation.",
+            "spoiler": true,
+            "language": "en",
+            "completeDocumentInspected": true
+          },
+          "duplicateWriteScope": "One draft and one identity POST per case; same placement operation replays once with the same receipt; one matching item in retained thread read. No global database count or restart durability claim.",
+          "focus": {
+            "entered": "INPUT",
+            "restored": "BODY",
+            "preflight-503": "BODY",
+            "edited-restored": "BODY",
+            "publication-result": "BODY",
+            "acknowledged-retry": "BODY"
+          },
+          "horizontalOverflow": false
+        }
+      ],
+      "persistenceLimit": "Real thread reads verify the complete edited document after response-loss reload/retry, not retention after backend restart, backup restore or a global duplicate database scan. Authored content language remains English under both UI locales.",
+      "reselection": {
+        "artifact": "live-reselection/result.json",
+        "communityPassed": 4,
+        "workAndReloadPassed": 1,
+        "cases": [
+          {
+            "locale": "en",
+            "width": 1440,
+            "criteria": {
+              "genuineCommunityReselection": true
+            },
+            "searchStatus": 503,
+            "searchProblem": {
+              "type": "https://rezics.com/problems/search_index_unavailable",
+              "title": "Public text index is unavailable",
+              "status": 503,
+              "code": "search_index_unavailable"
+            },
+            "blocker": "Genuine retained Work title search returned no selectable Work"
+          },
+          {
+            "locale": "en",
+            "width": 390,
+            "criteria": {
+              "genuineCommunityReselection": true
+            },
+            "searchStatus": 503,
+            "searchProblem": {
+              "type": "https://rezics.com/problems/search_index_unavailable",
+              "title": "Public text index is unavailable",
+              "status": 503,
+              "code": "search_index_unavailable"
+            },
+            "blocker": "Genuine retained Work title search returned no selectable Work"
+          },
+          {
+            "locale": "zh-Hans",
+            "width": 1440,
+            "criteria": {
+              "genuineCommunityReselection": true,
+              "genuineWorkReselection": true,
+              "genuineReselectionSurvivesFullReload": true
+            },
+            "searchStatus": 200,
+            "searchProblem": null,
+            "blocker": null
+          },
+          {
+            "locale": "zh-Hans",
+            "width": 390,
+            "criteria": {
+              "genuineCommunityReselection": true
+            },
+            "searchStatus": 503,
+            "searchProblem": {
+              "type": "https://rezics.com/problems/search_index_unavailable",
+              "title": "Public text index is unavailable",
+              "status": 503,
+              "code": "search_index_unavailable"
+            },
+            "blocker": "Genuine retained Work title search returned no selectable Work"
+          }
+        ],
+        "request": "/api/main/v1/search/typeahead?prefix=AUDIT%20D2%20interaction%20book",
+        "interpretation": "Actual intermittent search_index_unavailable, not absent retained Work or failed Community picker. No writes in reselection probe and no refresh/import/reset workaround."
+      }
+    },
+    "genuineImagePremise": {
+      "job": "0c97b4d0-1d17-4a2f-b144-dc3cc7213831",
+      "artifact": "live/attempt-media-use-403.json",
+      "stage": "en/1440 actual retained PNG upload and binding in signed-in /submit",
+      "png": {
+        "retainedOriginal": "audit-avatar.png",
+        "bytes": 3134,
+        "sha256": "70247ff82e10fbacdc785b6b391ebbaf5fee5d01b37539cb4cda8d4a6f3c2a5f"
+      },
+      "actualReceipts": [
+        {
+          "method": "POST",
+          "path": "/api/main/v1/media/uploads",
+          "status": 201,
+          "operation": "4e6c6ee4-4db9-43f4-b5be-505a54f7f814:reserve",
+          "body": {
+            "asset": "901bd435-0af5-415f-a5e5-7211c79c1b21",
+            "upload": "eca4a4c8-7b91-4f3e-8473-09f816909a4c",
+            "quarantineKey": "media-quarantine/eca4a4c8-7b91-4f3e-8473-09f816909a4c",
+            "objectNamespace": "media/asset/901bd435-0af5-415f-a5e5-7211c79c1b21/",
+            "expiresAt": "2026-10-19T08:26:51.268Z",
+            "stateHead": "355b049f-5f12-4a67-8d57-83c69291fffc",
+            "replayed": false,
+            "position": {
+              "owner": "content",
+              "dataEpoch": "59342c98-1083-4e17-8200-4d74e8f4bc50",
+              "sequence": "1703"
+            },
+            "admission": "01a1530e-557c-773b-ada5-7f7675853c1b",
+            "uploadUrl": "/v1/media/uploads/eca4a4c8-7b91-4f3e-8473-09f816909a4c/bytes"
+          }
+        },
+        {
+          "method": "PUT",
+          "path": "/api/main/v1/media/uploads/eca4a4c8-7b91-4f3e-8473-09f816909a4c/bytes",
+          "status": 201,
+          "operation": null,
+          "body": {
+            "asset": "901bd435-0af5-415f-a5e5-7211c79c1b21",
+            "upload": "eca4a4c8-7b91-4f3e-8473-09f816909a4c",
+            "status": "activated",
+            "reason": null,
+            "clearance": "cleared",
+            "clearanceReason": null,
+            "representation": "f02b9465-dafb-422b-b77e-565b84e8f2ed",
+            "revision": "8af7bdab-ba67-40ed-997f-26054a9589e9",
+            "replayed": false
+          }
+        },
+        {
+          "method": "POST",
+          "path": "/api/main/v1/media/representations/f02b9465-dafb-422b-b77e-565b84e8f2ed/inferences",
+          "status": 201,
+          "operation": "4e6c6ee4-4db9-43f4-b5be-505a54f7f814:inference",
+          "body": "unreadable"
+        },
+        {
+          "method": "POST",
+          "path": "/api/main/v1/media/uses",
+          "status": 403,
+          "operation": "4e6c6ee4-4db9-43f4-b5be-505a54f7f814:use",
+          "body": "unreadable"
+        }
+      ],
+      "useTarget": "https://rezics.com/id/01a14f4e-526a-706c-9404-479d17f3e7ba",
+      "result": "Reserve 201, bytes 201 activated/cleared, inference 201, media-use 403; inference/use bodies unavailable to original reader. No successful media-use receipt, genuine stable bound image, unavailable-metadata reopen or image persistence acceptance. No speculative authorization diagnosis.",
+      "harnessLimit": "Original unbounded receipt-body reader timed out the browser test; retained request/status evidence and source. Later private wrapper bounds reads. Owned timed-out process gone and port closed independently observed."
+    },
+    "actualWriteInventory": {
+      "successfulMatrix": "Four new draft revisions, four reply identities, four placements; four placement retries are same-operation replays, not four additional semantic posts. Browser response list omits deliberately dropped first acknowledgements; route receipts retain them.",
+      "earlierHarnessRace": {
+        "job": "eac61ca5-6288-4573-8706-81d543e420e5",
+        "artifact": "live/attempt-placement-route-race.json",
+        "reply": "https://rezics.com/id/de4c096a-741b-4e54-b0f6-93dc0ea03593",
+        "placement": "https://rezics.com/id/01a1531e-2b6b-712a-95eb-3e8fcd748d6d",
+        "revisionId": "8df51875-7768-4870-a67a-a7fc3f202008",
+        "operation": "ff5b118f-e404-4264-974b-748fbb94ca13:place",
+        "result": "Actual draft/identity/placement 201 occurred before private route lifecycle race; extra same-key Node replay returned 200 replayed=true. Retain actual write but do not count this failed harness as successful browser retry."
+      },
+      "totalNewTextPosts": 5,
+      "otherActualWrites": "One reserved/activated image asset plus 201 inference; denied media-use 403. No real bound image or cleanup deletion.",
+      "syntheticWrites": "All Storybook receipts, mock call counts and simulated uploaded image IDs remain separately scoped to stories; never included in actual API inventory.",
+      "originalD2002InputContinuation": {
+        "publicationMutationsThisContinuation": 0,
+        "successfulInputRunFeedWatermarkPut200": 8,
+        "premiseFailedRunFeedWatermarkPut200": 8,
+        "totalNewTextPostsAcrossPriorVerificationUnchanged": 5,
+        "scope": "All 16 additional actual writes are retained individually in the two raw result files. Existing four successful matrix posts plus one earlier failed-harness real post remain in actualWriteInventory; no synthetic story receipt is an API receipt."
+      }
+    },
+    "harnessAttempts": [
+      {
+        "job": "09ab56a0-6d27-401f-a75f-f736f5fe89d0",
+        "artifact": "live/attempt-session-probe-400.json",
+        "result": "OAuth succeeded; initial private BFF session probe shape returned 400. Corrected supported direct session-agent probe, not product login defect."
+      },
+      {
+        "job": "e1fe9e4f-b06d-453e-ab7e-ffb90d3ef7d1",
+        "artifact": "live/attempt-picker-premises.json",
+        "result": "Initial generic-prefix picker probe and too-early phone wait; not proof no Community exists. Later exact retained-title reselection receipts supersede premise."
+      },
+      {
+        "job": "3466678e-07d7-4f7a-b0e0-80125d1035db",
+        "artifact": "live/attempt-reload-matrix.json",
+        "result": "All reload/preflight/edit cases reached; immediate enabled check ran before hydration. Corrected private wait; not durable publication failure."
+      },
+      {
+        "job": "eac61ca5-6288-4573-8706-81d543e420e5",
+        "artifact": "live/attempt-placement-route-race.json",
+        "result": "Private asynchronous route lifecycle race after real write; corrected by awaiting route completion. Source unchanged."
+      },
+      {
+        "artifact": "live/attempt-port-43125.json",
+        "result": "Foreign fixture frontend already used 43125; refused to stop/reuse it, owned frontend used 43127."
+      },
+      {
+        "result": "Earlier admission filename/config/ESM/env loader setup failures retained in private verification logs; no product outcome assertions reached."
+      }
+    ],
+    "screenshots": {
+      "actuallyViewedNew": 26,
+      "inventory": "screenshots-viewed.json",
+      "historicalViewed": "Original 29 remain under historical screenshots; not claimed newly inspected.",
+      "observations": [
+        "Current text visible in all four SnapshotFailure and RetryThenRemove captures; repaired Remove preserves bold text and focuses editor; reopened private control focus is separate.",
+        "All four retained Retry failure PNGs show current text, editor focus and unresolved image warning; Export PNGs show focused export control. Actual export Blob includes current raw document.",
+        "Stable image fallback preserves only synthetic reference; zh-Hans fallback still has English Content unavailable / Mask this image shared strings.",
+        "Device failure status is accurate in rendered assertions; zh-Hans phone PNG crop excludes lower status/controls, so complete visual coverage is not claimed.",
+        "Genuine desktop/phone preflight and posted captures have BODY focus despite keyboard-operable Cancel; automatic error/success focus is not accepted.",
+        "Phone full-page captures include fixed navigation at viewport boundary over the captured scroll position. Treat as capture/layout limitation requiring targeted review; no diagnosed product clipping defect.",
+        "No horizontal overflow in 24 captured stages of successful genuine matrix. Publication result remains on /submit with posted/open-discussion recovery text; no forced-navigation claim.",
+        "Genuine zh-Hans/1440 reselection PNG retains edited title/body after reload; English phone unavailable Work search uses community-named error copy. Correct noun remains a visible copy issue for owner review."
+      ]
+    },
+    "blockers": [
+      "D2-003: genuine media-use binding 403 prevents genuine bound-image metadata/reopen/persistence proof. G-2748/G-2780 own repair. Original low-level audit exception remains unreproduced/undiagnosed."
+    ],
+    "administrativeChecks": {
+      "job": "3e8aebc6-58ee-47ef-8ac3-ae9747a7f47f",
+      "checkedReportCommit": "ad9df8761aa5b8f29eb0c9594ad88e8054b5c7a7",
+      "steps": [
+        {
+          "command": "task docs:check",
+          "exitStatus": 0,
+          "result": "13 checker tests passed; 250 Markdown files checked for local links/fragments/navigation; no runtime claim."
+        },
+        {
+          "command": "task goal -- check",
+          "exitStatus": 0,
+          "result": "types/lint: no source changed; tests: none named in brief; AST passed; repository guards passed, 1/44 selected for report path."
+        }
+      ],
+      "output": ".temp/goal/check/run-LEegrJ/output.log",
+      "automaticReportRebase": {
+        "before": "a0d925ac6a1934822c8c64504c67848e5431a755",
+        "after": "ad9df8761aa5b8f29eb0c9594ad88e8054b5c7a7",
+        "onto": "3cd04051f209a189ac080907fd690e6e15fad994",
+        "note": "Normal goal check rebased only administrative report worktree. Both isolated product clones stayed clean at original/repaired pins; no unchanged source-review/test rerun or full regression claim."
+      },
+      "candidateAffectedSourceCheck": "Already passed separately on exact dabebfed candidate delta against a27bcfc6bad; see commands and candidate-check/output.log.",
+      "commitMaintenance": "Report commit succeeded; automatic pack-refs again printed reference-transaction hook rejection. No manual shared ref maintenance; required checks subsequently passed.",
+      "finalMetadataOnlyUpdate": "Adds these check receipts and completed private bundle inventory; no product, test, original assertion or substantive evidence change."
+    },
+    "artifactBundle": "repaired-dabebfed5276/ under worker bundle; new manifest includes logs/receipts/PNGs/harness and report copy. No credentials, cookies, storageState or unredacted auth traces.",
+    "originalD2002Verification": {
+      "recordedAt": "2026-10-19T09:55:26.537689+00:00",
+      "decision": "Latest manager original-assertion-only continuation; image403 must not hold D2-002. No unchanged review or 44-story rerun.",
+      "status": "all three original D2-002 assertions pass; ready for manager acceptance at exact pins",
+      "frontendPin": "dabebfed5276f2847ee763b8575a030edfc1b1ff",
+      "backendServedRevision": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "canonicalSource": "docs/goals/audit-remediation-20261019/site-plan.json:D2-002; original Chinese acceptance and three regression assertions preserved verbatim below",
+      "assertions": [
+        {
+          "id": "D2-002/assertion-1",
+          "originalAcceptance": "在首个服务端变更前的任何读取失败后，全部草稿字段仍可编辑，且可以取消或重新选择目标；不要求清除浏览器存储。",
+          "originalRegressionAssertion": "Before the first mutation, any prerequisite read failure leaves title, body, language, spoiler, community and Work editable and allows cancel/retarget.",
+          "status": "pass at frozen frontend/backend pins",
+          "evidence": [
+            "input-recovery/result.json: all eight allSixEditableBeforeWrite, failedIntentReload, naturalCancelAndContinue, languageSelectableDuringRecovery, workRetargetControl and communityRetargetControl outcomes",
+            "live/result.json: four preflightEditableCancelable outcomes; existing accepted source review and prerequisite-stage tests"
+          ],
+          "actualOutcome": "Original main-version selection prerequisite 503 is browser injected once before publication writes. All six fields remain editable/enabled before and after full reload of the failed intent. Cancel preserves the complete draft; title/body/language/spoiler changes and target controls work with natural keyboard and emulated touch.",
+          "boundary": "Failure injection reproduces the original prerequisite-read failure; it is not an actual backend outage. Zero publication mutations means no draft/identity/placement writes, not zero unrelated Main writes. Cancel-or-retarget is the original criterion; this adds no all-picker-results prerequisite. Existing genuine Community reselection four cases and Work selection/reload zh-Hans/1440 remain separate evidence."
+        },
+        {
+          "id": "D2-002/assertion-2",
+          "originalAcceptance": "已有变更时按确切回执/阶段限制可修改字段，并提供保留文字的取消或安全续做；同键重试不重复贴文。",
+          "originalRegressionAssertion": "After a mutation receipt, restrictions and resume use the exact completed stage; safe exit retains the draft and retries reuse the same intent/key.",
+          "status": "pass at frozen frontend/backend pins",
+          "evidence": [
+            "live/result.json: four realAcknowledgedPlacementRetry outcomes from job b91a5aa4-c986-4dfe-923e-15f23001f283",
+            "receipt-inspection.json: exact operation/body/receipt equivalence and complete thread readback",
+            "Previously accepted source review and stage/receipt tests; retained rendered acknowledged-operation states"
+          ],
+          "actualOutcome": "One actual draft 201 and reply identity 201 per case. The actual placement 201 is captured, then its browser response is dropped. The failed attempt retains acknowledged stages and current text across full reload; Retry sends the same placement operation/key/body and returns genuine 200 replayed=true with matching reply, placement and revision. No additional draft/identity POST; a thread GET200 contains one matching complete document.",
+          "boundary": "Reuses four completed genuine publication cases and exact-receipt stage evidence; no new publication run. Scope is these acknowledged operations and readbacks, not a global duplicate count, backend restart or backup-restore durability claim. Browser transport interception does not fabricate backend receipts."
+        },
+        {
+          "id": "D2-002/assertion-3",
+          "originalAcceptance": "失败后刷新并恢复身份时能继续编辑或明确取消；1440 与 390 布局均可键盘/触控完成。",
+          "originalRegressionAssertion": "Reload and desktop/mobile keyboard/touch recovery need no localStorage surgery, including restored pre-write failed intent.",
+          "status": "pass at frozen frontend/backend pins",
+          "evidence": [
+            "input-recovery/result.json: eight failedIntentReload, naturalCancelAndContinue and completeEditsAndLanguageSurviveReload outcomes",
+            "input-recovery/screenshots-viewed.json: twelve actual PNG inspections",
+            "input-recovery/source-equivalence.json: clean exact frontend and 26 retained authored fingerprints"
+          ],
+          "actualOutcome": "Supported sign-in validates the eligible actor; each owned context restores identity and the failed pre-write intent by full page reload. At 1440 and 390 in English and Simplified Chinese UI, keyboard Tab/Enter/Space or native emulated touch reaches Cancel, edits current title/body, selects zh-Hans content language, toggles spoiler, reloads the complete current document and opens destination search controls. No localStorage write/clear/surgery after initial fixture entry, no programmatic focus repair.",
+          "boundary": "Touch is Chromium hasTouch/isMobile emulation with Locator.tap, not physical hardware or a heard screen-reader test. Automatic Cancel focus remains BODY; natural Tab recovery completes and is the original assertion. Content language selection, editor lang and stored language survive reload; English UI remains English and Chinese UI remains Chinese."
+        }
+      ],
+      "command": {
+        "recordedJob": "e6ac9e39-0940-4532-ab46-25f7d070e2f0",
+        "exitStatus": 0,
+        "resultClass": "passed",
+        "wrapper": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --",
+        "command": "bun --cwd .temp/post-draft-repaired-product scripts/goal/goalctl.ts slot -- task web:e2e -- .temp/verification/input-recovery.e2e.ts --config .temp/verification/input-recovery.playwright.config.ts",
+        "admission": "Normal QA slot and Task web:e2e through repository Playwright provider, reusing explicitly authorized existing fixture/backend; no new corpus/QA stack.",
+        "test": "One Playwright test with eight independently retained keyboard/touch × en/zh-Hans × 1440/390 cases; all pass.",
+        "artifacts": "input-recovery/{job.log,result.json,input-recovery.e2e.ts,input-recovery.playwright.config.ts,source-equivalence.json,screenshots-viewed.json}"
+      },
+      "started": "2026-10-19T09:46:28.003Z",
+      "finished": "2026-10-19T09:49:58.358Z",
+      "readiness": {
+        "command": "task web:dev -- --port 43127",
+        "cwd": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2830/.temp/post-draft-repaired-product",
+        "pid": 428115,
+        "cleanSource": true,
+        "oauthMatchesFixture": true,
+        "status": 200,
+        "ready": true
+      },
+      "authentication": {
+        "method": "signInAtAccounts existing supported fixture",
+        "path": "/en/submit",
+        "status": 200,
+        "sessionAgent": {
+          "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+          "revision": "e46a8eb7-837a-4a08-b677-3b2118a08857",
+          "eligible": true
+        }
+      },
+      "cases": [
+        {
+          "mode": "keyboard",
+          "locale": "en",
+          "width": 1440,
+          "criteria": {
+            "allSixEditableBeforeWrite": true,
+            "failedIntentReload": true,
+            "languageSelectableDuringRecovery": true,
+            "naturalCancelAndContinue": true,
+            "completeEditsAndLanguageSurviveReload": true,
+            "workRetargetControl": true,
+            "communityRetargetControl": true,
+            "zeroPublicationMutations": true
+          },
+          "injected503": true,
+          "focusImmediatelyAfterCancel": {
+            "tag": "BODY",
+            "id": "",
+            "label": null
+          },
+          "languageAfterRecovery": "zh-Hans",
+          "actualWrites": [
+            {
+              "method": "PUT",
+              "path": "/api/main/v1/me/feed-watermarks/following",
+              "status": 200,
+              "operation": "ce3e73b2-8fe6-4096-9736-9ccb07927f25"
+            }
+          ],
+          "pass": true
+        },
+        {
+          "mode": "keyboard",
+          "locale": "en",
+          "width": 390,
+          "criteria": {
+            "allSixEditableBeforeWrite": true,
+            "failedIntentReload": true,
+            "languageSelectableDuringRecovery": true,
+            "naturalCancelAndContinue": true,
+            "completeEditsAndLanguageSurviveReload": true,
+            "workRetargetControl": true,
+            "communityRetargetControl": true,
+            "zeroPublicationMutations": true
+          },
+          "injected503": true,
+          "focusImmediatelyAfterCancel": {
+            "tag": "BODY",
+            "id": "",
+            "label": null
+          },
+          "languageAfterRecovery": "zh-Hans",
+          "actualWrites": [
+            {
+              "method": "PUT",
+              "path": "/api/main/v1/me/feed-watermarks/following",
+              "status": 200,
+              "operation": "b7761cd4-fee6-44d4-8aa2-678a60415ef0"
+            }
+          ],
+          "pass": true
+        },
+        {
+          "mode": "keyboard",
+          "locale": "zh-Hans",
+          "width": 1440,
+          "criteria": {
+            "allSixEditableBeforeWrite": true,
+            "failedIntentReload": true,
+            "languageSelectableDuringRecovery": true,
+            "naturalCancelAndContinue": true,
+            "completeEditsAndLanguageSurviveReload": true,
+            "workRetargetControl": true,
+            "communityRetargetControl": true,
+            "zeroPublicationMutations": true
+          },
+          "injected503": true,
+          "focusImmediatelyAfterCancel": {
+            "tag": "BODY",
+            "id": "",
+            "label": null
+          },
+          "languageAfterRecovery": "zh-Hans",
+          "actualWrites": [
+            {
+              "method": "PUT",
+              "path": "/api/main/v1/me/feed-watermarks/following",
+              "status": 200,
+              "operation": "4268371d-f6b7-47ac-8ea4-f4849058b9d7"
+            }
+          ],
+          "pass": true
+        },
+        {
+          "mode": "keyboard",
+          "locale": "zh-Hans",
+          "width": 390,
+          "criteria": {
+            "allSixEditableBeforeWrite": true,
+            "failedIntentReload": true,
+            "languageSelectableDuringRecovery": true,
+            "naturalCancelAndContinue": true,
+            "completeEditsAndLanguageSurviveReload": true,
+            "workRetargetControl": true,
+            "communityRetargetControl": true,
+            "zeroPublicationMutations": true
+          },
+          "injected503": true,
+          "focusImmediatelyAfterCancel": {
+            "tag": "BODY",
+            "id": "",
+            "label": null
+          },
+          "languageAfterRecovery": "zh-Hans",
+          "actualWrites": [
+            {
+              "method": "PUT",
+              "path": "/api/main/v1/me/feed-watermarks/following",
+              "status": 200,
+              "operation": "83589417-e290-4212-9823-5fd42b07bf55"
+            }
+          ],
+          "pass": true
+        },
+        {
+          "mode": "touch",
+          "locale": "en",
+          "width": 1440,
+          "criteria": {
+            "allSixEditableBeforeWrite": true,
+            "failedIntentReload": true,
+            "languageSelectableDuringRecovery": true,
+            "naturalCancelAndContinue": true,
+            "completeEditsAndLanguageSurviveReload": true,
+            "workRetargetControl": true,
+            "communityRetargetControl": true,
+            "zeroPublicationMutations": true
+          },
+          "injected503": true,
+          "focusImmediatelyAfterCancel": {
+            "tag": "BODY",
+            "id": "",
+            "label": null
+          },
+          "languageAfterRecovery": "zh-Hans",
+          "actualWrites": [
+            {
+              "method": "PUT",
+              "path": "/api/main/v1/me/feed-watermarks/following",
+              "status": 200,
+              "operation": "17cb0c17-d1ec-4228-8b96-beb183a201ec"
+            }
+          ],
+          "pass": true
+        },
+        {
+          "mode": "touch",
+          "locale": "en",
+          "width": 390,
+          "criteria": {
+            "allSixEditableBeforeWrite": true,
+            "failedIntentReload": true,
+            "languageSelectableDuringRecovery": true,
+            "naturalCancelAndContinue": true,
+            "completeEditsAndLanguageSurviveReload": true,
+            "workRetargetControl": true,
+            "communityRetargetControl": true,
+            "zeroPublicationMutations": true
+          },
+          "injected503": true,
+          "focusImmediatelyAfterCancel": {
+            "tag": "BODY",
+            "id": "",
+            "label": null
+          },
+          "languageAfterRecovery": "zh-Hans",
+          "actualWrites": [
+            {
+              "method": "PUT",
+              "path": "/api/main/v1/me/feed-watermarks/following",
+              "status": 200,
+              "operation": "8ea42d79-e3ee-4da5-a637-f217d90ac44a"
+            }
+          ],
+          "pass": true
+        },
+        {
+          "mode": "touch",
+          "locale": "zh-Hans",
+          "width": 1440,
+          "criteria": {
+            "allSixEditableBeforeWrite": true,
+            "failedIntentReload": true,
+            "languageSelectableDuringRecovery": true,
+            "naturalCancelAndContinue": true,
+            "completeEditsAndLanguageSurviveReload": true,
+            "workRetargetControl": true,
+            "communityRetargetControl": true,
+            "zeroPublicationMutations": true
+          },
+          "injected503": true,
+          "focusImmediatelyAfterCancel": {
+            "tag": "BODY",
+            "id": "",
+            "label": null
+          },
+          "languageAfterRecovery": "zh-Hans",
+          "actualWrites": [
+            {
+              "method": "PUT",
+              "path": "/api/main/v1/me/feed-watermarks/following",
+              "status": 200,
+              "operation": "123d0349-463a-43fb-9b4d-8b67f6be8ef3"
+            }
+          ],
+          "pass": true
+        },
+        {
+          "mode": "touch",
+          "locale": "zh-Hans",
+          "width": 390,
+          "criteria": {
+            "allSixEditableBeforeWrite": true,
+            "failedIntentReload": true,
+            "languageSelectableDuringRecovery": true,
+            "naturalCancelAndContinue": true,
+            "completeEditsAndLanguageSurviveReload": true,
+            "workRetargetControl": true,
+            "communityRetargetControl": true,
+            "zeroPublicationMutations": true
+          },
+          "injected503": true,
+          "focusImmediatelyAfterCancel": {
+            "tag": "BODY",
+            "id": "",
+            "label": null
+          },
+          "languageAfterRecovery": "zh-Hans",
+          "actualWrites": [
+            {
+              "method": "PUT",
+              "path": "/api/main/v1/me/feed-watermarks/following",
+              "status": 200,
+              "operation": "31c906aa-9f64-4605-820e-a0446029a3a7"
+            }
+          ],
+          "pass": true
+        }
+      ],
+      "testPremiseCorrection": {
+        "job": "d1a5bcd2-c1f6-43f7-8d1f-4ca61cd76246",
+        "result": "Private supplemental harness failed before recovery outcomes: asserted no Main mutations, but homepage hydration genuinely PUT feed-watermarks once per case.",
+        "correction": "Scoped only this new private no-publication-write check to original draft/identity/placement endpoints; all actual incidental writes retained. No product source or original independent assertion changed.",
+        "preserved": "input-recovery-premise-all-mutations/ contains original harness/config, raw result, eight failed-stage PNGs and job log."
+      },
+      "actualWrites": {
+        "publicationMutationsThisContinuation": 0,
+        "successfulInputRunFeedWatermarkPut200": 8,
+        "premiseFailedRunFeedWatermarkPut200": 8,
+        "totalNewTextPostsAcrossPriorVerificationUnchanged": 5,
+        "scope": "All 16 additional actual writes are retained individually in the two raw result files. Existing four successful matrix posts plus one earlier failed-harness real post remain in actualWriteInventory; no synthetic story receipt is an API receipt."
+      },
+      "screenshots": {
+        "retainedNewPngs": 48,
+        "actuallyViewed": 12,
+        "inventory": "input-recovery/screenshots-viewed.json",
+        "priorEvidencePreserved": true
+      },
+      "sourceEquivalence": "input-recovery/source-equivalence.json: exact clean frontend, all 26 candidate fingerprints equal retained authored source; separate actual backend pointer; active owner proof-map read without importing source.",
+      "nonblockingOwnerObservations": [
+        "BODY automatic focus after Cancel; natural keyboard recovery passes with 20 desktop / 18 phone Tab presses to title. G-2748 owns focus improvement.",
+        "Actual Work search_index_unavailable 503 in three earlier reselection cases remains an API/data premise, without expanding original cancel-or-retarget acceptance.",
+        "Original image/SlashMenu setup failures, retained Retry warning-absence premise and unconfirmed single-character discrepancy stay preserved; no new claim they pass."
+      ],
+      "serverStopped": true,
+      "productSourceOrOriginalAssertionChanges": [],
+      "newCorpusOrSharedReset": false,
+      "administrativeChecks": {
+        "job": "db007017-5be0-452b-8f83-3aa41e4dfbe7",
+        "status": "passed",
+        "checkedReportCommit": "548268f136032eaaefbb2e937f1488dfd5ff4b3e",
+        "steps": [
+          {
+            "command": "task docs:check",
+            "exitStatus": 0,
+            "result": "13 checker tests passed; 249 Markdown files checked for local links, fragments and design navigation. No external URL or runtime claim."
+          },
+          {
+            "command": "task goal -- check",
+            "exitStatus": 0,
+            "result": "No source changed; no tests named in brief. AST and selected repository guard passed: 1/45 files, 2 tests, 6 assertions."
+          }
+        ],
+        "artifacts": "input-recovery/report-check/{job.log,job.1.log,job.2.log,output.log,guards-unit.xml}",
+        "automaticReportRebase": {
+          "before": "77bf557157804be8a56d951df050508c5f3be3fc",
+          "after": "548268f136032eaaefbb2e937f1488dfd5ff4b3e",
+          "onto": "3b34e7cd53e8bec9d346a5a2ccecced22ea512b5",
+          "scope": "Normal goal check changed only administrative report integration. Product clones remain isolated at frozen pins. Relevant worker protocol and canonical D2-002 criteria did not change."
+        },
+        "commitMaintenance": "Report commit succeeded despite automatic pack-refs reference-transaction hook rejection; no manual shared ref maintenance.",
+        "finalMetadataOnlyUpdate": "Records completed checks and retained bundle inventory; original evidence and assertions unchanged."
+      }
+    },
+    "nonblockingOwnerObservations": [
+      "BODY automatic focus after Cancel; natural keyboard recovery passes with 20 desktop / 18 phone Tab presses to title. G-2748 owns focus improvement.",
+      "Actual Work search_index_unavailable 503 in three earlier reselection cases remains an API/data premise, without expanding original cancel-or-retarget acceptance.",
+      "Original image/SlashMenu setup failures, retained Retry warning-absence premise and unconfirmed single-character discrepancy stay preserved; no new claim they pass."
+    ]
+  },
+  "scopeBeforeOriginalD2002Completion": {
+    "recordedAt": "2026-10-19T08:16:32.816006+00:00",
+    "conclusion": "At exact candidate dabebfed5276, repaired snapshot/current-document outcomes pass across en/zh-Hans and 1440/390. Genuine signed-in text drafts survive full reload, and four acknowledged publication operations replay after lost responses with matching real receipts and thread readback. Four retained supplemental Retry cases fail before their text outcome because they expect an unresolved invalid-image warning to disappear. D2-002 and D2-003 remain open: Work reselection returns real search_index_unavailable 503 in three of four cases, genuine image-use binding returns 403, and recovery focus/complete image persistence acceptance is incomplete. The original audit low-level exception remains unreproduced and undiagnosed.",
+    "acceptanceByFinding": [
+      {
+        "id": "D2-002",
+        "status": "partial; keep open",
+        "productPin": "dabebfed5276f2847ee763b8575a030edfc1b1ff",
+        "criteria": [
+          {
+            "criterion": "Preflight failure before writes leaves editable cancellable draft",
+            "result": "pass in all four rendered and genuine full-page cases; 503 is explicitly browser injected, not a real backend outage; no actual publication writes before failure"
+          },
+          {
+            "criterion": "Editing/reselection survives full reload",
+            "result": "edited text/title/spoiler and full draft reload pass in all four; genuine Community reselection passes four; Work reselection and subsequent reload pass zh-Hans/1440 only, blocked by actual search_index_unavailable 503 in en/1440, en/390, zh-Hans/390"
+          },
+          {
+            "criterion": "Lost acknowledged response retries the same operation without duplicate publication",
+            "result": "pass for four real text-publication placement operations: first backend 201 withheld from browser; reload/Retry sends same idempotency key and body, returns 200 replayed=true with same reply/placement/revision; one draft and identity POST each; real thread GET 200 contains one matching complete document"
+          },
+          {
+            "criterion": "Keyboard and recovery focus",
+            "result": "Cancel is keyboard operable; snapshot recovery editor focus assertions pass. Genuine error and success captures retain BODY focus; automatic full-page recovery focus acceptance remains incomplete"
+          }
+        ]
+      },
+      {
+        "id": "D2-003",
+        "status": "partial; keep open; repaired snapshot loss no longer reproduced at candidate",
+        "productPin": "dabebfed5276f2847ee763b8575a030edfc1b1ff",
+        "criteria": [
+          {
+            "criterion": "Snapshot failure and Retry/Remove preserve current document",
+            "result": "unchanged original SnapshotFailureKeepsCurrentText and new RetryThenRemoveKeepsCurrentDocument pass all four combinations; marked current text survives Retry, Remove, save and reopen; no source blocker in independent correction review"
+          },
+          {
+            "criterion": "Retained independent Retry and export assertions",
+            "result": "ExportRetained and current-document reopen pass all four. Retained RetryRetainsCurrentText fails all four at warning-absence premise before final text assertion; actual PNGs retain current text, invalid-image warning, retry/remove/export controls and editor focus. Preserve failure, do not weaken assertion or call it recurring text loss"
+          },
+          {
+            "criterion": "Stable genuine uploaded references survive unavailable metadata and reopening",
+            "result": "pass only with simulated stable references in rendered composer/body stories. Real reserve/bytes activation/inference return 201, but media-use binding returns 403, so no genuine bound-image metadata-outage/reload/persistence proof"
+          },
+          {
+            "criterion": "Device storage failure never falsely reports a saved draft",
+            "result": "all four rendered controlled storage-failure cases pass; not an actual disk failure. Phone screenshot crop does not display every lower recovery control"
+          },
+          {
+            "criterion": "Original low-level audit exception diagnosed",
+            "result": "unresolved: not reproduced or diagnosed. Real media-use 403 and original test setup failures are distinct evidence"
+          }
+        ]
+      }
+    ],
+    "next": [
+      "Keep D2-002 and D2-003 open. Accept bounded repaired current-document and real text-publication replay evidence only at separately pinned candidate/backend revisions.",
+      "Route real media-use 403 with actual asset/representation/target receipts and intermittent search_index_unavailable to responsible fixture/API/index owners; no speculative contract or shared refresh workaround.",
+      "Return retained Retry warning-absence premise and genuine BODY-focus/copy observations to G-2748; preserve original image/SlashMenu premises and old single-character discrepancy as unconfirmed.",
+      "Once genuine image binding and Work search prerequisites are available, finish only outstanding image metadata/reopen/persistence and three Work reselection cases at a frozen accepted product pin. Original exception requires reproduction before diagnosis.",
+      "Manager copies entire retained worker bundle into requested main location; worker write boundary forbids that copy. Land only report commit(s); no product fixes, land:auto or full regression performed."
+    ],
+    "repairedBlockers": [
+      "Actual media-use binding POST 403 prevents genuine image-reference persistence/reopening and unavailable-metadata proof; original low-level audit exception still not reproduced.",
+      "Actual Work typeahead search_index_unavailable 503 in three of four reselection cases prevents full reselection matrix acceptance.",
+      "Automatic full-page error/success focus not established; BODY focus retained. Supplemental Retry warning-absence premise and original image/SlashMenu setup failures need owner disposition without weakening assertions."
+    ],
+    "reason": "Retained prior partial scope. Latest manager decision requires original three D2-002 assertions, without adding image403, complete search matrix, automatic-focus or physical-device prerequisites."
+  }
 }

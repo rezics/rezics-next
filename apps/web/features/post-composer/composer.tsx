@@ -24,8 +24,10 @@ import { parseStoredDocument } from '@rezics/document';
 import type { RealmHeader } from '../realm/types.ts';
 import Link from '../shell/localized-link.tsx';
 import { useOperationGate } from '../shell/shell-provider.tsx';
-import { newPostProgress, submitPost, type PostProgress } from './api.ts';
+import { newPostProgress, postWriteState, submitPost, type PostProgress } from './api.ts';
+import type { DocumentSaveState } from '../document-editor/publication.ts';
 import { postText as words } from './messages.ts';
+import { persistDraftBody } from './draft-body.ts';
 
 export interface CommunityChoice {
   id: string;
@@ -44,6 +46,7 @@ interface Draft {
   work: WorkChoice | null;
   title: string;
   body: string;
+  recoveryBody?: string;
   bodyFormat?: 'document';
   spoiler: boolean;
   progress: PostProgress | null;
@@ -61,6 +64,9 @@ const blank = (community: CommunityChoice | null, work: WorkChoice | null = null
 });
 const draftKey = (actor: string) => `rezics:post-draft:${actor}`;
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
+const storedDraft = (draft: Draft) => JSON.stringify({
+  ...draft, bodyFormat: parseStoredDocument(draft.body) ? 'document' : undefined,
+});
 
 /** The post draft survives navigation and reload; a started publication retains its operation keys. */
 export function PostComposer({
@@ -80,7 +86,13 @@ export function PostComposer({
   operationGate.current = operationOpen;
   const router = useRouter();
   const [draft, setDraft] = useState<Draft>(() => blank(initial, target));
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
   const [hydrated, setHydrated] = useState(false);
+  const [savedValue, setSavedValue] = useState<string | null>(null);
+  const [storageError, setStorageError] = useState(false);
+  const [bodyState, setBodyState] = useState<DocumentSaveState>('ready');
+  const bodySaveState = useRef<DocumentSaveState>('ready');
   const [communityQuery, setCommunityQuery] = useState('');
   const [communities, setCommunities] = useState<CommunityChoice[]>([]);
   const [communityState, setCommunityState] = useState<'idle' | 'loading' | 'failed'>('idle');
@@ -94,10 +106,8 @@ export function PostComposer({
   const [error, setError] = useState<'failed' | 'refused' | 'banned' | null>(null);
   const [postedHref, setPostedHref] = useState<string | null>(null);
   const [checkingProjection, setCheckingProjection] = useState(false);
-  const locked = Boolean(
-    checkingProjection ||
-      (draft.progress && (busy || draft.progress.revisionId || !draft.progress.restartRequired)),
-  );
+  const writeState = postWriteState(draft.progress);
+  const locked = busy || checkingProjection || writeState !== 'none';
   const reading = useReadingLanguages(actingSubject);
   const language = writingLanguage({ chosen: draft.language, reading });
   const written = textAttributes(language, bodyText(draft.body));
@@ -114,13 +124,17 @@ export function PostComposer({
         (!stored.community || native.test(stored.community.id)) &&
         (!stored.work || native.test(stored.work.id))
       ) {
-        const asked = target && !stored.progress ? target : null;
+        const editable = postWriteState(stored.progress ?? null) === 'none';
+        const asked = target && editable ? target : null;
+        if (typeof stored.recoveryBody === 'string') {
+          bodySaveState.current = 'pending'; setBodyState('pending');
+        }
         setDraft({
           ...stored,
           body: restoreCachedBody(stored.body, stored.bodyFormat, true),
           language: typeof stored.language === 'string' ? stored.language : null,
           work: asked ?? stored.work,
-          community: stored.progress ? stored.community : (initial ?? stored.community),
+          community: editable ? (initial ?? stored.community) : stored.community,
         });
       }
     } catch {
@@ -128,18 +142,18 @@ export function PostComposer({
     }
     setHydrated(true);
   }, [actingSubject, initial, target]);
+  function persist(next: Draft) {
+    const value = storedDraft(next);
+    localStorage.setItem(draftKey(actingSubject), value);
+    setSavedValue(value);
+    setStorageError(false);
+  }
   useEffect(() => {
     if (!hydrated) return;
     try {
-      localStorage.setItem(
-        draftKey(actingSubject),
-        JSON.stringify({
-          ...draft,
-          bodyFormat: parseStoredDocument(draft.body) ? 'document' : undefined,
-        }),
-      );
+      persist(draft);
     } catch {
-      /* Private browsing may decline local storage. */
+      setStorageError(true);
     }
   }, [draft, actingSubject, hydrated]);
 
@@ -250,34 +264,39 @@ export function PostComposer({
   function change(patch: Partial<Draft>) {
     if (locked) return;
     setPostedHref(null);
-    setDraft((before) => ({
+    const before = draftRef.current;
+    const next = {
       ...before,
       ...patch,
-      // A refused draft has no durable revision; editing starts another intent.
-      progress: before.progress?.restartRequired ? null : before.progress,
-    }));
+      // Editing an unwritten attempt discards its cached root and operation keys together.
+      progress: postWriteState(before.progress) === 'none' ? null : before.progress,
+    };
+    draftRef.current = next;
+    setDraft(next);
+  }
+  function saveBody(body: string) {
+    if (locked) throw new Error('draft-not-editable');
+    // Clearing raw recovery acknowledges a complete device write, just as publication progress does.
+    let next: Draft;
+    try { next = persistDraftBody(draftRef.current, body, persist); } catch (cause) { setStorageError(true); throw cause; }
+    draftRef.current = next;
+    setDraft(next);
   }
   function saveProgress(progress: PostProgress) {
-    setDraft((before) => {
-      const next = { ...before, progress, language: before.progress ? before.language : language };
-      try {
-        localStorage.setItem(
-          draftKey(actingSubject),
-          JSON.stringify({
-            ...next,
-            bodyFormat: parseStoredDocument(next.body) ? 'document' : undefined,
-          }),
-        );
-      } catch {
-        /* optional */
-      }
-      return next;
-    });
+    const before = draftRef.current;
+    const next = { ...before, progress, language: before.progress ? before.language : language };
+    // React may defer state updaters. The operation record must be durable before dispatch.
+    try { persist(next); } catch (cause) { setStorageError(true); throw cause; }
+    draftRef.current = next;
+    setDraft(next);
   }
   async function post(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (
       busy ||
+      !hydrated ||
+      bodySaveState.current !== 'ready' ||
+      draft.recoveryBody ||
       !draft.community ||
       !draft.work ||
       !header ||
@@ -296,48 +315,53 @@ export function PostComposer({
     setError(null);
     let projectionVisible = false;
     const progress = draft.progress ?? newPostProgress();
-    saveProgress(progress);
-    const result = await submitPost(
-      {
-        realm: draft.community.id,
-        work: draft.work.id,
-        mainVersion: draft.work.mainVersion,
-        revision: draft.work.revision,
-        title: draft.title,
-        body: draft.body,
-        spoiler: draft.spoiler,
-        language,
-        actingSubject,
-      },
-      progress,
-      saveProgress,
-      undefined,
-      (reply) => {
-        try {
-          localStorage.removeItem(draftKey(actingSubject));
-        } catch {
-          /* optional */
-        }
-        setDraft(blank(community, draft.work));
-        setPostedHref(discussionHref(reply));
-        setCheckingProjection(true);
-        setBusy(false);
-      },
-      (visible) => {
-        projectionVisible = visible;
-        setCheckingProjection(false);
-      },
-      operation => operationGate.current(operation),
-    );
-    setBusy(false);
-    if (result.kind === 'posted') {
-      if (projectionVisible) router.push(discussionHref(result.reply));
-    } else if (result.kind === 'refused') {
-      setDraft((before) => ({ ...before, progress: null }));
-      setError('refused');
-    } else {
-      saveProgress(result.progress);
-      setError(result.kind);
+    try {
+      saveProgress(progress);
+      const result = await submitPost(
+        {
+          realm: draft.community.id,
+          work: draft.work.id,
+          mainVersion: draft.work.mainVersion,
+          revision: draft.work.revision,
+          title: draft.title,
+          body: draft.body,
+          spoiler: draft.spoiler,
+          language,
+          actingSubject,
+        },
+        progress,
+        saveProgress,
+        undefined,
+        (reply) => {
+          try {
+            localStorage.removeItem(draftKey(actingSubject));
+          } catch {
+            /* optional */
+          }
+          setDraft(blank(community, draft.work));
+          setPostedHref(discussionHref(reply));
+          setCheckingProjection(true);
+          setBusy(false);
+        },
+        (visible) => {
+          projectionVisible = visible;
+          setCheckingProjection(false);
+        },
+        operation => operationGate.current(operation),
+      );
+      if (result.kind === 'posted') {
+        if (projectionVisible) router.push(discussionHref(result.reply));
+      } else if (result.kind === 'refused') {
+        setDraft((before) => ({ ...before, progress: null }));
+        setError('refused');
+      } else {
+        saveProgress(result.progress);
+        setError(result.kind);
+      }
+    } catch {
+      setError('failed');
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -349,7 +373,7 @@ export function PostComposer({
         : header?.reviewMode === 'trusted-members' && !joined
           ? words.joinRequired[locale]
           : null;
-  const canPost = Boolean(header && draft.community && draft.work && draft.title.trim() && !notice);
+  const canPost = Boolean(hydrated && bodyState === 'ready' && !draft.recoveryBody && header && draft.community && draft.work && draft.title.trim() && !notice);
   return (
     <form onSubmit={(event) => void post(event)} className="grid max-w-3xl gap-7">
       <section className="grid gap-2" aria-label={words.community[locale]}>
@@ -538,7 +562,13 @@ export function PostComposer({
               locale={locale}
               readOnly={locked}
               disabled={busy}
-              onChange={(body) => change({ body })}
+              recoveryValue={draft.recoveryBody}
+              onRecoveryChange={(recoveryBody) => change({ recoveryBody })}
+              onChange={saveBody}
+              onSaveStateChange={(state) => {
+                bodySaveState.current = state;
+                setBodyState(state);
+              }}
               legacyMarkdown
               lang={written.lang}
               dir={written.dir}
@@ -564,6 +594,16 @@ export function PostComposer({
               <AlertDescription>{words[error][locale]}</AlertDescription>
             </Alert>
           ) : null}
+          {!busy && draft.progress ? (
+            <div className="grid gap-2 text-sm">
+              <p role="status">{words[writeState === 'none' ? 'unwritten' : writeState === 'unknown' ? 'writeUnknown' : 'writeAcknowledged'][locale]}</p>
+              {writeState === 'none' ? (
+                <Button type="button" variant="outline" className="justify-self-start" onClick={() => {
+                  change({ progress: null }); setError(null);
+                }}>{words.cancelAttempt[locale]}</Button>
+              ) : null}
+            </div>
+          ) : null}
           {postedHref ? (
             <Alert role="status">
               <AlertDescription>
@@ -575,12 +615,22 @@ export function PostComposer({
             </Alert>
           ) : null}
           <div className="flex flex-wrap items-center gap-3">
-            <Button type="submit" disabled={!canPost} isLoading={busy}>
-              {busy ? words.posting[locale] : words.post[locale]}
+            <Button type="submit" disabled={!canPost || busy || checkingProjection} isLoading={busy}>
+              {busy ? words.posting[locale] : draft.progress ? words.retryPost[locale] : words.post[locale]}
             </Button>
+            {bodyState === 'ready' ? <Button type="button" variant="ghost" onClick={() => {
+              const url = URL.createObjectURL(new Blob([storedDraft(draft)], { type: 'application/json' }));
+              const link = document.createElement('a'); link.href = url; link.download = 'post-draft.json';
+              link.click(); URL.revokeObjectURL(url);
+            }}>{words.exportDraft[locale]}</Button> : null}
+            {storageError ? <Button type="button" variant="outline" onClick={() => {
+              try { persist(draft); } catch { setStorageError(true); }
+            }}>{words.retrySave[locale]}</Button> : null}
             {hydrated && !postedHref ? (
               <span role="status" className="text-muted-foreground text-xs">
-                {words.draftSaved[locale]}
+                {bodyState !== 'ready' || draft.recoveryBody ? words.draftIncomplete[locale]
+                  : storageError ? words.draftSaveFailed[locale]
+                    : savedValue === storedDraft(draft) ? words.draftSaved[locale] : words.draftSaving[locale]}
               </span>
             ) : null}
           </div>
