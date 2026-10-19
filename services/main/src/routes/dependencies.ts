@@ -49,6 +49,7 @@ import type { SourceAuthorCreditStore } from '../modules/source/author-credit.ts
 import type { SourceFieldWithdrawalStore } from '../modules/source/withdrawal.ts';
 import type { SourceFieldAttachmentStore } from '../modules/source/support-attach.ts';
 import type { SourceFieldApplicationStore } from '../modules/source/field-application.ts';
+import type { SourceRetainedFieldSupportStore } from '../modules/source/field-support-retained.ts';
 import type { SourceNativeChildStore } from '../modules/source/child-native-support.ts';
 import type { ProviderIdentityStore } from '../modules/source/provider-identity.ts';
 import type { SourceScoreStore } from '../modules/source/score.ts';
@@ -96,6 +97,8 @@ import type { ReaderLibraryRatings } from '../modules/library/ratings.ts';
 import type { ConsumptionSessionStore } from '../modules/session/store.ts';
 
 export interface MainWorkDependencies {
+  /** Source/credit/publication owners attest exact retained participation fields. */
+  relationAttribution?: import('../modules/relation/attribution.ts').RelationAttributionOwner;
   statementSeek?: import('../modules/statement/seek.ts').StatementSeek;
   templateSeek?: import('../modules/query/seek-index.ts').TemplateSeekIndex;
   platformAccess?: import('../modules/access/exposure.ts').AccessExposure;
@@ -248,6 +251,7 @@ export interface MainWorkDependencies {
   sourceFieldWithdrawals?: SourceFieldWithdrawalStore;
   sourceFieldAttachments?: SourceFieldAttachmentStore;
   sourceFieldApplications?: SourceFieldApplicationStore;
+  sourceRetainedFieldSupports?: SourceRetainedFieldSupportStore;
   sourceNativeChildren?: SourceNativeChildStore;
   sourceProviderIdentity?: ProviderIdentityStore;
   sourceScores?: SourceScoreStore;

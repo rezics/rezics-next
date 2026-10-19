@@ -15,6 +15,7 @@ export { DATASET, GRAPHS };
 export const PROFILES = {
   resource: 'https://rezics.com/definition/semantic-resource-v1',
   definition: 'https://rezics.com/definition/semantic-definition-v1',
+  definitionV2: 'https://rezics.com/definition/semantic-definition-v2',
   generation: 'https://rezics.com/definition/semantic-model-generation-v1',
   annotation: 'https://rezics.com/definition/semantic-annotation-v1',
   value: 'https://rezics.com/definition/value-exact-v1',

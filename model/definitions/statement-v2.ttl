@@ -1,0 +1,124 @@
+# Authored coverage and the exact SemanticValue sum use statement-meaning-v3.
+# V1 meanings and existential values never acquire coverage through this profile.
+# The complete tagged subject/value and qualification live in the immutable manifest;
+# structured RDF values use the existing value-exact-v1 shapes and node identities.
+# Lifecycle/evidence revisions retain the same meaning, coverage and value nodes.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/statement-v2/statement-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:hasValue rdf:Statement ] ;
+    sh:property [ sh:path rdf:subject ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rdf:predicate ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rdf:object ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRIOrLiteral ] ;
+    sh:property [ sh:path rv:relationDefinition ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:interpretationDefinition ; sh:maxCount 8 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:semanticContextRevision ; sh:maxCount 1 ; sh:class rv:ContextSemanticRevision ] ;
+    sh:property [ sh:path rv:speaker ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:applicability ; sh:maxCount 8 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:meaningKey ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:statementState ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Active rv:Withdrawn ) ] ;
+    sh:property [ sh:path rv:head ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:StatementRevision ] ;
+    sh:property [ sh:path rv:source ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:migratedFrom ; sh:maxCount 1 ; sh:class rv:ClassificationApplication ] ;
+    sh:property [ sh:path rv:retainedClaimHead ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:class rv:ClaimRevision ] ;
+    sh:property [ sh:path rv:principal ; sh:maxCount 0 ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/statement-v2> ] ;
+    sh:property [ sh:path rv:statementCoverage ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:ParticipationCoverage rv:OccurrenceCoverage rv:SubjectGlobalCoverage ) ] ;
+    sh:property [ sh:path rv:coveredOccurrence ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:coveredOccurrenceRevision ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:coveredParticipation ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:qualificationDefinition ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:class rv:DefinitionRevision ] ;
+    sh:property [ sh:path rv:interpretationContext ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:valuePrecision ; sh:maxCount 1 ; sh:in ( rv:ExactValue rv:ApproximateValue rv:UncertainValue ) ] ;
+    sh:property [ sh:path rv:valueQualifier ; sh:maxCount 2 ; sh:in ( rv:DisputedAttribution rv:InferredValue ) ] ;
+    sh:property [ sh:path rv:validFrom ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+    sh:property [ sh:path rv:validUntil ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+    sh:property [ sh:path rv:editionScope ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    # Each coverage alternative retains the complete optional qualification bundle.
+    sh:or (
+        [ sh:property [ sh:path rv:statementCoverage ; sh:hasValue rv:ParticipationCoverage ] ;
+          sh:property [ sh:path rv:coveredOccurrence ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:coveredOccurrenceRevision ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:coveredParticipation ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:qualificationDefinition ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:interpretationContext ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:valuePrecision ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:valueQualifier ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:validFrom ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:validUntil ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:editionScope ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:statementCoverage ; sh:hasValue rv:ParticipationCoverage ] ;
+          sh:property [ sh:path rv:coveredOccurrence ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:coveredOccurrenceRevision ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:coveredParticipation ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:qualificationDefinition ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:interpretationContext ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:valuePrecision ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ]
+        [ sh:property [ sh:path rv:statementCoverage ; sh:hasValue rv:OccurrenceCoverage ] ;
+          sh:property [ sh:path rv:coveredOccurrence ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:coveredOccurrenceRevision ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:coveredParticipation ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:qualificationDefinition ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:interpretationContext ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:valuePrecision ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:valueQualifier ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:validFrom ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:validUntil ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:editionScope ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:statementCoverage ; sh:hasValue rv:OccurrenceCoverage ] ;
+          sh:property [ sh:path rv:coveredOccurrence ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:coveredOccurrenceRevision ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:coveredParticipation ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:qualificationDefinition ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:interpretationContext ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:valuePrecision ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ]
+        [ sh:property [ sh:path rv:statementCoverage ; sh:hasValue rv:SubjectGlobalCoverage ] ;
+          sh:property [ sh:path rv:coveredOccurrence ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:coveredOccurrenceRevision ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:coveredParticipation ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:qualificationDefinition ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:interpretationContext ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:valuePrecision ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:valueQualifier ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:validFrom ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:validUntil ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:editionScope ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:statementCoverage ; sh:hasValue rv:SubjectGlobalCoverage ] ;
+          sh:property [ sh:path rv:coveredOccurrence ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:coveredOccurrenceRevision ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:coveredParticipation ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:qualificationDefinition ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:interpretationContext ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:valuePrecision ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ]
+    ) .
+
+<https://rezics.com/definition/statement-v2/revision-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:minCount 2 ; sh:maxCount 2 ; sh:in ( rv:StatementRevision rv:RevisionAnchor ) ] ;
+    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rdf:Statement ] ;
+    sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ; sh:class rv:StatementRevision ] ;
+    sh:property [ sh:path rv:statementState ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Active rv:Withdrawn ) ] ;
+    sh:property [ sh:path rv:evidence ; sh:maxCount 16 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:recordedBy ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/statement-v2> ] ;
+    sh:property [ sh:path rv:shapeRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/statement-v2> ] ;
+    sh:property [ sh:path rv:modelGeneration ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:manifest ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:retainedSourceRevision ; sh:maxCount 1 ; sh:nodeKind sh:IRI ; sh:class rv:ClaimRevision ] ;
+    sh:property [ sh:path rv:retainedSourceReceipt ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:recordedAt ; sh:maxCount 1 ; sh:datatype xsd:dateTime ] ;
+    sh:property [ sh:path rv:derivation ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:or (
+        [ sh:property [ sh:path rv:retainedSourceRevision ; sh:maxCount 0 ] ;
+          sh:property [ sh:path rv:retainedSourceReceipt ; sh:maxCount 0 ] ]
+        [ sh:property [ sh:path rv:retainedSourceRevision ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:retainedSourceReceipt ; sh:minCount 1 ; sh:nodeKind sh:IRI ] ;
+          sh:property [ sh:path rv:recordedAt ; sh:minCount 1 ; sh:datatype xsd:dateTime ] ]
+    ) ;
+    sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
+    sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] .

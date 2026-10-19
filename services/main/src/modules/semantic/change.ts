@@ -14,6 +14,8 @@ import { checkedNativeIri, DEFINITION_KINDS, definitionKindIri, MODEL_COMPONENT,
   type DefinitionKind, type Lifecycle, type TermOutcome } from './schema.ts';
 import { checkedSemanticValue, semanticValueRdf, type SemanticValue, type ValueRdf } from './value.ts';
 import { modelGenerationHeadGuard } from './generation-guard.ts';
+import { assertAssociationMeaning, checkedAssociation, checkedRetainedCredit,
+  type AssociationBinding, type RetainedCreditMapping, type SemanticChangeProfile } from './association.ts';
 
 const RDFS_RESOURCE = 'http://www.w3.org/2000/01/rdf-schema#Resource';
 export const SEMANTIC_CHANGE_FAMILY = 'semantic-change';
@@ -101,6 +103,8 @@ export interface DefinitionState extends EditorRecording {
   workSubjectRole?: string;
   /** A leaf holds its role in at most one active occurrence; a hub never holds the leaf role. */
   star?: RelationStar;
+  association?: AssociationBinding;
+  retainedCredit?: RetainedCreditMapping;
 }
 
 export type ComponentState = ResourceState | DefinitionState;
@@ -108,6 +112,7 @@ export type ComponentInput = Omit<ResourceState, 'properties'> & { properties: S
   | DefinitionState;
 
 export interface SemanticChangeIntent {
+  profile?: SemanticChangeProfile;
   admission: SemanticAdmission;
   /** Absent for a create; the owner allocates the identity. */
   target?: string;
@@ -126,6 +131,8 @@ export interface SemanticChangeResult {
   dataEpoch: string;
   sequence: string;
   replayed: boolean;
+  modelGeneration?: string;
+  manifest?: string;
 }
 
 const fail = (code: SemanticChangeRejected['code'], message: string): never => {
@@ -150,9 +157,12 @@ function keyOf(property: SemanticProperty): string {
 }
 
 /** Canonical, bounded component state; the digest and manifest use this form. */
-export function checkedComponentState(input: unknown): ComponentInput {
+export function checkedComponentState(input: unknown, profile: SemanticChangeProfile = 'semantic-change-v1'): ComponentInput {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return fail('invalid', 'state is invalid');
   const row = input as Record<string, unknown>;
+  if (profile === 'semantic-change-v2' && row.component !== 'definition') {
+    return fail('invalid-association-binding', 'semantic-change-v2 admits authored definitions only');
+  }
   const lifecycle = row.lifecycle ?? 'active';
   if (lifecycle !== 'active' && lifecycle !== 'retired') fail('invalid', 'lifecycle is invalid');
   if (row.component === 'resource') {
@@ -183,7 +193,8 @@ export function checkedComponentState(input: unknown): ComponentInput {
       properties: checked.sort((a, b) => keyOf(a).localeCompare(keyOf(b))), lifecycle: lifecycle as Lifecycle };
   }
   if (row.component === 'definition') {
-    if (Object.keys(row).some(key => !['component', 'kind', 'lifecycle', 'successor', 'roles', 'notation', 'workSubjectRole', 'star', 'editorRecordable', 'writePath'].includes(key))) {
+    if (Object.keys(row).some(key => !['component', 'kind', 'lifecycle', 'successor', 'roles', 'notation', 'workSubjectRole', 'star', 'editorRecordable', 'writePath',
+      ...(profile === 'semantic-change-v2' ? ['association', 'retainedCredit'] : [])].includes(key))) {
       fail('invalid', 'definition state has unsupported fields');
     }
     if (!DEFINITION_KINDS.includes(row.kind as DefinitionKind)) fail('invalid', 'definition kind is invalid');
@@ -212,11 +223,20 @@ export function checkedComponentState(input: unknown): ComponentInput {
         ...(role.members === undefined ? {} : { members: checkedRoleMembers(role.members) }) };
     }).sort((a, b) => a.key.localeCompare(b.key));
     if (new Set(checkedRoles.map(role => role.key)).size !== checkedRoles.length) fail('invalid', 'role repeats');
+    if (profile === 'semantic-change-v2' && row.kind !== 'relation'
+      && (row.kind !== 'property' || row.notation !== 'association-occurrence-assertion-v1'
+        || row.association !== undefined || row.retainedCredit !== undefined || row.workSubjectRole !== undefined || row.star !== undefined)) {
+      fail('invalid-association-binding', 'the V2 property meaning is the exact occurrence assertion property');
+    }
+    const association = row.association === undefined ? undefined
+      : checkedAssociation(row.association, checkedRoles, row.workSubjectRole);
+    const retainedCredit = row.retainedCredit === undefined ? undefined : checkedRetainedCredit(row.retainedCredit, association);
     return { component: 'definition', kind: row.kind as DefinitionKind, lifecycle: lifecycle as Lifecycle,
       successor: successor as string | null, roles: checkedRoles, ...checkedEditorRecording(row),
       ...(row.notation === undefined ? {} : { notation: checkedDefinitionKey(row.notation) }),
       ...(row.workSubjectRole === undefined ? {} : { workSubjectRole: checkedSubjectRole(row.workSubjectRole, checkedRoles) }),
-      ...(row.star === undefined ? {} : { star: checkedStar(row.star, checkedRoles) }) };
+      ...(row.star === undefined ? {} : { star: checkedStar(row.star, checkedRoles) }),
+      ...(association ? { association } : {}), ...(retainedCredit ? { retainedCredit } : {}) };
   }
   return fail('invalid', 'component is invalid');
 }
@@ -234,15 +254,15 @@ function checkedNative(value: string): boolean {
 }
 
 export function semanticChangeDigest(target: string | undefined, expectedHead: string | null,
-  state: ComponentInput): string {
+  state: ComponentInput, profile: SemanticChangeProfile = 'semantic-change-v1'): string {
   if (target !== undefined) checkedNativeIri(target);
   if (expectedHead !== null) checkedNativeIri(expectedHead);
   if ((target === undefined) !== (expectedHead === null)) fail('invalid', 'a create has no head; an edit names one');
   if (target === undefined && state.component === 'resource' && state.types.length === 0) {
     fail('invalid', 'a new semantic resource requires a descriptive type');
   }
-  return hash(JSON.stringify({ family: 'semantic-change-v1', target: target ?? null, expectedHead,
-    state: checkedComponentState(state) }));
+  return hash(JSON.stringify({ family: profile, target: target ?? null, expectedHead,
+    state: checkedComponentState(state, profile) }));
 }
 
 const STRUCTURED = new Set(['quantity', 'temporal', 'external']);
@@ -275,7 +295,7 @@ function storedRdf(properties: readonly StoredProperty[]): string[] {
     () => property.node ?? fail('invalid', 'stored structured value has no node')).object}`);
 }
 
-export function checkedStoredState(state: Record<string, unknown>): ComponentState {
+export function checkedStoredState(state: Record<string, unknown>, profile: string = PROFILES.definition): ComponentState {
   try {
     if (state.component === 'resource') {
       const input = checkedComponentState({ component: 'resource', types: state.types, lifecycle: state.lifecycle,
@@ -288,27 +308,28 @@ export function checkedStoredState(state: Record<string, unknown>): ComponentSta
       return { ...input, properties: input.properties.map(item => ({ ...item,
         ...(byKey.get(keyOf(item)) ? { node: byKey.get(keyOf(item))! } : {}) })) };
     }
-    return checkedComponentState(state) as DefinitionState;
+    return checkedComponentState(state, profile === PROFILES.definitionV2 ? 'semantic-change-v2' : 'semantic-change-v1') as DefinitionState;
   } catch { throw new RevisionCorrupt('stored semantic state is invalid'); }
 }
 
-interface CurrentComponent { head: string; manifest: string; state: ComponentState }
+interface CurrentComponent { head: string; manifest: string; state: ComponentState; profile: string }
 
 /** Exact current component: graph head, its retained manifest and a projection check. */
 export async function readCurrentComponent(env: WorkActivationEnvironment, target: string,
   component: ComponentState['component']): Promise<CurrentComponent | null> {
   const headPredicate = component === 'resource' ? 'semanticHead' : 'definitionHead';
   const revisionType = component === 'resource' ? 'SemanticRevision' : 'DefinitionRevision';
-  const profile = component === 'resource' ? PROFILES.resource : PROFILES.definition;
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head ?manifest WHERE {
+  const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head ?manifest ?model WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(target)} rv:${headPredicate} ?head }
-    GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:${revisionType} ; rv:component ${iri(target)} ; rv:manifest ?manifest } } LIMIT 2`);
+    GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:${revisionType} ; rv:component ${iri(target)} ; rv:manifest ?manifest .
+      OPTIONAL { ?head rv:modelRevision ?model } } } LIMIT 2`);
   const rows = result.results?.bindings ?? [];
   if (!rows.length) return null;
   if (rows.length !== 1 || !rows[0]?.head || !rows[0].manifest) throw new RevisionCorrupt('semantic head is ambiguous');
-  const state = checkedStoredState(await readComponent(env, rows[0].manifest.value, target, profile));
+  const profile = checkedComponentProfile(rows[0].model?.value, component);
+  const state = checkedStoredState(await readComponent(env, rows[0].manifest.value, target, profile), profile);
   if (state.component !== component) throw new RevisionCorrupt('semantic head names another component');
-  const expected = new Set(ownedTriples(target, state, rows[0].head.value));
+  const expected = new Set(ownedTriples(target, state, rows[0].head.value, profile));
   // Open resource: predicates other components own on this subject are preserved and ignored.
   const owned = new Set([...expected].map(triple => triple.slice(0, triple.indexOf('> ') + 1)));
   const projection = await env.fuseki.query(`SELECT ?p ?o WHERE { GRAPH ${iri(GRAPHS.current)} {
@@ -325,7 +346,15 @@ export async function readCurrentComponent(env: WorkActivationEnvironment, targe
     const key = await env.fuseki.query(`ASK { GRAPH ${iri(GRAPHS.current)} { ${definitionKeyTriples(target, state.notation)} } }`);
     if (!key.boolean) throw new RevisionCorrupt('lexicon key differs from retained definition state');
   }
-  return { head: rows[0].head.value, manifest: rows[0].manifest.value, state };
+  return { head: rows[0].head.value, manifest: rows[0].manifest.value, state, profile };
+}
+
+export function checkedComponentProfile(model: string | undefined, component: ComponentState['component']): string {
+  const profile = model ?? (component === 'resource' ? PROFILES.resource : PROFILES.definition);
+  if (component === 'resource' ? profile !== PROFILES.resource : ![PROFILES.definition, PROFILES.definitionV2].some(value => value === profile)) {
+    throw new SemanticChangeRejected('unsupported-model-revision', 'semantic model revision is unsupported');
+  }
+  return profile;
 }
 
 export function term(binding: { type: string; value: string; datatype?: string; 'xml:lang'?: string }): string {
@@ -337,13 +366,14 @@ export function term(binding: { type: string; value: string; datatype?: string; 
 const TYPE = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type';
 
 /** Every current-graph triple the component owns on its subject. */
-export function ownedTriples(target: string, state: ComponentState, head: string): string[] {
+export function ownedTriples(target: string, state: ComponentState, head: string, profile: string = PROFILES.definition): string[] {
   if (state.component === 'resource') {
     return [`<${TYPE}> <${RDFS_RESOURCE}>`, ...state.types.map(type => `<${TYPE}> <${type}>`),
       `<${RV}semanticHead> <${head}>`, ...storedRdf(state.properties)];
   }
   return [`<${TYPE}> <${RV}SemanticDefinition>`, `<${RV}definitionKind> <${definitionKindIri(state.kind)}>`,
-    `<${RV}definitionHead> <${head}>`, ...(state.successor ? [`<${RV}successor> <${state.successor}>`] : [])];
+    `<${RV}definitionHead> <${head}>`, ...(state.successor ? [`<${RV}successor> <${state.successor}>`] : []),
+    ...(profile === PROFILES.definitionV2 ? [`<${RV}modelRevision> <${profile}>`] : [])];
 }
 
 export async function readSemanticChangeTerminal(env: WorkActivationEnvironment, admissionId: string):
@@ -395,6 +425,17 @@ export async function semanticPredecessor(env: WorkActivationEnvironment, termin
   return rows[0]?.predecessor?.value ?? null;
 }
 
+/** Receipt metadata comes from its immutable revision, never the current generation or head. */
+export async function semanticRevisionMetadata(env: WorkActivationEnvironment, component: string, revision: string):
+Promise<{ modelGeneration: string; manifest: string }> {
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?generation ?manifest WHERE {
+    GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} rv:component ${iri(component)} ;
+      rv:modelGeneration ?generation ; rv:manifest ?manifest }
+  } LIMIT 2`)).results?.bindings ?? [];
+  if (rows.length !== 1 || !rows[0]?.generation || !rows[0].manifest) throw new RevisionCorrupt('semantic receipt revision is unavailable');
+  return { modelGeneration: rows[0].generation.value, manifest: rows[0].manifest.value };
+}
+
 async function resultOf(env: WorkActivationEnvironment, terminal: SemanticTerminal, replayed: boolean): Promise<SemanticChangeResult> {
   return { component: terminal.component!, revision: terminal.revision!, predecessor: await semanticPredecessor(env, terminal),
     receipt: terminal.receipt, dataEpoch: terminal.dataEpoch, sequence: terminal.sequence, replayed };
@@ -417,8 +458,8 @@ async function assertPredicatesUnowned(env: WorkActivationEnvironment, target: s
  */
 export async function changeSemanticComponent(env: WorkActivationEnvironment,
   intent: SemanticChangeIntent): Promise<SemanticChangeResult> {
-  const state = checkedComponentState(intent.state);
-  const digest = semanticChangeDigest(intent.target, intent.expectedHead, state);
+  const state = checkedComponentState(intent.state, intent.profile);
+  const digest = semanticChangeDigest(intent.target, intent.expectedHead, state, intent.profile);
   const receipt = familyReceiptIri(intent.admission.id, SEMANTIC_CHANGE_FAMILY);
   const existing = await assertSemanticDispatchable(env, intent.admission, receipt, digest);
   if (existing) return checkedResult(env, existing, intent, true);
@@ -465,6 +506,10 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
     return sealStale(env, intent, receipt, digest, target, state);
   }
   if (current && current.head !== intent.expectedHead) return sealStale(env, intent, receipt, digest, target, state);
+  if (current?.profile === PROFILES.definitionV2 && intent.profile !== 'semantic-change-v2') {
+    fail('unsupported-model-revision', 'a V1 command cannot mutate a V2 definition');
+  }
+  if (current?.state.component === 'definition' && state.component === 'definition') assertAssociationMeaning(current.state, state);
   // Ownership is invalid only at the head this request names. A successor may
   // claim the same predicate/type after the head read; let the write CAS seal
   // that loss as stale instead of treating the successor's claim as permanent.
@@ -516,13 +561,14 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
   const { stored, rdf } = state.component === 'resource' ? propertyRdf(state.properties, prior)
     : { stored: [], rdf: [] };
   const exact: ComponentState = state.component === 'resource' ? { ...state, properties: stored } : state;
-  const profile = state.component === 'resource' ? PROFILES.resource : PROFILES.definition;
+  const profile = state.component === 'resource' ? PROFILES.resource
+    : intent.profile === 'semantic-change-v2' ? PROFILES.definitionV2 : PROFILES.definition;
   const manifest = await sealComponentState(env, target, profile, exact);
   const revision = `${ID}${Bun.randomUUIDv7()}`;
   const operation = `${ID}${Bun.randomUUIDv7()}`;
-  const old = current ? ownedTriples(target, current.state, current.head)
+  const old = current ? ownedTriples(target, current.state, current.head, current.profile)
     .filter(triple => !(state.component === 'resource' && triple === `<${TYPE}> <${RDFS_RESOURCE}>`)) : [];
-  const next = ownedTriples(target, exact, revision)
+  const next = ownedTriples(target, exact, revision, profile)
     .filter(triple => !(current && state.component === 'resource' && triple === `<${TYPE}> <${RDFS_RESOURCE}>`));
   const revisionType = state.component === 'resource' ? 'SemanticRevision' : 'DefinitionRevision';
   const nodes = rdf.flatMap(item => item.node ? [item.node] : []);
@@ -534,7 +580,8 @@ export async function changeSemanticComponent(env: WorkActivationEnvironment,
     rv:operation ${iri(operation)} ; rv:manifest ${iri(manifest)} ; rv:modelGeneration ${iri(generation)} ;
     rv:modelRevision ${iri(profile)} ; rv:shapeRevision ${iri(profile)} ; rv:datasetId ${iri('urn:rezics:dataset:product')} ;
     rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .`;
-  const validationProfile = state.component === 'resource' ? 'semantic-resource-v1' : 'semantic-definition-v1';
+  const validationProfile = state.component === 'resource' ? 'semantic-resource-v1'
+    : intent.profile === 'semantic-change-v2' ? 'semantic-definition-v2' : 'semantic-definition-v1';
   const validations = [
     ...await validationsFor(env, validationProfile, [
       { role: state.component === 'resource' ? 'resource' : 'definition', focus: [target] },
@@ -646,7 +693,9 @@ async function checkedResult(env: WorkActivationEnvironment, terminal: SemanticT
     || (checked.expectedHead ?? null) !== intent.expectedHead) {
     throw new IdempotencyConflict('semantic receipt targets another intent');
   }
-  return resultOf(env, checked, replayed);
+  const result = await resultOf(env, checked, replayed);
+  return intent.profile === 'semantic-change-v2'
+    ? { ...result, ...await semanticRevisionMetadata(env, result.component, result.revision) } : result;
 }
 
 export { StaleSemanticHead };
