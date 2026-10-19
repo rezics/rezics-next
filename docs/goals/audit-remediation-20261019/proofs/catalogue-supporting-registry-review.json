@@ -1,0 +1,634 @@
+{
+  "schemaVersion": 1,
+  "reviewedAtUtc": "2026-10-19T11:39:50.816566+00:00",
+  "goal": "audit-remediation-20261019",
+  "worker": "G-2849",
+  "reviewer": "Same independent codex-1 / gpt-6.1-sol / xhigh worker; no fallback or delegation",
+  "reviewKind": "Independent bounded original A15/C23 supporting-registry source and API-contract review",
+  "status": "bounded-registry-correction-accepted-public-and-rendered-qualification-open",
+  "conclusion": {
+    "boundedCorrection": "accepted",
+    "actionableDeltaFindings": 0,
+    "originalTargetsChecked": 27,
+    "correctedHistoricalFallbackSelections": 19,
+    "unchangedCharacterControls": 8,
+    "originalRegistryEntriesPreserved": 36,
+    "registryEntriesAfter": 41,
+    "confirmedNewPublicOutcomeFailures": 0,
+    "acceptanceIdsClosed": 0,
+    "a15Closed": false,
+    "c23Closed": false,
+    "recommendation": "Consume exact 661d0484a7ed65c30bcfd15506a79a00fceffd29 for the five missing descriptive registrations. Continue the manager's existing genuine API and 1440/390 C23 proof separately. No Book/Recipe, all113, whole-wave or fresh-catalogue prerequisite is imposed."
+  },
+  "pins": {
+    "base": "82df58d2ba1d9d377b591126e7f4dfa42f27f02e",
+    "baseTree": "2540a398452ba22b2788946be34f942cf2fa1056",
+    "candidate": "661d0484a7ed65c30bcfd15506a79a00fceffd29",
+    "candidateTree": "126af9ec7d7cc8c6082418b2c5a521406a14f699",
+    "candidateIsolatedCheckout": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-supporting-registry-candidate-20261019",
+    "independentSnapshot": ".temp/supporting-registry-review/candidate-661d048",
+    "exactChangedPaths": [
+      "model/definitions/types-v1.ts",
+      "model/tests/types-registry.test.ts",
+      "packages/model/src/generated/types.ts",
+      "services/main/tests/g-653-types.test.ts"
+    ],
+    "pathSetMatchesFourFileReceipt": true
+  },
+  "receipt": {
+    "path": ".temp/ref/supporting-registry-candidate.json",
+    "sha256": "4da99fe8ce6f9043a3ba921c7641580947fee66f819ed44737f3346d4088ac2a",
+    "format": "rezics-supporting-registry-candidate-v1",
+    "recordedAt": "2026-10-19T10:22:21.978193+00:00",
+    "patch": {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/supporting-registry-candidate.patch",
+      "sha256": "a2aef6d99757acbabb3912382929ac843a1f6102a0aa843ce2382391984e9dd6"
+    },
+    "patchSha256IndependentlyVerified": true,
+    "dependencyAndConsumerHashesIndependentlyVerified": true,
+    "auditDependencyHashesIndependentlyVerified": true,
+    "allFrozenCheckLogHashesIndependentlyVerified": true,
+    "ownerCheckLog": {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-supporting-registry-candidate-20261019/.temp/goal/check/run-AMVrnP/output.log",
+      "sha256": "6708cb215da03e5db39e0a80eaa9f5b1de16f8eea6e33b38b2b28fe50a4eb9f4"
+    },
+    "ownerCheckLogHashIndependentlyVerified": true,
+    "use": "Provenance and exact-blob check reuse only. The review independently reads implementation and consumers and executes its own concrete checks."
+  },
+  "exactFiles": [
+    {
+      "path": "model/definitions/types-v1.ts",
+      "baseBlob": "882c89dc88c4c059d7dfb4a7c8c9e8138d68f29e",
+      "candidateBlob": "9f735f687b55a353e9663a4526980c1865028387",
+      "sha256": "b16b2398e912ec4b50c21ce58dc765cc9b69074eb49c138dcb42afc7e8baa28f",
+      "matchesReceiptFrozenCheckoutAndReviewSnapshot": true
+    },
+    {
+      "path": "model/tests/types-registry.test.ts",
+      "baseBlob": "7419baca4de1b65328ded6adf8cc3ce09dd8390a",
+      "candidateBlob": "fe245981cf7f6eedd23a69e800c6fb0d84831bc0",
+      "sha256": "378d3ec5f1d4ebc73ab2211599de647d5d005dfd7640f9b196daba3de76a3bbc",
+      "matchesReceiptFrozenCheckoutAndReviewSnapshot": true
+    },
+    {
+      "path": "packages/model/src/generated/types.ts",
+      "baseBlob": "c3388d25f5ae5b8416c2498032b770cd6889c2b2",
+      "candidateBlob": "cdd8505fa21e1b8e0334c05af29ae75613517d03",
+      "sha256": "fd05e50c70d9a41d73918f590975a177f1f9ed62b8100d6634047348e59e318a",
+      "matchesReceiptFrozenCheckoutAndReviewSnapshot": true
+    },
+    {
+      "path": "services/main/tests/g-653-types.test.ts",
+      "baseBlob": "88ba54dbabf4f3ec122260c6cf7a4ad8806073f1",
+      "candidateBlob": "245d27a588512cdfb01978196fc2736a0bb2925e",
+      "sha256": "e2cb6080aac113576a170c4c3aef32f0ab863a79ec78c31d946374694d5762cf",
+      "matchesReceiptFrozenCheckoutAndReviewSnapshot": true
+    }
+  ],
+  "originalCensus": {
+    "basis": "The original analysis.json selects exactly 27 successful page reads from 42 purposeful probes. Each selected HTTP snapshot was re-read, checked against the analysis identity/types, and replayed only through actual pure pageRegistry/pageSections consumers. No new HTTP request or corpus mutation occurred. Other retained snapshots in the owner test are additional examples and do not redefine this census.",
+    "analysis": {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/supporting-entities/evidence/analysis.json",
+      "sha256": "00f332313699b21bb50dd3d6eeb49056a0cba9de7ea46176f340bfc0eff105e4"
+    },
+    "counts": {
+      "Character": 8,
+      "Person": 5,
+      "Organization": 4,
+      "DefinedTerm": 3,
+      "PublicationEvent": 4,
+      "SourceDatasetEpisode": 3
+    },
+    "originalResourceFallbacks": 19,
+    "purposefulSampleNotCataloguePrevalence": true,
+    "captures": [
+      {
+        "source": "bangumi:character:173485",
+        "capture": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/supporting-entities/evidence/entities/bangumi-character-173485/page.http.json",
+        "sha256": "2c909655ae7b5e7e0cf71026e328157ead551cb56eee401e8c5deca05e21c288",
+        "resource": "https://rezics.com/id/01a0fd95-5b1c-71a3-b360-2b300dc3c785",
+        "revision": "https://rezics.com/id/01a0fd95-5cc0-7323-9f4d-9224e0560bee",
+        "descriptiveType": "https://rezics.com/vocab/Character",
+        "originalRegistryType": "https://rezics.com/vocab/Character"
+      },
+      {
+        "source": "bangumi:character:17529",
+        "capture": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/supporting-entities/evidence/entities/bangumi-character-17529/page.http.json",
+        "sha256": "b539612afc08d42b00e373aee3e54b29a4f7c78800f2716f79e71c660e07bc3a",
+        "resource": "https://rezics.com/id/01a0fd95-61db-70eb-bae8-687f3c59ae58",
+        "revision": "https://rezics.com/id/01a0fd95-63da-7671-bb59-900b0c428c45",
+        "descriptiveType": "https://rezics.com/vocab/Character",
+        "originalRegistryType": "https://rezics.com/vocab/Character"
+      },
+      {
+        "source": "bangumi:character:3257",
+        "capture": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/supporting-entities/evidence/entities/bangumi-character-3257/page.http.json",
+        "sha256": "3ce0ec333e7f2de0adca775ab514886bf88d4b1da2022dbe4a7e6dbe54846959",
+        "resource": "https://rezics.com/id/01a0fd95-d0d4-71c8-9879-e4f67ecaa3fd",
+        "revision": "https://rezics.com/id/01a0fd95-d26a-7474-a724-9092e6ce4253",
+        "descriptiveType": "https://rezics.com/vocab/Character",
+        "originalRegistryType": "https://rezics.com/vocab/Character"
+      },
+      {
+        "source": "bangumi:episode:1000491",
+        "capture": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/supporting-entities/evidence/entities/bangumi-episode-1000491/page.http.json",
+        "sha256": "d656a2490abed5a9dce5a9928c8420ccb4e977571d92306260a9c0d630bfdbb4",
+        "resource": "https://rezics.com/id/01a0fd96-95c5-77da-8962-1f76048fde35",
+        "revision": "https://rezics.com/id/01a0fd96-97f1-7180-935e-361244d8bf62",
+        "descriptiveType": "https://rezics.com/vocab/SourceDatasetEpisode",
+        "originalRegistryType": "http://www.w3.org/2000/01/rdf-schema#Resource"
+      },
+      {
+        "source": "bangumi:episode:1001450",
+        "capture": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/supporting-entities/evidence/entities/bangumi-episode-1001450/page.http.json",
+        "sha256": "f01362873775b6e6c39005a7ef9ca85acf2decb194ef29ec22a0c1ec91c1e0d4",
+        "resource": "https://rezics.com/id/01a0fd96-95c5-77db-804a-857d211d02e9",
+        "revision": "https://rezics.com/id/01a0fd96-97fb-7756-95f7-b97c362fe593",
+        "descriptiveType": "https://rezics.com/vocab/SourceDatasetEpisode",
+        "originalRegistryType": "http://www.w3.org/2000/01/rdf-schema#Resource"
+      },
+      {
+        "source": "bangumi:episode:1002704",
+        "capture": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/supporting-entities/evidence/entities/bangumi-episode-1002704/page.http.json",
+        "sha256": "a8b962056ed06547cd3b0e0d95189e704ddfbfa3c3ec26d8f49b42348ff01d94",
+        "resource": "https://rezics.com/id/01a0fd96-95c5-77dc-8d91-cc0dde0b4033",
+        "revision": "https://rezics.com/id/01a0fd96-9806-776d-b7ba-05cbe6bdbfc5",
+        "descriptiveType": "https://rezics.com/vocab/SourceDatasetEpisode",
+        "originalRegistryType": "http://www.w3.org/2000/01/rdf-schema#Resource"
+      },
+      {
+        "source": "bangumi:person:1286",
+        "capture": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/supporting-entities/evidence/entities/bangumi-person-1286/page.http.json",
+        "sha256": "55490a3edb0a7f4c07dc79e69ecf7d03fe91219faa6f8bdebdeef3be176e02b7",
+        "resource": "https://rezics.com/id/01a0fd9b-6009-7237-9123-e8d59e5a94ed",
+        "revision": "https://rezics.com/id/01a0fd9b-63d3-75fe-a06f-4fb01eeb0833",
+        "descriptiveType": "https://schema.org/Organization",
+        "originalRegistryType": "http://www.w3.org/2000/01/rdf-schema#Resource"
+      },
+      {
+        "source": "bangumi:person:19306",
+        "capture": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/supporting-entities/evidence/entities/bangumi-person-19306/page.http.json",
+        "sha256": "e7d4dd021ef877f1df0db9cabc59ab5f5c614df5105dbcd1f9feb20ad8520d77",
+        "resource": "https://rezics.com/id/01a0fd9c-1bef-74a2-a266-b86c9bc383fa",
+        "revision": "https://rezics.com/id/01a0fd9c-2253-718c-8165-3b1a8045cd5e",
+        "descriptiveType": "https://schema.org/Person",
+        "originalRegistryType": "http://www.w3.org/2000/01/rdf-schema#Resource"
+      },
+      {
+        "source": "bangumi:person:2481",
+        "capture": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/supporting-entities/evidence/entities/bangumi-person-2481/page.http.json",
+        "sha256": "6538a9377f24eeebc04960934298b54a1c5e83f8fe49f6fff578d6cb1c344139",
+        "resource": "https://rezics.com/id/01a0fd9c-7ead-75bd-a093-362d09540d17",
+        "revision": "https://rezics.com/id/01a0fd9c-8103-737e-8f59-6f40a1fc375d",
+        "descriptiveType": "https://schema.org/Organization",
+        "originalRegistryType": "http://www.w3.org/2000/01/rdf-schema#Resource"
+      },
+      {
+        "source": "bangumi:person:93",
+        "capture": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/supporting-entities/evidence/entities/bangumi-person-93/page.http.json",
+        "sha256": "bde63927b48c02ee59482030a44b15a690d53ca01c614dafbf650c229de4306e",
+        "resource": "https://rezics.com/id/01a0fda1-c738-7188-b055-ab02cd5bd924",
+        "revision": "https://rezics.com/id/01a0fda1-cb7d-76ad-b93d-d73a8c685c70",
+        "descriptiveType": "https://schema.org/Organization",
+        "originalRegistryType": "http://www.w3.org/2000/01/rdf-schema#Resource"
+      },
+      {
+        "source": "bangumi:tag:8447fb0532d16687bebe7947f907803697130be1fd667f3d938626dbae1d2250",
+        "capture": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/supporting-entities/evidence/entities/bangumi-tag-8447fb0532d16687bebe7947f907803697130be1fd667f3d938626dbae1d2250/page.http.json",
+        "sha256": "cff4e60baefb5611820fa3f170d5ffcb529e9aab0fd22d8f6a08de68f745d522",
+        "resource": "https://rezics.com/id/01a0fda4-43dc-73eb-b9c8-47290574093d",
+        "revision": "https://rezics.com/id/01a0fda4-6cb2-752a-915e-ae6be390f7b2",
+        "descriptiveType": "https://schema.org/DefinedTerm",
+        "originalRegistryType": "http://www.w3.org/2000/01/rdf-schema#Resource"
+      },
+      {
+        "source": "bangumi:tag:92c8dacf02cc570fa6b028edbc4c15cfda329b11ac21bf7da8f82647c3183caf",
+        "capture": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/supporting-entities/evidence/entities/bangumi-tag-92c8dacf02cc570fa6b028edbc4c15cfda329b11ac21bf7da8f82647c3183caf/page.http.json",
+        "sha256": "fb699330f24f4f229f5d2d48dce9eb39c3dbc3a85364b8c2004f23127e9b25c7",
+        "resource": "https://rezics.com/id/01a0fda4-a159-77d2-91f3-ccc028550bc7",
+        "revision": "https://rezics.com/id/01a0fda4-c323-71aa-b423-6fbb449144b9",
+        "descriptiveType": "https://schema.org/DefinedTerm",
+        "originalRegistryType": "http://www.w3.org/2000/01/rdf-schema#Resource"
+      },
+      {
+        "source": "bangumi:tag:cf2abf0c5be326cb922a70f8163f91079c4d9aa8655c60ead89ad545c9de2e92",
+        "capture": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/supporting-entities/evidence/entities/bangumi-tag-cf2abf0c5be326cb922a70f8163f91079c4d9aa8655c60ead89ad545c9de2e92/page.http.json",
+        "sha256": "c4f3d863aeb51bb5ac4380503c15c5b396541e934afb593b2cd44bb6a4326d27",
+        "resource": "https://rezics.com/id/01a0fda6-23ce-7046-ac07-2fed3947f278",
+        "revision": "https://rezics.com/id/01a0fda6-4150-77a1-af3c-38105198da4d",
+        "descriptiveType": "https://schema.org/DefinedTerm",
+        "originalRegistryType": "http://www.w3.org/2000/01/rdf-schema#Resource"
+      },
+      {
+        "source": "musicbrainz:artist:0f50beab-d77d-4f0f-ac26-0b87d3e9b11b",
+        "capture": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/supporting-entities/evidence/entities/musicbrainz-artist-0f50beab-d77d-4f0f-ac26-0b87d3e9b11b/page.http.json",
+        "sha256": "c43af4c5496ad92d23f3fcab64064365ebf56fab159cabacdb13465d5cb7adc5",
+        "resource": "https://rezics.com/id/01a0fdba-e2ca-7483-8478-9bab8deaebad",
+        "revision": "https://rezics.com/id/01a0fdba-e517-7180-b13b-60171fe116a9",
+        "descriptiveType": "https://schema.org/Person",
+        "originalRegistryType": "http://www.w3.org/2000/01/rdf-schema#Resource"
+      },
+      {
+        "source": "musicbrainz:artist:1dce970e-34bc-48b2-ab51-48d87544a4c2",
+        "capture": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/supporting-entities/evidence/entities/musicbrainz-artist-1dce970e-34bc-48b2-ab51-48d87544a4c2/page.http.json",
+        "sha256": "5fd4f45a4a72e68d33c6e90e8078ac211b8e59f1595daf88fb0b072a42d1f807",
+        "resource": "https://rezics.com/id/01a0fdba-e7be-733b-8f3d-56262d3367b4",
+        "revision": "https://rezics.com/id/01a0fdba-e98d-7592-be53-d9809936bfd5",
+        "descriptiveType": "https://schema.org/Person",
+        "originalRegistryType": "http://www.w3.org/2000/01/rdf-schema#Resource"
+      },
+      {
+        "source": "musicbrainz:artist:ba550d0e-adac-4864-b88b-407cab5e76af",
+        "capture": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/supporting-entities/evidence/entities/musicbrainz-artist-ba550d0e-adac-4864-b88b-407cab5e76af/page.http.json",
+        "sha256": "5094be79388b654372e89106c0c5dfd51b5e4253c8b257ef0731fd36f4a4723c",
+        "resource": "https://rezics.com/id/01a0fdbb-1430-70a1-a888-8aa208c822ef",
+        "revision": "https://rezics.com/id/01a0fdbb-166d-7398-943d-b9300221bc51",
+        "descriptiveType": "https://schema.org/Person",
+        "originalRegistryType": "http://www.w3.org/2000/01/rdf-schema#Resource"
+      },
+      {
+        "source": "musicbrainz:release:1839226c-bc23-49b7-a69c-10321076cca4",
+        "capture": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/supporting-entities/evidence/entities/musicbrainz-release-1839226c-bc23-49b7-a69c-10321076cca4/page.http.json",
+        "sha256": "a6331356b74a52e7e7f9598e384f2ac2ab22db85cee8edebd6c3aca46d7a66e6",
+        "resource": "https://rezics.com/id/01a0fdbb-2a80-73a6-a6a6-311c8dd4fdf0",
+        "revision": "https://rezics.com/id/01a0fdbb-2bcf-7365-865a-68b7e4e6a4b3",
+        "descriptiveType": "https://schema.org/PublicationEvent",
+        "originalRegistryType": "http://www.w3.org/2000/01/rdf-schema#Resource"
+      },
+      {
+        "source": "musicbrainz:release:23854e73-5585-42db-9fc3-d17bffe793f4",
+        "capture": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/supporting-entities/evidence/entities/musicbrainz-release-23854e73-5585-42db-9fc3-d17bffe793f4/page.http.json",
+        "sha256": "10651f73bea0d0ab331bf5c30a5f2cde8b34470742c6e0e9fa91617ddc39342b",
+        "resource": "https://rezics.com/id/01a0fdbb-2a80-73b3-b73f-b7e004cdd985",
+        "revision": "https://rezics.com/id/01a0fdbb-2c4e-7075-9349-afbc4f0db267",
+        "descriptiveType": "https://schema.org/PublicationEvent",
+        "originalRegistryType": "http://www.w3.org/2000/01/rdf-schema#Resource"
+      },
+      {
+        "source": "musicbrainz:release:b59de567-3e77-4ae6-8d7d-360b0459e95a",
+        "capture": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/supporting-entities/evidence/entities/musicbrainz-release-b59de567-3e77-4ae6-8d7d-360b0459e95a/page.http.json",
+        "sha256": "a6ac36ad5e8d1e97b4ed380ee38237f620ca03f9457a7091ceb0991f010eb498",
+        "resource": "https://rezics.com/id/01a0fdbb-42cf-7676-bceb-134b01f4156d",
+        "revision": "https://rezics.com/id/01a0fdbb-43f8-758a-aca8-3c1b58bb0e2f",
+        "descriptiveType": "https://schema.org/PublicationEvent",
+        "originalRegistryType": "http://www.w3.org/2000/01/rdf-schema#Resource"
+      },
+      {
+        "source": "vndb:character:c15",
+        "capture": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/supporting-entities/evidence/entities/vndb-character-c15/page.http.json",
+        "sha256": "e979009da1ee45ece986c063d5a269a86b1675d2fc91a265e564e4b94d16097c",
+        "resource": "https://rezics.com/id/01a0fd67-6098-75b9-8103-b50b13b3c84e",
+        "revision": "https://rezics.com/id/01a0fd67-6582-73cd-be2d-e76ef0bf64ae",
+        "descriptiveType": "https://rezics.com/vocab/Character",
+        "originalRegistryType": "https://rezics.com/vocab/Character"
+      },
+      {
+        "source": "vndb:character:c33",
+        "capture": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/supporting-entities/evidence/entities/vndb-character-c33/page.http.json",
+        "sha256": "129410f0fa7c47db0cafc1806767edf3c6f9e5aa0965a30f7a3dd4347ebde895",
+        "resource": "https://rezics.com/id/01a0fd67-72d6-708f-9b72-bd861bf70f5e",
+        "revision": "https://rezics.com/id/01a0fd67-75db-74ea-bd72-6e90edec09c2",
+        "descriptiveType": "https://rezics.com/vocab/Character",
+        "originalRegistryType": "https://rezics.com/vocab/Character"
+      },
+      {
+        "source": "vndb:character:c34",
+        "capture": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/supporting-entities/evidence/entities/vndb-character-c34/page.http.json",
+        "sha256": "9721d65a93555d2204125bd769ead5316f2943c02d7bd12a12dc5289d95981cf",
+        "resource": "https://rezics.com/id/01a0fd67-72d6-7090-aa43-2d8234f7e54a",
+        "revision": "https://rezics.com/id/01a0fd67-75e6-7635-abbb-885d067bb2af",
+        "descriptiveType": "https://rezics.com/vocab/Character",
+        "originalRegistryType": "https://rezics.com/vocab/Character"
+      },
+      {
+        "source": "vndb:character:c72",
+        "capture": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/supporting-entities/evidence/entities/vndb-character-c72/page.http.json",
+        "sha256": "59208e34064ab463ba16e9fb838ec7561bdf1d8e02e6682beae37f3b7959cbcd",
+        "resource": "https://rezics.com/id/01a0fd67-a2d2-72ff-aa5e-d25327407f14",
+        "revision": "https://rezics.com/id/01a0fd67-a48c-7163-bc47-3d23a2b93c33",
+        "descriptiveType": "https://rezics.com/vocab/Character",
+        "originalRegistryType": "https://rezics.com/vocab/Character"
+      },
+      {
+        "source": "vndb:producer:p11317",
+        "capture": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/supporting-entities/evidence/entities/vndb-producer-p11317/page.http.json",
+        "sha256": "753b80dc854cce51d3d888bdaa8bc613e48296db16c2a62b1d2abbd0fd4c9212",
+        "resource": "https://rezics.com/id/01a0fd73-2959-7283-ac5d-fdb51e363c00",
+        "revision": "https://rezics.com/id/01a0fd73-2dba-7294-914a-649bf56cbd5d",
+        "descriptiveType": "https://schema.org/Organization",
+        "originalRegistryType": "http://www.w3.org/2000/01/rdf-schema#Resource"
+      },
+      {
+        "source": "vndb:release:r353",
+        "capture": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/supporting-entities/evidence/entities/vndb-release-r353/page.http.json",
+        "sha256": "3e20ffbf1fd22bb9fc65a67c64fbe36d5662f1847582b83f571ec11274ce51b1",
+        "resource": "https://rezics.com/id/01a0fd74-1a92-76e5-a73a-68bda8885de4",
+        "revision": "https://rezics.com/id/01a0fd74-1e56-71a8-8bfd-a9c27297db8f",
+        "descriptiveType": "https://schema.org/PublicationEvent",
+        "originalRegistryType": "http://www.w3.org/2000/01/rdf-schema#Resource"
+      },
+      {
+        "source": "bangumi:person:1",
+        "capture": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/supporting-entities/evidence/entities/bangumi-person-1/page.http.json",
+        "sha256": "d7c999f021e6fe5c2aa7d2d537a144a4f9eccd66f2641c7735fe66bb1908e3ac",
+        "resource": "https://rezics.com/id/01a0fd9a-cff2-7631-a5fa-ff61717c3158",
+        "revision": "https://rezics.com/id/01a0fd9a-d2d2-722d-84eb-2528fe25b34f",
+        "descriptiveType": "https://schema.org/Person",
+        "originalRegistryType": "http://www.w3.org/2000/01/rdf-schema#Resource"
+      },
+      {
+        "source": "bangumi:character:2358",
+        "capture": "/home/edge/projects/rezics/rezics-next/.temp/catalogue-audit-20261018/supporting-entities/evidence/entities/bangumi-character-2358/page.http.json",
+        "sha256": "75d1d054bc14cbf600e9c2509429dc4655684b44bedead569f6c5b643af2fd53",
+        "resource": "https://rezics.com/id/01a0fd95-a190-77e9-9451-65e1284875dc",
+        "revision": "https://rezics.com/id/01a0fd95-a765-7041-8213-cb2e357cbe25",
+        "descriptiveType": "https://rezics.com/vocab/Character",
+        "originalRegistryType": "https://rezics.com/vocab/Character"
+      }
+    ]
+  },
+  "implementationAndConsumers": [
+    {
+      "location": "model/definitions/types-v1.ts:521-621",
+      "evidenceClass": "source inspection plus fresh compiled assertions",
+      "result": "Adds exactly schema:Person, schema:Organization, schema:DefinedTerm, schema:PublicationEvent and rv:SourceDatasetEpisode. All are resource, nondefault, noncreatable, contributor, no interest, visit, default presentation and priority 100. Person/Organization use square covers; the other three use document covers. All eight locale forms are authored. No browse, wikiSegment or frameDimension is inferred."
+    },
+    {
+      "location": "model/compiler/type.ts:117-249,254-292; packages/model/src/generated/types.ts",
+      "evidenceClass": "fresh deterministic reproduction",
+      "result": "Existing compiler enforces metadata fields, labels, one default per base and exact equality between Work metadata and the Work profile. renderTypeRegistry from the candidate exactly reproduces the committed generated file. The generated body digest independently recomputes to 0c6fdfc6b145ffecad6ff52fecc3dd86d016ebb29d4fd2f7eb3d96464faa7e27. All exported constants except the registry and its digest equal the base, including native compatibility and Work type orders."
+    },
+    {
+      "location": "services/main/src/modules/entity-page/read.ts:23-107,117-118",
+      "evidenceClass": "source inspection plus fresh actual-consumer assertions",
+      "result": "pageRegistry filters exact known IRIs within the target structural base, ignores defaults while selecting a descriptive entry, orders by ascending priority then IRI, and falls back to that base's default. pageSections continues to derive capabilities from target.base. All 27 actual retained targets keep only statements, relations and discussion when those reads are mounted; no Work, release, credit, rating or review sections are invented."
+    },
+    {
+      "location": "services/main/src/modules/types/registry.ts:48-83,102-158; types/contract.ts:75-88",
+      "evidenceClass": "source inspection plus fresh adverse-state assertions",
+      "result": "Compiled metadata supersedes matching older admitted rows before both listing and active admission sets are built. Active and retired former Work rows for the five new types cannot override labels, priority, resource base, Work admission, digest or inventory. Distinct retired descriptive rows remain readable. The complete 41-entry body fits the existing 128-type / 256 KiB bounds."
+    },
+    {
+      "location": "apps/web/features/entity-page/entity-page.tsx:133-150; header.tsx:39-46; catalogue/types.ts:70-76; entity-page/statement-groups.ts:42-57",
+      "evidenceClass": "source inference only; no rendered proof",
+      "result": "The production entity header consumes page.registry and reads its locale label directly. Resource sections remain shared owner reads. Adding a registry label does not create richer statement groups, facts or a specialized layout. The four-file candidate changes no grouping component, source/footer/privacy owner, creation workflow or transformation path."
+    }
+  ],
+  "preservation": {
+    "existingCompiledEntries": "All 36 base entries are equal as full JSON objects, including every optional metadata field and every locale. Defaults and all other generated exports are unchanged.",
+    "musicRecording": "The complete MusicRecording entry is byte-equivalent as JSON to base: work, media presentation, watch, square cover, priority 13 and its existing noncreatable admission metadata. No MusicRecording behavior or native compatibility/order is widened.",
+    "originalOwnerTestBodies": [
+      {
+        "path": "model/tests/types-registry.test.ts",
+        "originalTestBodySuffixMarker": "test('frame dimensions",
+        "originalBodyBytes": 4280,
+        "originalBodySha256": "7c200762e7f66ebdf3269891289fd35e60203ae7c5c8c4e83d0a5d204660946d",
+        "allOriginalTestBodiesByteUnchanged": true
+      },
+      {
+        "path": "services/main/tests/g-653-types.test.ts",
+        "originalTestBodySuffixMarker": "test('G653: admission refreshes",
+        "originalBodyBytes": 8553,
+        "originalBodySha256": "d17c862ade9ea403826eb829061341b7f6150538745a1a74deb9cd4447d53b0a",
+        "allOriginalTestBodiesByteUnchanged": true
+      }
+    ],
+    "originalOutcomeAndBrowserAssertions": [
+      {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2772/tests/qa/integration/outcomes/catalogue/supporting-information.test.ts",
+        "sha256": "d9070ef332648b933592c46339bcf39053f96ff6134d80ccfdde9880784eac5a",
+        "preflightSha256": "d9070ef332648b933592c46339bcf39053f96ff6134d80ccfdde9880784eac5a",
+        "matchesPreflight": true,
+        "independentlyHashVerified": true
+      },
+      {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2772/tests/qa/integration/support/catalogue-information.ts",
+        "sha256": "8ffbdd62abe74dfbe2d2057c5370a50a678f39accf33f93b16ce164f93de69aa",
+        "preflightSha256": "8ffbdd62abe74dfbe2d2057c5370a50a678f39accf33f93b16ce164f93de69aa",
+        "matchesPreflight": true,
+        "independentlyHashVerified": true
+      },
+      {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2772/tests/qa/fixtures/catalogue-information-matrix.ts",
+        "sha256": "3b0e44e66960fda1b416618908e3cd65e0a70e7ff37d032f40a487ebea4e545c",
+        "preflightSha256": "3b0e44e66960fda1b416618908e3cd65e0a70e7ff37d032f40a487ebea4e545c",
+        "matchesPreflight": true,
+        "independentlyHashVerified": true
+      },
+      {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2774/apps/web/tests/catalogue-detail-contract.e2e.ts",
+        "sha256": "b6889bcde1f06083da74aa0507f85c35a91627a80dea75cb9e3f586b8ebfa2c3",
+        "preflightSha256": "b6889bcde1f06083da74aa0507f85c35a91627a80dea75cb9e3f586b8ebfa2c3",
+        "matchesPreflight": true,
+        "independentlyHashVerified": true
+      },
+      {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2774/apps/web/tests/catalogue-browser-fixture.ts",
+        "sha256": "6a64ca9e45e3353bd4dd2df53e89d78d859e90a96264f31d785795514c4611e0",
+        "preflightSha256": "6a64ca9e45e3353bd4dd2df53e89d78d859e90a96264f31d785795514c4611e0",
+        "matchesPreflight": true,
+        "independentlyHashVerified": true
+      }
+    ],
+    "acceptedQueryReview": {
+      "commit": "5c1f50ae0012cd3d0f728059d4c0e500d54eed19",
+      "path": "docs/goals/audit-remediation-20261019/proofs/catalogue-query-credit-privacy-review.json",
+      "sha256": "932e9988230d884a6585a2df4c03a371bfb73945940e50405a7bc430354dd922",
+      "byteUnchanged": true,
+      "reviewRepeated": false
+    }
+  },
+  "semanticBoundaries": [
+    {
+      "types": [
+        "schema:Person",
+        "schema:Organization"
+      ],
+      "result": "Descriptive resource entries. No Account Agent/OrganizationAgent provisioning, principal mapping, grants or Access code changed. Selecting a label supplies no authenticated authority. Fresh checks keep these types out of Work admission."
+    },
+    {
+      "types": [
+        "schema:PublicationEvent"
+      ],
+      "result": "Resource event metadata remains separate from native Release. A release target with an explicit rv:Release still selects Release; PublicationEvent alone cannot select a record Release. No frameDimension is added."
+    },
+    {
+      "types": [
+        "rv:SourceDatasetEpisode"
+      ],
+      "result": "Retained source episode record only. It does not become Episode Work, realization, schema:TVEpisode, schema:MusicComposition or dcat:Dataset. Cross-base and unknown exact-IRI counterexamples retain their existing defaults."
+    },
+    {
+      "types": [
+        "native citation",
+        "retained derivation"
+      ],
+      "result": "No citation/conversion code is changed. Source citation remains independent of conversion; optional retained derivation is not made a mandatory annotation or provider transformation."
+    }
+  ],
+  "freshCheck": {
+    "jobId": "e93c752a-b7e1-4610-aeab-62f896d9b297",
+    "command": "bun scripts/goal/goalctl.ts test ./.temp/supporting-registry-review/independent-supporting-registry.test.ts",
+    "log": ".temp/goal/jobs/e93c752a-b7e1-4610-aeab-62f896d9b297.log",
+    "exitCode": 0,
+    "passed": 4,
+    "failed": 0,
+    "assertions": 443,
+    "cases": [
+      "Exact generated closure, all 36 preserved entries/defaults/Work exports, localization and finite type/body bounds",
+      "Original 27 captured target selections: 19 corrected fallbacks plus eight unchanged Character controls, exact owner links and no target mutation",
+      "Mixed type order, equal-priority tie, duplicate types, unknown/lookalike IRIs and cross-base Work/Release counterexamples",
+      "Active and retired older admitted rows, including conflicting former Work metadata, and retained reading of a distinct retired resource type"
+    ],
+    "premise": "Real candidate compiler, registry, pageRegistry and pageSections in a full exact-pin archive; historical HTTP targets supply the original identities/types. Only local process registry state is changed. Own modules are not mocked. This is not a real-stack page response, browser, C23 or authority-grant test.",
+    "snapshotNodeModules": "Links to this worker dependency installation. All four candidate files and required frozen consumer/compiler hashes were verified; no new dependency or manifest is introduced by the four-file delta.",
+    "harnessNote": "Runner printed that this report branch was three commits behind main; the check passed without a rebase or workaround.",
+    "reproducer": {
+      "file": ".temp/supporting-registry-review/independent-supporting-registry.test.ts",
+      "sha256": "dc55de25d9901963e8f416ede463ed91e66ae700ed653c178b4efaafc49112cb",
+      "source": "import { afterEach, expect, test } from 'bun:test';\nimport { createHash } from 'node:crypto';\nimport { readFileSync } from 'node:fs';\nimport * as before from './base-types.ts';\nimport * as generated from './candidate-661d048/packages/model/src/generated/types.ts';\nimport { renderTypeRegistry } from './candidate-661d048/model/compiler/type.ts';\nimport { typesV1 } from './candidate-661d048/model/definitions/types-v1.ts';\nimport { workKindV2Profile } from './candidate-661d048/model/definitions/work-kind-v2.ts';\nimport { workTypeV2Profile } from './candidate-661d048/model/definitions/work-type-v2.ts';\nimport { pageRegistry, pageSections } from './candidate-661d048/services/main/src/modules/entity-page/read.ts';\nimport {\n  admittedTypes, assertRegisteredTypeSnapshot, installRegisteredTypes,\n  resourceTypeAdmitted, workTypeAdmitted, workSemanticTypeOptions,\n  creatableWorkTypeOptions, typeListBody, typeListTag,\n} from './candidate-661d048/services/main/src/modules/types/registry.ts';\nimport { TYPES_READ_COST } from './candidate-661d048/services/main/src/modules/types/contract.ts';\nimport type { ResolvedTarget } from './candidate-661d048/services/main/src/modules/target/contract.ts';\n\n// Pure compiler/consumer checks over preserved historical captures. No installed\n// public read, rendered groups, authority grant or richer fixture is represented.\nconst resource = 'http://www.w3.org/2000/01/rdf-schema#Resource';\nconst rv = (name: string) => `https://rezics.com/vocab/${name}`;\nconst added = ['https://schema.org/Person', 'https://schema.org/Organization',\n  'https://schema.org/DefinedTerm', 'https://schema.org/PublicationEvent', rv('SourceDatasetEpisode')];\nconst original = JSON.parse(readFileSync(new URL('./original-census.json', import.meta.url), 'utf8')) as {\n  source: string; target: ResolvedTarget; originalRegistryType: string;\n}[];\nafterEach(() => installRegisteredTypes([]));\n\ntest('exact generated closure preserves all 36 prior entries, defaults, Work metadata and type bounds', () => {\n  const registry = generated.typeRegistry as Record<string, typeof generated.typeRegistry[typeof resource]>;\n  expect(Object.keys(before.typeRegistry)).toHaveLength(36);\n  expect(Object.keys(registry)).toHaveLength(41);\n  expect(Object.keys(registry).filter(type => !(type in before.typeRegistry)).sort()).toEqual([...added].sort());\n  for (const [type, entry] of Object.entries(before.typeRegistry)) expect(registry[type]).toEqual(entry);\n  for (const key of Object.keys(before).filter(key => !['typeRegistry', 'typeRegistryDigest'].includes(key))) {\n    expect((generated as Record<string, unknown>)[key]).toEqual((before as Record<string, unknown>)[key]);\n  }\n  const output = renderTypeRegistry(typesV1, workKindV2Profile, workTypeV2Profile);\n  expect(output).toBe(readFileSync(new URL('./candidate-661d048/packages/model/src/generated/types.ts', import.meta.url), 'utf8'));\n  expect(createHash('sha256').update(JSON.stringify(registry, null, 2)).digest('hex')).toBe(generated.typeRegistryDigest);\n  expect(generated.typeRegistryDigest).toBe('0c6fdfc6b145ffecad6ff52fecc3dd86d016ebb29d4fd2f7eb3d96464faa7e27');\n  expect(Object.keys(registry).filter(type => registry[type]!.default)).toEqual(\n    Object.keys(before.typeRegistry).filter(type => before.typeRegistry[type as keyof typeof before.typeRegistry].default));\n  for (const type of added) {\n    expect(registry[type]).toMatchObject({ base: 'resource', default: false, creatable: false,\n      creation: 'contributor', interest: null, primaryAction: 'visit', presentation: 'default', priority: 100 });\n    for (const key of ['browse', 'frameDimension', 'wikiSegment']) expect(registry[type]).not.toHaveProperty(key);\n    expect(Object.keys(registry[type]!.labels)).toEqual([...generated.typeLocales]);\n    for (const forms of Object.values(registry[type]!.labels)) {\n      expect(forms.one.length).toBeGreaterThan(0); expect(forms.other.length).toBeGreaterThan(0);\n    }\n    expect(resourceTypeAdmitted(type)).toBe(true); expect(workTypeAdmitted(type)).toBe(false);\n    expect(workSemanticTypeOptions).not.toContain(type); expect(creatableWorkTypeOptions).not.toContain(type);\n  }\n  expect(JSON.parse(typeListBody).types).toHaveLength(41);\n  expect(Buffer.byteLength(typeListBody)).toBeLessThanOrEqual(TYPES_READ_COST.maxBytes);\n  expect(JSON.parse(typeListBody).types.length).toBeLessThanOrEqual(TYPES_READ_COST.maxTypes);\n});\n\ntest('the original 27 captured targets select all 19 corrected descriptive entries and retain eight Character controls', () => {\n  const census: Record<string, number> = {};\n  const mounted = new Set(['statements', 'relations', 'discussion', 'credits', 'releases', 'contents', 'ratings', 'reviews']\n    .map(section => `/v1/resources/:resource/${section}`));\n  let corrected = 0, controls = 0;\n  expect(original).toHaveLength(27);\n  for (const row of original) {\n    const preserved = structuredClone(row.target);\n    const descriptive = row.target.types.filter(type => type !== resource);\n    expect(descriptive).toHaveLength(1);\n    const type = descriptive[0]!;\n    census[type] = (census[type] ?? 0) + 1;\n    expect(pageRegistry(row.target)).toEqual(generated.typeRegistry[type as keyof typeof generated.typeRegistry]);\n    expect(pageRegistry(row.target).default).toBe(false);\n    expect(pageSections(row.target, mounted)).toEqual(['statements', 'relations', 'discussion'].map(id => ({\n      id, href: `/v1/resources/${row.target.resource.slice(-36)}/${id}`, actions: [],\n    })));\n    expect(row.target).toEqual(preserved);\n    if (type === rv('Character')) { expect(row.originalRegistryType).toBe(type); controls++; }\n    else { expect(row.originalRegistryType).toBe(resource); corrected++; }\n  }\n  expect(census).toEqual({ [rv('Character')]: 8, 'https://schema.org/Person': 5,\n    'https://schema.org/Organization': 4, 'https://schema.org/DefinedTerm': 3,\n    'https://schema.org/PublicationEvent': 4, [rv('SourceDatasetEpisode')]: 3 });\n  expect(corrected).toBe(19); expect(controls).toBe(8);\n});\n\ntest('mixed and unknown types retain exact IRI matching, base separation and deterministic existing tie rules', () => {\n  for (const type of added) {\n    for (const types of [[type, resource, 'urn:unknown:type'], ['urn:unknown:type', resource, type], [type, type]]) {\n      expect(pageRegistry({ base: 'resource', types }).type).toBe(type);\n    }\n    expect(pageRegistry({ base: 'work', types: [type] }).type).toBe('https://schema.org/CreativeWork');\n    expect(pageRegistry({ base: 'release', types: [type] }).type).toBe(rv('Record'));\n  }\n  for (const types of [[], ['Person'], ['urn:unknown:type'], ['http://schema.org/Person'],\n    ['https://schema.org/Person#unregistered'], ['https://schema.org/MusicComposition'],\n    ['https://schema.org/TVEpisode'], ['http://www.w3.org/ns/dcat#Dataset']]) {\n    expect(pageRegistry({ base: 'resource', types }).type).toBe(resource);\n  }\n  for (const types of [['https://schema.org/Person', 'https://schema.org/Organization'],\n    ['https://schema.org/Organization', 'https://schema.org/Person']]) {\n    expect(pageRegistry({ base: 'resource', types }).type).toBe('https://schema.org/Organization');\n  }\n  expect(pageRegistry({ base: 'resource', types: ['https://schema.org/Person', rv('Character')] }).type).toBe(rv('Character'));\n  expect(pageRegistry({ base: 'resource', types: ['https://schema.org/Person', rv('Agent')] }).type).toBe(rv('Agent'));\n  expect(pageRegistry({ base: 'release', types: ['https://schema.org/PublicationEvent', rv('Release')] }).type).toBe(rv('Release'));\n  expect(pageRegistry({ base: 'work', types: ['https://schema.org/Person', 'https://schema.org/MusicRecording'] }))\n    .toEqual(before.typeRegistry['https://schema.org/MusicRecording']);\n});\n\ntest('compiled descriptive metadata wins over active and retired older rows without widening Work admission or erasing distinct retired types', () => {\n  const tag = typeListTag;\n  for (const lifecycle of ['active', 'retired'] as const) {\n    const rows = added.map(type => ({ definition: { ...pageRegistry({ base: 'resource', types: [type] }),\n      base: 'work' as const, creatable: true, priority: 0 }, lifecycle, revision: '2' }));\n    assertRegisteredTypeSnapshot(rows); installRegisteredTypes(rows);\n    expect(typeListTag).toBe(tag);\n    for (const type of added) {\n      expect(admittedTypes.filter(entry => entry.type === type)).toEqual([generated.typeRegistry[type as keyof typeof generated.typeRegistry]]);\n      expect(resourceTypeAdmitted(type)).toBe(true); expect(workTypeAdmitted(type)).toBe(false);\n      expect(workSemanticTypeOptions).not.toContain(type); expect(creatableWorkTypeOptions).not.toContain(type);\n    }\n  }\n  const type = 'urn:independent:older-descriptive-type';\n  const definition = { ...pageRegistry({ base: 'resource', types: ['https://schema.org/Person'] }), type };\n  installRegisteredTypes([{ definition, lifecycle: 'retired', revision: '2' }]);\n  expect(pageRegistry({ base: 'resource', types: [type] })).toEqual(definition);\n  expect(resourceTypeAdmitted(type)).toBe(false);\n  expect(workTypeAdmitted(type)).toBe(false);\n});\n",
+      "inputs": ".temp/supporting-registry-review/original-census.json; reconstructed by reading originalCensus capture references without modifying their targets",
+      "baseGeneratedRegistry": "git show 82df58d2ba1d9d377b591126e7f4dfa42f27f02e:packages/model/src/generated/types.ts"
+    }
+  },
+  "reusedOwnerChecks": {
+    "checks": [
+      {
+        "name": "baseline-owner-tests",
+        "command": "task goal:unit-files -- model/tests/types-registry.test.ts services/main/tests/g-653-types.test.ts",
+        "exitCode": 201,
+        "log": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-supporting-registry-candidate-20261019/.temp/supporting-registry-candidate/baseline-tests.log",
+          "sha256": "6f5416522f9b4b642fbc95d3cf06a7f5df2d71bd02f0d3e08611f58ca4038b76"
+        },
+        "note": "Expected red: five missing descriptive registrations; 15 existing tests passed, three added tests failed across two files.",
+        "logHashIndependentlyVerified": true
+      },
+      {
+        "name": "generate",
+        "command": "task gen",
+        "exitCode": 0,
+        "log": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-supporting-registry-candidate-20261019/.temp/supporting-registry-candidate/generate.log",
+          "sha256": "45c2a0078ca1db58cd69b93ec836d8392788bcdceb9d06a4b38f8eeb647b16ba"
+        },
+        "note": "Only the authored registry generated types.ts; no shape/image input changed.",
+        "logHashIndependentlyVerified": true
+      },
+      {
+        "name": "generated-current",
+        "command": "task gen:check",
+        "exitCode": 0,
+        "log": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-supporting-registry-candidate-20261019/.temp/supporting-registry-candidate/generate-check.log",
+          "sha256": "eb65faa4a65fb65b9a35a1b029441b27dface39bc0a02ed0b042239bc7252287"
+        },
+        "logHashIndependentlyVerified": true
+      },
+      {
+        "name": "candidate-owner-tests",
+        "command": "task goal:unit-files -- model/tests/types-registry.test.ts services/main/tests/g-653-types.test.ts",
+        "exitCode": 0,
+        "log": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-supporting-registry-candidate-20261019/.temp/supporting-registry-candidate/candidate-tests.log",
+          "sha256": "5eb1df2dfd5c9cf7576f050e856d4ae26197a0a918d49bb70a77250fc624e4a3"
+        },
+        "note": "18 tests passed. A later const-tuple annotation changed only the service test typing; that final file was rerun below.",
+        "logHashIndependentlyVerified": true
+      },
+      {
+        "name": "selected-types",
+        "command": "task goal:type-files -- --project services/main/tsconfig.json model/definitions/types-v1.ts model/tests/types-registry.test.ts packages/model/src/generated/types.ts services/main/tests/g-653-types.test.ts",
+        "exitCode": 0,
+        "log": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-supporting-registry-candidate-20261019/.temp/supporting-registry-candidate/typecheck.log",
+          "sha256": "8604b3d602de68ec4fff7ed6fed86a0d94805902efc9e82c35def7dda2f08c2b"
+        },
+        "note": "1,313 files checked. Initial new-test tuple widening was corrected before this passing check.",
+        "logHashIndependentlyVerified": true
+      },
+      {
+        "name": "lint-and-code-shape",
+        "command": "task goal -- check --only lint",
+        "exitCode": 0,
+        "log": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-supporting-registry-candidate-20261019/.temp/supporting-registry-candidate/lint-check.log",
+          "sha256": "f201fd695422cc0f34aac1b995e8cd6367059d1013486c023970339fac36a0d1"
+        },
+        "note": "lint and ast passed. Candidate-local Task install prepared dependencies; no package manifest/lock changes.",
+        "logHashIndependentlyVerified": true
+      },
+      {
+        "name": "final-service-tests",
+        "command": "task goal:unit-files -- services/main/tests/g-653-types.test.ts",
+        "exitCode": 0,
+        "log": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-supporting-registry-candidate-20261019/.temp/supporting-registry-candidate/candidate-final-service-tests.log",
+          "sha256": "1d9804ff429f95eb9ed9c60ea4ba861df994ba57a2b4ac5099fb397153e9fef6"
+        },
+        "note": "Final service-test bytes: 12 tests passed.",
+        "logHashIndependentlyVerified": true
+      },
+      {
+        "name": "affected-selection-only",
+        "command": "task goal -- test --affected --list",
+        "exitCode": 0,
+        "log": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/catalogue-supporting-registry-candidate-20261019/.temp/supporting-registry-candidate/affected-tests-list.log",
+          "sha256": "bf038c117febecab1d190adeff2ea51795cd4594970fd638ef4db5bd8bde238e"
+        },
+        "note": "Read-only affected selection; no listed wider tests were executed.",
+        "logHashIndependentlyVerified": true
+      },
+      {
+        "name": "diff-whitespace",
+        "command": "git diff --check",
+        "exitCode": 0
+      }
+    ],
+    "countDisposition": "The combined candidate run is 18 tests total: six model and twelve service tests. The final twelve-service-test run rechecks final const-tuple annotation bytes; it is not twelve additional distinct tests or eighteen model tests. No passing owner suite was rerun by this reviewer.",
+    "baselineClassification": "Owner baseline reaches three assertion failures in the test bodies: missing compiled entry (types-registry.test.ts:28), Resource fallback instead of Person (g-653-types.test.ts:73), and one Character entry rather than six compiled supporting/control entries (g-653-types.test.ts:93). Fifteen other tests passed. These are local compiler/consumer assertion failures, not setup errors or public acceptance.",
+    "generationDisposition": "Reuse hash-matching task gen and task gen:check logs. Fresh focused renderTypeRegistry reproduction separately proves exact generated registry closure. No full generator or broad types/lint suite is rerun.",
+    "sourceLimit": "The combined owner test run preceded a service-test-only const-tuple annotation. The frozen final-service test log covers the final service bytes; generation, selected 1,313-file types and lint/AST logs are verified supporting receipts."
+  },
+  "findings": [],
+  "sourceObservations": [
+    {
+      "location": "apps/web/features/catalogue/types.ts:58-66",
+      "classification": "nonblocking source observation; no public assertion reproduced",
+      "observation": "The alternate web typeEntry helper keeps the first input on equal priority, whereas Main pageRegistry uses an IRI tie-break. This behavior predates the four-file correction. The production entity header consumes Main's registry directly; the original 27 captured targets each have one descriptive type. The fresh mixed-type cases prove Main's current rule, not rendered cross-surface tie consistency. No broader GUI correction or acceptance claim is inferred."
+    }
+  ],
+  "affectedChecksNotRun": {
+    "ownerAffectedSelectionCounts": {
+      "unit": 201,
+      "owner": 808,
+      "model": 4,
+      "integration": 891,
+      "fault/recovery": 85
+    },
+    "disposition": "Counts describe owner selection only, not executed coverage. No whole-tier, native, Book/Recipe, all113, corpus or fresh catalogue prerequisite is added.",
+    "managerProof": "Genuine original-entity API and original 1440/390 C23 assertions remain the manager's separate prepared a15-original-v2 runner. No browser, network or shared lifecycle is used here."
+  },
+  "limitations": [
+    "This review accepts the exact missing-registration correction at source/API-contract scope. It does not establish useful type-appropriate rendered groups, C24 field fidelity, A15 closure or original C23 acceptance.",
+    "Fresh target replay does not revalidate historical disclosure, current data state, API availability or installed model generation. No public outcome failure or success was newly measured.",
+    "Locale forms and compiler constraints were checked; no human translation or visual-layout review was performed.",
+    "No implementation, original assertion, source identity, corpus or shared service was changed; no import, backup/reset, installation or landing was performed. Only the new claimed review JSON is a tracked edit."
+  ],
+  "recordedJobRunner": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- <command...>, invoked from this worker worktree; QA uses bun scripts/goal/goalctl.ts test.",
+  "reportValidation": {
+    "status": "pass",
+    "completedAtUtc": "2026-10-19T11:40:55.167733+00:00",
+    "jobId": "338d3c48-64c6-4154-8ab8-deb9daa206ab",
+    "docsCheck": "task docs:check passed: 13 tests and 249 Markdown files; local links, fragments and design navigation.",
+    "workerGate": "Recorded task goal -- check passed: proportional 1/44 repository guards and AST. No TypeScript source changed and no tests were named in the report-only brief.",
+    "logs": [
+      ".temp/goal/jobs/338d3c48-64c6-4154-8ab8-deb9daa206ab.1.log",
+      ".temp/goal/jobs/338d3c48-64c6-4154-8ab8-deb9daa206ab.2.log",
+      ".temp/goal/check/run-fhBdNo/output.log"
+    ],
+    "sourcePinPreservation": "New report staged during validation; HEAD stayed 5c1f50ae0012cd3d0f728059d4c0e500d54eed19. No rebase, merge or source implementation mutation.",
+    "trackedScope": "Only the new claimed supporting-registry review JSON. The prior accepted query review remains byte unchanged."
+  }
+}
