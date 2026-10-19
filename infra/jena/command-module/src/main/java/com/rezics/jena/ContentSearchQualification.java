@@ -223,8 +223,20 @@ final class ContentSearchQualification {
     }
     private static Node receipt(DatasetGraph data, Node decision, String link) {
         var rows = data.find(RECEIPTS, Node.ANY, p(link), decision);
-        Node receipt;
-        try { require(rows.hasNext()); receipt = rows.next().getSubject(); require(!rows.hasNext() && receipt.isURI()); }
+        Node receipt = null;
+        try {
+            while (rows.hasNext()) {
+                Node candidate = rows.next().getSubject();
+                // Eligibility receipts also name their approved publication.
+                // The publication owner identifies its claimants by preparation,
+                // before checking their type, outcome or exact proof fields.
+                if (link.equals("publicationDecision")
+                    && !data.contains(RECEIPTS, candidate, p("contentPreparation"), Node.ANY)) continue;
+                require(receipt == null && candidate.isURI());
+                receipt = candidate;
+            }
+            require(receipt != null);
+        }
         finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
         type(data, RECEIPTS, receipt, "OperationReceipt");
         expect(data, RECEIPTS, receipt, link, decision);
