@@ -76,7 +76,7 @@ export default {
   notificationRealmInvitation: "Invitaciones a comunidades",
   notificationClaimCorrection: "Correcciones de atribución",
   notificationSaved: "Preferencias de notificación guardadas.",
-  notificationUnavailable: "No se pudieron cargar las preferencias de notificación. Recarga la página para volver a intentarlo.",
+  notificationUnavailable: "No se pudieron cargar las preferencias de notificación.",
   privacyTitle: "Privacidad",
   privacyHelp: "Elige quién puede ver tu biblioteca. Las estanterías privadas no aparecen en tu perfil público.",
   libraryVisibility: "Biblioteca y estanterías",

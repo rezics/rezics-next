@@ -64,7 +64,7 @@ export default {
   notificationRealmRoleChange: '社群角色變更', notificationRealmMembershipChange: '社群成員資格變更',
   notificationRealmInvitation: '社群邀請', notificationClaimCorrection: '資料更正',
   notificationSaved: '通知設定已儲存。',
-  notificationUnavailable: '無法載入通知設定。請重新載入後再試。',
+  notificationUnavailable: '無法載入通知設定。',
   privacyTitle: '隱私',
   privacyHelp: '管理誰可以查看你的藏書庫。私人書架不會出現在公開個人檔案中。',
   libraryVisibility: '藏書庫與書架', libraryPublic: '公開', libraryPrivate: '私人', libraryFollowers: '追蹤者',

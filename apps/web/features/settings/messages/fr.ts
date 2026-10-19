@@ -76,7 +76,7 @@ export default {
   notificationRealmInvitation: "Invitations à rejoindre une communauté",
   notificationClaimCorrection: "Corrections d’attribution",
   notificationSaved: "Préférences de notification enregistrées.",
-  notificationUnavailable: "Impossible de charger les préférences de notification. Rechargez la page pour réessayer.",
+  notificationUnavailable: "Impossible de charger les préférences de notification.",
   privacyTitle: "Confidentialité",
   privacyHelp: "Choisissez qui peut voir votre bibliothèque. Les étagères privées n’apparaissent pas sur votre profil public.",
   libraryVisibility: "Bibliothèque et étagères",

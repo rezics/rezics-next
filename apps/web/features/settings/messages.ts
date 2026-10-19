@@ -50,7 +50,7 @@ const en = {
   notificationDisable: 'Turn off',
   retrySave: 'Try saving again',
   reviewLatest: 'Load latest choices',
-  notificationUnavailable: 'Could not load notification choices. Reload to try again.',
+  notificationUnavailable: 'Could not load notification choices.',
   privacyTitle: 'Privacy',
   privacyHelp: 'Control who can see your library. Private shelves do not appear on your public profile.',
   libraryVisibility: 'Library and shelves',

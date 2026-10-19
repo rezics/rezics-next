@@ -49,7 +49,7 @@ export default {
   notificationRealmInvitation: '社区邀请',
   notificationClaimCorrection: '资料更正',
   notificationSaved: '通知选项已保存。',
-  notificationUnavailable: '无法加载通知选项。请重新加载后重试。',
+  notificationUnavailable: '无法加载通知选项。',
   privacyTitle: '隐私',
   privacyHelp: '控制谁可以看到您的书库。私人书架不会显示在公开资料中。',
   libraryVisibility: '书库和书架',
