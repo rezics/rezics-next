@@ -74,5 +74,5 @@ export default {
   ratingsFor: insert('この{{subject}}の評価', { subject: String }),
   reviewsFor: insert('この{{subject}}のレビュー', { subject: String }),
   noRatings: '評価はまだありません。',
-  unavailable: '利用できません', unnamed: '名称なし', search: '検索',
+  unavailable: '利用できません', unnamed: '名称なし', nameNotShown: '名前は表示されていません', search: '検索',
 } satisfies EntityPageMessages;

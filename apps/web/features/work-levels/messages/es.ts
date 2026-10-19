@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkLevelsMessages } from '../messages.ts';
 
 export default {
+  namesUnavailable: 'No se pudieron cargar algunos nombres.',
+  namesRestored: 'Nombres cargados.',
   creditedAs: "como",
   nameNotShown: 'Nombre no mostrado',
   parts: 'Partes', partsList: 'Partes en orden de publicación', partsPages: 'Páginas de partes',

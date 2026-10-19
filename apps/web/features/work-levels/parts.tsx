@@ -55,6 +55,7 @@ export function WholesLines({
               names={names}
               unavailable={t.unavailable}
               unnamed={t.unnamed}
+              undisclosed={t.nameNotShown}
             />
           </li>
         ))}
@@ -140,6 +141,7 @@ function PartRow({
             names={names}
             unavailable={t.unavailable}
             unnamed={t.unnamed}
+            undisclosed={t.nameNotShown}
           />
         ) : (
           <Link documentNavigation

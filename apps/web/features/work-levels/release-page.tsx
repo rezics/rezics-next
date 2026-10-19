@@ -12,6 +12,7 @@ import Link from '../shell/localized-link.tsx';
 import { coverageLabel, LanguageName, RealizationRow, ReleaseCard } from './editions.tsx';
 import type { Copy } from './messages.ts';
 import { NameLink } from './names.tsx';
+import { ReleaseNamesRecovery } from './release-names-recovery.tsx';
 import type { SelectedRealizationRead } from './read.ts';
 import type { Loaded, Names, Realization, Release } from './types.ts';
 
@@ -31,6 +32,7 @@ export function ReleaseView({ release, realizations, sources, sourceReads = [], 
   const records = [...new Map(loaded.map(item => [`${item.id}\0${item.revision}`, item] as const)).values()];
   const original = sourceHref(release.originalUrl);
   const detail = detailCopy(locale);
+  const namesUnavailable = [...names.values()].some(item => item.status === 'unavailable-read');
   return <div className="grid gap-8">
     <SubjectHeader identity={<div className="grid gap-1.5">
       <p className="text-muted-foreground text-sm">{t.release}</p>
@@ -44,14 +46,15 @@ export function ReleaseView({ release, realizations, sources, sourceReads = [], 
       actions={<ReportMenu targets={[{ target: release.id, kind: 'page' }]} name={release.title.value} locale={locale} />} />
     <ReleaseCard release={release} names={names} locale={locale} t={t} headingLevel={null} detailed coverage={false} showOriginalUrl={false} />
     <Region id="covers" title={t.coversHeading} className="scroll-mt-20">
+      <ReleaseNamesRecovery unavailable={namesUnavailable} locale={locale} />
       {release.coverage.length ? <ol className="grid gap-5">
         {release.coverage.map(entry => {
           const realization = entry.realization ? realizations.get(entry.realization) : undefined;
           return <li key={`${entry.work}-${entry.realization ?? ''}`} data-coverage className="grid min-w-0 gap-2 border-border/70 border-b pb-4">
             <p className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-              <span className="font-medium"><NameLink reference={entry.work} names={names} unavailable={t.unavailable} unnamed={t.unnamed} /></span>
+              <span className="font-medium"><NameLink reference={entry.work} names={names} unavailable={t.unavailable} unnamed={t.unnamed} undisclosed={t.nameNotShown} /></span>
               <span className="text-muted-foreground text-sm">{t.mainVersion}{' '}
-                <NameLink reference={entry.mainVersion} names={names} unavailable={t.unavailable} unnamed={t.unnamed} /></span>
+                <NameLink reference={entry.mainVersion} names={names} unavailable={t.unavailable} unnamed={t.unnamed} undisclosed={t.nameNotShown} /></span>
             </p>
             <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground text-sm">
               <span>{coverageLabel(entry.completeness, t)}</span>
@@ -72,7 +75,7 @@ export function ReleaseView({ release, realizations, sources, sourceReads = [], 
     <SubjectSources locale={locale}>
       <p className="text-muted-foreground text-xs [overflow-wrap:anywhere]">{detail.releaseRevision}: {release.revision}</p>
       <ul className="grid gap-3">{records.map(item => <li key={`${item.id}:${item.revision}`} data-realization-record className="grid min-w-0 gap-1">
-        <p><NameLink reference={item.work} names={names} unavailable={t.unavailable} unnamed={t.unnamed} />{' · '}
+        <p><NameLink reference={item.work} names={names} unavailable={t.unavailable} unnamed={t.unnamed} undisclosed={t.nameNotShown} />{' · '}
           <LanguageName tag={item.language} locale={locale} /></p>
         <p className="text-muted-foreground text-xs [overflow-wrap:anywhere]">{item.id}</p>
         <p className="text-muted-foreground text-xs [overflow-wrap:anywhere]">{detail.realizationRevision}: {item.revision}</p>

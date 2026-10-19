@@ -48,7 +48,7 @@ export function PublicCollectionPage({ summary, page, currentUrl, locale, messag
     {!page.ok ? <RegionFailure title={browse.unavailable} failure={page.failure} messages={messages} restartHref={start} />
       : page.data.occurrences.length ? <ol aria-label={browse.lists} className="grid gap-3">
         {page.data.occurrences.map(item => <li key={item.occurrence} className="min-w-0 break-words rounded-xl border p-4">
-          {item.target ? <SummaryLink summary={page.data.names.get(item.target)} unavailable={t.unavailable} unnamed={t.unavailable}
+          {item.target ? <SummaryLink summary={page.data.names.get(item.target)} unavailable={t.unavailable} unnamed={t.unnamed} undisclosed={t.nameNotShown}
             hrefFor={named => resourceHref('/e/', named.address as AddressTarget)} />
             : <Link href={collectionPageHref(currentUrl, { after: null, parent: item.occurrence })} className="underline underline-offset-4">
               {item.labels[0] ? <bdi lang={item.labels[0].language}>{item.labels[0].value}</bdi> : t.openGroup}</Link>}
@@ -73,7 +73,7 @@ export interface Franchise {
 
 function Participant({ item, t, hrefFor, people }: { item: RelationItem; t: Copy; hrefFor?: SummaryHref; people?: People }) {
   const target = item.target;
-  if (target.kind === 'withheld') return <span className="text-muted-foreground">{t.unavailable}</span>;
+  if (target.kind === 'withheld') return <span className="text-muted-foreground">{t.nameNotShown}</span>;
   if (target.kind === 'external') {
     // A contributor is one REZICS Agent wherever they are named: the link is their profile, not a page of this Zone.
     const person = target.agent ? people?.get(target.agent) : undefined;
@@ -84,7 +84,7 @@ function Participant({ item, t, hrefFor, people }: { item: RelationItem; t: Copy
         {person.name}</Link>
       : <bdi className="font-mono text-sm">{target.label}</bdi>;
   }
-  return <SummaryLink summary={target.summary} unavailable={t.unavailable} unnamed={t.unnamed} hrefFor={hrefFor} />;
+  return <SummaryLink summary={target.summary} unavailable={t.unavailable} unnamed={t.unnamed} undisclosed={t.nameNotShown} hrefFor={hrefFor} />;
 }
 
 /** Where a withheld credit can be read: the participant's own page, never the reference written out. */
@@ -235,14 +235,14 @@ function Members({ franchise, current, names, workRef, query, t }: {
         return <li key={member.occurrence} className="grid min-w-0 gap-1"
           aria-current={work.endsWith(current) ? 'true' : undefined}>
           <span className="flex flex-wrap items-center gap-2">
-            <NameLink reference={work} names={names} unavailable={t.unavailable} unnamed={t.unnamed} />
+            <NameLink reference={work} names={names} unavailable={t.unavailable} unnamed={t.unnamed} undisclosed={t.nameNotShown} />
             {work.endsWith(current) ? <Badge variant="soft">{t.thisWork}</Badge> : null}
           </span>
           {query.grain === 'parts' && parts
             ? parts.ok
               ? <ol className="ms-4 flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground text-sm">
                 {parts.data.parts.filter(part => part.work).map(part => <li key={part.occurrence} className="whitespace-nowrap">
-                  <NameLink reference={part.work!} names={names} unavailable={t.unavailable} unnamed={t.unnamed} />
+                  <NameLink reference={part.work!} names={names} unavailable={t.unavailable} unnamed={t.unnamed} undisclosed={t.nameNotShown} />
                   {part.displayLabel ? <> <bdi className="tabular-nums">({part.displayLabel})</bdi></> : null}
                 </li>)}
                 {parts.data.next && workPage ? <li><Link documentNavigation href={`${workPage}/connections#parts`}

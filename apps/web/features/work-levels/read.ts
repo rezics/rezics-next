@@ -63,7 +63,7 @@ export async function readCollectionMembers(collection: string, query: { after?:
 }
 
 /**
- * Names and availability for up to 64 resources per Main call; a failed batch leaves its resources unnamed. `position` is
+ * Names and availability for up to 64 resources per Main call; failed batches retain unavailable entries. `position` is
  * the reading position (`all` or an occurrence IRI) Main withholds later names for; omitted, Main chooses.
  */
 export const readNames = cache(async (resources: string, position?: string, client?: SuppliedClient): Promise<Names> => {

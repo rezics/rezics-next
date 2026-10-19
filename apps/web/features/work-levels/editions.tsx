@@ -50,7 +50,7 @@ function SourceContinuity({ realization, all, sourceReads, names, locale, t }: {
   // The Main Version is named, so the web serial's continuity and the bunko's are told apart.
   if (source.kind === 'main-version') {
     return <span>{t.continuityMain}{' '}
-      <NameLink reference={source.mainVersion} names={names} unavailable={t.unavailable} unnamed={t.unnamed} /></span>;
+      <NameLink reference={source.mainVersion} names={names} unavailable={t.unavailable} unnamed={t.unnamed} undisclosed={t.nameNotShown} /></span>;
   }
   const from = all.find(item => item.id === source.realization && item.revision === source.revision);
   const selected = sourceReads.find(item => item.id === source.realization && item.revision === source.revision);
@@ -68,7 +68,7 @@ function Parties({ label, agents, names, t }: { label: string; agents: readonly 
   return <div className="grid gap-0.5">
     <dt className="text-muted-foreground text-xs">{label}</dt>
     <dd className="flex flex-wrap gap-x-2 text-sm">{agents.map((agent, index) => <span key={agent}>{index ? '· ' : ''}
-      <NameLink reference={agent} names={names} unavailable={t.unavailable} unnamed={t.unnamed} /></span>)}</dd>
+      <NameLink reference={agent} names={names} unavailable={t.unavailable} unnamed={t.unnamed} undisclosed={t.nameNotShown} /></span>)}</dd>
   </div>;
 }
 
@@ -203,7 +203,7 @@ export function ReleaseCard({ release, names, locale, t, headingLevel = 3, detai
       <ul className="grid gap-1 text-sm">
         {release.coverage.map(entry => <li key={`${entry.work}-${entry.realization ?? ''}`}
           className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-          <NameLink reference={entry.work} names={names} unavailable={t.unavailable} unnamed={t.unnamed} />
+          <NameLink reference={entry.work} names={names} unavailable={t.unavailable} unnamed={t.unnamed} undisclosed={t.nameNotShown} />
           <span className="text-muted-foreground">{coverageLabel(entry.completeness, t)}</span>
           {entry.portion ? <span className="text-muted-foreground">· {entry.portion}</span> : null}
           {detailed && entry.language ? <LanguageName tag={entry.language} locale={locale} /> : null}

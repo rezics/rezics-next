@@ -74,5 +74,5 @@ export default {
   ratingsFor: insert('이 {{subject}}에 대한 평점', { subject: String }),
   reviewsFor: insert('이 {{subject}}에 대한 리뷰', { subject: String }),
   noRatings: '아직 평점이 없습니다.',
-  unavailable: '사용할 수 없음', unnamed: '이름 없음', search: '검색',
+  unavailable: '사용할 수 없음', unnamed: '이름 없음', nameNotShown: '이름이 표시되지 않음', search: '검색',
 } satisfies EntityPageMessages;

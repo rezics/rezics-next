@@ -74,5 +74,5 @@ export default {
   ratingsFor: insert('此{{subject}}的评分', { subject: String }),
   reviewsFor: insert('此{{subject}}的评论', { subject: String }),
   noRatings: '暂无评分。',
-  unavailable: '不可用', unnamed: '未命名', search: '搜索',
+  unavailable: '不可用', unnamed: '未命名', nameNotShown: '未显示名字', search: '搜索',
 } satisfies EntityPageMessages;

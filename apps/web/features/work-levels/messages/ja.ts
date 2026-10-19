@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkLevelsMessages } from '../messages.ts';
 
 export default {
+  namesUnavailable: '一部の名前を読み込めませんでした。',
+  namesRestored: '名前を読み込みました。',
   creditedAs: "役名：",
   nameNotShown: '名前は表示されていません',
   parts: '構成', partsList: '刊行順の構成', partsPages: '構成のページ',

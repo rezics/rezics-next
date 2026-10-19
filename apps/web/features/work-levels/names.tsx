@@ -3,7 +3,7 @@ import { LocalizedText } from '@rezics/ui/localized-text';
 import Link from '../shell/localized-link.tsx';
 import { resourceHref } from '../address/path.ts';
 import { workLinkHref } from './route.ts';
-import type { AvailableSummary, Names, NameText, Summary } from './types.ts';
+import type { AvailableSummary, Names, NameText, NameSummary } from './types.ts';
 
 /** Where a named resource's page is; null when it has none to link. Works link to their own host by default. */
 export type SummaryHref = (summary: AvailableSummary) => string | null;
@@ -25,7 +25,7 @@ export function namedWorkHref(reference: string, names: Names): string | null {
 
 /** What Main named a resource: its name in the language Main selected, or null when it is unavailable or unnamed. */
 export function nameOf(names: Names, reference: string): NameText | null {
-  const summary: Summary | undefined = names.get(reference);
+  const summary = names.get(reference);
   return summary?.status === 'available' ? summary.name : null;
 }
 
@@ -35,13 +35,14 @@ export function nameOf(names: Names, reference: string): NameText | null {
  * around it. A resource Main will not name says so, which is not the same
  * as a name nobody has recorded.
  */
-export function SummaryLink({ summary, unavailable, unnamed, hrefFor }: {
-  summary: Summary | null | undefined; unavailable: string; unnamed: string; hrefFor?: SummaryHref;
+export function SummaryLink({ summary, unavailable, unnamed, undisclosed = unavailable, hrefFor }: {
+  summary: NameSummary | null | undefined; unavailable: string; unnamed: string;
+  undisclosed?: string; hrefFor?: SummaryHref;
 }) {
-  if (!summary) return <span className="text-muted-foreground">{unnamed}</span>;
-  if (summary.status !== 'available') return <span className="text-muted-foreground">{unavailable}</span>;
+  if (!summary || summary.status === 'unavailable-read') return <span data-name-state="unavailable" className="text-muted-foreground">{unavailable}</span>;
+  if (summary.status !== 'available') return <span data-name-state="undisclosed" className="text-muted-foreground">{undisclosed}</span>;
   const href = hrefFor ? hrefFor(summary) : summaryWorkHref(summary);
-  const text = <LocalizedText text={summary.name} />;
+  const text = summary.name.value ? <LocalizedText text={summary.name} /> : <span data-name-state="unnamed">{unnamed}</span>;
   // A Work hub streams independent reads. Its RSC response can stay open while
   // the client router keeps the old Work; the browser can commit the document as it streams.
   return href ? <Link href={href} documentNavigation={summary.type === 'work'} className={link}>{text}</Link>
@@ -49,8 +50,8 @@ export function SummaryLink({ summary, unavailable, unnamed, hrefFor }: {
 }
 
 /** `SummaryLink` for a resource named by a batch read. */
-export function NameLink({ reference, names, unavailable, unnamed }: {
-  reference: string; names: Names; unavailable: string; unnamed: string;
+export function NameLink({ reference, names, unavailable, unnamed, undisclosed }: {
+  reference: string; names: Names; unavailable: string; unnamed: string; undisclosed?: string;
 }) {
-  return <SummaryLink summary={names.get(reference)} unavailable={unavailable} unnamed={unnamed} />;
+  return <SummaryLink summary={names.get(reference)} unavailable={unavailable} unnamed={unnamed} undisclosed={undisclosed} />;
 }

@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkLevelsMessages } from '../messages.ts';
 
 export default {
+  namesUnavailable: '일부 이름을 불러오지 못했습니다.',
+  namesRestored: '이름을 불러왔습니다.',
   creditedAs: "배역명:",
   nameNotShown: '이름이 표시되지 않음',
   parts: '구성', partsList: '출간 순서의 구성', partsPages: '구성 페이지',

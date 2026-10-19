@@ -148,6 +148,7 @@ export function Value({
           summary={names.get(ref)}
           unavailable={t.unavailable}
           unnamed={t.unnamed}
+          undisclosed={t.nameNotShown}
           hrefFor={summaryHref(hrefFor)}
         />
       );
@@ -182,6 +183,7 @@ export function Value({
       summary={names.get(value.iri)}
       unavailable={t.unavailable}
       unnamed={t.unnamed}
+      undisclosed={t.nameNotShown}
       hrefFor={summaryHref(hrefFor)}
     />
   );
@@ -367,6 +369,7 @@ export function RelationsView({
                       summary={summary}
                       unavailable={t.unavailable}
                       unnamed={t.unnamed}
+                      undisclosed={t.nameNotShown}
                       hrefFor={summaryHref(hrefFor)}
                     />
                   </li>

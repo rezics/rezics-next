@@ -84,7 +84,7 @@ const en = {
   ratingsFor: insert('Ratings for this {{subject}}', { subject: String }),
   reviewsFor: insert('Reviews of this {{subject}}', { subject: String }),
   noRatings: 'No ratings yet.',
-  unavailable: 'Unavailable', unnamed: 'Unnamed', search: 'Search',
+  unavailable: 'Unavailable', unnamed: 'Unnamed', nameNotShown: 'Name not shown', search: 'Search',
 };
 
 export const englishMessages = en;

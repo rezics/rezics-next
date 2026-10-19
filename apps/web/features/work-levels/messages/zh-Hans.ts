@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkLevelsMessages } from '../messages.ts';
 
 export default {
+  namesUnavailable: '部分名称未能加载。',
+  namesRestored: '名称已加载。',
   creditedAs: '署名为',
   nameNotShown: '未显示名字',
   parts: '组成部分', partsList: '按出版顺序排列的组成部分', partsPages: '组成部分分页',

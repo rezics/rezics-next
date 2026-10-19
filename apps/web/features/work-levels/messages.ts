@@ -70,6 +70,8 @@ const en = {
 
   showMore: 'Show more', firstPage: 'Back to the start',
   unavailable: 'Unavailable', unnamed: 'Unnamed',
+  namesUnavailable: 'Some names could not be loaded.',
+  namesRestored: 'Names loaded.',
 };
 
 export const englishMessages = en;

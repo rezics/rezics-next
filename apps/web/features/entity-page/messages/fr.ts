@@ -74,5 +74,5 @@ export default {
   ratingsFor: insert('Notes : {{subject}}', { subject: String }),
   reviewsFor: insert('Critiques : {{subject}}', { subject: String }),
   noRatings: 'Aucune note.',
-  unavailable: 'Indisponible', unnamed: 'Sans nom', search: 'Rechercher',
+  unavailable: 'Indisponible', unnamed: 'Sans nom', nameNotShown: 'Nom non affiché', search: 'Rechercher',
 } satisfies EntityPageMessages;
