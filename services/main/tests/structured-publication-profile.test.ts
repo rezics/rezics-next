@@ -62,20 +62,21 @@ test('composition source evidence joins the selected generation to its exact rev
   const structure = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
   const owner = 'https://rezics.com/id/00000000-0000-4000-8000-000000000002';
   const component = 'https://rezics.com/id/00000000-0000-4000-8000-000000000003';
-  const generation = 'urn:structure:generation:one';
+  const generation = 'https://rezics.com/id/00000000-0000-4000-8000-000000000004';
+  const revision = 'https://rezics.com/id/00000000-0000-4000-8000-000000000005';
   const calls: string[] = [];
   const env = { fuseki: { query: async (query: string) => {
     calls.push(query);
     if (query.includes('SELECT ?component ?profile')) return { results: { bindings: [{
       component: { value: component }, profile: { value: 'https://rezics.com/vocab/RecipeComposition' },
-      head: { value: 'urn:structure:revision:one' }, generation: { value: generation },
+      head: { value: revision }, generation: { value: generation },
       count: { value: '2' }, manifest: { value: `urn:rezics:sha256:${'c'.repeat(64)}` },
     }] } };
     return { results: { bindings: [{ owner: { value: owner } }] } };
   } } } as unknown as WorkActivationEnvironment;
 
   const header = await readCompositionHeader(env, structure);
-  expect(header).toMatchObject({ owner, component, generation, profile: 'recipe-composition' });
+  expect(header).toMatchObject({ owner, component, generation, head: revision, profile: 'recipe-composition' });
   expect(calls[0]).toMatch(/GRAPH <[^>]+> \{ \?head a rv:StructureRevision ;\s*rv:component <[^>]+> ; rv:generation \?generation ; rv:manifest \?manifest/);
   expect(header?.manifest).toBe(`urn:rezics:sha256:${'c'.repeat(64)}`);
 
