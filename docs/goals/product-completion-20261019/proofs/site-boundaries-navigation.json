@@ -1,0 +1,520 @@
+{
+  "goal": "product-completion-20261019",
+  "worker": "G-2825",
+  "status": "partial-verification; no audit closure",
+  "scope": [
+    "D3-002",
+    "AUD-006",
+    "AUD-012",
+    "D4-002"
+  ],
+  "source": {
+    "wave": "wave/audit-20261019",
+    "sha": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+    "pin": "One detached git clone at the wave revision resolved at start; never repinned.",
+    "directory": ".temp/site-boundaries-navigation/source",
+    "productDiff": "empty throughout verification",
+    "repairReference": "G-2747 handoff attempt-7, commit ab100b34706bbecd361239d3cfb6529e31b3f32f; handoff explicitly leaves AUD-006 cause unresolved.",
+    "inputs": [
+      ".temp/ref/shell-findings.json",
+      "docs/goals/audit-remediation-20261019/execution-reset.md",
+      "apps/web/features/shell/boundary-navigation-verification.md (pinned clone)",
+      "/home/edge/projects/rezics/rezics-next/.temp/goal-orchestration/runs/G-2747/attempt-7.last.md (read-only)"
+    ],
+    "procedures": [
+      "goal-worker",
+      "local-development/local-stack",
+      "local-development/local-web-auth",
+      "local-development/launch-accessibility",
+      "storybook-ui-review"
+    ]
+  },
+  "execution": {
+    "cwd": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2825",
+    "recordedJobs": [
+      {
+        "id": "f5c7dd06-a5b6-4a17-bc76-7d1d5f58b68e",
+        "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun --cwd .temp/site-boundaries-navigation/source scripts/goal/goalctl.ts test apps/web/tests/server-client-boundary.test.ts apps/web/features/proposals/list-state.test.ts apps/web/features/shell/providers.test.tsx apps/web/features/shell/bottom-nav.test.tsx apps/web/features/shell/current-page-visibility.test.ts apps/web/features/shell/bottom-nav.stories.tsx apps/web/features/shell/current-page-visibility.stories.tsx",
+        "exit": 1,
+        "result": "25 unit tests passed, 480 assertions across five files, including the existing server-client-boundary regression. Storybook setup then failed before story assertions: dependency reuse resolved its setup module outside the isolated clone.",
+        "log": ".temp/goal/jobs/f5c7dd06-a5b6-4a17-bc76-7d1d5f58b68e.log",
+        "qaRun": "20261019t042037-52b249",
+        "qaSummary": ".temp/site-boundaries-navigation/source/.artifacts/qa/20261019t042037-52b249/summary.md"
+      },
+      {
+        "id": "2c166306-fe06-49f5-ab49-f014fa081c8a",
+        "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --dir .temp/site-boundaries-navigation/source install -- --immutable",
+        "exit": 0,
+        "result": "Initial immutable install completed; external dependency links remained unsuitable for isolated Storybook.",
+        "log": ".temp/goal/jobs/2c166306-fe06-49f5-ab49-f014fa081c8a.log"
+      },
+      {
+        "id": "40fe29d0-013d-4aa7-a0f7-7ebfc3a52549",
+        "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --dir .temp/site-boundaries-navigation/source install -- --immutable",
+        "exit": 0,
+        "result": "Immutable Yarn install after removing only the isolated clone node_modules. Dependencies and workspace links now belong to the clone; no source edits.",
+        "log": ".temp/goal/jobs/40fe29d0-013d-4aa7-a0f7-7ebfc3a52549.log"
+      },
+      {
+        "id": "32237c54-b7f8-4775-8871-4377fd5ecc09",
+        "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun --cwd .temp/site-boundaries-navigation/source scripts/goal/goalctl.ts test apps/web/features/shell/bottom-nav.stories.tsx apps/web/features/shell/current-page-visibility.stories.tsx",
+        "exit": 0,
+        "result": "15 stories passed across both files, including repository light/dark accessibility sweeps at phone/desktop widths. Warning retained: @storybook/react-dom-shim could not be resolved from optimizeDeps.include; Vite native-config warnings also retained.",
+        "log": ".temp/goal/jobs/32237c54-b7f8-4775-8871-4377fd5ecc09.log",
+        "qaRun": "20261019t042426-81f383",
+        "qaSummary": ".temp/site-boundaries-navigation/source/.artifacts/qa/20261019t042426-81f383/summary.md"
+      },
+      {
+        "id": "f4a8fdd9-d5eb-4400-9584-6c6de913b133",
+        "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --dir .temp/site-boundaries-navigation dev:start",
+        "exit": 0,
+        "result": "Launcher returned after starting task web:dev -- --port 43125. The server subsequently failed during RSC dependency optimization; launcher exit 0 is not product readiness.",
+        "log": ".temp/goal/jobs/f4a8fdd9-d5eb-4400-9584-6c6de913b133.log"
+      },
+      {
+        "id": "dcf5cb3c-ba06-4457-8a2d-3c089d1335b1",
+        "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --dir .temp/site-boundaries-navigation observe:dev",
+        "exit": 201,
+        "result": "Harness/setup failure: frontend connection refused, including OAuth start. No product assertion reached. Secondary axe.run invalid-arguments error occurred because navigation was absent; not a product accessibility failure.",
+        "log": ".temp/goal/jobs/dcf5cb3c-ba06-4457-8a2d-3c089d1335b1.log"
+      },
+      {
+        "id": "2c77a5e8-6c23-4236-8bb4-c982b64344be",
+        "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --dir .temp/site-boundaries-navigation prod:build",
+        "exit": 201,
+        "result": "Admitted task web:build failed in RSC compilation: features/address/edge.ts:3 imports renderToReadableStream from react-dom/server.browser, resolved to react-dom/server.react-server.js with no such export. Production frontend was not launched.",
+        "log": ".temp/goal/jobs/2c77a5e8-6c23-4236-8bb4-c982b64344be.log"
+      },
+      {
+        "id": "eee23715-bdd3-4180-a020-c61f91d6e838",
+        "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --dir .temp/site-boundaries-navigation run:stories",
+        "exit": 201,
+        "result": "32 mobile samples captured, then capture-helper selector failed before navigation assertions. Retained in stories-browser-first; only temporary helper corrected.",
+        "log": ".temp/goal/jobs/eee23715-bdd3-4180-a020-c61f91d6e838.log"
+      },
+      {
+        "id": "94a40242-53b6-423c-bbd8-e087ffad3923",
+        "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --dir .temp/site-boundaries-navigation run:stories",
+        "exit": 201,
+        "result": "Harness startup socket bind failed in TIME_WAIT, with no listening owned server. No product assertion reached. Added SO_REUSEADDR only to temporary launcher.",
+        "log": ".temp/goal/jobs/94a40242-53b6-423c-bbd8-e087ffad3923.log"
+      },
+      {
+        "id": "70cb71c9-586b-4e9a-9edd-775bc9aca01e",
+        "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --dir .temp/site-boundaries-navigation run:stories",
+        "exit": 0,
+        "result": "Actual isolated Storybook Chromium observations completed: 32 mobile samples, 24 selected/focus rectangle samples and six all-seven-link focus samples. Capture errors empty. No product source or test assertions changed.",
+        "log": ".temp/goal/jobs/70cb71c9-586b-4e9a-9edd-775bc9aca01e.log"
+      }
+    ],
+    "admission": "Tests used pinned bun scripts/goal/goalctl.ts test. Custom Task browser/build commands used pinned goalctl.ts slot. Storybook used repository loopbackChromiumLaunch and installed Playwright, real index.json and /mcp discovery; no guessed story IDs.",
+    "temporaryTaskfile": ".temp/site-boundaries-navigation/Taskfile.yml",
+    "browserCapture": ".temp/site-boundaries-navigation/stories.ts",
+    "serverLifecycle": ".temp/site-boundaries-navigation/run.py",
+    "appOrigin": "http://127.0.0.1:43125",
+    "backend": "Existing http://127.0.0.1:3001 Main and :3002 Account configured read-only; public OAuth client configuration read from existing stack. No reset, refresh, seed, grant, import or shared frontend use.",
+    "oauthPrerequisite": "Actual callback compatibility and supported existing-account sign-in were not established: the isolated frontend died before /auth/start. Storybook sign-in controls are synthetic component fixtures, not authenticated app fixtures.",
+    "shutdown": "Owned Storybook process group SIGTERM recorded in stories-shutdown.json; dev process had exited at startup; no production server launched; port 43125 has no listener.",
+    "finalChecks": {
+      "recordedSequence": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "job": "6935f7ff-0a0f-4a0b-8c48-0cbe83c72cf5",
+      "jsonValidation": {
+        "command": "python -m json.tool docs/goals/product-completion-20261019/proofs/site-boundaries-navigation.json > /dev/null",
+        "result": "passed"
+      },
+      "docsCheck": {
+        "result": "passed",
+        "exit": 0,
+        "log": ".temp/goal/jobs/6935f7ff-0a0f-4a0b-8c48-0cbe83c72cf5.1.log",
+        "detail": "13 documentation checker tests; 230 Markdown files checked. JSON syntax validated separately."
+      },
+      "goalCheck": {
+        "result": "passed",
+        "exit": 0,
+        "log": ".temp/goal/jobs/6935f7ff-0a0f-4a0b-8c48-0cbe83c72cf5.2.log",
+        "detail": "AST and selected guard passed (1/44 guards selected for proof-only path). Types/lint skipped: no source change. Brief named no tests, so no additional test files ran.",
+        "output": ".temp/goal/check/run-xGIWsY/output.log"
+      }
+    }
+  },
+  "findings": {
+    "D3-002": {
+      "result": "regression tests verified; actual app acceptance unexecuted",
+      "reached": [
+        "Existing server-client-boundary and proposal list-state regressions passed in the 25-test unit selection."
+      ],
+      "notReached": [
+        "No Proposals page body, HTTP/server rendering, client fallback, pageerror or shadow-DOM development-overlay acceptance reached.",
+        "No accepted anonymous or actual signed-in default/mine/review-requested/unknown fallback sample in either build."
+      ],
+      "requiredMatrix": {
+        "views": [
+          "default",
+          "mine",
+          "review-requested",
+          "unknown fallback"
+        ],
+        "identities": [
+          "anonymous",
+          "existing signed-in fixture"
+        ],
+        "locales": [
+          "en",
+          "zh-Hans"
+        ],
+        "widths": [
+          1440,
+          390
+        ],
+        "themes": [
+          "light",
+          "dark"
+        ],
+        "builds": [
+          "development",
+          "production"
+        ],
+        "combinations": 128
+      },
+      "attemptEvidence": ".temp/site-boundaries-navigation/dev-browser-startup-failure/result.json",
+      "interpretation": "Connection refusal and global RSC startup/build errors cannot confirm or clear the original parseListView/listHref boundary defect. HTTP 200 alone was never used as acceptance."
+    },
+    "AUD-006": {
+      "result": "Providers unit regression verified; runtime acceptance unexecuted",
+      "reached": [
+        "Existing Providers test passed in the unit selection."
+      ],
+      "notReached": [
+        "Home → Discover → search → back repetitions at phone/desktop in development and production.",
+        "No actual SSR HTML/hydration, useState hook error, client-render fallback or development-overlay assertion."
+      ],
+      "interpretation": "The existing intermittent Providers failure remains unresolved; the earlier handoff and a passing unit test do not establish runtime repair. No overlay/error suppression was applied."
+    },
+    "AUD-012": {
+      "result": "actual component label/name/unread comparisons verified; app and assistive-technology acceptance incomplete",
+      "surface": "Real Storybook PhoneNavigation, 390×844; eight locales × light/dark × anonymous/signed-in-overflow component states = 32 samples.",
+      "reached": [
+        "160/160 actual visible link captions occur in captured accessible-name snapshots; aria-label overrides absent.",
+        "0/160 captions clipped; document scrollWidth 390 for every sample.",
+        "All eight signed-in overflow names retain localized 99+ unread semantics; anonymous state has no unread suffix.",
+        "Existing story play checks for signed-out/signed-in, unread 0, 3 and 120/99+ passed."
+      ],
+      "locales": [
+        {
+          "locale": "en",
+          "visibleLabels": [
+            "Home",
+            "Discover",
+            "Create",
+            "Alerts",
+            "Library"
+          ],
+          "alertsAccessibleNameWithUnread": "Alerts · 99+ unread"
+        },
+        {
+          "locale": "zh-Hant",
+          "visibleLabels": [
+            "首頁",
+            "探索",
+            "創作",
+            "通知",
+            "書架"
+          ],
+          "alertsAccessibleNameWithUnread": "通知 · 99+ 則未讀"
+        },
+        {
+          "locale": "zh-Hans",
+          "visibleLabels": [
+            "首页",
+            "探索",
+            "创作",
+            "通知",
+            "书架"
+          ],
+          "alertsAccessibleNameWithUnread": "通知 · 99+ 条未读"
+        },
+        {
+          "locale": "ja",
+          "visibleLabels": [
+            "ホーム",
+            "見つける",
+            "作る",
+            "通知",
+            "本棚"
+          ],
+          "alertsAccessibleNameWithUnread": "通知 · 未読99+件"
+        },
+        {
+          "locale": "ko",
+          "visibleLabels": [
+            "홈",
+            "둘러보기",
+            "만들기",
+            "알림",
+            "서재"
+          ],
+          "alertsAccessibleNameWithUnread": "알림 · 읽지 않음 99+개"
+        },
+        {
+          "locale": "de",
+          "visibleLabels": [
+            "Startseite",
+            "Entdecken",
+            "Erstellen",
+            "Meldungen",
+            "Bücher"
+          ],
+          "alertsAccessibleNameWithUnread": "Meldungen · 99+ ungelesen"
+        },
+        {
+          "locale": "fr",
+          "visibleLabels": [
+            "Accueil",
+            "Découvrir",
+            "Créer",
+            "Alertes",
+            "Livres"
+          ],
+          "alertsAccessibleNameWithUnread": "Alertes · 99+ non lues"
+        },
+        {
+          "locale": "es",
+          "visibleLabels": [
+            "Inicio",
+            "Explorar",
+            "Crear",
+            "Avisos",
+            "Libros"
+          ],
+          "alertsAccessibleNameWithUnread": "Avisos · 99+ sin leer"
+        }
+      ],
+      "axe": {
+        "command": "axe.run(actual nav, runOnly label-content-name-mismatch; rule explicitly enabled)",
+        "scans": 32,
+        "violations": 0,
+        "incomplete": 0,
+        "applicableNodes": 0,
+        "result": "Rule reported inapplicable after aria-label overrides were removed. This is not an applicable-node axe pass; browser accessible-name comparisons provide the separate evidence."
+      },
+      "notReached": [
+        "Actual application anonymous/authenticated pages and cross-page Library/Settings/Following comparisons.",
+        "Continue-reading card descriptions and status semantics in the real application.",
+        "Actual voice control or screen-reader use: unavailable in this headless Chromium environment; automation does not satisfy this remaining acceptance."
+      ],
+      "events": "No captured pageerrors in the successful run. Console resource 404 errors retained in result.json without URL attribution; console cleanliness is not claimed."
+    },
+    "D4-002": {
+      "result": "component selected-label visibility verified; focus-ring clipping concern retained; actual route/history acceptance unexecuted",
+      "surface": "Actual DiscoverView in current-page-visibility stories at 390×844 and 1440×1000.",
+      "reached": [
+        "Topics/Lists/People selected links fully within the horizontal row in 24/24 measured component states.",
+        "Selected links focusable; their selected/focus DOM rectangles captured.",
+        "All seven All/Works/Communities/Sites/People/Lists/Topics links received focus in six component samples; hrefs retained."
+      ],
+      "transitionsMeasured": [
+        "initial-after-story-play",
+        "remount",
+        "fixture-filter-change",
+        "synthetic-pageshow"
+      ],
+      "transitionLimits": "Initial capture is after the existing story play (which already changes fixture filter/remounts and focuses links). Synthetic pageshow dispatch and fixture remount are not real direct-entry, reload, back/forward or route-filter navigation.",
+      "rectangleUnits": "CSS px; arrays are left,top,right,bottom in viewport coordinates. Selected/focus rectangles coincide in these initial captures; full 24-sample computed styles/rectangles are retained in result.json.",
+      "initialMeasurements": [
+        {
+          "label": "Topics",
+          "viewportWidth": 390,
+          "rowLTRB": [
+            16,
+            202,
+            374,
+            242
+          ],
+          "selectedAndFocusLTRB": [
+            301,
+            202,
+            374,
+            238
+          ],
+          "scrollLeft": 177,
+          "fullLabelVisible": true,
+          "activeAndFocusVisible": true
+        },
+        {
+          "label": "Topics",
+          "viewportWidth": 1440,
+          "rowLTRB": [
+            184,
+            222,
+            1256,
+            262
+          ],
+          "selectedAndFocusLTRB": [
+            646,
+            222,
+            719,
+            258
+          ],
+          "scrollLeft": 0,
+          "fullLabelVisible": true,
+          "activeAndFocusVisible": true
+        },
+        {
+          "label": "Lists",
+          "viewportWidth": 390,
+          "rowLTRB": [
+            16,
+            202,
+            374,
+            242
+          ],
+          "selectedAndFocusLTRB": [
+            235,
+            202,
+            297,
+            238
+          ],
+          "scrollLeft": 177,
+          "fullLabelVisible": true,
+          "activeAndFocusVisible": true
+        },
+        {
+          "label": "Lists",
+          "viewportWidth": 1440,
+          "rowLTRB": [
+            184,
+            222,
+            1256,
+            262
+          ],
+          "selectedAndFocusLTRB": [
+            580,
+            222,
+            642,
+            258
+          ],
+          "scrollLeft": 0,
+          "fullLabelVisible": true,
+          "activeAndFocusVisible": true
+        },
+        {
+          "label": "People",
+          "viewportWidth": 390,
+          "rowLTRB": [
+            16,
+            202,
+            374,
+            242
+          ],
+          "selectedAndFocusLTRB": [
+            155,
+            202,
+            231,
+            238
+          ],
+          "scrollLeft": 177,
+          "fullLabelVisible": true,
+          "activeAndFocusVisible": true
+        },
+        {
+          "label": "People",
+          "viewportWidth": 1440,
+          "rowLTRB": [
+            184,
+            222,
+            1256,
+            262
+          ],
+          "selectedAndFocusLTRB": [
+            500,
+            222,
+            576,
+            258
+          ],
+          "scrollLeft": 0,
+          "fullLabelVisible": true,
+          "activeAndFocusVisible": true
+        }
+      ],
+      "focusConcern": {
+        "status": "observed component concern, requires existing owner review",
+        "sample": "shell-current-page-visibility--topics, 390, initial-after-story-play",
+        "geometry": "Row x16–374; focused Topics x301–374 with a computed 2px blue outer box-shadow. Its right outer focus ring extends to x376 and is clipped at the scroll-row edge in the viewed PNG. Label and selection fill remain visible.",
+        "limits": "Helper outlineWithinRow uses a conservative 4px margin, not the actual 2px ring; its boolean is not an acceptance assertion. Later pointer-click states can have focusVisible=false. All-seven-link loop records focusability, not complete focus-ring visibility."
+      },
+      "notReached": [
+        "Real Discover direct entry, reload, browser back/forward and filter change at both widths.",
+        "Following all seven destinations and checking selected destination/content type agreement.",
+        "Studio, Site and Library navigation in the actual application: frontend startup blocked before these surfaces."
+      ]
+    }
+  },
+  "setupFailures": [
+    {
+      "phase": "development startup",
+      "message": "react-dom/server is not supported in React Server Components.",
+      "evidence": ".temp/site-boundaries-navigation/dev-server.log",
+      "detail": "RSC optimizer metadata resolves react-dom/server.browser to react-dom/server.react-server.js; frontend never became reachable for app acceptance."
+    },
+    {
+      "phase": "production build",
+      "message": "MISSING_EXPORT: renderToReadableStream is not exported by react-dom/server.react-server.js",
+      "location": "apps/web/features/address/edge.ts:3",
+      "evidence": ".temp/goal/jobs/2c77a5e8-6c23-4236-8bb4-c982b64344be.log",
+      "classification": "Pinned app build blocker; not a reproduced D3-002 or AUD-006 assertion."
+    },
+    {
+      "phase": "initial browser harness",
+      "message": "Connection refused at isolated /auth/start; axe invalid arguments with missing nav.",
+      "evidence": ".temp/site-boundaries-navigation/dev-browser-startup-failure",
+      "classification": "No authenticated fixture or app assertion reached."
+    }
+  ],
+  "retainedEvidence": {
+    "fullObservations": ".temp/site-boundaries-navigation/stories-browser/result.json",
+    "storyIndex": ".temp/site-boundaries-navigation/stories-browser/index.json",
+    "mcpDiscovery": ".temp/site-boundaries-navigation/stories-browser/mcp-tools-list.txt",
+    "failedCapture": ".temp/site-boundaries-navigation/stories-browser-first",
+    "imagesActuallyViewedWithViewImage": [
+      ".temp/site-boundaries-navigation/source/.artifacts/qa/20261019t042426-81f383/story-screenshots/apps-web-features-shell-bottom-nav.stories.tsx/German.png",
+      ".temp/site-boundaries-navigation/source/.artifacts/qa/20261019t042426-81f383/story-screenshots/apps-web-features-shell-current-page-visibility.stories.tsx/Topics.png",
+      ".temp/site-boundaries-navigation/stories-browser/shell-current-page-visibility--topics-390-initial-after-story-play.png",
+      ".temp/site-boundaries-navigation/stories-browser/shell-current-page-visibility--topics-1440-initial-after-story-play.png",
+      ".temp/site-boundaries-navigation/stories-browser/shell-current-page-visibility--lists-390-initial-after-story-play.png",
+      ".temp/site-boundaries-navigation/stories-browser/shell-current-page-visibility--lists-1440-initial-after-story-play.png",
+      ".temp/site-boundaries-navigation/stories-browser/shell-current-page-visibility--people-390-initial-after-story-play.png",
+      ".temp/site-boundaries-navigation/stories-browser/shell-current-page-visibility--people-1440-initial-after-story-play.png",
+      ".temp/site-boundaries-navigation/stories-browser/shell-phone-navigation--english-light-signed-in-overflow.png",
+      ".temp/site-boundaries-navigation/stories-browser/shell-phone-navigation--english-dark-anonymous.png",
+      ".temp/site-boundaries-navigation/stories-browser/shell-phone-navigation--traditional-chinese-light-signed-in-overflow.png",
+      ".temp/site-boundaries-navigation/stories-browser/shell-phone-navigation--traditional-chinese-dark-anonymous.png",
+      ".temp/site-boundaries-navigation/stories-browser/shell-phone-navigation--simplified-chinese-light-signed-in-overflow.png",
+      ".temp/site-boundaries-navigation/stories-browser/shell-phone-navigation--simplified-chinese-dark-anonymous.png",
+      ".temp/site-boundaries-navigation/stories-browser/shell-phone-navigation--japanese-light-signed-in-overflow.png",
+      ".temp/site-boundaries-navigation/stories-browser/shell-phone-navigation--japanese-dark-anonymous.png",
+      ".temp/site-boundaries-navigation/stories-browser/shell-phone-navigation--korean-light-signed-in-overflow.png",
+      ".temp/site-boundaries-navigation/stories-browser/shell-phone-navigation--korean-dark-anonymous.png",
+      ".temp/site-boundaries-navigation/stories-browser/shell-phone-navigation--german-light-signed-in-overflow.png",
+      ".temp/site-boundaries-navigation/stories-browser/shell-phone-navigation--german-dark-anonymous.png",
+      ".temp/site-boundaries-navigation/stories-browser/shell-phone-navigation--french-light-signed-in-overflow.png",
+      ".temp/site-boundaries-navigation/stories-browser/shell-phone-navigation--french-dark-anonymous.png",
+      ".temp/site-boundaries-navigation/stories-browser/shell-phone-navigation--spanish-light-signed-in-overflow.png",
+      ".temp/site-boundaries-navigation/stories-browser/shell-phone-navigation--spanish-dark-anonymous.png"
+    ],
+    "visualReview": "Viewed all eight locale light/signed-in-overflow and dark/anonymous PNGs, all six initial selected-navigation PNGs, and two QA story PNGs. Captions had no observed clipping/overlap. Mobile Topics focus-ring clipping retained. Other captured images were not visually inspected.",
+    "sha256": {
+      ".temp/site-boundaries-navigation/stories-browser/result.json": "07958ff17b2a437bac648c0718645d77d76d0260b8281eaa13ffa0d8d9a0e6ea",
+      ".temp/site-boundaries-navigation/dev-server.log": "00d4a30153fc2e3408ba151095a238d360618f3ae3c80944f9899ce471d25622",
+      ".temp/goal/jobs/2c77a5e8-6c23-4236-8bb4-c982b64344be.log": "c1fc4b1eb5c43b2a6f8684ed980cdbd68a8fae7662198008d6a76eebcc22fb9f"
+    }
+  },
+  "remainingAcceptanceAndExactNextChecks": [
+    "Manager routes features/address/edge.ts RSC startup/build evidence to the existing implementation owner. Repair outside this proof task; authorize a new isolated pin for another run rather than moving this pin.",
+    "On that new pin, use admitted Task web:dev/web:build and production serve; first establish readiness, correct OAuth callbacks for the isolated origin, and an existing supported signed-in fixture without shared writes. Do not wait for catalogue imports.",
+    "D3-002: execute all 128 declared combinations; retain response/SSR body, actual page state, pageerror/console/fallback and shadow-root overlay evidence. Run the existing server-client-boundary regression on the new source.",
+    "AUD-006: repeat Home → Discover → search → browser back at 390/1440 in both builds; retain SSR/hydration, hook/fallback and development overlay observations, including failures.",
+    "AUD-012: compare visible captions/accessibility names and unread semantics on real anonymous/signed-in pages in all eight locales, repeat the relevant axe check, inspect cards description/status semantics, then perform actual voice or screen-reader verification with an operator/device that supports it.",
+    "D4-002: existing navigation owner reviews the retained mobile Topics focus-ring clipping. Measure selected/focus rectangles on real direct entry, reload, back/forward and filter change at 390/1440; follow all seven destinations and check content agreement. Apply the same principle to reachable Studio/Site/Library."
+  ],
+  "ownership": "No production or test-assertion changes, shared writes, wave push, source-review chain, unrelated proof or audit closure. Product manager accepts this report and routes evidence to existing implementation owners; audit owns closure and wave integration."
+}
