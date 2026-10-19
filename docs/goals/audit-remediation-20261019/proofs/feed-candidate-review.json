@@ -1,4 +1,369 @@
 {
+  "d3ReaderAuthorityAccountsQualificationVerdict": {
+    "result": "partial-original-D3-001; single direct Accounts hydration premise passes, module body capture remains unqualified",
+    "summary": "One authorized fresh fixture-free Accounts3004 /sign-in journey reached the genuine ClientProviders hydration effect and actual visible/editable Email/Next form.254 actual requests returnedHTTP200 and completed under one loader/timeOrigin, no request failure/pageerror/HMR reload, credentials or writes. Original Feed callback was not run.",
+    "captureLimitation": "Post-run byte audit found252 Script/Stylesheet records with zero captured bytes despite nonzero transfer; their empty hashes are invalid served-module evidence. Only the80650-byte document capture is nonempty. Recorded test exit0/4expect proves its stated hydration/form assertions, not a complete module-body gate.",
+    "historicalClassification": "d2ede738 remains an actual unresolved historical Accounts hydration setup failure:42 ERR_NETWORK_CHANGED/noHTTP, zero Feed assertions. Its trace lacks loader/canceled/timeOrigin, so this new pass does not prove those failures were old-document cancellations or identify cache/proxy/optimizer/font/source causation.",
+    "productFinding": "No new Feed business failure or new source counterexample. No Accounts product repair identified or made.",
+    "classClosed": false,
+    "reportLanding": "Report-only ready after administrative checks. All earlier proof and failed attempts retained unchanged by value; no implementation changes.",
+    "next": "Root retains the qualified direct Accounts premise and routes the exact capture deficiency to the existing startup/capture owner. Before any separately authorized original Feed run, correct passive durable CDP response capture and qualify positive actual module bytes. Preserve compiled6cf output, five frozen callback regions, original assertions/timeouts, own fresh signInAtAccounts, compatible Main754 and actual Account/Agent distinction. Genuine NONNULL/ineligible saved Agent remains a separate G2775/root premise."
+  },
+  "d3ReaderAuthorityAccountsQualificationContinuation": {
+    "recordedAt": "2026-10-19T15:34:42.685099+00:00",
+    "authority": "Latest same-scope resume authorizes retained-log/source/process diagnosis and, if undecidable, one bounded fixture-free owned Accounts page qualification at existing3004. No original callback rerun, rebuild, new Accounts runtime/shared refresh, credentials, account fallback, corpus/authority writes or widened tier. This was the sole fresh browser qualification in this continuation.",
+    "reviewer": {
+      "worker": "G-2836",
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independent": true,
+      "candidateAuthor": false,
+      "fallback": false,
+      "nestedAgents": false
+    },
+    "preservedHistory": {
+      "previousReportCommit": "185e761bda2b0706174b919f594212d8c45db4ae",
+      "previousReportSnapshot": {
+        "path": ".temp/accounts-hydration-qualification/report-before-qualification.json",
+        "sha256": "6d070b27af45dbebfef9d0b348b6591d7c16ea99ca88abab2b0857a4a30a6ecf",
+        "bytes": 403894
+      },
+      "allPreviousFieldsUnchangedByValue": true,
+      "originalFailedJob": "d2ede738-0793-4fef-9aa1-eac9ac4f16e6",
+      "compiledBuildReceiptAndOutputUnchanged": true,
+      "completedProofNotRerun": [
+        "preview148",
+        "frozenRSC22",
+        "focus",
+        "unchanged adapters/stories/statics",
+        "accepted genuine anonymous control"
+      ],
+      "namedRootReceipt": "site-runtime-exact-failures-G2836-G2747-G2775-20261019T152158Z.json",
+      "namedRootReceiptAvailability": "Named file not located by bounded filename searches of own .temp and main .temp; exact facts supplied by manager compared with retained d2ede738 evidence."
+    },
+    "retainedDiagnosis": {
+      "sourceContract": "Actual Accounts root ClientProviders sets document.documentElement.dataset.hydrated in useEffect; SSR sign-in form visibility alone is insufficient. Sign-in page consumes actual SignInFlow/AuthFrame. No marker or DOM success was injected.",
+      "serverLog": "Existing accounts-jsjbawdk resource logs show virtual-entry import failure at2026-10-19T15:14:33.861Z. Retained full log has reoptimization at process startup06:18, no optimizer/HMR reload at the historical failure timestamp. This does not prove or exclude a transport cause.",
+      "priorFirstFailedRequest": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/app-browser-navigation-abort.js?v=76985142",
+      "priorInitiator": {
+        "url": "http://127.0.0.1:3004/@fs/home/edge/projects/rezics/rezics-next/node_modules/vinext/dist/server/app-browser-entry.js?v=76985142",
+        "lineNumberZeroBased": 36
+      },
+      "priorTransportAndBody": "42 Accounts net::ERR_NETWORK_CHANGED, noHTTP/status/body. Four separate Web HTTP200/requestfinished body-access failures after cross-origin navigation remain distinct. Historical Web120/120HTTP200,116 matching compiled body hashes; originalFeed0.",
+      "causation": "Retained old driver has no loader/navigation/timeOrigin/CDP canceled fields; insufficient to distinguish canceled old-document requests. New direct journey has no failing request to classify. No claim that unrelated G2747 coldWebSSR editor prebundle correction fixes Accounts.",
+      "readOnlyCommands": [
+        {
+          "command": "task aspire -- logs accounts --apphost /home/edge/projects/rezics/rezics-next/apphost/apphost.mts --tail 1000 --timestamps --format Json --non-interactive",
+          "exitCode": 0,
+          "output": ".temp/accounts-hydration-qualification/accounts-server-log.json"
+        },
+        {
+          "command": "task aspire -- logs accounts --apphost /home/edge/projects/rezics/rezics-next/apphost/apphost.mts --timestamps --format Json --non-interactive",
+          "exitCode": 0,
+          "output": ".temp/accounts-hydration-qualification/accounts-server-log-all.json"
+        },
+        {
+          "command": "task aspire -- describe accounts --apphost /home/edge/projects/rezics/rezics-next/apphost/apphost.mts --format Json --non-interactive",
+          "exitCode": 0,
+          "output": ".temp/accounts-hydration-qualification/accounts-resource.json"
+        }
+      ]
+    },
+    "sourceAndRuntime": {
+      "frontendRetained": {
+        "head": "6cf460b284cca8677a9b696f8f842fea9fac5321",
+        "tree": "b98454fc990705e15d704031471dabab13e2ba29",
+        "directory": ".temp/feed-authority-candidate",
+        "compiledGeneration": "g-2836-compiled-2026-10-19T15:11:55.063Z",
+        "compiledOutputManifest": {
+          "path": ".temp/feed-authority-evidence/compiled-output-manifest.json",
+          "sha256": "c3dc87a8b9342c0127b5cc1946fdc38dcf367a1526da27e5412184ad3c78f35e",
+          "bytes": 656685
+        },
+        "rebuilt": false,
+        "started": false
+      },
+      "backendRetained": {
+        "source": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "origin": "http://127.0.0.1:3001",
+        "qualification": "Existing compatible Web consumer runtime only; no Main requests in fixture-free qualification; no current-main native identity/privacy/Realm/rating claim."
+      },
+      "accountsProcess": {
+        "pid": 1374628,
+        "parentDcpPid": 1369803,
+        "cwd": "/home/edge/projects/rezics/rezics-next/apps/accounts",
+        "command": "vinext dev --host 127.0.0.1 --port16776",
+        "publicOrigin": "http://127.0.0.1:3004",
+        "createdAt": "2026-10-19T06:18:09.01+00:00"
+      },
+      "accountsProcessAfter": {
+        "pid": 1374628,
+        "cwd": "/home/edge/projects/rezics/rezics-next/apps/accounts",
+        "cmdline": "node /home/edge/projects/rezics/rezics-next/apps/accounts/../../node_modules/.bin/vinext dev --host 127.0.0.1 --port 16776 "
+      },
+      "sourcePinLimitation": "Observed current disk/source/support hashes, not a claim that old running process was built at current HEAD; actual served module hashes captured separately.",
+      "observedCurrentMainDiskHEAD": "97774d61fd2fb5e068b4d8351440305f0bde0601",
+      "sourceAndDependencyManifest": {
+        "path": ".temp/accounts-hydration-qualification/source-runtime-manifest.json",
+        "sha256": "bef44be2ae6ff6989bc86f3f7cfe72a851d76b1be478232ba66d6ed07a0ffef5",
+        "bytes": 3798
+      },
+      "runnerDependencies": {
+        "playwright": "1.63.0",
+        "vinext": "1.0.0-beta.13",
+        "bun": "1.4.3 (c6da4a4d3)",
+        "protocolSupport": "Network.configureDurableMessages stores response bodies outside renderer across process navigation; requestId getResponseBody available in installed playwright-core/types/protocol.d.ts. Proposed capture correction unexecuted."
+      },
+      "qualificationDriver": {
+        "path": ".temp/accounts-hydration-qualification.test.ts",
+        "sha256": "976ee04d6132df83ba6c0cfefebe3e0fc284bf6f8e8c1f5bb517a5cdec0f684c",
+        "bytes": 10944
+      },
+      "originalFeedDriver": {
+        "path": ".temp/feed-authority-live.test.ts",
+        "sha256": "9db43dcdf55f4bb4167791bb5c4b2a0e9538e0cc735b89e02f7999e07e0d0795",
+        "bytes": 25572
+      },
+      "frozenRegionVerification": {
+        "path": ".temp/accounts-hydration-qualification/frozen-callback-check.json",
+        "sha256": "001a9b8366b3b38b30f53a6eaea4ec8e5420c9b53ded8a35eceae930ef0b8ed8",
+        "bytes": 1423
+      },
+      "frozenRegions": [
+        {
+          "name": "observerForwardingAndFaults",
+          "sha256": "fa768fa886cb073bea0e53def9cf86e4adc219919a693e73a2a4ced50047ecfd",
+          "bytes": 3809,
+          "equal": true
+        },
+        {
+          "name": "browserFetchAuthorityCapture",
+          "sha256": "58c9f6652c7cc25b46cb61f92b4674f2c1e3ef740713432073d1c325bef906ad",
+          "bytes": 662,
+          "equal": true
+        },
+        {
+          "name": "sessionAndSelection",
+          "sha256": "e8463431155b6c6325238b9f1474f123b83c8c88b8f97ec57d6c39a27dd017e0",
+          "bytes": 981,
+          "equal": true
+        },
+        {
+          "name": "runCell",
+          "sha256": "a258ffc03ad48ca9ea02896c445b4775f23a93d4fa1313a8f7b05738c4f9ca26",
+          "bytes": 5016,
+          "equal": true
+        },
+        {
+          "name": "originalTestCallback",
+          "sha256": "84e734f8a763da977194916cbe5eb020124851b2a08f813af0507769a262fdf0",
+          "bytes": 2268,
+          "equal": true
+        },
+        {
+          "name": ".temp/feed-review-live-focus.test.ts",
+          "sha256": "3d92e6262c83f760c28620327b92fa5ed30bb9a9d2f31ab9cd36239ba1fe92ac",
+          "bytes": 6438,
+          "equal": true
+        },
+        {
+          "name": ".temp/feed-rsc-patch.test.ts",
+          "sha256": "0d2d4ad3b8674d36eba41221cd810c464bc0adc772b737eb77d2af6807a3b74d",
+          "bytes": 11809,
+          "equal": true
+        }
+      ],
+      "allOriginalCallbacksAndAnonymousControlsPreserved": true,
+      "originalDriverEdited": false,
+      "dependencyInstallOrUpgrade": false,
+      "sourceOrAssetRepair": false,
+      "networkOrProxyConfigurationChange": false,
+      "sharedLifecycleAction": false
+    },
+    "checks": {
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task goal -- test ./.temp/accounts-hydration-qualification.test.ts",
+      "jobId": "2f8748d5-63e0-4e54-bcfd-28c05d39c4f5",
+      "exitCode": 0,
+      "resultClass": "passed",
+      "log": {
+        "path": ".temp/goal/jobs/2f8748d5-63e0-4e54-bcfd-28c05d39c4f5.log",
+        "sha256": "961dd369855b067e503ee1b906a855dc0450ebdef54bdf9e76816816736ef176",
+        "bytes": 449
+      },
+      "test": "existing Accounts origin executes its actual hydration effect and real sign-in form in one fresh document journey",
+      "testsPassed": 1,
+      "testsFailed": 0,
+      "expectCalls": 4,
+      "bunRuntimeSeconds": 4.24,
+      "assertions": [
+        "one explicit navigation",
+        "zero non-read requests",
+        "actual ClientProviders hydration effect marker",
+        "Email visible/editable and Next visible"
+      ],
+      "scopeLimit": "Four premise assertions passed. Body capture is a separately failed evidence requirement, not a fifth asserted success. No original Feed outcome assertion reached, identity selection or authority proof executed.",
+      "postRunAudit": {
+        "path": ".temp/accounts-hydration-qualification/capture-audit.json",
+        "sha256": "ef7b6b32bfe50a6dcc5fc3e041dc5723a4c08b11ed2a40a745a05b00253bda2e",
+        "bytes": 3609
+      },
+      "completeModuleBodyGatePassed": false,
+      "frozenHashVerificationCommand": "python3 .temp/verify-feed-authority-callbacks.py",
+      "frozenHashVerificationExitCode": 0,
+      "notRun": "No second browser attempt, original Feed callback, completed preview/RSC/anonymous/story/static suite, G2747 runtime suite, native tier, fresh catalogue, full identity journey or build/install."
+    },
+    "observations": {
+      "startedAt": "2026-10-19T15:31:01.066Z",
+      "finishedAt": "2026-10-19T15:31:04.921Z",
+      "document": {
+        "explicitNavigations": 1,
+        "actualAccountsDocuments": 1,
+        "loaderIds": [
+          "76A6F0875CA8D9A46166439A5C91ECBA"
+        ],
+        "timeOrigin": 1792423861225.2,
+        "hydrated": true,
+        "form": {
+          "emailVisible": true,
+          "emailEditable": true,
+          "nextVisible": true
+        }
+      },
+      "network": {
+        "requests": 254,
+        "http200": 254,
+        "finished": 254,
+        "failed": 0,
+        "types": {
+          "Document": 1,
+          "Font": 1,
+          "Script": 251,
+          "Stylesheet": 1
+        },
+        "pageerrors": [],
+        "hmr": [
+          {
+            "timestamp": 102947.329653,
+            "at": "2026-10-19T15:31:02.881Z",
+            "type": "connected"
+          }
+        ],
+        "apiWrites": []
+      },
+      "bodyCapture": {
+        "requiredDocumentScriptStylesheetResponses": 253,
+        "validNonemptyBodyCount": 1,
+        "emptyBodyRecordsDespiteNonzeroTransfer": 252,
+        "encodedDataLengthSum": 22538144,
+        "complete": false,
+        "reason": "252 completed Script/Stylesheet responses recorded zero captured bytes and SHA256 of empty content. Passive CDP stream setup success was incorrectly treated as body completeness. Only the80650-byte document capture is nonempty. Do not accept empty module hashes as actual served-module pins."
+      },
+      "actualModuleEffect": "data-hydrated absent after navigation; present in final same document. Actual Email visible/editable, Next visible. The marker is produced by source useEffect; instrumentation observes only.",
+      "actualNavigation": "Exactly one explicit direct navigation to /sign-in. Initial about:blank document was left; one actual Accounts loader with same timeOrigin throughout DOMContentLoaded/load/final snapshot. No Accounts reload, beforeunload, second timeOrigin, HMR update/full-reload or canceled request in this attempt.",
+      "modulePinsLimitation": "All252 Script/Stylesheet body hashes from streaming implementation are empty SHA256 and MUST NOT be used as actual module pins. Their request/response/loadingFinished facts remain valid. Only nonempty document captured. No direct replay is substituted for a browser module body.",
+      "transportVsBusiness": "No controlled fault injected in this qualification and no genuine failure reproduced. No Feed/API authority/failure-classification assertion follows."
+    },
+    "screenshotsActuallyViewed": [
+      {
+        "path": ".temp/accounts-hydration-qualification/accounts-qualification.png",
+        "sha256": "66cede5444ca52bdab1c9aca0af670538a6ae59986ee1c58d4710d60d6c2b584",
+        "bytes": 508559,
+        "viewedWith": "view_image",
+        "viewport": [
+          1440,
+          1000
+        ],
+        "observation": "Real centered REZICS Account Sign in card, empty focused Email field, Create account, Next and English selector. No clipping at1440; qualification is hydration/form only. Data-hydrated is independently observed in runtime evidence, not inferred from screenshot."
+      }
+    ],
+    "acceptanceTierMapping": {
+      "originalD3001Verbatim": [
+        "同一登录账户在未选 Agent、Agent 不合资格、acting-context 读取暂时不可用三种条件下，公开首屏、next/head 和恢复读取使用一致且明确的读者权限；不会发出“有认证、无 actingSubject”的请求。",
+        "公开列表至少连续两页并能恢复一次暂时失败，无 400、无漏项或重复；选择有效 Agent 后的个人 Feed 及匿名公开 Feed 同样覆盖。保留 Main 的认证配对校验，不能靠放宽安全契约通过。",
+        "内容真实变化/409 才显示“Feed changed”；认证、权限和服务不可用各有可解释且可恢复的状态。en/zh-Hans、1440/390、浅/深色均验收。"
+      ],
+      "criterion1": "Original signed-in unselected/eligible-control/unavailable callback still unexecuted. Direct fixture-free Accounts hydration is setup evidence only. Genuine nonnull saved Agent eligible=false remains distinct missing premise; null+eligible=false is unselected and cannot count.",
+      "criterion2": "No new first/second/head/recovery Feed reads, selection, generations, matched authority or signed-in no400/noomission/no-duplicate result. Accepted earlier genuine anonymous pages/recovery retained separately, unchanged.",
+      "criterion3": "No new401/403/409/service distinctions or signed-in locale/theme/viewport cells. Existing accepted actual controlled409 and its genuine200 limits retained; original callback would exercise503 only, if reached.",
+      "otherClasses": "Accepted D4-016 preview148 and AUD005/frozenRSC22/focus/source proof remain independently scoped. No new class closure or wider identity/native proof."
+    },
+    "executableNextCorrection": {
+      "owner": "G-2836 ignored startup/capture lifecycle through root; existing G-2747 runtime owner for any newly demonstrated runtime failure",
+      "scope": "Do not change frozen original callback, observers, authority, source, dependencies, timeouts or accounts/backend. Preserve compiled output.",
+      "procedure": [
+        "Enable passive CDP durable response-body storage before navigation with Network.configureDurableMessages and bounded maxTotalBufferSize/maxResourceBufferSize (supported installed protocol).",
+        "Register Network.loadingFinished before navigation and request Network.getResponseBody immediately by exact requestId; record loader/frame/initiator and decoded Network.dataReceived.dataLength. Drain pending body reads before closing context.",
+        "Require captured body length to agree with positive decoded payload length; never accept a successful stream setup or empty SHA as proof of a nonempty module response. Keep failures explicit.",
+        "Qualify only capture/readiness under a separately dispatched bounded recorded Task job before any original Feed callback run. No automatic retry is executed here."
+      ],
+      "notExecuted": true
+    },
+    "cleanup": {
+      "browserClosed": true,
+      "pendingBeforeClose": 0,
+      "pendingAfterClose": 0,
+      "sharedRuntimeStartedOrRestarted": false
+    },
+    "privateEvidence": {
+      "directory": ".temp/accounts-hydration-qualification",
+      "qualification": {
+        "path": ".temp/accounts-hydration-qualification/qualification.json",
+        "sha256": "d1a304b592953700386574448a8560b7dfd6784762c92851d4d5761222d08d22",
+        "bytes": 368579
+      },
+      "audit": {
+        "path": ".temp/accounts-hydration-qualification/capture-audit.json",
+        "sha256": "ef7b6b32bfe50a6dcc5fc3e041dc5723a4c08b11ed2a40a745a05b00253bda2e",
+        "bytes": 3609
+      },
+      "serverLog": {
+        "path": ".temp/accounts-hydration-qualification/accounts-server-log-all.json",
+        "sha256": "2ae0c14a788480f9ae3a67163df7739cde37c4cb96dc3c52bc709d2dbcd97046",
+        "bytes": 264676
+      },
+      "serverLogSafeMatches": {
+        "path": ".temp/accounts-hydration-qualification/retained-log-matches-safe.json",
+        "sha256": "dcd96139ba72ae82a2e9a14e733cc192a97f5d5c0a039eb692a724f7a6f78599",
+        "bytes": 1605
+      },
+      "resource": {
+        "path": ".temp/accounts-hydration-qualification/accounts-resource.json",
+        "sha256": "c21a9f5013a376f8bed8bfb3c5237eb4b510ebe14b168cd941258bccf72e48ab",
+        "bytes": 1887
+      },
+      "privacy": "All raw logs, captures and driver retained privately under.temp; only cumulative report published. No credentials read or entered. No peer profile/cookie access."
+    },
+    "instructionEffects": {
+      "reasonForStopping": "Manager explicitly authorizes one bounded fixture-free Accounts qualification, not a repeat of original Feed callback. Sole qualification finished; report capture deficiency and minimal correction promptly. This is an explicit scope limit, not a speculative approval rule.",
+      "workerProtocol": "docs/goals/worker.md: \"a failure in a test's setup is diagnosed before any full gate reruns.\" Applied to keep original callback frozen and report exact reached premise. No product finding inferred from setup."
+    },
+    "administrativeReportChecks": {
+      "recordedJob": "6fba1ae3-81fc-426b-9db3-cd418b72aee7",
+      "steps": [
+        {
+          "command": "task docs:check",
+          "exitCode": 0,
+          "log": ".temp/goal/jobs/6fba1ae3-81fc-426b-9db3-cd418b72aee7.1.log",
+          "result": "13tests pass;250Markdown files, local links/fragments and design navigation pass."
+        },
+        {
+          "command": "task goal -- check",
+          "exitCode": 0,
+          "runId": "run-uMwSx1",
+          "log": ".temp/goal/jobs/6fba1ae3-81fc-426b-9db3-cd418b72aee7.2.log",
+          "result": "AST and1selected repository guard pass. Types/lint skipped for report-only change; brief names no test files. No product check or browser tier rerun."
+        }
+      ]
+    },
+    "ownerChanges": [],
+    "productChanges": [],
+    "proposedTasks": [
+      "Existing startup/capture owner through root: apply and verify the minimal passive durable CDP capture lifecycle correction; do not accept empty module hashes or rerun Feed blindly.",
+      "Existing G2775/identity-fixture owner through root: supply lawful genuine NONNULL saved ineligible Agent receipt/state; do not mutate shared eligibility or relabel unselected."
+    ],
+    "next": "Report-only handoff. Root decides separately bounded setup qualification and eventual unchanged original Feed callback dispatch after evidence capture is valid. Preserve all historical failures and independently completed classes."
+  },
   "d3ReaderAuthorityCompiledVerdict": {
     "result": "partial-original-d3-001-compiled-Web-reaches-Accounts; Accounts-hydration-setup-blocked",
     "summary": "Supported local compiled Worker build passed at exact frontend6cf460b2. Owned Web served compiled chunks from dist/client, executed real auth/start redirect, and reached actual Accounts3004 /sign-in. Accounts failed42 actual module requests net::ERR_NETWORK_CHANGED/no HTTP, so its hydration marker never appeared. Frozen Feed callback and every original Feed outcome remain unexecuted. Screenshot shows the real sign-in form, not successful hydration.",
