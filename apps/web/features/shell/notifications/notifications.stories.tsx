@@ -232,7 +232,22 @@ function invitationArgs(): Args {
   };
 }
 
-export const InvitationNotificationPending: Story = { args: invitationArgs() };
+export const InvitationNotificationPending: Story = {
+  args: invitationArgs(),
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('button', { name: 'Join' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Decline' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Actions' })).toHaveAttribute('aria-expanded', 'false');
+    await expect(args.calls).toEqual([]);
+  },
+};
+export const InvitationNotificationPhone: Story = {
+  args: invitationArgs(), globals: { viewport: { value: 'phone' } }, play: InvitationNotificationPending.play,
+};
+export const InvitationNotificationPhoneDark: Story = {
+  args: invitationArgs(), globals: { viewport: { value: 'phone' }, theme: 'dark' }, play: InvitationNotificationPending.play,
+};
 
 /** The notification itself can answer the invitation and then reads it. */
 export const InvitationNotification: Story = {
@@ -644,6 +659,12 @@ export const TriageErrorDark: Story = {
   args: triageErrorArgs(),
   globals: { theme: 'dark' },
   play: TriageError.play,
+};
+export const TriageErrorPhone: Story = {
+  args: triageErrorArgs(), globals: { viewport: { value: 'phone' } }, play: TriageError.play,
+};
+export const TriageErrorPhoneDark: Story = {
+  args: triageErrorArgs(), globals: { viewport: { value: 'phone' }, theme: 'dark' }, play: TriageError.play,
 };
 
 export const FailedDark: Story = { ...Failed, globals: { theme: 'dark' } };
