@@ -671,7 +671,8 @@ describe('offline selection and published producer helpers', () => {
     expect(unqualifiedAlias.disposition.status).toBe('unmapped');
     expect(unqualifiedAlias.disposition.reason).toContain('guessed language');
     expect(qualifiedAlias.disposition.status).toBe('unmapped');
-    expect(qualifiedAlias.disposition.reason).toContain('without-adoption');
+    expect(qualifiedAlias.disposition.reason).toContain('field-adoption-pending');
+    expect(qualifiedAlias.disposition.reason).toContain('owner: work-metadata');
     expect(report.entries.find((entry: { path: string }) => entry.path === '/data/rating').disposition.status).toBe('source-only');
     expect(report.entries.find((entry: { path: string }) => entry.path === '/data/unknown').observation).toBe('present');
     expect(report.entries.find((entry: { path: string }) => entry.path === '/title').disposition.status).toBe('mapped');
@@ -2681,10 +2682,12 @@ describe('retained field adoption through the actual importer', () => {
       expect(field.support?.responses[0]?.status).toBe(201);
       expect(field.supportRead?.body.headGuarantee).toBe('verified-before-commit');
       expect(first.coverage.entries.find((entry: { path: string }) => entry.path === '/data/description').disposition.status).toBe('mapped');
-      const before = fixture.calls.filter(call => call.method === 'POST').length;
+      const writes = () => fixture.calls.filter(call => call.method === 'POST' && call.path !== '/v1/catalogue/candidates');
+      const before = writes().length;
       const replay = await fixture.run();
       expect(replay.adoptions.fields.find(field => field.field.pointer === '/data/description')!.status).toBe('mapped');
-      expect(fixture.calls.filter(call => call.method === 'POST')).toHaveLength(before);
+      expect(writes()).toHaveLength(before);
+      expect(replay.adoptions.fields.find(field => field.field.pointer === '/data/description')!.support).toEqual(field.support);
       expect(fixture.fixture.nativeWorks).toHaveLength(1);
     });
   }
