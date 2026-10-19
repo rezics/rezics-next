@@ -15,6 +15,26 @@ const compile = (definition: TypeRegistryDefinition = typesV1) =>
   compileTypes(definition, workKindV2Profile, workTypeV2Profile);
 const rv = (name: string) => `https://rezics.com/vocab/${name}`;
 
+test('supporting catalogue types describe resources without adding structural or Work authority', () => {
+  const entries = compile();
+  for (const type of [
+    'https://schema.org/Person',
+    'https://schema.org/Organization',
+    'https://schema.org/DefinedTerm',
+    'https://schema.org/PublicationEvent',
+    rv('SourceDatasetEpisode'),
+  ]) {
+    const entry = entries.find((candidate) => candidate.type === type);
+    expect(entry).toBeDefined();
+    expect(entry).toMatchObject({ base: 'resource', default: false, creatable: false, interest: null });
+    expect(entry).not.toHaveProperty('browse');
+    expect(entry).not.toHaveProperty('frameDimension');
+  }
+  expect(Object.fromEntries(entries.filter((entry) => entry.default).map((entry) => [entry.base, entry.type])))
+    .toEqual({ resource: 'http://www.w3.org/2000/01/rdf-schema#Resource', work: 'https://schema.org/CreativeWork',
+      record: rv('Record'), projection: rv('Projection') });
+});
+
 test('frame dimensions are declared by exactly the descriptive types that can be a frame', () => {
   const dimensions = Object.fromEntries(
     compile()
