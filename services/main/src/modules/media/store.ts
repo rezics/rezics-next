@@ -1102,6 +1102,47 @@ export class MediaStore {
       row.original_representation_id, provenance);
   }
 
+  /** Read the Use, its command and current selection at the Media owner. This
+   * supplies evidence only; Access resolves the actual terminal receipt. */
+  async readImportedCoverUse(useId: string): Promise<{
+    use: string; target: string; context: string; selection: string; currentHead: string;
+    variant: string; assetRevision: string; asset: string; actor: string; operationId: string;
+    requestDigest: string; dataEpoch: string; sequence: string; objectNamespace: string;
+    original: { id: string; sha256: string; byteLength: number }; provenance: ImportedCoverProvenance;
+  } | null> {
+    if (!uuid.test(useId)) throw new MediaInvalid('invalid imported Use');
+    const row = (await this.pool.query(`SELECT u.id,u.target,u.context,u.asset_variant_id,u.asset_revision_id,
+      u.asset_id,u.actor,u.operation_id,r.request_digest,r.data_epoch,r.sequence::text,
+      selection.id AS selection,slot.head AS current_head,a.object_namespace,
+      p.id AS representation,p.byte_digest,p.byte_length,revision.body
+      FROM media.use u JOIN media.selection_revision selection ON selection.use_id=u.id
+        AND selection.operation_id=u.operation_id AND selection.target=u.target
+        AND selection.context=u.context AND selection.role=u.role
+      JOIN media.selection_slot slot ON slot.target=u.target AND slot.context=u.context AND slot.role=u.role
+      JOIN content.receipt r ON r.operation_id=u.operation_id AND r.outcome='succeeded'
+        AND r.action='media.selection.change' AND r.sequence IS NOT NULL
+      JOIN media.asset a ON a.id=u.asset_id AND a.variant_id=u.asset_variant_id
+      JOIN media.asset_state state ON state.id=a.state_head AND state.lifecycle='active' AND state.moderation='none'
+      JOIN content.variant variant ON variant.id=u.asset_variant_id AND variant.resource_id=$2 || a.id::text
+      JOIN content.revision revision ON revision.id=u.asset_revision_id AND revision.variant_id=u.asset_variant_id
+        AND revision.availability='available'
+      JOIN media.representation p ON p.id=u.representation_id AND p.asset_id=a.id
+        AND p.kind='original' AND p.availability='available'
+      WHERE u.id=$1 AND u.role='avatar' AND a.cover_only LIMIT 2`, [useId, ID])).rows;
+    if (row.length !== 1) return null;
+    const item = row[0]!;
+    const projection = await this.readImportedCoverRevision(item.asset_revision_id);
+    if (!projection || projection.originalRepresentation !== item.representation) return null;
+    const provenance = manifestProvenance(item.body);
+    if (!provenance || provenance.targetWork !== item.target) return null;
+    return { use: assetIri(item.id), target: item.target, context: item.context,
+      selection: assetIri(item.selection), currentHead: assetIri(item.current_head), variant: item.asset_variant_id,
+      assetRevision: assetIri(item.asset_revision_id), asset: item.asset_id, actor: item.actor,
+      operationId: item.operation_id, requestDigest: item.request_digest, dataEpoch: item.data_epoch,
+      sequence: item.sequence, objectNamespace: item.object_namespace,
+      original: { id: item.representation, sha256: item.byte_digest, byteLength: Number(item.byte_length) }, provenance };
+  }
+
   /** Whether an imported-cover provenance for these bytes is currently suppressed. */
   async hasSuppressedImportedCover(provenance: ImportedCoverProvenance): Promise<boolean> {
     const sourceRecord = provenance.source.record.startsWith(ID)
