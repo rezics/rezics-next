@@ -11,6 +11,7 @@ import {
   checkRatingAggregateFence,
   STANDING_RATING_INVENTORY_SQL,
   STANDING_RATING_FENCE_SQL,
+  RATING_INVENTORY_SQL,
 } from '../../../services/main/src/modules/rating/aggregate-inventory.ts';
 import { fenceStandingRatingTransition, refreshStandingRatingProjections } from '../../../services/main/src/modules/rating/standing-publication.ts';
 import { itemCommandKey } from '../../../services/main/src/modules/identity-merge/contract.ts';
@@ -24,6 +25,7 @@ interface NativePlan {
   'Query Text'?: string;
 }
 interface PlanNode {
+  'Node Type'?: string;
   'Relation Name'?: string;
   'Actual Rows'?: number;
   'Actual Loops'?: number;
@@ -39,6 +41,9 @@ const planNodes = (node: PlanNode): PlanNode[] => [node, ...(node.Plans ?? []).f
 test('standing components retain exact effective slots through 100/101/large, merge changes and bounded legacy reconstruction', async () => {
   const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access'], 'privileged');
   const pool = new Pool({ connectionString: databases.urls.access, options: '-c role=access' });
+  // LOAD/configure instrumentation on a privileged session, then execute the
+  // measured SQL as Access. Normal fixture sessions retain the Access role.
+  const metricsPool = new Pool({ connectionString: databases.urls.access, max: 1 });
   const context = id(), work = id(), main = id(), originWork = id(), originMain = id(), legacyMain = id(), actor = id();
   const people = Array.from({ length: 2048 }, () => randomUUID()).sort();
   const scope = `rating:observe:${context}`;
@@ -109,7 +114,7 @@ test('standing components retain exact effective slots through 100/101/large, me
     const currentTargets = [{main:id(),work:id()},{main:id(),work:id()}].sort((a,b) => a.main.localeCompare(b.main));
     const workMeasurements: Record<string,unknown>[] = [];
     const measure = async (sql: string, parameters: unknown[]) => {
-      const client = await pool.connect(), plans: NativePlan[] = [];
+      const client = await metricsPool.connect(), plans: NativePlan[] = [];
       const capture = (notice: { message?: string }) => {
         const message = notice.message ?? '', start = message.indexOf('{');
         if (start >= 0) {
@@ -127,7 +132,8 @@ test('standing components retain exact effective slots through 100/101/large, me
         await client.query(sql,parameters);
         // A Function Scan's output count omits work inside the SQL function.
         // Include every nested plan under the same row-work measurement.
-        expect(plans.some(plan => planNodes(plan.Plan).some(node => node['Relation Name'] === 'rating_standing_component'))).toBe(true);
+        if (sql !== RATING_INVENTORY_SQL) expect(plans.some(plan => planNodes(plan.Plan)
+          .some(node => node['Relation Name'] === 'rating_standing_component'))).toBe(true);
         const examined = plans.flatMap(plan => planNodes(plan.Plan)).reduce((sum,node) => sum
           + ((node['Actual Rows'] ?? 0)+(node['Rows Removed by Filter'] ?? 0)+(node['Rows Removed by Join Filter'] ?? 0))
             * (node['Actual Loops'] ?? 0),0);
@@ -190,6 +196,25 @@ test('standing components retain exact effective slots through 100/101/large, me
       SELECT $2,$3,$4,x.principal::uuid,$5,x.slot,$6
       FROM jsonb_to_recordset($1::jsonb) x(principal text,slot text)`,
     [JSON.stringify(items), context, work, main, originMain, task]);
+    const masked = items.slice(64,96).map(item => ({ ...item, admission: randomUUID(), observation: id(), revision: id(),
+      slot: standingRatingSlotIri(item.principal,context,main) }));
+    await heads(masked,main,work);
+    await pool.query('ANALYZE access.rating_aggregate_head; ANALYZE access.rating_merge_selection');
+    const mixed = await measure(RATING_INVENTORY_SQL,[context,main]);
+    workMeasurements.push({ population:2048, mixed });
+    await Bun.write(`${import.meta.dir}/../../../.temp/goal/standing-native-work.json`,JSON.stringify(workMeasurements));
+    for (const node of mixed.plans.flatMap(plan => planNodes(plan.Plan))) {
+      if (!node['Actual Loops']) continue;
+      if (node['Node Type'] === 'Sort') expect(node['Actual Rows']).toBeLessThanOrEqual(202);
+      if (['rating_aggregate_head','rating_merge_selection'].includes(node['Relation Name'] ?? '')) {
+        expect(node['Node Type']).toMatch(/Index/);
+        expect(node['Actual Rows']).toBeLessThanOrEqual(101);
+        expect(node['Actual Loops']).toBeLessThanOrEqual(101);
+        expect(node['Rows Removed by Filter'] ?? 0).toBe(0);
+      }
+    }
+    await pool.query('DELETE FROM access.rating_aggregate_head WHERE context=$1 AND main_version=$2 AND principal_id=ANY($3::uuid[])',
+      [context,main,masked.map(item => item.principal)]);
     expect(await expectExact(main)).toEqual({ slots: 2048, unvalued: 0, histogram: { '5': 2048 } });
     const native = { ...items[0]!, admission: randomUUID(), observation: id(), revision: id(),
       slot: standingRatingSlotIri(people[0]!, context, main) };
@@ -350,6 +375,7 @@ test('standing components retain exact effective slots through 100/101/large, me
     await expect(readStandingRatingReconstructionBatch(pool, context, legacyMain, '', 100, cancellation.signal)).rejects.toThrow();
     await expect(readStandingRatingReconstructionBatch(pool, context, legacyMain, '', 101)).rejects.toThrow('invalid standing reconstruction page');
   } finally {
+    await metricsPool.end();
     await pool.end();
     await databases.close();
   }
