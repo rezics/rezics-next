@@ -223,10 +223,16 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/review/source-publication-authority.test.ts',
   // Restores a bootstrapped Access baseline between destructive designation controls.
   'tests/qa/integration/review/governance-designation-revocation.test.ts',
+  // Author preparation and lifecycle proofs own their command-created stopped corpus.
+  'tests/qa/integration/outcomes/realm/studio-inventory.test.ts',
+  'tests/qa/integration/outcomes/realm/published-author-lifecycle.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */
 export const commandOnlyIntegrationFiles: ReadonlySet<string> = new Set([
+  // Author preparation and restores require the closed product assembler.
+  'tests/qa/integration/outcomes/realm/studio-inventory.test.ts',
+  'tests/qa/integration/outcomes/realm/published-author-lifecycle.test.ts',
   // Imported licence delivery is proved through the production catalogue writer.
   'tests/qa/integration/imported-content-rights.test.ts',
   'services/main/tests/also-enjoyed-read-cost.integration.test.ts',
