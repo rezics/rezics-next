@@ -56,6 +56,19 @@ async function open(canvasElement: HTMLElement, action: 'edit' | 'placement' = '
   return dialog;
 }
 
+// Contenteditable selection uses the same browser Range/paste path as the chapter stories.
+async function append(editor: HTMLElement, text: string) {
+  editor.focus();
+  const range = document.createRange();
+  range.selectNodeContents(editor);
+  range.collapse(false);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+  await userEvent.paste(text);
+  await waitFor(() => expect(editor).toHaveTextContent(text.trim()));
+}
+
 export const OwnedAndForeign: Story = {
   async play({ canvasElement }) {
     await expect(within(canvasElement).getAllByRole('button', { name: authorMessages.en.menu })).toHaveLength(1);
@@ -110,8 +123,7 @@ export const Correction: Story = {
   async play({ canvasElement }) {
     const dialog = await open(canvasElement);
     const editor = dialog.getByRole('textbox', { name: authorMessages.en.body });
-    await userEvent.click(editor);
-    await userEvent.type(editor, ' Corrected wording.');
+    await append(editor, ' Corrected wording.');
     await userEvent.click(dialog.getByRole('button', { name: authorMessages.en.save }));
     await expect(await dialog.findByRole('status')).toHaveTextContent(authorMessages.en.corrected);
     await userEvent.click(dialog.getByText(authorMessages.en.close, { selector: 'button' }));
@@ -123,7 +135,7 @@ export const CancelAndReopen: Story = {
   async play({ canvasElement }) {
     let dialog = await open(canvasElement);
     const editor = dialog.getByRole('textbox', { name: authorMessages.en.body });
-    await userEvent.type(editor, ' Keep these unpublished words.');
+    await append(editor, ' Keep these unpublished words.');
     await userEvent.click(dialog.getByRole('button', { name: authorMessages.en.cancel }));
     await waitFor(() => expect(within(canvasElement).getByRole('button', { name: authorMessages.en.menu })).toHaveFocus());
     const memory = JSON.parse(localStorage.getItem(`rezics:author-correction:v1:${f.actor}:${f.realm}:${f.reply}`)!);
@@ -139,7 +151,7 @@ export const RetryAfterReload: Story = {
   args: { options: { fail: 'place' } },
   async play({ canvasElement }) {
     let dialog = await open(canvasElement);
-    await userEvent.type(dialog.getByRole('textbox', { name: authorMessages.en.body }), ' Retain this correction.');
+    await append(dialog.getByRole('textbox', { name: authorMessages.en.body }), ' Retain this correction.');
     await userEvent.click(dialog.getByRole('button', { name: authorMessages.en.save }));
     await expect(await dialog.findByRole('alert')).toHaveTextContent(authorMessages.en.failed);
     const key = `rezics:author-correction:v1:${f.actor}:${f.realm}:${f.reply}`;
@@ -159,7 +171,7 @@ export const StaleCorrection: Story = {
   args: { options: { fail: 'draft', status: 409, code: 'stale_head' } },
   async play({ canvasElement }) {
     const dialog = await open(canvasElement);
-    await userEvent.type(dialog.getByRole('textbox', { name: authorMessages.en.body }), ' My correction survives.');
+    await append(dialog.getByRole('textbox', { name: authorMessages.en.body }), ' My correction survives.');
     await userEvent.click(dialog.getByRole('button', { name: authorMessages.en.save }));
     await expect(await dialog.findByRole('alert')).toHaveTextContent(authorMessages.en.stale);
     await userEvent.click(dialog.getByRole('button', { name: authorMessages.en.reload }));
@@ -204,7 +216,9 @@ export const KeyboardRetry: Story = {
     const trigger = within(canvasElement).getByRole('button', { name: t.menu });
     trigger.focus();
     await userEvent.keyboard('{ArrowDown}');
-    await within(document.body).findByRole('menu');
+    const menu = await within(document.body).findByRole('menu');
+    await waitFor(() => expect(menu).toHaveFocus());
+    await waitFor(() => expect(within(menu).getByRole('menuitem', { name: t.edit })).toHaveAttribute('data-highlighted'));
     await userEvent.keyboard('{Enter}');
     const dialog = within(await within(document.body).findByRole('dialog', { name: t.edit }));
     await dialog.findByRole('textbox', { name: t.body });
