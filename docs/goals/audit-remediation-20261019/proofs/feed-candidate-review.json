@@ -1,4 +1,981 @@
 {
+  "d3ReaderAuthorityReadinessVerdict": {
+    "result": "partial-original-d3-001-blocked-at-owned-module-readiness; no-new-Feed-outcome",
+    "summary": "The single authorized bounded startup correction completed its capture, not its readiness gate: disposable Web /auth/start returned200 but15 actual module requests failed net::ERR_NETWORK_CHANGED with no HTTP response. 141 actual Web module bodies completed and were hashed, including the virtual entry; Accounts form/hydration was never reached. The fresh proof profile was correctly not created. No original signed-in Feed assertion or controlled API fault ran.",
+    "reviewClassification": "setup/premise failure, despite recorded job result class assertion; no reproduced Feed reader-authority defect",
+    "scope": "Only ignored owned startup/module capture lifecycle changed. Frozen observer faults, browser authority capture, session/select, runCell, original test callback and both genuine anonymous control files are byte-identical. No implementation, dependency, config or timeout changes; no fallback, nested agent, repeat probe or completed-suite rerun.",
+    "classClosed": false,
+    "newSourceLanding": null,
+    "reportLanding": "Ready for normal report-only handoff. Reuse all accepted preview148/RSC22/focus/adapter/story/static and anonymous evidence unchanged. Root decides original class closure.",
+    "next": "Root routes the exact first failed module and CDP initiator chain to existing G-2747 startup/runtime owner. Resume this same frozen proof only after an authorized demonstrated startup correction. Separately request a lawful retained nonnull saved-Agent eligible=false receipt from the existing identity/fixture owner."
+  },
+  "d3ReaderAuthorityReadinessContinuation": {
+    "recordedAt": "2026-10-19T14:44:35.144857+00:00",
+    "authority": "Same original D3-001 claims, acceptance and G-2836 report claim; latest manager instruction authorizes one bounded actual module-readiness correction and stops affected proof on repeated transport failure.",
+    "reviewer": {
+      "worker": "G-2836",
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independent": true,
+      "candidateAuthor": false,
+      "fallback": false,
+      "nestedAgents": false
+    },
+    "historyBase": {
+      "reportCommit": "3cd4f9773c035a820cedb5ba7f80e12d5db1ca9e",
+      "reportBeforeContinuation": {
+        "path": ".temp/feed-authority-evidence/report-before-module-readiness.json",
+        "sha256": "5da182c1c8c4acba8346659dbffbbeb89de49602baa057935013c780d4c4f7bb",
+        "bytes": 310951
+      },
+      "retention": "Every existing JSON field retained unchanged by value; original4 failed D3 attempts, original Feed failures, accepted preview/RSC/focus checks and genuine anonymous bodies are preserved. Latest prior artifacts archived under .temp/feed-authority-evidence/setup-web-transitive before capture files were renewed."
+    },
+    "source": {
+      "frontend": {
+        "head": "6cf460b284cca8677a9b696f8f842fea9fac5321",
+        "tree": "b98454fc990705e15d704031471dabab13e2ba29",
+        "statusPorcelain": "",
+        "readOnly": true,
+        "currentMainMaterialComparison": {
+          "manifest": {
+            "path": ".temp/feed-authority-evidence/resume-input/source-manifest.json",
+            "sha256": "5910bdbec77db67f57336dcc8b8c59fb3c936269dd2d33b71413d5dfc80db2c4",
+            "bytes": 23711
+          },
+          "observedMain": "f04269ebae6966fe228e75bb8e3ec8e0863047a4",
+          "comparedPaths": 38,
+          "allEqual": true,
+          "reverifiedPaths": [
+            {
+              "path": "apps/web/app/[locale]/page.tsx",
+              "blob": "ab284562783d1acc98886a24ba4831e024ffbb94",
+              "sha256": "2d24914763f8f46c8a96f133dc3058bfb61daffe4266032b4e3ba26011fbe7ff",
+              "bytes": 834,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "apps/web/features/home/server.ts",
+              "blob": "26e748c2784fbd20c6394e72584687c4984de2cd",
+              "sha256": "98c6c013bc6fa6dc8dd872ca0897506b942d7a7cb4994999021047912358b10f",
+              "bytes": 9948,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "apps/web/features/home/home-page.tsx",
+              "blob": "7dfbe62d13d21f523d2a4f815fc3bb71d4b3d35c",
+              "sha256": "44f8fcf5e373c26ee3b3475909ccbec23c1463a3964c0e890986b6dc080f938c",
+              "bytes": 13609,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "apps/web/features/shell/communities-read.ts",
+              "blob": "5941a6b22062c555412701fb4030f068a4b325fb",
+              "sha256": "8af51d92346432aab0efcea6c2f60a515caeadd0039b1c4ff90a383c7327d3c9",
+              "bytes": 7475,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "apps/web/features/auth/session.ts",
+              "blob": "07a2100944c05da93f6f44e729aadb03c082b39f",
+              "sha256": "cdcf8408d77f2803b1fb6910a1a2af7ccfa536f4f7ea497b7372edb7925bbaaf",
+              "bytes": 6478,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "apps/web/features/auth/acting-identity.ts",
+              "blob": "9251b2dcfde8da781b6b78a664cf87cae248298f",
+              "sha256": "fdd590a5435d69e0fa9e07f21ef59166b6d7a2201a4a72164ce1e93cf8c63604",
+              "bytes": 4800,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "apps/web/features/auth/session-state.ts",
+              "blob": "3ce4291c5b55ea65a660cd271bb7984f94f6416c",
+              "sha256": "5217d6ddd357f5fc00054a9440a59c0dbffdaefb9122256734b273176c8ad6d9",
+              "bytes": 3705,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "apps/web/features/api/main.ts",
+              "blob": "32a5c7d149b4052d1cbb17d48d6db7972a69430e",
+              "sha256": "ef54b96effed0c784f0b8483787e27e16c7bdad554e732f5ee763268e587c170",
+              "bytes": 6222,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "apps/web/features/api/main-read.ts",
+              "blob": "06c977f5da7f45ccd571e9424a7cb26e528013f9",
+              "sha256": "b8f19918ae9852b0234dba48a612b01c8247afdb66fec27ed99b943ff0314e1b",
+              "bytes": 1076,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "apps/web/features/api/server-read.ts",
+              "blob": "4486ceb5072fbd9be6d455c95ad83cd6b629d2f4",
+              "sha256": "2994aaa8ba8d9be57f0d665eea9ffeda0748820ad50842d74bc3a12f5bbec115",
+              "bytes": 4410,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "apps/web/features/api/server-fetch.ts",
+              "blob": "5dc162e45643cf34d789e24c56af204ac1d95b93",
+              "sha256": "9de290653ae8f200a6799ed1864870da2fda0ec632994d1aa402b9f60db5a8ef",
+              "bytes": 11030,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "apps/web/features/api/browser.ts",
+              "blob": "5b8c2d862068a9152b77de410bfefb247f047112",
+              "sha256": "9dcb73313b2edb43fe8dfeddefe14301c00e5054b7fba5d1e081a546e92aac01",
+              "bytes": 2523,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "apps/web/features/api/bff.ts",
+              "blob": "bef3b99dddb47602612d82843347339634ac215c",
+              "sha256": "75c60dbfe0209e901d321af1ff3c230c13c0f8c62116835521553c4749111b21",
+              "bytes": 16741,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "apps/web/app/api/main/[...path]/route.ts",
+              "blob": "684df850a5d7eb82e10dae1ca3d9a3253c6329b9",
+              "sha256": "c8a29cfb1955c8deb7ffa1c0e3754ca7b5e9133fdfbde03ca22af27b4b8bb765",
+              "bytes": 1147,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "apps/web/features/feed/api.ts",
+              "blob": "4163aa567dff214434cd9ff61353e1a20844912e",
+              "sha256": "1b0c3ef18488aabb99a60dcb03afcfeefd968627c8c405a8d4aa17924d73df4e",
+              "bytes": 5169,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "apps/web/features/feed/read.ts",
+              "blob": "aea7075c117100da3747026eda0d5136b010f61c",
+              "sha256": "64cc444bfb07802e49758c8e4484496af84e41b07c46988e0595709dc831ef5a",
+              "bytes": 2048,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "apps/web/features/feed/feed-list.tsx",
+              "blob": "127eddc9eabc0c1dd0ae16406bc78c1d8fdd23d6",
+              "sha256": "2202a8d2388eed9033f9fdf9851e9f273e02be950e8534761ae90d1cf93ffb28",
+              "bytes": 21716,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "apps/web/features/feed/feed-context.tsx",
+              "blob": "e97de6dff0da2c4ee03cdf1cc13f5c4a297b2b43",
+              "sha256": "04985aac9ad6eeb4409fea94a4803d7b69d346c73e4cc171a6930142cd6901f3",
+              "bytes": 3948,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "apps/web/features/feed/state.ts",
+              "blob": "f9968afd501ba4167f73a197b76b28955973cd95",
+              "sha256": "2a555c31c116a5550d63bc019b9c5fc0a5b4ca98ff7e8f086898de7293c74375",
+              "bytes": 6026,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "apps/web/features/feed/projection.ts",
+              "blob": "1d1b676dbf9472be62bc76e8b51bf60c9e636da3",
+              "sha256": "d68eb6b05861e2e369dba40d415365e3d17cb1c72ad12b2e89cfcc4533a8ec94",
+              "bytes": 3187,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "apps/web/features/feed/reader-identity.test.ts",
+              "blob": "ee9423986060349950dbf89ba1f3467ed0dba27c",
+              "sha256": "55d0bcd946719cc2d1ba536a648239e8ea8a83b89da6c0e3e73f444976141020",
+              "bytes": 4487,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "apps/web/features/feed/reader-identity.stories.tsx",
+              "blob": "10084e056972edea9d7ea34752ddf02a966d9782",
+              "sha256": "b1d77311ee410a74fe4eef87373d6d4b7850e402cb75848956ed70ce25dc15a1",
+              "bytes": 5699,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "apps/web/features/feed/read.test.ts",
+              "blob": "c0b5261ffee7e3f21d7064c7ff58fa17436c7291",
+              "sha256": "50b8cab447d8c3f4f3f59102699f5339c4582a0858eb9f8a5228031fa49d9a84",
+              "bytes": 7285,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "apps/web/features/feed/refusal-read.test.ts",
+              "blob": "338e4f502f71048fffc40469ee59b362a7fe6b5a",
+              "sha256": "96236cfbf8a02fd5dc8468dd7954e5eddc553701e532e2399ea2961bb246d646",
+              "bytes": 1099,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "tests/qa/integration/feed-home.test.ts",
+              "blob": "41c724d0c26084d9005a3be431213a7835b02f27",
+              "sha256": "a5b0318abaa5beab6c12a28eb45b9d966c579458a14d14909948de1b23a6eee9",
+              "bytes": 70088,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "tests/qa/integration/g-1025-home-fence.test.ts",
+              "blob": "d32fdc3163fae96e54d23f0bea33be56756b926d",
+              "sha256": "056edabe61e89f990d78904fc51ab99f5b1a3a294fb7d8db969cbe36a7f5d568",
+              "bytes": 7451,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "package.json",
+              "blob": "4aed970288778fefd485dd2e401e6fdf458f7a2d",
+              "sha256": "487061c605dc753c9e60c657ecaa4dd7cf417a213ac65c2e906380367b98acaf",
+              "bytes": 1285,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "yarn.lock",
+              "blob": "e70dcbe4159d3fcab2585962a1cf3688937eb0e5",
+              "sha256": "026c93ddc3085e43b1ff6727a42f7c55b03a03cc1aa4c11cbf57438ce5b9d391",
+              "bytes": 436830,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": ".yarn/patches/vinext-refresh-retain-document.patch",
+              "blob": "59e238412881bd350741a8b4528a586b77ba375a",
+              "sha256": "3c1f008b04ed3d37b42afcc007ef479de7405bc787bde671afa284fa1b7aecaf",
+              "bytes": 658,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "apps/web/package.json",
+              "blob": "788bd74341217c9fb7f655e00ccd902d64210f5b",
+              "sha256": "f0b29308365ed08148f73ba83b3c5f6c5b5e890c1df2d547ece26b541ad7965f",
+              "bytes": 1602,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "apps/web/vite.config.ts",
+              "blob": "5340e037be04b55b3499adb537984ee440edcb61",
+              "sha256": "f3e735deaf8bc457f322eae2ec351394f33588604901e80b8a95b59a2020200e",
+              "bytes": 5032,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "Taskfile.yml",
+              "blob": "30cfc2093436fab2cc18a589404a2f589783f7c7",
+              "sha256": "9ebb829d62cd74ab42b1fa2bd4ad2786cd9ef8d16e61ef4f3637d9a40693516f",
+              "bytes": 25724,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "scripts/dev/web-preview.ts",
+              "blob": "b784d9938a5bbc9a0721715740d76fe059bd010a",
+              "sha256": "8665e0b06e3582639d6d3d273d76b3dbcf4d449bf0acde8293832975b07ea580",
+              "bytes": 1627,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "scripts/dev/preview.ts",
+              "blob": "0d09c874f12d8a9a97bd30ddf4ff9bbf1ddd047b",
+              "sha256": "1b9a2e31626dc30f375eafef0e8fc61e1e7ee4a5e812ece7ce6c13daece37f74",
+              "bytes": 1997,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "apps/accounts/vite.config.ts",
+              "blob": "d8c4a9aaac8ed60f3901880ba402aadf24c0b774",
+              "sha256": "c07e520c53f7bac390083c66cebae927687cc0bbe619d8c2817a52113555aedf",
+              "bytes": 1346,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "apps/accounts/package.json",
+              "blob": "361c8bfb69801c3ddaf2af761a04669e0dcf33bf",
+              "sha256": "e577b25fd335fec1ea399509bfb841925c5b3d7b544a56203304c940b6aabc1c",
+              "bytes": 1135,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "apps/web/tests/account-sign-in.ts",
+              "blob": "dc52bc552a2ecfffec528fd8ea61ccca57e75900",
+              "sha256": "a52d9c42a7fb4599a4b54bf7170f8f2747772a04506bcaa29537553135c3befb",
+              "bytes": 4951,
+              "verifiedAfterAttempt": true
+            },
+            {
+              "path": "apps/web/features/shell/preferences.ts",
+              "blob": "8df1c0903b09668b906217db9d435619ab66b540",
+              "sha256": "a7c04098373951467aaf75524136a83993b4163c9fb87d2fe44d73d93b14f944",
+              "bytes": 1062,
+              "verifiedAfterAttempt": true
+            }
+          ]
+        }
+      },
+      "backend": {
+        "origin": "http://127.0.0.1:3001",
+        "managerSuppliedSource": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "qualification": "Existing compatible Web-consumer backend with retained own OAuth/session-agent and anonymous/preview genuine data evidence. This attempt reached only9 pre-auth GET200 and no Feed; no new Feed/runtime qualification follows. Main754 is not current-main native identity, Realm-disclosure, rating, privacy or class proof. Exact native material differences remain in prior report and resume-input/diagnosis.json.",
+        "pairing": "Main authentication/actingSubject contract and original observer untouched."
+      },
+      "publicAccountsOrigin": "http://127.0.0.1:3004",
+      "driver": {
+        "path": ".temp/feed-authority-live.test.ts",
+        "sha256": "36220544b7c8bc8a648a5340f500cb30f0a4630da7cef4db5afb9efddb1847fe",
+        "bytes": 25437
+      },
+      "supportedSignInHelper": {
+        "path": ".temp/feed-authority-candidate/apps/web/tests/account-sign-in.ts",
+        "sha256": "a52d9c42a7fb4599a4b54bf7170f8f2747772a04506bcaa29537553135c3befb",
+        "bytes": 4951
+      },
+      "dependencyStamp": {
+        "path": ".temp/feed-authority-candidate/node_modules/.rezics-dependencies",
+        "sha256": "4e85518bfd315f8d440f0d5b617c8e51d918b9e7eac014b9079f7adb9d50e4c2",
+        "bytes": 64
+      },
+      "vinextPatchedBrowserEntry": {
+        "path": ".temp/feed-authority-candidate/node_modules/vinext/dist/server/app-browser-entry.js",
+        "sha256": "496abcdede37434faa54443e4bd90d6ca8aef076e371fefe7f19cab701a14998",
+        "bytes": 78597
+      },
+      "unchangedDependencyInputs": "Reuse preceding source-pins.json exact dependency comparison/install proof. No install or version mutation this continuation.",
+      "frozenProof": {
+        "allPreserved": true,
+        "regionsAndControls": [
+          {
+            "name": "observerForwardingAndFaults",
+            "sha256": "fa768fa886cb073bea0e53def9cf86e4adc219919a693e73a2a4ced50047ecfd",
+            "bytes": 3809,
+            "equal": true
+          },
+          {
+            "name": "browserFetchAuthorityCapture",
+            "sha256": "58c9f6652c7cc25b46cb61f92b4674f2c1e3ef740713432073d1c325bef906ad",
+            "bytes": 662,
+            "equal": true
+          },
+          {
+            "name": "sessionAndSelection",
+            "sha256": "e8463431155b6c6325238b9f1474f123b83c8c88b8f97ec57d6c39a27dd017e0",
+            "bytes": 981,
+            "equal": true
+          },
+          {
+            "name": "runCell",
+            "sha256": "a258ffc03ad48ca9ea02896c445b4775f23a93d4fa1313a8f7b05738c4f9ca26",
+            "bytes": 5016,
+            "equal": true
+          },
+          {
+            "name": "originalTestCallback",
+            "sha256": "84e734f8a763da977194916cbe5eb020124851b2a08f813af0507769a262fdf0",
+            "bytes": 2268,
+            "equal": true
+          },
+          {
+            "name": ".temp/feed-review-live-focus.test.ts",
+            "sha256": "3d92e6262c83f760c28620327b92fa5ed30bb9a9d2f31ab9cd36239ba1fe92ac",
+            "bytes": 6438,
+            "equal": true
+          },
+          {
+            "name": ".temp/feed-rsc-patch.test.ts",
+            "sha256": "0d2d4ad3b8674d36eba41221cd810c464bc0adc772b737eb77d2af6807a3b74d",
+            "bytes": 11809,
+            "equal": true
+          }
+        ],
+        "driverSha256": "36220544b7c8bc8a648a5340f500cb30f0a4630da7cef4db5afb9efddb1847fe",
+        "driverBytes": 25437
+      }
+    },
+    "originalAcceptanceVerbatim": [
+      "同一登录账户在未选 Agent、Agent 不合资格、acting-context 读取暂时不可用三种条件下，公开首屏、next/head 和恢复读取使用一致且明确的读者权限；不会发出“有认证、无 actingSubject”的请求。",
+      "公开列表至少连续两页并能恢复一次暂时失败，无 400、无漏项或重复；选择有效 Agent 后的个人 Feed 及匿名公开 Feed 同样覆盖。保留 Main 的认证配对校验，不能靠放宽安全契约通过。",
+      "内容真实变化/409 才显示“Feed changed”；认证、权限和服务不可用各有可解释且可恢复的状态。en/zh-Hans、1440/390、浅/深色均验收。"
+    ],
+    "setupProcedure": {
+      "portsBefore": "ss -ltnp found no listener on62841/62842 immediately before recorded startup; no peer process stopped.",
+      "startup": "task --dir .temp/feed-authority-candidate web:dev -- --port 62841",
+      "launchCount": 1,
+      "launchEnvironment": "Existing private fixture values read in process, never printed; MAIN_ORIGIN=own forwarding observer62842; ACCOUNT_ORIGIN=publicAccounts3004; existing resource and OAuth client unchanged.",
+      "transportGate": "Bound TCP listener only; previous any-non503 /@vite/client poll removed. TCP binding does not assert module or UI readiness.",
+      "readinessGate": "Before navigation attach console/pageerror/request/requestfailed/response/requestfinished and CDP Network initiator capture. Disposable context traverses actual /auth/start toward public Accounts sign-in without credentials. Require hydrated Accounts Email field plus completed200 module-body/hash evidence for both origins, no failed module and finite in-flight/body drain before fresh original context.",
+      "bounds": "Existing45s interaction/capture drain,120s navigation,240s beforeAll and original1500000ms callback remain unchanged. One startup, one disposable traversal; no explicit navigation retry loop.",
+      "captureLifecycle": "Every module response waits response.finished then reads full body and SHA256; HTTP error bodies retained when present. Failed requests retain full public module URL, no-response flag and exact CDP initiator chain. Warm context closed and all capture promises drained (0 remaining) before any fresh context can be created.",
+      "reachedStage": "module-readiness /auth/start; real public Accounts form, Accounts module graph, signInAtAccounts and fresh original proof profile not reached",
+      "cleanup": {
+        "ownBrowserClosed": true,
+        "ownFrontendStopped": true,
+        "ownObserverStopped": true,
+        "peerLifecycleChanged": false,
+        "corpusOrGrantWrites": false,
+        "accountCreated": false,
+        "ownSessionSelectionOnly": true
+      },
+      "portsAfter": "ss -ltnp found no listener on62841/62842 after completion."
+    },
+    "checks": [
+      {
+        "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task goal -- test ./.temp/feed-authority-live.test.ts",
+        "executedCommand": "task goal -- test ./.temp/feed-authority-live.test.ts",
+        "goalQaImplementation": "Task goal invokes supported scripts/goal/goalctl.ts test; no raw shell test or admission bypass.",
+        "jobId": "3f6e1029-0569-476f-8748-102123541bc1",
+        "exitCode": 201,
+        "innerTestExitCode": 1,
+        "jobResultClass": "assertion",
+        "reviewClassification": "setup/premise failure",
+        "test": "original D3-001 ready genuine saved-session reader-authority cases and applicable locale/theme/viewport cells",
+        "failureLocation": ".temp/feed-authority-live.test.ts:178 in beforeAll; warmPage.waitForURL public Accounts sign-in",
+        "failure": "TimeoutError: waitForURL: Timeout120000ms exceeded; remained on actual /auth/start?next=%2Fen%2Fidentity.",
+        "runtimeSeconds": 154.24,
+        "hookMilliseconds": 153544.6,
+        "testsPassed": 0,
+        "testsFailed": 1,
+        "originalFeedOutcomeAssertionsReached": false,
+        "expectCallsReached": 0,
+        "controlledIdentityFaultsReached": 0,
+        "controlledFeedFaultsReached": 0,
+        "feedRequestsReached": 0,
+        "log": ".temp/goal/jobs/3f6e1029-0569-476f-8748-102123541bc1.log",
+        "harnessBehindMainNotice": "Recorded runner reported harness2commits behind main. Worker did not rebase, edit source or retry; root report HEAD remained3cd4f977 and immutable candidate remained6cf460b2."
+      }
+    ],
+    "moduleEvidence": {
+      "manifest": {
+        "path": ".temp/feed-authority-evidence/module-readiness-manifest.json",
+        "sha256": "ef900cdbdbb41ffa62cb238fc9532493366150ba9a979b49fbdc3fbbecb30ac3",
+        "bytes": 320769
+      },
+      "actualModuleRequests": 156,
+      "completedHttp200BodiesWithRequestfinishedAndSha256": 141,
+      "transportFailures": 15,
+      "accountsModuleRequests": 0,
+      "firstFailedRequest": {
+        "phase": "module-readiness",
+        "capture": "disposable-warmup",
+        "kind": "requestfailed",
+        "url": "http://127.0.0.1:62841/@id/__x00__virtual:vite-rsc/client-in-server-package-proxy/%2Fhome%2Fedge%2Fprojects%2Frezics%2Frezics-next%2F.temp%2Fworktrees%2Fg-2836%2F.temp%2Ffeed-authority-candidate%2Fnode_modules%2Fvinext%2Fdist%2Fshims%2Fapp-router-scroll.js",
+        "origin": "http://127.0.0.1:62841",
+        "path": "/@id/__x00__virtual:vite-rsc/client-in-server-package-proxy/%2Fhome%2Fedge%2Fprojects%2Frezics%2Frezics-next%2F.temp%2Fworktrees%2Fg-2836%2F.temp%2Ffeed-authority-candidate%2Fnode_modules%2Fvinext%2Fdist%2Fshims%2Fapp-router-scroll.js",
+        "error": "net::ERR_NETWORK_CHANGED",
+        "httpStatus": null,
+        "body": null,
+        "noResponse": true,
+        "initiators": [
+          {
+            "requestId": "1368039.157",
+            "type": "script",
+            "sourceUrl": null,
+            "lineNumber": null,
+            "stack": [
+              {
+                "url": "http://127.0.0.1:62841/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/@vitejs/plugin-rsc/dist/browser.js?v=3ced47c4",
+                "functionName": "load",
+                "lineNumber": 7,
+                "columnNumber": 101
+              },
+              {
+                "url": "http://127.0.0.1:62841/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/@vitejs/plugin-rsc/dist/core/browser.js?v=3ced47c4",
+                "functionName": "",
+                "lineNumber": 8,
+                "columnNumber": 17
+              },
+              {
+                "url": "http://127.0.0.1:62841/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/@vitejs/plugin-rsc/dist/shared-BWJvctW6.js?v=3ced47c4",
+                "functionName": "",
+                "lineNumber": 27,
+                "columnNumber": 22
+              },
+              {
+                "url": "http://127.0.0.1:62841/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/@vitejs/plugin-rsc/dist/shared-Y4B6DJ99.js?v=3ced47c4",
+                "functionName": "globalThis.__vite_rsc_require__",
+                "lineNumber": 16,
+                "columnNumber": 20
+              },
+              {
+                "url": "http://127.0.0.1:62841/node_modules/.vite/deps/react-server-dom-webpack_client__browser.js?v=3ced47c4",
+                "functionName": "requireAsyncModule",
+                "lineNumber": 67,
+                "columnNumber": 17
+              },
+              {
+                "url": "http://127.0.0.1:62841/node_modules/.vite/deps/react-server-dom-webpack_client__browser.js?v=3ced47c4",
+                "functionName": "preloadModule",
+                "lineNumber": 84,
+                "columnNumber": 58
+              },
+              {
+                "url": "http://127.0.0.1:62841/node_modules/.vite/deps/react-server-dom-webpack_client__browser.js?v=3ced47c4",
+                "functionName": "resolveModule",
+                "lineNumber": 1717,
+                "columnNumber": 15
+              },
+              {
+                "url": "http://127.0.0.1:62841/node_modules/.vite/deps/react-server-dom-webpack_client__browser.js?v=3ced47c4",
+                "functionName": "processFullStringRow",
+                "lineNumber": 2329,
+                "columnNumber": 5
+              },
+              {
+                "url": "http://127.0.0.1:62841/node_modules/.vite/deps/react-server-dom-webpack_client__browser.js?v=3ced47c4",
+                "functionName": "processFullBinaryRow",
+                "lineNumber": 2324,
+                "columnNumber": 3
+              },
+              {
+                "url": "http://127.0.0.1:62841/node_modules/.vite/deps/react-server-dom-webpack_client__browser.js?v=3ced47c4",
+                "functionName": "processBinaryChunk",
+                "lineNumber": 2428,
+                "columnNumber": 209
+              },
+              {
+                "url": "http://127.0.0.1:62841/node_modules/.vite/deps/react-server-dom-webpack_client__browser.js?v=3ced47c4",
+                "functionName": "progress",
+                "lineNumber": 2611,
+                "columnNumber": 4
+              }
+            ]
+          }
+        ]
+      },
+      "allFailedRequests": [
+        {
+          "url": "http://127.0.0.1:62841/@id/__x00__virtual:vite-rsc/client-in-server-package-proxy/%2Fhome%2Fedge%2Fprojects%2Frezics%2Frezics-next%2F.temp%2Fworktrees%2Fg-2836%2F.temp%2Ffeed-authority-candidate%2Fnode_modules%2Fvinext%2Fdist%2Fshims%2Fapp-router-scroll.js",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null,
+          "noResponse": true
+        },
+        {
+          "url": "http://127.0.0.1:62841/app/auth/start/page.tsx",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null,
+          "noResponse": true
+        },
+        {
+          "url": "http://127.0.0.1:62841/@id/__x00__virtual:vite-rsc/remove-duplicate-server-css",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null,
+          "noResponse": true
+        },
+        {
+          "url": "http://127.0.0.1:62841/features/shell/shell-provider.tsx",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null,
+          "noResponse": true
+        },
+        {
+          "url": "http://127.0.0.1:62841/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/packages/ui/src/components/skip-nav.tsx",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null,
+          "noResponse": true
+        },
+        {
+          "url": "http://127.0.0.1:62841/features/shell/nav-controls.tsx",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null,
+          "noResponse": true
+        },
+        {
+          "url": "http://127.0.0.1:62841/@id/__x00__virtual:vite-rsc/client-package-proxy/next/link",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null,
+          "noResponse": true
+        },
+        {
+          "url": "http://127.0.0.1:62841/features/shell/search-field.tsx",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null,
+          "noResponse": true
+        },
+        {
+          "url": "http://127.0.0.1:62841/features/shell/locale-switch.tsx",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null,
+          "noResponse": true
+        },
+        {
+          "url": "http://127.0.0.1:62841/features/shell/theme-switch.tsx",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null,
+          "noResponse": true
+        },
+        {
+          "url": "http://127.0.0.1:62841/features/auth/sign-in-link.tsx",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null,
+          "noResponse": true
+        },
+        {
+          "url": "http://127.0.0.1:62841/features/shell/side-nav.tsx",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null,
+          "noResponse": true
+        },
+        {
+          "url": "http://127.0.0.1:62841/features/shell/bottom-nav.tsx",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null,
+          "noResponse": true
+        },
+        {
+          "url": "http://127.0.0.1:62841/features/shell/theme-notice.tsx",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null,
+          "noResponse": true
+        },
+        {
+          "url": "http://127.0.0.1:62841/features/shell/community-nav.tsx",
+          "error": "net::ERR_NETWORK_CHANGED",
+          "httpStatus": null,
+          "body": null,
+          "noResponse": true
+        }
+      ],
+      "completedEntryAndDependencyBodies": [
+        {
+          "url": "http://127.0.0.1:62841/@id/__x00__virtual:vinext-app-browser-entry",
+          "status": 200,
+          "finished": true,
+          "bodySha256": "4efa1860d382c715a4b2099f60b86cacb5da04555a2da234e5e10548cb04fa95",
+          "bodyBytes": 693685
+        },
+        {
+          "url": "http://127.0.0.1:62841/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/@vitejs/plugin-rsc/dist/browser.js?v=3ced47c4",
+          "status": 200,
+          "finished": true,
+          "bodySha256": "8de572c9cc155ed6a53887785a571dd51c48739d4cac9ad9cdf78fccb4c5b930",
+          "bodyBytes": 6882
+        },
+        {
+          "url": "http://127.0.0.1:62841/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/@vitejs/plugin-rsc/dist/core/browser.js?v=3ced47c4",
+          "status": 200,
+          "finished": true,
+          "bodySha256": "36593856cb258100227741c3ab267328b1ee3167f98e5be230396d75fb95cee1",
+          "bodyBytes": 3752
+        },
+        {
+          "url": "http://127.0.0.1:62841/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/@vitejs/plugin-rsc/dist/shared-BWJvctW6.js?v=3ced47c4",
+          "status": 200,
+          "finished": true,
+          "bodySha256": "0dbace2f5b96519bb50c8c46cc1ce80120b903f873a22f23ad29ab0844b1b75d",
+          "bodyBytes": 4810
+        },
+        {
+          "url": "http://127.0.0.1:62841/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/@vitejs/plugin-rsc/dist/shared-Y4B6DJ99.js?v=3ced47c4",
+          "status": 200,
+          "finished": true,
+          "bodySha256": "e7300ffbf00531da35f8fdfe1e56273f83e6ca8ed4ef0549974ed05345c4a797",
+          "bodyBytes": 3907
+        },
+        {
+          "url": "http://127.0.0.1:62841/node_modules/.vite/deps/react-server-dom-webpack_client__browser.js?v=3ced47c4",
+          "status": 200,
+          "finished": true,
+          "bodySha256": "43aa91fdbe4fb26cce70e5864491b8bd119454978044c1f129328dbaadd68e04",
+          "bodyBytes": 529648
+        }
+      ],
+      "serverFacts": [
+        "Normal Task web:dev Vite8.3.4 ready in13008ms.",
+        "GET /auth/start?next=%2Fen%2Fidentity returned200 in19.1s.",
+        "Actual server-forwarded browser console reports failed dynamically imported virtual:vite-rsc/remove-duplicate-server-css with React component stack.",
+        "Owned afterAll terminated Task frontend (exit143); no spontaneous crash claim."
+      ],
+      "mainFacts": {
+        "actualRequests": 9,
+        "method": "GET",
+        "statuses": [
+          200
+        ],
+        "authorizationPresent": false,
+        "cookiePresent": false,
+        "actingSubject": null,
+        "paths": [
+          "/v1/me/platform-access",
+          "/v1/me/platform-access",
+          "/v1/zones",
+          "/v1/realms/01a100b4-6c26-776e-87b5-f9250e2a08a5",
+          "/v1/realms/01a0e90b-63b4-70ae-a08e-91a25abd19d5",
+          "/v1/realms/01a0e90b-6b75-70d9-828f-4d4f32a05e05",
+          "/v1/realms/01a0f54b-d0b7-73f7-985b-381cb103d074",
+          "/v1/realms/01a0e90b-6985-7030-ba28-14e01ed8f81d",
+          "/v1/realms/01a0e90b-61b5-7165-95cd-50b4e381aa20"
+        ],
+        "feedRequests": 0,
+        "sessionAgentReads": 0,
+        "writes": 0,
+        "newD3RuntimeSuccess": false
+      },
+      "causeDisposition": "Transport failure is reproduced in actual owned normal Task browser setup. No HTTP failure response/body exists for15 failed requests. Entry200/body completion does not prove transitive execution or successful hydration. Neither this capture nor old logs demonstrate a causal font, realpath, transform, proxy, optimizer, cache or asset repair. No such repair attempted."
+    },
+    "screenshotsActuallyViewed": [
+      {
+        "path": ".temp/feed-authority-evidence/module-readiness-failure.png",
+        "sha256": "e7d836072b1596431bdb17e932a95f9861de485ae0ef5bbe890edcd5e053ce8d",
+        "bytes": 46176,
+        "viewedWith": "view_image",
+        "viewport": [
+          1440,
+          1000
+        ],
+        "observation": "Actual browser shows runtime-error overlay for virtual:vite-rsc/remove-duplicate-server-css and This page couldn’t load with Reload/Back. No Accounts form or Feed content; no pending/recovered Feed success claimed."
+      }
+    ],
+    "originalCriterionTierMapping": [
+      {
+        "criterion": "OriginalD3 acceptance1 and assertion1/2/3: same signed-in Account, genuinely unselected; SSR first + browser next/head/recovery explicit anonymous authority",
+        "readyPremise": "Own supported selection(null) and frozen observer are prepared; new setup never entered original callback.",
+        "thisAttempt": "0 outcome assertions; remains unexecuted at genuine signed-in browser tier."
+      },
+      {
+        "criterion": "OriginalD3 acceptance1 and assertion1/2/3: actual relevant identity-read temporary unavailability preserves anonymous authority",
+        "readyPremise": "Frozen observer bounds delivery503 only after actual genuine upstream session-agent response.",
+        "thisAttempt": "No session-agent or controlled identity fault reached; remains unexecuted."
+      },
+      {
+        "criterion": "OriginalD3 acceptance1 and assertion3: genuine NONNULL saved Agent with actual eligible=false receipt",
+        "thisAttempt": "No lawful retained ineligible receipt available. Null+eligiblefalse remains unselected, not ineligible. Existing identity/fixture owner through root requested; no grants/eligibility/receipt fabrication.",
+        "missingOwner": "Existing identity/fixture owner via root; no new task scope invented."
+      },
+      {
+        "criterion": "OriginalD3 acceptance2: >=2 genuine pages, one temporary recovery, no400/no gaps/duplicates, valid Agent personal Feed + anonymous public control, no stale anonymous cursor reuse",
+        "thisAttempt": "Eligible control, unselected and unavailable runCell bodies unchanged but not executed. Genuine accepted anonymous control retained byte-for-byte; prior adapter/story counts do not substitute for signed-in proof."
+      },
+      {
+        "criterion": "OriginalD3 acceptance3: only genuine content409 means Feed changed; distinct authentication/authority/service recovery",
+        "thisAttempt": "No fault branch executed. Frozen new callback covers503 only if reached, never newly401/403/409. Existing original409/error-classification proof and its limits retained."
+      },
+      {
+        "criterion": "OriginalD3 acceptance3: en/zh-Hans ×1440/390 ×light/dark applicable Feed/error/recovery cells",
+        "thisAttempt": "All original cells unchanged in callback, none reached; screenshot is setup-only1440light, not acceptance matrix evidence."
+      }
+    ],
+    "ownerHandoff": {
+      "to": "Root -> existing G-2747 startup/runtime owner",
+      "smallestReproduction": "From G-2836 use the recorded command above with exact6cf460b2 candidate and unchanged dependency stamp. It starts normal Task web:dev62841 once against actual Main3001 through own62842. Disposable context navigates /auth/start?next=%2Fen%2Fidentity without credentials. Await publicAccounts3004 /sign-in; first actual failing request and CDP dependency chain are recorded. No reload or API fault injection ran.",
+      "firstFailedModule": "http://127.0.0.1:62841/@id/__x00__virtual:vite-rsc/client-in-server-package-proxy/%2Fhome%2Fedge%2Fprojects%2Frezics%2Frezics-next%2F.temp%2Fworktrees%2Fg-2836%2F.temp%2Ffeed-authority-candidate%2Fnode_modules%2Fvinext%2Fdist%2Fshims%2Fapp-router-scroll.js",
+      "actualInitiator": [
+        {
+          "requestId": "1368039.157",
+          "type": "script",
+          "sourceUrl": null,
+          "lineNumber": null,
+          "stack": [
+            {
+              "url": "http://127.0.0.1:62841/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/@vitejs/plugin-rsc/dist/browser.js?v=3ced47c4",
+              "functionName": "load",
+              "lineNumber": 7,
+              "columnNumber": 101
+            },
+            {
+              "url": "http://127.0.0.1:62841/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/@vitejs/plugin-rsc/dist/core/browser.js?v=3ced47c4",
+              "functionName": "",
+              "lineNumber": 8,
+              "columnNumber": 17
+            },
+            {
+              "url": "http://127.0.0.1:62841/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/@vitejs/plugin-rsc/dist/shared-BWJvctW6.js?v=3ced47c4",
+              "functionName": "",
+              "lineNumber": 27,
+              "columnNumber": 22
+            },
+            {
+              "url": "http://127.0.0.1:62841/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-authority-candidate/node_modules/@vitejs/plugin-rsc/dist/shared-Y4B6DJ99.js?v=3ced47c4",
+              "functionName": "globalThis.__vite_rsc_require__",
+              "lineNumber": 16,
+              "columnNumber": 20
+            },
+            {
+              "url": "http://127.0.0.1:62841/node_modules/.vite/deps/react-server-dom-webpack_client__browser.js?v=3ced47c4",
+              "functionName": "requireAsyncModule",
+              "lineNumber": 67,
+              "columnNumber": 17
+            },
+            {
+              "url": "http://127.0.0.1:62841/node_modules/.vite/deps/react-server-dom-webpack_client__browser.js?v=3ced47c4",
+              "functionName": "preloadModule",
+              "lineNumber": 84,
+              "columnNumber": 58
+            },
+            {
+              "url": "http://127.0.0.1:62841/node_modules/.vite/deps/react-server-dom-webpack_client__browser.js?v=3ced47c4",
+              "functionName": "resolveModule",
+              "lineNumber": 1717,
+              "columnNumber": 15
+            },
+            {
+              "url": "http://127.0.0.1:62841/node_modules/.vite/deps/react-server-dom-webpack_client__browser.js?v=3ced47c4",
+              "functionName": "processFullStringRow",
+              "lineNumber": 2329,
+              "columnNumber": 5
+            },
+            {
+              "url": "http://127.0.0.1:62841/node_modules/.vite/deps/react-server-dom-webpack_client__browser.js?v=3ced47c4",
+              "functionName": "processFullBinaryRow",
+              "lineNumber": 2324,
+              "columnNumber": 3
+            },
+            {
+              "url": "http://127.0.0.1:62841/node_modules/.vite/deps/react-server-dom-webpack_client__browser.js?v=3ced47c4",
+              "functionName": "processBinaryChunk",
+              "lineNumber": 2428,
+              "columnNumber": 209
+            },
+            {
+              "url": "http://127.0.0.1:62841/node_modules/.vite/deps/react-server-dom-webpack_client__browser.js?v=3ced47c4",
+              "functionName": "progress",
+              "lineNumber": 2611,
+              "columnNumber": 4
+            }
+          ]
+        }
+      ],
+      "evidence": "observations.json and module-readiness-manifest.json contain requestfinished/body hashes, all15 no-response failures and actual CDP initiators. web-server.log and the viewed module-readiness-failure.png show the same failed import. Prior44-failure and Accounts auth-frame traces remain separately archived.",
+      "requestedAction": "Diagnose demonstrated owned normal Task module transport failure and return an executable authorized startup correction; no inferred cache/proxy/font/optimizer fix, version change, timeout increase, shared restart or assertion weakening is approved by this report.",
+      "productFindingConfirmed": false
+    },
+    "administrativeReportChecks": {
+      "recordedJob": "dc51271d-c0a1-4fdf-b6e3-686111e912eb",
+      "steps": [
+        {
+          "command": "task docs:check",
+          "exitCode": 0,
+          "log": ".temp/goal/jobs/dc51271d-c0a1-4fdf-b6e3-686111e912eb.1.log",
+          "result": "13tests pass;250Markdown files and local links/navigation pass."
+        },
+        {
+          "command": "task goal -- check",
+          "exitCode": 0,
+          "runId": "run-4w6pOK",
+          "log": ".temp/goal/jobs/dc51271d-c0a1-4fdf-b6e3-686111e912eb.2.log",
+          "result": "AST and1selected repository guard pass; report-only types/lint correctly skipped; brief names no tests. No product or completed-suite rerun."
+        }
+      ]
+    },
+    "privateEvidence": [
+      {
+        "path": ".temp/feed-authority-evidence/observations.json",
+        "sha256": "707ea6fccba2fc8dd08cf517b6f60a45d9788fb1fdaa8c0bb8bdc2310cfbbcab",
+        "bytes": 327007
+      },
+      {
+        "path": ".temp/feed-authority-evidence/web-server.log",
+        "sha256": "d87ae011916e095191acd76c719acf3441b7f034930e229068d1500d11789533",
+        "bytes": 7215
+      },
+      {
+        "path": ".temp/feed-authority-evidence/cleanup.json",
+        "sha256": "c024e4441560cafd75414cdfaef7abf8cd3c4a69d335ffda92d0f7d56bdf9406",
+        "bytes": 217
+      },
+      {
+        "path": ".temp/feed-authority-evidence/source-pins.json",
+        "sha256": "d2225ca9874242b16057fdea8bfd4e4b9a70af62bece256627b0448a0c90b989",
+        "bytes": 8462
+      },
+      {
+        "path": ".temp/feed-authority-evidence/callback-verification.json",
+        "sha256": "859186fffe6a16098132cd90fa575e631385a62052e3a85e37f40ab7f94df315",
+        "bytes": 1423
+      },
+      {
+        "path": ".temp/feed-authority-evidence/module-readiness-manifest.json",
+        "sha256": "ef900cdbdbb41ffa62cb238fc9532493366150ba9a979b49fbdc3fbbecb30ac3",
+        "bytes": 320769
+      },
+      {
+        "path": ".temp/feed-authority-evidence/module-readiness-failure.png",
+        "sha256": "e7d836072b1596431bdb17e932a95f9861de485ae0ef5bbe890edcd5e053ce8d",
+        "bytes": 46176
+      },
+      {
+        "path": ".temp/feed-authority-evidence/setup-web-transitive/observations.json",
+        "sha256": "d29eec85efb1627267847da6a1778c726f47cb4dad0565e56cbbb2cbc326e020",
+        "bytes": 31698
+      },
+      {
+        "path": ".temp/feed-authority-evidence/setup-web-transitive/web-server.log",
+        "sha256": "ed172bfaf5f39265b69adc1ea05213c79ba858ee7d254d8257b90a4b05a6557a",
+        "bytes": 3040
+      },
+      {
+        "path": ".temp/feed-authority-evidence/setup-web-transitive/setup-failure-private.png",
+        "sha256": "050849d774d8c282ac4671bdc382f1f162cd6c37bd5151c79080da43b2f2205f",
+        "bytes": 27804
+      },
+      {
+        "path": ".temp/feed-authority-evidence/setup-web-transitive/source-pins.json",
+        "sha256": "7b7b71be09c4a3c922f1cea4c2fe619d4d12aaa668c27b7a8a36b49049774932",
+        "bytes": 7642
+      },
+      {
+        "path": ".temp/feed-authority-evidence/setup-web-transitive/feed-authority-live.test.ts",
+        "sha256": "4e1af8c0f3e00c2ebbd63b1600b0f544869cbdc4a3c63bb73d8162299171240e",
+        "bytes": 18859
+      },
+      {
+        "path": ".temp/feed-authority-evidence/resume-input/callback-sha256.json",
+        "sha256": "4c2abca06f04f1c640fee46c446b699b241aeee57247de13824f3c2feb6b234b",
+        "bytes": 1974
+      },
+      {
+        "path": ".temp/feed-authority-evidence/resume-input/diagnosis.json",
+        "sha256": "b7fc5f6bc1472568be8aa66745b87a4a155a70febf985917d8910726fe3d7220",
+        "bytes": 34143
+      },
+      {
+        "path": ".temp/feed-authority-evidence/resume-input/source-manifest.json",
+        "sha256": "5910bdbec77db67f57336dcc8b8c59fb3c936269dd2d33b71413d5dfc80db2c4",
+        "bytes": 23711
+      },
+      {
+        "path": ".temp/feed-authority-evidence/resume-input/evidence-manifest.json",
+        "sha256": "86e0735b00f092762a8ad4e8c47a9c95d051c0971e69f12748520dd948abfb93",
+        "bytes": 8360
+      },
+      {
+        "path": ".temp/feed-authority-live.test.ts",
+        "sha256": "36220544b7c8bc8a648a5340f500cb30f0a4630da7cef4db5afb9efddb1847fe",
+        "bytes": 25437
+      },
+      {
+        "path": ".temp/goal/jobs/3f6e1029-0569-476f-8748-102123541bc1.log",
+        "sha256": "076829a77772917f79937a5f9edb5ddd6bbe6dffa39aebcb5aec9e04fe02d081",
+        "bytes": 1597
+      }
+    ],
+    "instructionEffect": {
+      "file": "docs/goals/worker.md",
+      "quote": "A finding that still cannot reach its assertion goes to program as unconfirmed and uses no worker fix round.",
+      "effect": "This is the authorized bounded setup correction; repeated transport failure goes to root/startup owner as unconfirmed at Feed tier. No product fix round or class self-closure."
+    },
+    "ownerChanges": "Only claimed cumulative JSON published; all drivers/captures ignored under .temp/. No product, main, index, ledger, live jobs, native data, peer lifecycle or Accounts change.",
+    "blockers": [
+      "Owned disposable Web module graph fails before public Accounts form; fresh signed-in Feed callback cannot run.",
+      "Genuine nonnull saved-Agent eligible=false premise has no lawful retained receipt; existing owner requested through root."
+    ],
+    "next": "Root routes this setup-only evidence to G-2747 and retains D3 original browser assertions open. Preserve accepted completed proofs and all failed traces; no blind rerun or widening."
+  },
   "d3ReaderAuthorityVerdict": {
     "result": "partial-d3-001-genuine-reader-authority-proof-blocked-at-browser-hydration-setup",
     "scope": "Only the newly ready original D3-001 genuine signed-in Feed reader-authority assertions. No rerun of completed D4-016 preview148, FEED-RSC-01 frozen22, unchanged adapter/story/static suites, or whole native Feed fixture.",
