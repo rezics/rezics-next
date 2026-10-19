@@ -11,11 +11,16 @@ ENV JAVA_TOOL_OPTIONS="-XX:+UseSerialGC -XX:ActiveProcessorCount=4 -Djava.io.tmp
 RUN mvn -B -ntp -DskipTests package
 
 FROM module AS module-test
+ARG NATIVE_TEST_SELECTION
+ARG NATIVE_TEST_CACHE_ID=rezics-native-test-files
 # Fixture databases need a writable disk mount: syncing the image layer can exceed
 # their unchanged transaction deadlines. Each fixture still creates a fresh directory.
 # ExternalFixture tests need a live SQL fixture. This native suite excludes that
 # category; the focused wrapper qualifies those original cases separately at this pin.
-RUN --mount=type=cache,id=rezics-native-test-files,target=/build/tmp,sharing=locked mvn -B -ntp -DexcludedGroups=com.rezics.jena.ExternalFixture -DargLine=-Xmx384m -DforkCount=1 -DreuseForks=false package
+# Selected runs use a separate locked partition; fixture directories remain fresh.
+RUN --mount=type=cache,id=${NATIVE_TEST_CACHE_ID},target=/build/tmp,sharing=locked \
+    if [ -n "$NATIVE_TEST_SELECTION" ]; then set -- "-Dtest=$NATIVE_TEST_SELECTION" -Dsurefire.failIfNoSpecifiedTests=true; else set --; fi; \
+    mvn -B -ntp -DexcludedGroups=com.rezics.jena.ExternalFixture -DargLine=-Xmx384m -DforkCount=1 -DreuseForks=false "$@" package
 
 FROM maven:3.9.16-eclipse-temurin-21@sha256:c2a2c58516d160f43b50f12baa427ca86989e0bc942609e04aff61da5d9a7d74 AS distribution
 ARG FUSEKI_VERSION=6.2.0
