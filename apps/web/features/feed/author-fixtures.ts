@@ -27,6 +27,7 @@ export function authorTransport(options: {
   fail?: 'head' | 'draft' | 'place' | 'withdraw'; status?: number; code?: string;
   foreign?: boolean; wrongReceipt?: boolean; wrongRevision?: boolean;
   publishedCorrected?: boolean; draftAhead?: boolean; variantsOnNextPage?: boolean;
+  variantMissing?: boolean; repeatVariantCursor?: boolean;
   authoringSubject?: string | null;
 } = {}) {
   const f = authorFixture;
@@ -109,10 +110,10 @@ export function authorTransport(options: {
       const firstPage = options.variantsOnNextPage && !url.searchParams.has('cursor');
       return Response.json({ work: f.reply,
         authoringSubject: options.authoringSubject === undefined ? f.actor : options.authoringSubject,
-        items: [{ variantId: firstPage ? 'urn:rezics:variant:another' : f.variant,
-          language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
+        items: [{ variantId: firstPage || options.variantMissing ? 'urn:rezics:variant:another' : f.variant,
+          language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: directionOf('en'),
           draftHead, publicationHead: null, eligibilityHead: null }],
-        nextCursor: firstPage ? 'next-variant-page' : null,
+        nextCursor: firstPage || options.repeatVariantCursor ? 'next-variant-page' : null,
         sourcePosition: { owner: 'content', dataEpoch: 'fixture', sequence: '2' } });
     }
     if (method === 'GET' && path.includes('/content-revisions/')) {

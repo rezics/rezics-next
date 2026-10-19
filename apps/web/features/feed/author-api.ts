@@ -87,6 +87,8 @@ export function mainAuthorApi(main: MainClient = browserMainApi()): AuthorApi {
         let cursor: string | undefined;
         let draftHead: string;
         const cursors = new Set<string>();
+        // This is an exact author-head lookup, not a capped public list: follow owner
+        // continuations until this variant is found or the complete read fails.
         for (;;) {
           const heads = await main.v1.works({ id: target.reply.slice(-36) })['content-variants'].get({
             query: { actingSubject, ...(cursor ? { cursor } : {}) },

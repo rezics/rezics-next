@@ -59,6 +59,16 @@ test('selected published bytes stay separate from a paged current private draft 
   expect(calls.find(call => call.method === 'POST')!.body?.expectedHead).toBe(f.concurrent);
 });
 
+test('exhausted and repeated author variant continuations never yield a partial editable basis', async () => {
+  for (const repeatVariantCursor of [false, true]) {
+    const { api, calls } = authorTransport({ variantsOnNextPage: true, variantMissing: true, repeatVariantCursor });
+    expect(await api.read(authorTarget, f.actor)).toEqual({ kind: repeatVariantCursor ? 'failed' : 'missing' });
+    expect(calls.filter(call => call.url.pathname.endsWith('/content-variants'))
+      .map(call => call.url.searchParams.get('cursor'))).toEqual([null, 'next-variant-page']);
+    expect(calls.some(call => call.method === 'POST' || call.url.pathname.includes('/content-revisions/'))).toBe(false);
+  }
+});
+
 test('the private author read cannot substitute a grant or an unrelated exact revision', async () => {
   expect(await authorTransport({ authoringSubject: null }).api.read(authorTarget, f.actor)).toEqual({ kind: 'denied' });
   expect(await authorTransport({ publishedCorrected: true, wrongRevision: true }).api.read({
