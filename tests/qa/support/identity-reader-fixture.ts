@@ -9,6 +9,7 @@ import { signIn, type LocalOAuthClient } from '../../../scripts/lib/oauth-client
 import { createCorpusBackupDriver } from '../../../scripts/load/corpus-backup-driver.ts';
 import { compatibleLoadStorage, loadCompatibility, type LoadCompatibility } from '../../../scripts/load/compatibility.ts';
 import { accountEmailQueue, smtpSender } from '../../../services/account/src/email.ts';
+import { assertAuditExecution } from './audit-execution.ts';
 import { personaNames, personaSession, personaSessions, retainPersonaRealm, restorePersonaRealms,
   type PersonaName, type PersonaSession, type PersonaSessions, type RetainedPersonaRealm } from './personas.ts';
 
@@ -255,12 +256,13 @@ export async function identityReaderFixture() {
       // Private credentials and original identities travel with this one stopped cut.
       writeFileSync(manifestPath, JSON.stringify(corpus, null, 2) + '\n', { mode: 0o600 });
     }
+    const execution = assertAuditExecution(corpus);
     phase = 'restore-corpus';
     await backups.restore(corpus.backup, target, signal);
     remaining();
     const live = sessions!;
     const fault = proxy!;
-    const preparation = { status: 'ready', sourceRevision: corpus.productRevision, backup: corpus.backup,
+    const preparation = { status: 'ready', sourceRevision: corpus.productRevision, execution, backup: corpus.backup,
       buildMs: corpus.buildMs, restore: backups.preparation(target), totalMs: Date.now() - started, budgetMs: 600_000 };
     console.info('IDENTITY_READER_PREPARATION', JSON.stringify(preparation));
     writeFileSync(join(directory, `preparation-${sourceRunId}-${target}.json`), JSON.stringify(preparation, null, 2) + '\n');

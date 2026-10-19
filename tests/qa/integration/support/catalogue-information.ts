@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync, realpathSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { canonicalJson } from '../../../../scripts/lib/canonical-json.ts';
+import { assertAuditExecution } from '../../support/audit-execution.ts';
 import { reconstructIntake } from '../../../../scripts/datasets/import.ts';
 import type { SemanticValue } from '../../../../services/main/src/modules/semantic/value.ts';
 import { sectionIds } from '../../../../services/main/src/modules/entity-page/contract.ts';
@@ -124,6 +125,7 @@ export function loadInformationCorpus(): InformationCorpus {
     throw new Error(`Missing retained catalogue-information corpus: ${path}. ${informationMatrix.sourceFixture.requirement}`, { cause });
   }
   expect(corpus.profile).toBe('catalogue-information-corpus-v1');
+  assertAuditExecution(corpus, { productBaseline: corpus.productBaseline });
   expect(corpus.productBaseline).toBe(informationMatrix.baselineProduct);
   expect(corpus.preparation.stopped).toBe(true);
   expect(corpus.preparation.elapsedMs).toBeGreaterThan(0);

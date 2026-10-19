@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { requireQa } from '../recommendation-support.ts';
+import { assertAuditExecution } from '../../support/audit-execution.ts';
 import { restorePersonaRealms, type PersonaSession, type PersonaSessions,
   type RetainedPersonaRealm } from '../../support/personas.ts';
 
@@ -184,6 +185,8 @@ export async function openReleaseMediaFixture(): Promise<{ fixture: ReleaseMedia
     throw new Error(`RELEASE_MEDIA_FIXTURE_REQUIRED: ${releaseMediaFixturePath}; prepare retained real VNDB and a second source, cover/portrait evidence, scoped command receipts and one consistent backup, then restore an isolated copy. No live acquisition or blank/synthetic substitute is allowed.`);
   }
   const fixture = JSON.parse(readFileSync(releaseMediaFixturePath, 'utf8')) as ReleaseMediaFixture;
+  assertAuditExecution(fixture, { productBaseline: fixture.preparation.baselineProductRevision,
+    fixtureGeneration: fixture.preparation.sourceKey });
   expect(fixture.format).toBe('catalogue-release-media-v1');
   expect(fixture.selection).toBe(releaseMediaSelection);
   expect(fixture.preparation.qaRunId).toBe(qaRunId);

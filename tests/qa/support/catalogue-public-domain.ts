@@ -6,6 +6,7 @@ import { createCorpusBackupDriver } from '../../../scripts/load/corpus-backup-dr
 import { publicDomainBaseline, privateRecipeText, type PublicDomainCorpus,
   type PublicRecipe, type RecipePage, type SourceQuote } from '../fixtures/catalogue-public-domain.ts';
 import { grantPersonaFixtureAuthority } from './persona-fixture-authority.ts';
+import { assertAuditExecution } from './audit-execution.ts';
 import { restorePersonaRealms, type PersonaSession, type PersonaSessions } from './personas.ts';
 
 export const short = (id: string) => id.slice(-36);
@@ -39,9 +40,11 @@ function sourceQuote(quote: SourceQuote): void {
 export function loadPublicDomainCorpus(): PublicDomainCorpus {
   const path = '.temp/goal/public-domain-corpus.json';
   if (!existsSync(path)) throw new Error(`TEST PREMISE: missing ${path}; prepare one isolated command-created corpus `
-    + `at ${publicDomainBaseline}, retain a consistent owner backup and reviewed source quotes within 600 seconds. `
+    + 'with explicit product/test revision pins, retain a consistent owner backup and reviewed source quotes within 600 seconds. '
     + 'No product assertion has been reached. Do not use the shared dev stack or the retained private recipe.');
   const corpus = JSON.parse(readFileSync(localFile(path), 'utf8')) as PublicDomainCorpus;
+  // This legacy field records the historical baseline, not the repaired product under test.
+  assertAuditExecution(corpus, { productBaseline: corpus.productRevision });
   if (corpus.profile !== 'catalogue-public-domain-corpus-v1' || corpus.productRevision !== publicDomainBaseline
     || !corpus.preparationQaRun || !Number.isFinite(corpus.preparationMs)
     || corpus.preparationMs <= 0 || corpus.preparationMs > 600_000)

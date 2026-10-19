@@ -1,6 +1,5 @@
 import { expect } from 'bun:test';
 import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
 import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import matrix from '../fixtures/catalogue/import-outcomes.json';
@@ -9,6 +8,7 @@ import type { DatasetRecord, DatasetSnapshot } from '../../../scripts/datasets/t
 import { reconstructIntake } from '../../../scripts/datasets/import.ts';
 import type { Persona, RowOutcomes } from '../../../scripts/qa/cases/outcome-cells.ts';
 import type { PersonaSession, PersonaSessions, RetainedPersonaRealm } from './personas.ts';
+import { assertAuditExecution } from './audit-execution.ts';
 import { admissionRefusals, retainedAdmissionCases, type RetainedConversionRequest,
   type RetainedFieldCoordinate, type RetainedRecordBinding, type RetainedRecordInput, type RetainedSupportAdmission,
   type RetainedSupportRequest } from '../fixtures/catalogue/import-admission-contract.ts';
@@ -149,7 +149,8 @@ export async function openImportFixture(row: RowOutcomes): Promise<ImportFixture
   expect(['baseline', 'candidate']).toContain(corpus.phase);
   expect(corpus.selectionDigest).toBe(digest(matrix));
   expect(corpus.productRevision).toMatch(/^[a-f0-9]{40}$/);
-  expect(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repository, encoding: 'utf8' }).trim()).toBe(corpus.productRevision);
+  assertAuditExecution(corpus, { checkout: repository, productBaseline: matrix.baselineProduct,
+    productRevision: corpus.productRevision });
   if (corpus.phase === 'baseline') expect(corpus.productRevision).toBe(matrix.baselineProduct);
   const restoredRunId = Bun.env.REZICS_QA_RUN_ID;
   if (!restoredRunId) throw new Error('TEST PREMISE: missing isolated restored REZICS_QA_RUN_ID');

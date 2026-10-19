@@ -4,6 +4,7 @@ import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
 import type { Participant } from '../../../services/main/src/modules/relation/schema.ts';
 import type { SemanticValue } from '../../../services/main/src/modules/semantic/value.ts';
+import { assertAuditExecution } from './audit-execution.ts';
 import { restorePersonaRealms, type PersonaName, type PersonaSession,
   type PersonaSessions, type RetainedPersonaRealm } from './personas.ts';
 
@@ -146,9 +147,11 @@ export async function contextHarness(): Promise<ContextHarness> {
   const path = resolve('.temp/qa-context-outcomes', runId, 'restored.json');
   if (!existsSync(path)) throw new Error('Context outcome fixture prerequisite missing: '
     + '.temp/qa-context-outcomes/<run-id>/restored.json; prepare one command-created retained corpus, '
-    + 'restore an isolated copy within 600 s, and pin the pristine product baseline. No product assertion reached.');
+    + 'restore an isolated copy within 600 s, and pin the product and test revisions separately. No product assertion reached.');
   if ((statSync(localFile(path)).mode & 0o077) !== 0) throw new Error('Restored persona fixture must be mode 0600');
   const restored = JSON.parse(readFileSync(path, 'utf8')) as RestoredContextOutcomes;
+  assertAuditExecution(restored, { productBaseline: restored.corpus.productBaseline,
+    productRevision: restored.preparation.pristineProduct, fixtureGeneration: restored.preparation.sourceKey });
   expect(restored.format).toBe('restored-context-outcomes-v1');
   expect(restored.runId).toBe(runId);
   expect(restored.preparation.commandCreated).toBe(true);

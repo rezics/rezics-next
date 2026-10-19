@@ -10,6 +10,7 @@ import { loadCompatibility } from '../../../scripts/load/compatibility.ts';
 import { retainStoppedOwnerBackup, restoreCatalogueBackup } from '../../../scripts/load/catalogue-backup.ts';
 import { stopCorpusSourcePostgres } from '../../../scripts/load/corpus-backup-driver.ts';
 import { grantPersonaFixtureAuthority } from './persona-fixture-authority.ts';
+import { assertAuditExecution } from './audit-execution.ts';
 import { personaSessions, retainPersonaRealm, restorePersonaRealms,
   type PersonaSession, type PersonaSessions, type RetainedPersonaRealm } from './personas.ts';
 
@@ -274,6 +275,7 @@ export async function restoreAuthorManagementCorpus() {
     + 'REZICS_QA_STACK_MODE=scale bun scripts/goal/goalctl.ts test '
     + 'tests/qa/integration/outcomes/realm/studio-inventory.test.ts -t AMGT00');
   const metadata = JSON.parse(readFileSync(authorManagementManifest, 'utf8')) as AuthorManagementCorpus;
+  const execution = assertAuditExecution(metadata, { checkout: root, productBaseline: metadata.baselineProduct });
   if (metadata.format !== 'author-management-corpus-v1' || metadata.recipeDigest !== recipeDigest()
     || metadata.compatibility !== loadCompatibility(root).digest || metadata.preparedMs > 600_000)
     throw new Error('Retained author-management corpus recipe, storage or preparation differs');
@@ -292,7 +294,7 @@ export async function restoreAuthorManagementCorpus() {
       `/v1/content-revisions/${content.revisionId}`));
     budget.remaining();
     console.info('Author-management restore', JSON.stringify({ runId, baselineProduct: metadata.baselineProduct,
-      totalMs: budget.elapsed(), admissionWaitMs: budget.admissionWaitMs() }));
+      execution, totalMs: budget.elapsed(), admissionWaitMs: budget.admissionWaitMs() }));
     const live = sessions;
     return { metadata, sessions: live[0]!, independent: live[1]!,
       async close() { try { await live[0]!.close(); } finally { await copy.stop(); } } };
