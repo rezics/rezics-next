@@ -8,8 +8,6 @@ import { readEnv } from '../../../../../scripts/dev/config.ts';
 import { runQaStartupChildAsync } from '../../../../../scripts/qa/stack-startup.ts';
 import { stopCorpusSourcePostgres } from '../../../../../scripts/load/corpus-backup-driver.ts';
 import { migrateOwnerData, assertOwnerMigrationsComplete } from '../../../../../scripts/fixture/migrate.ts';
-import { GLOBAL_CONTEXT_SCOPE } from '../../../../../services/main/src/modules/rating/global.ts';
-import { questionPresentationScope, QUESTION_PRESENTATION_ACTIONS } from '../../../../../services/main/src/modules/rating/question-presentation-schema.ts';
 import { grantPersonaFixtureAuthority } from '../../../support/persona-fixture-authority.ts';
 import { personaNames, personaSessions, retainPersonaRealm, restorePersonaRealms,
   type PersonaSession, type PersonaSessions, type RetainedPersonaRealm } from '../../../support/personas.ts';
@@ -67,7 +65,7 @@ async function prepare(): Promise<Source> {
   const other = await json<{ work: string }>(people.owner.main('POST', '/v1/works', {
     profile: 'metadata-only-v1', authoring: 'own-work', title: 'Separate native rating target',
     language: 'en', semanticTypes: ['https://schema.org/Book'], ...own(people.owner) }), 201);
-  await grant(people.owner, GLOBAL_CONTEXT_SCOPE, 'rating.context.create');
+  await grant(people.owner, 'rating:context:https://rezics.com/id/00000000-0000-8000-8000-676c6f62616c', 'rating.context.create');
   const global = await json<Context>(people.owner.main('POST', '/v1/global-rating-contexts', {
     profile: 'global-rating-standing-context-v1', question: 'Overall quality?', scale: { min: 1, max: 10, step: 1 }, ...own(people.owner) }), 201);
   const communities: Source['communities'] = [];
@@ -86,7 +84,7 @@ async function prepare(): Promise<Source> {
         profile: 'realm-standing-rating-context-v1', realm: community.realm, question: 'Overall quality?', scale, ...own(people.owner) }), 201);
       contexts.push(context);
       if (n === 0) {
-        for (const action of QUESTION_PRESENTATION_ACTIONS) await grant(people.owner, questionPresentationScope(context.context), action);
+        for (const action of ['rating.question-presentation.change', 'rating.question-presentation.review']) await grant(people.owner, `rating:presentation:${context.context}`, action);
         await presentation(context.context);
       }
     }
