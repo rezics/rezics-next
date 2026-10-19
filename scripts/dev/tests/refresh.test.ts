@@ -1449,25 +1449,37 @@ describe('isolated PostgreSQL migration rehearsal', () => {
         FOR EACH ROW EXECUTE FUNCTION public.refresh_probe_advance();`);
     observer = client(adminUrl);
     await observer.connect();
-    const seen = new Set<string>();
+    const seen = new Map<number, { phase: string; wait: string; since: number; last: number; samples: number }>();
     const started = Date.now();
     observation = setInterval(() => {
       if (sampling) return;
       sampling = true;
       // Observe the disposable container only. Fixed phase/wait labels cannot
       // disclose SQL, business rows, identifiers, credentials or database URLs.
-      sample = observer.query(`SELECT CASE WHEN query LIKE 'DROP DATABASE%' THEN 'drop' ELSE 'terminate' END AS phase,
+      sample = observer.query(`SELECT pid, CASE WHEN query LIKE 'DROP DATABASE%' THEN 'drop' ELSE 'terminate' END AS phase,
         CASE wait_event WHEN 'CheckpointDone' THEN 'checkpoint-done' WHEN 'CheckpointStart' THEN 'checkpoint-start'
           WHEN 'ProcSignalBarrier' THEN 'process-barrier' WHEN 'WALSync' THEN 'wal-sync' WHEN 'WALWrite' THEN 'wal-write'
           ELSE CASE wait_event_type WHEN 'Lock' THEN 'lock' WHEN 'IO' THEN 'io' WHEN 'IPC' THEN 'ipc'
             WHEN 'Client' THEN 'client' ELSE 'running' END END AS wait
-        FROM pg_stat_activity WHERE application_name LIKE 'rezics_rehearsal_%_cleanup'`).then(result => {
+        FROM pg_stat_activity WHERE application_name LIKE 'rezics_rehearsal_%_cleanup' AND state='active'`).then(result => {
+        const now = Date.now();
+        const active = new Set<number>();
         for (const row of result.rows) {
-          const label = `${row.phase}:${row.wait}`;
-          if (!seen.has(label)) {
-            seen.add(label);
-            console.log(`Isolated cleanup +${Date.now() - started}ms wait=${label}`);
+          active.add(row.pid);
+          const prior = seen.get(row.pid);
+          if (prior?.phase === row.phase && prior.wait === row.wait) {
+            prior.last = now;
+            prior.samples++;
+            continue;
           }
+          if (prior) console.log(`Isolated cleanup +${now - started}ms phase=${prior.phase} wait=${prior.wait} sampled-span=${prior.last - prior.since}ms samples=${prior.samples} gap=${now - prior.last}ms`);
+          console.log(`Isolated cleanup +${now - started}ms phase=${row.phase} wait=${row.wait} start`);
+          seen.set(row.pid, { phase: row.phase, wait: row.wait, since: now, last: now, samples: 1 });
+        }
+        for (const [pid, prior] of seen) {
+          if (active.has(pid)) continue;
+          console.log(`Isolated cleanup +${now - started}ms phase=${prior.phase} wait=${prior.wait} sampled-span=${prior.last - prior.since}ms samples=${prior.samples} gap=${now - prior.last}ms active-end`);
+          seen.delete(pid);
         }
       }).catch(() => {}).finally(() => { sampling = false; });
     }, 200);
@@ -1481,6 +1493,16 @@ describe('isolated PostgreSQL migration rehearsal', () => {
     // Container/volume removal can outlast SQL; it has its own cleanup budget.
     finally {
       const logs = spawnSync('docker', ['logs', '--tail', '100', fixtureName], { encoding: 'utf8', timeout: 1_000, maxBuffer: 65_536 });
+      // A synchronous owner call can pause sampling; spans cover samples only,
+      // and missing Docker evidence must not be mistaken for a healthy server.
+      console.log(`Isolated PostgreSQL log transport: ${JSON.stringify({ exit: logs.status,
+        signal: logs.signal, error: logs.error ? ('code' in logs.error && logs.error.code === 'ETIMEDOUT' ? 'timeout' : 'error') : null })}`);
+      for (const line of (logs.stdout + logs.stderr).split('\n')) {
+        const begin = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} [A-Z]+).*checkpoint starting: ((?:(?:shutdown|end-of-recovery|immediate|force|wait|wal|time|flush-all) ?)+)$/);
+        const end = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3} [A-Z]+).*checkpoint complete:.*write=([0-9.]+) s, sync=([0-9.]+) s, total=([0-9.]+) s; sync files=([0-9]+), longest=([0-9.]+) s, average=([0-9.]+) s/);
+        if (begin) console.log(`Isolated checkpoint ${begin[1]} start=${begin[2]}`);
+        if (end) console.log(`Isolated checkpoint ${end[1]} write=${end[2]}s sync=${end[3]}s total=${end[4]}s files=${end[5]} longest=${end[6]}s average=${end[7]}s`);
+      }
       const health = (logs.stdout + logs.stderr).split('\n').flatMap(line => {
         const prefix = line.match(/\[(\d+)\] \[([^\]]+)\]/);
         const process = prefix ? [`pid-${prefix[1]}`, ...[
