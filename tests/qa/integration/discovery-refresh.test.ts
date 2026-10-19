@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
 import { Pool } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { DiscoveryProjection, discoveryScopeKey } from '../../../services/main/src/modules/discovery/store.ts';
@@ -14,6 +15,7 @@ import { AccessJudgments } from '../../../services/main/src/modules/judgment/acc
 import { authorCreditTriples } from '../../../services/main/src/modules/work/author-credit.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
 import { WorkReadUnavailable, workRead } from '../../../services/main/src/modules/work/read-session.ts';
+import { WORK_READ_COST } from '../../../services/main/src/modules/work/read-contract.ts';
 import { startMediaStack } from './media-support.ts';
 import { DiscoveryRefreshInputs } from '../../../services/main/src/modules/discovery/source.ts';
 import type { OwnedDiscoveryBasis } from '../../../services/main/src/modules/discovery/contract.ts';
@@ -217,7 +219,9 @@ interface QueueState {
   checkpoint: string | null;
 }
 
-test('refresh owners quarantine malformed source once, bound fleet probes, recover transient work and rearm repaired input', async () => {
+test('D5004C01: refresh owners quarantine malformed source once, bound fleet probes, recover transient work and rearm repaired input', async () => {
+  const artifacts = Bun.env.REZICS_QA_ARTIFACT_DIR;
+  if (!artifacts) throw new Error('QA artifact directory is unavailable');
   const basis: OwnedDiscoveryBasis = { scope: 'global', realm: null, context: null, owner: null };
   const key = discoveryScopeKey(basis);
   const owners = await cloneQaOwnerDatabases(requireQa(), ['access', 'content', 'relay'], 'privileged');
@@ -226,6 +230,9 @@ test('refresh owners quarantine malformed source once, bound fleet probes, recov
   const query = f.fuseki.query.bind(f.fuseki);
   let head: string | undefined;
   let restoreGraph: (() => Promise<void>) | undefined;
+  let pendingRefresh: Promise<QueueState> | undefined;
+  let releasePopulation = () => {};
+  let populationTimer: ReturnType<typeof setTimeout> | undefined;
   // Contradictory current revision evidence is a real fault in today's identity
   // projection. No media hydration or synthetic worker outcome produces it.
   const conflictingSequence = '9223372036854775808';
@@ -274,12 +281,38 @@ test('refresh owners quarantine malformed source once, bound fleet probes, recov
       else if (job?.scope_key === key) fullClaims++;
       return job;
     };
+    let holdPopulation = false;
+    let entered!: () => void;
+    const entering = new Promise<void>(resolve => { entered = resolve; });
+    const overlap = { capability: 'discovery-refresh-maintenance', phase: 'concurrent-core-read',
+      personaJourney: false, nativeEngineCpuOverlapClaimed: false, responseDeliveryHeld: true,
+      nativeResponseAtMs: 0, coreStartedAtMs: 0, coreAnsweredAtMs: 0, deliveryReleasedAtMs: 0,
+      refreshSettledAtMs: 0, refreshSettledAtAnswer: false, publicStatus: 0, privateStatus: 0,
+      assertionReached: false, failure: null as string | null };
+    const released = new Promise<void>(resolve => {
+      releasePopulation = () => {
+        if (!overlap.deliveryReleasedAtMs) overlap.deliveryReleasedAtMs = performance.now();
+        resolve();
+      };
+    });
     f.fuseki.query = async (...args) => {
-      if (claimedScope === key && args[0].includes('SELECT DISTINCT ?work ?head')) {
+      const population = claimedScope === key && args[0].includes('SELECT DISTINCT ?work ?head');
+      if (population) {
         populationReads++;
         if (unavailable) throw new WorkReadUnavailable('Fixture discovery transport is unavailable');
       }
-      return query(...args);
+      const hold = holdPopulation && population;
+      if (hold) holdPopulation = false;
+      const result = await query(...args);
+      if (hold) {
+        // Keep the real native result unchanged; only delivery to the refresh
+        // waits while real HTTP readers answer. This does not measure Jena CPU overlap.
+        overlap.nativeResponseAtMs = performance.now();
+        populationTimer = setTimeout(releasePopulation, WORK_READ_COST.deadlineMs);
+        entered();
+        await released;
+      }
+      return result;
     };
     const until = async (done: (row: QueueState) => boolean, advance: number = DISCOVERY_REFRESH_COST.probeMs) => {
       for (let i = 0; i < 200; i++) {
@@ -292,7 +325,45 @@ test('refresh owners quarantine malformed source once, bound fleet probes, recov
     };
     await f.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/>
       INSERT DATA { GRAPH ${iri(GRAPHS.revisions)} { ${iri(head)} rv:sequence ${conflictingSequence} } }`);
-    const failed = await until(row => row.quarantine_reason === 'basis-invalid');
+    holdPopulation = true;
+    pendingRefresh = until(row => row.quarantine_reason === 'basis-invalid');
+    void pendingRefresh.then(() => { overlap.refreshSettledAtMs = performance.now(); },
+      () => { overlap.refreshSettledAtMs = performance.now(); });
+    try {
+      await Promise.race([entering, pendingRefresh.then(() => {
+        throw new Error('Faulty refresh finished before concurrent HTTP reads');
+      })]);
+      overlap.coreStartedAtMs = performance.now();
+      const [publicResponse, privateResponse] = await Promise.all([
+        f.main.handle(new Request(`http://main.local/v1/works/${work.work.slice(-36)}`)),
+        f.main.handle(new Request(`http://main.local/v1/works/${hidden.work.slice(-36)}`)),
+      ]);
+      const [publicBody, privateBody] = await Promise.all([publicResponse.text(), privateResponse.text()]);
+      overlap.coreAnsweredAtMs = performance.now();
+      overlap.refreshSettledAtAnswer = overlap.refreshSettledAtMs !== 0;
+      overlap.publicStatus = publicResponse.status;
+      overlap.privateStatus = privateResponse.status;
+      overlap.assertionReached = true;
+      expect(overlap.nativeResponseAtMs).toBeLessThanOrEqual(overlap.coreStartedAtMs);
+      expect(overlap.deliveryReleasedAtMs, 'Refresh response delivery must still be pending at both HTTP answers').toBe(0);
+      expect(overlap.refreshSettledAtAnswer).toBe(false);
+      expect(overlap.coreAnsweredAtMs - overlap.nativeResponseAtMs).toBeLessThan(WORK_READ_COST.deadlineMs);
+      expect(publicResponse.status, publicBody).toBe(200);
+      expect(JSON.parse(publicBody)).toMatchObject({ id: work.work });
+      expect(privateResponse.status, privateBody).toBe(404);
+      expect(privateBody).not.toContain(hidden.work);
+    } catch (error) {
+      overlap.failure = String(error);
+      throw error;
+    } finally {
+      releasePopulation();
+      clearTimeout(populationTimer);
+      await Bun.write(join(artifacts, 'discovery-refresh-core-overlap.json'), JSON.stringify({ ...overlap,
+        coreDurationMs: overlap.coreAnsweredAtMs ? overlap.coreAnsweredAtMs - overlap.coreStartedAtMs : null,
+        heldDurationMs: overlap.nativeResponseAtMs ? overlap.deliveryReleasedAtMs - overlap.nativeResponseAtMs : null,
+      }, null, 2));
+    }
+    const failed = await pendingRefresh;
     expect(failed.last_error).toBe('Discovery source is ambiguous');
     expect(failed.generation_id).not.toBeNull();
     expect(failed.attempts).toBe('0');
@@ -391,6 +462,9 @@ test('refresh owners quarantine malformed source once, bound fleet probes, recov
       probesInOneAllowance, transientAttempts: 2,
       personaJourney: false, queueClock: 'injected; graph, Access, projection and leases use production owners' }));
   } finally {
+    releasePopulation();
+    clearTimeout(populationTimer);
+    await pendingRefresh?.catch(() => {}); // Its rejection is propagated above; settle before restoring owners.
     f.fuseki.query = query;
     try { await repair(); }
     finally {
