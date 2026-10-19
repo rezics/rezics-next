@@ -11,7 +11,7 @@ test('G851: related-node release facets pin their path, child placement, meaning
   expect(releaseFacets).toHaveLength(7);
   for (const facet of releaseFacets) {
     const compiled = compileFacet(facet);
-    expect(facetRegistry[`https://rezics.com/definition/${facetId(facet)}` as keyof typeof facetRegistry].digest).toBe(compiled.digest);
+    expect(compiled.digest).toBe(facetRegistry[`https://rezics.com/definition/${facetId(facet)}` as keyof typeof facetRegistry].digest);
     expect(Object.keys(compiled.labels as object)).toEqual([...facetLocales]);
     if (facet.name !== 'release') expect(compiled).toMatchObject({ appliesTo: 'participant',
       within: 'https://rezics.com/definition/facet-release-v1', subject: 'https://rezics.com/vocab/Release' });
