@@ -16,7 +16,9 @@ import { attributed } from '../rights-mark/fixtures.ts';
 import { reportHref } from '../safety/report.ts';
 import { ReportMenu } from '../safety/report-action.tsx';
 import { messages as workMessages } from '../work-page/messages.ts';
-import { ReleaseView } from '../work-levels/release-page.tsx';
+import { ReleaseSources, ReleaseView } from '../work-levels/release-page.tsx';
+import { AppShell } from '../shell/app-shell.tsx';
+import { messages as shellMessages } from '../shell/messages.ts';
 import { RealizationRow } from '../work-levels/editions.tsx';
 import * as editions from '../work-levels/fixtures.ts';
 import { copyOf as editionsCopy } from '../work-levels/messages.ts';
@@ -319,6 +321,38 @@ describe('non-Work detail hosts', () => {
     expect(refusal).toContain(`${t.realizationRevision}: ${pin.revision}`);
     expect(refusal).toContain(workMessages.en.regionUnavailable);
     expect(refusal).not.toContain(workMessages.en.regionDenied);
+  });
+
+  test('the shell composes Release sources once after main while preserving exact evidence revisions and refused sources', () => {
+    if (!editions.releases.ok || !editions.realizations.ok) throw new Error('Expected edition fixtures');
+    const selected = { ...editions.realizations.data.items[0]!, evidence: null };
+    const retained = { ...selected, revision: target, evidence: 'https://example.test/retained-evidence' };
+    const native = { ...selected, id: editions.iri('r9'), evidence: editions.iri('e9') };
+    const props = { release: editions.releases.data.items[0]!,
+      realizations: new Map([[selected.id, { ok: true as const, data: selected }]]),
+      sources: [retained, retained, native], names: editions.names, locale: 'en' as const, t: editionsCopy('en'),
+      sourceReads: [{ work: selected.work, id: editions.iri('r8'), revision: target,
+        read: { ok: false as const, failure: 'unavailable' as const, status: 503 } }] };
+    const html = render(<AppShell locale="en" messages={shellMessages} theme="light" navCollapsed={false} account={null}
+      pageEnd={<ReleaseSources {...props} />}><ReleaseView {...props} pageEndSources /></AppShell>);
+    const mainEnd = html.indexOf('</main>');
+    const footerAt = html.indexOf('<footer role="contentinfo"');
+    expect(mainEnd).toBeGreaterThan(html.indexOf('data-coverage'));
+    expect(footerAt).toBeGreaterThan(mainEnd);
+    expect(html.match(/<main\b/g)).toHaveLength(1);
+    expect(html.match(/data-subject-sources/g)).toHaveLength(1);
+    const footer = html.slice(footerAt);
+    expect(footer).toContain(`${t.releaseRevision}: ${props.release.revision}`);
+    expect(footer).toContain(`${t.realizationRevision}: ${selected.revision}`);
+    expect(footer).toContain(`${t.realizationRevision}: ${retained.revision}`);
+    expect(footer).toContain(t.noEvidence);
+    expect(footer.match(/data-realization-record/g)).toHaveLength(3);
+    expect(footer.match(/href="https:\/\/example\.test\/retained-evidence"/g)).toHaveLength(1);
+    expect(footer).toContain(native.evidence);
+    expect(footer).not.toContain(`href="${native.evidence}"`);
+    expect(footer).toContain(workMessages.en.regionUnavailable);
+    expect(footer).not.toContain(workMessages.en.regionDenied);
+    expect(html.slice(0, mainEnd)).not.toContain(retained.evidence);
   });
 
   test('a denied realization and an unavailable realization remain distinct without hiding coverage', () => {

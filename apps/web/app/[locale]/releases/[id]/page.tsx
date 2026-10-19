@@ -18,6 +18,6 @@ export default async function ReleaseRoute({ params }: Props) {
   const id = parseReleaseId(segment);
   if (!id) notFound();
   return <PageContainer className="max-w-4xl">
-    <ReleasePage id={id} locale={locale} pageMessages={await getMessages('workPage', locale)} />
+    <ReleasePage id={id} locale={locale} pageMessages={await getMessages('workPage', locale)} pageEndSources />
   </PageContainer>;
 }

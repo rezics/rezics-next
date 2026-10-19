@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { readingAgent } from '../work-page/read.ts';
 import type { WorkAt } from '../work-page/route.ts';
 import { readAnimeRelationsConnections } from '../work-page/anime-relations-recorded-page.ts';
@@ -10,7 +11,7 @@ import Link from '../shell/localized-link.tsx';
 import { EditEntry } from '../work-levels-edit/edit-entry.tsx';
 import { EditionsSection, ReleaseCard } from './editions.tsx';
 import { copyOf } from './messages.ts';
-import { ReleaseFailure, ReleaseView } from './release-page.tsx';
+import { ReleaseFailure, ReleaseSources, ReleaseView } from './release-page.tsx';
 import {
   namesOf,
   readCollectionMembers,
@@ -101,21 +102,12 @@ export async function EditionsPage({
   );
 }
 
-/** A release's page: Main's release, the realizations it carries, and the names of everything it reaches. */
-export async function ReleasePage({
-  id,
-  locale,
-  pageMessages,
-}: {
-  id: string;
-  locale: UiLocale;
-  pageMessages: WorkPageMessages;
-}) {
-  const t = copyOf(locale);
+// The body and parallel page-end slot share one request's selection, including
+// exact coverage/source revisions and refused reads, without repeating Main calls.
+const readReleaseSelection = cache(async (id: string) => {
   const owner = await readReleaseWork(id);
   const release = owner.ok ? await readRelease(owner.data.work, iriOf(id).slice(-36)) : owner;
-  if (!release.ok)
-    return <ReleaseFailure failure={release.failure} messages={pageMessages} t={t} />;
+  if (!release.ok) return release;
   // Every coverage entry's realization is read (a release covers at most 64).
   const realizations = await readReleaseRealizations(release.data.coverage);
   const loaded = [...realizations.values()].flatMap((read) => (read.ok ? [read.data] : []));
@@ -130,18 +122,31 @@ export async function ReleasePage({
     ...release.data.coverage.flatMap((entry) => [entry.work, entry.mainVersion]),
     ...parties,
   ]);
+  return { ok: true as const, data: { release: release.data, realizations, sources, sourceReads, names } };
+});
+
+/** A release's page: Main's release, the realizations it carries, and the names of everything it reaches. */
+export async function ReleasePage({ id, locale, pageMessages, pageEndSources = false }: {
+  id: string; locale: UiLocale; pageMessages: WorkPageMessages; pageEndSources?: boolean;
+}) {
+  const selected = await readReleaseSelection(id);
+  const t = copyOf(locale);
+  if (!selected.ok) return <ReleaseFailure failure={selected.failure} messages={pageMessages} t={t} />;
   return (
     <ReleaseView
-      release={release.data}
+      {...selected.data}
       reader={await readingAgent()}
-      realizations={realizations}
-      sources={sources}
-      sourceReads={sourceReads}
-      names={names}
       locale={locale}
       t={t}
+      pageEndSources={pageEndSources}
     />
   );
+}
+
+/** Failed selections stay in main; the slot never invents a source record for them. */
+export async function ReleasePageEnd({ id, locale }: { id: string; locale: UiLocale }) {
+  const selected = await readReleaseSelection(id);
+  return selected.ok ? <ReleaseSources {...selected.data} locale={locale} t={copyOf(locale)} /> : null;
 }
 
 /** Several releases carry one ISBN (or Main has more to give): the reader chooses, none is picked for them. */

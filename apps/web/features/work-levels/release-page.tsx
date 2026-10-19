@@ -20,21 +20,24 @@ import { ReleaseNamesRecovery } from './release-names-recovery.tsx';
 import type { SelectedRealizationRead } from './read.ts';
 import type { Loaded, Names, Realization, Release } from './types.ts';
 
+interface ReleaseDetails {
+  release: Release; realizations: ReadonlyMap<string, Loaded<Realization>>;
+  /** The realizations those ones follow, so a translation can name the language it comes from. */
+  sources: readonly Realization[]; sourceReads?: readonly SelectedRealizationRead[];
+  names: Names; locale: UiLocale; t: Copy;
+}
+
 /**
  * A release with what it reaches: for each thing it covers, the Work, its Main Version and
  * the realization (who made that text) it carries. Everything comes from Main's release
  * coverage; nothing is matched by title.
  */
-export function ReleaseView({ release, realizations, sources, sourceReads = [], names, locale, t, reader }: {
-  release: Release; realizations: ReadonlyMap<string, Loaded<Realization>>;
-  /** The realizations those ones follow, so a translation can name the language it comes from. */
-  sources: readonly Realization[]; sourceReads?: readonly SelectedRealizationRead[];
-  names: Names; locale: UiLocale; t: Copy;
+export function ReleaseView({ release, realizations, sources, sourceReads = [], names, locale, t, reader, pageEndSources = false }: ReleaseDetails & {
   reader?: { signedIn: boolean; actingSubject?: string | null };
+  /** The server slot supplies the same selected sources outside the shell's main landmark. */
+  pageEndSources?: boolean;
 }) {
   const loaded = [...[...realizations.values()].flatMap(item => (item.ok ? [item.data] : [])), ...sources];
-  // Identity/revision survives absent evidence; distinct retained revisions stay distinct.
-  const records = [...new Map(loaded.map(item => [`${item.id}\0${item.revision}`, item] as const)).values()];
   const original = sourceHref(release.originalUrl);
   const detail = detailCopy(locale);
   const namesUnavailable = [...names.values()].some(item => item.status === 'unavailable-read');
@@ -83,7 +86,18 @@ export function ReleaseView({ release, realizations, sources, sourceReads = [], 
       </ol> : <p className="text-muted-foreground text-sm">{t.noCoverage}</p>}
     </Region>
     </div>
-    <SubjectSources locale={locale}>
+    {pageEndSources ? null : <ReleaseSources release={release} realizations={realizations} sources={sources}
+      sourceReads={sourceReads} names={names} locale={locale} t={t} />}
+  </div>;
+}
+
+/** The selected Release's records, shared by standalone views and the server page-end slot. */
+export function ReleaseSources({ release, realizations, sources, sourceReads = [], names, locale, t }: ReleaseDetails) {
+  const loaded = [...[...realizations.values()].flatMap(item => (item.ok ? [item.data] : [])), ...sources];
+  // Identity/revision survives absent evidence; distinct retained revisions stay distinct.
+  const records = [...new Map(loaded.map(item => [`${item.id}\0${item.revision}`, item] as const)).values()];
+  const detail = detailCopy(locale);
+  return <SubjectSources locale={locale}>
       <p className="text-muted-foreground text-xs [overflow-wrap:anywhere]">{detail.releaseRevision}: {release.revision}</p>
       <ul className="grid gap-3">{records.map(item => <li key={`${item.id}:${item.revision}`} data-realization-record className="grid min-w-0 gap-1">
         <p><NameLink reference={item.work} names={names} unavailable={t.unavailable} unnamed={t.unnamed} undisclosed={t.nameNotShown} />{' · '}
@@ -100,8 +114,7 @@ export function ReleaseView({ release, realizations, sources, sourceReads = [], 
         <p className="text-muted-foreground text-xs [overflow-wrap:anywhere]">{detail.realizationRevision}: {item.revision}</p>
         <RegionFailure title={t.realizationUnavailable} failure={item.read.failure} messages={workMessages[locale]} />
       </div>)}
-    </SubjectSources>
-  </div>;
+    </SubjectSources>;
 }
 
 export function ReleaseFailure({ failure, messages, t }: { failure: Extract<Loaded<Release>, { ok: false }>['failure'];
