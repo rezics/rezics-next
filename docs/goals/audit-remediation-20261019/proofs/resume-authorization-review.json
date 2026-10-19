@@ -230,5 +230,122 @@
       "instruction": "End that turn immediately with `RESULT: parked`, without a handoff, polling, reading logs or starting more work.",
       "effect": "The two recorded sequences that exceeded the inline window parked this worker; work resumed only on their recorded completion wakes."
     }
-  ]
+  ],
+  "correctedDeltaReview": {
+    "candidate": "8d5543b5e964a0f08256932ec6e01e09dad407f2",
+    "parent": "8c9d0995abe4afaf69138a3f06efda1650457c33",
+    "tree": "aee739275bb722addd57b8827954893cc431aa0a",
+    "originalReviewCommit": "b369ac0fe6b6eeef1fffae19b948010631532778",
+    "reviewer": {
+      "task": "G-2850",
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "execution": "Continuation of the same independent review session, restricted to the exact corrective delta.",
+      "nestedAgents": false,
+      "accountFallback": false
+    },
+    "reviewSnapshot": ".temp/resume-authorization-review/corrected-source",
+    "sourceVerification": "Detached checkout at the corrected immutable candidate. Parent and two-path delta verified from Git objects; tracked source matches the pin. Root dirty work and the manager candidate checkout were not used as proof.",
+    "deltaPaths": [
+      "scripts/goal/measures.test.ts",
+      "scripts/goal/measures.ts"
+    ],
+    "deltaAssessment": [
+      {
+        "path": "scripts/goal/measures.ts",
+        "line": 170,
+        "observation": "Explicit sameScope classification maps to fixRound before the generic resumeClass counter key. Existing retry/job-wake precedence remains. Run and daily increments, repair share and rendered fix totals therefore use the initialized finite fixRound counter; persisted attempt/queue classification is untouched."
+      },
+      {
+        "path": "scripts/goal/measures.test.ts",
+        "line": 222,
+        "observation": "The existing explicit-classification fixture adds a sameScope attempt and expects fixRound=2 and firstAttemptShare.run.share=1/3, while baselineRed/environment/unclassified expectations remain."
+      }
+    ],
+    "preservedEvidence": {
+      "originalCandidate": "8c9d0995abe4afaf69138a3f06efda1650457c33",
+      "originalVerdict": "request_changes",
+      "originalFinding": "unhandled-resume-classification",
+      "originalFailingReproducer": {
+        "path": "scripts/goal/same-scope-measures-review.test.ts",
+        "sha256": "341cddc78eb4f6f6e9d98e97eccda1504d40b638c5aa0435ce4d6b858b6aec81",
+        "contentLocation": "findings[0].evidence.runtime.test.content",
+        "modified": false
+      },
+      "successfulAuthorizationAndLaunchCases": 9,
+      "unchangedReview": "All original findings, the test-body failure, check records and nine successful authorization/launch counterexamples remain intact above; unchanged authorization code was not reviewed or tested again."
+    },
+    "verdict": "approve",
+    "findings": [],
+    "checks": {
+      "status": "passed",
+      "job": "job:1da55310-c591-4d08-b34d-6160ef2ec8fc",
+      "measurementTests": {
+        "step": 1,
+        "command": "env CLAUDECODE=1 bun scripts/goal/goalctl.ts test ./.temp/resume-authorization-review/corrected-source/scripts/goal/measures.test.ts ./.temp/resume-authorization-review/corrected-source/scripts/goal/same-scope-measures-review.test.ts --result-file .temp/resume-authorization-review/corrected-measures-result.json",
+        "exitCode": 0,
+        "passed": 16,
+        "failed": 0,
+        "assertions": 71,
+        "files": [
+          "scripts/goal/measures.test.ts",
+          "scripts/goal/same-scope-measures-review.test.ts"
+        ],
+        "log": ".temp/goal/jobs/1da55310-c591-4d08-b34d-6160ef2ec8fc.1.log",
+        "resultFile": ".temp/resume-authorization-review/corrected-measures-result.json",
+        "originalReproducer": {
+          "sha256": "341cddc78eb4f6f6e9d98e97eccda1504d40b638c5aa0435ce4d6b858b6aec81",
+          "modified": false,
+          "result": "passed",
+          "assertionReached": "yes",
+          "case": "sameScope review: supported resume classifications produce finite run and daily counts"
+        },
+        "classificationFixture": "explicit baseline-red and environment resumes exclude only those causes: sameScope adds the second fixRound and firstAttemptShare.run.share equals 1/3."
+      },
+      "sourceTypecheck": {
+        "step": 2,
+        "command": "task --dir .temp/resume-authorization-review/corrected-source scripts:typecheck",
+        "exitCode": 0,
+        "checkedFiles": 3578,
+        "diagnostic": "No type errors; no TS7053.",
+        "log": ".temp/goal/jobs/1da55310-c591-4d08-b34d-6160ef2ec8fc.2.log"
+      },
+      "reportWorkerCheck": {
+        "step": 3,
+        "command": "task goal -- check",
+        "exitCode": 0,
+        "log": ".temp/goal/jobs/1da55310-c591-4d08-b34d-6160ef2ec8fc.3.log",
+        "detailLog": ".temp/goal/check/run-koJcI9/output.log",
+        "selection": "Claimed JSON report only: AST and 1/45 affected repository guards passed. No source workspace changed and no tests were named in the worker brief."
+      },
+      "reportDocsCheck": {
+        "step": 4,
+        "command": "task docs:check",
+        "exitCode": 0,
+        "tests": 13,
+        "markdownFiles": 250,
+        "log": ".temp/goal/jobs/1da55310-c591-4d08-b34d-6160ef2ec8fc.4.log"
+      }
+    },
+    "scope": "Only the exact two-file correction and its measurement consumer behavior are reassessed. No source edits, landing, nested agents, fallback or unrelated product tests; original product-class proof remains outside this source review.",
+    "summary": "The exact corrective two-file delta resolves the original missing-consumer finding. The unchanged originally failing test-body reproducer now passes; all affected measurement tests pass, including two fixRound attempts and a first-attempt share of 1/3. The corrected source type-checks without TS7053. No remaining source issue was found in this delta; the nine original authorization/launch counterexamples and original failed-candidate evidence are preserved.",
+    "resolvedFindings": [
+      {
+        "id": "unhandled-resume-classification",
+        "originalCandidate": "8c9d0995abe4afaf69138a3f06efda1650457c33",
+        "correctedCandidate": "8d5543b5e964a0f08256932ec6e01e09dad407f2",
+        "status": "resolved",
+        "evidence": "The byte-identical reproducer now passes for finite run and daily counters; the existing explicit-classification fixture confirms sameScope counts as a fix and contributes to repair share. Script type checking reports no type errors."
+      }
+    ],
+    "workflowInstructions": [
+      {
+        "path": ".agents/skills/goal-worker/SKILL.md",
+        "instruction": "End that turn immediately with `RESULT: parked`, without a handoff, polling, reading logs or starting more work.",
+        "effect": "The single corrective verification sequence parked this worker until its recorded successful completion wake."
+      }
+    ],
+    "next": "Manager may proceed with normal landing of the seven-file corrected implementation and this actual review; no source-review blocker remains for this exact corrected pin."
+  }
 }
