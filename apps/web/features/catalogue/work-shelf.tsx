@@ -7,8 +7,9 @@ import { type ReactNode, type Ref, useCallback, useEffect, useId, useRef, useSta
 import type { UiLocale } from '../../i18n/define.ts';
 import Link from '../shell/localized-link.tsx';
 import { messages } from './messages.ts';
-import { type CatalogueWork, slotRatio } from './work.ts';
+import type { CatalogueWork } from './work.ts';
 import { WorkTile } from './work-tile.tsx';
+import { CatalogueGrid } from './catalogue-grid.tsx';
 
 export interface ShelfHeading {
   title: ReactNode;
@@ -80,16 +81,14 @@ export function WorkShelf({ heading, works, avatarQuery, locale, className }: {
     const rtl = getComputedStyle(element).direction === 'rtl' ? -1 : 1;
     element.scrollBy({ left: direction * rtl * element.clientWidth * 0.9, behavior: scrollBehavior() });
   };
-  const slot = slotRatio(works);
   // min-w-0 keeps the row's scroll width from widening the page's grid.
   return <section aria-labelledby={headingId} className={cn('grid min-w-0 grid-cols-1 gap-4', className)}>
     <ShelfHeader id={headingId} heading={heading} locale={locale} />
     <div className="relative min-w-0">
       <ul ref={list} onScroll={measure} className="-mx-4 flex snap-x snap-mandatory scroll-px-4 gap-x-4 overflow-x-auto
-        px-4 pt-1 pb-2 scrollbar-none sm:-mx-1 sm:scroll-px-1 sm:gap-x-6 sm:px-1">
-        {works.map(work => <li key={work.id} className="w-[42%] shrink-0 snap-start sm:w-[calc((100%-3*1.5rem)/3.4)]
-          md:w-[calc((100%-4*1.5rem)/4.4)] lg:w-[calc((100%-4*1.5rem)/5)]">
-          <WorkTile work={work} slot={slot} avatarQuery={avatarQuery} locale={locale} />
+        px-4 pt-1 pb-2 scrollbar-none sm:-mx-1 sm:scroll-px-1 sm:px-1">
+        {works.map(work => <li key={work.id} className="w-32 max-w-full shrink-0 snap-start">
+          <WorkTile work={work} avatarQuery={avatarQuery} locale={locale} />
         </li>)}
       </ul>
       <button type="button" aria-label={t.previous} onClick={() => page(-1)} disabled={edges.start}
@@ -100,7 +99,7 @@ export function WorkShelf({ heading, works, avatarQuery, locale, className }: {
   </section>;
 }
 
-/** Works in rows that wrap, for a full list with "Show more". */
+/** Works at browse-preview size, packed by natural height without changing their order. */
 export function WorkGrid({ works, headingLevel, avatarQuery, locale, listRef, className }: {
   works: readonly CatalogueWork[];
   /** The tiles' title level: 2 where the grid sits right under the page's <h1>. */
@@ -108,11 +107,9 @@ export function WorkGrid({ works, headingLevel, avatarQuery, locale, listRef, cl
   avatarQuery?: string; locale: UiLocale;
   listRef?: Ref<HTMLUListElement>; className?: string;
 }) {
-  const slot = slotRatio(works);
-  return <ul ref={listRef} className={cn('grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 sm:gap-x-6 md:grid-cols-4',
-    'lg:grid-cols-5', className)}>
+  return <CatalogueGrid listRef={listRef} className={className}>
     {works.map(work => <li key={work.id} className="min-w-0">
-      <WorkTile work={work} slot={slot} headingLevel={headingLevel} avatarQuery={avatarQuery} locale={locale} />
+      <WorkTile work={work} headingLevel={headingLevel} avatarQuery={avatarQuery} locale={locale} />
     </li>)}
-  </ul>;
+  </CatalogueGrid>;
 }
