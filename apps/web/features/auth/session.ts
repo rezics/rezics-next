@@ -17,6 +17,12 @@ export interface MainSessionAgentState {
   initialActingSubject: string | null;
 }
 
+/** Main discovery failure is not a signed-out session or an empty selection. */
+export type SessionAgentRead =
+  | { kind: 'ready'; state: MainSessionAgentState }
+  | { kind: 'signed-out' | 'unselected' }
+  | { kind: 'denied' | 'unavailable'; status?: number; problem?: unknown };
+
 /** Page reads use the eligible saved session selection, never its initialization suggestion. */
 export function sessionReadSubject(state: MainSessionAgentState | null): string | null {
   return state?.sessionAgent.eligible ? state.sessionAgent.actingSubject : null;
@@ -66,21 +72,38 @@ export async function discoverAgents(accessToken?: string, languages?: string, f
 export const sessionAgents = cache(async () => discoverAgents(undefined, await requestLocale()));
 
 /** Main owns the selected Agent for this opaque web session. */
-export async function readMainSessionAgent(accessToken: string, sessionKey: string, fetcher?: typeof fetch):
-  Promise<MainSessionAgentState | null> {
-  if (!isSessionKey(sessionKey)) return null;
+export async function readMainSessionAgentResult(accessToken: string, sessionKey: string, fetcher?: typeof fetch):
+  Promise<SessionAgentRead> {
+  if (!isSessionKey(sessionKey)) return { kind: 'unselected' };
   try {
     const response = await mainApiWithToken(accessToken, { fetcher }).v1.me['session-agent'].get({
       headers: { 'x-session-key': sessionKey } });
-    return response.error ? null : response.data;
-  } catch { return null; }
+    if (response.error) return {
+      kind: response.error.status === 401 || response.error.status === 403 ? 'denied' : 'unavailable',
+      status: response.error.status, problem: response.error.value,
+    };
+    return response.data ? { kind: 'ready', state: response.data } : { kind: 'unavailable' };
+  } catch { return { kind: 'unavailable' }; }
 }
 
-export const sessionAgentState = cache(async (): Promise<MainSessionAgentState | null> => {
+/** Compatibility for readers which only need a verified eligible selection. */
+export async function readMainSessionAgent(accessToken: string, sessionKey: string, fetcher?: typeof fetch):
+  Promise<MainSessionAgentState | null> {
+  const answer = await readMainSessionAgentResult(accessToken, sessionKey, fetcher);
+  return answer.kind === 'ready' ? answer.state : null;
+}
+
+export const sessionAgentRead = cache(async (): Promise<SessionAgentRead> => {
   const jar = await cookies();
   const token = jar.get(ACCESS_COOKIE)?.value;
   const key = jar.get(SESSION_KEY_COOKIE)?.value;
-  return token && key ? readMainSessionAgent(token, key) : null;
+  if (!token) return { kind: 'signed-out' };
+  return key ? readMainSessionAgentResult(token, key) : { kind: 'unselected' };
+});
+
+export const sessionAgentState = cache(async (): Promise<MainSessionAgentState | null> => {
+  const answer = await sessionAgentRead();
+  return answer.kind === 'ready' ? answer.state : null;
 });
 
 /** The current session for Server Components, Server Actions and route
@@ -95,7 +118,7 @@ export const readSession = cache(async (): Promise<Session | null> => {
     sessionDiscovery(), sessionAgents(), sessionAgentState()]);
   const agents = discovery ? agentOptions(discovery) : null;
   const identities = listed ? identityOptions(listed, agents ?? []) : null;
-  const agent = state ? resolveSessionAgent(identities, state.sessionAgent.actingSubject)
+  const agent = state ? resolveSessionAgent(identities, state.sessionAgent.actingSubject, state.sessionAgent.eligible)
     : { status: 'unverified', previous: null } as const;
   if (agent.status === 'selected') {
     const profile = await readAgentProfile(agent.agent.iri, jar.get(ACCESS_COOKIE)?.value);

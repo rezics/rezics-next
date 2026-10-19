@@ -1675,9 +1675,785 @@
     "only_committed_path": "docs/goals/audit-remediation-20261019/proofs/startup-navigation-review.json"
   },
   "manager_next": [
-    "Retain this partial execution report and immutable candidate/source pins; do not close any original finding on it.",
-    "Give G-2747 the exact unfinished Lists/People candidate-history premise and both failed logs; no confirmed new source counterexample or fix round is claimed.",
-    "Keep the five exact copied source findings with G-2784. Any corrected candidate needs its changed delta checked at its own pin.",
-    "G-2825 completes genuine signed-in/browser acceptance and remaining actual navigation history on the final isolated candidate using existing admitted data. No shared refresh/reset/import or assertion repair."
-  ]
+    "Hold the corrected common Web/startup batch for the existing G-2784/G-2785 identity distinction; give them this exact executable and pin. Four other source corrections can be treated as addressed with their genuine acceptance still open. The independent four-path Proposals batch has no new source failure. Do not repeat unchanged tests/history or claim original acceptance closed.",
+    "Preserve all original incomplete history and genuine acceptance constraints; no shared refresh, product edits or new review chain."
+  ],
+  "latest_source_landing_verdict": {
+    "candidate": "31a02b12f5c3eb91c9aa52d3209ee351f42b6717",
+    "verdict": "request changes",
+    "blocking_finding": "WEB-PRIVATE-IDENTITY (remaining denied-versus-outage distinction)",
+    "review_section": "corrected_candidate_delta_review",
+    "original_report_scope": "All original a27 evidence and conclusions below retain their original pins."
+  },
+  "corrected_candidate_delta_review": {
+    "kind": "continuation of the same actual independent review; changed-source validation only",
+    "reviewed_at_utc": "2026-10-19T07:36:20.975582+00:00",
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "independent_source_review": true,
+      "nested_agents": false,
+      "fallback_reviewer": false
+    },
+    "landing_verdict": "request changes for corrected common Web/startup batch at 31a02b12f5c3eb91c9aa52d3209ee351f42b6717: WEB-PRIVATE-IDENTITY still maps real denied identity to outage",
+    "source_review_complete": true,
+    "runtime_acceptance_granted": false,
+    "new_review_chain_or_fallback": false,
+    "original_report_archive": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/original-startup-navigation-review-22501ba8.json",
+    "source": {
+      "head": "31a02b12f5c3eb91c9aa52d3209ee351f42b6717",
+      "base": "c227714d2603453d4e2480e576fb7e1dfc6ca122",
+      "product_base": "708393ad2ed97857afd27176331a26b16124736a",
+      "original_reviewed_startup": "a27bcfc6bad849dd912cbd3f721de5defeba1c86",
+      "source_parent": "09395cdef3b3d5503bddf33fce717c87e8408564",
+      "authored_corrections": [
+        "1ca4984036b0081b4b4ed0cd6968d7c002e39a4b",
+        "5536a963e3a311dc3b1166553d2713d9005cce36"
+      ],
+      "snapshot": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/corrected-31a02b12f5c3/source",
+      "snapshot_detached_and_tracked_clean": true,
+      "integration_receipt": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/corrected-31a02b12f5c3/integration-receipt.json",
+      "independently_verified_manifest": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/corrected-31a02b12f5c3/source-validation.json",
+      "verified_material_paths": 13,
+      "material_stat": "13 paths, 365 insertions, 18 deletions",
+      "stable_patch_ids_independently_match": true,
+      "integration_differences_inspected": {
+        "apps/web/features/entity-page/read.ts": "Selective main keeps uncached async readStatements; authored wave has a React cache wrapper, untouched by the corrections.",
+        "apps/web/features/work-levels/connections.tsx": "Selective main keeps existing string workRef types; authored wave uses branded types, untouched by the corrections."
+      },
+      "unchanged_non_common_startup_paths": 27,
+      "unchanged_blob_manifest": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/corrected-31a02b12f5c3/unchanged-startup-paths.json",
+      "unchanged_nullable_session_blob": "957fab7cafd37ae81c67d08e294411a8aeb3ded4",
+      "unrelated_whole_wave_discover_imported": false,
+      "proposals_independent_batch": "Existing reviewed four-path Proposals batch has no new source failure; no new independence claim for the complete 27-path extraction."
+    },
+    "five_retained_findings_delta_review": [
+      {
+        "id": "WEB-PREREAD-REFUSAL",
+        "owner": "G-2784",
+        "source_disposition": "addressed at this pin; original genuine acceptance remains open",
+        "paths": [
+          "apps/web/features/api/bff.ts"
+        ],
+        "review": "Received prerequisite 4xx retains status, safe problem fields, WWW-Authenticate and Retry-After; zero target dispatch and write not-sent remain. Real transport/abort/deadline keeps typed unavailability. Checked GET/POST and cache-warm/cold paths.",
+        "executed": "Affected g-1028 tests pass, including 401/403/429 and warm-cache revocation; original owner actual 401 proof retained at its own pin."
+      },
+      {
+        "id": "WEB-COLLECTION-CURSOR",
+        "owner": "G-2784",
+        "source_disposition": "addressed at this pin; original genuine acceptance remains open",
+        "paths": [
+          "apps/web/proxy.ts",
+          "apps/web/features/address/edge.ts",
+          "apps/web/features/work-levels/connections.tsx"
+        ],
+        "review": "Admission retains 400/409/422/429; React-free localized recovery distinguishes invalid/moved from temporary outage. Restart removes after, preserves a single valid group parent and unrelated repeated task parameters; root navigation remains separate. Missing/undisclosed still 404.",
+        "executed": "Affected g-943 and work-levels tests pass, including malformed/moved restart, ja/repeated queries, group preservation and 422/429/503."
+      },
+      {
+        "id": "WEB-COLLECTION-STATUS",
+        "owner": "G-2784",
+        "source_disposition": "addressed in source and affected units; actual late Worker response acceptance remains open",
+        "paths": [
+          "apps/web/features/api/server-read.ts",
+          "apps/web/worker/index.ts",
+          "apps/web/app/[locale]/e/[ref]/page.tsx"
+        ],
+        "review": "Entry/member/name failures set status on the existing request boundary. Worker awaits resource GET HTML render completion under its original deadline, preserves cookies/headers and final owner status/no-store. RSC, non-HTML, detached work and nonresource streams keep existing behavior. Late missing entry/members retain 404. Abort/deadline cancels and releases renderer.",
+        "executed": "Affected g-1028 and work-levels tests pass for late status/cookies, cancellation/deadline, late failures, missing non-disclosure and restoration. This is not an actual successful-admission/later-failure Worker proof."
+      },
+      {
+        "id": "WEB-PRIVATE-IDENTITY",
+        "owner": "G-2784",
+        "dependency_owner": "G-2785",
+        "source_disposition": "partially addressed; confirmed remaining P2 source blocker",
+        "paths": [
+          "apps/web/features/work-page/read.ts",
+          "apps/web/features/entity-page/read.ts",
+          "apps/web/features/auth/session.ts"
+        ],
+        "review": "Outage no longer falls back to anonymous missing. However the unchanged nullable session adapter collapses received 401/403 and transport/503 to null. Boolean(token) && state === null then marks actual denied identity unavailable, and every strict entity entry returns identity/503 before obtaining the non-disclosing missing summary.",
+        "executed": "Existing outage/restoration/wrong-Agent/anonymous tests pass. Added private executable of the retained refused-identity distinction reaches its outcome assertion and fails on actual 401; captured 403 has the same wrong identity/503 result."
+      },
+      {
+        "id": "WEB-REFRESH-CANCEL",
+        "owner": "G-2784",
+        "source_disposition": "addressed at this pin; original genuine acceptance remains open",
+        "paths": [
+          "apps/web/features/auth/account.ts"
+        ],
+        "review": "Before creating a detached rotation, checks initiator abort and elapsed explicit deadline. Existing dispatched inflight rotation is reused with independent waiter cancellation. Missing access, earlier admission and two-waiter paths traced without adding an identity call.",
+        "executed": "Affected g-1028 pre-aborted counted endpoint and existing shared-rotation tests pass."
+      }
+    ],
+    "confirmed_remaining_counterexample": {
+      "id": "WEB-PRIVATE-IDENTITY",
+      "severity": "P2",
+      "owner": "G-2784",
+      "typed_identity_dependency_owner": "G-2785",
+      "locations": [
+        {
+          "path": "apps/web/features/work-page/read.ts",
+          "line": 48,
+          "end_line": 53
+        },
+        {
+          "path": "apps/web/features/auth/session.ts",
+          "line": 69,
+          "end_line": 83
+        },
+        {
+          "path": "apps/web/features/entity-page/read.ts",
+          "line": 17,
+          "end_line": 19
+        },
+        {
+          "path": "apps/web/app/[locale]/e/[ref]/page.tsx",
+          "line": 26,
+          "end_line": 31
+        },
+        {
+          "path": "apps/web/app/[locale]/e/[ref]/page.tsx",
+          "line": 51,
+          "end_line": 58
+        }
+      ],
+      "title": "Actual refused SSR identity still becomes identity outage at strict entity entry",
+      "assertion_provenance": [
+        "Original G-2804 required distinction between unavailable identity and genuine anonymous/denied 404.",
+        "WEB-PRIVATE-IDENTITY: genuine private Collection admitted with eligible signed-in fixture, SSR identity read fails, require 503 identity recovery; restore same reader to actual page. Wrong/revoked/anonymous/missing remain 404 with no private disclosure."
+      ],
+      "trigger": "An entry reaches its independent SSR identity read after admission, with a token/session key, and Main answers 401 or 403. The retained nullable adapter returns null for both denial and outage.",
+      "observed_unit_result": {
+        "pin": "31a02b12f5c3eb91c9aa52d3209ee351f42b6717",
+        "assertionProvenance": "G-2804 WEB-PRIVATE-IDENTITY; G-2784 handoff stillRequiredProductProof: Wrong/revoked/anonymous/missing remain 404 with no private disclosure.",
+        "tier": "isolated unit counterexample, not genuine signed-in public browser acceptance",
+        "cases": [
+          {
+            "identityHttpStatus": 503,
+            "actual": {
+              "ok": false,
+              "failure": "identity",
+              "status": 503
+            },
+            "expectedFailure": "identity",
+            "calls": [
+              {
+                "path": "/v1/me/session-agent",
+                "authorization": "Bearer current-token"
+              },
+              {
+                "path": "/v1/me/session-agent",
+                "authorization": "Bearer current-token"
+              }
+            ]
+          },
+          {
+            "identityHttpStatus": 401,
+            "actual": {
+              "ok": false,
+              "failure": "identity",
+              "status": 503
+            },
+            "expectedFailure": "missing",
+            "calls": [
+              {
+                "path": "/v1/me/session-agent",
+                "authorization": "Bearer current-token"
+              },
+              {
+                "path": "/v1/me/session-agent",
+                "authorization": "Bearer current-token"
+              }
+            ]
+          },
+          {
+            "identityHttpStatus": 403,
+            "actual": {
+              "ok": false,
+              "failure": "identity",
+              "status": 503
+            },
+            "expectedFailure": "missing",
+            "calls": [
+              {
+                "path": "/v1/me/session-agent",
+                "authorization": "Bearer current-token"
+              },
+              {
+                "path": "/v1/me/session-agent",
+                "authorization": "Bearer current-token"
+              }
+            ]
+          }
+        ],
+        "assertionReached": true
+      },
+      "expected": "503 for identity outage; actual denied private identity must retain the existing non-disclosing missing outcome (route 404), with no stale private summary.",
+      "test_file": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/corrected-31a02b12f5c3/source/.temp/review/private-identity.test.ts",
+      "test_case": "private Collection identity outage stays unavailable and an actual refused identity stays missing",
+      "outcome_assertion_line": 47,
+      "assertion_reached": true,
+      "failure_evidence": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/corrected-31a02b12f5c3/checks/b5624596-40a9-4731-b826-a7dd9b73cb98.log",
+      "test_premise": "Real reader/session adapter/Eden client and readEntityEntry; same existing Next request-storage fixture and controlled HTTP responses, no product modules mocked. No genuine account or private corpus fabricated. One added private unit executable preserves the original required distinction; no existing source, tests or assertions edited.",
+      "proof_limit": "Unit failure confirms the source classification. Actual post-admission Worker/browser HTTP 503 for a denied private identity was not executed; that outer effect follows from the inspected route status branch. Existing Main GET retry yields two identity HTTP attempts per case; the review adds no product lookup.",
+      "class_coverage": {
+        "executed": "503 outage versus actual HTTP 401 and 403 at readEntityEntry; all cases captured before assertion.",
+        "source_affected_surfaces": [
+          "Every localized /e/{ref} strict entry, including Collection and other entity entry destinations.",
+          "generateMetadata calls the same entry helper and selects unavailable title instead of missing.",
+          "EntityRoute chooses identity recovery and sets document 503 instead of notFound/404.",
+          "A public entry with stale/denied token is also intercepted before public summary; this wider effect is source inference, not additional executed public acceptance."
+        ],
+        "inspected_unchanged_consumers": "Other reader-based Work/Collection members readers do not consume the new identityUnavailable flag; session adapter compatibility/layout/identity consumers are unchanged. No unrelated shared identity redesign or extra source review."
+      },
+      "dependency_disposition": "Use the existing G-2785-owned typed cached session result and G-2784 transport/entry integration. The current receipt explicitly excludes that offered interface. No invented interface, additional identity lookup, implementation change or claim of an integrated fix."
+    },
+    "affected_executed_check": {
+      "job": "b5624596-40a9-4731-b826-a7dd9b73cb98",
+      "command": "bun scripts/goal/goalctl.ts test ./.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/corrected-31a02b12f5c3/source/apps/web/tests/g-1028-server-reads.test.ts ./.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/corrected-31a02b12f5c3/source/apps/web/tests/g-943-address.test.ts ./.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/corrected-31a02b12f5c3/source/apps/web/features/work-levels/read.test.ts ./.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/corrected-31a02b12f5c3/source/.temp/review/private-identity.test.ts",
+      "normal_goalctl_test_admission": true,
+      "runner_worktree_head": "fab27204797b7d8e45fa235e3fb77e976ea24ed5",
+      "imported_test_and_product_source_pin": "31a02b12f5c3eb91c9aa52d3209ee351f42b6717",
+      "result": "125 pass, 1 fail, 1194 expect calls; 126 tests across four files; exit 1",
+      "existing_affected_cases": "All 125 existing cases in the three changed test files passed. The added retained-assertion executable failed in its test body, not setup.",
+      "duration_seconds": 5.21,
+      "files": [
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/corrected-31a02b12f5c3/source/apps/web/tests/g-1028-server-reads.test.ts",
+          "sha256": "6497ac44cf002c3a26957f626699ba3fa64e39bdd51368e4663571b3095f03e0"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/corrected-31a02b12f5c3/source/apps/web/tests/g-943-address.test.ts",
+          "sha256": "d70df32b7dc0ee81e0813712b30313b94576dfa8de7352dc19b28683640e1719"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/corrected-31a02b12f5c3/source/apps/web/features/work-levels/read.test.ts",
+          "sha256": "bec9327bcecd3803753a8ff3d3d8eed6d1f123df380643129f842aaecbf95a38"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/corrected-31a02b12f5c3/source/.temp/review/private-identity.test.ts",
+          "sha256": "809cd051a01d8c123b5c6f094e92cc3693478d64db3a6b51b3b682d7511c3e7c"
+        }
+      ],
+      "log": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/corrected-31a02b12f5c3/checks/b5624596-40a9-4731-b826-a7dd9b73cb98.log",
+      "separate_qa_run_id": "none emitted for the stack-free direct unit selection; durable recorded job ID above"
+    },
+    "reused_checks": {
+      "owner_handoff": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/corrected-31a02b12f5c3/owner-handoff.json",
+      "checks": [
+        {
+          "job": "0935e331-af70-478f-aa1b-347b2c05956b",
+          "step": 1,
+          "pin": "78f33fc1310053619d153b9b1d2f379811b82c38",
+          "result": "164 pass, 0 fail, 2674 assertions across seven affected stack-free files",
+          "files": [
+            "apps/web/tests/g-1028-server-reads.test.ts",
+            "apps/web/tests/g-943-address.test.ts",
+            "apps/web/tests/g-998-address.test.ts",
+            "apps/web/tests/g-998-server-reads.test.ts",
+            "apps/web/tests/session-bff.test.ts",
+            "apps/web/tests/server-client-boundary.test.ts",
+            "apps/web/features/work-levels/read.test.ts"
+          ]
+        },
+        {
+          "job": "0935e331-af70-478f-aa1b-347b2c05956b",
+          "step": 2,
+          "pin": "78f33fc1310053619d153b9b1d2f379811b82c38",
+          "command": "bun .temp/web-boundary-proof.ts",
+          "result": "passed; isolated Worker dev process stopped; no shared refresh or mutation"
+        },
+        {
+          "job": "0935e331-af70-478f-aa1b-347b2c05956b",
+          "step": 3,
+          "pin": "78f33fc1310053619d153b9b1d2f379811b82c38",
+          "command": "task goal -- check --only types,lint,guards",
+          "result": "types, inference, lint, AST and selected guards passed",
+          "run": ".temp/goal/check/run-i26Lc4"
+        }
+      ],
+      "pin_boundary": "Owner units/static/runtime evidence belongs to 78f33fc1310053619d153b9b1d2f379811b82c38. Exact correction patch IDs match the selective import, and eleven of thirteen final blobs match; candidate-specific affected assertions above import 31a. No claim all old checks executed at 31a.",
+      "original_startup_navigation": "Original 22501ba8 actual source review reused. All 27 non-common startup blobs unchanged from a27. Original 40 navigation story cases, 25 viewed navigation PNGs and development/production readiness remain evidence at a27, without a new runtime pass at 31a.",
+      "history": "Both original failed setup logs, pre-focus observations and incomplete six settled observations remain unchanged. No repeat history run, assertion repair, full-history claim or original site-finding closure. G-2825 full-wave 196 receipts remain evidence only at 196."
+    },
+    "screenshots_inspected": [
+      {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/corrected-31a02b12f5c3/owner-recovery-1280.png",
+        "sha256": "ac2599aeb06ce00569aa0f6f39552cf04437566b3aa20d84eb281fb61a417dc5",
+        "source_pin": "78f33fc1310053619d153b9b1d2f379811b82c38",
+        "viewport": "1280x900",
+        "observation": "Japanese localized React-free recovery, readable text, all three links visible and retry outline painted."
+      },
+      {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/corrected-31a02b12f5c3/owner-recovery-390.png",
+        "sha256": "a5853a0a812aa5971f756443e9f77cb14a9c5fc99fd7468eea0e29bf3896c0a4",
+        "source_pin": "78f33fc1310053619d153b9b1d2f379811b82c38",
+        "viewport": "390x844",
+        "observation": "Japanese text wraps within viewport; links wrap to two rows without clipping; retry outline visibly painted."
+      }
+    ],
+    "remaining_genuine_acceptance": {
+      "owner": "G-2825 with existing source owners; original requirements remain open",
+      "owner_exact_requirements": [
+        "WEB-PREREAD-REFUSAL: real eligible signed-in uncached preferences 403/429 versus true transport 503, cache warm/cold invariance, safe fields/Retry-After/no-store and not-sent writes.",
+        "WEB-COLLECTION-CURSOR: on compatible Main with genuine members, malformed, moved, cross-Collection and group continuations retain 400/409/422/429/503; restart opens actual meaningful members while retaining locale/group/unrelated selections; undisclosed remains 404.",
+        "WEB-COLLECTION-STATUS: actual Worker admission succeeds, later entry/member/name owner fails; require initial full HTTP 503/no-store and contextual recovery on desktop/phone, then same URL restores actual members. Unit rendering proves the boundary but does not replace this assertion.",
+        "WEB-PRIVATE-IDENTITY: genuine private Collection admitted with eligible signed-in fixture, SSR identity read fails, require 503 identity recovery; restore same reader to actual page. Wrong/revoked/anonymous/missing remain 404 with no private disclosure.",
+        "WEB-REFRESH-CANCEL: actual Worker cancellation before missing-access refresh and during earlier admission produces no new Account token POST; retain two-waiter dispatched rotation. Pre-aborted counted Account endpoint and shared-rotation cases pass in unit tests."
+      ],
+      "runtime_premise_blocker": {
+        "assertionReached": false,
+        "assertionsNotClaimed": [
+          "Actual meaningful public Collection destination",
+          "Later SSR owner failure status through Worker",
+          "Genuine private Collection identity outage/restoration"
+        ],
+        "evidence": "Running shared Main resolves genuine Works Collection with 200 and members GET returns 200 with one real target, but GET /v1/resources/f5a5dd57-6009-4a78-a4c6-e0e937fcb809 returns 404 resource_unavailable; summary-batch returns 200 with that Collection unavailable. Actual Web destination therefore returns full 404, not meaningful members. Current wave Main source has includeCollections:true; shared backend was not refreshed by this worker.",
+        "needed": "Run the compatible corrected Main owner with existing genuine data in the manager's authorized candidate, then execute the retained assertions. No new Collection contract or whitelist is proposed."
+      },
+      "original_startup_navigation": "Original signed-in/mobile direct/reload/back/forward/filter and development/production acceptance remains in remaining_genuine_acceptance above. No additional browser or shared backend started for this delta review."
+    },
+    "report_validation": {
+      "status": "passed",
+      "documentation_check": {
+        "command": "task docs:check",
+        "job": "b4574e64-6ed5-4f4e-a7cf-e00af9a6f55d",
+        "step": 1,
+        "result": "13 tests passed; 249 Markdown files checked",
+        "log": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/corrected-31a02b12f5c3/checks/b4574e64-6ed5-4f4e-a7cf-e00af9a6f55d.1.log"
+      },
+      "worker_check": {
+        "command": "task goal -- check",
+        "job": "b4574e64-6ed5-4f4e-a7cf-e00af9a6f55d",
+        "step": 2,
+        "run": ".temp/goal/check/run-1r6y45",
+        "checks": {
+          "types": "ok; no TypeScript workspace changed",
+          "tests": "ok; no test files named in brief",
+          "lint": "ok; no source file changed",
+          "ast": "ok",
+          "guards": "ok; 1/44 selected for report-only change"
+        },
+        "log": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/corrected-31a02b12f5c3/checks/report-worker-gate-output.log"
+      },
+      "scope": "Report-only branch. Candidate affected checks are separately pinned above; no broad candidate gate or history rerun.",
+      "only_tracked_edit": "docs/goals/audit-remediation-20261019/proofs/startup-navigation-review.json",
+      "artifact_manifest": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/corrected-31a02b12f5c3/artifact-manifest.json"
+    },
+    "next": "Hold the corrected common Web/startup batch for the existing G-2784/G-2785 identity distinction; give them this exact executable and pin. Four other source corrections can be treated as addressed with their genuine acceptance still open. The independent four-path Proposals batch has no new source failure. Do not repeat unchanged tests/history or claim original acceptance closed."
+  },
+  "d3_002_guard_delta_review": {
+    "scope": "One bounded continuation of the same actual codex-1/gpt-6.1-sol/xhigh review: minimal D3-002 source delta only. Program owns main integration and class closure.",
+    "reviewed_at_utc": "2026-10-19T09:52:36.118563+00:00",
+    "candidate": "ba53ed87f1e5d21712ec7ff98f88a80313c34445",
+    "main_parent": "65f74f7dca0733328473b7f83b9e8782bcb424a5",
+    "source_manifest": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/guard-ba53ed87f1/source-manifest.json",
+    "snapshot": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/guard-ba53ed87f1/source",
+    "tracked_snapshot_clean": true,
+    "material_delta": "Two files, 163 added lines; no production implementation change.",
+    "verdict": "request changes: guard registration omits five actual server-graph inputs, so affected checks can skip this guard",
+    "findings": [
+      {
+        "id": "WEB-CLIENT-GUARD-SELECTION",
+        "severity": "P2",
+        "owner": "G-2747",
+        "location": {
+          "path": "scripts/qa/repository-guards.ts",
+          "line": 77
+        },
+        "title": "Select the client-boundary guard when its current server imports change",
+        "source_evidence": "The scanner follows relative server imports beyond app/features/i18n, but its new reads declaration includes only those three Web directories and UI source. selectRepositoryGuards therefore omits this guard for five real inputs; filterRepositoryGuardFiles also removes it even if an affected plan listed it.",
+        "affected_current_inputs": [
+          "apps/accounts/features/api/oauth-query.ts",
+          "apps/web/worker/client-ip.ts",
+          "apps/web/zones/official/declared.ts",
+          "apps/web/zones/official/index.ts",
+          "generated/openapi/main/exposure.ts"
+        ],
+        "verified_value_import_edges": [
+          {
+            "from": "apps/web/features/api/main-read.ts:2",
+            "to": "apps/web/worker/client-ip.ts"
+          },
+          {
+            "from": "apps/web/features/auth/paths.ts:1",
+            "to": "apps/accounts/features/api/oauth-query.ts"
+          },
+          {
+            "from": "apps/web/features/realm/realm-page.tsx:7",
+            "to": "apps/web/zones/official/declared.ts"
+          },
+          {
+            "from": "apps/web/features/realm/realm-page.tsx:8",
+            "to": "apps/web/zones/official/index.ts"
+          },
+          {
+            "from": "apps/web/features/api/platform-access.ts:5",
+            "to": "generated/openapi/main/exposure.ts"
+          }
+        ],
+        "selection_paths_inspected": [
+          "scripts/qa/repository-guards.ts:316-332",
+          "scripts/goal/unit-gate.ts:472-498",
+          "scripts/goal/check.ts:319-332",
+          "scripts/qa/affected.ts:658"
+        ],
+        "impact": "An authored change confined to a reachable server helper, such as worker/client-ip.ts or zones/official/declared.ts, can add an ordinary call to an existing client reference without selecting this regression guard. The candidate has no demonstrated new product client-call failure; this is a guard-selection defect.",
+        "executable": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/guard-ba53ed87f1/selection.test.ts",
+        "case": "the current resolvable server graph including Proposals is covered by the guard selection",
+        "assertion_line": 58,
+        "outcome_assertion_reached": true,
+        "observed": "Expected no uncovered current graph paths; received the five paths above. Existing route/helper/client/i18n/UI/self/registry selection predicates pass.",
+        "minimal_next_assertion": "expect(selectRepositoryGuards(['apps/web/worker/client-ip.ts']).map(guard => guard.file)).toContain('apps/web/tests/server-client-boundary.test.ts')",
+        "minimal_remedy": "Include the actual current server-graph inputs in the guard selection inventory and add the direct selection assertion; preserve the existing scanner and legal-case assertions. No backend, corpus, navigation, voice/control or new interface work is needed."
+      }
+    ],
+    "changed_file_disposition": [
+      {
+        "path": "apps/web/tests/server-client-boundary.test.ts",
+        "blob": "8844426b48a99c5d6b259db9a794235f4136bafb",
+        "disposition": "Required call-detection and legal-case behavior retained; no additional actionable source finding in this file for this bounded delta.",
+        "reviewed_behavior": [
+          "Named/default imports resolve to the client boundary. Namespace property and literal element access retain the imported reference. Local const aliases and renamed named re-exports/barrels remain traced with cycle protection.",
+          "Call/new/tagged-template nodes are checked; JSX rendering does not become a function-call violation. Type-only imports are excluded. Shared pure functions and use-server actions remain legal.",
+          "The real graph starts at all app ts/tsx files, follows authored relative/alias/UI server imports and re-exports, and stops at use-client boundaries. Proposals list-state remains server-safe and proposal-list is a client boundary."
+        ],
+        "extraction_boundary": "The original combined DOM-renderer/Worker guard is intentionally outside this D3-002 extraction. Original runtime failures and other-scope findings remain preserved; no claim those are closed by this narrower guard."
+      },
+      {
+        "path": "scripts/qa/repository-guards.ts",
+        "blob": "d631175d52be9d6b5ce3a9928425cf3b42145db9",
+        "disposition": "One actionable selection finding at added line 77; registry entry otherwise reaches normal affected and worker-check execution."
+      }
+    ],
+    "checks": {
+      "owner_focused_regressions": {
+        "job": "d67367d5-002e-4c03-b248-bf60df4eaf8a",
+        "step": 1,
+        "source_pin": "ba53ed87f1e5d21712ec7ff98f88a80313c34445",
+        "command": "bun scripts/goal/goalctl.ts test apps/web/tests/server-client-boundary.test.ts apps/web/features/proposals/list-state.test.ts",
+        "result": "5 pass, 0 fail, 16 expect calls across two files",
+        "log": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/guard-ba53ed87f1/checks/d67367d5-002e-4c03-b248-bf60df4eaf8a.1.log",
+        "reused_without_repeat": true
+      },
+      "owner_static_observation": {
+        "job": "d67367d5-002e-4c03-b248-bf60df4eaf8a",
+        "step": 2,
+        "source_pin": "ba53ed87f1e5d21712ec7ff98f88a80313c34445",
+        "command": "env GOAL_CHECK_PREPARED_TREE=/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2747 task goal -- check --only types,lint,guards",
+        "observed": "types ok (92.1s), guards ok (143.9s), 45/45 selected for the registry edit; four passing timeout retries retained. No claim of a final complete lint/AST result beyond the observed log.",
+        "log": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/guard-ba53ed87f1/checks/d67367d5-002e-4c03-b248-bf60df4eaf8a.2.log",
+        "full_log_snapshot": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/guard-ba53ed87f1/checks/owner-output.log",
+        "timeout_retries": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/guard-ba53ed87f1/checks/owner-timeout-retries.jsonl"
+      },
+      "independent_selection_counterexample": {
+        "job": "dcce8770-5ab8-4da4-bb62-eb8895f6a06c",
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/guard-ba53ed87f1/selection.test.ts",
+        "runner_head": "81c43bd09890292b6b43551095f0db1d9985c69d",
+        "imported_registry_and_read_source_pin": "ba53ed87f1e5d21712ec7ff98f88a80313c34445",
+        "normal_admission": true,
+        "result": "1 pass, 1 fail, 14 expect calls across one private file; exit 1",
+        "assertion_reached": true,
+        "log": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/guard-ba53ed87f1/checks/dcce8770-5ab8-4da4-bb62-eb8895f6a06c.log",
+        "selection_test_sha256": "5556a4952302dd9f97b546c7cbc568442e1ccbea93b5d6ddcd194df65c5ccb1b"
+      },
+      "source_graph_inventory": {
+        "artifact": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/guard-ba53ed87f1/server-graph-selection.json",
+        "route_entries": 122,
+        "files_in_current_resolvable_graph": 910,
+        "client_boundary_files": 171,
+        "selection_missing": 5,
+        "scope": "Readonly syntax inventory using the same relative/alias/UI resolution, plus an explicit current-graph selection assertion. The five reported omissions are verified actual value imports, not inferred dynamic packages. Current server side-effect imports found here are CSS."
+      }
+    },
+    "proposals_evidence_reuse": {
+      "four_paths_blob_identical_to_a27": true,
+      "blob_manifest": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/guard-ba53ed87f1/source-manifest.json",
+      "runtime_reference": "Manager supplied main report 271b7e40b3713782eec2148443c0e3b53f65a059 for 128 passed actual combinations at the original rendered pins 196a/c227. No browser/runtime execution at ba53 or additional screenshot review is claimed."
+    },
+    "historical_evidence_preservation": "All prior report fields, five common Web findings, 31a identity counterexample, failed history logs, pre-focus observations and original acceptance boundaries are retained unchanged and remain historical/other-scope evidence. This D3-002 finding does not relabel or close any of them.",
+    "product_source_tests_or_owner_tree_edited": false,
+    "new_reviewer_or_subagent": false,
+    "report_validation": {
+      "status": "passed",
+      "job": "9b7a8259-7aba-47d5-b75f-5356553922a2",
+      "documentation_check": {
+        "command": "task docs:check",
+        "step": 1,
+        "result": "13 tests passed; 250 Markdown files",
+        "log": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/guard-ba53ed87f1/checks/9b7a8259-7aba-47d5-b75f-5356553922a2.1.log"
+      },
+      "worker_check": {
+        "command": "task goal -- check",
+        "step": 2,
+        "result": "types/tests/lint/AST/guards ok; report-only change; 1/45 repository guards selected",
+        "run": ".temp/goal/check/run-NCBZll",
+        "log": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/guard-ba53ed87f1/checks/report-worker-check.log"
+      },
+      "only_tracked_edit": "docs/goals/audit-remediation-20261019/proofs/startup-navigation-review.json",
+      "artifact_manifest": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/guard-ba53ed87f1/artifact-manifest.json"
+    },
+    "next": "Return the guard selection assertion and exact ba53 pin to G-2747; fix only this inventory gap and prove the minimal selection assertion. Program decides final main integration/class closure. Do not require unrelated runtime or backend checks for this guard delta."
+  },
+  "typed_private_identity_delta_review": {
+    "reviewed_at_utc": "2026-10-19T10:23:34.705294+00:00",
+    "reviewer": "Same original G-2847 codex-1/GPT-6.1 Sol/xhigh actual source reviewer; bounded acceptance continuation, no new reviewer or nested agent.",
+    "scope": "Only WEB-PRIVATE-IDENTITY typed refusal/outage producer-consumer delta and relevant private disclosure/document boundary. Prior startup/navigation/common Web and D3-002 results retain their original pins and disposition history.",
+    "candidate": "de8fac2935cb59e61adfc18e98b55b9900751cb4",
+    "delta_parent": "4afaa42f5aa07a1cbf892d43e8a02ad822a654d3",
+    "correction_dependencies": [
+      "d1e6aad4a2fc24d83075b75b2e66d7b057ec534e",
+      "4afaa42f5aa07a1cbf892d43e8a02ad822a654d3"
+    ],
+    "typed_producer": {
+      "commit": "f4d0226f39526147eaeb86f99a4e0502b9ca8379",
+      "resolution": "Resolved from actual session.ts history and verified as candidate ancestor with the exact two supplied blobs. The supplied df4d0226f3952 spelling does not resolve; no guessed pin is used.",
+      "blobs": {
+        "apps/web/features/auth/session.ts": "07a2100944c05da93f6f44e729aadb03c082b39f",
+        "apps/web/features/auth/session-recovery.test.ts": "711c89bfa00fef5fd5004db3628a18c0f2fda6d1"
+      },
+      "consumer_owner_edited_producer": false
+    },
+    "source_verdict": {
+      "verdict": "approve this typed delta",
+      "actionable_findings": [],
+      "statement": "No actionable findings for this delta at de8fac2935cb59e61adfc18e98b55b9900751cb4. The original 31a denied-versus-outage source counterexample is resolved using the existing typed producer.",
+      "landing_boundary": "Source approval for this correction batch. Program owns final integration and class closure; genuine destination acceptance remains pending. Historical request-changes sections above describe their earlier pins."
+    },
+    "changed_file_disposition": [
+      {
+        "path": "apps/web/features/work-page/read.ts",
+        "blob": "43cb89cc52e6d43eced7548fd920577e980a36c4",
+        "lines": [
+          21,
+          47,
+          48,
+          49,
+          51,
+          52
+        ],
+        "disposition": "Approved. reader consumes sessionAgentRead; only ready state can supply an eligible saved Agent and authenticated Main client. Only unavailable sets identityUnavailable. Denied is no longer inferred from token plus nullable state.",
+        "authority_and_lookup": "The existing cached identity call is replaced, with no additional lookup, Account refresh, refetch branch, invented interface or fallback Agent. signedIn remains token presence but does not confer reader authority."
+      },
+      {
+        "path": "apps/web/features/work-levels/read.test.ts",
+        "blob": "82eba3820867cf8192e3e793f359d7e62bc55285",
+        "lines": [
+          565,
+          574,
+          577,
+          579,
+          580,
+          584,
+          597,
+          598,
+          599,
+          600,
+          603,
+          607
+        ],
+        "disposition": "Approved. Three controlled HTTP status cases retain real reader, typed producer and Eden client; existing transport/Next fixture boundaries are reused. They assert 503 identity recovery versus private missing/404, no-store, metadata, no private title or member reads, same-identity restoration and public access after refusal.",
+        "test_boundary": "The framework-unit document is rendered through withServerRequest/serverDocumentResponse; Next not-found is caught to build the test response. These are meaningful route/document assertions, not actual signed-in Worker/browser acceptance."
+      }
+    ],
+    "producer_and_disclosure_integration": [
+      {
+        "path": "apps/web/features/auth/session.ts",
+        "lines": [
+          21,
+          75,
+          77,
+          79,
+          82,
+          85,
+          86,
+          96,
+          101,
+          104,
+          105
+        ],
+        "observation": "Typed producer preserves HTTP 401/403 as denied; other unsuccessful results, empty response and thrown transport error are unavailable. Missing/invalid session key is unselected. sessionAgentState compatibility delegates to the same cached typed read. No nullable token workaround or second identity query is introduced."
+      },
+      {
+        "path": "apps/web/features/auth/session-recovery.test.ts",
+        "lines": [
+          17,
+          26,
+          35,
+          38,
+          39,
+          40,
+          41,
+          44,
+          49,
+          52
+        ],
+        "observation": "Existing producer assertions retain known/ineligible selection, 503 problem/status, restoration using the same token/session key, denial, invalid-key no read and offline unavailability."
+      },
+      {
+        "path": "apps/web/features/entity-page/read.ts",
+        "lines": [
+          15,
+          18,
+          19,
+          22,
+          27
+        ],
+        "observation": "The only identityUnavailable consumer is strict entry admission. Outage returns identity/503 before summary or members. Refusal uses a client without a token or acting subject; the private summary is unavailable and therefore missing. No private existence is disclosed."
+      },
+      {
+        "path": "apps/web/app/[locale]/e/[ref]/page.tsx",
+        "lines": [
+          29,
+          30,
+          51,
+          53,
+          54,
+          57,
+          68,
+          69
+        ],
+        "observation": "Missing yields not-found metadata and 404/notFound; identity outage yields unavailable metadata, 503 and retryable RegionFailure. The existing late Collection missing branch remains 404 and cannot render the admitted private title."
+      },
+      {
+        "path": "apps/web/features/api/server-read.ts",
+        "lines": [
+          29,
+          48,
+          51,
+          52
+        ],
+        "observation": "Existing document boundary retains recorded 404/503 with no-store and 503 Retry-After. It is unchanged by the typed correction."
+      },
+      {
+        "path": "apps/web/features/work-page/region.tsx",
+        "lines": [
+          34,
+          45,
+          58
+        ],
+        "observation": "The existing identity recovery path retains localized failure text and RetryButton. No new visual or browser claim is made."
+      }
+    ],
+    "product_audit_class_boundary": "Checked loss of refusal/outage meaning across the existing producer, shared reader, sole strict-entry flag consumer, metadata and initial document/disclosure outcomes. Other reader-based consumers are unchanged. No unrelated identity, navigation or whole-domain review.",
+    "immutable_source_and_check_pins": {
+      "snapshot": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/typed-identity-de8fac2935cb/source",
+      "manifest": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/typed-identity-de8fac2935cb/source-manifest.json",
+      "snapshot_method": "Exact selected git blobs materialized at the immutable final candidate; read-only source inspection. No product files or assertions edited.",
+      "checked_units": "500c85e728312b8e8a49f02b898b6e62fe0f22e9",
+      "checked_static": "c47dce3cc92d417c8eea2f1698e4818582b7be6d",
+      "all_nine_relevant_source_and_selected_test_blobs_identical_at_unit_static_and_final_pins": true,
+      "all_three_correction_commits_have_identical_stable_patch_ids_to_checked_pre_rebase_commits": true,
+      "rebase_evidence": "Final d1e6aad/4afaa42/de8fac patch IDs exactly equal 5c82dcf63fd4f5a166c8e6cf5155d73bebd85b98/0cadbe194498f46cb976cbaa8a3bdc95f60e7596/500c85e728312b8e8a49f02b898b6e62fe0f22e9. Relevant source and test blob equality verified separately.",
+      "owner_handoff": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/typed-identity-de8fac2935cb/owner-handoff.json"
+    },
+    "unchanged_original_executable": {
+      "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/typed-identity-de8fac2935cb/private-identity.test.ts",
+      "sha256": "809cd051a01d8c123b5c6f094e92cc3693478d64db3a6b51b3b682d7511c3e7c",
+      "byte_equal_to_original_reviewer_and_owner_executables": true,
+      "case": "private Collection identity outage stays unavailable and an actual refused identity stays missing",
+      "outcome_assertions": [
+        46,
+        47
+      ],
+      "assertion_reached": true,
+      "result": "passed unchanged for controlled real HTTP 503/401/403 through the production reader and typed producer",
+      "receipt": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/typed-identity-de8fac2935cb/identity-refusal-result.json",
+      "receipt_pin_boundary": "The unchanged executable writes its original 31a pin label. That string is not an execution pin; corrected execution pin is 500c85e728312b8e8a49f02b898b6e62fe0f22e9, with relevant blobs identical to de8fac. No receipt relabeling or assertion repair.",
+      "earlier_failure_preserved": "Original b5624596-40a9-4731-b826-a7dd9b73cb98 failed in the outcome assertion at 31a; the complete original section, executable, failure receipt and log remain unchanged."
+    },
+    "reused_executed_checks": {
+      "normal_goalctl_test_admission": true,
+      "duplicate_expensive_checks_started": false,
+      "affected_units": {
+        "job": "7ed0226f-c914-4a7f-a7f9-6654e06620db",
+        "step": 1,
+        "pin": "500c85e728312b8e8a49f02b898b6e62fe0f22e9",
+        "command": "bun scripts/goal/goalctl.ts test apps/web/tests/g-1028-server-reads.test.ts apps/web/tests/g-943-address.test.ts apps/web/features/work-levels/read.test.ts apps/web/features/auth/session-recovery.test.ts ./.temp/typed-identity/source/.temp/review/private-identity.test.ts",
+        "result": "132 pass,0 fail,1302 assertions,5 files; includes all125 prior affected tests,3 new consumer cases,3 unchanged producer cases,1 byte-exact reviewer executable",
+        "log": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/typed-identity-de8fac2935cb/checks/7ed0226f-c914-4a7f-a7f9-6654e06620db.1.log"
+      },
+      "static": {
+        "job": "7ed0226f-c914-4a7f-a7f9-6654e06620db",
+        "step": 2,
+        "pin": "c47dce3cc92d417c8eea2f1698e4818582b7be6d",
+        "command": "task goal -- check --only types,lint,guards",
+        "result": "guards/types/inference/lint/AST all passed; exact timeout retries passed; goal check auto-rebased before checks",
+        "run": ".temp/goal/check/run-OPL2mH",
+        "log": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/typed-identity-de8fac2935cb/checks/7ed0226f-c914-4a7f-a7f9-6654e06620db.2.log",
+        "raw_output": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/typed-identity-de8fac2935cb/checks/owner-output.log",
+        "timeout_retry_receipts": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/typed-identity-de8fac2935cb/checks/owner-timeout-retries.jsonl"
+      },
+      "final_rebase_types": {
+        "job": "51c35e9d-cd0f-411b-b8c2-d616f523403a",
+        "steps": [
+          1,
+          2,
+          3
+        ],
+        "pin": "de8fac2935cb59e61adfc18e98b55b9900751cb4",
+        "command": "git rebase wave/audit-20261019; task web:typecheck; git push . HEAD:refs/heads/wave/audit-20261019",
+        "result": "All passed;4027 files typecheck33.36s; fast-forward wave publication verified with merge-base; no main push",
+        "log": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/typed-identity-de8fac2935cb/checks/51c35e9d-cd0f-411b-b8c2-d616f523403a.2.log"
+      },
+      "baseline_new_consumer_cases": {
+        "job": "fa185130-f1a7-4490-8a8b-531a90993d1f",
+        "result": "129 pass, 2 fail, 1243 assertions across four files. Both new 401/403 cases failed at line 574 outcome assertion; 503 and all 125 prior cases passed.",
+        "log": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/typed-identity-de8fac2935cb/checks/fa185130-f1a7-4490-8a8b-531a90993d1f.log"
+      },
+      "original_startup_navigation": "Reuse the original eight startup/navigation checks, 40 navigation story cases, 25 viewed navigation PNGs and original readiness at their existing pins. Nothing was rerun or repinned as execution at de8fac. Original pre-focus observations, failed history setup logs and incomplete history remain intact."
+    },
+    "optional_hub_fixture_failures": {
+      "file": "apps/web/features/work-page/hub-access.test.ts",
+      "classification": "setup/fixture limitation, not a typed-delta product failure",
+      "outcome_assertions_reached": false,
+      "cause": "Six optional publication render fixtures stub Hub but not current WorkFrameView statement-section reads; followHref receives an undefined endpoint before the render assertion.",
+      "combined_corrected_job": "48f92d70-881d-4134-b441-8d6d7cdaef65",
+      "combined_result": "135 pass, 6 fail, 1326 assertions across six files; includes the 132 passing affected tests plus 3 passing optional Hub cases. Do not label this whole job passed.",
+      "unchanged_consumer_control_job": "f843bb35-c425-41bf-b107-191fdd3927aa",
+      "control_result": "3 pass, identical 6 fixture failures, 24 assertions across one file with original consumer, as recorded by owner.",
+      "artifacts": [
+        ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/typed-identity-de8fac2935cb/checks/48f92d70-881d-4134-b441-8d6d7cdaef65.log",
+        ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/typed-identity-de8fac2935cb/checks/f843bb35-c425-41bf-b107-191fdd3927aa.log"
+      ],
+      "disposition": "Preserved separately. No fixture/assertion repair, additional full catalogue run or product defect inferred from setup failures."
+    },
+    "historical_evidence_preservation": {
+      "prior_report": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/typed-identity-de8fac2935cb/prior-review.json",
+      "prior_report_sha256": "e9937cdd081b0f4e9d2abdbcb352e4cfa09be96cf5c30bec1009d2022b2c9224",
+      "all_prior_fields_unchanged": true,
+      "all_five_common_web_findings": "Prior source findings and original genuine acceptance requirements remain preserved. This delta resolves only the denied/outage source distinction of WEB-PRIVATE-IDENTITY; it does not establish closure of any original genuine destination finding.",
+      "d3_002": "Closed separately by program per current manager instruction; the historical ba53 guard review and its original selection counterexample are retained without another guard review.",
+      "screenshots": "No new screenshots or browser run for this nonvisual delta. Previously inspected screenshots retain their exact pins.",
+      "genuine_acceptance_owner": "G-2825 and existing source owners; no invented accounts or alternate identity fallback."
+    },
+    "remaining_genuine_acceptance": [
+      "On compatible frontend/backend with genuine eligible signed-in identity, open the actual private destination; induce identity 503 and assert initial HTTP 503/no-store, recovery body and retry, then restore the same URL/token/session/Agent and actual content.",
+      "Actual refused/revoked/anonymous/missing private destinations remain HTTP 404 without private metadata/title/member disclosure; preserve the original navigation assertions with settled observations.",
+      "Other original destination/status/body/navigation requirements remain with existing owners. Reuse existing successful evidence and add only missing assertions; no old full-catalogue restore, new corpus or repeated unchanged startup/history tiers."
+    ],
+    "product_source_tests_or_owner_tree_edited": false,
+    "report_validation": {
+      "status": "passed",
+      "job": "063000ec-3872-4ec4-a64b-4cad58b0bb28",
+      "documentation_check": {
+        "command": "task docs:check",
+        "step": 1,
+        "result": "13 tests passed; 250 Markdown files",
+        "log": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/typed-identity-de8fac2935cb/checks/063000ec-3872-4ec4-a64b-4cad58b0bb28.1.log"
+      },
+      "worker_check": {
+        "command": "task goal -- check",
+        "step": 2,
+        "result": "types/tests/lint/AST/guards ok; report-only change; 1/45 repository guards selected",
+        "run": ".temp/goal/check/run-KeYreS",
+        "log": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/typed-identity-de8fac2935cb/checks/report-worker-check.log"
+      },
+      "only_tracked_edit": "docs/goals/audit-remediation-20261019/proofs/startup-navigation-review.json",
+      "artifact_manifest": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/typed-identity-de8fac2935cb/artifact-manifest.json"
+    },
+    "next": "Program may integrate this minimal typed correction using the exact verified producer. No actionable source defect remains for this delta. Complete only the still-missing genuine destination status/body/navigation acceptance on compatible frontend/backend; program decides final class closure."
+  }
 }
