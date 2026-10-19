@@ -1,6 +1,5 @@
 'use client';
 
-import { cn } from '@rezics/ui/utils';
 import {
   ArrowLeftIcon,
   ArrowUpRightIcon,
@@ -8,7 +7,6 @@ import {
   ClockIcon,
   FlameIcon,
   MessageCircleIcon,
-  MessagesSquareIcon,
   TrophyIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -21,12 +19,15 @@ import { LinkMenu } from '../feed/controls.tsx';
 import { resourceHref } from '../address/path.ts';
 import { markedSpoiler, threadPath } from '../feed/discussion.ts';
 import { useFeed } from '../feed/feed-context.tsx';
+import { SubjectHeader } from '../entity-page/header.tsx';
+import { copyOf as detailCopy } from '../entity-page/messages.ts';
+import { SubjectSources } from '../entity-page/sources.tsx';
+import { ReportMenu } from '../safety/report-action.tsx';
 import { ReplyComposer, type ReplyMode, type ReplyTarget } from '../feed/reply-composer.tsx';
 import { ReplyBody, ReplyByline, ReplyList, type ThreadContext } from '../feed/reply-tree.tsx';
 import { mainThreadApi, type ThreadApi } from '../feed/thread-api.ts';
 import { replyTree, THREAD_DEPTH, type ThreadRead, type ThreadReply, type ThreadSort } from '../feed/thread.ts';
 import { assertThreadPage, mergeThreadPage, threadContinuationHref } from './thread-pages.ts';
-import { EmptyState } from '../shell/empty-state.tsx';
 import { CommunityIcon } from '../shell/community-icon.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 
@@ -93,7 +94,7 @@ function useReplyAnchor() {
 
 /** The Work a thread discusses, with its cover, as a link post names its source. */
 function AboutWork({ work }: { work: ThreadRead['work'] }) {
-  const { t, avatarQuery, locale } = useFeed();
+  const { t, avatarQuery } = useFeed();
   return (
     <div className="grid max-w-md gap-1">
     <LocalizedLink
@@ -127,13 +128,11 @@ function AboutWork({ work }: { work: ThreadRead['work'] }) {
         className="ms-auto size-4 shrink-0 text-muted-foreground"
       />
     </LocalizedLink>
-    <CatalogueCoverCredit work={{ id: work.id, title: work.title, cover: work.cover,
-      kind: coverKindOf([]), authors: [] }} avatarQuery={avatarQuery} locale={locale} />
     </div>
   );
 }
 
-/** The discussion as its own page: who opened it and when, the title, every word, then votes and share. */
+/** The opening post owns its identity, reactions and exact-object menu. */
 function OpeningPost({
   post,
   read,
@@ -145,10 +144,11 @@ function OpeningPost({
   realm: ThreadViewProps['realm'];
   count: number;
 }) {
-  const { t } = useFeed();
+  const { t, locale } = useFeed();
   const title = post.blocked ? t.blockedUser : (post.title ?? ''),
     body = post.body;
   const href = threadPath(realm.path, post.reply);
+  const detail = detailCopy(locale);
   const words = body ? (
     <ReplyBody
       reply={{ ...post, body }}
@@ -158,7 +158,8 @@ function OpeningPost({
   ) : null;
   return (
     <article aria-labelledby="thread-title" className="grid gap-3">
-      <div className="flex items-center gap-2">
+      <SubjectHeader locale={locale} resource={post.reply} contentModel="member-reply-v1" identity={<div className="grid min-w-0 gap-3">
+      <div className="flex min-w-0 items-center gap-2">
         <CommunityIcon
           icon={null}
           name={post.author?.name ?? '·'}
@@ -175,6 +176,20 @@ function OpeningPost({
       >
         {title || t.untitled}
       </h1>
+      </div>} actions={<>
+        {!post.blocked && post.author ? <ReplyAuthorActions target={{ reply: post.reply,
+          realm: read.realm, author: post.author.id, revisionId: post.revisionId, placement: post.placement }} /> : null}
+        {post.blocked ? null : <div role="group" aria-label={detail.reactions} className="flex items-center gap-1.5">
+          <VoteControl target={{ id: post.placement, vote: post.vote.value,
+            score: post.vote.score, revision: post.vote.revision, open: post.vote.open }} /></div>}
+        <ReportMenu targets={[{ target: post.reply, kind: 'post', realm: read.realm,
+          ...(post.revisionId ? { selection: { component: 'body' as const, revision: `urn:rezics:content:revision:${post.revisionId}`, locator: null } } : {}) }]}
+          name={title || t.untitled} locale={locale} moreAccessibleLabel={detail.moreActions({ name: title || t.untitled })} />
+      </>} primary={<a href="#comments"
+        className="inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 font-medium text-muted-foreground text-sm outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring">
+        <MessageCircleIcon aria-hidden="true" className="size-4" />{t.comments(count)}{read.complete ? '' : '+'}
+      </a>} />
+      <div data-primary-content className="grid min-w-0 gap-3">
       {post.blocked ? null : markedSpoiler(post.spoiler) ? (
         <>
           <span
@@ -189,32 +204,9 @@ function OpeningPost({
         words
       )}
       <AboutWork work={read.work} />
+      </div>
       <fieldset className="-ms-1 flex flex-wrap items-center gap-1.5">
         <legend className="sr-only">{t.actions}</legend>
-        {!post.blocked && post.author ? (
-          <ReplyAuthorActions target={{ reply: post.reply, realm: read.realm, author: post.author.id,
-            revisionId: post.revisionId, placement: post.placement }} />
-        ) : null}
-        {post.blocked ? null : (
-          <VoteControl
-            target={{
-              id: post.placement,
-              vote: post.vote.value,
-              score: post.vote.score,
-              revision: post.vote.revision,
-              open: post.vote.open,
-            }}
-          />
-        )}
-        <a
-          href="#comments"
-          className="inline-flex h-9 items-center gap-1.5 rounded-full px-3 font-medium
-        text-muted-foreground text-sm outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <MessageCircleIcon aria-hidden="true" className="size-4" />
-          {t.comments(count)}
-          {read.complete ? '' : '+'}
-        </a>
         <ShareButton href={href} title={title} />
       </fieldset>
     </article>
@@ -286,7 +278,7 @@ export function ThreadView({
   threadApi,
   readPage,
 }: ThreadViewProps) {
-  const { t, actingSubject } = useFeed();
+  const { t, actingSubject, avatarQuery, locale } = useFeed();
   const [loaded, setLoaded] = useState({ source: initialRead, read: initialRead });
   if (loaded.source !== initialRead) setLoaded({ source: initialRead, read: initialRead });
   const read = loaded.source === initialRead ? loaded.read : initialRead;
@@ -386,7 +378,7 @@ export function ThreadView({
           <h2 id="comments-heading" className="font-semibold text-lg">
             {opening ? t.commentsHeading : t.replyIn}
           </h2>
-          <LinkMenu
+          {replies.length || (read.continuations ?? []).some(value => value.kind !== 'ancestors') ? <LinkMenu
             label={t.sortComments}
             value={sort}
             icon={<SortIcon aria-hidden="true" className="size-4" />}
@@ -396,7 +388,7 @@ export function ThreadView({
               help: option === 'best' ? t.bestHelp : option === 'top' ? t.topHelp : t.newHelp,
               href: `${sortHrefs[option]}#comments`,
             }))}
-          />
+          /> : null}
         </div>
         {opening ? (
           <ReplyComposer
@@ -408,16 +400,18 @@ export function ThreadView({
         {replies.length ? (
           <ReplyList nodes={replies} context={context} />
         ) : (
-          <EmptyState
-            icon={MessagesSquareIcon}
-            headingLevel={3}
-            title={t.noComments}
-            description={t.noCommentsBody}
-            className={cn('py-8')}
-          />
+          <h3 className="font-normal text-muted-foreground text-sm">{t.noComments}</h3>
         )}
         {opening ? continuation(focus.reply) : null}
       </section>
+      {read.work.cover?.kind === 'image' ? <CatalogueCoverCredit
+        work={{ id: read.work.id, title: read.work.title, cover: read.work.cover,
+          kind: coverKindOf([]), authors: [] }} avatarQuery={avatarQuery} locale={locale}>
+        {credit => <SubjectSources locale={locale}>
+          <p className="font-medium" lang={read.work.title.language}>{read.work.title.value}</p>
+          {credit}
+        </SubjectSources>}
+      </CatalogueCoverCredit> : null}
     </div>
   );
 }

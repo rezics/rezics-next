@@ -180,8 +180,8 @@ export const SharedControls: Story = { render: () => <Controls />,
     await expect(await canvas.findByRole('button', { name: 'Notifications: All' })).toBeVisible();
     await expect(lastMemory.follows.get(target(10))?.source).toBe('library');
     await waitFor(() => expect(within(document.body).queryByRole('menu')).toBeNull());
-    await waitFor(() => expect(canvas.getByRole('button', { name: 'Relationship options · 中文网络小说' })).not.toBeDisabled());
-    await userEvent.click(canvas.getByRole('button', { name: 'Relationship options · 中文网络小说' }));
+    await waitFor(() => expect(canvas.getByRole('button', { name: 'More actions · 中文网络小说' })).not.toBeDisabled());
+    await userEvent.click(canvas.getByRole('button', { name: 'More actions · 中文网络小说' }));
     const unpin = await within(document.body).findByRole('menuitem', { name: 'Unpin' });
     await waitFor(() => expect(unpin).toBeVisible());
     await waitFor(() => expect(within(document.body).getByRole('menu')).toHaveFocus());

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useEffect, useState } from 'react';
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
 import { browserMainApi } from '../api/browser.ts';
 import { FeedProvider } from '../feed/feed-context.tsx';
@@ -88,10 +88,11 @@ function DiscussionPage({ state, locale, signedIn }: { state: State; locale: UiL
     links: { home: realmHref(locale, realm), browse: '', works: '',
       discussions: realmHref(locale, realm, 'discussions'), decisions: realmHref(locale, realm, 'decisions'),
       about: realmHref(locale, realm, 'about') } };
-  return <RealmPageStory zone={zone} realmRef={realm} locale={locale}>
+  return <RealmPageStory zone={zone} realmRef={realm} locale={locale} compactCommunity={isThread}>
     <DiscussionColumns rail={<ThreadRail name={{ value: zone.name.value, lang: zone.name.lang }}
       description={zone.description ? { value: zone.description.value, lang: zone.description.lang } : null}
-      members={null} aboutHref={zone.links.about} rules={[]}
+      members={null} aboutHref={zone.links.about} rules={[{ id: 'civility', title: 'Be considerate',
+        body: 'Discuss the work and respect other readers.', lang: 'en' }]}
       labels={{ about: feed.aboutCommunity, rules: feed.communityRules, more: feed.moreAboutCommunity }} />}>
     <FeedProvider locale={locale} messages={feed} now={THREAD_NOW} signedIn={signedIn} actingSubject={actor ?? null}
       signInHref="/auth/start" avatarQuery="" tab="all" followedRealms={null} api={memoryFeed()}>
@@ -138,7 +139,28 @@ export const Loading: Story = { args: { state: 'loading' }, async play({ canvasE
   await expect(canvasElement.querySelector('[aria-busy=true]')).not.toBeNull();
 } };
 export const LoadingPhone: Story = { ...Loading, globals: phone };
-export const PublicThread: Story = { args: { state: 'thread' } };
+export const PublicThread: Story = { args: { state: 'thread' }, async play({ canvasElement }) {
+  const canvas = within(canvasElement);
+  await canvas.findByRole('heading', { level: 1, name: storyThread.items[0]!.title! });
+  const header = canvasElement.querySelector('[data-subject-header]') as HTMLElement;
+  await expect(header).not.toBeNull();
+  await expect(canvas.queryByRole('link', { name: 'Report this post' })).toBeNull();
+  const more = within(header).getByRole('button', { name: /^More actions/ });
+  more.focus();
+  await userEvent.keyboard('{Enter}');
+  const report = await within(document.body).findByRole('menuitem', { name: 'Report this post' });
+  const params = new URL(report.getAttribute('href')!, location.origin).searchParams;
+  await expect(params.get('target')).toBe(storyThread.focus);
+  await expect(params.get('realm')).toBe(storyRealm.id);
+  await userEvent.keyboard('{Escape}');
+  await expect(more).toHaveFocus();
+  if (window.innerWidth < 1024) {
+    const rules = canvas.getByRole('link', { name: 'Rules' });
+    await expect(rules).toHaveAttribute('href', expect.stringContaining('#realm-rules'));
+    await expect(rules.compareDocumentPosition(header) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  }
+  await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+} };
 export const PublicThreadPhone: Story = { ...PublicThread, globals: phone };
 export const MemberThread: Story = { args: { state: 'thread', signedIn: true } };
 export const MemberThreadPhone: Story = { ...MemberThread, globals: phone };
@@ -149,7 +171,12 @@ export const ClosedThreadPhone: Story = { ...ClosedThread, globals: phone };
 export const Siblings: Story = { args: { state: 'siblings' } };
 export const SiblingsPhone: Story = { ...Siblings, globals: phone };
 
-export const ThreadWithoutReplies: Story = { args: { state: 'thread-empty' } };
+export const ThreadWithoutReplies: Story = { args: { state: 'thread-empty' }, async play({ canvasElement }) {
+  const canvas = within(canvasElement);
+  await expect(await canvas.findByText('No comments yet')).toBeVisible();
+  await expect(canvas.queryByRole('button', { name: /^Sort comments/ })).toBeNull();
+  await expect(canvas.getByRole('button', { name: /^More actions/ })).toBeVisible();
+} };
 export const ThreadWithoutRepliesPhone: Story = { ...ThreadWithoutReplies, globals: phone };
 export const ThreadLoading: Story = { args: { state: 'thread-loading' } };
 export const ThreadLoadingPhone: Story = { ...ThreadLoading, globals: phone };

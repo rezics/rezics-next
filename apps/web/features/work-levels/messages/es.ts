@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkLevelsMessages } from '../messages.ts';
 
 export default {
+  namesUnavailable: 'No se pudieron cargar algunos nombres.',
+  namesRestored: 'Nombres cargados.',
   creditedAs: "como",
   nameNotShown: 'Nombre no mostrado',
   parts: 'Partes', partsList: 'Partes en orden de publicación', partsPages: 'Páginas de partes',
@@ -52,6 +54,7 @@ export default {
   isbnMatches: 'Publicaciones con este ISBN',
   identifiers: 'Identificadores', isbn: 'ISBN', platform: 'Plataforma', territory: 'Territorio',
   languages: 'Idiomas', originalUrl: 'URL original',
+  openPublication: 'Abrir publicación', noCoverage: 'Aún no se han registrado obras para esta publicación.',
   coverage: 'Incluye', coversHeading: 'Qué incluye', mainVersion: 'Versión principal',
   coversWorks: plural({ one: insert('Incluye {{count}} obra'), other: insert('Incluye {{count}} obras') },
     { count: asValue(number()) }),

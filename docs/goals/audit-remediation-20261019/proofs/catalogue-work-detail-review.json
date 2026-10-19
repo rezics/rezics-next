@@ -5295,5 +5295,3369 @@
       "No implementation, API/schema/converter, source/citation architecture, import/lifecycle, dependency mutation or original assertion change. All prior catalogue/Book/Cook/footer findings and their gaps stay preserved."
     ],
     "managerNext": "Use this bounded source APPROVE for the normal manager integration of the seven-path correction and inspected five-product-file native overlay, preserving current Main peer changes and dependencies rather than replacing whole older worker blobs. Retain exact native-runtime/manifest wording qualifications and original failures; no canonical class closure is authorized by this report."
+  },
+  "boundedNonWorkReleaseFirstSourceCheckpoint": {
+    "observedAt": "2026-10-19T14:10:58.892583+00:00",
+    "reviewer": {
+      "account": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independent": true,
+      "delegation": false,
+      "fallback": false
+    },
+    "authority": "One first independent review of the exact missing non-Work header/footer and Release hunks selected by the 2026-10-19T13:48:51.083855Z decision. Same claimed report/outcome; no fallback, nested agent, product edits, service or native runtime work, or landing.",
+    "priorReport": {
+      "commit": "2b17a3fc5d5cb13da017bf9c020edca4b054e1fa",
+      "bytes": 392767,
+      "sha256": "e610ac9b38a46b95a85e7f35637b39038873985caa27cebf9a38486e35e9279f",
+      "preservedTopLevelFields": [
+        "format",
+        "goal",
+        "worker",
+        "observedAt",
+        "reviewer",
+        "disposition",
+        "acceptance",
+        "pins",
+        "scope",
+        "acceptanceReference",
+        "findings",
+        "sourceReviewObservations",
+        "checksActuallyExecuted",
+        "proofReuse",
+        "limitations",
+        "managerNext",
+        "originalReviewCheckpoint",
+        "finalCandidateCheckpoint",
+        "finalCandidateResolutionCheckpoint",
+        "boundedActionGroupCheckpoint",
+        "boundedSourceFooterCheckpoint",
+        "boundedCreditsCookCheckpoint",
+        "boundedBookCoverCheckpoint",
+        "boundedBookRetryCorrectionCheckpoint",
+        "boundedD1003NavigationCorrectionCheckpoint",
+        "boundedD1003BackQueryAssertionCheckpoint"
+      ]
+    },
+    "pins": {
+      "frozenCurrentMain": "0a0733dcbf73028e8d84e6ddfdf443473d3ecc90",
+      "authoredFinalSource": "caecadc10a37b36daaf03773282b47183673ee89",
+      "boundedReleaseBase": "a69b233dc5791ed35167fb6622f9721ce1f0c9ba",
+      "historicalRenderedSource": "33a1b49177583d3191b5523020252512af721071",
+      "priorCurrentHeader": "e299a8ecccee0cd945ef93062cbbc8656386be5b",
+      "priorG2841ReportCommit": "2b17a3fc5d5cb13da017bf9c020edca4b054e1fa",
+      "priorG2847ReportCommit": "e5935025fe756dbbd5d58e30b46620d70b045a26",
+      "shellSource": "8fedea7f12c27a7c869a37448015c2182a599752"
+    },
+    "manifest": {
+      "path": ".temp/ref/manifest.json",
+      "bytes": 114203,
+      "sha256": "4c72e239968bdb78bd6f2facb4bd68a631b96388f8c2c58c0f0fe8701ef45bb4",
+      "originalPath": ".temp/audit-remediation-20261019/two-hour-sprint/site-G2758-nonwork-release-first-review/manifest.json"
+    },
+    "disposition": {
+      "releaseComposition": "APPROVE the selected source hunks at caecadc against bounded base a69b233 and the listed shared prerequisites; component proof matches. This is not approval to replace complete worker files or changing Main.",
+      "historicalCorrections": "R1-R7/F1-F4 are addressed in the selected source; historical findings and executed failures remain immutable. No claim that source review proves original catalogue outcomes.",
+      "nonReleaseHostConcern": "One actionable P2 source inference, WORK-REVIEW-09, remains unconfirmed by an outcome assertion after the one permitted setup correction. It is explicitly not a reproduced blocker.",
+      "integration": "Compose only reviewed hunks onto frozen/current Main retaining owner/API/auth/dependency and unrelated inventory rows. The comparison-only whole-worker patch is not approved for landing.",
+      "canonicalAcceptance": "I1-001/A13/C21/C26 remain open to their original applicable assertions; no class closure. Existing G-2747 owns the bounded installed-router proof after manager composition."
+    },
+    "counts": {
+      "missingAuthoredPaths": 42,
+      "integrationComparisons": 12,
+      "newlyExplicitRecoveryDependencies": 4,
+      "boundedFirstReviewPaths": 58,
+      "exactPriorReviewedReuse": 15,
+      "alreadyExactMainContext": 6,
+      "alreadyReviewedMainShell": 5,
+      "totalExplicitPathDispositions": 84
+    },
+    "authoredDeltaDispositions": [
+      {
+        "commit": "f5bf2965518ee8a056c56c0b1353cfa8274acdc9",
+        "parent": "1beebf1e298db48c806ee20e40d7106a63eb04d2",
+        "author": "Edge-coordinates <Edgecoordinates@gmail.com>",
+        "purpose": "F1-F4 withheld locator privacy and exact selected source revisions",
+        "originalChangedPathCount": 14,
+        "selectedPathCount": 11,
+        "paths": [
+          "apps/web/features/entity-page/detail-contract.test.tsx",
+          "apps/web/features/entity-page/release-provenance.stories.tsx",
+          "apps/web/features/entity-page/sources.tsx",
+          "apps/web/features/release-filter/adapt.test.ts",
+          "apps/web/features/release-filter/adapt.ts",
+          "apps/web/features/release-filter/read.test.ts",
+          "apps/web/features/release-filter/read.ts",
+          "apps/web/features/work-levels/editions.test.tsx",
+          "apps/web/features/work-levels/editions.tsx",
+          "apps/web/features/work-levels/pages.tsx",
+          "scripts/static/web-continuations.inventory.json"
+        ],
+        "alreadyExactMainPaths": [
+          "services/main/src/modules/wiki/evidence-read.ts",
+          "services/main/src/modules/wiki/evidence.ts",
+          "services/main/tests/wiki-evidence-projection.test.ts"
+        ],
+        "authoredDelta": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-G2758-nonwork-release-first-review/authored-deltas/01-f5bf296551.patch",
+          "exists": true,
+          "bytes": 47525,
+          "sha256": "a86572587ad6e3ea4a314ee2d1ffadc6bd3108f55d42b0ab35a946a00c1664c4"
+        },
+        "reviewedDelta": "Actual direct-parent selected hunks inspected once; final source assessed at caecadc. Already-exact Main contexts are reused, and unrelated worker history is not selected."
+      },
+      {
+        "commit": "9a6da73270a645bf87e63bfaa762bde4a0e6db92",
+        "parent": "94039d9783d719ca8fe884c31312fbb9b9aef1b6",
+        "author": "Edge-coordinates <Edgecoordinates@gmail.com>",
+        "purpose": "Current non-Work identity, primary task, reaction and exact subject menu placement",
+        "originalChangedPathCount": 32,
+        "selectedPathCount": 31,
+        "paths": [
+          "apps/web/features/author/author-page.stories.tsx",
+          "apps/web/features/author/author-page.tsx",
+          "apps/web/features/concept/concept-follow.tsx",
+          "apps/web/features/concept/concept-page.stories.tsx",
+          "apps/web/features/concept/concept-page.tsx",
+          "apps/web/features/entity-page/detail-contract.stories.tsx",
+          "apps/web/features/entity-page/detail-contract.test.tsx",
+          "apps/web/features/entity-page/entity-page.tsx",
+          "apps/web/features/entity-page/header.tsx",
+          "apps/web/features/entity-page/messages.ts",
+          "apps/web/features/entity-page/messages/de.ts",
+          "apps/web/features/entity-page/messages/es.ts",
+          "apps/web/features/entity-page/messages/fr.ts",
+          "apps/web/features/entity-page/messages/ja.ts",
+          "apps/web/features/entity-page/messages/ko.ts",
+          "apps/web/features/entity-page/messages/zh-Hans.ts",
+          "apps/web/features/entity-page/messages/zh-Hant.ts",
+          "apps/web/features/entity-page/release-provenance.stories.tsx",
+          "apps/web/features/profile/follow-button.tsx",
+          "apps/web/features/profile/profile-page.stories.tsx",
+          "apps/web/features/profile/profile-page.tsx",
+          "apps/web/features/realm/membership.tsx",
+          "apps/web/features/realm/realm-page.tsx",
+          "apps/web/features/realm/story-page.tsx",
+          "apps/web/features/realm/thread-view.stories.tsx",
+          "apps/web/features/realm/thread-view.tsx",
+          "apps/web/features/relationships/control.tsx",
+          "apps/web/features/work-levels/pages.tsx",
+          "apps/web/features/work-levels/release-page.tsx",
+          "apps/web/features/zones/zone-frame.tsx",
+          "scripts/static/web-continuations.inventory.json"
+        ],
+        "alreadyExactMainPaths": [
+          "apps/web/features/safety/report-action.tsx"
+        ],
+        "authoredDelta": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-G2758-nonwork-release-first-review/authored-deltas/02-9a6da73270.patch",
+          "exists": true,
+          "bytes": 86585,
+          "sha256": "efef34a1f56e81a805e4afb2a74abc6797d80a4584a8098e846a4bbaeda488ec"
+        },
+        "reviewedDelta": "Actual direct-parent selected hunks inspected once; final source assessed at caecadc. Already-exact Main contexts are reused, and unrelated worker history is not selected."
+      },
+      {
+        "commit": "45218f09323ae7283246ebb482c5793df9bf8f31",
+        "parent": "b8ec0159dfd3b4f38d210bead790757222f8871f",
+        "author": "Edge-coordinates <Edgecoordinates@gmail.com>",
+        "purpose": "Original story premise corrections; real rendered content and subject",
+        "originalChangedPathCount": 2,
+        "selectedPathCount": 2,
+        "paths": [
+          "apps/web/features/entity-page/detail-contract.stories.tsx",
+          "apps/web/features/realm/thread-view.stories.tsx"
+        ],
+        "alreadyExactMainPaths": [],
+        "authoredDelta": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-G2758-nonwork-release-first-review/authored-deltas/03-45218f0932.patch",
+          "exists": true,
+          "bytes": 3092,
+          "sha256": "7403e72a66b92cf29902fb7dced70fc3a20a2715b198ce1a2f395eee377eb7c4"
+        },
+        "reviewedDelta": "Actual direct-parent selected hunks inspected once; final source assessed at caecadc. Already-exact Main contexts are reused, and unrelated worker history is not selected."
+      },
+      {
+        "commit": "e299a8ecccee0cd945ef93062cbbc8656386be5b",
+        "parent": "3c2e024a840394ea8e850c15f1fb17be893f8266",
+        "author": "Edge-coordinates <Edgecoordinates@gmail.com>",
+        "purpose": "Keep accepted page-end label and source content while adopting current headers",
+        "originalChangedPathCount": 16,
+        "selectedPathCount": 16,
+        "paths": [
+          "apps/web/features/author/author-page.stories.tsx",
+          "apps/web/features/entity-page/detail-contract.stories.tsx",
+          "apps/web/features/entity-page/detail-contract.test.tsx",
+          "apps/web/features/entity-page/messages.ts",
+          "apps/web/features/entity-page/messages/de.ts",
+          "apps/web/features/entity-page/messages/es.ts",
+          "apps/web/features/entity-page/messages/fr.ts",
+          "apps/web/features/entity-page/messages/ja.ts",
+          "apps/web/features/entity-page/messages/ko.ts",
+          "apps/web/features/entity-page/messages/zh-Hans.ts",
+          "apps/web/features/entity-page/messages/zh-Hant.ts",
+          "apps/web/features/entity-page/release-provenance.stories.tsx",
+          "apps/web/features/entity-page/sources.tsx",
+          "apps/web/features/realm/thread-view.stories.tsx",
+          "apps/web/features/work-levels/editions.stories.tsx",
+          "apps/web/features/work-levels/release-recovery.stories.tsx"
+        ],
+        "alreadyExactMainPaths": [],
+        "authoredDelta": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-G2758-nonwork-release-first-review/authored-deltas/04-e299a8eccc.patch",
+          "exists": true,
+          "bytes": 17799,
+          "sha256": "fbb1beafa198e5148e5ce52b9f66883d55454f6eacaf241eeba4a33887a0f68a"
+        },
+        "reviewedDelta": "Actual direct-parent selected hunks inspected once; final source assessed at caecadc. Already-exact Main contexts are reused, and unrelated worker history is not selected."
+      },
+      {
+        "commit": "444e601b79111ccc3d880079f2d06aef4756a8ce",
+        "parent": "a69b233dc5791ed35167fb6622f9721ce1f0c9ba",
+        "author": "Edge-coordinates <Edgecoordinates@gmail.com>",
+        "purpose": "Release exact selected reads shared by route body and parallel page-end slot",
+        "originalChangedPathCount": 6,
+        "selectedPathCount": 6,
+        "paths": [
+          "apps/web/app/@pageEnd/[locale]/releases/[id]/page.tsx",
+          "apps/web/app/[locale]/releases/[id]/page.tsx",
+          "apps/web/features/entity-page/detail-contract.test.tsx",
+          "apps/web/features/work-levels/pages.tsx",
+          "apps/web/features/work-levels/release-page.tsx",
+          "apps/web/features/work-levels/release-recovery.stories.tsx"
+        ],
+        "alreadyExactMainPaths": [],
+        "authoredDelta": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-G2758-nonwork-release-first-review/authored-deltas/05-444e601b79.patch",
+          "exists": true,
+          "bytes": 18841,
+          "sha256": "4f2101cddef82c7e9b6a6df9d696ca0a0c14270992af70b9cf6b47e36a330dba"
+        },
+        "reviewedDelta": "Actual direct-parent selected hunks inspected once; final source assessed at caecadc. Already-exact Main contexts are reused, and unrelated worker history is not selected."
+      },
+      {
+        "commit": "f249e4f7aee9b4cfbe0e0a616a51dc72fbf3a4d2",
+        "parent": "444e601b79111ccc3d880079f2d06aef4756a8ce",
+        "author": "Edge-coordinates <Edgecoordinates@gmail.com>",
+        "purpose": "SSR fixture supplies actual shell pathname",
+        "originalChangedPathCount": 1,
+        "selectedPathCount": 1,
+        "paths": [
+          "apps/web/features/entity-page/detail-contract.test.tsx"
+        ],
+        "alreadyExactMainPaths": [],
+        "authoredDelta": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-G2758-nonwork-release-first-review/authored-deltas/06-f249e4f7ae.patch",
+          "exists": true,
+          "bytes": 1359,
+          "sha256": "c8a707dcb142f13efdb712f17d74597e383ca0146644dc59320a32b5b5c54eb2"
+        },
+        "reviewedDelta": "Actual direct-parent selected hunks inspected once; final source assessed at caecadc. Already-exact Main contexts are reused, and unrelated worker history is not selected."
+      },
+      {
+        "commit": "caecadc10a37b36daaf03773282b47183673ee89",
+        "parent": "f249e4f7aee9b4cfbe0e0a616a51dc72fbf3a4d2",
+        "author": "Edge-coordinates <Edgecoordinates@gmail.com>",
+        "purpose": "Use supported exact named footer query without changing assertion",
+        "originalChangedPathCount": 1,
+        "selectedPathCount": 1,
+        "paths": [
+          "apps/web/features/work-levels/release-recovery.stories.tsx"
+        ],
+        "alreadyExactMainPaths": [],
+        "authoredDelta": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-G2758-nonwork-release-first-review/authored-deltas/07-caecadc10a.patch",
+          "exists": true,
+          "bytes": 864,
+          "sha256": "5301ff59711b6a10c7f9e142b86a7ffcc66576c02c87b82a7c510ee83223a432"
+        },
+        "reviewedDelta": "Actual direct-parent selected hunks inspected once; final source assessed at caecadc. Already-exact Main contexts are reused, and unrelated worker history is not selected."
+      }
+    ],
+    "inspectedChangedPaths": [
+      {
+        "path": "apps/web/app/@pageEnd/[locale]/releases/[id]/page.tsx",
+        "group": "missing-authored-correction",
+        "main": null,
+        "target": {
+          "blob": "1e308cb9d0ec2939885a815bf56507443ac8e309",
+          "bytes": 764,
+          "sha256": "0f53e57439588d61022da762463421b813617d2c15b7657c17415fd7a9a5b047"
+        },
+        "authoredOrigins": [
+          "444e601b79111ccc3d880079f2d06aef4756a8ce"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "release",
+          "assessment": "Exact selected coverage/source revisions and typed failures feed both Release body and page-end slot through the one-arity request cache. Native IDs are not evidence routes; null evidence keeps identity/revision. Route invalid-id/failure slots are null, and body suppresses its footer when the slot owns it."
+        }
+      },
+      {
+        "path": "apps/web/app/[locale]/releases/[id]/page.tsx",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "e8a2f63af7a3d77cbea29950c5709471f9cbd34f",
+          "bytes": 1099,
+          "sha256": "0075b17fa3fa74d8905a440da43198716cd6f52b4a385796b981de25be148dd7"
+        },
+        "target": {
+          "blob": "1df577c43148fa879850794b42e9c9269ead43ff",
+          "bytes": 1114,
+          "sha256": "369974eaa5bf758c876928fc22c634c968c24c343a3d2d56544e0d9cdcaf3828"
+        },
+        "authoredOrigins": [
+          "444e601b79111ccc3d880079f2d06aef4756a8ce"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "release",
+          "assessment": "Exact selected coverage/source revisions and typed failures feed both Release body and page-end slot through the one-arity request cache. Native IDs are not evidence routes; null evidence keeps identity/revision. Route invalid-id/failure slots are null, and body suppresses its footer when the slot owns it."
+        }
+      },
+      {
+        "path": "apps/web/features/author/author-page.stories.tsx",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "eaafca0e857529610f4b9b75218e6bf96b3d1849",
+          "bytes": 14246,
+          "sha256": "1bdb58f961b46343020dcfd77b837c005f228d6ed5762a4850997bf905b03216"
+        },
+        "target": {
+          "blob": "04b6699e455c45b4a2eec60fddd32977167ad6e0",
+          "bytes": 16189,
+          "sha256": "76a2564325c1e997db3ddabe7db214b55906fedfe9364cf2d2a5ea86dffdd729"
+        },
+        "authoredOrigins": [
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92",
+          "e299a8ecccee0cd945ef93062cbbc8656386be5b"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "component-proof-premise",
+          "assessment": "Inspected changed assertions/premises with the corresponding product delta. Existing independent source/privacy/revision/content assertions retained; pathname provider and supported role-query correction are fixture corrections. Final three Release fixtures use actual AppShell composition. Component checks do not establish installed-router acceptance."
+        }
+      },
+      {
+        "path": "apps/web/features/author/author-page.tsx",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "440395ba6c1d7d321cece28d94c08d33ce50eded",
+          "bytes": 18938,
+          "sha256": "603fbd5faa774ef216334f859a8dc0093d07cb7a328bf8ca568f553f6de38b47"
+        },
+        "target": {
+          "blob": "a27a1604662afc708a66f9d5d622ed13306223c9",
+          "bytes": 20362,
+          "sha256": "b171dd54386fec678695d6777c07351785502a959c0dbc79f1de54a0ceaf60fd"
+        },
+        "authoredOrigins": [
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "author",
+          "assessment": "External author preserves domain dates, reading links, totals, credited works and their supplied metadata; source records move after the useful content. No native author identity/report target is fabricated. Non-Release shell placement is the separate unconfirmed WORK-REVIEW-09 concern."
+        }
+      },
+      {
+        "path": "apps/web/features/concept/concept-follow.tsx",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "3cc27477f77e65af56cf9a08129df6aa06d1630f",
+          "bytes": 1661,
+          "sha256": "097598a18e5349b236d097e6bd181b7da6792e49e0faef7f58e3a29567c31e06"
+        },
+        "target": {
+          "blob": "26bb390b08207e17f3061fec0b3cb2e09a9a4583",
+          "bytes": 1923,
+          "sha256": "aa85b0e415f37b4b2e4a27d010818b6a6e639cd40a3e1a4a2810616e81a2da63"
+        },
+        "authoredOrigins": [
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "relationship",
+          "assessment": "Optional localized labels wrap the existing light reaction controls and title-specific subject menu. Existing API state, actingSubject, denied mutations, sign-in destination and target/report authority are preserved; no client eligibility rule added."
+        }
+      },
+      {
+        "path": "apps/web/features/concept/concept-page.stories.tsx",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "2a42d2ec9943b772dd51cb1dd8e2130f12f0deb4",
+          "bytes": 17600,
+          "sha256": "eebe0883fe8b0ade3179df3190a0c89392b9304e850f180778fb5f17f87943a2"
+        },
+        "target": {
+          "blob": "89aad9c0217026ed7ffe47f59eb1a4a06d00b57a",
+          "bytes": 20314,
+          "sha256": "a94e338b9003e214b2f643326723acbddc7b5f71fe43720255927e186f0ef127"
+        },
+        "authoredOrigins": [
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "component-proof-premise",
+          "assessment": "Inspected changed assertions/premises with the corresponding product delta. Existing independent source/privacy/revision/content assertions retained; pathname provider and supported role-query correction are fixture corrections. Final three Release fixtures use actual AppShell composition. Component checks do not establish installed-router acceptance."
+        }
+      },
+      {
+        "path": "apps/web/features/concept/concept-page.tsx",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "c49de89bcc72af4e3fc515c81d4ce24dded9f354",
+          "bytes": 11260,
+          "sha256": "a573d013322bc00aa5c862d549420553461406c7e106c02f65e5743a9b97ce89"
+        },
+        "target": {
+          "blob": "e26d30030e23c4cf9aa9437aed560709b9d3f029",
+          "bytes": 11735,
+          "sha256": "8c14b83afefc97bf13a468be4ec7ce03720f8378e1a4d6b16ab9dbe5f312634c"
+        },
+        "authoredOrigins": [
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "header",
+          "assessment": "Native identity/type comes from the existing owner and registry. SubjectHeader places the named Primary actions group before the separate Reactions/subject More actions; supplied content remains after these slots."
+        }
+      },
+      {
+        "path": "apps/web/features/entity-page/detail-contract.stories.tsx",
+        "group": "missing-authored-correction",
+        "main": null,
+        "target": {
+          "blob": "8c89b50d18216700b43c55bf57133445e27b5933",
+          "bytes": 12733,
+          "sha256": "1c272ec5dab1ffd98b537a8e2554e8ab855936b30b6fd80c42cf71594e90e816"
+        },
+        "authoredOrigins": [
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92",
+          "45218f09323ae7283246ebb482c5793df9bf8f31",
+          "e299a8ecccee0cd945ef93062cbbc8656386be5b"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "component-proof-premise",
+          "assessment": "Inspected changed assertions/premises with the corresponding product delta. Existing independent source/privacy/revision/content assertions retained; pathname provider and supported role-query correction are fixture corrections. Final three Release fixtures use actual AppShell composition. Component checks do not establish installed-router acceptance."
+        }
+      },
+      {
+        "path": "apps/web/features/entity-page/detail-contract.test.tsx",
+        "group": "missing-authored-correction",
+        "main": null,
+        "target": {
+          "blob": "d032504a912407f0d6ecbfbd386e3df55f5c9a26",
+          "bytes": 32242,
+          "sha256": "e57de07827f9190348e46ca6999e563827bac699def37d12065ed4e90f008d45"
+        },
+        "authoredOrigins": [
+          "f5bf2965518ee8a056c56c0b1353cfa8274acdc9",
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92",
+          "e299a8ecccee0cd945ef93062cbbc8656386be5b",
+          "444e601b79111ccc3d880079f2d06aef4756a8ce",
+          "f249e4f7aee9b4cfbe0e0a616a51dc72fbf3a4d2"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "component-proof-premise",
+          "assessment": "Inspected changed assertions/premises with the corresponding product delta. Existing independent source/privacy/revision/content assertions retained; pathname provider and supported role-query correction are fixture corrections. Final three Release fixtures use actual AppShell composition. Component checks do not establish installed-router acceptance."
+        }
+      },
+      {
+        "path": "apps/web/features/entity-page/entity-page.tsx",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "6460c53feb5d415a5332d3c7725895d1584940a6",
+          "bytes": 14423,
+          "sha256": "5ad0a7581533ce11e49831759968bb0491665e8213f4aec04b88498881ba9ec3"
+        },
+        "target": {
+          "blob": "a31f218fe1bba02c5bd0224d9ec3ab2f5624f14b",
+          "bytes": 16264,
+          "sha256": "ea48a12981f75b8146fbdb9f024589386719a8bbc2071ceb35760fc350b4fe36"
+        },
+        "authoredOrigins": [
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "header",
+          "assessment": "Native identity/type comes from the existing owner and registry. SubjectHeader places the named Primary actions group before the separate Reactions/subject More actions; supplied content remains after these slots."
+        }
+      },
+      {
+        "path": "apps/web/features/entity-page/header.tsx",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "8b5fe9aabecc2f36b1e2743c7909160f3e00f7ca",
+          "bytes": 2871,
+          "sha256": "4b4fed681909b2bc812ab1334a7e7323af7d551f7e94df5c9144e89ee86ec345"
+        },
+        "target": {
+          "blob": "3a5fb4849a2452a123b1491e512b54e68cca7018",
+          "bytes": 4719,
+          "sha256": "0ac43c9507ca573d6749e3748e658e648e819402538b76e764513e418f6d5549"
+        },
+        "authoredOrigins": [
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "header",
+          "assessment": "Native identity/type comes from the existing owner and registry. SubjectHeader places the named Primary actions group before the separate Reactions/subject More actions; supplied content remains after these slots."
+        }
+      },
+      {
+        "path": "apps/web/features/entity-page/messages.ts",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "4815fbfc805847995d492e1e791b5d1357ff158a",
+          "bytes": 3958,
+          "sha256": "79772332ae9279a8ab33ae68d3bce39636c745d4f46bd9f5db016d54d53fe7d9"
+        },
+        "target": {
+          "blob": "20a6f5b669c3883624c8e608f569f4d86150369e",
+          "bytes": 5090,
+          "sha256": "69aca46f7d87db73c68a1f23618f47d2dc3b68adec412b2b01929d581fe8a32c"
+        },
+        "authoredOrigins": [
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92",
+          "e299a8ecccee0cd945ef93062cbbc8656386be5b"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "localized-copy",
+          "assessment": "Inspected English and all seven translated catalogs: Primary actions, Reactions, subject-specific More actions and Sources and licenses; recovery/unnamed/undisclosed values stay distinct. Current Main Work messages are retained separately."
+        }
+      },
+      {
+        "path": "apps/web/features/entity-page/messages/de.ts",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "5f6a6e9fa8d0fab18c39ac9c1bbc6497d690f285",
+          "bytes": 2931,
+          "sha256": "0e34c391dbc0d70782144917c6bfb22a6b6dd4470a838cfabe5e06280b1e5daf"
+        },
+        "target": {
+          "blob": "d5bad0632c68165a73d7565d62e06d47d111f837",
+          "bytes": 4143,
+          "sha256": "3d5e81cd105d761f262a5d4e4c90a29bab6536a8312c0a0ece964fb5706d4c6b"
+        },
+        "authoredOrigins": [
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92",
+          "e299a8ecccee0cd945ef93062cbbc8656386be5b"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "localized-copy",
+          "assessment": "Inspected English and all seven translated catalogs: Primary actions, Reactions, subject-specific More actions and Sources and licenses; recovery/unnamed/undisclosed values stay distinct. Current Main Work messages are retained separately."
+        }
+      },
+      {
+        "path": "apps/web/features/entity-page/messages/es.ts",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "320cb11e3046dbfd26b117877da16276e7ccc7da",
+          "bytes": 2875,
+          "sha256": "d1ee8333980b5b2bba0817bd377c4c3df7b376ae84ba280d08c8aa281ebbdf0a"
+        },
+        "target": {
+          "blob": "5091beb12128ca096a81922e0bc30d4bdf6f69fd",
+          "bytes": 4102,
+          "sha256": "bc23f99a0e353c6532a108eebf828c3ecf68a9021625137c74ee1e104e43915c"
+        },
+        "authoredOrigins": [
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92",
+          "e299a8ecccee0cd945ef93062cbbc8656386be5b"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "localized-copy",
+          "assessment": "Inspected English and all seven translated catalogs: Primary actions, Reactions, subject-specific More actions and Sources and licenses; recovery/unnamed/undisclosed values stay distinct. Current Main Work messages are retained separately."
+        }
+      },
+      {
+        "path": "apps/web/features/entity-page/messages/fr.ts",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "a8836ee55f0fcf02cc0de634dd71173e3fc832d7",
+          "bytes": 2932,
+          "sha256": "ead8e30f632d2b7bc2718f5267d709db2eed86377ea84471248a0558945b119b"
+        },
+        "target": {
+          "blob": "2f79222fb93c70cd2634e356b79f3c3373627672",
+          "bytes": 4183,
+          "sha256": "eb3d0e5dcd1ffd9f9642ba0c18b22c55942b9de136d7b2d99d961eb6cef8df13"
+        },
+        "authoredOrigins": [
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92",
+          "e299a8ecccee0cd945ef93062cbbc8656386be5b"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "localized-copy",
+          "assessment": "Inspected English and all seven translated catalogs: Primary actions, Reactions, subject-specific More actions and Sources and licenses; recovery/unnamed/undisclosed values stay distinct. Current Main Work messages are retained separately."
+        }
+      },
+      {
+        "path": "apps/web/features/entity-page/messages/ja.ts",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "e0e5b7d0410f6c57246f3a32182aa16e97d64483",
+          "bytes": 3356,
+          "sha256": "5fe812cd75ebcd6106ddc49ad9690c1f127fec488c7cbb188077dcc68344589a"
+        },
+        "target": {
+          "blob": "c594f20f26440ca3a57ae511be51cf24dc80b9e9",
+          "bytes": 4607,
+          "sha256": "67031d52da7b7dd168c12eeeaf8e628fa1dabc66684c02ec9465ee362d830e1d"
+        },
+        "authoredOrigins": [
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92",
+          "e299a8ecccee0cd945ef93062cbbc8656386be5b"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "localized-copy",
+          "assessment": "Inspected English and all seven translated catalogs: Primary actions, Reactions, subject-specific More actions and Sources and licenses; recovery/unnamed/undisclosed values stay distinct. Current Main Work messages are retained separately."
+        }
+      },
+      {
+        "path": "apps/web/features/entity-page/messages/ko.ts",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "742b944de3a4d9b8191ac4c36d46a9c7b7d95e74",
+          "bytes": 3135,
+          "sha256": "fc864f51e54684b63dd763cf29c3b13906ac06367307f08b4e2695c0a9143d1f"
+        },
+        "target": {
+          "blob": "0a88645391ebafd3461fad35d84c165f654bc0d8",
+          "bytes": 4340,
+          "sha256": "9cee471e4694c14ef5519789abd02cc26ca4f343cd1d45a7865d21a642d67a31"
+        },
+        "authoredOrigins": [
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92",
+          "e299a8ecccee0cd945ef93062cbbc8656386be5b"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "localized-copy",
+          "assessment": "Inspected English and all seven translated catalogs: Primary actions, Reactions, subject-specific More actions and Sources and licenses; recovery/unnamed/undisclosed values stay distinct. Current Main Work messages are retained separately."
+        }
+      },
+      {
+        "path": "apps/web/features/entity-page/messages/zh-Hans.ts",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "46c43b68b167800d46686227911e8121e8c7c354",
+          "bytes": 2575,
+          "sha256": "1dd52059a561d7804e67aaded54e73369c29832376305eab640bbc7865fde430"
+        },
+        "target": {
+          "blob": "de99c829e1b8d95b0197dc15b38f485ee7287862",
+          "bytes": 3616,
+          "sha256": "b77f6f1893f779a35684d5e0a60ec18e578380196fdef0a78e6277036c0a750c"
+        },
+        "authoredOrigins": [
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92",
+          "e299a8ecccee0cd945ef93062cbbc8656386be5b"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "localized-copy",
+          "assessment": "Inspected English and all seven translated catalogs: Primary actions, Reactions, subject-specific More actions and Sources and licenses; recovery/unnamed/undisclosed values stay distinct. Current Main Work messages are retained separately."
+        }
+      },
+      {
+        "path": "apps/web/features/entity-page/messages/zh-Hant.ts",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "b6b355bda5a1aeb19cfc8d56b875e1c1ecfb3233",
+          "bytes": 2575,
+          "sha256": "9a6e581d6347db5002f71408ca556fb0eea08d11fd49cf59c61cdf03f6634ac5"
+        },
+        "target": {
+          "blob": "beb745539ae8e49e2a37ea1376da7d670a49bae4",
+          "bytes": 3622,
+          "sha256": "b7962b99d663ab4e9bdeef43d8558e17303fcccfcb95ec55f45eabc5edc3bb1d"
+        },
+        "authoredOrigins": [
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92",
+          "e299a8ecccee0cd945ef93062cbbc8656386be5b"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "localized-copy",
+          "assessment": "Inspected English and all seven translated catalogs: Primary actions, Reactions, subject-specific More actions and Sources and licenses; recovery/unnamed/undisclosed values stay distinct. Current Main Work messages are retained separately."
+        }
+      },
+      {
+        "path": "apps/web/features/entity-page/read.ts",
+        "group": "required-integration-comparison",
+        "main": {
+          "blob": "fcec14b6f19b3507d968e82814d5b503545befb8",
+          "bytes": 5210,
+          "sha256": "4c4accbc8e1bf2328a356a9b8da7ea79d281111761ad443ad1d4ef4e0363e109"
+        },
+        "target": {
+          "blob": "15c9ec836695c91f7dd1cb6a0708a45c46d793b2",
+          "bytes": 5221,
+          "sha256": "c656827b541ae78ee74cf3c940623caed52a7d25b731647587947e13a213a8f6"
+        },
+        "authoredOrigins": [],
+        "disposition": "Review only current-main-to-target readStatements React cache wrapper; consume current reader and acting-identity behavior. Do not restore earlier reader implementations.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "sources",
+          "assessment": "Retain fact value, predicate, applicability, revision, native evidence identity, representation digest, locator/method/modality/submitter/rightsBasis and assessed rights. Withheld passages remain hidden recursively; unsafe/native hrefs remain text. Reuse the already accepted shared footer semantics; assess newly selected host placement separately."
+        }
+      },
+      {
+        "path": "apps/web/features/entity-page/release-provenance.stories.tsx",
+        "group": "missing-authored-correction",
+        "main": null,
+        "target": {
+          "blob": "d39fed71d405ac9b100431bca72c9c1b116b3563",
+          "bytes": 11730,
+          "sha256": "83ca442f4703e828c0fa0f9c515a2fa04d3add5af5eecb2b73c29f8577a3ecf8"
+        },
+        "authoredOrigins": [
+          "f5bf2965518ee8a056c56c0b1353cfa8274acdc9",
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92",
+          "e299a8ecccee0cd945ef93062cbbc8656386be5b"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "component-proof-premise",
+          "assessment": "Inspected changed assertions/premises with the corresponding product delta. Existing independent source/privacy/revision/content assertions retained; pathname provider and supported role-query correction are fixture corrections. Final three Release fixtures use actual AppShell composition. Component checks do not establish installed-router acceptance."
+        }
+      },
+      {
+        "path": "apps/web/features/entity-page/sources.tsx",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "f7124277be565918e1cd607a115714983771d781",
+          "bytes": 1040,
+          "sha256": "c48111daff554abc862fc69c2a25f64484a91f67126de95b1b710709747eb73c"
+        },
+        "target": {
+          "blob": "16978455cf768ae0f341ecdc8daec824111dc163",
+          "bytes": 8635,
+          "sha256": "17feabfe30d331430f4bb64efa349875aed89f52507bbd67af36e6dc9ca6383a"
+        },
+        "authoredOrigins": [
+          "f5bf2965518ee8a056c56c0b1353cfa8274acdc9",
+          "e299a8ecccee0cd945ef93062cbbc8656386be5b"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "sources",
+          "assessment": "Retain fact value, predicate, applicability, revision, native evidence identity, representation digest, locator/method/modality/submitter/rightsBasis and assessed rights. Withheld passages remain hidden recursively; unsafe/native hrefs remain text. Reuse the already accepted shared footer semantics; assess newly selected host placement separately."
+        }
+      },
+      {
+        "path": "apps/web/features/entity-page/views.tsx",
+        "group": "required-integration-comparison",
+        "main": {
+          "blob": "63a6c8f270fcd0aadb01ccdc7e6999092c660e0c",
+          "bytes": 14386,
+          "sha256": "e9046d2e024fed8dcae97039377ed10f41b7e9620029171f2df647dadc53099a"
+        },
+        "target": {
+          "blob": "c8b3084dd8c531bc9f9a710d4ddfe87266cff902",
+          "bytes": 14766,
+          "sha256": "5d91d3f55484112f4f77d9f7552c200e847332fb1f4e8d0b2cf20a62f9ea7ebc"
+        },
+        "authoredOrigins": [],
+        "disposition": "Review source/fact partition and rights relocation when pageEndSources is true, plus truthful undisclosed/failed-name and compact-empty rendering. Default existing callers remain in scope for regression inference.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "sources",
+          "assessment": "Retain fact value, predicate, applicability, revision, native evidence identity, representation digest, locator/method/modality/submitter/rightsBasis and assessed rights. Withheld passages remain hidden recursively; unsafe/native hrefs remain text. Reuse the already accepted shared footer semantics; assess newly selected host placement separately."
+        }
+      },
+      {
+        "path": "apps/web/features/profile/follow-button.tsx",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "02b636434f1cb98732a2cb68e7d9329e2b1aa6cd",
+          "bytes": 4082,
+          "sha256": "d8169ed1ddfb9c30b5df74b1356be972c5918c5df06a78e799b5147a75b2dffa"
+        },
+        "target": {
+          "blob": "2174b8d2e08a8f95ff101fbc15f593803f2fbc72",
+          "bytes": 4391,
+          "sha256": "239c7c45d2aa52fcb05681409cf5ef8f2f59e798acdb02798f2d33fb118f4f93"
+        },
+        "authoredOrigins": [
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "relationship",
+          "assessment": "Optional localized labels wrap the existing light reaction controls and title-specific subject menu. Existing API state, actingSubject, denied mutations, sign-in destination and target/report authority are preserved; no client eligibility rule added."
+        }
+      },
+      {
+        "path": "apps/web/features/profile/profile-page.stories.tsx",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "bbc186a455f00ef108c8af077fc759d414053ab5",
+          "bytes": 25137,
+          "sha256": "86ea47d8e25912a217f252e99797b649a2e1ff801c539bc52184992dd3b3acde"
+        },
+        "target": {
+          "blob": "5c9a41f3f7f1d0415edb01763edd48db4e4f75bf",
+          "bytes": 28393,
+          "sha256": "be36908d417b53eca1ecf793fa6cb032870cf57b65e612c080ef33543ac0ac28"
+        },
+        "authoredOrigins": [
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "component-proof-premise",
+          "assessment": "Inspected changed assertions/premises with the corresponding product delta. Existing independent source/privacy/revision/content assertions retained; pathname provider and supported role-query correction are fixture corrections. Final three Release fixtures use actual AppShell composition. Component checks do not establish installed-router acceptance."
+        }
+      },
+      {
+        "path": "apps/web/features/profile/profile-page.tsx",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "0c2a21f35e2eee270b711b2b954005b178b1e0b8",
+          "bytes": 23563,
+          "sha256": "8e107061467ee28cd6c5424d18bb59ca3a89e0fd4d7af229f11cf953a908ea88"
+        },
+        "target": {
+          "blob": "6e71d11012c7444452a9dd68ff750d8f87ada8f4",
+          "bytes": 24320,
+          "sha256": "6251d93d90ebbc3b4634b6a6964bcaf26a01049e39488f70cb3d3373ed8be7cf"
+        },
+        "authoredOrigins": [
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "header",
+          "assessment": "Native identity/type comes from the existing owner and registry. SubjectHeader places the named Primary actions group before the separate Reactions/subject More actions; supplied content remains after these slots."
+        }
+      },
+      {
+        "path": "apps/web/features/realm/membership.tsx",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "7bc95e96fab9debb793ebeb712e3b750b0a1647d",
+          "bytes": 11682,
+          "sha256": "a64d0d31da7e8959aa2c3a064c5c83157484c6036d81bbc01f3393bccc5c65ba"
+        },
+        "target": {
+          "blob": "d910fe2d626d356a7f21336f6c789976ef14ca9e",
+          "bytes": 11991,
+          "sha256": "f4a9480d0b7efa102beb7448a37fcd210ba5f4f32d1b8610f90ff25eafd5fc71"
+        },
+        "authoredOrigins": [
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "relationship",
+          "assessment": "Optional localized labels wrap the existing light reaction controls and title-specific subject menu. Existing API state, actingSubject, denied mutations, sign-in destination and target/report authority are preserved; no client eligibility rule added."
+        }
+      },
+      {
+        "path": "apps/web/features/realm/realm-page.tsx",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "ac799c3eeb76390e186df521ee6eca08c8feb0e9",
+          "bytes": 26805,
+          "sha256": "6b0ae88447651a208683de1736a3e5f4d46357ccd0553ac8d3267f4f0ebac429"
+        },
+        "target": {
+          "blob": "4587b5442bc7f62b70450effd6bd983a48c3dfbe",
+          "bytes": 27853,
+          "sha256": "d3a8bdbdaf7d071eceaecf201e65ce7dc3fc19d0db91cffe814046994b176a8c"
+        },
+        "authoredOrigins": [
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "header",
+          "assessment": "Native identity/type comes from the existing owner and registry. SubjectHeader places the named Primary actions group before the separate Reactions/subject More actions; supplied content remains after these slots."
+        }
+      },
+      {
+        "path": "apps/web/features/realm/story-page.tsx",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "298c4ecd62b99d42167fb44d7eca39c6776f9b5c",
+          "bytes": 4921,
+          "sha256": "727167ef3487d626c4c0d04521cf13726f7d4099477ea84f463a35258e907eba"
+        },
+        "target": {
+          "blob": "5dca2fb9925977b45946d974be36d407ac72317f",
+          "bytes": 5819,
+          "sha256": "17033702fc767f1b3d3b69d7a9a82ee7518f9cf482117a14226726e779995aa6"
+        },
+        "authoredOrigins": [
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "header",
+          "assessment": "Native identity/type comes from the existing owner and registry. SubjectHeader places the named Primary actions group before the separate Reactions/subject More actions; supplied content remains after these slots."
+        }
+      },
+      {
+        "path": "apps/web/features/realm/thread-view.stories.tsx",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "2ca98d88b1b750bcabdbdf6cbcb641cb36d086aa",
+          "bytes": 24983,
+          "sha256": "0f829b6630302531217264fd58dbfc98076ea0c51891f13c274620846385e38c"
+        },
+        "target": {
+          "blob": "13a955af0188615ba590848199ebdc5413d0fc75",
+          "bytes": 30775,
+          "sha256": "07ad654c1f67de3d3be2494823f09e5c2647e982a0f5832da8c13ae4dd843122"
+        },
+        "authoredOrigins": [
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92",
+          "45218f09323ae7283246ebb482c5793df9bf8f31",
+          "e299a8ecccee0cd945ef93062cbbc8656386be5b"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "component-proof-premise",
+          "assessment": "Inspected changed assertions/premises with the corresponding product delta. Existing independent source/privacy/revision/content assertions retained; pathname provider and supported role-query correction are fixture corrections. Final three Release fixtures use actual AppShell composition. Component checks do not establish installed-router acceptance."
+        }
+      },
+      {
+        "path": "apps/web/features/realm/thread-view.tsx",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "ab072fcd980b8b7ea98112191df7cded98c4e284",
+          "bytes": 16458,
+          "sha256": "183d34e9128cf0ec9e94d748086daa696c19a94d063a66453ca829fdbd9b03e8"
+        },
+        "target": {
+          "blob": "d18ddc022d02255fcd071fa45bf3bdeb82b900b9",
+          "bytes": 17436,
+          "sha256": "37fa351ce61558f3b65fef34ad2801c7cceaa1791175af0fa1630c26e3206986"
+        },
+        "authoredOrigins": [
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "thread",
+          "assessment": "Thread retains one guarded ReplyAuthorActions with Main target fields, exact reply/body revision selection, blocked-post suppression, comments/continuations/share and current media attribution. Current metadata callback runs even when the serialized cover credit is null. Non-Release landmark placement is separately noted."
+        }
+      },
+      {
+        "path": "apps/web/features/relationships/control.tsx",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "d72c79a8369675275fd9a5e8137998dafb99678b",
+          "bytes": 14062,
+          "sha256": "50c34520ea41c1f54f25fbdf7132191834c7ac32d62c85a289f2420f37f6b903"
+        },
+        "target": {
+          "blob": "4f125f64975e5c8b255bb327634176071ccdf4b5",
+          "bytes": 14613,
+          "sha256": "a5dd470f574591eb826b6c11200cc3a2686e366a00961a5c85c9ca7d18d7283d"
+        },
+        "authoredOrigins": [
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "relationship",
+          "assessment": "Optional localized labels wrap the existing light reaction controls and title-specific subject menu. Existing API state, actingSubject, denied mutations, sign-in destination and target/report authority are preserved; no client eligibility rule added."
+        }
+      },
+      {
+        "path": "apps/web/features/release-filter/adapt.test.ts",
+        "group": "missing-authored-correction",
+        "main": null,
+        "target": {
+          "blob": "6493f72b8998bc484649c84d00430765e5b6f53f",
+          "bytes": 3755,
+          "sha256": "6b444be4ff3491840b802b6e909987a7e75c374c5a5d98d229a38017ff7e6d7b"
+        },
+        "authoredOrigins": [
+          "f5bf2965518ee8a056c56c0b1353cfa8274acdc9"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "component-proof-premise",
+          "assessment": "Inspected changed assertions/premises with the corresponding product delta. Existing independent source/privacy/revision/content assertions retained; pathname provider and supported role-query correction are fixture corrections. Final three Release fixtures use actual AppShell composition. Component checks do not establish installed-router acceptance."
+        }
+      },
+      {
+        "path": "apps/web/features/release-filter/adapt.ts",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "25e8754d2486af1a199c087959d6753d7f75593e",
+          "bytes": 4906,
+          "sha256": "ed7b5941718c0e65af3380e2b464678c213865f6610cd5c1a8a0f4eb7e603a0f"
+        },
+        "target": {
+          "blob": "6eccc7c775ac5a3a010d488e04706f90072e4016",
+          "bytes": 5594,
+          "sha256": "6293ea8e98f45c421361cd537d198f61429694395182e87e99ae871f41acdac5"
+        },
+        "authoredOrigins": [
+          "f5bf2965518ee8a056c56c0b1353cfa8274acdc9"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "filter",
+          "assessment": "Match coverage by identity and selected revision; exact read refusals stay refused, with no current-head translator/evidence substitution. Existing supplied records are used only at the matching revision (or a genuinely unpinned selection)."
+        }
+      },
+      {
+        "path": "apps/web/features/release-filter/read.test.ts",
+        "group": "missing-authored-correction",
+        "main": null,
+        "target": {
+          "blob": "278f0b20406435106ebd58631f20507dfe5bb75d",
+          "bytes": 4673,
+          "sha256": "b8146e6202fd21d2d2e740905096c1489dabb15df8205d9e77791761882e96a0"
+        },
+        "authoredOrigins": [
+          "f5bf2965518ee8a056c56c0b1353cfa8274acdc9"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "component-proof-premise",
+          "assessment": "Inspected changed assertions/premises with the corresponding product delta. Existing independent source/privacy/revision/content assertions retained; pathname provider and supported role-query correction are fixture corrections. Final three Release fixtures use actual AppShell composition. Component checks do not establish installed-router acceptance."
+        }
+      },
+      {
+        "path": "apps/web/features/release-filter/read.ts",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "75b3135e63cf225e4700af7ef099d586a9dc2321",
+          "bytes": 4718,
+          "sha256": "36e46f48a86c6eb27dd8dd981d89c6d59556eebee76a9186e6a651e2989f8755"
+        },
+        "target": {
+          "blob": "9573bcb1ee3fee71b7fcb271ec423dee506087b0",
+          "bytes": 5349,
+          "sha256": "d7961ba3a69ac15c79bddaa81bea97db4f2cea030a37f609fd8c82093e440fb6"
+        },
+        "authoredOrigins": [
+          "f5bf2965518ee8a056c56c0b1353cfa8274acdc9"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "filter",
+          "assessment": "Match coverage by identity and selected revision; exact read refusals stay refused, with no current-head translator/evidence substitution. Existing supplied records are used only at the matching revision (or a genuinely unpinned selection)."
+        }
+      },
+      {
+        "path": "apps/web/features/work-levels/editions.stories.tsx",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "8e5322031abc3cf90d674e89b033f6bbb2519a90",
+          "bytes": 7937,
+          "sha256": "0c037d6332c3da7601d3fbc369c0feb92be31c3588683414ecb7b792b972e279"
+        },
+        "target": {
+          "blob": "77e2649ef747c1eafef9adfbf2d62c399900cb13",
+          "bytes": 9352,
+          "sha256": "4600302856930e01b446250f7288e23a005fc47df1c8e06d2c5c387de262fac8"
+        },
+        "authoredOrigins": [
+          "e299a8ecccee0cd945ef93062cbbc8656386be5b"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "component-proof-premise",
+          "assessment": "Inspected changed assertions/premises with the corresponding product delta. Existing independent source/privacy/revision/content assertions retained; pathname provider and supported role-query correction are fixture corrections. Final three Release fixtures use actual AppShell composition. Component checks do not establish installed-router acceptance."
+        }
+      },
+      {
+        "path": "apps/web/features/work-levels/editions.test.tsx",
+        "group": "missing-authored-correction",
+        "main": null,
+        "target": {
+          "blob": "884750f8ac4cd86d4381931497fd439b5aa71925",
+          "bytes": 5321,
+          "sha256": "2b40eb157e1682544b34fe407e2ab8072c5bd7f144657f62cd46d695a64f9c8e"
+        },
+        "authoredOrigins": [
+          "f5bf2965518ee8a056c56c0b1353cfa8274acdc9"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "component-proof-premise",
+          "assessment": "Inspected changed assertions/premises with the corresponding product delta. Existing independent source/privacy/revision/content assertions retained; pathname provider and supported role-query correction are fixture corrections. Final three Release fixtures use actual AppShell composition. Component checks do not establish installed-router acceptance."
+        }
+      },
+      {
+        "path": "apps/web/features/work-levels/editions.tsx",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "a378b4456bf14b63ecaa878fdfac75748de586c2",
+          "bytes": 15949,
+          "sha256": "3bbbd6b84df54a9227639c5325ff278db5c9f826e8913cb2518c43d803d2ba6f"
+        },
+        "target": {
+          "blob": "190517f0a7d6305d7700d7adec4b2946a4c7bf28",
+          "bytes": 17711,
+          "sha256": "b831169f71ef1711cd412d345896486be568b343ba09920a69702f8d01811bec"
+        },
+        "authoredOrigins": [
+          "f5bf2965518ee8a056c56c0b1353cfa8274acdc9"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "release",
+          "assessment": "Exact selected coverage/source revisions and typed failures feed both Release body and page-end slot through the one-arity request cache. Native IDs are not evidence routes; null evidence keeps identity/revision. Route invalid-id/failure slots are null, and body suppresses its footer when the slot owns it."
+        }
+      },
+      {
+        "path": "apps/web/features/work-levels/messages.ts",
+        "group": "required-integration-comparison",
+        "main": {
+          "blob": "3a0dbbb7ecb1de485569f847aeff42927ef58664",
+          "bytes": 5092,
+          "sha256": "856ef06c8216792c3ad68dcb395e5809926cd84d6e090b45a16311a37f7c68e3"
+        },
+        "target": {
+          "blob": "41dfdc012f544ff38bc63ecff63ef41e52f5ccc1",
+          "bytes": 5279,
+          "sha256": "4684552b006192413145c69e5c9a28239b620999ee0e0b1d4178cf1905a4bda9"
+        },
+        "authoredOrigins": [],
+        "disposition": "Review exactly the three supporting localized Release/recovery strings in this catalog; retain current Main unrelated locale content.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "localized-copy",
+          "assessment": "Inspected English and all seven translated catalogs: Primary actions, Reactions, subject-specific More actions and Sources and licenses; recovery/unnamed/undisclosed values stay distinct. Current Main Work messages are retained separately."
+        }
+      },
+      {
+        "path": "apps/web/features/work-levels/messages/de.ts",
+        "group": "required-integration-comparison",
+        "main": {
+          "blob": "4db4e1c1446a24ec98383873b7b7f533f666331b",
+          "bytes": 4585,
+          "sha256": "b5e2f1a712671a4359e292198b05ac85c13407bceb17e015b50203708085d46a"
+        },
+        "target": {
+          "blob": "7f3d3a4a08df86cb88453046a1246b463ab249f8",
+          "bytes": 4813,
+          "sha256": "2cf74dbeadb246ca10d6c22569cdfa363ba1c3fa0450cd9ed9e23b3398c16636"
+        },
+        "authoredOrigins": [],
+        "disposition": "Review exactly the three supporting localized Release/recovery strings in this catalog; retain current Main unrelated locale content.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "localized-copy",
+          "assessment": "Inspected English and all seven translated catalogs: Primary actions, Reactions, subject-specific More actions and Sources and licenses; recovery/unnamed/undisclosed values stay distinct. Current Main Work messages are retained separately."
+        }
+      },
+      {
+        "path": "apps/web/features/work-levels/messages/es.ts",
+        "group": "required-integration-comparison",
+        "main": {
+          "blob": "6fb2d36ad0835d0504716d155899cde0b80ffd12",
+          "bytes": 4414,
+          "sha256": "2a81157af9522ce1fa80106cf628ee1e3ceb6c9d78134284618583cc2c84d48a"
+        },
+        "target": {
+          "blob": "863ca7bc1eee839e996a4be036633bec345702f4",
+          "bytes": 4626,
+          "sha256": "55f4be5ac63e88733f452139d9a83e21382516d4291be8259e4d935b6b01ddf7"
+        },
+        "authoredOrigins": [],
+        "disposition": "Review exactly the three supporting localized Release/recovery strings in this catalog; retain current Main unrelated locale content.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "localized-copy",
+          "assessment": "Inspected English and all seven translated catalogs: Primary actions, Reactions, subject-specific More actions and Sources and licenses; recovery/unnamed/undisclosed values stay distinct. Current Main Work messages are retained separately."
+        }
+      },
+      {
+        "path": "apps/web/features/work-levels/messages/fr.ts",
+        "group": "required-integration-comparison",
+        "main": {
+          "blob": "e13f085e4b7d54e1cd9571638eeca8cb2ce70ad9",
+          "bytes": 4519,
+          "sha256": "46fe29e1b96fab8b8a6e70a4ecca6d0f12d95479c2e0b239f7c4285c04517f98"
+        },
+        "target": {
+          "blob": "0e32092bd4144de189c6e3e83e224ca76cb1cd26",
+          "bytes": 4748,
+          "sha256": "9e0b8e4c2c7a58de814fb5d96ac12d8074a18d8bb03d900689bf42844b193324"
+        },
+        "authoredOrigins": [],
+        "disposition": "Review exactly the three supporting localized Release/recovery strings in this catalog; retain current Main unrelated locale content.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "localized-copy",
+          "assessment": "Inspected English and all seven translated catalogs: Primary actions, Reactions, subject-specific More actions and Sources and licenses; recovery/unnamed/undisclosed values stay distinct. Current Main Work messages are retained separately."
+        }
+      },
+      {
+        "path": "apps/web/features/work-levels/messages/ja.ts",
+        "group": "required-integration-comparison",
+        "main": {
+          "blob": "c4fc5d17ad3b72f707d9b4195942262710aa89ea",
+          "bytes": 4717,
+          "sha256": "230e58e61222ecef115831deacfe53ab414c0580366aa6c12b12c916d27055bd"
+        },
+        "target": {
+          "blob": "d4237a1181478b5b2f90c3c1c2e10dc59eccc784",
+          "bytes": 4981,
+          "sha256": "180504b3c10a17d954691cb02387d37c6fa94ece7d721fbfdc7cf232016f163a"
+        },
+        "authoredOrigins": [],
+        "disposition": "Review exactly the three supporting localized Release/recovery strings in this catalog; retain current Main unrelated locale content.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "localized-copy",
+          "assessment": "Inspected English and all seven translated catalogs: Primary actions, Reactions, subject-specific More actions and Sources and licenses; recovery/unnamed/undisclosed values stay distinct. Current Main Work messages are retained separately."
+        }
+      },
+      {
+        "path": "apps/web/features/work-levels/messages/ko.ts",
+        "group": "required-integration-comparison",
+        "main": {
+          "blob": "564ebf1bbdf2016bc80909316a8bb00124336fc8",
+          "bytes": 4440,
+          "sha256": "455986d47d771799de439174209c9a9a20837fef90221f5b04598a242375a25e"
+        },
+        "target": {
+          "blob": "0ba8642d2c1d55df549c7bf2fbf9b0cc06e0fac2",
+          "bytes": 4695,
+          "sha256": "8b952cde1589977985f58c92dcb0c47eb73335085b84a73e433b97db6f8db6d6"
+        },
+        "authoredOrigins": [],
+        "disposition": "Review exactly the three supporting localized Release/recovery strings in this catalog; retain current Main unrelated locale content.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "localized-copy",
+          "assessment": "Inspected English and all seven translated catalogs: Primary actions, Reactions, subject-specific More actions and Sources and licenses; recovery/unnamed/undisclosed values stay distinct. Current Main Work messages are retained separately."
+        }
+      },
+      {
+        "path": "apps/web/features/work-levels/messages/zh-Hans.ts",
+        "group": "required-integration-comparison",
+        "main": {
+          "blob": "23b56fda2a4c41b7552bd133ca09006c5dec4423",
+          "bytes": 4026,
+          "sha256": "1c4975d4983fece1e7487f8b259fb6a39e751a2ea8704346846436dd0caf5e52"
+        },
+        "target": {
+          "blob": "13823edb885d1db39306ebf034fef630948470a2",
+          "bytes": 4215,
+          "sha256": "1572bd7c78fa3e3105ee66c66cd0bac7b5926c59b2e569bba81458bd49e56892"
+        },
+        "authoredOrigins": [],
+        "disposition": "Review exactly the three supporting localized Release/recovery strings in this catalog; retain current Main unrelated locale content.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "localized-copy",
+          "assessment": "Inspected English and all seven translated catalogs: Primary actions, Reactions, subject-specific More actions and Sources and licenses; recovery/unnamed/undisclosed values stay distinct. Current Main Work messages are retained separately."
+        }
+      },
+      {
+        "path": "apps/web/features/work-levels/messages/zh-Hant.ts",
+        "group": "required-integration-comparison",
+        "main": {
+          "blob": "e37a6b247cc88fdc3397efd63f3e62e11325f3e1",
+          "bytes": 4032,
+          "sha256": "b7eb094331b8f9592c84da8487414efc2fa32a928b64c6100f92facd5a5bf7b2"
+        },
+        "target": {
+          "blob": "4502271e3b2aa3722db4688f727d1c03dffe96f4",
+          "bytes": 4221,
+          "sha256": "305b2d2073d633523641f7b6bdbbe4d71c0566ef8177b4a70d21ed8995361ecb"
+        },
+        "authoredOrigins": [],
+        "disposition": "Review exactly the three supporting localized Release/recovery strings in this catalog; retain current Main unrelated locale content.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "localized-copy",
+          "assessment": "Inspected English and all seven translated catalogs: Primary actions, Reactions, subject-specific More actions and Sources and licenses; recovery/unnamed/undisclosed values stay distinct. Current Main Work messages are retained separately."
+        }
+      },
+      {
+        "path": "apps/web/features/work-levels/names.tsx",
+        "group": "concrete-recovery-dependency-missing-from-old-map",
+        "main": {
+          "blob": "8c56a530dc517ae426f88843278ff2751107feda",
+          "bytes": 3030,
+          "sha256": "0c50e180a1d3a924415961ecfcc669a079ef92dd86f4b23fc16c28aa0da94009"
+        },
+        "target": {
+          "blob": "7ded5465d2976547628ae4ac7dd9c9ebcb423eb1",
+          "bytes": 3306,
+          "sha256": "8945a38c10eb1bef3dad0e6ffb07ea6791f0db6783cd6e357c79f94df7a76615"
+        },
+        "authoredOrigins": [
+          "f4d0226f39526147eaeb86f99a4e0502b9ca8379"
+        ],
+        "disposition": "Review the small exact current-main-to-target partial-name recovery dependency delta. The current 80-path inventory omitted it; no whole f4d producer or wave approval is inferred. Existing G2847 coverage is reused only if the report explicitly covers the identical hunk. No fresh product authoring.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "recovery",
+          "assessment": "Finite required recovery dependency, not a new producer review: distinguish unavailable read, explicitly undisclosed summary and available empty name; preserve known siblings. Retry uses router.refresh with a retained control. Existing owner reads/auth/pagination/canonical addresses and native document navigation remain."
+        }
+      },
+      {
+        "path": "apps/web/features/work-levels/pages.tsx",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "c44b426452b0cb0e3c08e672c7b4c4f616f454b8",
+          "bytes": 7493,
+          "sha256": "f43c0f3b64f3308382b0eec26024025ae2b83530f1216f54b62a2914b952cec1"
+        },
+        "target": {
+          "blob": "db0c3e1f4ce63b618ce680eed297e816eb593ce6",
+          "bytes": 7457,
+          "sha256": "2c0de7f124f3f7b148e41a04dcbc5c5912aba3ef918009a15ea4ca3bb349ecf8"
+        },
+        "authoredOrigins": [
+          "f5bf2965518ee8a056c56c0b1353cfa8274acdc9",
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92",
+          "444e601b79111ccc3d880079f2d06aef4756a8ce"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "release",
+          "assessment": "Exact selected coverage/source revisions and typed failures feed both Release body and page-end slot through the one-arity request cache. Native IDs are not evidence routes; null evidence keeps identity/revision. Route invalid-id/failure slots are null, and body suppresses its footer when the slot owns it."
+        }
+      },
+      {
+        "path": "apps/web/features/work-levels/read.ts",
+        "group": "required-integration-comparison",
+        "main": {
+          "blob": "584b61e61fde2cef9044683b29a36e4a31091a5e",
+          "bytes": 6627,
+          "sha256": "0d5f611014d555859cbbcd6e6ec713880e10e13e732c71787352912e7c05c0a3"
+        },
+        "target": {
+          "blob": "2f2afd228b3460541f502f9c5d63ad556716cc2f",
+          "bytes": 8270,
+          "sha256": "db0c26f1afc1d4a668d5d19a466ea60474b158e8f9b48b756b89354fa0d63197"
+        },
+        "authoredOrigins": [],
+        "disposition": "Review exact retained realization revision reads and followed-source refusal retention, canonical id argument adaptation, supplied client flow and request sharing. Preserve current reader identity and owner authority.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "release",
+          "assessment": "Exact selected coverage/source revisions and typed failures feed both Release body and page-end slot through the one-arity request cache. Native IDs are not evidence routes; null evidence keeps identity/revision. Route invalid-id/failure slots are null, and body suppresses its footer when the slot owns it."
+        }
+      },
+      {
+        "path": "apps/web/features/work-levels/release-names-recovery.tsx",
+        "group": "concrete-recovery-dependency-missing-from-old-map",
+        "main": null,
+        "target": {
+          "blob": "bf76655ec2a5d1d59bd6529d399068d153f4c531",
+          "bytes": 1438,
+          "sha256": "3be48c8df1b87013588137e111b008a1c3307c5e30ea514cf54001e66d6b3e52"
+        },
+        "authoredOrigins": [
+          "f4d0226f39526147eaeb86f99a4e0502b9ca8379"
+        ],
+        "disposition": "Review the small exact current-main-to-target partial-name recovery dependency delta. The current 80-path inventory omitted it; no whole f4d producer or wave approval is inferred. Existing G2847 coverage is reused only if the report explicitly covers the identical hunk. No fresh product authoring.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "recovery",
+          "assessment": "Finite required recovery dependency, not a new producer review: distinguish unavailable read, explicitly undisclosed summary and available empty name; preserve known siblings. Retry uses router.refresh with a retained control. Existing owner reads/auth/pagination/canonical addresses and native document navigation remain."
+        }
+      },
+      {
+        "path": "apps/web/features/work-levels/release-page.tsx",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "f9e018eb6528c8c3100504d1c6f505379e6f3918",
+          "bytes": 3109,
+          "sha256": "ae053c0bc75cd2042d6858a9d3205df44a6e2eeced02976266a1a3fd8cea5613"
+        },
+        "target": {
+          "blob": "2ae66f91f6adfb5cded6e168f06ac021fa70bc33",
+          "bytes": 8805,
+          "sha256": "519c5125ee01a99c3f9f63b544c4c46f8a5f41ea35f1fbd5755d9a2c46329e97"
+        },
+        "authoredOrigins": [
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92",
+          "444e601b79111ccc3d880079f2d06aef4756a8ce"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "release",
+          "assessment": "Exact selected coverage/source revisions and typed failures feed both Release body and page-end slot through the one-arity request cache. Native IDs are not evidence routes; null evidence keeps identity/revision. Route invalid-id/failure slots are null, and body suppresses its footer when the slot owns it."
+        }
+      },
+      {
+        "path": "apps/web/features/work-levels/release-recovery.stories.tsx",
+        "group": "missing-authored-correction",
+        "main": null,
+        "target": {
+          "blob": "763f294d6036bff44edaeb62d01dc48105953fb8",
+          "bytes": 6204,
+          "sha256": "9ae23873e5e630744c9575a65d0576d2eb52d39259cfb2013c57d76bf1fe05f6"
+        },
+        "authoredOrigins": [
+          "e299a8ecccee0cd945ef93062cbbc8656386be5b",
+          "444e601b79111ccc3d880079f2d06aef4756a8ce",
+          "caecadc10a37b36daaf03773282b47183673ee89"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "component-proof-premise",
+          "assessment": "Inspected changed assertions/premises with the corresponding product delta. Existing independent source/privacy/revision/content assertions retained; pathname provider and supported role-query correction are fixture corrections. Final three Release fixtures use actual AppShell composition. Component checks do not establish installed-router acceptance."
+        }
+      },
+      {
+        "path": "apps/web/features/work-levels/types.ts",
+        "group": "concrete-recovery-dependency-missing-from-old-map",
+        "main": {
+          "blob": "9456b64cae9114ee7acee247a0e310eee270e80f",
+          "bytes": 2461,
+          "sha256": "cf46fea4050d261b100345a0551a71baf7ac2fef492222e6a139e70b0b35f76f"
+        },
+        "target": {
+          "blob": "22a62804c79bb7c90bcfeea2f58c3d3f65b9f4f2",
+          "bytes": 2629,
+          "sha256": "be954940d68962ccf2bcd1a4f8f053ce31df10945095f782431055b6be80c0e8"
+        },
+        "authoredOrigins": [
+          "f4d0226f39526147eaeb86f99a4e0502b9ca8379"
+        ],
+        "disposition": "Review the small exact current-main-to-target partial-name recovery dependency delta. The current 80-path inventory omitted it; no whole f4d producer or wave approval is inferred. Existing G2847 coverage is reused only if the report explicitly covers the identical hunk. No fresh product authoring.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "recovery",
+          "assessment": "Finite required recovery dependency, not a new producer review: distinguish unavailable read, explicitly undisclosed summary and available empty name; preserve known siblings. Retry uses router.refresh with a retained control. Existing owner reads/auth/pagination/canonical addresses and native document navigation remain."
+        }
+      },
+      {
+        "path": "apps/web/features/work-page/anime-relations-recorded-page.ts",
+        "group": "concrete-recovery-dependency-missing-from-old-map",
+        "main": {
+          "blob": "202a4ec9365a33f188b1b9568c5ca79df9afad2a",
+          "bytes": 10335,
+          "sha256": "cc14c701fd585e79fa2e733381897b08ee9e6e3278bd6cd9e00ff26b6b0e8df2"
+        },
+        "target": {
+          "blob": "ebdee2f8f39ae131af58cfebe86285d5d214e3e6",
+          "bytes": 10649,
+          "sha256": "e8a07cf6291c4af76aeb319b06739f81fa59138f0ad1b168d3608165759c1dbc"
+        },
+        "authoredOrigins": [
+          "f4d0226f39526147eaeb86f99a4e0502b9ca8379"
+        ],
+        "disposition": "Review the small exact current-main-to-target partial-name recovery dependency delta. The current 80-path inventory omitted it; no whole f4d producer or wave approval is inferred. Existing G2847 coverage is reused only if the report explicitly covers the identical hunk. No fresh product authoring.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "recovery",
+          "assessment": "Finite required recovery dependency, not a new producer review: distinguish unavailable read, explicitly undisclosed summary and available empty name; preserve known siblings. Retry uses router.refresh with a retained control. Existing owner reads/auth/pagination/canonical addresses and native document navigation remain."
+        }
+      },
+      {
+        "path": "apps/web/features/zones/zone-frame.tsx",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "78975f822807cc211485ef25fe286eae41021990",
+          "bytes": 5992,
+          "sha256": "f76659d5cd95b90b32a2ff831e6fa4acc3bf0131ab5bc67ce5e1238ac405b004"
+        },
+        "target": {
+          "blob": "3a1808555595b605e1ebab65450fa539ff794f45",
+          "bytes": 6662,
+          "sha256": "c806bbc42a6f0b23951137222460afaea8df09b68ee2585903ef0727f3d89778"
+        },
+        "authoredOrigins": [
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "header",
+          "assessment": "Native identity/type comes from the existing owner and registry. SubjectHeader places the named Primary actions group before the separate Reactions/subject More actions; supplied content remains after these slots."
+        }
+      },
+      {
+        "path": "scripts/static/web-continuations.inventory.json",
+        "group": "missing-authored-correction",
+        "main": {
+          "blob": "09af3ac0c42fe1ee3e987992b07cdb7b013ee8bd",
+          "bytes": 304872,
+          "sha256": "bcb75d6c53647f4d58d42d43863b5f8a605a6add24b9239258e538976de28089"
+        },
+        "target": {
+          "blob": "657afcd915946269c48897559453b25b334d7496",
+          "bytes": 305371,
+          "sha256": "64a2a39920b1eaaf86bd89d8dbe40f6c9a2a876a317ab87f707804bfaf1241de"
+        },
+        "authoredOrigins": [
+          "f5bf2965518ee8a056c56c0b1353cfa8274acdc9",
+          "9a6da73270a645bf87e63bfaa762bde4a0e6db92"
+        ],
+        "disposition": "First review actual authored missing hunks listed in authoredCommits, with the final selected source at target; compare current main to preserve peer changes. Do not import entire worker blobs or approve unrelated inherited source.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "selected-inventory-rows-only",
+          "assessment": "Only the manifest-selected consumer rows/context changes and exact-selection predicates are reviewed. Preserve all frozen-Main peer rows; no new waiver, timeout waiver or wholesale inventory replacement is approved."
+        }
+      },
+      {
+        "path": "scripts/static/web-page-filtering.inventory.json",
+        "group": "required-integration-comparison",
+        "main": {
+          "blob": "46c517810e0f2d211195db54a01cfe708a683f4e",
+          "bytes": 58599,
+          "sha256": "99b497d40da35273c27cf45d1a68939b03deec6e39baf5c4d4f3380e10ae81de"
+        },
+        "target": {
+          "blob": "0b483885106d15b3a5822296f9a2bf354aba2209",
+          "bytes": 58548,
+          "sha256": "7afb8219d982f85921ee5e658fc6c251b5776d9df397d44ab8f2c24dafa9b9fc"
+        },
+        "authoredOrigins": [],
+        "disposition": "Review exactly the selected EditionsPage/readFollowedRealizations inventory rows. Retain current Main games-hub rows and every unrelated peer row; see inventory-row-dispositions.json.",
+        "selectionIsWholeBlob": false,
+        "review": {
+          "kind": "selected-inventory-rows-only",
+          "assessment": "Only the manifest-selected consumer rows/context changes and exact-selection predicates are reviewed. Preserve all frozen-Main peer rows; no new waiver, timeout waiver or wholesale inventory replacement is approved."
+        }
+      }
+    ],
+    "exactBlobAccounting": {
+      "result": "84/84 manifest path before/after blob/size/SHA identities verified from frozen pins, plus all 12 material current-Main consumer/dependency comparisons verified. Missing paths checked through git ls-tree. Seven regenerated exact authored patches match manifest size/SHA.",
+      "artifact": {
+        "path": ".temp/goal/nonwork-first-review/blob-verification.json",
+        "bytes": 39792,
+        "sha256": "c1bcf712e34e966d36dc3c295f193f16090178b2616151a2036dd7aefa07e0e8"
+      }
+    },
+    "reuseDispositions": {
+      "priorExactBlobReuse": [
+        {
+          "path": "apps/web/features/catalogue/cover.tsx",
+          "main": {
+            "blob": "c04cdc6b42ad8a3acd673f6b97fe90115bc350ed",
+            "bytes": 2478,
+            "sha256": "7f828d0830242221654a749352493309932e987dba94e31906cd55008effdb36"
+          },
+          "target": {
+            "blob": "f82bd4c35cf48cc4d5b0eea47cb9d5f6793070d0",
+            "bytes": 2736,
+            "sha256": "9f892946dfb396e2ff827e65be9903f302bb472dea379e98f88de446e5a3d5a9"
+          },
+          "priorExactCoverage": [
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "f82bd4c35cf48cc4d5b0eea47cb9d5f6793070d0"
+            }
+          ],
+          "olderReviewedBlobs": [
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "f82bd4c35cf48cc4d5b0eea47cb9d5f6793070d0"
+            }
+          ],
+          "verifiedSameTargetAsPriorManifest": true,
+          "disposition": "Reuse exact independently inspected source. Do not repeat its review. This is not blanket approval of either historical candidate; R1-R7/F1-F4 failures and their required selected corrections remain preserved.",
+          "actualDisposition": "Exact blob equality verified and earlier inspection reused; no repeated source review."
+        },
+        {
+          "path": "apps/web/features/entity-page/fixtures.ts",
+          "main": {
+            "blob": "11730dc6759ae754647fce9496df9d2807a760dd",
+            "bytes": 10895,
+            "sha256": "66005b2033c683a1d11edd342b61aec2b58eb224f875adbdc34111b3512b60ad"
+          },
+          "target": {
+            "blob": "918d0332db4e3e58e6d789b1e6e73ca434805473",
+            "bytes": 14849,
+            "sha256": "f230823cfe28ccb1bced4dc83910ca55455135c1ad76c756a67fb16de6cf78fd"
+          },
+          "priorExactCoverage": [
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "918d0332db4e3e58e6d789b1e6e73ca434805473"
+            }
+          ],
+          "olderReviewedBlobs": [
+            {
+              "review": "G-2796",
+              "pin": "b6d6ecc2e15d7b9f5cfe2cdcc13e8302782d549f",
+              "blob": "790dfe89d48a4d3fae079ec640d04a0b55528c0b"
+            },
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "918d0332db4e3e58e6d789b1e6e73ca434805473"
+            }
+          ],
+          "verifiedSameTargetAsPriorManifest": true,
+          "disposition": "Reuse exact independently inspected source. Do not repeat its review. This is not blanket approval of either historical candidate; R1-R7/F1-F4 failures and their required selected corrections remain preserved.",
+          "actualDisposition": "Exact blob equality verified and earlier inspection reused; no repeated source review."
+        },
+        {
+          "path": "apps/web/features/entity-page/projection-views.tsx",
+          "main": {
+            "blob": "e27db4bae3a20eb81b18786ec862af46770c5fe8",
+            "bytes": 4297,
+            "sha256": "45e65cc7500111572c3e275d46dbea581d4ed7f5940ab8adc1467c06b9b7aeee"
+          },
+          "target": {
+            "blob": "30cbfb80021508430a133ddeb6d567a52a7e21c7",
+            "bytes": 4556,
+            "sha256": "70f73a00e8efee58d78e239829923c5e44e09794b8dfa477aee3bd800d630efd"
+          },
+          "priorExactCoverage": [
+            {
+              "review": "G-2796",
+              "pin": "b6d6ecc2e15d7b9f5cfe2cdcc13e8302782d549f",
+              "blob": "30cbfb80021508430a133ddeb6d567a52a7e21c7"
+            },
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "30cbfb80021508430a133ddeb6d567a52a7e21c7"
+            }
+          ],
+          "olderReviewedBlobs": [
+            {
+              "review": "G-2796",
+              "pin": "b6d6ecc2e15d7b9f5cfe2cdcc13e8302782d549f",
+              "blob": "30cbfb80021508430a133ddeb6d567a52a7e21c7"
+            },
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "30cbfb80021508430a133ddeb6d567a52a7e21c7"
+            }
+          ],
+          "verifiedSameTargetAsPriorManifest": true,
+          "disposition": "Reuse exact independently inspected source. Do not repeat its review. This is not blanket approval of either historical candidate; R1-R7/F1-F4 failures and their required selected corrections remain preserved.",
+          "actualDisposition": "Exact blob equality verified and earlier inspection reused; no repeated source review."
+        },
+        {
+          "path": "apps/web/features/entity-page/sections.tsx",
+          "main": {
+            "blob": "86a41c765d6417e4a3bd9ce6b43d001b0639f951",
+            "bytes": 6934,
+            "sha256": "4e3fdedf2c33dc7c4bb4441369f853e9fc6255f6278dd08232b5741bd318377f"
+          },
+          "target": {
+            "blob": "976d693b23a8f9c66d6ec2a95d23437032d8e292",
+            "bytes": 7295,
+            "sha256": "f575cfb366715cbfed3ebbf866eca653e115dc2ff1f60ba6beabc7d08688b237"
+          },
+          "priorExactCoverage": [
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "976d693b23a8f9c66d6ec2a95d23437032d8e292"
+            }
+          ],
+          "olderReviewedBlobs": [
+            {
+              "review": "G-2796",
+              "pin": "b6d6ecc2e15d7b9f5cfe2cdcc13e8302782d549f",
+              "blob": "1e9d6f8c87176f148e75417a87bb3feb2750aa37"
+            },
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "976d693b23a8f9c66d6ec2a95d23437032d8e292"
+            }
+          ],
+          "verifiedSameTargetAsPriorManifest": true,
+          "disposition": "Reuse exact independently inspected source. Do not repeat its review. This is not blanket approval of either historical candidate; R1-R7/F1-F4 failures and their required selected corrections remain preserved.",
+          "actualDisposition": "Exact blob equality verified and earlier inspection reused; no repeated source review."
+        },
+        {
+          "path": "apps/web/features/entity-page/statement-groups.ts",
+          "main": {
+            "blob": "59b172e2818e99542b98c1509acc63f20a960558",
+            "bytes": 2789,
+            "sha256": "dcdc52b0c261e9c4b70d62ff080daf35133824c8689907514104c3dad7f7c3fa"
+          },
+          "target": {
+            "blob": "59b172e2818e99542b98c1509acc63f20a960558",
+            "bytes": 2789,
+            "sha256": "dcdc52b0c261e9c4b70d62ff080daf35133824c8689907514104c3dad7f7c3fa"
+          },
+          "priorExactCoverage": [
+            {
+              "review": "G-2796",
+              "pin": "b6d6ecc2e15d7b9f5cfe2cdcc13e8302782d549f",
+              "blob": "59b172e2818e99542b98c1509acc63f20a960558"
+            },
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "59b172e2818e99542b98c1509acc63f20a960558"
+            }
+          ],
+          "olderReviewedBlobs": [
+            {
+              "review": "G-2796",
+              "pin": "b6d6ecc2e15d7b9f5cfe2cdcc13e8302782d549f",
+              "blob": "59b172e2818e99542b98c1509acc63f20a960558"
+            },
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "59b172e2818e99542b98c1509acc63f20a960558"
+            }
+          ],
+          "verifiedSameTargetAsPriorManifest": true,
+          "disposition": "Reuse exact independently inspected source. Do not repeat its review. This is not blanket approval of either historical candidate; R1-R7/F1-F4 failures and their required selected corrections remain preserved.",
+          "actualDisposition": "Exact blob equality verified and earlier inspection reused; no repeated source review."
+        },
+        {
+          "path": "apps/web/features/realm/discussion-page.stories.tsx",
+          "main": {
+            "blob": "43213259be808382e773b42fa588bfd4c9871a42",
+            "bytes": 11300,
+            "sha256": "87ea93457e44b5030ac87b995eb76447f2024e9bf8ae661319e24f610dabbd32"
+          },
+          "target": {
+            "blob": "7a187bde0f3bdf259cd811613c9364ede6d9dec5",
+            "bytes": 13049,
+            "sha256": "8861e9be6a0a50d4ad49e453d9d3c8acc03719fb80275f51fcc015e2565e9f19"
+          },
+          "priorExactCoverage": [
+            {
+              "review": "G-2796",
+              "pin": "b6d6ecc2e15d7b9f5cfe2cdcc13e8302782d549f",
+              "blob": "7a187bde0f3bdf259cd811613c9364ede6d9dec5"
+            },
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "7a187bde0f3bdf259cd811613c9364ede6d9dec5"
+            }
+          ],
+          "olderReviewedBlobs": [
+            {
+              "review": "G-2796",
+              "pin": "b6d6ecc2e15d7b9f5cfe2cdcc13e8302782d549f",
+              "blob": "7a187bde0f3bdf259cd811613c9364ede6d9dec5"
+            },
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "7a187bde0f3bdf259cd811613c9364ede6d9dec5"
+            }
+          ],
+          "verifiedSameTargetAsPriorManifest": true,
+          "disposition": "Reuse exact independently inspected source. Do not repeat its review. This is not blanket approval of either historical candidate; R1-R7/F1-F4 failures and their required selected corrections remain preserved.",
+          "actualDisposition": "Exact blob equality verified and earlier inspection reused; no repeated source review."
+        },
+        {
+          "path": "apps/web/features/realm/discussion-page.tsx",
+          "main": {
+            "blob": "943790f732ad77a7a164b7868585b462a499b0b0",
+            "bytes": 6837,
+            "sha256": "895fdc7263194f65486810d21d3b3182a564830871d1516110ec086bcb7c0eef"
+          },
+          "target": {
+            "blob": "186e768140f4ec802e05445a2a4d0dcd88b22c14",
+            "bytes": 6916,
+            "sha256": "b33ee347b9810bc9e505b08718a7cd456d910329b9695337e3b934d092039094"
+          },
+          "priorExactCoverage": [
+            {
+              "review": "G-2796",
+              "pin": "b6d6ecc2e15d7b9f5cfe2cdcc13e8302782d549f",
+              "blob": "186e768140f4ec802e05445a2a4d0dcd88b22c14"
+            },
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "186e768140f4ec802e05445a2a4d0dcd88b22c14"
+            }
+          ],
+          "olderReviewedBlobs": [
+            {
+              "review": "G-2796",
+              "pin": "b6d6ecc2e15d7b9f5cfe2cdcc13e8302782d549f",
+              "blob": "186e768140f4ec802e05445a2a4d0dcd88b22c14"
+            },
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "186e768140f4ec802e05445a2a4d0dcd88b22c14"
+            }
+          ],
+          "verifiedSameTargetAsPriorManifest": true,
+          "disposition": "Reuse exact independently inspected source. Do not repeat its review. This is not blanket approval of either historical candidate; R1-R7/F1-F4 failures and their required selected corrections remain preserved.",
+          "actualDisposition": "Exact blob equality verified and earlier inspection reused; no repeated source review."
+        },
+        {
+          "path": "apps/web/features/realm/membership.stories.tsx",
+          "main": {
+            "blob": "f53e682e294c4beee70dce0357f941005a19c318",
+            "bytes": 7489,
+            "sha256": "72280c67dac0122f818189c5481a02f745fa2399035ea6dea8c182c9e29b59b2"
+          },
+          "target": {
+            "blob": "9e4a7aa83c1ec46b12d851d8030c1d2f6f09ed19",
+            "bytes": 7481,
+            "sha256": "705449283179ec599da65049d46fab1b71b552e5e2d7c82373926e360a310370"
+          },
+          "priorExactCoverage": [
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "9e4a7aa83c1ec46b12d851d8030c1d2f6f09ed19"
+            }
+          ],
+          "olderReviewedBlobs": [
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "9e4a7aa83c1ec46b12d851d8030c1d2f6f09ed19"
+            }
+          ],
+          "verifiedSameTargetAsPriorManifest": true,
+          "disposition": "Reuse exact independently inspected source. Do not repeat its review. This is not blanket approval of either historical candidate; R1-R7/F1-F4 failures and their required selected corrections remain preserved.",
+          "actualDisposition": "Exact blob equality verified and earlier inspection reused; no repeated source review."
+        },
+        {
+          "path": "apps/web/features/realm/thread-rail.tsx",
+          "main": {
+            "blob": "f46eb1f52cb6659dfb206117f007f63eee305d70",
+            "bytes": 3697,
+            "sha256": "d43d25785e4a9207996f9e28551d705fbd0a53f1fccc59362f64e73035be7e18"
+          },
+          "target": {
+            "blob": "59d1a26c26d22d2d21dfe6b7f5be5d0b51baef6a",
+            "bytes": 5202,
+            "sha256": "51d0c29c2f24d24e7756a3318c6adb010ac6f8b390ffa3a9fd499f0dc276dfed"
+          },
+          "priorExactCoverage": [
+            {
+              "review": "G-2796",
+              "pin": "b6d6ecc2e15d7b9f5cfe2cdcc13e8302782d549f",
+              "blob": "59d1a26c26d22d2d21dfe6b7f5be5d0b51baef6a"
+            },
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "59d1a26c26d22d2d21dfe6b7f5be5d0b51baef6a"
+            }
+          ],
+          "olderReviewedBlobs": [
+            {
+              "review": "G-2796",
+              "pin": "b6d6ecc2e15d7b9f5cfe2cdcc13e8302782d549f",
+              "blob": "59d1a26c26d22d2d21dfe6b7f5be5d0b51baef6a"
+            },
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "59d1a26c26d22d2d21dfe6b7f5be5d0b51baef6a"
+            }
+          ],
+          "verifiedSameTargetAsPriorManifest": true,
+          "disposition": "Reuse exact independently inspected source. Do not repeat its review. This is not blanket approval of either historical candidate; R1-R7/F1-F4 failures and their required selected corrections remain preserved.",
+          "actualDisposition": "Exact blob equality verified and earlier inspection reused; no repeated source review."
+        },
+        {
+          "path": "apps/web/features/realm/thread-route.tsx",
+          "main": {
+            "blob": "0f22a44985e6140cdda8c133220d8c5b881dd278",
+            "bytes": 4375,
+            "sha256": "e634810ebe8cf6cd2a4d4904205c016a0fa8da32f34861441d36ff6a75d2da98"
+          },
+          "target": {
+            "blob": "9bf554d2a7da5ead976cc585b78c989cb1c87b16",
+            "bytes": 4393,
+            "sha256": "a2b08a61aa14b2aca4857ae64e26eaa60cb0a6e9d43eee60d27ebb3e1d026315"
+          },
+          "priorExactCoverage": [
+            {
+              "review": "G-2796",
+              "pin": "b6d6ecc2e15d7b9f5cfe2cdcc13e8302782d549f",
+              "blob": "9bf554d2a7da5ead976cc585b78c989cb1c87b16"
+            },
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "9bf554d2a7da5ead976cc585b78c989cb1c87b16"
+            }
+          ],
+          "olderReviewedBlobs": [
+            {
+              "review": "G-2796",
+              "pin": "b6d6ecc2e15d7b9f5cfe2cdcc13e8302782d549f",
+              "blob": "9bf554d2a7da5ead976cc585b78c989cb1c87b16"
+            },
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "9bf554d2a7da5ead976cc585b78c989cb1c87b16"
+            }
+          ],
+          "verifiedSameTargetAsPriorManifest": true,
+          "disposition": "Reuse exact independently inspected source. Do not repeat its review. This is not blanket approval of either historical candidate; R1-R7/F1-F4 failures and their required selected corrections remain preserved.",
+          "actualDisposition": "Exact blob equality verified and earlier inspection reused; no repeated source review."
+        },
+        {
+          "path": "apps/web/features/relationships/messages.ts",
+          "main": {
+            "blob": "8692d0ead32373c19367051a0dff817aa70af648",
+            "bytes": 24718,
+            "sha256": "df66051b745b45c27af55fcd66524f11850bca2c37042f4bf0e9fe712fba0c0d"
+          },
+          "target": {
+            "blob": "9f1e87a363af39fb029ba0973eedb63083a68713",
+            "bytes": 24702,
+            "sha256": "31ff1d136710ed9baac512087b02f809ca6aa4304deff9839a634e10a2950a27"
+          },
+          "priorExactCoverage": [
+            {
+              "review": "G-2796",
+              "pin": "b6d6ecc2e15d7b9f5cfe2cdcc13e8302782d549f",
+              "blob": "9f1e87a363af39fb029ba0973eedb63083a68713"
+            },
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "9f1e87a363af39fb029ba0973eedb63083a68713"
+            }
+          ],
+          "olderReviewedBlobs": [
+            {
+              "review": "G-2796",
+              "pin": "b6d6ecc2e15d7b9f5cfe2cdcc13e8302782d549f",
+              "blob": "9f1e87a363af39fb029ba0973eedb63083a68713"
+            },
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "9f1e87a363af39fb029ba0973eedb63083a68713"
+            }
+          ],
+          "verifiedSameTargetAsPriorManifest": true,
+          "disposition": "Reuse exact independently inspected source. Do not repeat its review. This is not blanket approval of either historical candidate; R1-R7/F1-F4 failures and their required selected corrections remain preserved.",
+          "actualDisposition": "Exact blob equality verified and earlier inspection reused; no repeated source review."
+        },
+        {
+          "path": "apps/web/features/relationships/relationships.stories.tsx",
+          "main": {
+            "blob": "e29b8dedd63278eb6f4031ebf559cb7c710f4d06",
+            "bytes": 18863,
+            "sha256": "4cd37b4994433110241db44c6315bb9c4f7db15e27125708987dd1a6ab34d779"
+          },
+          "target": {
+            "blob": "1c13d0850c5b900f51a637fd068a022f2bc8ead2",
+            "bytes": 18847,
+            "sha256": "3d1a53f552c3a500263b15ba4ff5c1fc270efbb3fffcab88ce4b1c573b0823fe"
+          },
+          "priorExactCoverage": [
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "1c13d0850c5b900f51a637fd068a022f2bc8ead2"
+            }
+          ],
+          "olderReviewedBlobs": [
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "1c13d0850c5b900f51a637fd068a022f2bc8ead2"
+            }
+          ],
+          "verifiedSameTargetAsPriorManifest": true,
+          "disposition": "Reuse exact independently inspected source. Do not repeat its review. This is not blanket approval of either historical candidate; R1-R7/F1-F4 failures and their required selected corrections remain preserved.",
+          "actualDisposition": "Exact blob equality verified and earlier inspection reused; no repeated source review."
+        },
+        {
+          "path": "apps/web/features/work-levels/release-read.test.ts",
+          "main": null,
+          "target": {
+            "blob": "e67cacc734ddcad996f5bb952b486064bf86e231",
+            "bytes": 5650,
+            "sha256": "aa1d4c4912b5392163ca9926e83cceba42e182da086cd5755924fbd8a061105c"
+          },
+          "priorExactCoverage": [
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "e67cacc734ddcad996f5bb952b486064bf86e231"
+            }
+          ],
+          "olderReviewedBlobs": [
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "e67cacc734ddcad996f5bb952b486064bf86e231"
+            }
+          ],
+          "verifiedSameTargetAsPriorManifest": true,
+          "disposition": "Reuse exact independently inspected source. Do not repeat its review. This is not blanket approval of either historical candidate; R1-R7/F1-F4 failures and their required selected corrections remain preserved.",
+          "actualDisposition": "Exact blob equality verified and earlier inspection reused; no repeated source review."
+        },
+        {
+          "path": "apps/web/tests/g-944-shared-browser.test.ts",
+          "main": {
+            "blob": "24d82a7f2a01bad7a5b937be4e6c779ecb9abb0d",
+            "bytes": 18904,
+            "sha256": "ce730d013d33b434b82d920fed0875238ca0c05723be727a55e7da37cd9d679b"
+          },
+          "target": {
+            "blob": "54d897a998a7a6186e1d85670045ea9a59773e3e",
+            "bytes": 18888,
+            "sha256": "768a261dc3941b7a136a10f8a1a52f6f21ef083539636401880bf1020c16a131"
+          },
+          "priorExactCoverage": [
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "54d897a998a7a6186e1d85670045ea9a59773e3e"
+            }
+          ],
+          "olderReviewedBlobs": [
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "54d897a998a7a6186e1d85670045ea9a59773e3e"
+            }
+          ],
+          "verifiedSameTargetAsPriorManifest": true,
+          "disposition": "Reuse exact independently inspected source. Do not repeat its review. This is not blanket approval of either historical candidate; R1-R7/F1-F4 failures and their required selected corrections remain preserved.",
+          "actualDisposition": "Exact blob equality verified and earlier inspection reused; no repeated source review."
+        },
+        {
+          "path": "apps/web/tests/launch-phone-keyboard.e2e.ts",
+          "main": {
+            "blob": "d1a0a0c6eae36c97e33ba6537f8dbcf8bcde291e",
+            "bytes": 23204,
+            "sha256": "131adf5bae02c78fea920b6894d6aca8fd5b37d3890c3def14b13ff05ac709b5"
+          },
+          "target": {
+            "blob": "acb1a68c4af4407cf87518d5e97d0b5fd928904b",
+            "bytes": 23199,
+            "sha256": "f4fdbf9afc9c92d2acab643ecf5acc12d21793260b2b8e7640dbad81d68d1882"
+          },
+          "priorExactCoverage": [
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "acb1a68c4af4407cf87518d5e97d0b5fd928904b"
+            }
+          ],
+          "olderReviewedBlobs": [
+            {
+              "review": "G-2811",
+              "pin": "82934ed001dcfbd880d5458b3e458630c0bac1df",
+              "blob": "acb1a68c4af4407cf87518d5e97d0b5fd928904b"
+            }
+          ],
+          "verifiedSameTargetAsPriorManifest": true,
+          "disposition": "Reuse exact independently inspected source. Do not repeat its review. This is not blanket approval of either historical candidate; R1-R7/F1-F4 failures and their required selected corrections remain preserved.",
+          "actualDisposition": "Exact blob equality verified and earlier inspection reused; no repeated source review."
+        }
+      ],
+      "alreadyMainContext": [
+        {
+          "path": "apps/web/features/official-zone-stories/release-fixtures.ts",
+          "main": {
+            "blob": "20990ccc33ce49fe389b33288ffa9850924f6074",
+            "bytes": 7042,
+            "sha256": "3eaa5b061910c939c2595b16b9993f2ce8ae624d27a52440a21b73804672fb0a"
+          },
+          "target": {
+            "blob": "20990ccc33ce49fe389b33288ffa9850924f6074",
+            "bytes": 7042,
+            "sha256": "3eaa5b061910c939c2595b16b9993f2ce8ae624d27a52440a21b73804672fb0a"
+          },
+          "disposition": "Already byte-identical main context; no new first review or source selection.",
+          "actualDisposition": "Exact frozen Main/target equality verified; reuse context. No new backend/report source selection."
+        },
+        {
+          "path": "apps/web/features/safety/report-action.tsx",
+          "main": {
+            "blob": "a6ac9b1c3d89f16a2b844fb7b2e83d1a7ce2d138",
+            "bytes": 3611,
+            "sha256": "57d2d6e4c809c44f8de8b516c765d26baa862323d96eda6bd0f025fb2c268667"
+          },
+          "target": {
+            "blob": "a6ac9b1c3d89f16a2b844fb7b2e83d1a7ce2d138",
+            "bytes": 3611,
+            "sha256": "57d2d6e4c809c44f8de8b516c765d26baa862323d96eda6bd0f025fb2c268667"
+          },
+          "disposition": "Already byte-identical main context; no new first review or source selection.",
+          "actualDisposition": "Exact frozen Main/target equality verified; reuse context. No new backend/report source selection."
+        },
+        {
+          "path": "apps/web/tests/g-853-release-filter.test.ts",
+          "main": {
+            "blob": "c90525031517c97014b5c311875caff6798b03c5",
+            "bytes": 27765,
+            "sha256": "fb84d41d003761193227eeeee88a14a474ca3bd4818662ed1c93efc691b00f34"
+          },
+          "target": {
+            "blob": "c90525031517c97014b5c311875caff6798b03c5",
+            "bytes": 27765,
+            "sha256": "fb84d41d003761193227eeeee88a14a474ca3bd4818662ed1c93efc691b00f34"
+          },
+          "disposition": "Already byte-identical main context; no new first review or source selection.",
+          "actualDisposition": "Exact frozen Main/target equality verified; reuse context. No new backend/report source selection."
+        },
+        {
+          "path": "services/main/src/modules/wiki/evidence-read.ts",
+          "main": {
+            "blob": "87ddbdb70bf63be930c7541adf66f57745fbf3b4",
+            "bytes": 3212,
+            "sha256": "d6409986fc81cf04e56f8af52f0d42768f78702bd043fb4fe82f3c281539b830"
+          },
+          "target": {
+            "blob": "87ddbdb70bf63be930c7541adf66f57745fbf3b4",
+            "bytes": 3212,
+            "sha256": "d6409986fc81cf04e56f8af52f0d42768f78702bd043fb4fe82f3c281539b830"
+          },
+          "disposition": "Already byte-identical main context; no new first review or source selection.",
+          "actualDisposition": "Exact frozen Main/target equality verified; reuse context. No new backend/report source selection."
+        },
+        {
+          "path": "services/main/src/modules/wiki/evidence.ts",
+          "main": {
+            "blob": "d5484dfcd8c18646fa6944fb92482d4d29efa5e2",
+            "bytes": 9615,
+            "sha256": "a8b97a506398fe5babb0618b0ec2ffce2644f3c5253df59f82a04f01f9068b43"
+          },
+          "target": {
+            "blob": "d5484dfcd8c18646fa6944fb92482d4d29efa5e2",
+            "bytes": 9615,
+            "sha256": "a8b97a506398fe5babb0618b0ec2ffce2644f3c5253df59f82a04f01f9068b43"
+          },
+          "disposition": "Already byte-identical main context; no new first review or source selection.",
+          "actualDisposition": "Exact frozen Main/target equality verified; reuse context. No new backend/report source selection."
+        },
+        {
+          "path": "services/main/tests/wiki-evidence-projection.test.ts",
+          "main": {
+            "blob": "7c6dce17e8025f8d4dcbe56ce37d91afd87f55a1",
+            "bytes": 4040,
+            "sha256": "7124604f15135506ce61d8df66f0e572b66833001f281c4d46742abec277fc47"
+          },
+          "target": {
+            "blob": "7c6dce17e8025f8d4dcbe56ce37d91afd87f55a1",
+            "bytes": 4040,
+            "sha256": "7124604f15135506ce61d8df66f0e572b66833001f281c4d46742abec277fc47"
+          },
+          "disposition": "Already byte-identical main context; no new first review or source selection.",
+          "actualDisposition": "Exact frozen Main/target equality verified; reuse context. No new backend/report source selection."
+        }
+      ],
+      "alreadyReviewedShellReuse": [
+        {
+          "path": "apps/web/app/@pageEnd/[...rest]/page.tsx",
+          "main": {
+            "blob": "bbfd11a2047a58158b8cf2ad9ac2944935432f37",
+            "bytes": 144,
+            "sha256": "89606d77af1181d92ebd43a24c787be46554c438b04728915eda002dbaefc640"
+          },
+          "target": {
+            "blob": "bbfd11a2047a58158b8cf2ad9ac2944935432f37",
+            "bytes": 144,
+            "sha256": "89606d77af1181d92ebd43a24c787be46554c438b04728915eda002dbaefc640"
+          },
+          "disposition": "Reuse actual G2847 shell_page_end_source_review; byte-identical target and actual main. Native Release hard/soft router behavior was explicitly unproved.",
+          "actualDisposition": "Exact approved G-2847/Main shell blob reused. Inspected material host composition only; no repeated shell source review."
+        },
+        {
+          "path": "apps/web/app/@pageEnd/default.tsx",
+          "main": {
+            "blob": "cd59e1593505cc72a7ff630872a781e877ed6179",
+            "bytes": 60,
+            "sha256": "36ede4adce6104c8da0d735ea46b1e3e4df01ea95fc735442d94bb213ed81c5a"
+          },
+          "target": {
+            "blob": "cd59e1593505cc72a7ff630872a781e877ed6179",
+            "bytes": 60,
+            "sha256": "36ede4adce6104c8da0d735ea46b1e3e4df01ea95fc735442d94bb213ed81c5a"
+          },
+          "disposition": "Reuse actual G2847 shell_page_end_source_review; byte-identical target and actual main. Native Release hard/soft router behavior was explicitly unproved.",
+          "actualDisposition": "Exact approved G-2847/Main shell blob reused. Inspected material host composition only; no repeated shell source review."
+        },
+        {
+          "path": "apps/web/app/layout.tsx",
+          "main": {
+            "blob": "0c533265e146eb82aaad53ab73d71a264b0e6b5a",
+            "bytes": 2373,
+            "sha256": "334969524ce9f789c5c213735d4d21bccd28eb22f6b7f0dc3a5a4d5eae53740b"
+          },
+          "target": {
+            "blob": "0c533265e146eb82aaad53ab73d71a264b0e6b5a",
+            "bytes": 2373,
+            "sha256": "334969524ce9f789c5c213735d4d21bccd28eb22f6b7f0dc3a5a4d5eae53740b"
+          },
+          "disposition": "Reuse actual G2847 shell_page_end_source_review; byte-identical target and actual main. Native Release hard/soft router behavior was explicitly unproved.",
+          "actualDisposition": "Exact approved G-2847/Main shell blob reused. Inspected material host composition only; no repeated shell source review."
+        },
+        {
+          "path": "apps/web/features/shell/app-shell.tsx",
+          "main": {
+            "blob": "8610db78f8408a43cb4a828b7a9055c3d3d05a13",
+            "bytes": 4422,
+            "sha256": "7c88bb671ea29e02d34f17bbad0d456707916decfb9df520b6e4496834642f12"
+          },
+          "target": {
+            "blob": "8610db78f8408a43cb4a828b7a9055c3d3d05a13",
+            "bytes": 4422,
+            "sha256": "7c88bb671ea29e02d34f17bbad0d456707916decfb9df520b6e4496834642f12"
+          },
+          "disposition": "Reuse actual G2847 shell_page_end_source_review; byte-identical target and actual main. Native Release hard/soft router behavior was explicitly unproved.",
+          "actualDisposition": "Exact approved G-2847/Main shell blob reused. Inspected material host composition only; no repeated shell source review."
+        },
+        {
+          "path": "apps/web/features/shell/page-end.stories.tsx",
+          "main": {
+            "blob": "e9732491c1d9228004b4608e6660aefed8fc70d5",
+            "bytes": 5689,
+            "sha256": "ac8ba8f5c0d92b3e6220c60cc0bf413552fc9d77fbd744c4c67659138bb86e90"
+          },
+          "target": {
+            "blob": "e9732491c1d9228004b4608e6660aefed8fc70d5",
+            "bytes": 5689,
+            "sha256": "ac8ba8f5c0d92b3e6220c60cc0bf413552fc9d77fbd744c4c67659138bb86e90"
+          },
+          "disposition": "Reuse actual G2847 shell_page_end_source_review; byte-identical target and actual main. Native Release hard/soft router behavior was explicitly unproved.",
+          "actualDisposition": "Exact approved G-2847/Main shell blob reused. Inspected material host composition only; no repeated shell source review."
+        }
+      ],
+      "currentMainConsumerComparisons": [
+        {
+          "path": "apps/web/features/work-page/read.ts",
+          "main": {
+            "blob": "9b8211c2ba87a9c159c4686de4a9f2992a42b2a0",
+            "bytes": 22899,
+            "sha256": "01248ed321e11c3b46a6d68d4c3f3b01602bd3d79ae0c8aefcf68ddf85d90f9d"
+          },
+          "target": {
+            "blob": "43cb89cc52e6d43eced7548fd920577e980a36c4",
+            "bytes": 22818,
+            "sha256": "3882eab31276381b9991de98f85b4127b3d237ecf487592d12749704690ea08c"
+          },
+          "disposition": "Current-main consumer/dependency comparison only; retain current owner implementations and current dependency graph. No whole old source or lockfile restoration. Inspect only material call-shape compatibility of selected hunks.",
+          "actualReviewDisposition": "Retain frozen Main ReadStart unavailable outcome and current owner/API/auth implementation. No target whole-file restore is selected."
+        },
+        {
+          "path": "apps/web/features/entity-page/identity-read.ts",
+          "main": {
+            "blob": "174bf85250e75f0ca6add9e7d7342992662910ae",
+            "bytes": 10414,
+            "sha256": "a12adfc9fef882ffbb41a1a7d7f876d70a49b500a046c3c6b4508e74bffa6754"
+          },
+          "target": {
+            "blob": "96f9afc6e3bc0589035894ebe7c7faaf049a8a0e",
+            "bytes": 10540,
+            "sha256": "c9eddfee1c0f31ccfed4da1f2c80bfc5a19eec63f90df5b59382446f2004a26f"
+          },
+          "disposition": "Current-main consumer/dependency comparison only; retain current owner implementations and current dependency graph. No whole old source or lockfile restoration. Inspect only material call-shape compatibility of selected hunks.",
+          "actualReviewDisposition": "The association-evidence-v1 profile cannot supply title applicability; keep that narrowing and the widened Names discrimination when composing. No readable head or guessed applicability substitutes a refused/undisclosed name. Preserve all other current Main owner logic."
+        },
+        {
+          "path": "apps/web/features/entity-page/identity-views.tsx",
+          "main": {
+            "blob": "7af30c189fb890a8c03eafb1daaf3031367796a8",
+            "bytes": 8510,
+            "sha256": "1967d9d5c47049a88d47d7b391a1b02b093f00f0f0e663cbe177a92c58e6cb94"
+          },
+          "target": {
+            "blob": "338fc7f4de8f00c3ed5538723fa01380cb75f1c6",
+            "bytes": 8639,
+            "sha256": "42336a3df6fe1dd8904161bb592b6ad93d8f46755c7548401358d772aeeb122a"
+          },
+          "disposition": "Current-main consumer/dependency comparison only; retain current owner implementations and current dependency graph. No whole old source or lockfile restoration. Inspect only material call-shape compatibility of selected hunks.",
+          "actualReviewDisposition": "Only the supplied undisclosed-name label for existing SummaryLink callers is relevant; preserve current Main target/href/identity behavior."
+        },
+        {
+          "path": "apps/web/features/work-levels/connections.tsx",
+          "main": {
+            "blob": "7a6254719250e53ba93893e76d272d71476ec1ea",
+            "bytes": 19485,
+            "sha256": "ec5e5ab950da93863620ec1a0a32f841a42c238eafc758e9b0f1314da81eb082"
+          },
+          "target": {
+            "blob": "d3224a1144ebaf9d77ed01001ddbbc27ea35c848",
+            "bytes": 19598,
+            "sha256": "db3b4860738d7d543190515855c874934106da91295be2d330e6e9137faa209b"
+          },
+          "disposition": "Current-main consumer/dependency comparison only; retain current owner implementations and current dependency graph. No whole old source or lockfile restoration. Inspect only material call-shape compatibility of selected hunks.",
+          "actualReviewDisposition": "Existing public collections, participant and member/part callers pass the distinct unnamed/undisclosed labels. No supplied roles, occurrence context, pagination, scopes or native hrefs are replaced."
+        },
+        {
+          "path": "apps/web/features/work-levels/previews.tsx",
+          "main": {
+            "blob": "eaa403ff51d5ff2e41a414f7719ab5c749d38a17",
+            "bytes": 8090,
+            "sha256": "895f14435c004c6a1d5da6f66a2be75d7068245ae74c1c8e707d20919aa52a60"
+          },
+          "target": {
+            "blob": "aeb11e78c774a6d4cf6c4ade3c177888a5cad1fd",
+            "bytes": 8137,
+            "sha256": "d5de5a427f34e4f582bef42aae65cb882537f508995bff6b4f23e931993d53b0"
+          },
+          "disposition": "Current-main consumer/dependency comparison only; retain current owner implementations and current dependency graph. No whole old source or lockfile restoration. Inspect only material call-shape compatibility of selected hunks.",
+          "actualReviewDisposition": "Only distinct undisclosed label at the existing NameLink call; preserve part/occurrence and continuation behavior."
+        },
+        {
+          "path": "apps/web/features/work-page/messages.ts",
+          "main": {
+            "blob": "9b44d2a1470777744624765c165d311b040914f1",
+            "bytes": 23892,
+            "sha256": "2d570f9ec4eefa5eb6ffd033b0bca103e12e0ad17ae3f699984f8d1999dcb507"
+          },
+          "target": {
+            "blob": "9f5e87be626434b6ea42f845c81f2266ce4246d5",
+            "bytes": 22969,
+            "sha256": "1fa5f365b5d893969cb839d8048ab8097cb7766401b4ca5c8e4822f4506794d5"
+          },
+          "disposition": "Current-main consumer/dependency comparison only; retain current owner implementations and current dependency graph. No whole old source or lockfile restoration. Inspect only material call-shape compatibility of selected hunks.",
+          "actualReviewDisposition": "Retain all current Main primary/reaction/more, Cook and evidence copy. The old target omissions are not selected changes."
+        },
+        {
+          "path": "apps/web/features/feed/author-actions.tsx",
+          "main": {
+            "blob": "78a09d5a17c5b008242fa623b43a90a640314740",
+            "bytes": 12582,
+            "sha256": "184cb01baf65ac16ddeb88ae115a60b812d28d08628b20edd6cb0b19b9e9b0a5"
+          },
+          "target": {
+            "blob": "78a09d5a17c5b008242fa623b43a90a640314740",
+            "bytes": 12582,
+            "sha256": "184cb01baf65ac16ddeb88ae115a60b812d28d08628b20edd6cb0b19b9e9b0a5"
+          },
+          "disposition": "Current-main consumer/dependency comparison only; retain current owner implementations and current dependency graph. No whole old source or lockfile restoration. Inspect only material call-shape compatibility of selected hunks.",
+          "actualReviewDisposition": "Exact Main/target blob identity verified. Reuse approved implementation; inspect only the moved Thread caller, preserving guard/target and exactly one instance."
+        },
+        {
+          "path": "apps/web/.storybook/next-navigation.ts",
+          "main": {
+            "blob": "538a2ae4c8a6cb2ecff7a9eced8d27c0ad76a36d",
+            "bytes": 1281,
+            "sha256": "62f27ac1e40c837106d973e1f35a7a55312e1d88ba633106f24e03ea0ad8bc0a"
+          },
+          "target": {
+            "blob": "f2d56ad4c2d45b12782c1b281a4a87f674bd5e03",
+            "bytes": 1402,
+            "sha256": "60ca1058a126226e07d1e0fc2e1839d1e53c1b9f9e73537c7e1cef0030c749e5"
+          },
+          "disposition": "Current-main consumer/dependency comparison only; retain current owner implementations and current dependency graph. No whole old source or lockfile restoration. Inspect only material call-shape compatibility of selected hunks.",
+          "actualReviewDisposition": "Optional onRefresh models the next fixture snapshot. Keep current Main navigation adapter and add only this fixture hook if required; it proves no native refresh/router behavior."
+        },
+        {
+          "path": "apps/web/features/shell/side-nav.tsx",
+          "main": {
+            "blob": "0b22ec801aed87b52740d88a58a25138b8e57895",
+            "bytes": 4360,
+            "sha256": "c1b39f24f08de4e3470f2db67fb941f66727ca264fb861a587d0a4564fabb5b9"
+          },
+          "target": {
+            "blob": "78da75177b25e3775d5e8ccfff7ff58fb9d8e609",
+            "bytes": 4355,
+            "sha256": "cc87fa598aa00a2a1f9c3ed1ab7822fb2f3e790e8c549f113013ba859dd6d9ed"
+          },
+          "disposition": "Current-main consumer/dependency comparison only; retain current owner implementations and current dependency graph. No whole old source or lockfile restoration. Inspect only material call-shape compatibility of selected hunks.",
+          "actualReviewDisposition": "Retain Main. Target trailing-whitespace JSX difference is unrelated to the selected correction."
+        },
+        {
+          "path": "package.json",
+          "main": {
+            "blob": "4aed970288778fefd485dd2e401e6fdf458f7a2d",
+            "bytes": 1285,
+            "sha256": "487061c605dc753c9e60c657ecaa4dd7cf417a213ac65c2e906380367b98acaf"
+          },
+          "target": {
+            "blob": "5b83cc84bb8984bbb72f1056d2ecc9463973fde3",
+            "bytes": 1164,
+            "sha256": "507787932c026b08db8c45a0673da53ee42a8668bda84cfc5e2d4a62d30afdb4"
+          },
+          "disposition": "Current-main consumer/dependency comparison only; retain current owner implementations and current dependency graph. No whole old source or lockfile restoration. Inspect only material call-shape compatibility of selected hunks.",
+          "actualReviewDisposition": "Retain Main dependency resolutions and API/auth graph, including the existing vinext refresh/document patch; do not import old target package file."
+        },
+        {
+          "path": "yarn.lock",
+          "main": {
+            "blob": "e70dcbe4159d3fcab2585962a1cf3688937eb0e5",
+            "bytes": 436830,
+            "sha256": "026c93ddc3085e43b1ff6727a42f7c55b03a03cc1aa4c11cbf57438ce5b9d391"
+          },
+          "target": {
+            "blob": "239124b3f025a9beeb23d08d75adfbdbcc18c366",
+            "bytes": 435646,
+            "sha256": "5473e2ac8b308af7e28929652f8882e71e11d81728d567d6324ca7c65eb0ac30"
+          },
+          "disposition": "Current-main consumer/dependency comparison only; retain current owner implementations and current dependency graph. No whole old source or lockfile restoration. Inspect only material call-shape compatibility of selected hunks.",
+          "actualReviewDisposition": "Retain Main lockfile; historical fixture execution does not approve a downgrade or substitute for the eventual composed dependency gate."
+        },
+        {
+          "path": ".yarn/patches/vinext-refresh-retain-document.patch",
+          "main": {
+            "blob": "59e238412881bd350741a8b4528a586b77ba375a",
+            "bytes": 658,
+            "sha256": "3c1f008b04ed3d37b42afcc007ef479de7405bc787bde671afa284fa1b7aecaf"
+          },
+          "target": null,
+          "disposition": "Current-main consumer/dependency comparison only; retain current owner implementations and current dependency graph. No whole old source or lockfile restoration. Inspect only material call-shape compatibility of selected hunks.",
+          "actualReviewDisposition": "Retain this Main-only patch; its absence in the worker target is not a deletion authorized by this review."
+        }
+      ],
+      "ThreadAuthorCaller": {
+        "path": "apps/web/features/realm/thread-view.tsx",
+        "main": {
+          "blob": "ab072fcd980b8b7ea98112191df7cded98c4e284",
+          "bytes": 16458,
+          "sha256": "183d34e9128cf0ec9e94d748086daa696c19a94d063a66453ca829fdbd9b03e8"
+        },
+        "target": {
+          "blob": "d18ddc022d02255fcd071fa45bf3bdeb82b900b9",
+          "bytes": 17436,
+          "sha256": "37fa351ce61558f3b65fef34ad2801c7cceaa1791175af0fa1630c26e3206986"
+        },
+        "approvedAuthorCallerMainCommit": "312b69f1bc",
+        "approvedAuthorCallerSource": "20b62",
+        "materialCall": "!post.blocked && post.author; ReplyAuthorActions target {reply: post.reply, realm: read.realm, author: post.author.id, revisionId: post.revisionId, placement: post.placement}",
+        "comparison": "Current Main keeps this approved guard/target in the old fieldset. Target moves the same guard/target into SubjectHeader.actions; verify exactly one instance, preserved authority, reply menu identity/revision and reaction/share semantics. New header/presentation receives its first review here. No author source review repetition or old header baseline restoration.",
+        "actualDisposition": "One ReplyAuthorActions call (plus import), guarded by !post.blocked && post.author, keeps reply/realm/author/revisionId/placement exactly. Existing approved implementation blob is unchanged. Current auth and menu authority retained."
+      }
+    },
+    "dependencyDispositions": [
+      {
+        "path": "apps/web/features/work-levels/names.tsx",
+        "disposition": "Required 52+/15- dependency set: distinguish unavailable-read / undisclosed / available-empty, keep native canonical document navigation and available-only href derivation; no speculative name or route."
+      },
+      {
+        "path": "apps/web/features/work-levels/types.ts",
+        "disposition": "NameSummary adds only a local unavailable-read discriminant, retaining native Summary and explicit backend undisclosed status. Not an API/schema change."
+      },
+      {
+        "path": "apps/web/features/work-levels/release-names-recovery.tsx",
+        "disposition": "Existing request refresh plus pending/failed/recovered UI; retain Retry node after recovery for focus. Fixture callback is not installed-router proof."
+      },
+      {
+        "path": "apps/web/features/work-page/anime-relations-recorded-page.ts",
+        "disposition": "Each bounded summary batch pre-seeds requested references as unavailable-read; only returned requested entries overwrite them. Later batches, known siblings, actingSubject/position and existing page continuation remain. No whole producer or first-six rewrite selected."
+      }
+    ],
+    "historicalFindingDispositions": [
+      {
+        "id": "R1",
+        "disposition": "addressed-in-source",
+        "reason": "Thread mounts CatalogueCoverCredit from an image cover even when serialized credit is null; current metadata owns attribution/age suppression, and only a real current credit emits sources.",
+        "classification": "source-review; retained owner regression evidence only"
+      },
+      {
+        "id": "R2",
+        "disposition": "addressed-in-source",
+        "reason": "sourceHref rejects native rezics.com/id references, unsafe schemes and credential-bearing URLs. Native evidence remains readable text, supplied safe external URLs retain anchors.",
+        "classification": "source-review; retained owner regression evidence only"
+      },
+      {
+        "id": "R3",
+        "disposition": "addressed-in-source-with-runtime-limit",
+        "reason": "Subject menu is title-specific and separated from localized light Reactions; shared optional labels preserve existing caller defaults. Existing story menu/keyboard premises were updated to the actual owner labels. No fresh installed-router/AT claim.",
+        "classification": "source-review; retained owner regression evidence only"
+      },
+      {
+        "id": "R4",
+        "disposition": "addressed-in-source",
+        "reason": "Release sources retain realization identity/revision for evidence:null; identity-plus-revision dedup preserves different retained revisions and does not create evidence links.",
+        "classification": "source-review; retained owner regression evidence only"
+      },
+      {
+        "id": "R5",
+        "disposition": "addressed-in-source",
+        "reason": "Coverage revision is forwarded to exact realization reads; the selected Release, coverage and followed source reads are shared by body/footer within the request. No head fallback after a pinned refusal.",
+        "classification": "source-review; retained owner regression evidence only"
+      },
+      {
+        "id": "R6",
+        "disposition": "addressed-in-source",
+        "reason": "Citations keep each fact value, exact predicate, HoldsIn/applicability and revision. The hidden header-name fact still retains its evidence association; unknown predicates remain distinguishable.",
+        "classification": "source-review; retained owner regression evidence only"
+      },
+      {
+        "id": "R7",
+        "disposition": "addressed-in-source",
+        "reason": "Structured evidence retains native identity/sourceWork, representationSha256, public locator, permitted quote, method, modality, submitter and rightsBasis; assessed obligations stay attached to the corresponding facts.",
+        "classification": "source-review; retained owner regression evidence only"
+      },
+      {
+        "id": "F1",
+        "disposition": "addressed-in-source",
+        "reason": "Already-exact Main evidence projection strips private CFI assertions and nested quote fields from withheld locator/method data. Selected source renderer also refuses a retained assertion-bearing CFI fallback; native references/digest/safe public locator remain.",
+        "classification": "source-review; retained owner regression evidence only"
+      },
+      {
+        "id": "F2",
+        "disposition": "addressed-in-source",
+        "reason": "Followed realization reads return explicit identity/revision/read triples. Editions and Release retain and display missing/denied/unavailable outcomes; successful source facts and cursors remain separate.",
+        "classification": "source-review; retained owner regression evidence only"
+      },
+      {
+        "id": "F3",
+        "disposition": "addressed-in-source",
+        "reason": "Release filter keys selected reads by identity+revision; exact refusal cannot use head translators/evidence. Matching supplied data must meet the same pin. Refused profile reads cannot invent Agent names.",
+        "classification": "source-review; retained owner regression evidence only"
+      },
+      {
+        "id": "F4",
+        "disposition": "addressed-in-source",
+        "reason": "Standalone RealizationRow retains native evidence as text and safe external links. Detailed Release hosts suppress row evidence only while their one page-end owner retains the same selected identity/revision/evidence.",
+        "classification": "source-review; retained owner regression evidence only"
+      }
+    ],
+    "sourceReviewObservations": [
+      "Resource and projection headers consume registry semantic type/native resource; Profile is Agent, Concept is skos:Concept, Release is rv:Release, Realm is rv:Realm, Thread supplies native reply identity and member-reply-v1. External Author does not invent a native target.",
+      "Primary links use actual page sections/coverage/comments/profile/settings/discussions routes; no invented navigation or frontend business eligibility. Entity primary content precedes community content. header=false hosts retain their existing section ownership.",
+      "Supplied creator credits, domain dates, cover/current metadata, relevant fact values and assessed obligations remain. Names distinguish a readable empty value from owner refusal and transport failure; all eight catalogs preserve those distinctions.",
+      "One request-scoped Release selection owns both body and slot; consistent one-argument cache use includes failures. Release coverage/source exact reads retain typed 403/404/503 states, and no current head substitutes a pinned refusal.",
+      "Release body suppresses its inline source owner only when the actual route passes pageEndSources. The accepted shell composes slot after main; invalid Release IDs and failed selection produce no fabricated footer. Non-Release slot clearing exists in the accepted catch-all, but native hard/soft routing is not proved by source or render fixtures.",
+      "f249 supplies the missing pathname provider for actual shell SSR; caec removes an unsupported role-query option while retaining count/order/title/content/footer-outside-main/mobile-clearance assertions. These fixture repairs do not relabel earlier failures.",
+      "Existing continuation debt remains visible. Selected consumer/context changes are not blanket waivers, new completeness claims or permission to replace current Main inventory peer rows."
+    ],
+    "inventoryDisposition": {
+      "receipt": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-G2758-nonwork-release-first-review/inventory-row-dispositions.json",
+        "exists": true,
+        "bytes": 36469,
+        "sha256": "ac449be3fc1af9acddc8664304a8a9d42668c10be58b8876158a07ff8a8dc9d8"
+      },
+      "selectedRowsAndRetainedPeers": [
+        {
+          "path": "scripts/static/web-continuations.inventory.json",
+          "sections": [
+            {
+              "section": "violations",
+              "selectedCurrentRows": [
+                {
+                  "path": "apps/web/features/author/author-page.tsx",
+                  "consumer": "AuthorPage",
+                  "operation": "<syntax>",
+                  "rule": "dropped-continuation",
+                  "expression": "author.works.items",
+                  "context": "2d2d4901c7e305bd1ebdb7077bd5ed774b8c90b82e0f1a397d9f9c26b0cea8d9",
+                  "expressionSha256": "5d07f00f62efe6f4fad95cfa03105ea838934728040d838e11cd30535160ecad"
+                },
+                {
+                  "path": "apps/web/features/work-levels/pages.tsx",
+                  "consumer": "EditionsPage",
+                  "operation": "<syntax>",
+                  "rule": "dropped-continuation",
+                  "expression": "realizations.data.items",
+                  "context": "01119208a2a96627b445faa96479adede43a7df1564aa2f8d0f2c2a7669236ca",
+                  "expressionSha256": "4620cdd9aa73ccf9dd0f01495155ea50b5e545ed69316ee3ca9acdbde98edc03"
+                },
+                {
+                  "path": "apps/web/features/work-levels/pages.tsx",
+                  "consumer": "EditionsPage",
+                  "operation": "<syntax>",
+                  "rule": "dropped-continuation",
+                  "expression": "releases.data.items",
+                  "context": "01119208a2a96627b445faa96479adede43a7df1564aa2f8d0f2c2a7669236ca",
+                  "expressionSha256": "c76767fcb2a7ef748389c214dd382a4a2c2b8d0c9b64a82ac9052a9f8e5a3e63"
+                },
+                {
+                  "path": "apps/web/features/work-levels/editions.tsx",
+                  "consumer": "EditionsSection",
+                  "operation": "<syntax>",
+                  "rule": "dropped-continuation",
+                  "expression": "realizations.data.items",
+                  "context": "ff460eb62d0fb8a4a4390501513a6ed60576b636e9c89395339a67e348e655a5",
+                  "expressionSha256": "4620cdd9aa73ccf9dd0f01495155ea50b5e545ed69316ee3ca9acdbde98edc03"
+                },
+                {
+                  "path": "apps/web/features/work-levels/editions.tsx",
+                  "consumer": "EditionsSection",
+                  "operation": "<syntax>",
+                  "rule": "dropped-continuation",
+                  "expression": "releases.data.items",
+                  "context": "ff460eb62d0fb8a4a4390501513a6ed60576b636e9c89395339a67e348e655a5",
+                  "expressionSha256": "c76767fcb2a7ef748389c214dd382a4a2c2b8d0c9b64a82ac9052a9f8e5a3e63"
+                },
+                {
+                  "path": "apps/web/features/profile/profile-page.tsx",
+                  "consumer": "ProfilePage",
+                  "operation": "<syntax>",
+                  "rule": "dropped-continuation",
+                  "expression": "works.data.items",
+                  "context": "b6a6b7da4a70218ff2c07cc81ff6a6492a998e96a6546d403222e73be8ca1dec",
+                  "expressionSha256": "0ff936043c7127a52f5e372c116cfb4c26308daad62594f073aacbd31b420b9f"
+                },
+                {
+                  "path": "apps/web/features/entity-page/views.tsx",
+                  "consumer": "RelationsView",
+                  "operation": "<syntax>",
+                  "rule": "dropped-continuation",
+                  "expression": "page.data.items",
+                  "context": "f949c28ef18e99253cacc0928198bb7f51bdb13d4509b09d9c8706ea37adc028",
+                  "expressionSha256": "47a76d606f9c82ecc9384071235ac4e24deea8981a9b09e48835ff72afbe0b8e"
+                },
+                {
+                  "path": "apps/web/features/realm/thread-view.tsx",
+                  "consumer": "ThreadView",
+                  "operation": "<syntax>",
+                  "rule": "dropped-continuation",
+                  "expression": "read.items",
+                  "context": "6f5e108f63160f98514abcddb4d9ce5b52f588a762beea8377d0479be9fc554d",
+                  "expressionSha256": "0636ab410378eb832cae6f1701b4e0c14827a424284457e38aa5946ff0211cba"
+                },
+                {
+                  "path": "apps/web/features/realm/thread-view.tsx",
+                  "consumer": "ThreadView",
+                  "operation": "<syntax>",
+                  "rule": "invented-continuation",
+                  "expression": "{\"type\":\"VariableDeclarator\",\"id\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"continuation\",\"optional\":false,\"typeAnnotation\":null},\"init\":{\"type\":\"A [full bytes retained in referenced row-disposition receipt]",
+                  "context": "6f5e108f63160f98514abcddb4d9ce5b52f588a762beea8377d0479be9fc554d",
+                  "expressionSha256": "941c49397dadb109f3092894d80d2229f3c7bf4224c635cbc55cf7ffb7592ced"
+                }
+              ],
+              "selectedTargetRows": [
+                {
+                  "path": "apps/web/features/author/author-page.tsx",
+                  "consumer": "AuthorPage",
+                  "operation": "<syntax>",
+                  "rule": "dropped-continuation",
+                  "expression": "author.works.items",
+                  "context": "688e534977cbcc71327e6e02a4487150c8a74c5540a717d80a71c525707ec780",
+                  "expressionSha256": "5d07f00f62efe6f4fad95cfa03105ea838934728040d838e11cd30535160ecad"
+                },
+                {
+                  "path": "apps/web/features/work-levels/pages.tsx",
+                  "consumer": "EditionsPage",
+                  "operation": "<syntax>",
+                  "rule": "dropped-continuation",
+                  "expression": "realizations.data.items",
+                  "context": "dba35356de49b746080ece0bc6b29319de851422a4b41c3da96bee621a27c1e8",
+                  "expressionSha256": "4620cdd9aa73ccf9dd0f01495155ea50b5e545ed69316ee3ca9acdbde98edc03"
+                },
+                {
+                  "path": "apps/web/features/work-levels/pages.tsx",
+                  "consumer": "EditionsPage",
+                  "operation": "<syntax>",
+                  "rule": "dropped-continuation",
+                  "expression": "releases.data.items",
+                  "context": "dba35356de49b746080ece0bc6b29319de851422a4b41c3da96bee621a27c1e8",
+                  "expressionSha256": "c76767fcb2a7ef748389c214dd382a4a2c2b8d0c9b64a82ac9052a9f8e5a3e63"
+                },
+                {
+                  "path": "apps/web/features/work-levels/editions.tsx",
+                  "consumer": "EditionsSection",
+                  "operation": "<syntax>",
+                  "rule": "dropped-continuation",
+                  "expression": "realizations.data.items",
+                  "context": "e3eaa9a7034109f155e71eea4af73bcc947fb6701de9fc8b23a6b616897c9d6b",
+                  "expressionSha256": "4620cdd9aa73ccf9dd0f01495155ea50b5e545ed69316ee3ca9acdbde98edc03"
+                },
+                {
+                  "path": "apps/web/features/work-levels/editions.tsx",
+                  "consumer": "EditionsSection",
+                  "operation": "<syntax>",
+                  "rule": "dropped-continuation",
+                  "expression": "releases.data.items",
+                  "context": "e3eaa9a7034109f155e71eea4af73bcc947fb6701de9fc8b23a6b616897c9d6b",
+                  "expressionSha256": "c76767fcb2a7ef748389c214dd382a4a2c2b8d0c9b64a82ac9052a9f8e5a3e63"
+                },
+                {
+                  "path": "apps/web/features/profile/profile-page.tsx",
+                  "consumer": "ProfilePage",
+                  "operation": "<syntax>",
+                  "rule": "dropped-continuation",
+                  "expression": "works.data.items",
+                  "context": "8efa3f21afdf4475eebbc6fff283cc7f22f65fb0874b28b460311c22d6394fec",
+                  "expressionSha256": "0ff936043c7127a52f5e372c116cfb4c26308daad62594f073aacbd31b420b9f"
+                },
+                {
+                  "path": "apps/web/features/entity-page/views.tsx",
+                  "consumer": "RelationsView",
+                  "operation": "<syntax>",
+                  "rule": "dropped-continuation",
+                  "expression": "page.data.items",
+                  "context": "b63017fe3e9d0fed9311cd854ef6bc439a1bb86520ce0425a30419635d430e80",
+                  "expressionSha256": "47a76d606f9c82ecc9384071235ac4e24deea8981a9b09e48835ff72afbe0b8e"
+                },
+                {
+                  "path": "apps/web/features/entity-page/sources.tsx",
+                  "consumer": "StatementSourcesView",
+                  "operation": "<syntax>",
+                  "rule": "dropped-continuation",
+                  "expression": "group.items",
+                  "context": "68b32f0fc38ab6490f85b1e7a841c86e900f27b94b304689569a48248a8b5c15",
+                  "expressionSha256": "4099d3471874c403339de84dff07999ce0432ad55fc41ff1c2a52a8a3b656ea2"
+                },
+                {
+                  "path": "apps/web/features/entity-page/sources.tsx",
+                  "consumer": "StatementSourcesView",
+                  "operation": "<syntax>",
+                  "rule": "dropped-continuation",
+                  "expression": "group.items",
+                  "context": "d2f8e7f6ab4318afb69a71d5a58187d42ea3682e24942185892099fb04c37037",
+                  "expressionSha256": "4099d3471874c403339de84dff07999ce0432ad55fc41ff1c2a52a8a3b656ea2"
+                },
+                {
+                  "path": "apps/web/features/realm/thread-view.tsx",
+                  "consumer": "ThreadView",
+                  "operation": "<syntax>",
+                  "rule": "dropped-continuation",
+                  "expression": "read.items",
+                  "context": "edec64e72b2c7f18d67d20af245be0250579f77d995c75a34dae12b348c916e8",
+                  "expressionSha256": "0636ab410378eb832cae6f1701b4e0c14827a424284457e38aa5946ff0211cba"
+                },
+                {
+                  "path": "apps/web/features/realm/thread-view.tsx",
+                  "consumer": "ThreadView",
+                  "operation": "<syntax>",
+                  "rule": "invented-continuation",
+                  "expression": "{\"type\":\"VariableDeclarator\",\"id\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"continuation\",\"optional\":false,\"typeAnnotation\":null},\"init\":{\"type\":\"A [full bytes retained in referenced row-disposition receipt]",
+                  "context": "edec64e72b2c7f18d67d20af245be0250579f77d995c75a34dae12b348c916e8",
+                  "expressionSha256": "941c49397dadb109f3092894d80d2229f3c7bf4224c635cbc55cf7ffb7592ced"
+                }
+              ],
+              "retainCurrentMainPeerRows": [
+                {
+                  "path": "apps/web/features/zones/modules.tsx",
+                  "consumer": "EditorialModule",
+                  "operation": "<syntax>",
+                  "rule": "dropped-continuation",
+                  "expression": "list.items",
+                  "context": "f5855e353288f8436740c884952843810bb1e10ab1abe056c41052fc0486f137",
+                  "expressionSha256": "e03487282c3e3f0eeb7d57e03a9f1d257708b228224c2526f5c8a3e3124550bc"
+                },
+                {
+                  "path": "apps/web/features/work-page/types/recipe.tsx",
+                  "consumer": "IngredientList",
+                  "operation": "<syntax>",
+                  "rule": "dropped-continuation",
+                  "expression": "block.items",
+                  "context": "82b12b22f1f196dcd6377102e1e99fb3d9b659033da902ace52ad74df0245ffb",
+                  "expressionSha256": "b9b9e57e84a1a336591db567fe06e078cef34ba967a318cb9dc16d83df510742"
+                },
+                {
+                  "path": "apps/web/features/recipe-editor/instruction-reading.tsx",
+                  "consumer": "InstructionReading",
+                  "operation": "<syntax>",
+                  "rule": "dropped-continuation",
+                  "expression": "item.details?.derivations?.items",
+                  "context": "03666688bc75d0868977acae37b23acdb28787977f643052445c5c65e806086c",
+                  "expressionSha256": "fce03a38f558ea1c254b2bebbf3c8d479a0741b7f20cf66dc20198f750983ed8"
+                }
+              ],
+              "doNotImportHistoricalPeerRows": [
+                {
+                  "path": "apps/web/features/zones/modules.tsx",
+                  "consumer": "EditorialModule",
+                  "operation": "<syntax>",
+                  "rule": "dropped-continuation",
+                  "expression": "list.items",
+                  "context": "a0076ba38bfd34b0c658e7620df5754cfb8039ebad99098d0d34c098a94b64ce",
+                  "expressionSha256": "e03487282c3e3f0eeb7d57e03a9f1d257708b228224c2526f5c8a3e3124550bc"
+                },
+                {
+                  "path": "apps/web/features/work-page/types/recipe.tsx",
+                  "consumer": "IngredientList",
+                  "operation": "<syntax>",
+                  "rule": "dropped-continuation",
+                  "expression": "block.items",
+                  "context": "8dda09b98d628b020113054a4b3dfefac6fd58c63644a71b161c72d115130fdb",
+                  "expressionSha256": "b9b9e57e84a1a336591db567fe06e078cef34ba967a318cb9dc16d83df510742"
+                },
+                {
+                  "path": "apps/web/features/recipe-editor/instruction-reading.tsx",
+                  "consumer": "InstructionReading",
+                  "operation": "<syntax>",
+                  "rule": "dropped-continuation",
+                  "expression": "item.details?.derivations?.items",
+                  "context": "09de1fc4b6b56546c67c36b31001dcaa64b2af4bfca9e518812c5a8cbb1d7f05",
+                  "expressionSha256": "fce03a38f558ea1c254b2bebbf3c8d479a0741b7f20cf66dc20198f750983ed8"
+                }
+              ],
+              "disposition": "Review selected consumer/operation/context changes and retain every unrelated current-main entry. This comparison does not authorize wholesale inventory replacement or a new waiver."
+            },
+            {
+              "section": "remaining",
+              "selectedCurrentRows": [],
+              "selectedTargetRows": [],
+              "retainCurrentMainPeerRows": [],
+              "doNotImportHistoricalPeerRows": [],
+              "disposition": "Review selected consumer/operation/context changes and retain every unrelated current-main entry. This comparison does not authorize wholesale inventory replacement or a new waiver."
+            }
+          ]
+        },
+        {
+          "path": "scripts/static/web-page-filtering.inventory.json",
+          "sections": [
+            {
+              "section": "array",
+              "selectedCurrentRows": [
+                {
+                  "path": "apps/web/features/work-levels/pages.tsx",
+                  "consumer": "followedBy",
+                  "operation": "followedBy",
+                  "predicate": "(loaded)[\"flatMap\"]((item) =>\n      item.source.kind === 'realization' && !known(item.source.realization)\n        ? [[item.source.realization, item.source.work] as const]\n        : [])",
+                  "evidence": {
+                    "kind": "owner-audit",
+                    "reason": "Existing page consumer; selection responsibility and completeness need its owner to prove them."
+                  },
+                  "predicateSha256": "7cab6ee0ceb388843758b8136bf8fefac669da2c1c9102032e186789b8d26848"
+                }
+              ],
+              "selectedTargetRows": [
+                {
+                  "path": "apps/web/features/work-levels/pages.tsx",
+                  "consumer": "EditionsPage",
+                  "operation": "EditionsPage",
+                  "predicate": "(sourceReads)[\"flatMap\"](item => item.read.ok ? [item.read.data] : [])",
+                  "evidence": {
+                    "kind": "rendering",
+                    "reason": "Partitions nonpaged exact source-revision reads for language/name hydration. The original realization and release pages, including every item and nextCursor, still reach EditionsSection unchanged. release-read.test.ts proves exact pin reads and failure retention; detail-contract.test.tsx proves continuity cannot use a different loaded head."
+                  },
+                  "predicateSha256": "c75d83c2f73655b96a6abfbda420d4b6abdeba24dc6ab2665cbdd9c7b3e55847"
+                },
+                {
+                  "path": "apps/web/features/work-levels/read.ts",
+                  "consumer": "readFollowedRealizations",
+                  "operation": "readFollowedRealizations",
+                  "predicate": "(loaded)[\"flatMap\"](item => item.source.kind === 'realization'\n    && !known.has(`${item.source.realization}\\0${item.source.revision}`)\n    ? [[`${item.source.realization}\\0${item.source.revision}`, item.source] as const] : [])",
+                  "evidence": {
+                    "kind": "deduplication",
+                    "reason": "Hydrates source dependencies from the already returned realization page; skips only exact identity/revision pairs already loaded and deduplicates repeated pins. Does not filter the realization page or alter its opaque continuation. release-read.test.ts proves R1 is fetched despite loaded head R2, distinct pins survive, and an unavailable pin retains its refusal."
+                  },
+                  "predicateSha256": "411c5da95fcfd320928562e06931e60cc77f7f9cf72c96eeddc56eb625cd4c5c"
+                }
+              ],
+              "retainCurrentMainPeerRows": [
+                {
+                  "path": "apps/web/features/work-page/games-hub-recorded-page.ts",
+                  "consumer": "readSuppliedStart",
+                  "operation": "GET /v1/works/{id}/contents",
+                  "predicate": "(contents.entries)[\"find\"](item => item.availability === 'available')",
+                  "evidence": {
+                    "kind": "owner-audit",
+                    "reason": "Counts or selects roles/availability within an API page; the owner must prove bounded presentation versus catalogue eligibility. The same predicate now consumes an explicit entries/nextCursor envelope; this adaptation retains the existing owner audit and does not establish eligibility or completeness."
+                  },
+                  "predicateSha256": "2ea216befe79014b7ee6704ea95a0d8df181f16027ff0d4bfb5c0958158e30b1"
+                },
+                {
+                  "path": "apps/web/features/work-page/games-hub-recorded-page.ts",
+                  "consumer": "readSuppliedStart",
+                  "operation": "readSuppliedStart",
+                  "predicate": "(continuing?.entries)[\"find\"](entry => entry.work === work)",
+                  "evidence": {
+                    "kind": "owner-audit",
+                    "reason": "Existing page consumer; selection responsibility and completeness need its owner to prove them. The same predicate now consumes an explicit entries/nextCursor envelope; this adaptation retains the existing owner audit and does not establish eligibility or completeness. The scanner also reports the same expression through its local nextCursor-bearing helper origin."
+                  },
+                  "predicateSha256": "b410a0e01f451dc0553ec66b85c9c04ff0b4b8c14d4e3d595f206acb23b03c90"
+                },
+                {
+                  "path": "apps/web/features/work-page/games-hub-recorded-page.ts",
+                  "consumer": "readSuppliedStart",
+                  "operation": "GET /v1/me/continue",
+                  "predicate": "(continuing?.entries)[\"find\"](entry => entry.work === work)",
+                  "evidence": {
+                    "kind": "owner-audit",
+                    "reason": "Existing page consumer; selection responsibility and completeness need its owner to prove them. The same predicate now consumes an explicit entries/nextCursor envelope; this adaptation retains the existing owner audit and does not establish eligibility or completeness."
+                  },
+                  "predicateSha256": "b410a0e01f451dc0553ec66b85c9c04ff0b4b8c14d4e3d595f206acb23b03c90"
+                }
+              ],
+              "doNotImportHistoricalPeerRows": [
+                {
+                  "path": "apps/web/features/work-page/games-hub-recorded-page.ts",
+                  "consumer": "readSuppliedStart",
+                  "operation": "GET /v1/works/{id}/contents",
+                  "predicate": "(level.data.items)[\"find\"](item => item.availability === 'available')",
+                  "evidence": {
+                    "kind": "owner-audit",
+                    "reason": "Counts or selects roles/availability within an API page; the owner must prove bounded presentation versus catalogue eligibility."
+                  },
+                  "predicateSha256": "d234b92b85b378237da50515303e065b4c94f423b878146d28041425994c2193"
+                },
+                {
+                  "path": "apps/web/features/work-page/games-hub-recorded-page.ts",
+                  "consumer": "readSuppliedStart",
+                  "operation": "GET /v1/me/continue",
+                  "predicate": "(next.data.items)[\"find\"](entry => entry.work === work)",
+                  "evidence": {
+                    "kind": "owner-audit",
+                    "reason": "Existing page consumer; selection responsibility and completeness need its owner to prove them."
+                  },
+                  "predicateSha256": "e0d9867a7c2e69ef76f7d277885d9947123cc2ffccb08e3f36ba355391dc24b1"
+                }
+              ],
+              "disposition": "Review selected consumer/operation/context changes and retain every unrelated current-main entry. This comparison does not authorize wholesale inventory replacement or a new waiver."
+            }
+          ]
+        }
+      ],
+      "wholeFileReplacementApproved": false,
+      "newWaiverApproved": false,
+      "exactContinuationAccounting": {
+        "selectedCurrentRows": 9,
+        "selectedTargetRows": 11,
+        "twoStatementSourcesRows": "New syntax inventory rows cover StatementSourcesView group.items traversal of the same selected StatementPage, not a separate complete listing. StatementsView retains Pages(cursor, next=page.data.nextCursor, section=statements) even when source records leave no visible ordinary facts. EntityPage passes the same section/cursor/position/frame arguments to its cached facts and sources reads. No new pagination policy or full-list promise is accepted.",
+        "retainedCurrentMainPeerRows": 3,
+        "contextRefreshes": "AuthorPage, EditionsPage/Section, ProfilePage, RelationsView and ThreadView change presentation/context hashes; existing debt is retained, not claimed fixed."
+      },
+      "exactFilterAccounting": {
+        "selectedCurrentRows": 1,
+        "selectedTargetRows": 2,
+        "retainedCurrentMainPeerRows": 3,
+        "disposition": "Old identity-only followedBy selection is replaced by exact identity/revision readFollowedRealizations and EditionsPage separates successful source facts from typed sourceReads failures that are explicitly rendered. Retain all three current Main games native entries/continue rows and do not import the two historical item-envelope peers."
+      }
+    },
+    "newActionableFindings": [
+      {
+        "id": "WORK-REVIEW-09",
+        "severity": "P2",
+        "classification": "source-inference",
+        "status": "actionable-source-concern; not outcome-reproduced; not a confirmed landing blocker",
+        "title": "New non-Release source hosts still nest the contentinfo landmark inside main",
+        "candidate": "caecadc10a37b36daaf03773282b47183673ee89",
+        "paths": [
+          "apps/web/features/author/author-page.tsx",
+          "apps/web/features/entity-page/entity-page.tsx",
+          "apps/web/features/realm/thread-view.tsx"
+        ],
+        "counterexample": "A successful /en/authors/open-library/OL21594A route with the existing prolificAuthor source data returns AuthorPage as RootLayout children. AuthorPage renders AuthorRecord(sourcesOnly) inside its PageContainer; that returns SubjectSources <footer role=\"contentinfo\">. AppShell wraps route children in <main>, while the non-Release @pageEnd catch-all returns null. Thus the source contentinfo is a descendant of main, unlike the corrected Release host. EntityPage statements sources and Thread current-cover sources follow the same host pattern when present.",
+        "impact": "The same landmark-contentinfo-is-top-level principle demonstrated by the retained three failed Release axe cells is not yet satisfied by these newly selected hosts. Bare component stories do not exercise their installed shell ancestry. Source content is at the end and retained; the concern is the landmark composition.",
+        "requestedCorrection": "Have the existing non-Work owner validate these selected host compositions with the actual shell, then compose their source content through the accepted pageEnd seam or another valid document-level host while preserving exact content, obligations, current media and one source owner. No new source model, corpus or general citation architecture is requested.",
+        "scopeBoundary": "This applies the reported principle to the newly selected Author/Entity/Thread hosts. It does not reopen the accepted shared SubjectSources primitive or accepted Work review, and does not add unrelated canonical acceptance prerequisites.",
+        "sourceAnchors": [
+          {
+            "path": "apps/web/app/[locale]/authors/open-library/[author]/page.tsx",
+            "blob": "a24093d0c8016e6b15907326a9bbd9ef9f95c457",
+            "sha256": "f1d1969142d9da4c554b724a6a92ab7f9e09a3044424ccc1d90325566d43efa9",
+            "anchors": [
+              {
+                "line": 41,
+                "text": "return <>"
+              },
+              {
+                "line": 44,
+                "text": "<AuthorPage author={author.data} follow={follow} locale={locale} messages={messages}"
+              }
+            ]
+          },
+          {
+            "path": "apps/web/features/author/author-page.tsx",
+            "blob": "a27a1604662afc708a66f9d5d622ed13306223c9",
+            "sha256": "b171dd54386fec678695d6777c07351785502a959c0dbc79f1de54a0ceaf60fd",
+            "anchors": [
+              {
+                "line": 187,
+                "text": "if (sourcesOnly) return <SubjectSources locale={locale}>"
+              },
+              {
+                "line": 260,
+                "text": "<PageContainer className=\"grid gap-12 [text-autospace:normal]\">"
+              },
+              {
+                "line": 282,
+                "text": "<AuthorRecord author={author} locale={locale} messages={messages} sourcesOnly />"
+              }
+            ]
+          },
+          {
+            "path": "apps/web/features/entity-page/entity-page.tsx",
+            "blob": "a31f218fe1bba02c5bd0224d9ec3ab2f5624f14b",
+            "sha256": "ea48a12981f75b8146fbdb9f024589386719a8bbc2071ceb35760fc350b4fe36",
+            "anchors": [
+              {
+                "line": 52,
+                "text": "return frame ? <PageContainer>{body}</PageContainer> : body;"
+              },
+              {
+                "line": 197,
+                "text": "ownName={ownName} sourcesOnly {...common} />"
+              },
+              {
+                "line": 200,
+                "text": "return frame ? <PageContainer className=\"max-w-4xl [text-autospace:normal]\">{body}</PageContainer> : body;"
+              }
+            ]
+          },
+          {
+            "path": "apps/web/features/entity-page/sections.tsx",
+            "blob": "976d693b23a8f9c66d6ec2a95d23437032d8e292",
+            "sha256": "f575cfb366715cbfed3ebbf866eca653e115dc2ff1f60ba6beabc7d08688b237",
+            "anchors": [
+              {
+                "line": 33,
+                "text": "if (sourcesOnly) return <StatementSourcesView page={page} labels={labels} names={names} hrefFor={rest.hrefFor} locale={rest.locale} t={rest.t} />;"
+              }
+            ]
+          },
+          {
+            "path": "apps/web/features/realm/thread-view.tsx",
+            "blob": "d18ddc022d02255fcd071fa45bf3bdeb82b900b9",
+            "sha256": "37fa351ce61558f3b65fef34ad2801c7cceaa1791175af0fa1630c26e3206986",
+            "anchors": [
+              {
+                "line": 410,
+                "text": "{credit => <SubjectSources locale={locale}>"
+              }
+            ]
+          },
+          {
+            "path": "apps/web/features/entity-page/sources.tsx",
+            "blob": "16978455cf768ae0f341ecdc8daec824111dc163",
+            "sha256": "17feabfe30d331430f4bb64efa349875aed89f52507bbd67af36e6dc9ca6383a",
+            "anchors": [
+              {
+                "line": 17,
+                "text": "return <footer role=\"contentinfo\" aria-labelledby=\"sources\""
+              }
+            ]
+          },
+          {
+            "path": "apps/web/features/shell/app-shell.tsx",
+            "blob": "8610db78f8408a43cb4a828b7a9055c3d3d05a13",
+            "sha256": "7c88bb671ea29e02d34f17bbad0d456707916decfb9df520b6e4496834642f12",
+            "anchors": [
+              {
+                "line": 75,
+                "text": "<main id={MAIN_CONTENT_ID} tabIndex={-1} className=\"min-w-0 flex-1 outline-none\">{children}</main>"
+              },
+              {
+                "line": 76,
+                "text": "{pageEnd}"
+              }
+            ]
+          },
+          {
+            "path": "apps/web/app/layout.tsx",
+            "blob": "0c533265e146eb82aaad53ab73d71a264b0e6b5a",
+            "sha256": "334969524ce9f789c5c213735d4d21bccd28eb22f6b7f0dc3a5a4d5eae53740b",
+            "anchors": [
+              {
+                "line": 33,
+                "text": "platformAccess={platformAccess} pageEnd={pageEnd}"
+              },
+              {
+                "line": 39,
+                "text": "{children}"
+              }
+            ]
+          },
+          {
+            "path": "apps/web/app/@pageEnd/[...rest]/page.tsx",
+            "blob": "bbfd11a2047a58158b8cf2ad9ac2944935432f37",
+            "sha256": "89606d77af1181d92ebd43a24c787be46554c438b04728915eda002dbaefc640",
+            "anchors": [
+              {
+                "line": 3,
+                "text": "return null;"
+              }
+            ]
+          }
+        ],
+        "attemptedAssertion": "The temporary component SSR check asserts one Author sources footer after </main>. Neither attempted run reached that assertion; therefore it supplies no reproduced outcome failure.",
+        "testPremise": "First run selected no hidden .temp test because the argument lacked ./; the one setup correction supplied it. The corrected run failed during renderToStaticMarkup with an invalid hook call / React instance mismatch from cross-worktree imports. No further setup attempt or product edit was made."
+      }
+    ],
+    "checksActuallyExecuted": [
+      {
+        "command": "Read-only git show/diff/ls-tree/hash-object and local SHA256/JSON accounting",
+        "result": "PASS immutable path/blobs, seven delta patch checksums, original assertion bytes, manifest/comparison/dependency/evidence receipts; not a product acceptance test."
+      },
+      {
+        "job": "245a19d4-5c6b-4882-b21d-35d76ab0b059",
+        "command": "task -t .temp/goal/nonwork-first-review/Taskfile.yml prove (initial hidden-path selector)",
+        "result": "SETUP FAILURE; 0 test files selected; outcome assertion not reached.",
+        "log": {
+          "path": ".temp/goal/jobs/245a19d4-5c6b-4882-b21d-35d76ab0b059.log",
+          "bytes": 1031,
+          "sha256": "343e0c56f20dd5df05e4d44800672922a9233b16241bbf49c84b3873feb074f7"
+        },
+        "exit": 201
+      },
+      {
+        "job": "343cd1c0-18aa-4349-9ce1-fa03eebc5cd8",
+        "command": "task -t .temp/goal/nonwork-first-review/Taskfile.yml prove -> bun scripts/goal/goalctl.ts test ./.temp/goal/nonwork-first-review/nonwork-shell.test.tsx",
+        "result": "SETUP FAILURE after one setup correction; test discovered, renderToStaticMarkup failed with cross-worktree React invalid hook call before any outcome assertion. No reproduced product failure.",
+        "log": {
+          "path": ".temp/goal/jobs/343cd1c0-18aa-4349-9ce1-fa03eebc5cd8.log",
+          "bytes": 1857,
+          "sha256": "210eb3e7b680572a43bc1adf4d70ea40601d91ce6a07fd4d3ad6b22cc6dcb0b2"
+        },
+        "exit": 201
+      }
+    ],
+    "focusedAssertionSource": {
+      "path": ".temp/goal/nonwork-first-review/nonwork-shell.test.tsx",
+      "bytes": 2677,
+      "sha256": "51a6ebba02943ff92690e13b37566918e0877ef2819783ecb88056b05ff95975"
+    },
+    "reusedCandidateChecks": {
+      "executedByOwnerNotRerun": [
+        {
+          "job": "bd477d27-ed9d-4fe5-bd18-6a2e6d72d8e1",
+          "step": 1,
+          "command": "bun scripts/goal/goalctl.ts test apps/web/features/entity-page/detail-contract.test.tsx apps/web/features/work-levels/editions.test.tsx",
+          "result": "26 pass, 0 fail, 277 expects; new shell composition behavior included."
+        },
+        {
+          "job": "bd477d27-ed9d-4fe5-bd18-6a2e6d72d8e1",
+          "step": 2,
+          "command": "task i18n:check",
+          "result": "Catalogs match. No locale bytes changed afterwards."
+        },
+        {
+          "job": "cf3dfc0d-81ae-40fb-9f11-eb0584e82ab8",
+          "step": 1,
+          "command": "task goal -- check --only types,lint,guards",
+          "result": "Types, guards, inference, lint and AST pass; accepted-command timeout retry passed."
+        },
+        {
+          "job": "cf3dfc0d-81ae-40fb-9f11-eb0584e82ab8",
+          "step": 2,
+          "command": "bun scripts/goal/goalctl.ts test apps/web/features/work-levels/release-recovery.stories.tsx",
+          "result": "3/3 pass, normal addon-a11y enabled, actual shell composition, all original play outcomes retained.",
+          "qaRun": "20261019t130721-85573d",
+          "sourcePin": "caecadc10a37b36daaf03773282b47183673ee89"
+        },
+        {
+          "job": "271a39c7-c65d-462b-a2d3-cc4d2ac6c4a7",
+          "result": "Rebase up to date; push to local wave passed; task web:typecheck passed 4,037 files."
+        }
+      ],
+      "headerChecks": {
+        "unitJob": "507bac8c-66d1-4def-9011-51ce6c557e36",
+        "unitResult": "36 pass / 281 expectations in three focused files",
+        "initialStoryJob": "a6b39d72-0cba-4b8d-b410-35dc7d23f214",
+        "initialStoryQa": "20261019t102017-8f301a",
+        "initialStoryResult": "120 pass / 5 failures from three test premises; four unchanged story files passed",
+        "correctedStoryJob": "ef0acc29-36e1-4ee4-afea-4880d3814726",
+        "correctedStoryQa": "20261019t102539-3b5237",
+        "correctedStoryResult": "39/39 pass in both corrected files; guards/types/inference/lint/ast passed",
+        "i18nJob": "507bac8c-66d1-4def-9011-51ce6c557e36",
+        "i18nResult": "Catalogs match",
+        "integrityJob": "507bac8c-66d1-4def-9011-51ce6c557e36",
+        "integrityResult": "types, inference, lint, ast, selected guards passed; accepted-command timeout retry passed",
+        "finalStoryJob": "507bac8c-66d1-4def-9011-51ce6c557e36",
+        "finalStoryQa": "20261019t112404-5e964a",
+        "finalStoryResult": "134/137 pass in eight files. All three release-recovery stories completed their play assertions and failed axe afterEach: landmark-contentinfo-is-top-level. No skip, removed outcome or axe suppression.",
+        "renderedSource": "33a1b49177583d3191b5523020252512af721071",
+        "rebasedTypePushJob": "58992774-bd4b-4e49-872b-d520c656aa7f",
+        "rebasedTypeResult": "published candidate; 4029 files, no type errors in 28.89s",
+        "viewedScreenshotManifest": ".temp/goal/non-work-viewed-screenshots.json",
+        "renderPinNote": "The final eight-file QA ran with the footer reconciliation uncommitted; its selected source is retained by renderedSource. Current authored paths are compared byte-for-byte with that commit in each path record. Five peer feed/author-actions files changed during subsequent rebases; their behaviors were not rerendered by this worker. The post-publication typecheck is at candidate. No entire-candidate native/browser acceptance is implied."
+      },
+      "binding": "134 unaffected story results retained at historical render pin; only the three affected actual-shell Release stories replaced by matching caec results. Main dependency composition still needs its normal affected gate. No claim of 137 final native states."
+    },
+    "actualImagesInspected": [
+      {
+        "path": ".artifacts/qa/20261019t130721-85573d/story-screenshots/apps-web-features-work-levels-release-recovery.stories.tsx/PartialNames.png",
+        "bytes": 78327,
+        "sha256": "3c5f4906bda96bafd63220700aef3e2ee739411cc722fa31c9e08a02b5e2a634",
+        "story": "PartialNames",
+        "width": 1200,
+        "height": 900,
+        "viewed": true,
+        "evidence": "Actual Chromium story screenshot, inspected during this continuation; render fixture, not native API proof.",
+        "repositoryPath": ".temp/worktrees/g-2758/.artifacts/qa/20261019t130721-85573d/story-screenshots/apps-web-features-work-levels-release-recovery.stories.tsx/PartialNames.png",
+        "hashVerified": true,
+        "newInspectionByPreparer": false,
+        "actuallyViewedByThisReviewer": true,
+        "evidenceKind": "actual captured component fixture under AppShell; not installed-router/public API"
+      },
+      {
+        "path": ".artifacts/qa/20261019t130721-85573d/story-screenshots/apps-web-features-work-levels-release-recovery.stories.tsx/PartialNamesPhoneDarkJapanese.png",
+        "bytes": 64846,
+        "sha256": "ea35e87b918091d1481dd070aa4a4e38b73dd1a0f5f4f7713f7cb4e2aa6e1431",
+        "story": "PartialNamesPhoneDarkJapanese",
+        "width": 390,
+        "height": 844,
+        "viewed": true,
+        "evidence": "Actual Chromium story screenshot, inspected during this continuation; render fixture, not native API proof.",
+        "repositoryPath": ".temp/worktrees/g-2758/.artifacts/qa/20261019t130721-85573d/story-screenshots/apps-web-features-work-levels-release-recovery.stories.tsx/PartialNamesPhoneDarkJapanese.png",
+        "hashVerified": true,
+        "newInspectionByPreparer": false,
+        "actuallyViewedByThisReviewer": true,
+        "evidenceKind": "actual captured component fixture under AppShell; not installed-router/public API"
+      },
+      {
+        "path": ".artifacts/qa/20261019t130721-85573d/story-screenshots/apps-web-features-work-levels-release-recovery.stories.tsx/NamesRecoverInPlace.png",
+        "bytes": 73195,
+        "sha256": "ae9c20012f6b5f701609698515c61515d67aa20d62d901f1a0431c9f7e5da0ce",
+        "story": "NamesRecoverInPlace",
+        "width": 1200,
+        "height": 900,
+        "viewed": true,
+        "evidence": "Actual Chromium story screenshot, inspected during this continuation; render fixture, not native API proof.",
+        "repositoryPath": ".temp/worktrees/g-2758/.artifacts/qa/20261019t130721-85573d/story-screenshots/apps-web-features-work-levels-release-recovery.stories.tsx/NamesRecoverInPlace.png",
+        "hashVerified": true,
+        "newInspectionByPreparer": false,
+        "actuallyViewedByThisReviewer": true,
+        "evidenceKind": "actual captured component fixture under AppShell; not installed-router/public API"
+      }
+    ],
+    "visualObservations": [
+      "PartialNames desktop: recognizable Release identity, primary links separate from Follow/More, publication facts/coverage and retained sibling, readable failed/undisclosed/unnamed states, one source section with selected revision; no visible clipping.",
+      "PartialNamesPhoneDarkJapanese 390x844: scrolled lower content and distinct name failure states remain readable, source revision wraps and source section stays above the bottom navigation. Header is above this capture and is not asserted by this image alone.",
+      "NamesRecoverInPlace desktop: retained sibling and restored main-version name coexist; alert clears, Retry remains visibly focused, source section remains present once. Fixture state replacement supplies recovery, not a native RSC/network proof."
+    ],
+    "evidenceClassification": {
+      "sourceInferences": [
+        "All source/dependency/R1-R7/F1-F4 dispositions and WORK-REVIEW-09"
+      ],
+      "reproducedAssertionFailuresThisReview": [],
+      "setupFailuresThisReview": [
+        "245a19d4: hidden path selector",
+        "343cd1c0: cross-worktree React hook/render setup"
+      ],
+      "reusedOwnerProof": "Existing exact-pin focused units/types/guards/i18n and component screenshots; independently inspected bytes/images, not rerun or upgraded to public acceptance."
+    },
+    "historicalFailuresPreserved": [
+      "Historical R1-R7 and F1-F4 source findings remain retained; inspect selected correction dispositions instead of treating historical reports as blanket approval.",
+      "Three Release stories failed axe landmark-contentinfo-is-top-level at QA20261019t112404-5e964a. Their play assertions had completed; original run is not relabeled green. The final three actual-shell stories pass at QA20261019t130721-85573d, exact caec source.",
+      "Unsupported exactByRole option and initial missing shell pathname SSR fixture failures remain historical; f249/caec correct the fixture only.",
+      "Original G2774 sourceFooter helper is main-scoped. Canonical C21/C26 do not require contentinfo inside main; an owner proof binding may change selector scope/order only, preserving all information/privacy/duplicate/link assertions. Original test bytes and old failures remain immutable.",
+      "Own six-file Release patch does not apply standalone to frozen main due concrete existing header/footer preimages; this manifest supplies those exact first-review inputs."
+    ],
+    "originalAssertions": [
+      {
+        "path": "apps/web/tests/catalogue-detail-contract.e2e.ts",
+        "candidate": {
+          "blob": "b6045fca00f40afd56dd8ac13148ed929f7d4cd9",
+          "bytes": 32565,
+          "sha256": "b6889bcde1f06083da74aa0507f85c35a91627a80dea75cb9e3f586b8ebfa2c3"
+        },
+        "sameBytesAsRetainedHeaderPin": true,
+        "executedInThisContinuation": false
+      },
+      {
+        "path": "apps/web/tests/catalogue-browser-fixture.ts",
+        "candidate": {
+          "blob": "c6c02703dbab9682b97547a1cb77151ac1c10b3e",
+          "bytes": 22034,
+          "sha256": "6a64ca9e45e3353bd4dd2df53e89d78d859e90a96264f31d785795514c4611e0"
+        },
+        "sameBytesAsRetainedHeaderPin": true,
+        "executedInThisContinuation": false
+      }
+    ],
+    "canonicalReferences": [
+      {
+        "path": ".temp/catalogue-audit-20261018/03-acceptance-and-investigation-backlog.md",
+        "exists": true,
+        "bytes": 14016,
+        "sha256": "4298c3194e13b41db04b2a2602bd0454d7a9979eafac8b08be20957ebea7c6b3"
+      },
+      {
+        "path": ".temp/catalogue-audit-20261018/04-page-information-and-reporting.md",
+        "exists": true,
+        "bytes": 8608,
+        "sha256": "016d05621ebf1c2d2f80df5d5275d1fdd8b30444b1f35eeda2ad9def74012f75"
+      },
+      {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/page-end-source-review/original-contract/catalogue-page-end-interface-and-oracle-note.txt",
+        "exists": true,
+        "bytes": 1244,
+        "sha256": "8cab236db06af39d18bd15a539787304423aed4fb2b79069894a1197b8ff70cf"
+      }
+    ],
+    "limitations": [
+      "No native installed-router, public producer/corpus, authenticated/account, accessibility technology or original catalogue acceptance execution in this source review. No shared stack, data or peer lease change.",
+      "The new Author landmark assertion is unconfirmed because both attempts failed in setup; it cannot be represented as a reproduced blocker or passing check. Static route/RootLayout/AppShell anchors state the concrete inference.",
+      "G-2747 separately owns the retained one-phone hard/soft Release/non-Release installed-router proof after a manager-pinned current-Main composition; source approval does not satisfy it. Preserve active C28 lease.",
+      "Frozen comparison is 0a0733d; later Main is not reviewed. Approve only selected source hunks, not full worker files, dependency downgrades, stale Work messages, source model changes or all catalogue findings.",
+      "Original D1-003 Back/query failures and all earlier Work/Guide/Cook/footer/Book checkpoints are preserved exactly; this continuation neither reruns nor overrides them."
+    ],
+    "resources": {
+      "startedServices": [],
+      "mutatedPeerFiles": [],
+      "accountOrDataWrites": [],
+      "ownedRuntimeResourcesToStop": [],
+      "note": "Only admitted focused unit attempts and local ignored review artifacts; no stack or browser runtime started."
+    },
+    "reportValidation": {
+      "status": "PASS",
+      "job": "035e5010-9ecb-4acd-a2d9-7f87416d2c72",
+      "commands": [
+        {
+          "command": "task docs:check",
+          "exit": 0,
+          "result": "13 documentation checker tests PASS; 249 Markdown files checked. External URLs and runtime behavior not tested.",
+          "log": {
+            "path": ".temp/goal/jobs/035e5010-9ecb-4acd-a2d9-7f87416d2c72.1.log",
+            "bytes": 348,
+            "sha256": "386e1a80e930e31ee7205b290a6deca54a1a288f126bec00835de80c6622f124"
+          }
+        },
+        {
+          "command": "task goal -- check",
+          "exit": 0,
+          "result": "AST and affected repository guards PASS (1/44 guards selected). Types/lint skipped because no product source changed; no tests named in brief. This is report QA, not product acceptance.",
+          "log": {
+            "path": ".temp/goal/jobs/035e5010-9ecb-4acd-a2d9-7f87416d2c72.2.log",
+            "bytes": 621,
+            "sha256": "c85eac45161a16e9aad466a7b945ba1c48d88b06a6466f6e43a5d81da9abf34f"
+          }
+        }
+      ],
+      "preservation": "All 26 earlier top-level fields compare equal to report commit 2b17a3fc5d5cb13da017bf9c020edca4b054e1fa; only the new bounded checkpoint is appended.",
+      "scope": "One claimed report path; local ignored artifacts only. git diff --check PASS."
+    },
+    "managerNext": "Retain the bounded Release source approval and exact dependency dispositions for a normal immutable Main composition; have existing G-2758 validate/correct the unconfirmed non-Release host concern without broadening this review. Existing G-2747 then performs its already-owned installed-router proof. Keep all earlier failures and assess original applicable acceptance independently."
   }
 }

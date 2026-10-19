@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkLevelsMessages } from '../messages.ts';
 
 export default {
+  namesUnavailable: '部分名稱無法載入。',
+  namesRestored: '名稱已載入。',
   creditedAs: '署名為',
   nameNotShown: '未顯示名字',
   parts: '組成部分', partsList: '依出版順序排列的組成部分', partsPages: '組成部分分頁',
@@ -50,6 +52,7 @@ export default {
   isbnMatches: '與此 ISBN 對應的發行',
   identifiers: '識別碼', isbn: 'ISBN', platform: '平台', territory: '地區',
   languages: '語言', originalUrl: '原始網址',
+  openPublication: '開啟出版頁面', noCoverage: '尚未記錄這個發行涵蓋的作品。',
   coverage: '涵蓋', coversHeading: '涵蓋內容', mainVersion: '主版本',
   coversWorks: plural({ one: insert('涵蓋 {{count}} 部作品'), other: insert('涵蓋 {{count}} 部作品') },
     { count: asValue(number()) }),
