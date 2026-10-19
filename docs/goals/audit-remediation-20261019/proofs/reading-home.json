@@ -2,9 +2,9 @@
   "version": 2,
   "goal": "audit-remediation-20261019",
   "worker": "G-2831",
-  "status": "partial",
+  "status": "done",
   "recordedAtUTC": "2026-10-19T05:19:10.615488+00:00",
-  "summary": "Exact53f4 frontend/genuine754 backend with fresh own supported actor714 OAuth: normal root-leased one-Book status-only PUT200 v0->readingv1 and real Library/Work/continuation200; original populated1440/390 firstscreen reading, actual card/nextUnread identity, natural Tab, disclosure Enter/Space and reload passed. Eight screenshots viewed; Web stopped. All prior Home2e17/empty0787/native414/positive8ea evidence and failures preserved. Status readingv1 intentionally held for serialized G-2847; root must resume G-2831 afterward for current-CAS cleanup. Original D4-003 criteria proved within stated scope; main acceptance remains manager-owned, no regression/global-done claim.",
+  "summary": "Original reading-first/Home verification and all historical failures/proofs preserved. After G-2847 borrower release, fresh own supported actor714 OAuth on exact53f4 frontend/genuine754 backend executed one normal reader-status cleanup PUT200 expectedVersion1: original null status/dates restored at version2. Two real readbacks confirm original empty reading/status shelves and unchanged progress/custom shelves/rating/continuation/follow basis. Root already observed and marked leaseReleased:true; matching hashed observation verified without worker main writes. Cleanup frontend stopped. Original class accepted per manager; no full-regression or byte-exact rollback claim.",
   "provenance": {
     "execution": "Independent Codex-1/GPT-6.1 Sol/xhigh worker; no nested agents or fallback.",
     "worktree": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2831",
@@ -581,7 +581,7 @@
       "effect": "Report stays on the dispatch main-based worker branch; copying the artifact bundle into main is left to the manager, consistent with the user write restriction."
     }
   },
-  "lastUpdatedAtUTC": "2026-10-19T12:22:50.270147+00:00",
+  "lastUpdatedAtUTC": "2026-10-19T12:41:08.411439+00:00",
   "historyInterpretation": {
     "originalReportCommit": "4a90cf6dd3ec99facb7e064aabff7c5c984a9f62",
     "originalProductPin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
@@ -621,9 +621,9 @@
     }
   },
   "latestVerification": {
-    "recordedAtUTC": "2026-10-19T12:22:50.270147+00:00",
-    "status": "original-populated-Library-proof-passed; ready-for-serialized-G-2847; leased-status-cleanup-due",
-    "execution": "Same Codex-1/GPT-6.1 Sol/xhigh verifier, no fallback or nested agents. Only missing original populated D4-003 premise and firstscreen1440/390, route/reload, focus/disclosure assertions executed. Home, native zoom, stories, import/export and roundtrip were not replayed.",
+    "recordedAtUTC": "2026-10-19T12:41:08.411439+00:00",
+    "status": "done; released-lease-status-and-dates-restored; original-verification-history-preserved",
+    "execution": "Same Codex-1/GPT-6.1 Sol/xhigh verifier, no fallback or nested agents. Only root-authorized operational cleanup after durable G-2847 borrower release. No replay or rewrite of original populated, empty, Home, story, native zoom, import/export or roundtrip proof.",
     "source": {
       "frontendAndOriginalTestPin": "53f4ec6709f31bfb0cf7eca934e25b796644fa88",
       "frontendTree": "b3ba0509a488d7c102f69518845de56fb252f626",
@@ -638,11 +638,11 @@
       "originalTestChanges": [],
       "backendServedRevision": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
       "backendReceipt": "source/backend-served-revision.json",
-      "backendVerification": "Existing backend75409 pointer/refresh receipt and actual Main1372265 process cwd observed, unchanged. Own fresh supported OAuth returned eligible actor714 session-agent200. Actual Work, reader-state, directory, reading shelf, continuation and follow reads returned200 before preparation, after normal status-only PUT200, and after rendered proof. No backend refresh/reset/lifecycle action.",
+      "backendVerification": "Exact existing backend75409 pointer/refresh revision and actual Main1372265 process cwd checked before owned frontend startup. Own fresh supported OAuth returned eligible actor714 session-agent200; actual reader-state, directory, reading shelf, continuation and follow reads returned200 before cleanup and in two post-command readbacks. No backend lifecycle/refresh/reset.",
       "reportBranch": "goal/g-2831",
-      "reportBranchPriorCommit": "3e04c5d53d49689ffcb34136e6736b1158004e14",
-      "reportMainBase": "ef9ae2b4db4d2a37f8644de322dc06724eeb08aa",
-      "differentBases": "Product/browser proof ran detached at exact53f4ec6 with clean original source/tests. Administrative checks run on main-based report branch3e04. Administrative success establishes no new main product integration.",
+      "reportBranchPriorCommit": "419e277dc0d76079ec046ca3c6dd8eb93f6ef218",
+      "reportMainBase": "df431a1822669a9935799963e8ee7410f21e2089",
+      "differentBases": "Cleanup browser/API operation ran detached at exact53f4ec6, clean product/original tests. Required report checks run separately on main-based report branch419e277. Cleanup/report checks establish no new main product integration.",
       "runnerIdentityReceipt": "source/runner-identities.json",
       "runner": {
         "bun": "1.4.3",
@@ -657,229 +657,245 @@
       "unchangedReviewRepeated": false,
       "productOrOriginalTestChanges": [],
       "newBlockingSourceDefects": [],
-      "boundary": "Exact same coherent53f4 reviewed frontend and compatible754 backend as0787/8ea3. Prior original authored-commit, final correction, native27665 and material integration reviews remain valid. No source fix or whole-source rereview."
+      "boundary": "Same exact approved frontend53f4/backend754 binding. No new product delta or source review required; normal reader-status API schema inspected for explicit original null status/startedOn/finishedOn restore."
     },
     "qa": [
       {
-        "job": "7355b076-1905-4acb-9f41-6eef293ae931",
-        "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'bun scripts/goal/goalctl.ts test ./.temp/reading-home-leased-G-2831-53f4ec6/capture.test.ts' -- bun .temp/reading-home-leased-G-2831-53f4ec6/start-web.ts",
+        "job": "46cc5fe1-9d09-4f64-a5e8-c6298c8ad023",
+        "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'bun scripts/goal/goalctl.ts test ./.temp/reading-home-cleanup-G-2831-53f4ec6/capture.test.ts' -- bun .temp/reading-home-cleanup-G-2831-53f4ec6/start-web.ts",
         "startupExitStatus": 0,
         "qaExitStatus": 0,
-        "taskCommand": "task web:e2e -- --config .temp/reading-home-leased-G-2831-53f4ec6/playwright.config.ts library-live.spec.ts",
-        "file": ".temp/reading-home-leased-G-2831-53f4ec6/library-live.spec.ts",
-        "case": "original D4-003: actual populated Library primary reading at1440/390 under serialized one-Book lease",
+        "taskCommand": "task web:e2e -- --config .temp/reading-home-cleanup-G-2831-53f4ec6/playwright.config.ts cleanup.spec.ts",
+        "file": ".temp/reading-home-cleanup-G-2831-53f4ec6/cleanup.spec.ts",
+        "case": "released existing one-Book lease: fresh CAS restores original reader status and projected invariants",
         "runnerResult": {
           "passed": 1,
           "failed": 0,
-          "playwrightDurationSeconds": 59
+          "playwrightDurationMilliseconds": 73600.815
         },
         "assertionReach": [
-          "fresh consistent before backup and root-qualified exact actor/Book/version",
-          "normal status-only PUT200, exact CAS version, real populated Library/continuation readback; progress/dates/shelves unchanged",
-          "original first-screen shell/action 1440",
-          "populated primary-task organization 1440",
-          "natural Tab first action and secondary disclosure Enter/Space 1440",
-          "original populated route/reload same href 1440",
-          "original first-screen shell/action 390",
-          "populated primary-task organization 390",
-          "natural Tab first action and secondary disclosure Enter/Space 390",
-          "original populated route/reload same href 390",
-          "post-proof progress/dates/shelves unchanged and lease held for serialized borrower"
+          "Root release, original private backup hash, fresh own eligible OAuth, consistent current held status/version and all guarded invariants",
+          "One supported current-CAS/idempotent cleanup PUT200; version increment and durable changedAt retained",
+          "Two actual successful readbacks restore original null status/dates and empty directory/status shelves; progress/custom shelves/rating/continuation/follow basis unchanged"
         ],
         "qaRunId": null,
-        "qaRunIdNote": "Current Bun-wrapper path emitted no separate QA run ID; durable recorded job, actual Task/admission command and Playwright results retained.",
+        "qaRunIdNote": "Current Bun wrapper emitted no separate QA ID; durable recorded job, Task/admission command and Playwright results retained.",
         "logs": [
-          "jobs/7355b076-1905-4acb-9f41-6eef293ae931.1.log",
-          "jobs/7355b076-1905-4acb-9f41-6eef293ae931.2.log",
+          "jobs/46cc5fe1-9d09-4f64-a5e8-c6298c8ad023.1.log",
+          "jobs/46cc5fe1-9d09-4f64-a5e8-c6298c8ad023.2.log",
           "results.json",
           "browser.log"
-        ]
+        ],
+        "classification": "Operational cleanup acceptance only; unchanged original product verification reused."
       }
     ],
-    "admission": "Normal goalctl test -> Task web:e2e -> scripts/goal/admission.ts -> existing Chromium Playwright provider. Original populated assertions executed successfully; no admission/environment failure or alternative runner.",
-    "lease": {
-      "authority": "Current manager continuation and exact root narrow lease source/narrow-lease.json qualify only own actor714 reader status on existing Book01a10aff/backend754. No QA-disposable stack claim or wider mutation authority.",
-      "rootReceipt": "source/narrow-lease.json",
-      "stateReceipt": "lease-state.json",
-      "beforeConsistency": "Two fresh repeated per-record snapshots agreed on status/version/dates/progress/custom shelves/follow basis and continuation before the command. No cross-store atomic snapshot claim. Unexpected status/version or inconsistent records would abort.",
-      "privateBeforeBackup": ".temp/reading-home-leased-G-2831-53f4ec6/private/before-backup.json",
-      "privateBeforeSHA256": "e7f7f76375a82f3dfd65653d9240f484db92e31cdc90258390fd75f0eccbe98d",
-      "before": {
-        "status": {
-          "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
-          "status": null,
-          "startedOn": null,
-          "finishedOn": null,
-          "version": 0,
-          "changedAt": null
-        },
-        "progress": null,
-        "customShelves": [],
-        "followBasis": {
-          "following": false,
-          "revision": null,
-          "source": null,
-          "level": null,
-          "pinPosition": null
-        }
-      },
-      "normalCommand": {
+    "admission": "Normal goalctl test -> Task web:e2e -> scripts/goal/admission.ts -> existing Chromium Playwright provider. Cleanup assertions reached and passed; no API injection or alternative auth/browser provider.",
+    "cleanup": {
+      "authority": "Current manager continuation releases cleanup after root observed G-2847 borrowerReleased:true at12:33:09.278Z, owned frontend stopped, restorationPerformedByBorrower:false. Same exact root narrow actor714/Book01a10aff/backend754 status-only lease.",
+      "borrowerRelease": "source/borrower-release.json",
+      "originalLease": "source/root-lease-before-cleanup.json",
+      "originalBeforeBackup": ".temp/reading-home-leased-G-2831-53f4ec6/private/before-backup.json",
+      "originalBeforeSHA256": "e7f7f76375a82f3dfd65653d9240f484db92e31cdc90258390fd75f0eccbe98d",
+      "preCleanupPrivateBackup": ".temp/reading-home-cleanup-G-2831-53f4ec6/private/pre-cleanup-backup.json",
+      "preCleanupBackupSHA256": "35959db38975abfd37d2cb7bc1ff095677eaf9e4585ef4380a61866eb1940d7e",
+      "freshOwnOAuth": "Fresh signInAtAccounts with existing supported member, no borrowed/expired cookie or rotating refresh state. Identity200 confirmed eligible expected actor714. Private auth state excluded.",
+      "freshCurrentGuard": "Two per-record current snapshots agreed with held readingv1/changedAt and original progress/custom shelves/rating/follow basis/continuation; unexpected state would abort before normal write. No cross-store atomic snapshot claim.",
+      "command": {
         "method": "PUT",
         "url": "http://127.0.0.1:43131/api/main/v1/works/01a10aff-93e5-7069-b80a-cd33bb6ce57c/reader-status",
         "requestBody": {
           "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
-          "expectedVersion": 0,
-          "status": "reading"
+          "expectedVersion": 1,
+          "status": null,
+          "startedOn": null,
+          "finishedOn": null
         },
-        "idempotencyKey": "4e05cde5-856b-4f24-bf70-9f20f57e5f7f",
-        "attemptedAtUTC": "2026-10-19T12:17:19.244Z",
+        "idempotencyKey": "e2da54b8-5936-43b8-af16-083d60221dfb",
+        "attemptedAtUTC": "2026-10-19T12:37:52.946Z",
         "response": {
           "status": 200,
           "body": {
             "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
-            "status": "reading",
+            "status": null,
             "startedOn": null,
             "finishedOn": null,
-            "version": 1,
-            "changedAt": "2026-10-19 12:17:19.730675+00",
+            "version": 2,
+            "changedAt": "2026-10-19 12:37:53.623385+00",
             "replayed": false
           },
-          "receivedAtUTC": "2026-10-19T12:17:19.802Z"
+          "receivedAtUTC": "2026-10-19T12:37:53.654Z"
         }
       },
-      "currentStatus": {
-        "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
-        "status": "reading",
-        "startedOn": null,
-        "finishedOn": null,
-        "version": 1,
-        "changedAt": "2026-10-19 12:17:19.730675+00"
+      "actualReadback": {
+        "reader": {
+          "profile": "reader-work-state-v1",
+          "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+          "status": {
+            "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+            "status": null,
+            "startedOn": null,
+            "finishedOn": null,
+            "version": 2,
+            "changedAt": "2026-10-19 12:37:53.623385+00"
+          },
+          "customShelves": [],
+          "rating": {
+            "global": null,
+            "realm": null
+          },
+          "progress": null,
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          }
+        },
+        "directory": {
+          "profile": "reader-shelves-v1",
+          "statusShelves": [
+            {
+              "status": "want-to-read",
+              "count": 0,
+              "changedAt": null
+            },
+            {
+              "status": "reading",
+              "count": 0,
+              "changedAt": null
+            },
+            {
+              "status": "read",
+              "count": 0,
+              "changedAt": null
+            }
+          ],
+          "items": [],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          },
+          "count": {
+            "value": 0,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "reading": {
+          "profile": "reader-status-shelf-v1",
+          "status": "reading",
+          "items": [],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          },
+          "count": {
+            "value": 0,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "follow": {
+          "profile": "follow-state-v1",
+          "target": {
+            "id": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+            "kind": "work",
+            "name": {
+              "value": "The Lantern Road 8805d7a2",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "icon": {
+              "kind": "fallback",
+              "policy": "avatar-fallback-v1",
+              "resourceType": "work",
+              "key": "d16fb4a59060b06626dbde7cc1df0edf"
+            },
+            "realm": null,
+            "href": "/w/01a10aff-93e5-7069-b80a-cd33bb6ce57c"
+          },
+          "following": false,
+          "revision": null,
+          "level": null,
+          "source": null,
+          "pinPosition": null,
+          "followers": {
+            "value": 41,
+            "kind": "exact"
+          }
+        },
+        "continuation": {
+          "profile": "work-resume-v1",
+          "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          },
+          "lastPosition": null,
+          "nextUnread": {
+            "occurrence": "https://rezics.com/id/5caa0cc4-f716-876a-8a46-fa048620c48d",
+            "title": "At the harbour",
+            "href": "/w/01a10aff-93e5-7069-b80a-cd33bb6ce57c/read/5caa0cc4-f716-876a-8a46-fa048620c48d?language=en"
+          },
+          "unreadCount": {
+            "value": 1,
+            "kind": "exact"
+          }
+        }
       },
-      "currentReadingCount": 1,
+      "invariants": {
+        "originalStatusRestored": true,
+        "originalDatesRestored": true,
+        "progressUnchanged": true,
+        "customShelvesUnchanged": true,
+        "ratingUnchanged": true,
+        "statusShelfCountsRestored": true,
+        "readingItemsRestored": true,
+        "followBasisUnchanged": true,
+        "continuationLastPositionNextUnreadAndCountUnchanged": true,
+        "versionHistoryPreserved": true,
+        "changedAtHistoryPreserved": true,
+        "byteExactRollbackClaimed": false
+      },
+      "answerReceipt": "cleanup-result.json retains all21 actual GET200 bodies and exact normal PUT200 receipt, before and two after snapshots; cleanup-state.json and sanitized-cleanup-receipt.json retain safe current state.",
       "statusWriteAttempts": 1,
       "progressWrites": 0,
-      "datesProgressCustomShelvesUnchanged": true,
-      "followBasisUnchanged": true,
-      "cleanupNeeded": true,
-      "state": "Status reading v1 intentionally held for root-serialized G-2847 same-actor read-only card voice proof. Root must resume G-2831 after borrower release for cleanup; no cleanup performed while loaned.",
-      "cleanupPlan": "After root release, fresh own supported sign-in, compare actual current per-record state, restore only original status/startedOn/finishedOn values with current CAS and new idempotency key, retain real200/readback, and verify status shelf/continue/follow projected state. Abort unexpected concurrent state. Do not write progress/custom shelves/preferences/follows. Durable command receipts/version/changedAt/shelf revision history remain; no byte-exact rollback promise.",
-      "excludedAuthority": "No peer46775 writes, shared reset, new Book/corpus, direct SQL/graph seed, account fallback, progress write, shelf/preference/follow write, import or restore."
-    },
-    "liveAssessment": {
-      "identity": {
-        "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
-        "eligible": true,
-        "status": 200,
-        "method": "Own fresh signInAtAccounts with existing supported rezics-dev member. No expired saved cookie, peer rotating refresh or account fallback; private auth state excluded."
-      },
-      "answers": "Actual safe request URLs/statuses/JSON bodies in live/result.json. All22 retained GET answers returned200; one normal reader-status PUT returned200 and real readbacks. No synthetic/injected own API response.",
-      "data": {
-        "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
-        "title": "The Lantern Road 8805d7a2",
-        "existingDataOrigin": "Same already-existing readable Book positively bound in8ea3; root narrow status lease authorizes only own reader-status preparation. No new catalogue or Book production. Original Book creation command is not inferred from its title or API identity.",
-        "readingShelf": "reader-status-shelf-v1, actual one-item reading shelf created through the normal supported status command and retained through reload/final readback.",
-        "sourcePosition": {
-          "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
-          "sequence": "11954"
-        },
-        "statusVersionIndependentOfGraphSequence": true,
-        "nextUnread": {
-          "occurrence": "https://rezics.com/id/5caa0cc4-f716-876a-8a46-fa048620c48d",
-          "title": "At the harbour",
-          "href": "/w/01a10aff-93e5-7069-b80a-cd33bb6ce57c/read/5caa0cc4-f716-876a-8a46-fa048620c48d?language=en"
-        },
-        "unreadCount": {
-          "value": 1,
-          "kind": "exact"
-        },
-        "lastPosition": null,
-        "savedProgressRequired": false,
-        "renderedIdentity": "/en/w/1Cfii3m6U4BFnf8q5M6YmZ",
-        "renderedIdentityDecoding": "addressPath/parseAddressSegment decode actual compact Work href to exact API UUID01a10aff-93e5-7069-b80a-cd33bb6ce57c.",
-        "actionDestination": "/en/w/01a10aff-93e5-7069-b80a-cd33bb6ce57c/read/5caa0cc4-f716-876a-8a46-fa048620c48d?language=en",
-        "destinationCheck": "Normalized actual rendered action matches genuine continuation200 Work, nextUnread occurrence and language query at both widths, unchanged after reload."
-      },
-      "firstScreen": [
-        {
-          "width": 1440,
-          "height": 1000,
-          "scrollY": 0,
-          "documentWidth": 1440,
-          "availableTop": 65,
-          "availableBottom": 1000,
-          "action": {
-            "text": "Continue — The Lantern Road 8805d7a2",
-            "href": "/en/w/01a10aff-93e5-7069-b80a-cd33bb6ce57c/read/5caa0cc4-f716-876a-8a46-fa048620c48d?language=en",
-            "rect": {
-              "x": 680,
-              "y": 325,
-              "width": 102,
-              "height": 32,
-              "top": 325,
-              "right": 782,
-              "bottom": 357,
-              "left": 680
-            },
-            "cardTitle": "The Lantern Road 8805d7a2",
-            "cardWorkHref": "/en/w/1Cfii3m6U4BFnf8q5M6YmZ"
-          },
-          "renderedWorkId": "01a10aff-93e5-7069-b80a-cd33bb6ce57c"
-        },
-        {
-          "width": 390,
-          "height": 844,
-          "scrollY": 0,
-          "documentWidth": 390,
-          "availableTop": 105,
-          "availableBottom": 779,
-          "action": {
-            "text": "Continue — The Lantern Road 8805d7a2",
-            "href": "/en/w/01a10aff-93e5-7069-b80a-cd33bb6ce57c/read/5caa0cc4-f716-876a-8a46-fa048620c48d?language=en",
-            "rect": {
-              "x": 128,
-              "y": 469,
-              "width": 102,
-              "height": 32,
-              "top": 469,
-              "right": 230,
-              "bottom": 501,
-              "left": 128
-            },
-            "cardTitle": "The Lantern Road 8805d7a2",
-            "cardWorkHref": "/en/w/1Cfii3m6U4BFnf8q5M6YmZ"
-          },
-          "renderedWorkId": "01a10aff-93e5-7069-b80a-cd33bb6ce57c"
-        }
-      ],
-      "organization": "Actual currently-reading Work and useful Continue precede collapsed Goals, stats, import and export in rendered and DOM order. Zero-month statistics stay secondary. Existing genuine empty1440/390 organization retained from0787.",
-      "keyboard": "Natural Tab from initial document reached actual Continue before global secondary tools at both widths, with visible focus fully inside shell. Then natural Tab reached exact global disclosure; Enter opened and Space closed it. Phone shelf row scrolled horizontally during keyboard traversal without document overflow.",
-      "routeAndReload": "Actual default/en/library route and reload retain same card/action href at both widths. Chapter activation not performed because it can write progress outside this status-only lease; actual destination is checked against genuine continuation200 instead. No additional chapter journey acceptance is claimed.",
+      "otherDataWrites": 0,
       "browserNonGetRequests": [],
-      "pageErrors": [],
-      "screenshotsViewed": "screenshots-viewed.json lists all8 actual1440x1000/390x844 initial/focused/tools/reloaded PNGs inspected using view_image.",
-      "newRuntimeDefects": [],
-      "scopeLimit": "One genuine existing readable Book on actor714/backend754; no games corpus, all-persona matrix, durable transfer/roundtrip, chapter-progress/navigation or whole-regression acceptance inferred."
+      "cleanupSucceeded": true,
+      "leaseReleased": true,
+      "cleanupNeeded": false,
+      "completedAtUTC": "2026-10-19T12:37:58.540Z",
+      "durableHistory": "Original semantic status:null/startedOn:null/finishedOn:null restored. Version0->1->2 and command receipts/changedAt history persist; current changedAt2026-10-19 12:37:53.623385+00. Empty reading shelf/counts restored while actual nextUnread remains At the harbour; no byte-exact rollback claim.",
+      "rootReleaseReconciliation": "Root independently observed the same successful cleanup and already marked its exact ignored lease released at12:39:02.992230+00:00 before worker publication. Worker existing-release guard aborted without any main file write, then verified the matching hashed root cleanup receipt and preserved it unchanged.",
+      "rootLeaseAfter": "source/root-lease-after-cleanup.json",
+      "rootObservation": "source/root-cleanup-observed.json",
+      "rootObservationSHA256": "76f3ed57ec41bb224124d84f7febea320d31e5b25f163a6432280f64c844530a",
+      "rootLeaseReconciliationReceipt": "source/root-lease-update.json",
+      "sanitizedReceipt": "sanitized-cleanup-receipt.json"
     },
     "coordination": {
-      "mail": "c3cc0615-acf9-4c38-8c08-c5badd2c9d9f",
-      "channel": "Existing goal mail to manager for requested safe G-2847 serialized handoff.",
-      "binding": "ready-for-G2847.json",
-      "message": "ready-for-G2847.md",
-      "authSharing": "No cookies/tokens/storage state shared. G-2847 renews own supported OAuth via existing signInAtAccounts fixture. Root owns borrower serialization and later cleanup release.",
-      "ownedWebStopped": true
+      "mail": "e5296daa-d58b-45b0-af2e-121a8d1567fd",
+      "message": "cleanup-complete.md",
+      "channel": "Existing goal mail to manager for requested safe cleanup result; no credentials shared.",
+      "remainingCustody": "None; borrower released and original one-Book semantic state restored."
     },
     "priorEvidenceReused": {
-      "baseline": "All92b8 original failures and diagnostic results retained unchanged.",
-      "repaired": "17units/116stories/10rendered repaired checks and independent genuine Home2e17 proof retained unchanged.",
-      "native": "414b0f77 original native100/200/400 and fresh natural Tab both-actions proof retained unchanged; no zoom replay.",
-      "empty": "0787 real eligible actor Library200/reading0 and actual empty1440/390 screenshots remain truthful for their pre-preparation time/source.",
-      "binding": "8ea3 actual readable Book/nextUnread readonly proof retained unchanged. Root narrow lease now resolves that earlier writable-custody prerequisite; earlier report not rewritten.",
-      "unchangedBundles": "All five prior immutable manifests and every listed artifact verified; receipt source/prior-bundles-unchanged.json."
+      "allPriorReportValuesPreserved": true,
+      "baseline": "92b8 original17units/107passing8failingstories/9passing1failingrendered/2diagnostics remain distinct and unchanged.",
+      "repaired": "2e17 repaired17units/116stories/10rendered and genuine Home proof preserved.",
+      "native": "414 native100/200/400 and fresh natural keyboard both-actions proof preserved.",
+      "empty": "0787 genuine empty Library200/1440/390 preserved.",
+      "binding": "8ea3 genuine existing readable Book/nextUnread readonly binding preserved.",
+      "populated": "02ea9a134d genuine leased populated firstscreen1440/390, real API/card/nextUnread identity, naturalTab, disclosure Enter/Space, reload and8 screenshots preserved unchanged.",
+      "historyInterpretation": "Earlier snapshots truthfully retain their then-pending prerequisites/cleanup. This latest cleanup resolves only the pending one-Book lease; earlier evidence is not edited.",
+      "unchangedBundles": "All six prior immutable manifests and each listed artifact verified; receipt source/prior-bundles-unchanged.json."
     },
     "findingAcceptance": [
       {
         "id": "D4-003",
-        "status": "All three original criteria demonstrated within the combined retained fixture/native/empty and new genuine populated scope; manager acceptance and leased-state cleanup remain due.",
+        "status": "Original class accepted per current manager continuation; prior three criteria and bounded proof unchanged. Serialized status/date cleanup complete.",
         "criteria": [
           {
             "original": "在已有可继续作品的默认Library，1440×1000与390×844的应用实际可用首屏内出现至少一个正在读作品及Open/Continue行动；计算固定顶栏与底栏占用。",
@@ -894,10 +910,11 @@
             "result": "PASS within original bounded scope: unchanged recorded stories retained; genuine successful Library/Work/continuation200 and actual populated card identity/firstscreen/reload/focus now pass. Actual empty0787 and populated current Library separately organize their main task. No synthetic API or progress prerequisite."
           }
         ],
-        "mainAcceptance": false,
+        "mainAcceptance": true,
         "closureOwner": "Manager retains finding-level main acceptance and ledger; verifier does not edit it.",
         "regressionConfirmed": false,
-        "remaining": "Root serializes G-2847 read-only borrower, then resumes G-2831 for narrow status/dates cleanup with current CAS and projected-state readback. No missing original populated data premise remains."
+        "remaining": "None for original verification and the released one-Book lease. Durable command/version/timestamp history retained; no byte-exact rollback or full-regression claim.",
+        "acceptanceAuthority": "Current manager continuation states: original class accepted. This records that manager decision and does not create a new verifier closure or main runtime claim."
       },
       {
         "id": "D4-011",
@@ -909,14 +926,20 @@
       }
     ],
     "unavailableOriginalPremises": [],
+    "screenshots": {
+      "newScreenshots": 0,
+      "newViews": 0,
+      "reason": "Operational cleanup only; original actual firstscreen/native/empty/Home screenshots reused unchanged, no new product assertion or visual correction."
+    },
+    "newProductDefects": [],
     "administrative": {
       "status": "passed",
-      "scope": "Required docs:check and proportional goal check on report branch, separate from exact detached product runtime.",
+      "scope": "Required docs:check and proportional goal check on report branch, separate from exact detached cleanup runtime.",
       "trackedChanges": [
         "docs/goals/audit-remediation-20261019/proofs/reading-home.json"
       ],
       "ownedServerStop": {
-        "pid": 2892050,
+        "pid": 3224796,
         "command": "task web:dev -- --port 43131",
         "sourcePin": "53f4ec6709f31bfb0cf7eca934e25b796644fa88",
         "origin": "http://127.0.0.1:43131",
@@ -925,19 +948,19 @@
         "oauthMatchesFixture": true,
         "ready": true,
         "readinessStatus": 401,
-        "stopRequestedAtUTC": "2026-10-19T12:20:50.604152+00:00",
+        "stopRequestedAtUTC": "2026-10-19T12:38:45.372733+00:00",
         "stopCommandVerified": "task web:dev -- --port 43131",
         "stopped": true,
         "portClosed": true,
-        "stoppedAtUTC": "2026-10-19T12:21:14.136928+00:00"
+        "stoppedAtUTC": "2026-10-19T12:39:14.080318+00:00"
       },
       "otherOwnersServersAltered": false,
-      "sharedDataWritten": true,
-      "writeScope": "Exactly one own-reader status command under root narrow one-Book lease; held readingv1 and cleanup obligation retained. No broader shared mutation.",
+      "sharedDataWrite": "Exactly one authorized own Book reader-status restoration command with explicit null original dates, currentCAS and new idempotency. No progress/shelf/follow/preferences/relation/SQL/reset/import writes.",
+      "workerMainOrOtherWorktreeWrites": false,
       "supportedOwnAuthSessionRenewed": true,
-      "job": "ae970b79-5be0-43f5-9dae-9108f0491a6a",
+      "job": "b09e20c4-f623-4dd8-9945-a73997e72065",
       "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
-      "docs": "13 checker tests and256 Markdown files passed; local links/fragments/navigation only, no runtime behavior inferred.",
+      "docs": "13 checker tests and258 Markdown files passed; local links/fragments/navigation only, no runtime behavior inferred.",
       "goal": {
         "types": "ok; no TypeScript workspace changed, skipped",
         "tests": "ok; no tests named in brief, skipped",
@@ -946,34 +969,33 @@
         "guards": "ok;1/45 selected for proof path"
       },
       "logs": [
-        "jobs/ae970b79-5be0-43f5-9dae-9108f0491a6a.1.log",
-        "jobs/ae970b79-5be0-43f5-9dae-9108f0491a6a.2.log",
+        "jobs/b09e20c4-f623-4dd8-9945-a73997e72065.1.log",
+        "jobs/b09e20c4-f623-4dd8-9945-a73997e72065.2.log",
         "administrative/goal-check-output.log"
       ],
       "interpretation": "Administrative report checks passed on report branch; detached53f4 actual runtime result remains separately pinned."
     },
     "artifacts": {
-      "privateBundle": ".temp/reading-home-leased-G-2831-53f4ec6/",
-      "localHandoffCopy": ".temp/audit-remediation-20261019/proofs/reading-home-G-2831-leased-populated-53f4ec6/",
-      "managerCopyDestination": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/proofs/reading-home-G-2831-leased-populated-53f4ec6/",
-      "copyStatus": "Credential-free safe local sibling prepared/hash-verified; all five prior bundles unchanged. Manager copies to main; worker did not write main or other worktrees.",
+      "privateBundle": ".temp/reading-home-cleanup-G-2831-53f4ec6/",
+      "localHandoffCopy": ".temp/audit-remediation-20261019/proofs/reading-home-G-2831-cleanup-53f4ec6/",
+      "managerCopyDestination": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/proofs/reading-home-G-2831-cleanup-53f4ec6/",
+      "copyStatus": "Credential-free safe local sibling prepared/hash-verified; all six prior bundles unchanged. Manager copies to main; worker did not write main or other worktrees.",
       "manifest": "artifact-manifest.json",
-      "newScreenshotsViewed": 8,
-      "privateExclusions": "All private auth/session/cookie/token storage and full private before backup, XDG/cache/profiles and private Web log excluded. Necessary bounded reader status/version, one-Book lease/command and real API answers retained. Private before backup retained under own private directory with safe SHA256.",
-      "verifiedSafeCopyFiles": 49,
-      "bytes": 955465,
-      "manifestSHA256": "16d240ca3bbe1e1985cfc22a49209eb8ae3b9e8c87056f611ff357dcdfe9aa7d",
+      "privateExclusions": "All auth/session/cookie/token storage, full private before/current backups, XDG/cache/profiles and private Web log excluded. Safe narrow status/command/readback/lease metadata retained; private backup SHA256 retained.",
+      "verifiedSafeCopyFiles": 36,
+      "bytes": 299589,
+      "manifestSHA256": "6923dcdd42de06c01983990e924dfed192dd19785a02c62d2bc178b6060ffb6e",
       "priorBundleIntegrity": "source/prior-bundles-unchanged.json",
       "historyIntegrity": "source/report-history-integrity.json"
     },
     "handoff": {
-      "result": "partial",
-      "completed": "Missing original populated Library1440/390 firstscreen, realAPI/card/nextUnread identity, natural focus/disclosure and reload assertions passed. Safe G-2847 binding sent; Web stopped; all prior evidence preserved.",
-      "blockers": "No missing original populated prerequisite. Temporary readingv1 cleanup intentionally waits for root-observed G-2847 release; main finding acceptance remains manager-owned.",
+      "result": "done",
+      "completed": "Original accepted verification retained; post-borrower one-Book cleanup passed, original semantic state restored, exact root ignored lease already released and matching observation verified. Own cleanup frontend stopped.",
+      "blockers": "None for original task and released lease. No full-regression claim.",
       "ownerChanges": [],
-      "proposedTasks": "None; existing G-2847 borrower and G-2831 cleanup continuation are already assigned.",
-      "next": "Copy safe artifact sibling and land report-only step; resume G-2847 with own fresh supported OAuth/read-only binding, then resume G-2831 for current-CAS status/dates cleanup and shelf/continue/follow readback. Home stays closed; no source edits or whole-regression claim.",
-      "instructionBoundary": "Current user manager decision explicitly requires holding this one qualified status reading for serialized G-2847 and resuming cleanup after borrower release. This is a required partial-ready handoff, not an inferred approval gate."
+      "proposedTasks": "None.",
+      "next": "Copy safe cleanup sibling and land report-only commit through normal manager workflow; no remaining cleanup, source change or original-proof rerun.",
+      "instructionBoundary": "Current manager continuation explicitly authorizes only serialized status/date restoration after borrower release. Original class accepted by manager; this cleanup does not alter finding ledger or original proof."
     }
   },
   "verificationHistory": [
@@ -2522,6 +2544,362 @@
         "proposedTasks": "None; existing G-2791/G-2778 prepare/attest this narrow existing binding and coordinate G-2847.",
         "next": "Land report only and copy safe sibling. Have existing owner qualify this exact actor/backend/Book for one normal status-to-reading write, preserve prior version and coordinate custody; resume only original missing populated selector. D4-011 stays closed; no source edits/new corpus/regression claim.",
         "instructionBoundary": "User condition requires owner-qualified writable disposable fixture before status/save. Local-development supported OAuth grants sign-in, not inferred shared Library custody. The brief explicitly allows returning precise binding to existing owners if not qualified."
+      }
+    },
+    {
+      "recordedAtUTC": "2026-10-19T12:22:50.270147+00:00",
+      "status": "original-populated-Library-proof-passed; ready-for-serialized-G-2847; leased-status-cleanup-due",
+      "execution": "Same Codex-1/GPT-6.1 Sol/xhigh verifier, no fallback or nested agents. Only missing original populated D4-003 premise and firstscreen1440/390, route/reload, focus/disclosure assertions executed. Home, native zoom, stories, import/export and roundtrip were not replayed.",
+      "source": {
+        "frontendAndOriginalTestPin": "53f4ec6709f31bfb0cf7eca934e25b796644fa88",
+        "frontendTree": "b3ba0509a488d7c102f69518845de56fb252f626",
+        "candidateReceipt": "source/site-library-native-home-main-candidate.json",
+        "candidateBase": "e9bff8c44b5317168b38c954b405938b458bd1e1",
+        "identityVerification": "All30 candidate file identities match the manager receipt:29 product/original-test paths plus prior report. Retained published27665b2 review/native proof and earlier df384/a84/a552 review reused; no whole-source rereview.",
+        "materialIntegration": "Manager receipt composes reviewed Library delta with current main BringIntoRow loan-only wrapper; that wrapper is preserved. This run used the exact composed candidate, not a hand-edited source substitute.",
+        "sourceIdentityReceipt": "source/candidate-identities.json",
+        "runtimeIdentityReceipt": "source/product-pin-after.json",
+        "productAndOriginalTestsCleanBeforeAndAfter": true,
+        "productChanges": [],
+        "originalTestChanges": [],
+        "backendServedRevision": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "backendReceipt": "source/backend-served-revision.json",
+        "backendVerification": "Existing backend75409 pointer/refresh receipt and actual Main1372265 process cwd observed, unchanged. Own fresh supported OAuth returned eligible actor714 session-agent200. Actual Work, reader-state, directory, reading shelf, continuation and follow reads returned200 before preparation, after normal status-only PUT200, and after rendered proof. No backend refresh/reset/lifecycle action.",
+        "reportBranch": "goal/g-2831",
+        "reportBranchPriorCommit": "3e04c5d53d49689ffcb34136e6736b1158004e14",
+        "reportMainBase": "ef9ae2b4db4d2a37f8644de322dc06724eeb08aa",
+        "differentBases": "Product/browser proof ran detached at exact53f4ec6 with clean original source/tests. Administrative checks run on main-based report branch3e04. Administrative success establishes no new main product integration.",
+        "runnerIdentityReceipt": "source/runner-identities.json",
+        "runner": {
+          "bun": "1.4.3",
+          "task": "3.53.1",
+          "playwright": "1.63.0",
+          "browser": "Existing Chromium provider via loopbackChromiumLaunch; no new browser install or fallback."
+        },
+        "mainOrchestrator": "Recorded job wrapper invoked main-checkout goalctl from own cwd as instructed. Actual product/Task/QA source stayed53f4; job-owner main source observed separately, no product integration claim."
+      },
+      "sourceReview": {
+        "priorReviewReused": true,
+        "unchangedReviewRepeated": false,
+        "productOrOriginalTestChanges": [],
+        "newBlockingSourceDefects": [],
+        "boundary": "Exact same coherent53f4 reviewed frontend and compatible754 backend as0787/8ea3. Prior original authored-commit, final correction, native27665 and material integration reviews remain valid. No source fix or whole-source rereview."
+      },
+      "qa": [
+        {
+          "job": "7355b076-1905-4acb-9f41-6eef293ae931",
+          "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'bun scripts/goal/goalctl.ts test ./.temp/reading-home-leased-G-2831-53f4ec6/capture.test.ts' -- bun .temp/reading-home-leased-G-2831-53f4ec6/start-web.ts",
+          "startupExitStatus": 0,
+          "qaExitStatus": 0,
+          "taskCommand": "task web:e2e -- --config .temp/reading-home-leased-G-2831-53f4ec6/playwright.config.ts library-live.spec.ts",
+          "file": ".temp/reading-home-leased-G-2831-53f4ec6/library-live.spec.ts",
+          "case": "original D4-003: actual populated Library primary reading at1440/390 under serialized one-Book lease",
+          "runnerResult": {
+            "passed": 1,
+            "failed": 0,
+            "playwrightDurationSeconds": 59
+          },
+          "assertionReach": [
+            "fresh consistent before backup and root-qualified exact actor/Book/version",
+            "normal status-only PUT200, exact CAS version, real populated Library/continuation readback; progress/dates/shelves unchanged",
+            "original first-screen shell/action 1440",
+            "populated primary-task organization 1440",
+            "natural Tab first action and secondary disclosure Enter/Space 1440",
+            "original populated route/reload same href 1440",
+            "original first-screen shell/action 390",
+            "populated primary-task organization 390",
+            "natural Tab first action and secondary disclosure Enter/Space 390",
+            "original populated route/reload same href 390",
+            "post-proof progress/dates/shelves unchanged and lease held for serialized borrower"
+          ],
+          "qaRunId": null,
+          "qaRunIdNote": "Current Bun-wrapper path emitted no separate QA run ID; durable recorded job, actual Task/admission command and Playwright results retained.",
+          "logs": [
+            "jobs/7355b076-1905-4acb-9f41-6eef293ae931.1.log",
+            "jobs/7355b076-1905-4acb-9f41-6eef293ae931.2.log",
+            "results.json",
+            "browser.log"
+          ]
+        }
+      ],
+      "admission": "Normal goalctl test -> Task web:e2e -> scripts/goal/admission.ts -> existing Chromium Playwright provider. Original populated assertions executed successfully; no admission/environment failure or alternative runner.",
+      "lease": {
+        "authority": "Current manager continuation and exact root narrow lease source/narrow-lease.json qualify only own actor714 reader status on existing Book01a10aff/backend754. No QA-disposable stack claim or wider mutation authority.",
+        "rootReceipt": "source/narrow-lease.json",
+        "stateReceipt": "lease-state.json",
+        "beforeConsistency": "Two fresh repeated per-record snapshots agreed on status/version/dates/progress/custom shelves/follow basis and continuation before the command. No cross-store atomic snapshot claim. Unexpected status/version or inconsistent records would abort.",
+        "privateBeforeBackup": ".temp/reading-home-leased-G-2831-53f4ec6/private/before-backup.json",
+        "privateBeforeSHA256": "e7f7f76375a82f3dfd65653d9240f484db92e31cdc90258390fd75f0eccbe98d",
+        "before": {
+          "status": {
+            "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+            "status": null,
+            "startedOn": null,
+            "finishedOn": null,
+            "version": 0,
+            "changedAt": null
+          },
+          "progress": null,
+          "customShelves": [],
+          "followBasis": {
+            "following": false,
+            "revision": null,
+            "source": null,
+            "level": null,
+            "pinPosition": null
+          }
+        },
+        "normalCommand": {
+          "method": "PUT",
+          "url": "http://127.0.0.1:43131/api/main/v1/works/01a10aff-93e5-7069-b80a-cd33bb6ce57c/reader-status",
+          "requestBody": {
+            "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+            "expectedVersion": 0,
+            "status": "reading"
+          },
+          "idempotencyKey": "4e05cde5-856b-4f24-bf70-9f20f57e5f7f",
+          "attemptedAtUTC": "2026-10-19T12:17:19.244Z",
+          "response": {
+            "status": 200,
+            "body": {
+              "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+              "status": "reading",
+              "startedOn": null,
+              "finishedOn": null,
+              "version": 1,
+              "changedAt": "2026-10-19 12:17:19.730675+00",
+              "replayed": false
+            },
+            "receivedAtUTC": "2026-10-19T12:17:19.802Z"
+          }
+        },
+        "currentStatus": {
+          "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+          "status": "reading",
+          "startedOn": null,
+          "finishedOn": null,
+          "version": 1,
+          "changedAt": "2026-10-19 12:17:19.730675+00"
+        },
+        "currentReadingCount": 1,
+        "statusWriteAttempts": 1,
+        "progressWrites": 0,
+        "datesProgressCustomShelvesUnchanged": true,
+        "followBasisUnchanged": true,
+        "cleanupNeeded": true,
+        "state": "Status reading v1 intentionally held for root-serialized G-2847 same-actor read-only card voice proof. Root must resume G-2831 after borrower release for cleanup; no cleanup performed while loaned.",
+        "cleanupPlan": "After root release, fresh own supported sign-in, compare actual current per-record state, restore only original status/startedOn/finishedOn values with current CAS and new idempotency key, retain real200/readback, and verify status shelf/continue/follow projected state. Abort unexpected concurrent state. Do not write progress/custom shelves/preferences/follows. Durable command receipts/version/changedAt/shelf revision history remain; no byte-exact rollback promise.",
+        "excludedAuthority": "No peer46775 writes, shared reset, new Book/corpus, direct SQL/graph seed, account fallback, progress write, shelf/preference/follow write, import or restore."
+      },
+      "liveAssessment": {
+        "identity": {
+          "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+          "eligible": true,
+          "status": 200,
+          "method": "Own fresh signInAtAccounts with existing supported rezics-dev member. No expired saved cookie, peer rotating refresh or account fallback; private auth state excluded."
+        },
+        "answers": "Actual safe request URLs/statuses/JSON bodies in live/result.json. All22 retained GET answers returned200; one normal reader-status PUT returned200 and real readbacks. No synthetic/injected own API response.",
+        "data": {
+          "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+          "title": "The Lantern Road 8805d7a2",
+          "existingDataOrigin": "Same already-existing readable Book positively bound in8ea3; root narrow status lease authorizes only own reader-status preparation. No new catalogue or Book production. Original Book creation command is not inferred from its title or API identity.",
+          "readingShelf": "reader-status-shelf-v1, actual one-item reading shelf created through the normal supported status command and retained through reload/final readback.",
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          },
+          "statusVersionIndependentOfGraphSequence": true,
+          "nextUnread": {
+            "occurrence": "https://rezics.com/id/5caa0cc4-f716-876a-8a46-fa048620c48d",
+            "title": "At the harbour",
+            "href": "/w/01a10aff-93e5-7069-b80a-cd33bb6ce57c/read/5caa0cc4-f716-876a-8a46-fa048620c48d?language=en"
+          },
+          "unreadCount": {
+            "value": 1,
+            "kind": "exact"
+          },
+          "lastPosition": null,
+          "savedProgressRequired": false,
+          "renderedIdentity": "/en/w/1Cfii3m6U4BFnf8q5M6YmZ",
+          "renderedIdentityDecoding": "addressPath/parseAddressSegment decode actual compact Work href to exact API UUID01a10aff-93e5-7069-b80a-cd33bb6ce57c.",
+          "actionDestination": "/en/w/01a10aff-93e5-7069-b80a-cd33bb6ce57c/read/5caa0cc4-f716-876a-8a46-fa048620c48d?language=en",
+          "destinationCheck": "Normalized actual rendered action matches genuine continuation200 Work, nextUnread occurrence and language query at both widths, unchanged after reload."
+        },
+        "firstScreen": [
+          {
+            "width": 1440,
+            "height": 1000,
+            "scrollY": 0,
+            "documentWidth": 1440,
+            "availableTop": 65,
+            "availableBottom": 1000,
+            "action": {
+              "text": "Continue — The Lantern Road 8805d7a2",
+              "href": "/en/w/01a10aff-93e5-7069-b80a-cd33bb6ce57c/read/5caa0cc4-f716-876a-8a46-fa048620c48d?language=en",
+              "rect": {
+                "x": 680,
+                "y": 325,
+                "width": 102,
+                "height": 32,
+                "top": 325,
+                "right": 782,
+                "bottom": 357,
+                "left": 680
+              },
+              "cardTitle": "The Lantern Road 8805d7a2",
+              "cardWorkHref": "/en/w/1Cfii3m6U4BFnf8q5M6YmZ"
+            },
+            "renderedWorkId": "01a10aff-93e5-7069-b80a-cd33bb6ce57c"
+          },
+          {
+            "width": 390,
+            "height": 844,
+            "scrollY": 0,
+            "documentWidth": 390,
+            "availableTop": 105,
+            "availableBottom": 779,
+            "action": {
+              "text": "Continue — The Lantern Road 8805d7a2",
+              "href": "/en/w/01a10aff-93e5-7069-b80a-cd33bb6ce57c/read/5caa0cc4-f716-876a-8a46-fa048620c48d?language=en",
+              "rect": {
+                "x": 128,
+                "y": 469,
+                "width": 102,
+                "height": 32,
+                "top": 469,
+                "right": 230,
+                "bottom": 501,
+                "left": 128
+              },
+              "cardTitle": "The Lantern Road 8805d7a2",
+              "cardWorkHref": "/en/w/1Cfii3m6U4BFnf8q5M6YmZ"
+            },
+            "renderedWorkId": "01a10aff-93e5-7069-b80a-cd33bb6ce57c"
+          }
+        ],
+        "organization": "Actual currently-reading Work and useful Continue precede collapsed Goals, stats, import and export in rendered and DOM order. Zero-month statistics stay secondary. Existing genuine empty1440/390 organization retained from0787.",
+        "keyboard": "Natural Tab from initial document reached actual Continue before global secondary tools at both widths, with visible focus fully inside shell. Then natural Tab reached exact global disclosure; Enter opened and Space closed it. Phone shelf row scrolled horizontally during keyboard traversal without document overflow.",
+        "routeAndReload": "Actual default/en/library route and reload retain same card/action href at both widths. Chapter activation not performed because it can write progress outside this status-only lease; actual destination is checked against genuine continuation200 instead. No additional chapter journey acceptance is claimed.",
+        "browserNonGetRequests": [],
+        "pageErrors": [],
+        "screenshotsViewed": "screenshots-viewed.json lists all8 actual1440x1000/390x844 initial/focused/tools/reloaded PNGs inspected using view_image.",
+        "newRuntimeDefects": [],
+        "scopeLimit": "One genuine existing readable Book on actor714/backend754; no games corpus, all-persona matrix, durable transfer/roundtrip, chapter-progress/navigation or whole-regression acceptance inferred."
+      },
+      "coordination": {
+        "mail": "c3cc0615-acf9-4c38-8c08-c5badd2c9d9f",
+        "channel": "Existing goal mail to manager for requested safe G-2847 serialized handoff.",
+        "binding": "ready-for-G2847.json",
+        "message": "ready-for-G2847.md",
+        "authSharing": "No cookies/tokens/storage state shared. G-2847 renews own supported OAuth via existing signInAtAccounts fixture. Root owns borrower serialization and later cleanup release.",
+        "ownedWebStopped": true
+      },
+      "priorEvidenceReused": {
+        "baseline": "All92b8 original failures and diagnostic results retained unchanged.",
+        "repaired": "17units/116stories/10rendered repaired checks and independent genuine Home2e17 proof retained unchanged.",
+        "native": "414b0f77 original native100/200/400 and fresh natural Tab both-actions proof retained unchanged; no zoom replay.",
+        "empty": "0787 real eligible actor Library200/reading0 and actual empty1440/390 screenshots remain truthful for their pre-preparation time/source.",
+        "binding": "8ea3 actual readable Book/nextUnread readonly proof retained unchanged. Root narrow lease now resolves that earlier writable-custody prerequisite; earlier report not rewritten.",
+        "unchangedBundles": "All five prior immutable manifests and every listed artifact verified; receipt source/prior-bundles-unchanged.json."
+      },
+      "findingAcceptance": [
+        {
+          "id": "D4-003",
+          "status": "All three original criteria demonstrated within the combined retained fixture/native/empty and new genuine populated scope; manager acceptance and leased-state cleanup remain due.",
+          "criteria": [
+            {
+              "original": "在已有可继续作品的默认Library，1440×1000与390×844的应用实际可用首屏内出现至少一个正在读作品及Open/Continue行动；计算固定顶栏与底栏占用。",
+              "result": "PASS: genuine actual resumable Work and Continue visible in usable default Library firstscreen1440x1000 and390x844. Desktop action y325..357 within65..1000; phone y469..501 within105..779; initial scrollY0 and no document horizontal overflow. Native zoom original proof retained separately."
+            },
+            {
+              "original": "目标、统计、导入导出保持可达并形成次级层级，零月统计不再把主任务整体推出首屏。",
+              "result": "PASS: reading action precedes collapsed secondary tools; actual naturalTab, Enter/Space prove reachable disclosure at both widths. Zero-month tools remain secondary. Prior original tools/stories retained."
+            },
+            {
+              "original": "录制故事和实际成功API状态都验收；空库与已填充库分别按主要任务组织。",
+              "result": "PASS within original bounded scope: unchanged recorded stories retained; genuine successful Library/Work/continuation200 and actual populated card identity/firstscreen/reload/focus now pass. Actual empty0787 and populated current Library separately organize their main task. No synthetic API or progress prerequisite."
+            }
+          ],
+          "mainAcceptance": false,
+          "closureOwner": "Manager retains finding-level main acceptance and ledger; verifier does not edit it.",
+          "regressionConfirmed": false,
+          "remaining": "Root serializes G-2847 read-only borrower, then resumes G-2831 for narrow status/dates cleanup with current CAS and projected-state readback. No missing original populated data premise remains."
+        },
+        {
+          "id": "D4-011",
+          "status": "CLOSED per current manager continuation; prior genuine Home proof retained",
+          "currentWorkerRerun": false,
+          "authority": "Latest user manager note: D4011Home is already CLOSED from genuine2e17/main d365; do not rerun/reopenHome.",
+          "closureOwner": "Manager finding ledger; this report does not independently edit closure or claim new class acceptance.",
+          "regressionConfirmed": false
+        }
+      ],
+      "unavailableOriginalPremises": [],
+      "administrative": {
+        "status": "passed",
+        "scope": "Required docs:check and proportional goal check on report branch, separate from exact detached product runtime.",
+        "trackedChanges": [
+          "docs/goals/audit-remediation-20261019/proofs/reading-home.json"
+        ],
+        "ownedServerStop": {
+          "pid": 2892050,
+          "command": "task web:dev -- --port 43131",
+          "sourcePin": "53f4ec6709f31bfb0cf7eca934e25b796644fa88",
+          "origin": "http://127.0.0.1:43131",
+          "main": "http://127.0.0.1:3001",
+          "accounts": "http://127.0.0.1:3004",
+          "oauthMatchesFixture": true,
+          "ready": true,
+          "readinessStatus": 401,
+          "stopRequestedAtUTC": "2026-10-19T12:20:50.604152+00:00",
+          "stopCommandVerified": "task web:dev -- --port 43131",
+          "stopped": true,
+          "portClosed": true,
+          "stoppedAtUTC": "2026-10-19T12:21:14.136928+00:00"
+        },
+        "otherOwnersServersAltered": false,
+        "sharedDataWritten": true,
+        "writeScope": "Exactly one own-reader status command under root narrow one-Book lease; held readingv1 and cleanup obligation retained. No broader shared mutation.",
+        "supportedOwnAuthSessionRenewed": true,
+        "job": "ae970b79-5be0-43f5-9dae-9108f0491a6a",
+        "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+        "docs": "13 checker tests and256 Markdown files passed; local links/fragments/navigation only, no runtime behavior inferred.",
+        "goal": {
+          "types": "ok; no TypeScript workspace changed, skipped",
+          "tests": "ok; no tests named in brief, skipped",
+          "lint": "ok; no source file changed, skipped",
+          "ast": "ok",
+          "guards": "ok;1/45 selected for proof path"
+        },
+        "logs": [
+          "jobs/ae970b79-5be0-43f5-9dae-9108f0491a6a.1.log",
+          "jobs/ae970b79-5be0-43f5-9dae-9108f0491a6a.2.log",
+          "administrative/goal-check-output.log"
+        ],
+        "interpretation": "Administrative report checks passed on report branch; detached53f4 actual runtime result remains separately pinned."
+      },
+      "artifacts": {
+        "privateBundle": ".temp/reading-home-leased-G-2831-53f4ec6/",
+        "localHandoffCopy": ".temp/audit-remediation-20261019/proofs/reading-home-G-2831-leased-populated-53f4ec6/",
+        "managerCopyDestination": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/proofs/reading-home-G-2831-leased-populated-53f4ec6/",
+        "copyStatus": "Credential-free safe local sibling prepared/hash-verified; all five prior bundles unchanged. Manager copies to main; worker did not write main or other worktrees.",
+        "manifest": "artifact-manifest.json",
+        "newScreenshotsViewed": 8,
+        "privateExclusions": "All private auth/session/cookie/token storage and full private before backup, XDG/cache/profiles and private Web log excluded. Necessary bounded reader status/version, one-Book lease/command and real API answers retained. Private before backup retained under own private directory with safe SHA256.",
+        "verifiedSafeCopyFiles": 49,
+        "bytes": 955465,
+        "manifestSHA256": "16d240ca3bbe1e1985cfc22a49209eb8ae3b9e8c87056f611ff357dcdfe9aa7d",
+        "priorBundleIntegrity": "source/prior-bundles-unchanged.json",
+        "historyIntegrity": "source/report-history-integrity.json"
+      },
+      "handoff": {
+        "result": "partial",
+        "completed": "Missing original populated Library1440/390 firstscreen, realAPI/card/nextUnread identity, natural focus/disclosure and reload assertions passed. Safe G-2847 binding sent; Web stopped; all prior evidence preserved.",
+        "blockers": "No missing original populated prerequisite. Temporary readingv1 cleanup intentionally waits for root-observed G-2847 release; main finding acceptance remains manager-owned.",
+        "ownerChanges": [],
+        "proposedTasks": "None; existing G-2847 borrower and G-2831 cleanup continuation are already assigned.",
+        "next": "Copy safe artifact sibling and land report-only step; resume G-2847 with own fresh supported OAuth/read-only binding, then resume G-2831 for current-CAS status/dates cleanup and shelf/continue/follow readback. Home stays closed; no source edits or whole-regression claim.",
+        "instructionBoundary": "Current user manager decision explicitly requires holding this one qualified status reading for serialized G-2847 and resuming cleanup after borrower release. This is a required partial-ready handoff, not an inferred approval gate."
       }
     }
   ]
