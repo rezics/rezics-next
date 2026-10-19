@@ -14,6 +14,7 @@ import * as fixture from './fixtures.ts';
 import { copyOf } from './messages.ts';
 import { PartsSection } from './parts.tsx';
 import { PartsPreviewView } from './previews.tsx';
+import { connectionsHref } from './route.ts';
 import type { NameSummary } from './types.ts';
 
 type Surface = 'parts' | 'connections' | 'edition' | 'preview';
@@ -43,7 +44,7 @@ function NameSection({ surface = 'parts', locale = 'en', undisclosed = false }: 
   } } };
   if (!fixture.realizations.ok) throw new Error('Expected a successful edition fixture');
   const realization = { ...fixture.realizations.data.items[0]!, translators: [fixture.iri('a1')] };
-  return <StoryRouteContext value={{ pathname: '/w/index-new-testament/connections',
+  return <StoryRouteContext value={{ pathname: connectionsHref(fixture.workRef),
     search: '?grain=series&partsAfter=opaque-selected-page', onPush: () => { throw new Error('A name retry must retain the route'); },
     onRefresh: () => setAttempt(value => value + 1) }}>
     <AppShell locale={locale} messages={locale === 'ja' ? shellJapanese : shellMessages}
