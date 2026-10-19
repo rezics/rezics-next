@@ -53,6 +53,7 @@ async function prepare(): Promise<Source> {
     profile: 'metadata-only-v1', authoring: 'own-work', title: 'Separate native rating target',
     language: 'en', semanticTypes: ['https://schema.org/Book'], ...own(people.owner) }), 201);
   await grant(people.owner, GLOBAL_CONTEXT_SCOPE, 'rating.context.create');
+  await grant(people.owner, 'space:create:root', 'space.create');
   const global = await json<Context>(people.owner.main('POST', '/v1/global-rating-contexts', {
     profile: 'global-rating-standing-context-v1', question: 'Overall quality?', scale: { min: 1, max: 10, step: 1 }, ...own(people.owner) }), 201);
   const communities: Source['communities'] = [];
