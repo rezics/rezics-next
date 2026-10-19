@@ -19,6 +19,10 @@ import { acquireDatasetImportLock, datasetImportLockPath } from '../../../script
 import type { DatasetCoverEvidence, DatasetRecord, DatasetSnapshot, StoredImage } from '../../../scripts/datasets/types.ts';
 import type { DatasetNativeMapper, DatasetNativeRecord } from '../../../scripts/datasets/types.ts';
 import { testDatasetImportCoverage } from '../../../scripts/datasets/conformance.ts';
+import { DatasetIntakeCustodyError } from '../../../scripts/datasets/native/context.ts';
+import type {
+  DatasetIntakeJournal, DatasetIntakeRequest, DatasetRecordEnvelope, DatasetSourceReference,
+} from '../../../scripts/datasets/types.ts';
 
 const roots: string[] = [];
 const root = () => {
@@ -88,6 +92,7 @@ function apiFixture(options: { loseCoverReplies?: ('reserve' | 'transfer' | 'sel
     selectionReceipts = new Map<string, { status: number; body: Record<string, unknown> }>(),
     uploads = new Map<string, { asset: string; digest: string; byteLength: number; activated?: Record<string, unknown> }>(),
     currentSelections = new Map<string, string | null>(),
+    sourceRecords = new Map<string, string>(),
     nativeWorks: string[] = [];
   let id = 1,
     lost = false,
@@ -152,12 +157,18 @@ function apiFixture(options: { loseCoverReplies?: ('reserve' | 'transfer' | 'sel
         return result;
       }
       if (!key) throw new Error('Every product mutation requires an idempotency key');
-      if (receipts.has(key)) return { status: 200, body: receipts.get(key)! };
+      if (receipts.has(key)) return { status: 200, body: path === '/v1/sources/intakes'
+        ? { ...receipts.get(key)!, replayed: true } : receipts.get(key)! };
       let receipt: Record<string, unknown>;
       if (path === '/v1/sources/intakes') {
-        const intake = body as { rawBytesBase64?: string };
-        const bytes = intake.rawBytesBase64 ? Buffer.from(intake.rawBytesBase64, 'base64') : Buffer.alloc(0);
-        receipt = { observation: { observation: iri(id++), record: iri(id++), byteDigest: sha256(bytes) }, replayed: false };
+        const intake = body as DatasetIntakeRequest;
+        const bytes = Buffer.from(intake.rawBytesBase64, 'base64');
+        const identity = canonical([intake.provider, intake.namespace, intake.externalId]);
+        let sourceRecord = sourceRecords.get(identity);
+        if (!sourceRecord) { sourceRecord = iri(id++); sourceRecords.set(identity, sourceRecord); }
+        receipt = { observation: { ...structuredClone(intake), state: 'staged',
+          observation: iri(id++), record: sourceRecord, byteDigest: sha256(bytes), byteLength: bytes.length,
+          submittedAt: '2026-10-19T00:00:00Z' }, replayed: false };
       }
       else if (path === '/v1/works') {
         expect(body).not.toHaveProperty('authoring');
@@ -310,6 +321,288 @@ const selectionBudget: DatasetSelectionBudget = {
   maxJsonBytes: 4 * 1024 * 1024, maxMediaBytes: 4 * 1024 * 1024,
 };
 
+const retainedCases = [
+  ['vndb', 'vn', 'v11', 'https://vndb.org/v11'],
+  ['bangumi', 'subject', '1014', 'https://bgm.tv/subject/1014'],
+  ['musicbrainz', 'artist', '24f1766e-9635-4d58-a4d4-9413f9f98a4c',
+    'https://musicbrainz.org/artist/24f1766e-9635-4d58-a4d4-9413f9f98a4c'],
+  ['musicbrainz', 'release', '2ab08baa-b1c6-4aca-8cf7-c31565ef71b4',
+    'https://musicbrainz.org/release/2ab08baa-b1c6-4aca-8cf7-c31565ef71b4'],
+] as const;
+function retainedCase(index: number, multipart: boolean): DatasetRecord {
+  const [provider, kind, externalId, sourceUrl] = retainedCases[index]!;
+  return { ...record(`${provider}:${kind}:${externalId}`), provider, kind, externalId, sourceUrl,
+    data: { alias: 'Frozen alias', count: 0, omitted: null, ...(multipart ? { text: '字'.repeat(40_000) } : {}) } };
+}
+function freezeSnapshotFile(directory: string, source: DatasetSnapshot): Buffer {
+  const file = join(directory, 'snapshots', source.id, 'snapshot.json');
+  mkdirSync(dirname(file), { recursive: true });
+  const bytes = Buffer.from(JSON.stringify(source, null, 2) + '\n');
+  writeFileSync(file, bytes);
+  return bytes;
+}
+function intakeJournal(file: string): DatasetIntakeJournal {
+  return JSON.parse(readFileSync(file, 'utf8'));
+}
+function requestFile(receiptFile: string, label: string): string {
+  return join(receiptFile.slice(0, -5), 'requests', sha256(label) + '.json');
+}
+
+describe('actual importer intake custody', () => {
+  for (const multipart of [false, true]) for (let index = 0; index < retainedCases.length; index++) {
+    const key = retainedCases[index]!.slice(0, 3).join(':');
+    test(`retains exact ${multipart ? 'multipart' : 'single-part'} request/reply bindings for ${key}`, async () => {
+      const fixture = apiFixture(), directory = root(), original = retainedCase(index, multipart);
+      const source = sealSnapshot(snapshot([original]));
+      const frozen = freezeSnapshotFile(directory, source);
+      const result = await importDataset(directory, source, { ...options(fixture.api), native: false });
+      const receipts = intakeJournal(result.intakeReceiptsFile), retained = receipts.records[original.key]!;
+      expect(receipts.snapshot).toEqual({ id: source.id, digest: source.digest, fileSha256: sha256(frozen) });
+      expect(retained.identity).toEqual({ key: original.key, provider: original.provider,
+        namespace: original.kind, externalId: original.externalId });
+      expect(retained.envelope).toEqual({ format: 'rezics-dataset-record-v1', snapshot: source.id,
+        digest: source.digest, record: original, edges: [], images: [] });
+      expect(retained.record).toEqual(original);
+      expect(retained.recordDigest).toBe(sha256(canonical(original)));
+      expect(retained.intakes.length > 1).toBe(multipart);
+      expect(retained.payload).toEqual({ format: multipart ? 'rezics-dataset-chunk-v1' : 'json',
+        byteDigest: sha256(canonical(retained.envelope)), byteLength: Buffer.byteLength(canonical(retained.envelope)) });
+      const buffers: Buffer[] = [];
+      for (const [partIndex, part] of retained.intakes.entries()) {
+        const command = part.command, submitted = command.request;
+        expect(part.index).toBe(partIndex);
+        expect(command.coordinate.identity).toEqual(retained.identity);
+        expect(command.coordinate.snapshot).toEqual(receipts.snapshot);
+        expect(command.coordinate.index).toBe(partIndex);
+        expect(command.coordinate.count).toBe(retained.intakes.length);
+        expect(submitted.namespace).toBe(multipart ? `${original.kind}-dataset-part` : original.kind);
+        expect(submitted.externalId).toBe(multipart ? `${original.externalId}:part:${partIndex}` : original.externalId);
+        expect(submitted.mediaType).toBe('application/json');
+        expect(submitted.retention).toBe('retained');
+        expect(submitted.coverage.complete).toBe(!multipart);
+        expect(submitted.rightsEvidence.basis).toBe(original.provider === 'musicbrainz' ? 'unknown' : 'license');
+        expect(submitted.rightsEvidence.note).toContain(original.sourceUrl);
+        expect(command.request).toEqual(fixture.requests.find(call => call.key === command.key)!.body);
+        expect(command.result).toEqual(fixture.receipts.get(command.key)!);
+        expect(command.responses).toEqual([{ status: 201, body: command.result }]);
+        const bytes = Buffer.from(submitted.rawBytesBase64, 'base64'); buffers.push(bytes);
+        expect(part.byteDigest).toBe(sha256(bytes));
+        expect(part.byteLength).toBe(bytes.length);
+        expect((command.result.observation as Record<string, unknown>).record).toBe(part.record);
+        expect(retained.recordDigest).not.toBe(part.byteDigest);
+      }
+      expect(reconstructIntake(buffers)).toEqual(retained.envelope);
+      expect(new Set(retained.intakes.map(part => part.record)).size).toBe(retained.intakes.length);
+      expect(Object.hasOwn(retained, 'sourceRecord')).toBe(false);
+      expect(receipts.unboundCommands).toEqual([]);
+      const before = readFileSync(result.intakeReceiptsFile, 'utf8');
+      const calls = fixture.requests.filter(call => call.path === '/v1/sources/intakes').length;
+      await importDataset(directory, source, { ...options(fixture.api), native: false });
+      expect(readFileSync(result.intakeReceiptsFile, 'utf8')).toBe(before);
+      expect(fixture.requests.filter(call => call.path === '/v1/sources/intakes')).toHaveLength(calls);
+      expect(readFileSync(join(directory, 'snapshots', source.id, 'snapshot.json'))).toEqual(frozen);
+    });
+
+    test(`refuses self-consistent unrelated ${multipart ? 'part' : 'source'} coordinates for ${key}`, async () => {
+      const fixture = apiFixture(), directory = root(), original = retainedCase(index, multipart), source = snapshot([original]);
+      const result = await importDataset(directory, source, { ...options(fixture.api), native: false });
+      const command = intakeJournal(result.intakeReceiptsFile).records[original.key]!.intakes[multipart ? 1 : 0]!.command;
+      const file = requestFile(result.receiptFile, command.label), before = readFileSync(file, 'utf8');
+      for (const field of ['namespace', 'externalId'] as const) {
+        const saved = JSON.parse(before);
+        saved.entry.body[field] += '-unrelated';
+        saved.entry.result.observation[field] = saved.entry.body[field];
+        for (const reply of saved.entry.responses) reply.body.observation[field] = saved.entry.body[field];
+        writeFileSync(file, JSON.stringify(saved));
+        const calls = fixture.requests.length;
+        const error = await importDataset(directory, source, { ...options(fixture.api), native: false }).catch(error => error);
+        expect(error).toBeInstanceOf(DatasetIntakeCustodyError);
+        expect(error.basis).toBe('coordinate');
+        expect(error.message).toContain(field);
+        expect(error.owner).toBe('dataset-importer');
+        expect(error.stage).toBe('import-intake-receipts');
+        expect(fixture.requests.slice(calls).every(call => call.path === '/v1/catalogue/candidates')).toBe(true);
+        writeFileSync(file, before);
+      }
+    });
+  }
+
+  for (const multipart of [false, true]) test(`checks the whole ${multipart ? 'multipart' : 'single-part'} envelope and original selected indices`, async () => {
+    const fixture = apiFixture(), directory = root(), original = retainedCase(0, multipart);
+    const outside = record('outside'), child = record('child');
+    const source = snapshot([outside, original, child]);
+    source.sources[0]!.edges = [{ from: outside.key, to: child.key, kind: 'character', data: { order: 0 } },
+      { from: original.key, to: child.key, kind: 'character', data: { order: 1 } }];
+    source.images = [outside.key, original.key, original.key].map((key, index) => ({ record: key,
+      role: index === 1 ? 'candidate-cover' : 'selected-cover', url: `https://images.example.test/${index}.png`,
+      captureRole: 'cover', capture: null, missing: true }));
+    source.sources[0]!.images = source.images.map(({ record, role, url }) => ({ record, role, url }));
+    sealSnapshot(source);
+    const before = canonical(source);
+    const importOptions = { ...options(fixture.api), native: false,
+      selection: { roots: [original.key], budget: selectionBudget, relatedWorkDepth: 0 } };
+    const result = await importDataset(directory, source, importOptions);
+    const retained = intakeJournal(result.intakeReceiptsFile).records[original.key]!;
+    expect(retained.envelope.edges).toEqual([source.sources[0]!.edges[1]!]);
+    expect(retained.envelope.images).toEqual(source.images.slice(1));
+    expect(retained.occurrences).toEqual({ edges: ['/sources/0/edges/1'],
+      images: ['/images/1', '/images/2'], electedImages: ['/images/2'] });
+    const originals = retained.intakes.map(part => {
+      const file = requestFile(result.receiptFile, part.command.label);
+      return { file, before: readFileSync(file, 'utf8') };
+    });
+    const mutations: [keyof DatasetRecordEnvelope, unknown][] = [
+      ['snapshot', 'another-snapshot'], ['digest', '0'.repeat(64)], ['edges', []], ['images', []],
+      ['record', { ...original, title: 'another normalized title outside data' }],
+    ];
+    for (const [field, value] of mutations) {
+      const envelope = structuredClone(retained.envelope);
+      Object.assign(envelope, { [field]: value });
+      const parts = intakeChunks(envelope);
+      expect(parts).toHaveLength(originals.length);
+      for (const [index, saved] of originals.entries()) {
+        const entry = JSON.parse(saved.before), bytes = parts[index]!;
+        entry.entry.body.rawBytesBase64 = bytes.toString('base64');
+        const update = (body: { observation: Record<string, unknown> }) => Object.assign(body.observation, {
+          byteDigest: sha256(bytes), byteLength: bytes.length, rawBytesBase64: bytes.toString('base64'),
+        });
+        update(entry.entry.result);
+        for (const reply of entry.entry.responses) update(reply.body);
+        writeFileSync(saved.file, JSON.stringify(entry));
+      }
+      const calls = fixture.requests.length;
+      const error = await importDataset(directory, source, importOptions).catch(error => error);
+      expect(error).toBeInstanceOf(DatasetIntakeCustodyError);
+      expect(error.basis).toBe('envelope');
+      expect(error.message).toContain(`envelope ${field}`);
+      expect(fixture.requests.slice(calls).every(call => call.path === '/v1/catalogue/candidates')).toBe(true);
+      for (const saved of originals) writeFileSync(saved.file, saved.before);
+    }
+    expect(canonical(source)).toBe(before);
+  });
+
+  test('retains interrupted multipart intents and resumes the same keys with actual replay replies', async () => {
+    const fixture = apiFixture(), directory = root(), original = retainedCase(2, true), source = snapshot([original]);
+    let lose = true;
+    const api: DatasetApi = { ...fixture.api, async request(method, path, body, key) {
+      const response = await fixture.api.request(method, path, body, key);
+      if (lose && path === '/v1/sources/intakes'
+        && (body as DatasetIntakeRequest).externalId === `${original.externalId}:part:1`)
+        throw new Error('socket closed after committed part, before acknowledgement');
+      return response;
+    } };
+    await expect(importDataset(directory, source, { ...options(api), native: false })).rejects.toThrow('response lost');
+    const file = readdirSync(directory).find(name => name.startsWith('intakes-'))!;
+    const interrupted = intakeJournal(join(directory, file));
+    const first = interrupted.commands.find(command => command.coordinate.index === 0)!;
+    const uncertain = interrupted.commands.find(command => command.coordinate.index === 1)!;
+    expect(first.responses[0]!.status).toBe(201);
+    expect(first.result).toBeDefined();
+    expect(uncertain.responses).toEqual([]);
+    expect(uncertain.result).toBeUndefined();
+    expect(interrupted.records[original.key]).toBeUndefined();
+    const committed = fixture.receipts.get(uncertain.key)!;
+    lose = false;
+    const resumed = await importDataset(directory, source, { ...options(api), native: false });
+    const receipts = intakeJournal(resumed.intakeReceiptsFile), actual = receipts.records[original.key]!.intakes[1]!.command;
+    expect(actual.key).toBe(uncertain.key);
+    expect(actual.request).toEqual(uncertain.request);
+    expect(actual.result).toEqual({ ...committed, replayed: true });
+    expect(actual.responses).toEqual([{ status: 200, body: actual.result }]);
+    expect(receipts.records[original.key]!.intakes[0]!.command).toEqual(first);
+    const retries = fixture.requests.filter(call => call.key === uncertain.key);
+    expect(retries).toHaveLength(9);
+    expect(retries.every(call => canonical(call.body) === canonical(uncertain.request))).toBe(true);
+    expect(new Set(retries.map(call => call.key)).size).toBe(1);
+  });
+
+  test('exports exact refusals and keeps partial requests out of acknowledged record bindings', async () => {
+    const fixture = apiFixture(), directory = root(), original = retainedCase(1, false);
+    const problem = { status: 403, code: 'source_intake_denied', detail: 'retained owner refusal' };
+    const api: DatasetApi = { ...fixture.api, async request(method, path, body, key) {
+      if (path === '/v1/sources/intakes') return { status: 403, body: problem };
+      return fixture.api.request(method, path, body, key);
+    } };
+    await expect(importDataset(directory, snapshot([original]), { ...options(api), native: false })).rejects.toThrow('403');
+    const file = readdirSync(directory).find(name => name.startsWith('intakes-'))!;
+    const receipt = intakeJournal(join(directory, file));
+    expect(receipt.commands).toHaveLength(1);
+    expect(receipt.commands[0]!.responses).toEqual([{ status: 403, body: problem }]);
+    expect(receipt.commands[0]!.result).toBeUndefined();
+    expect(receipt.records).toEqual({});
+  });
+
+  test('joins intake media, retention, coverage and rights to importer evidence and the acknowledgement', async () => {
+    const fixture = apiFixture(), directory = root(), original = retainedCase(1, false), source = snapshot([original]);
+    const result = await importDataset(directory, source, { ...options(fixture.api), native: false });
+    const command = intakeJournal(result.intakeReceiptsFile).records[original.key]!.intakes[0]!.command;
+    const file = requestFile(result.receiptFile, command.label), before = readFileSync(file, 'utf8');
+    const mutations = { mediaType: 'text/plain', retention: 'not-retained',
+      coverage: { scope: 'unrelated', complete: true, omittedFields: ['summary'] },
+      rightsEvidence: { basis: 'permission', note: 'unrelated self-consistent permission' } };
+    for (const [field, value] of Object.entries(mutations)) for (const requestChanged of [true, false]) {
+      const saved = JSON.parse(before);
+      if (requestChanged) saved.entry.body[field] = value;
+      saved.entry.result.observation[field] = value;
+      for (const reply of saved.entry.responses) reply.body.observation[field] = value;
+      writeFileSync(file, JSON.stringify(saved));
+      const error = await importDataset(directory, source, { ...options(fixture.api), native: false }).catch(error => error);
+      expect(error).toBeInstanceOf(DatasetIntakeCustodyError);
+      expect(error.basis).toBe(requestChanged ? 'request' : 'receipt');
+      expect(error.message).toContain(field);
+      writeFileSync(file, before);
+    }
+  });
+
+  test('refuses a mismatched retained snapshot file before submitting any public request', async () => {
+    const fixture = apiFixture(), directory = root(), original = retainedCase(0, false), source = snapshot([original]);
+    freezeSnapshotFile(directory, { ...source, createdAt: 'another frozen file' });
+    const error = await importDataset(directory, source, { ...options(fixture.api), native: false }).catch(error => error);
+    expect(error).toBeInstanceOf(DatasetIntakeCustodyError);
+    expect(error.basis).toBe('snapshot');
+    expect(fixture.requests).toEqual([]);
+  });
+
+  test('enriches old real-shaped journals without inventing HTTP status or repeating intake', async () => {
+    const fixture = apiFixture(), directory = root(), source = snapshot([retainedCase(0, false)]);
+    const result = await importDataset(directory, source, { ...options(fixture.api), native: false });
+    const receipts = intakeJournal(result.intakeReceiptsFile);
+    for (const command of receipts.commands) {
+      const file = requestFile(result.receiptFile, command.label), saved = JSON.parse(readFileSync(file, 'utf8'));
+      delete saved.entry.intake; delete saved.entry.responses; delete saved.entry.responseStatus;
+      writeFileSync(file, JSON.stringify(saved));
+    }
+    const calls = fixture.requests.length;
+    await importDataset(directory, source, { ...options(fixture.api), native: false });
+    const replayed = intakeJournal(result.intakeReceiptsFile);
+    expect(replayed.unboundCommands).toEqual([]);
+    for (const command of replayed.commands) {
+      expect(command.responses).toEqual([{ body: command.result! }]);
+      expect(command.responses[0]!.status).toBeUndefined();
+    }
+    expect(fixture.requests.slice(calls).every(call => call.path === '/v1/catalogue/candidates')).toBe(true);
+  });
+
+  test('exposes checked full custody to mappers without lending them mutable frozen inputs', async () => {
+    const fixture = apiFixture(), directory = root(), original = { ...retainedCase(0, false), native: 'work' as const };
+    const source = snapshot([original]), frozen = canonical(source);
+    let evidence: DatasetSourceReference | undefined;
+    const probe: DatasetNativeMapper = { id: 'fields', revision: 'custody-probe-v1', async map(context) {
+      evidence = context.source(original.key);
+      expect(evidence.retained!.record).toEqual(original);
+      expect(evidence.retained!.intakes[0]!.command.result).toBeDefined();
+      evidence.retained!.record.title = 'mutated consumer copy';
+      evidence.retained!.intakes[0]!.command.request.externalId = 'mutated consumer copy';
+      expect(context.source(original.key).retained!.record.title).toBe(original.title);
+      expect(context.source(original.key).retained!.intakes[0]!.command.request.externalId).toBe(original.externalId);
+    } };
+    const result = await importDataset(directory, source, { ...options(fixture.api), nativeMappers: [probe] });
+    expect(evidence).toBeDefined();
+    expect(canonical(source)).toBe(frozen);
+    expect(intakeJournal(result.intakeReceiptsFile).records[original.key]!.record).toEqual(original);
+  });
+});
+
 describe('offline selection and published producer helpers', () => {
   test('refuses an over-budget closure before any public request and retains its refusal manifest', async () => {
     const fixture = apiFixture(), directory = root();
@@ -442,6 +735,12 @@ describe('offline selection and published producer helpers', () => {
       disposition: { status: 'unmapped', reason: 'source-image-not-acquired' } });
     expect(at('/images/4')).toBeUndefined();
     expect(second.coverage.catalogueReady).toBe(false);
+    const custody = intakeJournal(second.intakeReceiptsFile);
+    const coverIntakes = custody.commands.filter(command => command.coordinate.purpose === 'cover-evidence');
+    expect(coverIntakes).toHaveLength(1);
+    expect(coverIntakes[0]!.coordinate.occurrences).toEqual({ edges: [], images: ['/images/3'], electedImages: ['/images/3'] });
+    expect(coverIntakes[0]!.responses.some(reply => reply.status === 201)).toBe(true);
+    expect(coverIntakes[0]!.responses.some(reply => reply.status === 200 && reply.body.replayed === true)).toBe(true);
     expect(canonical(parent)).toBe(before);
     expect(parent.images[3]!.sourceEvidence).toBeUndefined();
     expect(parent.images[3]!.captureRole).toBe('other');

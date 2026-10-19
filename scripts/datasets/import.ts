@@ -14,11 +14,17 @@ import { acquireDatasetImportLock } from './lock.ts';
 import { normalizedCaptureRole, verifyCoverSourceCapture } from './snapshot.ts';
 import { selectDatasetRoots, type DatasetSelectionManifest, type DatasetSelectionOptions } from './selection.ts';
 import type {
-  DatasetCoverageKey, DatasetEdge, DatasetIntakeReference, DatasetMappingContext, DatasetMapperId, DatasetNativeMapper,
-  DatasetNativeRecord, DatasetRecord, DatasetSnapshot, StoredImage,
+  DatasetCommandResponse, DatasetCoverageKey, DatasetEdge, DatasetIntakeCommand, DatasetIntakeCoordinate,
+  DatasetIntakeJournal, DatasetIntakeReceipt, DatasetIntakeRequest, DatasetMappingContext, DatasetMapperId,
+  DatasetNativeMapper, DatasetNativeRecord, DatasetRecord, DatasetRecordEnvelope, DatasetRecordOccurrences,
+  DatasetRetainedRecord, DatasetSnapshot, DatasetSnapshotReference, StoredImage,
 } from './types.ts';
 import { BANGUMI_USER_POST_FIELDS } from './bangumi.ts';
-import { datasetRecordDigest, datasetSourceIdentity, datasetSourceReference } from './native/context.ts';
+import {
+  assertDatasetIntakeRequest, assertDatasetRecordEnvelope, datasetFrozenIdentity, datasetIntakeReceipt,
+  datasetIntakeRequest, datasetRecordDigest, datasetSourceIdentity, datasetSourceReference,
+  datasetSourceRightsEvidence, DatasetIntakeCustodyError,
+} from './native/context.ts';
 import { DATASET_NATIVE_MAPPERS, datasetCoverage, datasetCoverageId, type DatasetCoverageReport } from './native/coverage.ts';
 import { projectDatasetFields, type DatasetFieldPlan } from './native/fields.ts';
 import { datasetMediaMapper, datasetWorkCoverImages, electedDatasetCovers } from './native/media.ts';
@@ -166,10 +172,12 @@ interface JournalEntry {
   path: string;
   body: unknown;
   result?: Record<string, unknown>;
-  /** Last Main response for a resumable media step, including refusals. */
+  /** Last observed Main response, including refusals and pending operations. */
   responseStatus?: number;
   /** Exact historical replies survive later replay refusals or editor changes. */
-  responses?: { status?: number; body: Record<string, unknown> }[];
+  responses?: DatasetCommandResponse[];
+  /** Bound before Source dispatch; multipart identities remain separate. */
+  intake?: DatasetIntakeCoordinate;
   phase?: 'cover-evidence' | 'cover-reserve' | 'cover-transfer' | 'cover-selection' | 'cover-read';
   /** Ordered source/child receipt keys bound to an atomic native batch. */
   itemKeys?: string[];
@@ -237,6 +245,8 @@ export interface DatasetImportResult {
   selectionFile?: string;
   selection?: DatasetSelectionManifest;
   fieldPlansFile: string;
+  /** Exact intake intents/replies, including partial attempts after interruption. */
+  intakeReceiptsFile: string;
 }
 
 export class DatasetSelectionRefusedError extends Error {
@@ -314,9 +324,10 @@ async function request(
   path: string,
   body?: unknown,
   key?: string,
+  observed?: (response: ApiResponse) => void,
 ) {
   const response = await responseWithRetry(api, method, path,
-    () => api.request(method, path, body, key));
+    () => api.request(method, path, body, key), observed);
   if (response.status === 202)
     throw new Error(`${method} ${path}: remains pending; rerun with the retained checkpoint`);
   if (response.status >= 300)
@@ -362,6 +373,7 @@ async function responseWithRetry(
   method: 'GET' | 'POST' | 'PUT',
   path: string,
   send: () => Promise<ApiResponse>,
+  observed?: (response: ApiResponse) => void,
 ): Promise<ApiResponse> {
   for (let attempt = 0; attempt < 8; attempt++) {
     let response: ApiResponse;
@@ -375,6 +387,7 @@ async function responseWithRetry(
       await (api.wait?.(100 * (attempt + 1)) ?? Bun.sleep(100 * (attempt + 1)));
       continue;
     }
+    observed?.(response);
     const movableRead =
       response.status === 409 &&
       (method === 'GET' || (method === 'POST' && path === '/v1/catalogue/candidates')) &&
@@ -408,16 +421,6 @@ function responseReason(response: ApiResponse): string {
   if (response.status === 413) return 'cover exceeds the Main upload limit';
   if (code) return `${code} (HTTP ${response.status})`;
   return `HTTP ${response.status}`;
-}
-function sourceEvidence(record: DatasetRecord) {
-  if (record.provider === 'bangumi') return { basis: 'license' as const,
-    note: `Bangumi contributors, ${record.sourceUrl}; CC BY-SA 3.0 https://creativecommons.org/licenses/by-sa/3.0/. Covers have separate rights; user posts are excluded.` };
-  if (record.provider === 'vndb') return { basis: 'license' as const,
-    note: `VNDB contributors, ${record.sourceUrl}; ODbL https://opendatacommons.org/licenses/odbl/1-0/ and DbCL https://opendatacommons.org/licenses/dbcl/1-0/. Field exceptions retained; descriptions and user posts are not published.` };
-  return {
-    basis: 'unknown' as const,
-    note: `Frozen local development evidence from ${record.sourceUrl}; raw provider data and images retain their original rights. No redistribution permission is asserted.`,
-  };
 }
 function nativeId(result: Record<string, unknown>, field: string): string {
   const value = result[field];
@@ -748,12 +751,41 @@ export async function importDataset(
   for (const entry of coverage.entries.values())
     if (selectedKeys.has(entry.record) && !inView(entry) && entry.disposition.status === 'unmapped')
       entry.disposition.reason = 'outside-selected-view';
+  const snapshotReference: DatasetSnapshotReference = { id: snapshot.id, digest: snapshot.digest };
+  if (!/^[A-Za-z0-9_-]+$/.test(snapshot.id))
+    throw new DatasetIntakeCustodyError('snapshot', 'invalid frozen snapshot file identity');
+  const snapshotFile = join(root, 'snapshots', snapshot.id, 'snapshot.json');
+  if (existsSync(snapshotFile)) {
+    const bytes = readFileSync(snapshotFile);
+    if (canonical(JSON.parse(bytes.toString())) !== canonical(snapshot))
+      throw new DatasetIntakeCustodyError('snapshot', 'retained snapshot file differs from the immutable parent');
+    snapshotReference.fileSha256 = sha256(bytes);
+  }
   const imagesByRecord = new Map<string, DatasetSnapshot['images']>();
-  for (const image of view?.images ?? snapshot.images) {
+  const occurrencesByRecord = new Map<string, DatasetRecordOccurrences>();
+  const occurrences = (key: string) => {
+    let value = occurrencesByRecord.get(key);
+    if (!value) {
+      value = { edges: [], images: [], electedImages: [] };
+      occurrencesByRecord.set(key, value);
+    }
+    return value;
+  };
+  const elected = electedDatasetCovers(snapshot.sources.flatMap(source => source.images));
+  for (const [index, image] of snapshot.images.entries()) {
+    const path = `/images/${index}`;
+    if (!inView({ record: image.record, kind: 'image', path })) continue;
     const listed = imagesByRecord.get(image.record) ?? [];
     listed.push(image);
     imagesByRecord.set(image.record, listed);
+    occurrences(image.record).images.push(path);
+    if (elected.some(cover => cover.record === image.record && cover.role === image.role && cover.url === image.url))
+      occurrences(image.record).electedImages.push(path);
   }
+  snapshot.sources.forEach((source, sourceIndex) => source.edges.forEach((edge, index) => {
+    const path = `/sources/${sourceIndex}/edges/${index}`;
+    if (inView({ record: edge.from, kind: 'edge', path })) occurrences(edge.from).edges.push(path);
+  }));
   const outgoing = new Map<string, DatasetEdge[]>(),
     neighbors = new Map<string, string[]>();
   for (const edge of allEdges) {
@@ -855,19 +887,7 @@ export async function importDataset(
         save();
       }
     };
-    const command = (label: string, method: 'GET' | 'POST' | 'PUT', path: string,
-      body?: unknown, itemKeys?: string[]): Promise<Record<string, unknown>> => {
-      const key = `dataset:${sha256(`${context}:${label}`)}`;
-      // The first persisted request binds child IDs and search receipts before dispatch.
-      return replayCommand<JournalEntry, Record<string, unknown>>({
-        read: () => journal.entries[label],
-        write: entry => { journal.entries[label] = entry; saveEntry(label, entry); },
-      }, { method, path, body: body ?? null, outcome: 'result', changed: `Dataset request changed: ${label}`,
-        ...(itemKeys ? { fields: { itemKeys } } : {}) },
-      entry => request(api, entry.method, entry.path, entry.body ?? undefined,
-        entry.method === 'GET' ? undefined : key));
-    };
-    const coverResponse = (entry: JournalEntry, response: ApiResponse) => {
+    const rememberResponse = (entry: JournalEntry, response: ApiResponse) => {
       const history = [...(entry.responses ?? []),
         ...(entry.result ? [{ status: entry.responseStatus, body: entry.result }] : []),
         { status: response.status, body: response.body }];
@@ -879,12 +899,31 @@ export async function importDataset(
         return true;
       }).map(reply => structuredClone(reply));
       entry.responseStatus = response.status;
+    };
+    const command = (label: string, method: 'GET' | 'POST' | 'PUT', path: string,
+      body?: unknown, itemKeys?: string[], intake?: DatasetIntakeCoordinate): Promise<Record<string, unknown>> => {
+      const key = `dataset:${sha256(`${context}:${label}`)}`;
+      // The first persisted request binds child IDs and search receipts before dispatch.
+      return replayCommand<JournalEntry, Record<string, unknown>>({
+        read: () => journal.entries[label],
+        write: entry => { journal.entries[label] = entry; saveEntry(label, entry); },
+      }, { method, path, body: body ?? null, outcome: 'result', changed: `Dataset request changed: ${label}`,
+        fields: { ...(itemKeys ? { itemKeys } : {}), ...(intake ? { intake } : {}) } },
+      async entry => structuredClone(await request(api, entry.method, entry.path, entry.body ?? undefined,
+        entry.method === 'GET' ? undefined : key, response => {
+          rememberResponse(entry, response);
+          saveEntry(label, entry);
+        }))).then(result => structuredClone(result));
+    };
+    const coverResponse = (entry: JournalEntry, response: ApiResponse) => {
+      rememberResponse(entry, response);
       entry.result = structuredClone(response.body);
     };
     /** Cover writes use the same immutable request journal, but are always replayed
      * against current owner fences before their prior receipt is accepted. */
     const coverCall = async (label: string, phase: JournalEntry['phase'],
-      method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown): Promise<ApiResponse> => {
+      method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown,
+      intake?: DatasetIntakeCoordinate): Promise<ApiResponse> => {
       let entry = journal.entries[label];
       if (entry) {
         if (entry.method !== method || entry.path !== path
@@ -892,17 +931,24 @@ export async function importDataset(
           throw new Error(`Dataset cover checkpoint changed: ${label}`);
         }
       } else {
-        entry = { method, path, body: body ?? null, phase };
+        entry = { method, path, body: body ?? null, phase, ...(intake ? { intake } : {}) };
         journal.entries[label] = entry;
         saveEntry(label, entry);
         save(true);
       }
+      if (intake) {
+        if (entry.intake && canonical(entry.intake) !== canonical(intake))
+          throw new DatasetIntakeCustodyError('coordinate', 'cover intake frozen coordinate changed');
+        entry.intake = structuredClone(intake);
+        saveEntry(label, entry);
+      }
       entry.phase = phase;
       const key = method === 'GET' ? undefined : `dataset:${sha256(`${context}:${label}`)}`;
       const response = await responseWithRetry(api, method, path,
-        () => api.request(method, path, body, key));
-      coverResponse(entry, response);
-      saveEntry(label, entry);
+        () => api.request(method, path, body, key), response => {
+          coverResponse(entry, response);
+          saveEntry(label, entry);
+        });
       save(true);
       return response;
     };
@@ -933,48 +979,83 @@ export async function importDataset(
       return response;
     };
     const retainedLabels = new Set<string>();
-    const sourceObservations = new Map<string, DatasetIntakeReference[]>();
+    const sourceObservations = new Map<string, DatasetIntakeReceipt[]>();
+    const sourceRetained = new Map<string, DatasetRetainedRecord>();
+    const intakeCommand = (label: string): DatasetIntakeCommand => {
+      const entry = journal.entries[label];
+      if (!entry?.intake || entry.method !== 'POST' || entry.path !== '/v1/sources/intakes')
+        throw new DatasetIntakeCustodyError('coordinate', `missing actual intake coordinate: ${label}`);
+      return structuredClone({ label, key: `dataset:${sha256(`${context}:${label}`)}`,
+        method: entry.method, path: entry.path, request: entry.body as DatasetIntakeRequest,
+        coordinate: entry.intake,
+        responses: entry.responses ?? (entry.result ? [{ body: entry.result }] : []),
+        ...(entry.result ? { result: entry.result } : {}) });
+    };
     const sourceReference = (key: string) => {
       const record = byKey.get(key);
       if (!record) throw new Error(`No frozen source record: ${key}`);
       const intakes = sourceObservations.get(key) ?? [];
-      return datasetSourceReference(snapshot, record, intakes.map(intake => intake.observation), intakes);
+      return datasetSourceReference(snapshot, record, intakes.map(intake => intake.observation), intakes, sourceRetained.get(key));
     };
     const retained = async (label: string, record: DatasetRecord, value: unknown) => {
       const parts = intakeChunks(value),
         ids: string[] = [];
-      const intakes: DatasetIntakeReference[] = [];
+      const original = byKey.get(record.key);
+      if (!original) throw new DatasetIntakeCustodyError('coordinate', `missing frozen origin: ${record.key}`);
+      const purpose = label.startsWith('record:') ? 'record' : label.startsWith('scope:') ? 'scope' : 'image-candidates';
+      const assembled = Buffer.from(canonical(value));
+      const payload = { format: parts.length > 1 ? 'rezics-dataset-chunk-v1' as const : 'json' as const,
+        byteDigest: sha256(assembled), byteLength: assembled.length };
+      const coordinate = (index: number): DatasetIntakeCoordinate => ({
+        snapshot: snapshotReference, identity: datasetFrozenIdentity(original), recordDigest: datasetRecordDigest(original),
+        purpose, index, count: parts.length, payload,
+        ...(purpose === 'record' ? { occurrences: occurrences(record.key) } : {}),
+      });
+      const requests = parts.map((part, index) => datasetIntakeRequest(record, snapshot.digest, part, index, parts.length));
+      const saved = parts.map((_, index) => journal.entries[`${label}:part:${index}`]);
+      // Validate cached successes too: an internally consistent unrelated intake
+      // cannot replace this frozen source or its original ordered part.
+      for (const [index, entry] of saved.entries()) if (entry) {
+        if (entry.method !== 'POST' || entry.path !== '/v1/sources/intakes')
+          throw new DatasetIntakeCustodyError('request', `intake operation changed: ${label}`);
+        assertDatasetIntakeRequest(entry.body, requests[index]!, false);
+      }
+      if (saved.every(entry => entry !== undefined)) {
+        let actual: unknown;
+        try {
+          actual = reconstructIntake(saved.map(entry => Buffer.from((entry!.body as DatasetIntakeRequest).rawBytesBase64, 'base64')));
+        } catch (cause) {
+          throw new DatasetIntakeCustodyError('envelope', `recorded parts cannot reconstruct the frozen input: ${String(cause)}`);
+        }
+        if (purpose === 'record') assertDatasetRecordEnvelope(actual, value as DatasetRecordEnvelope);
+        else if (canonical(actual) !== canonical(value))
+          throw new DatasetIntakeCustodyError('envelope', `retained ${purpose} differs from frozen input`);
+      }
+      const intakes: DatasetIntakeReceipt[] = [];
+      if (purpose === 'record') sourceObservations.set(record.key, intakes);
       for (let index = 0; index < parts.length; index++) {
-        const part = parts[index]!;
-        const response = await command(`${label}:part:${index}`, 'POST', '/v1/sources/intakes', {
-          profile: 'source-manual-intake-v1',
-          provider: record.provider,
-          namespace: parts.length > 1 ? `${record.kind}-dataset-part` : record.kind,
-          externalId: parts.length > 1 ? `${record.externalId}:part:${index}` : record.externalId,
-          sourceRevision: snapshot.digest,
-          mediaType: 'application/json',
-          retention: 'retained',
-          rawBytesBase64: part.toString('base64'),
-          coverage: {
-            scope:
-              parts.length > 1
-                ? 'complete-json-part-of-frozen-dataset-record'
-                : 'exact-frozen-dataset-record-with-outgoing-relations',
-            complete: parts.length === 1,
-            omittedFields: [],
-          },
-          rightsEvidence: sourceEvidence(record),
-        });
-        const observation = response.observation as Record<string, unknown>;
-        const observationId = nativeId(observation, 'observation'), recordId = nativeId(observation, 'record');
-        if (observation.byteDigest !== sha256(part)) throw new Error('Retained source receipt digest differs from frozen bytes');
-        ids.push(observationId);
-        intakes.push({ observation: observationId, record: recordId, byteDigest: observation.byteDigest });
+        const partLabel = `${label}:part:${index}`, expected = requests[index]!, binding = coordinate(index);
+        const entry = saved[index];
+        if (entry) {
+          assertDatasetIntakeRequest(entry.body, expected);
+          if (entry.intake && canonical(entry.intake) !== canonical(binding))
+            throw new DatasetIntakeCustodyError('coordinate', `recorded frozen intake coordinate changed: ${partLabel}`);
+          // Older real journals have exact requests/replies but no producer annotation.
+          // Enrich only after checking their actual bytes and frozen coordinates.
+          entry.intake = structuredClone(binding);
+          saveEntry(partLabel, entry);
+        }
+        await command(partLabel, 'POST', '/v1/sources/intakes', expected, undefined, binding);
+        const receipt = datasetIntakeReceipt(intakeCommand(partLabel), expected);
+        ids.push(receipt.observation);
+        intakes.push(receipt);
       }
       retainedLabels.add(label);
-      if (label.startsWith('record:')) {
+      if (purpose === 'record') {
         coverage.retain(record.key);
-        sourceObservations.set(record.key, intakes);
+        sourceRetained.set(record.key, structuredClone({ identity: datasetFrozenIdentity(original), snapshot: snapshotReference,
+          record: original, recordDigest: datasetRecordDigest(original), envelope: value as DatasetRecordEnvelope,
+          occurrences: occurrences(record.key), payload, intakes }));
       }
       return ids;
     };
@@ -1141,6 +1222,7 @@ export async function importDataset(
     const coverResults = new Map<string, DatasetCoverImportResult>();
     const coverageFile = join(root, `coverage-${context}.json`);
     const fieldPlansFile = join(root, `field-plans-${context}.json`);
+    const intakeReceiptsFile = join(root, `intakes-${context}.json`);
     const completedMappers = new Set<DatasetMapperId>();
     let coverageReport = coverage.report(false, completedMappers);
     try {
@@ -1648,7 +1730,7 @@ export async function importDataset(
           captureDigest: capture.digest,
         }));
         const label = `cover:${candidate}:${mapped.id}`;
-        const evidenceBody = {
+        const evidenceBody: DatasetIntakeRequest = {
           profile: 'source-manual-intake-v1',
           provider: source.provider,
           namespace: source.namespace,
@@ -1658,24 +1740,30 @@ export async function importDataset(
           retention: 'retained',
           rawBytesBase64: envelopeBytes.toString('base64'),
           coverage: { scope: 'cover-evidence', complete: false, omittedFields: ['description'] },
-          rightsEvidence: sourceEvidence(record),
+          rightsEvidence: datasetSourceRightsEvidence(record),
         };
         let activeStep: DatasetCoverImportStep = 'source-evidence';
         try {
           const evidenceReply = await coverCall(`${label}:evidence`, 'cover-evidence', 'POST',
-            '/v1/sources/intakes', evidenceBody);
+            '/v1/sources/intakes', evidenceBody, {
+              snapshot: snapshotReference, identity: datasetFrozenIdentity(record), recordDigest: datasetRecordDigest(record),
+              purpose: 'cover-evidence', index: 0, count: 1,
+              payload: { format: 'json', byteDigest: sha256(envelopeBytes), byteLength: envelopeBytes.length },
+              occurrences: { edges: [], images: [`/images/${imageIndex}`], electedImages: [`/images/${imageIndex}`] },
+            });
           if (evidenceReply.status >= 300) {
             pending(responseReason(evidenceReply), 'source-evidence', 'source-evidence-rejected', evidenceReply);
             continue;
           }
-          const retained = evidenceReply.body.observation as Record<string, unknown> | undefined;
-          if (!retained || typeof retained.byteDigest !== 'string'
-            || retained.byteDigest !== sha256(envelopeBytes)) {
+          let receipt: DatasetIntakeReceipt;
+          try {
+            receipt = datasetIntakeReceipt(intakeCommand(`${label}:evidence`), evidenceBody);
+          } catch {
             pending('Source did not return the retained cover evidence digest', 'source-evidence', 'source-evidence-invalid');
             continue;
           }
-          const sourceRecordId = nativeId(retained, 'record');
-          const sourceObservationId = nativeId(retained, 'observation');
+          const sourceRecordId = receipt.record;
+          const sourceObservationId = receipt.observation;
           const provenance = {
             format: 'media-imported-cover-v1',
             targetWork: mapped.id,
@@ -1687,7 +1775,7 @@ export async function importDataset(
               namespace: source.namespace,
               externalId: source.externalId,
               sourceRevision: source.revision,
-              observationDigest: retained.byteDigest,
+              observationDigest: receipt.byteDigest,
               datasetSnapshotDigest: snapshot.digest,
               recordDigest: source.recordDigest,
               fieldLocator: source.field,
@@ -1881,6 +1969,19 @@ export async function importDataset(
       journal.completed = selected.length === records.length;
       save(true);
     } finally {
+      const intakeEntries = Object.entries(journal.entries).filter(([, entry]) =>
+        entry.method === 'POST' && entry.path === '/v1/sources/intakes');
+      const intakeJournal: DatasetIntakeJournal = {
+        format: 'rezics-dataset-intake-receipts-v1', snapshot: snapshotReference,
+        commands: intakeEntries.filter(([, entry]) => entry.intake).map(([label]) => intakeCommand(label)),
+        unboundCommands: intakeEntries.filter(([, entry]) => !entry.intake).map(([label, entry]) => ({
+          label, key: `dataset:${sha256(`${context}:${label}`)}`, method: 'POST', path: '/v1/sources/intakes',
+          request: entry.body, responses: entry.responses ?? (entry.result ? [{ body: entry.result }] : []),
+          ...(entry.result ? { result: entry.result } : {}),
+        })),
+        records: Object.fromEntries(sourceRetained),
+      };
+      atomicJson(intakeReceiptsFile, intakeJournal);
       for (const entry of coverage.entries.values()) {
         if (!inView(entry) || entry.disposition.status !== 'unmapped') continue;
         if (!retainedLabels.has(`record:${entry.record}`)) entry.disposition.reason = 'source-intake-incomplete';
@@ -1914,6 +2015,7 @@ export async function importDataset(
       coverage: (({ entries: _entries, ...summary }) => summary)(coverageReport),
       ...(selectionFile ? { selectionFile, selection } : {}),
       fieldPlansFile,
+      intakeReceiptsFile,
     };
     atomicJson(join(root, 'import-latest.json'), result);
     return result;

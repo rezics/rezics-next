@@ -1,5 +1,6 @@
 import type { Capture } from './network.ts';
 import type { DatasetSelectionManifest } from './selection.ts';
+import type { ManualSourceIntake } from '../../services/main/src/modules/source/intake.ts';
 
 export type Provider = 'vndb' | 'bangumi' | 'musicbrainz';
 export interface DatasetRecord {
@@ -110,6 +111,109 @@ export interface DatasetIntakeReference {
   byteDigest: string;
 }
 
+export interface DatasetFrozenIdentity {
+  key: string;
+  provider: Provider;
+  namespace: string;
+  externalId: string;
+}
+
+export interface DatasetSnapshotReference {
+  id: string;
+  digest: string;
+  /** Only a digest of the actual retained file, never of a reserialization. */
+  fileSha256?: string;
+}
+
+export type DatasetIntakeRequest = ManualSourceIntake & {
+  profile: 'source-manual-intake-v1';
+  retention: 'retained';
+  rawBytesBase64: string;
+};
+
+export interface DatasetIntakePayload {
+  format: 'json' | 'rezics-dataset-chunk-v1';
+  /** Digest/length of assembled bytes, distinct from record and part digests. */
+  byteDigest: string;
+  byteLength: number;
+}
+
+export interface DatasetRecordEnvelope {
+  format: 'rezics-dataset-record-v1';
+  snapshot: string;
+  digest: string;
+  record: DatasetRecord;
+  edges: DatasetEdge[];
+  images: StoredImage[];
+}
+
+export interface DatasetRecordOccurrences {
+  /** Parallel to envelope.edges/images, in their actual submitted order. */
+  edges: string[];
+  images: string[];
+  /** Original /images indices; an election is not Media admission or adoption. */
+  electedImages: string[];
+}
+
+export interface DatasetIntakeCoordinate {
+  snapshot: DatasetSnapshotReference;
+  /** Original frozen record, separate from a scope or multipart Source record. */
+  identity: DatasetFrozenIdentity;
+  recordDigest: string;
+  purpose: 'record' | 'scope' | 'image-candidates' | 'cover-evidence';
+  index: number;
+  count: number;
+  payload: DatasetIntakePayload;
+  occurrences?: DatasetRecordOccurrences;
+}
+
+export interface DatasetCommandResponse {
+  /** Old journals did not retain HTTP status. Absence must stay unknown. */
+  status?: number;
+  body: Record<string, unknown>;
+}
+
+/** Actual command custody, including intents whose reply has not been observed. */
+export interface DatasetIntakeCommand {
+  label: string;
+  key: string;
+  method: 'POST';
+  path: '/v1/sources/intakes';
+  request: DatasetIntakeRequest;
+  coordinate: DatasetIntakeCoordinate;
+  responses: DatasetCommandResponse[];
+  result?: Record<string, unknown>;
+}
+
+export interface DatasetIntakeReceipt extends DatasetIntakeReference {
+  index: number;
+  byteLength: number;
+  /** Exact request and acknowledged reply; IDs alone are not intake custody. */
+  command: DatasetIntakeCommand & { result: Record<string, unknown> };
+}
+
+export interface DatasetRetainedRecord {
+  identity: DatasetFrozenIdentity;
+  snapshot: DatasetSnapshotReference;
+  record: DatasetRecord;
+  recordDigest: string;
+  envelope: DatasetRecordEnvelope;
+  occurrences: DatasetRecordOccurrences;
+  payload: DatasetIntakePayload;
+  intakes: DatasetIntakeReceipt[];
+}
+
+export interface DatasetIntakeJournal {
+  format: 'rezics-dataset-intake-receipts-v1';
+  snapshot: DatasetSnapshotReference;
+  /** Failed/interrupted intents remain here without an invented result. */
+  commands: DatasetIntakeCommand[];
+  /** Preserve older exact commands even when their frozen coordinate is unverified. */
+  unboundCommands: (Omit<DatasetIntakeCommand, 'coordinate' | 'request'> & { request: unknown })[];
+  /** Only complete, checked, acknowledged record intakes enter this view. */
+  records: Record<string, DatasetRetainedRecord>;
+}
+
 export interface DatasetSourceReference {
   key: string;
   provider: Provider;
@@ -121,6 +225,8 @@ export interface DatasetSourceReference {
   /** Ordered retained intake parts. Multiple parts are not one convertible observation. */
   observations: readonly string[];
   intakes: readonly DatasetIntakeReference[];
+  /** Complete actual envelope and ordered custody, not a conversion/adoption. */
+  retained?: DatasetRetainedRecord;
 }
 
 export interface DatasetMappingReceipt {
