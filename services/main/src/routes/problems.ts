@@ -45,6 +45,7 @@ import { OpenLibraryAcquisitionInvalid, OpenLibraryAcquisitionMissing,
   OpenLibraryAcquisitionUnavailable } from '../modules/source/open-library.ts';
 import { SourceConversionInvalid, SourceConversionUnavailable }
   from '../modules/source/open-library-conversion.ts';
+import { SourceFieldProblem } from '../modules/source/field-support-contract.ts';
 import { SourceChildCorrespondenceInvalid, SourceChildCorrespondenceConflict,
   SourceChildCorrespondenceUnavailable } from '../modules/source/record-child-correspondence.ts';
 import { GoResolutionInvalid, GoResolutionConflict, GoResolutionUnavailable }
@@ -140,6 +141,7 @@ export class LibraryImportTooLarge extends Error {}
 export class LibraryImportTimedOut extends Error {}
 
 interface ProblemDetails {
+  basis?: string;
   currentHead?: string | null;
   current?: string | null | SessionState | EditionPreference;
   operation?: string;
@@ -210,6 +212,8 @@ export function typedRefusal(error: unknown, fault: unknown = error): Response |
 }
 
 function mapTypedRefusal(error: unknown): Response | undefined {
+  if (error instanceof SourceFieldProblem) return problem(error.status, error.code, error.message,
+    undefined, error.basis === undefined ? undefined : { basis: error.basis });
   // fetch can exhaust its deadline before headers or while reading the body.
   // Both leave the dependency unavailable, rather than an internal failure.
   if (error instanceof DOMException && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
