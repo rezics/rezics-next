@@ -764,7 +764,7 @@ describe('selected native view and original parent intake custody', () => {
       return response;
     } };
     const input = { ...options(api), native: false };
-    await expect(importDataset(directory, source, { ...input, selection })).rejects.toThrow('closed socket');
+    await expect(importDataset(directory, source, { ...input, selection })).rejects.toThrow('response lost; rerun to replay the recorded request');
     const file = readdirSync(directory).find(name => name.startsWith('intakes-'))!;
     const interrupted = intakeJournal(join(directory, file));
     const pending = interrupted.commands.find(command => command.request.externalId === 'c1:part:1')!;
