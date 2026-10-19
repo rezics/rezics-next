@@ -242,6 +242,8 @@ export default {
   textNotFoundBody: '이 작품은 이 언어로 텍스트가 공개되지 않았거나 챕터별로 읽는 작품입니다.',
   textUnavailableTitle: '지금은 이 텍스트를 표시할 수 없습니다', textFormat: '리더에서 아직 표시할 수 없는 형식의 텍스트입니다.',
   recipeMethod: '레시피', viewRecipe: '레시피 보기',
+  // Machine-drafted; needs native review.
+  recipeNutrition: '영양 정보', recipeNutritionNotProvided: '영양 정보가 제공되지 않았습니다',
   recipeYield: '완성 분량', servings: '인분', totalTime: '전체 시간', prepTime: '준비', cookTime: '조리',
   ingredients: '재료', method: '조리 방법', scaleRecipe: '분량 환산', scaling: '환산 중…',
   scaleFailed: '분량을 환산하지 못했습니다. 다시 시도해 주세요.',

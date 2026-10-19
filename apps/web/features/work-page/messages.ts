@@ -44,6 +44,7 @@ const en = {
   regionDenied: 'Sign in with access to this Work to see this part.',
 
   recipeMethod: 'Recipe', viewRecipe: 'View recipe', recipeYield: 'Yield', servings: 'Servings',
+  recipeNutrition: 'Nutrition', recipeNutritionNotProvided: 'Nutrition not provided',
   totalTime: 'Total', prepTime: 'Prep', cookTime: 'Cook', ingredients: 'Ingredients', method: 'Method',
   scaleRecipe: 'Scale', scaling: 'Scaling…', scaleFailed: 'Quantities could not be scaled. Try again.',
   scaleByTaste: 'This amount stays as written. Salt, spices and leavening need a taste check when the batch changes by more than double.',

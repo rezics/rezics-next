@@ -244,6 +244,8 @@ export default {
   textUnavailableTitle: 'Dieser Text kann gerade nicht angezeigt werden',
   textFormat: 'Dieser Text verwendet ein Format, das der Reader noch nicht anzeigen kann.',
   recipeMethod: "Rezept",
+  // Machine-drafted; needs native review.
+  recipeNutrition: 'Nährwertangaben', recipeNutritionNotProvided: 'Keine Nährwertangaben vorhanden',
   viewRecipe: "Rezept ansehen",
   recipeYield: "Ergibt",
   servings: "Portionen",
