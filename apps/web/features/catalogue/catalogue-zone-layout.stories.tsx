@@ -87,7 +87,7 @@ const meta = {
     await assertPreviews(list, works);
     const firstTitle = within(list).getByRole('link', { name: works[0]!.title!.value });
     for (const label of ['Collapse navigation', 'Expand navigation']) {
-      await userEvent.click(canvas.getByRole('button', { name: label, exact: true }));
+      await userEvent.click(canvas.getByRole('button', { name: label }));
       await assertPreviews(list, works);
       await expect(within(list).getByRole('link', { name: works[0]!.title!.value })).toBe(firstTitle);
     }
