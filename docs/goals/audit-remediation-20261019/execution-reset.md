@@ -58,7 +58,17 @@ tasks continue. This explicitly supersedes the global build/prove phase hold
 for targeted checks, including real API, native, Storybook and browser checks.
 Use existing Task admission and isolated fixtures; do not start a full regress
 campaign that monopolizes build admission. Keep one final recorded regression
-and confirmation before the wave's main merge. A source-only handoff is not proof.
+and confirmation before the remaining wave's main merge. A source-only handoff is not proof.
+
+Independently complete, verified slices may reach main as small integration
+batches before the whole audit wave is ready. This supersedes the one-big-merge
+hold for such batches. Integrate exact authored commits and their required
+dependencies from a pinned wave into an isolated main-based candidate; run its
+affected checks and codex-1/xhigh review on that actual candidate. Do not assume
+wave evidence alone proves a different dependency base, rewrite the wave or
+include unrelated work. Preserve wave history and reconcile main into the wave
+through its existing owner. Original wave tasks stay tracked until their normal
+closure; finding-level main evidence identifies the small integration receipt.
 
 Start with the ready shared controls and other independent visible fixes, plus
 bounded request/query/notification operations using their own genuine fixtures.
