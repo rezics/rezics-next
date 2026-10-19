@@ -13,7 +13,10 @@ export const composeFile = 'infra/dev/compose.yaml';
  * runtime stage's test-free packaging invocation. Refuse drift in the fixture cache. */
 export function nativeModuleTestInvocation(dockerfile: string): string {
   const stage = dockerfile.split('\nFROM module AS module-test\n', 2)[1]?.split(/\nFROM /, 1)[0];
-  const invocation = /^RUN --mount=type=cache,id=rezics-native-test-files,target=\/build\/tmp,sharing=locked mvn (.+) package$/m.exec(stage ?? '')?.[1];
+  const invocation = /^RUN --mount=type=cache,id=rezics-native-test-files,target=\/build\/tmp,sharing=locked mvn (.+) package$/m.exec(stage ?? '')?.[1]
+    ?? (/^ARG NATIVE_TEST_CACHE_ID=rezics-native-test-files$/m.test(stage ?? '')
+      ? /^RUN --mount=type=cache,id=\$\{NATIVE_TEST_CACHE_ID\},target=\/build\/tmp,sharing=locked \\\n    if \[ -n "\$NATIVE_TEST_SELECTION" \]; then set -- "-Dtest=\$NATIVE_TEST_SELECTION" -Dsurefire.failIfNoSpecifiedTests=true; else set --; fi; \\\n    mvn (.+) "\$@" package$/m.exec(stage ?? '')?.[1]
+      : undefined);
   if (!invocation || !invocation.split(' ').every(argument => /^-[^\s"'`]+$/u.test(argument)))
     throw new Error('unsupported native module-test Maven invocation');
   return invocation;

@@ -422,9 +422,9 @@ tasks:
       - bun scripts/dev/fuseki-image-build.ts
 
   jena:test:
-    desc: Run the full native Maven suite in the module-test Docker target.
+    desc: Run the native Maven suite (or -- --tests Class[#method][,Class...]) in the module-test Docker target.
     cmds:
-      - bun scripts/qa/host-admission.ts --gib 4 -- bun scripts/qa/native-module-suite.ts
+      - bun scripts/qa/host-admission.ts --gib 4 -- bun scripts/qa/native-module-suite.ts {{.CLI_ARGS}}
 
   toolchain:inventory:
     desc: Regenerate the toolchain inventory from manifests and root commands.
