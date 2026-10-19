@@ -32,15 +32,16 @@ export const TEXT_INDEX_PROBE_BODY = '中文检索验证 魔法禁書目錄 ガ�
 export const TEXT_INDEX_PROBE_QUERIES = ['中文检索', '魔法禁书目录', 'がらす', 'ｶﾞﾗｽ', 'rust'] as const;
 export const TEXT_INDEX_PROBE_TITLE = '标题检索验证';
 /** Constant-size analyzer witness shared by request readiness and rebuild
- * activation. Every query must return the original literal from this graph. */
+ * activation. Require every phrase on the same original indexed literal in one
+ * search, avoiding a reader acquisition and query parse for each phrase. */
 export function textIndexProbePattern(): string {
+  const query = TEXT_INDEX_PROBE_QUERIES.map(phrase => `"${phrase}"`).join(' AND ');
   return `GRAPH ${iri(TEXT_INDEX_PROBE_GRAPH)} {
     ${iri(TEXT_INDEX_PROBE)} rv:searchBody ${lit(TEXT_INDEX_PROBE_BODY)}@zh .
-    ${TEXT_INDEX_PROBE_QUERIES.map((query, index) => `
-      (${iri(TEXT_INDEX_PROBE)} ?probeScore${index} ?probeLiteral${index} ?probeGraph${index})
-        text:query (rv:searchBody ${lit(`"${query}"`)} 2) .
-      FILTER(?probeLiteral${index} = ${lit(TEXT_INDEX_PROBE_BODY)}@zh
-        && ?probeGraph${index} = ${iri(TEXT_INDEX_PROBE_GRAPH)})`).join('\n')}
+    (${iri(TEXT_INDEX_PROBE)} ?probeScore ?probeLiteral ?probeGraph)
+      text:query (rv:searchBody ${lit(query)} 2) .
+    FILTER(?probeLiteral = ${lit(TEXT_INDEX_PROBE_BODY)}@zh
+      && ?probeGraph = ${iri(TEXT_INDEX_PROBE_GRAPH)})
   }`;
 }
 export const PUBLIC_SEARCH_ANCHOR = 'urn:rezics:search:public:anchor';
