@@ -9,6 +9,8 @@ import { legacyFailureResponse } from '../modules/problem.ts';
 import { readWorkClassifications } from '../modules/work/read-classifications.ts';
 import { executeTemplate } from '../modules/query/template-read.ts';
 import { template as workCredits } from '../modules/query/templates/work-credits.schema.ts';
+import { associationCreditsQuery, associationConflict, associationResult } from '../modules/query/association-contract.ts';
+import { associationReadFailure, creditAssociationRequest, executeAssociationQuery } from '../modules/query/association-read.ts';
 import { readResourceRating, readResourceRatingContexts, resourceRatingRead } from '../modules/rating/target-read.ts';
 import { RatingTargetNotAccepted } from '../modules/rating/acceptance.ts';
 import { RatingTargetGrainMismatch } from '../modules/rating/release.ts';
@@ -51,10 +53,16 @@ export function workReadRoutes(work: MainWorkDependencies) {
     .model(workHeaderModels)
     [workHeaderOperation.method](workHeaderOperation.path, workHeaderOperation.options, workHeaderHandler(work))
     .get('/v1/works/:id/credits', { params, detail,
-      query: t.Object(pageQuery, { additionalProperties: false }),
-      response: transportResponses(openApiOperations["/v1/works/{id}/credits"].get, { 200: workCredits.response, 304: t.Null(), ...workReadProblems }, 'GET'),
+      query: t.Union([t.Object({ ...pageQuery,
+        limit: t.Optional(t.Numeric({ minimum: 1, maximum: 20, multipleOf: 1 })) }, { additionalProperties: false }), associationCreditsQuery]),
+      response: transportResponses(openApiOperations["/v1/works/{id}/credits"].get, {
+        200: t.Union([workCredits.response, associationResult]), 304: t.Null(), ...workReadProblems, 409: associationConflict }, 'GET'),
     }, async ({ request, params: path, query: options }) => {
       try {
+        if ('profile' in options && options.profile === 'subject-associations-v1') {
+          return await executeAssociationQuery(work, request,
+            creditAssociationRequest(`https://rezics.com/id/${path.id}`, options), 'work-credits');
+        }
         const response = await executeTemplate(work, request, {
           profile: 'template-query-v1', query: workCredits.query, revision: workCredits.revision,
           parameters: { roots: [`https://rezics.com/id/${path.id}`] },
@@ -64,7 +72,7 @@ export function workReadRoutes(work: MainWorkDependencies) {
         if (response.status !== 200) return response;
         const body = await response.json() as { result: unknown };
         return Response.json(body.result, { status: response.status, headers: response.headers });
-      } catch (error) { return workReadError(error); }
+      } catch (error) { return 'profile' in options ? associationReadFailure(error) ?? workReadError(error) : workReadError(error); }
     })
     .get('/v1/works/:id/classifications', { params, detail,
       query: t.Object({ ...pageQuery, ...scopeQuery }, { additionalProperties: false }),
