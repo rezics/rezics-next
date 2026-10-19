@@ -2,6 +2,8 @@ import { transportResponses } from '../transport-responses.ts';
 import { chooseMainLanguage, readMainLanguageHeads } from '../modules/work/selection-heads.ts';
 import { discloseInventory } from '../modules/disclosure/read.ts';
 import { ANONYMOUS_VIEWER } from '../modules/suitability/policy.ts';
+import { verifyRequestAccount } from '../modules/account/verify-assertion.ts';
+import { disclosureViewer, withDisclosureViewer } from '../modules/disclosure/viewer.ts';
 import { Elysia, t } from 'elysia';
 import { prepareSourcedStructurePublication } from '../modules/work/sourced-structure-publication.ts';
 import { prepareInstructionAdoptions } from '../modules/work/instruction-adoption.ts';
@@ -733,11 +735,14 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
       query: t.Object({ language: t.Optional(t.String({ pattern: '^[a-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$' })) }),
       params: t.Object({ mainVersion: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
       response: transportResponses(openApiOperations["/v1/main-versions/{mainVersion}/selection"].get, { 200: mainSelectionReadResult, ...readProblems }, 'GET'),
-    }, async ({ params, query }) => {
+    }, async ({ request, params, query }) => {
       try {
+        const principal = request.headers.has('authorization')
+          ? await verifyRequestAccount(work.account, request, []) : null;
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         const main = `https://rezics.com/id/${params.mainVersion}`;
-        const selected = await readMainDefaultVariant(work.environment, main, query.language);
+        const selected = await withDisclosureViewer(disclosureViewer(principal),
+          () => readMainDefaultVariant(work.environment, main, query.language));
         return Response.json({ work: selected.work, mainVersion: main,
           selection: selected.selection, contribution: selected.variant.contribution,
           selectedDraft: selected.variant.selectedDraft, language: selected.variant.language,
