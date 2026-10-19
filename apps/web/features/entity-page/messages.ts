@@ -12,7 +12,34 @@ import zhHant from './messages/zh-Hant.ts';
 // from the type registry, and relation labels from Main's lexicon; neither is
 // written here.
 const en = {
+  primaryActions: "Primary actions",
+  reactions: "Reactions",
+  moreActions: insert("More actions for {{name}}", { name: String }),
+  noFurtherDetails: "No further details are listed.",
+  showMore: "Show more",
+  showLess: "Show less",
   sources: "Sources and licenses",
+  sourceRecord: "Source record",
+  sourceIdentity: "Source identity",
+  evidence: "Evidence",
+  recordRevision: "Revision",
+  fieldEvidenceUnavailable: "Field-by-field attribution is not available for this record.",
+  releaseRevision: "Release revision",
+  realizationRevision: "Realization revision",
+  factRevision: "Fact revision",
+  noEvidence: "No evidence is recorded for this revision.",
+  evidenceReference: "Evidence reference",
+  sourceWork: "Source work",
+  sourceRepresentation: "Source fingerprint (SHA-256)",
+  sourceLocation: "Location in source",
+  evidenceMethod: "How it was recorded",
+  evidenceModality: "Claim type",
+  evidenceSubmitter: "Submitted by",
+  evidenceRights: "Rights basis",
+  quotation: "Quoted passage",
+  quotationWithheld: "The quoted passage is not available. Its source is still recorded.",
+  notSupplied: "Not supplied",
+
   alternateSelf: "Alternate self",
   otherWorldCounterpart: "Counterpart from another world",
   identityGlobal: "Global",
@@ -60,7 +87,7 @@ const en = {
   ratingsFor: insert('Ratings for this {{subject}}', { subject: String }),
   reviewsFor: insert('Reviews of this {{subject}}', { subject: String }),
   noRatings: 'No ratings yet.',
-  unavailable: 'Unavailable', unnamed: 'Unnamed', search: 'Search',
+  unavailable: 'Unavailable', unnamed: 'Unnamed', nameNotShown: 'Name not shown', search: 'Search',
 };
 
 export const englishMessages = en;

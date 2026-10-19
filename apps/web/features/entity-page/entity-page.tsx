@@ -13,7 +13,7 @@ import type { WorkPageMessages } from '../work-page/messages.ts';
 import { reader, readingAgent } from '../work-page/read.ts';
 import { Region, RegionSkeleton } from '../work-page/region.tsx';
 import { RetryButton } from '../work-page/retry-button.tsx';
-import { EntityHeader } from './header.tsx';
+import { EntityHeader, SubjectHeader } from './header.tsx';
 import { type Copy, copyOf } from './messages.ts';
 import { readEntityProjection, sectionOf } from './read.ts';
 import { ContinuitySwitch, type ContinuityOption } from '../wiki/continuity-switch.tsx';
@@ -39,6 +39,10 @@ import { namesOf } from '../work-levels/read.ts';
 import { iriOf } from '../work-page/route.ts';
 import { RATINGS_REGION, TargetRatingsRegion } from '../work-page/ratings.tsx';
 import { inSentence } from './messages.ts';
+
+function UsefulContent({ enabled, children }: { enabled: boolean; children: ReactNode }) {
+  return enabled ? <div data-primary-content className="grid min-w-0 gap-10">{children}</div> : children;
+}
 
 function Unavailable({ t, messages, frame }: { t: Copy; messages: WorkPageMessages; frame: boolean }) {
   const body = <EmptyState icon={TriangleAlertIcon} tone="destructive" role="alert" headingLevel={1}
@@ -129,29 +133,23 @@ export async function EntityPage({ resource, locale, hrefFor, frame = true, curs
     : null;
   const loading = (section: EntitySection, title: string) =>
     <RegionSkeleton id={`${section.id}-loading`} title={title} label={messages.loadingRegion} lines={3} />;
-  const body: ReactNode = <div className="grid min-w-0 gap-10">
-    {header ? scoped
-      ? <ProjectionHeader summary={placeSummary} level={1} page locale={locale} messages={scoped} />
-      : <EntityHeader summary={page.summary} registry={page.registry} avatarQuery={avatarQuery} locale={locale} t={t} /> : null}
-    {header ? <RelationshipControl target={page.target.resource}
-      kind={page.summary.base === 'work' ? 'work' : ['realm', 'space', 'collection', 'concept'].includes(page.summary.type)
-        ? page.summary.type : page.registry.type} name={page.summary.name.value} locale={locale}
-      signedIn={signedIn} actingSubject={actingSubject} signInHref="/auth/start" /> : null}
-    {continuitySwitch && page.target.base === 'resource'
-      ? <Suspense fallback={null}><ContinuityBar id={id} position={position} here={here} current={continuity} locale={locale} /></Suspense> : null}
-    {identitySections && page.target.base === 'resource' ? <Suspense fallback={
-      <RegionSkeleton id="identity-loading" title={t.relations} label={messages.loadingRegion} lines={3} />}>
-      <IdentitySections page={page} cursors={cursors} ratingScope={ratingScope} position={position}
-        frame={frames[0]} here={here} actingSubject={actingSubject ?? null}
-        avatarQuery={avatarQuery} {...common} /></Suspense> : null}
-    {page.target.base === 'resource' && page.registry.frameDimension === 'event'
-      ? <Suspense fallback={null}><EventRankingSection page={page} ratingScope={ratingScope} position={position}
-        locale={locale} actingSubject={actingSubject ?? null} /></Suspense> : null}
-    {draw.map(section => {
+  const actions = <RelationshipControl target={page.target.resource}
+    kind={page.summary.base === 'work' ? 'work' : ['realm', 'space', 'collection', 'concept'].includes(page.summary.type)
+      ? page.summary.type : page.registry.type} name={page.summary.name.value} locale={locale}
+    signedIn={signedIn} actingSubject={actingSubject} signInHref={signInPath(localizedPath(here, locale))}
+    reactionsLabel={t.reactions} moreAccessibleLabel={t.moreActions({ name: ownName })}
+    reports={[{ target: page.target.resource, kind: 'page' }]} />;
+  const primary = draw.some(section => section.id === 'relations')
+    ? <Link href="#relations" className={buttonVariants({ variant: 'outline', size: 'sm' })}>{t.relations}</Link>
+    : draw.some(section => section.id === 'statements')
+      ? <Link href="#statements" className={buttonVariants({ variant: 'outline', size: 'sm' })}>{t.statements}</Link>
+    : draw.some(section => section.id === 'discussion')
+      ? <Link href="#discussion" className={buttonVariants({ variant: 'outline', size: 'sm' })}>{t.discussion}</Link> : null;
+  const renderSection = (section: EntitySection) => {
       switch (section.id) {
         case 'statements': return <Suspense key={section.id} fallback={loading(section, t.statements)}>
           <StatementsSection section={section} cursor={cursors.statements} position={position} frame={frames}
-            projection={isPlace} ownName={ownName} {...common} /></Suspense>;
+            projection={isPlace} ownName={ownName} pageEndSources {...common} /></Suspense>;
         case 'relations': return <Suspense key={section.id} fallback={loading(section, t.relations)}>
           <RelationsSection section={section} cursor={cursors.relations} position={position} frame={frames}
             hideIdentity={identitySections && page.target.base === 'resource'} {...common} /></Suspense>;
@@ -171,7 +169,33 @@ export async function EntityPage({ resource, locale, hrefFor, frame = true, curs
             registry={page.registry} signedIn={signedIn} noun={noun} {...common} /></Suspense>;
         default: return null;
       }
-    })}
+  };
+  const body: ReactNode = <div className="grid min-w-0 gap-10">
+    {header ? scoped
+      ? <SubjectHeader locale={locale} resource={page.target.resource} semanticType={page.registry.type} identity={<ProjectionHeader summary={placeSummary} level={1} page locale={locale} messages={scoped} />}
+        primary={primary} actions={actions} />
+      : <EntityHeader summary={page.summary} registry={page.registry} avatarQuery={avatarQuery} locale={locale} t={t}
+        primary={primary} actions={actions} /> : null}
+    <UsefulContent enabled={header}>
+    {continuitySwitch && page.target.base === 'resource'
+      ? <Suspense fallback={null}><ContinuityBar id={id} position={position} here={here} current={continuity} locale={locale} /></Suspense> : null}
+    {identitySections && page.target.base === 'resource' ? <Suspense fallback={
+      <RegionSkeleton id="identity-loading" title={t.relations} label={messages.loadingRegion} lines={3} />}>
+      <IdentitySections page={page} cursors={cursors} ratingScope={ratingScope} position={position}
+        frame={frames[0]} here={here} actingSubject={actingSubject ?? null}
+        avatarQuery={avatarQuery} {...common} /></Suspense> : null}
+    {page.target.base === 'resource' && page.registry.frameDimension === 'event'
+      ? <Suspense fallback={null}><EventRankingSection page={page} ratingScope={ratingScope} position={position}
+        locale={locale} actingSubject={actingSubject ?? null} /></Suspense> : null}
+    {draw.filter(section => !header || section.id !== 'discussion' && section.id !== 'reviews').map(renderSection)}
+    </UsefulContent>
+    {header ? <div data-community-content className="grid min-w-0 gap-10">
+      {draw.filter(section => section.id === 'reviews' || section.id === 'discussion').map(renderSection)}
+    </div> : null}
+    {draw.filter(section => section.id === 'statements').map(section => <Suspense key={`${section.id}-sources`} fallback={null}>
+      <StatementsSection section={section} cursor={cursors.statements} position={position} frame={frames}
+        ownName={ownName} sourcesOnly {...common} />
+    </Suspense>)}
   </div>;
   return frame ? <PageContainer className="max-w-4xl [text-autospace:normal]">{body}</PageContainer> : body;
 }

@@ -20,7 +20,7 @@ import {
   PlusIcon,
   VolumeXIcon,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { ReportMenu, ReportMenuItems, type ReportMenuTarget } from '../safety/report-action.tsx';
 import { mainRelationships, RelationshipError } from './api.ts';
@@ -76,6 +76,11 @@ export function NotificationMenu({
   );
 }
 
+/** The reaction group excludes the object's more menu so each keeps its own accessible identity. */
+function Reactions({ label, children }: { label?: string; children: ReactNode }) {
+  return label ? <div role="group" aria-label={label} className="flex min-w-0 items-center gap-1.5">{children}</div> : children;
+}
+
 /** Follow/Join, its delivery level and separate negative relationships share one control on every surface. */
 export function RelationshipControl(props: Parameters<typeof RelationshipControlState>[0]) {
   return (
@@ -104,8 +109,9 @@ function RelationshipControlState({
   followLabel,
   followingLabel,
   followAccessibleLabel,
-  reports = [],
   moreAccessibleLabel,
+  reactionsLabel,
+  reports = [],
 }: {
   target: string;
   kind: string;
@@ -124,8 +130,9 @@ function RelationshipControlState({
   followLabel?: string;
   followingLabel?: string;
   followAccessibleLabel?: string;
-  reports?: readonly ReportMenuTarget[];
   moreAccessibleLabel?: string;
+  reactionsLabel?: string;
+  reports?: readonly ReportMenuTarget[];
 }) {
   const t = messages[locale];
   const api = useMemo(
@@ -270,7 +277,7 @@ function RelationshipControlState({
         : (followLabel ?? t.follow);
   if (!signedIn)
     return (
-      <div className="flex min-w-0 flex-wrap items-center gap-1.5"><a
+      <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5"><Reactions label={reactionsLabel}><a
         href={signInHref}
         aria-label={followAccessibleLabel ? `${followAccessibleLabel} · ${t.signIn}` : undefined}
         className={cn(buttonVariants({ pill: true, size: compact ? 'xs' : 'sm' }), 'w-fit max-w-full justify-self-start', className)}
@@ -281,13 +288,13 @@ function RelationshipControlState({
           {' '}
           · {name} · {t.signIn}
         </span>
-      </a><ReportMenu targets={reports} name={name} locale={locale} moreAccessibleLabel={moreAccessibleLabel} /></div>
+      </a></Reactions><ReportMenu targets={reports} name={name} locale={locale} moreAccessibleLabel={moreAccessibleLabel} /></div>
     );
   if (!api)
     return (
-      <div className="flex min-w-0 flex-wrap items-center gap-1.5"><p role="status" className="text-muted-foreground text-sm">
+      <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5"><Reactions label={reactionsLabel}><p role="status" className="text-muted-foreground text-sm">
         {t.unknown}
-      </p><ReportMenu targets={reports} name={name} locale={locale} moreAccessibleLabel={moreAccessibleLabel} /></div>
+      </p></Reactions><ReportMenu targets={reports} name={name} locale={locale} moreAccessibleLabel={moreAccessibleLabel} /></div>
     );
   return (
     <div
@@ -295,6 +302,7 @@ function RelationshipControlState({
       data-relationship={target}
       data-hydrated={hydrated ? 'true' : undefined}
     >
+      <Reactions label={reactionsLabel}>
       <Button
         type="button"
         pill
@@ -340,6 +348,7 @@ function RelationshipControlState({
           onChange={(level) => void write({ level })}
         />
       ) : null}
+      </Reactions>
       <Menu>
         <MenuTrigger asChild>
           <Button

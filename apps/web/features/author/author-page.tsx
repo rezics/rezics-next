@@ -16,6 +16,9 @@ import { Notice } from '../discover/notice.tsx';
 import { EmptyState } from '../shell/empty-state.tsx';
 import Link from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
+import { SubjectHeader } from '../entity-page/header.tsx';
+import { SubjectSources } from '../entity-page/sources.tsx';
+import { copyOf as detailCopy } from '../entity-page/messages.ts';
 import { workHref } from '../work-page/route.ts';
 import { type FollowActions, FollowControl } from '../profile/follow-button.tsx';
 import { authorName, formatAuthorDate, lifespan, retrievedOn } from './facts.ts';
@@ -56,7 +59,7 @@ export function authorCard(item: AuthorWork): CatalogueWork {
 function Portrait({ name, size = 'lg', className }: { name: string; size?: 'sm' | 'lg'; className?: string }) {
   return <span aria-hidden="true" className={cn('relative grid shrink-0 place-items-center overflow-hidden rounded-full',
     'bg-accent text-accent-foreground after:absolute after:inset-0 after:rounded-[inherit] after:border',
-    'after:border-foreground/8', size === 'lg' ? 'size-20 text-3xl sm:size-40 sm:text-6xl' : 'size-10 text-base',
+    'after:border-foreground/8', size === 'lg' ? 'size-10 text-base sm:size-24 sm:text-4xl' : 'size-10 text-base',
     className)}>
     <span className="font-semibold font-work-title leading-none">{initials(name)}</span>
   </span>;
@@ -98,25 +101,23 @@ function AuthorHeader({ author, follow, reader, followActions, locale, messages 
   const name = authorName(author, t);
   const years = lifespan(author.facts, locale, messages);
   const state = follow.ok ? follow.data : null;
-  return <header className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-5 gap-y-6 sm:items-start
-    sm:gap-x-10">
-    <Portrait name={name} className="sm:row-span-2" />
-    <div className="min-w-0 space-y-1.5 sm:pt-3">
+  const detail = detailCopy(locale);
+  return <SubjectHeader locale={locale} identity={<div className="flex min-w-0 items-center gap-3 sm:gap-5">
+    <Portrait name={name} />
+    <div className="min-w-0 space-y-1.5">
       <p className="font-medium text-muted-foreground text-sm">{t.author}</p>
-      <h1 className="text-balance font-semibold font-work-title text-3xl/tight tracking-tight [overflow-wrap:anywhere]
-        sm:text-5xl/tight">{name}</h1>
+      <h1 className="text-balance font-semibold font-work-title text-2xl/tight tracking-tight [overflow-wrap:anywhere]
+        sm:text-3xl/tight">{name}</h1>
       {years ? <p className="text-lg text-muted-foreground tabular-nums">{years}</p> : null}
-    </div>
-    {/* Follow and its count sit where a REZICS author's profile has them, above what the Works add up to. */}
-    <div className="col-span-2 grid content-start gap-6 sm:col-span-1 sm:col-start-2">
-      <FollowControl target={externalAuthorFollow(author.key)} kind="external-author" name={name}
+    </div></div>}
+    actions={<FollowControl target={externalAuthorFollow(author.key)} kind="external-author" name={name}
         following={state?.following ?? null} revision={state?.revision ?? null} followers={state?.followers ?? null}
         signedIn={reader.signedIn} actingSubject={reader.actingSubject}
         signInHref={signInPath(localizedPath(openLibraryAuthorHref(author.key), locale))} actions={followActions}
-        locale={locale} messages={messages} />
-      <Totals totals={author.totals} locale={locale} messages={messages} />
-    </div>
-  </header>;
+        locale={locale} messages={messages} reactionsLabel={detail.reactions}
+        moreAccessibleLabel={detail.moreActions({ name })} className="justify-end gap-x-2" />}
+    primary={<Link href="#author-works" className={buttonVariants({ variant: 'outline', size: 'sm' })}>
+      {t.worksHeading({ name })}</Link>} />;
 }
 
 const completionText = (completion: AuthorWork['completionStatus'], t: Text) =>
@@ -164,8 +165,8 @@ function Onward({ href, label, note, mono }: { href: string; label: string; note
  * the author, and where and when REZICS took these facts. No biography: Open
  * Library's is prose, not a fact REZICS may repeat.
  */
-function AuthorRecord({ author, locale, messages }: { author: ExternalAuthor; locale: UiLocale;
-  messages: AuthorMessages }) {
+function AuthorRecord({ author, locale, messages, sourcesOnly = false }: { author: ExternalAuthor; locale: UiLocale;
+  messages: AuthorMessages; sourcesOnly?: boolean }) {
   const t = materializeData(messages, { locale });
   const facts = author.facts;
   const details = [
@@ -177,10 +178,35 @@ function AuthorRecord({ author, locale, messages }: { author: ExternalAuthor; lo
   const reading = identifiers.filter(item => (readingSchemes as readonly string[]).includes(item.scheme));
   const records = identifiers.filter(item => !(readingSchemes as readonly string[]).includes(item.scheme));
   const label = (item: AuthorIdentifier) => t[item.scheme];
-  const retrieved = author.name ? retrievedOn(author.name.nameSource.fetchedAt, locale) : null;
+  const fieldSources = [author.name?.nameSource, facts?.birthDate?.source, facts?.deathDate?.source,
+    facts?.fullerName?.source, ...identifiers.map(item => item.source)].filter(source => source !== undefined && source !== null);
+  const sourceRecords = [...new Map(fieldSources.map(source => [`${source.url}:${source.sourceRevision}`, source])).values()];
+  const retrieved = sourceRecords[0] ? retrievedOn(sourceRecords[0].fetchedAt, locale) : null;
   const id = author.key.replace(/^\/authors\//, '');
   const heading = 'font-semibold text-muted-foreground text-xs uppercase tracking-wider';
-  return <aside className="grid content-start gap-8 text-[0.9375rem]">
+  if (sourcesOnly) return <SubjectSources locale={locale}>
+    <section aria-labelledby="author-records" className="grid gap-2">
+      <h3 id="author-records" className={heading}>{t.records}</h3>
+      <ul className="grid divide-y divide-border/60">
+        <Onward href={`https://openlibrary.org${author.key}`} label={t.openLibrary} note={id} mono />
+        {records.map(item => <Onward key={item.scheme} href={item.url} label={label(item)} note={item.value} mono />)}
+      </ul>
+    </section>
+    <p className="text-pretty text-muted-foreground text-xs leading-relaxed">
+      {retrieved ? t.sourceNote({ date: retrieved }) : t.sourceNoteUndated}{' '}
+      <a href={author.record} rel="noreferrer"
+        className="rounded-sm font-medium text-foreground underline underline-offset-4 outline-none focus-visible:ring-2 focus-visible:ring-ring">{t.viewRecord}</a>
+    </p>
+    {sourceRecords.length ? <ul className="grid gap-2 text-muted-foreground text-xs">
+      {sourceRecords.map(source => <li key={`${source.url}:${source.sourceRevision}`} className="grid min-w-0 gap-1">
+        <a href={source.url} rel="noreferrer noopener" className="w-fit rounded-sm text-primary underline underline-offset-4 [overflow-wrap:anywhere] focus-visible:ring-2 focus-visible:ring-ring">
+          {detailCopy(locale).sourceRecord}</a>
+        <span className="[overflow-wrap:anywhere]">{detailCopy(locale).recordRevision}: {source.sourceRevision}</span>
+      </li>)}
+    </ul> : null}
+  </SubjectSources>;
+  if (!details.length && !reading.length) return null;
+  return <div className="grid content-start gap-6 text-[0.9375rem] sm:grid-cols-2">
     {details.length ? <section aria-labelledby="author-details" className="grid gap-3">
       <h2 id="author-details" className={heading}>{t.details}</h2>
       <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-6 gap-y-2">
@@ -196,20 +222,7 @@ function AuthorRecord({ author, locale, messages }: { author: ExternalAuthor; lo
           note={item.scheme === 'librivox' ? t.librivoxNote : t.project_gutenbergNote} />)}
       </ul>
     </section> : null}
-    <section aria-labelledby="author-records" className="grid gap-2">
-      <h2 id="author-records" className={heading}>{t.records}</h2>
-      <ul className="grid divide-y divide-border/60">
-        <Onward href={`https://openlibrary.org${author.key}`} label={t.openLibrary} note={id} mono />
-        {records.map(item => <Onward key={item.scheme} href={item.url} label={label(item)} note={item.value} mono />)}
-      </ul>
-    </section>
-    <p className="text-pretty text-muted-foreground text-xs leading-relaxed">
-      {retrieved ? t.sourceNote({ date: retrieved }) : t.sourceNoteUndated}{' '}
-      <a href={author.record} rel="noreferrer"
-        className="whitespace-nowrap rounded-sm font-medium text-foreground underline underline-offset-4 outline-none
-          focus-visible:ring-2 focus-visible:ring-ring">{t.viewRecord}</a>
-    </p>
-  </aside>;
+  </div>;
 }
 
 export interface AuthorPageProps {
@@ -247,9 +260,11 @@ export function AuthorPage({ author, follow, reader, alsoEnjoyed, readerActions,
     <PageContainer className="grid gap-12 [text-autospace:normal]">
       <AuthorHeader author={author} follow={follow} reader={reader} followActions={followActions} locale={locale}
         messages={messages} />
-      <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_17rem] lg:gap-16">
+      <Totals totals={author.totals} locale={locale} messages={messages} />
+      <AuthorRecord author={author} locale={locale} messages={messages} />
+      <div className="grid gap-12">
         <div className="grid min-w-0 content-start gap-12">
-          <section aria-labelledby="author-works" className="grid gap-4">
+          <section data-primary-content aria-labelledby="author-works" className="grid gap-4">
             <header className="flex items-end justify-between gap-4 border-border/70 border-b pb-4">
               <h2 id="author-works" className="text-balance font-semibold text-2xl tracking-tight">
                 {t.worksHeading({ name })}</h2>
@@ -264,7 +279,7 @@ export function AuthorPage({ author, follow, reader, alsoEnjoyed, readerActions,
           </section>
           {alsoEnjoyed}
         </div>
-        <AuthorRecord author={author} locale={locale} messages={messages} />
+        <AuthorRecord author={author} locale={locale} messages={messages} sourcesOnly />
       </div>
     </PageContainer>
   </ReaderActionsProvider>;

@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkLevelsMessages } from '../messages.ts';
 
 export default {
+  namesUnavailable: '一部の名前を読み込めませんでした。',
+  namesRestored: '名前を読み込みました。',
   creditedAs: "役名：",
   nameNotShown: '名前は表示されていません',
   parts: '構成', partsList: '刊行順の構成', partsPages: '構成のページ',
@@ -50,6 +52,7 @@ export default {
   isbnMatches: 'この ISBN のリリース',
   identifiers: '識別子', isbn: 'ISBN', platform: 'プラットフォーム', territory: '地域',
   languages: '言語', originalUrl: '元の URL',
+  openPublication: '公開先を開く', noCoverage: 'このリリースに含まれる作品はまだ登録されていません。',
   coverage: '収録', coversHeading: '収録内容', mainVersion: 'メインバージョン',
   coversWorks: plural({ one: insert('{{count}} 作品を収録'), other: insert('{{count}} 作品を収録') },
     { count: asValue(number()) }),

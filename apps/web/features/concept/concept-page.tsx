@@ -1,3 +1,4 @@
+import { iri } from '@rezics/model';
 import { Button, buttonVariants } from '@rezics/ui/button';
 import { Input } from '@rezics/ui/input';
 import { cn } from '@rezics/ui/utils';
@@ -11,6 +12,7 @@ import type { FollowActions } from '../profile/follow-button.tsx';
 import { EmptyState } from '../shell/empty-state.tsx';
 import Link from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
+import { SubjectHeader, SubjectDescription } from '../entity-page/header.tsx';
 import { type BarValue, type ConceptSearch, ConditionBar } from './condition-bar.tsx';
 import { ConceptFollow } from './concept-follow.tsx';
 import { type ConceptWorksLoader, ConceptWorks } from './concept-works.tsx';
@@ -145,8 +147,7 @@ export function ConceptPage({ concept, facet, state, realms, works, follow, read
   const values: BarValue[] = works.ok ? works.data.values : [];
   const page: BarValue = { id: concept.id, name: concept.name };
   return <PageContainer className="grid gap-8 sm:gap-10">
-    <header className="grid gap-5">
-      <div className="grid gap-2">
+    <SubjectHeader locale={locale} resource={concept.id} semanticType={iri['skos:Concept']} identity={<div className="grid gap-2">
         {facet || concept.realm ? <p className="flex flex-wrap items-center gap-x-3 gap-y-1 font-medium
           text-muted-foreground text-sm">
           {facet ? <span>{facet}</span> : null}
@@ -155,16 +156,18 @@ export function ConceptPage({ concept, facet, state, realms, works, follow, read
             {t.fromRealm({ realm: realmName(idOf(concept.realm) ?? '', realms, t) })}</span> : null}
         </p> : null}
         <h1 lang={concept.name.language} dir={concept.name.direction} className="text-balance font-semibold
-          font-work-title text-3xl/tight tracking-tight [overflow-wrap:anywhere] sm:text-5xl/tight">{name}</h1>
-        {concept.description ? <p lang={concept.description.language} dir={concept.description.direction}
-          className="max-w-3xl text-pretty text-lg text-muted-foreground">{concept.description.value}</p> : null}
-      </div>
-      <ConceptFollow concept={concept.id} name={name} following={followed?.following ?? null}
+          font-work-title text-2xl/tight tracking-tight [overflow-wrap:anywhere] sm:text-3xl/tight">{name}</h1>
+      </div>}
+      primary={<Link href="#concept-content" className={buttonVariants({ variant: 'outline', size: 'sm' })}>{t.works}</Link>}
+      actions={<ConceptFollow concept={concept.id} name={name} following={followed?.following ?? null}
         revision={followed?.revision ?? null} followers={followed?.followers ?? null} signedIn={reader.signedIn}
         actingSubject={reader.actingSubject} signInHref={signInPath(localizedPath(conceptHref(state), locale))}
-        actions={followActions} locale={locale} messages={messages} />
+        actions={followActions} locale={locale} messages={messages} />}>
+      {concept.description ? <SubjectDescription locale={locale}><p lang={concept.description.language}
+        dir={concept.description.direction} className="max-w-prose whitespace-pre-line text-pretty text-muted-foreground">
+        {concept.description.value}</p></SubjectDescription> : null}
       <Related concept={concept} scope={state.scope} t={t} />
-    </header>
+    </SubjectHeader>
     <div className="grid gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <ScopeSwitch state={state} concept={concept} realms={realms} t={t} />
@@ -175,9 +178,9 @@ export function ConceptPage({ concept, facet, state, realms, works, follow, read
         actingSubject={reader.actingSubject ?? undefined}
         messages={messages} />
     </div>
-    <ConceptWorks state={state} name={name} initial={works} avatarQuery={reader.avatarQuery}
+    <div data-primary-content id="concept-content" className="scroll-mt-20"><ConceptWorks state={state} name={name} initial={works} avatarQuery={reader.avatarQuery}
       signedIn={reader.signedIn} load={loadWorks}
-      locale={locale} messages={messages} />
+      locale={locale} messages={messages} /></div>
   </PageContainer>;
 }
 

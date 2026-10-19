@@ -106,7 +106,7 @@ export const Joined: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('button', { name: /Joined/ })).toBeVisible();
-    await userEvent.click(canvas.getByRole('button', { name: 'Relationship options · Fiction 小说' }));
+    await userEvent.click(canvas.getByRole('button', { name: 'More actions · Fiction 小说' }));
     await waitFor(() => expect(within(document.body).getByRole('menuitem', { name: 'Unfollow' })).toBeVisible());
   },
 };

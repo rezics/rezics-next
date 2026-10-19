@@ -60,6 +60,7 @@ const en = {
   isbnMatches: 'Releases with this ISBN',
   identifiers: 'Identifiers', isbn: 'ISBN', platform: 'Platform', territory: 'Territory',
   languages: 'Languages', originalUrl: 'Original URL',
+  openPublication: 'Open publication', noCoverage: 'No Works are recorded for this release yet.',
   coverage: 'Covers', coversHeading: 'What it covers', mainVersion: 'Main Version',
   coversWorks: plural({ one: insert('Covers {{count}} Work'), other: insert('Covers {{count}} Works') },
     { count: asValue(number()) }),
@@ -69,6 +70,8 @@ const en = {
 
   showMore: 'Show more', firstPage: 'Back to the start',
   unavailable: 'Unavailable', unnamed: 'Unnamed',
+  namesUnavailable: 'Some names could not be loaded.',
+  namesRestored: 'Names loaded.',
 };
 
 export const englishMessages = en;

@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ComponentProps } from 'react';
+import { Button } from '@rezics/ui/button';
+import { MediaImageProvider } from '@rezics/ui/media-image';
 import { materializeData } from 'native-i18n';
 import { realmMessagesFor } from './catalog.ts';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -42,7 +44,7 @@ function ThreadPage({ read, mode, signedIn, locale, api = memoryThreads(), sort 
   const memberCount = materializeData(realmMessagesFor(locale), { locale }).members(10);
   const feedMessages = locale === 'zh-Hans' ? { ...messages, ...zhHans }
     : locale === 'ja' ? { ...messages, ...ja } : messages;
-  return <RealmPageStory zone={zone} locale={locale} members={memberCount}>
+  return <RealmPageStory zone={zone} locale={locale} members={memberCount} compactCommunity>
     <FeedProvider locale={locale} messages={feedMessages} now={THREAD_NOW}
       signedIn={signedIn} actingSubject={signedIn ? 'https://rezics.com/id/00000802-bbbb-7a6f-8c2d-3e7b5c1a9f40' : null}
       signInHref={`/auth/start?next=${encodeURIComponent(here)}`} avatarQuery="" tab="all" followedRealms={null}
@@ -428,6 +430,56 @@ export const ContinuationRefresh: Story = {
   },
 };
 
+const coverRepresentation = '00000000-0000-4000-8000-000000009901';
+const nullCreditThread: ThreadRead = { ...storyThread, work: { ...storyThread.work, cover: {
+  kind: 'image', selection: storyThread.work.id, url: `/v1/media/representations/${coverRepresentation}/bytes`,
+  mediaType: 'image/png', width: 400, height: 600, crop: null,
+  basis: { policy: 'story', context: 'story' }, coverCredit: null,
+} } };
+
+/** A null serialized credit resolves through the same media owner as the cover, then refreshes independently. */
+function CurrentCreditThread(args: Args) {
+  const [version, setVersion] = useState(0);
+  const src = useMemo(() => URL.createObjectURL(new Blob([
+    '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="600"><rect width="400" height="600" fill="#264550"/><path d="M40 80H360V520H40Z" fill="#f0d9a1"/></svg>',
+  ], { type: 'image/svg+xml' })), []);
+  useEffect(() => () => URL.revokeObjectURL(src), [src]);
+  const resolve = useCallback(async (references: Parameters<NonNullable<ComponentProps<typeof MediaImageProvider>['resolve']>>[0]) =>
+    references.map(reference => ({ ...reference, src, nsfw: 'sfw' as const,
+      ageRating: { status: 'unassessed' as const }, coverCredit: {
+        kind: 'copyright' as const, permittedRole: 'cover' as const,
+        holder: version ? 'Corrected holder' : 'Current holder', text: version ? '© Corrected holder' : '© Current holder',
+        source: { name: 'Current archive', href: version ? 'https://example.test/cover/corrected' : 'https://example.test/cover/current' },
+      } })), [src, version]);
+  return <MediaImageProvider resolve={resolve} refreshKey={version}
+    viewer={{ ready: true, signedIn: false, age: 'unknown', optIns: { general: true, r15: false, sexual: false, grotesque: false } }}>
+    <Button type="button" variant="outline" onClick={() => setVersion(value => value + 1)}>Refresh cover credit</Button>
+    <ThreadPage {...args} read={nullCreditThread} />
+  </MediaImageProvider>;
+}
+
+export const CurrentCoverCredit: Story = {
+  render: args => <CurrentCreditThread {...args} />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const initial = await canvas.findByText('© Current holder');
+    const sources = canvas.getByRole('contentinfo', { name: 'Sources and licenses' });
+    await expect(sources).toContainElement(initial);
+    await expect(canvasElement.querySelectorAll('[data-cover-credit]')).toHaveLength(1);
+    const comments = canvas.getByRole('heading', { name: 'Comments' });
+    await expect(sources.compareDocumentPosition(comments) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    await expect(within(sources).getByRole('link', { name: 'Current archive' })).toHaveAttribute('href', 'https://example.test/cover/current');
+    await userEvent.click(canvas.getByRole('button', { name: 'Refresh cover credit' }));
+    await expect(await canvas.findByText('© Corrected holder')).toBeVisible();
+    await waitFor(() => expect(canvas.queryByText('© Current holder')).toBeNull());
+    await expect(canvasElement.querySelectorAll('[data-cover-credit]')).toHaveLength(1);
+    const refreshedSources = canvas.getByRole('contentinfo', { name: 'Sources and licenses' });
+    await expect(refreshedSources).toContainElement(canvas.getByText('© Corrected holder'));
+    await expect(within(refreshedSources).getByRole('link', { name: 'Current archive' })).toHaveAttribute('href', 'https://example.test/cover/corrected');
+    refreshedSources.scrollIntoView({ block: 'start' });
+  },
+};
+
 const anonymousBasis = displayLanguageHeaders({ signedIn: false,
   cookie: contentLanguageCookie(['ja']),
   pageUrl: new URL(localizedPath(threadHref(storyRealm.path, storyReply(1)), 'en'), 'https://web.test').href,
@@ -462,3 +514,34 @@ export const AnonymousReadingLanguages: Story = {
     await expect(anonymousRequest?.headers.get('x-rezics-display-languages')).toBe(anonymousBasis);
   },
 };
+
+
+export const NativeHeader: Story = {
+  async play({ canvasElement }) {
+    const opening = storyThread.items.find(item => item.reply === storyThread.focus)!;
+    const header = canvasElement.querySelector<HTMLElement>('[data-subject-header]')!;
+    const top = within(header);
+    await expect(header).toHaveAttribute('data-resource', opening.reply);
+    await expect(header).toHaveAttribute('data-content-model', 'member-reply-v1');
+    const primary = top.getByRole('group', { name: 'Primary actions' });
+    const reactions = top.getByRole('group', { name: 'Reactions' });
+    const more = top.getByRole('button', { name: `More actions for ${opening.title}` });
+    await expect(within(primary).getByRole('link', { name: '11 comments' })).toHaveAttribute('href', '#comments');
+    await expect(primary.compareDocumentPosition(reactions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await expect(more.getBoundingClientRect().left).toBeGreaterThanOrEqual(reactions.getBoundingClientRect().right - 1);
+    await expect(Math.abs(more.getBoundingClientRect().top - reactions.getBoundingClientRect().top)).toBeLessThan(16);
+    const useful = within(canvasElement.querySelector<HTMLElement>('[data-primary-content]')!);
+    for (const paragraph of opening.body!.split('\n\n'))
+      await expect(useful.getByText(paragraph)).toBeVisible();
+    more.focus();
+    await userEvent.keyboard('{Enter}');
+    const report = await within(document.body).findByRole('menuitem', { name: 'Report this post' });
+    const query = new URL(report.getAttribute('href')!, window.location.origin).searchParams;
+    await expect(Object.fromEntries(query)).toEqual({ target: opening.reply, realm: storyThread.realm,
+      component: 'body', revision: `urn:rezics:content:revision:${opening.revisionId}` });
+    await userEvent.keyboard('{Escape}');
+    await expect(more).toHaveFocus();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+export const NativeHeaderPhone: Story = { ...NativeHeader, globals: { viewport: { value: 'phone' } } };

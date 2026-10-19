@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkLevelsMessages } from '../messages.ts';
 
 export default {
+  namesUnavailable: '일부 이름을 불러오지 못했습니다.',
+  namesRestored: '이름을 불러왔습니다.',
   creditedAs: "배역명:",
   nameNotShown: '이름이 표시되지 않음',
   parts: '구성', partsList: '출간 순서의 구성', partsPages: '구성 페이지',
@@ -50,6 +52,7 @@ export default {
   isbnMatches: '이 ISBN의 릴리스',
   identifiers: '식별자', isbn: 'ISBN', platform: '플랫폼', territory: '지역',
   languages: '언어', originalUrl: '원본 URL',
+  openPublication: '발행 페이지 열기', noCoverage: '이 발행본에 포함된 작품이 아직 등록되지 않았습니다.',
   coverage: '수록', coversHeading: '수록 내용', mainVersion: '메인 버전',
   coversWorks: plural({ one: insert('작품 {{count}}편 수록'), other: insert('작품 {{count}}편 수록') },
     { count: asValue(number()) }),
