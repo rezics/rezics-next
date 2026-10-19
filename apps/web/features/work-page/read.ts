@@ -18,7 +18,7 @@ import { mainApiWithToken, readPlatformAccess } from '../api/main.ts';
 import { operationOpen, platformClosed } from '../api/platform-access.ts';
 import { ACCESS_COOKIE } from '../auth/cookies.ts';
 import { BrowseReadError, discoveryApi, type ListPage, type RatingPopulation } from '../discover/api.ts';
-import { sessionAgentState } from '../auth/session.ts';
+import { sessionAgentRead } from '../auth/session.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { type ReaderSeed, readerEntry } from '../catalogue/reader-store.ts';
 import { localizedPath } from '../../i18n/locale.ts';
@@ -45,12 +45,11 @@ import type { AdoptionPage, AgentCreditPage, AgentWorksPage, AlsoEnjoyedPage, Ch
  */
 export const reader = cache(async () => {
   const token = (await cookies()).get(ACCESS_COOKIE)?.value;
-  const state = token ? await sessionAgentState() : null;
+  const identity = token ? await sessionAgentRead() : null;
+  const state = identity?.kind === 'ready' ? identity.state : null;
   const acting = state?.sessionAgent.eligible ? state.sessionAgent.actingSubject ?? undefined : undefined;
   return { main: mainApiWithToken(acting ? token : undefined), actingSubject: acting, signedIn: Boolean(token),
-    // The nullable session adapter cannot prove an anonymous reading identity
-    // when an authenticated lookup failed. Strict entry reads retain recovery.
-    identityUnavailable: Boolean(token) && state === null };
+    identityUnavailable: identity?.kind === 'unavailable' };
 });
 
 /** Main ranks rating populations by current votes and supplies the reader-community flag. */

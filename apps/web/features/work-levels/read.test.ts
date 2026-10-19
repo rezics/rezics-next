@@ -60,7 +60,7 @@ const restoreOriginalHeaders = replaceModule(import.meta.resolve('next/headers')
   }),
   headers: async () => new Headers(),
 });
-// Keep reader(), sessionAgentState() and Main's Eden client real. Only the HTTP
+// Keep reader(), sessionAgentRead() and Main's Eden client real. Only the HTTP
 // transport answers fixture data, including a rejected expired session lookup.
 const restoreOriginalTransport = replaceModule(import.meta.resolve('../api/server-read.ts'), originalTransport, {
   serverRead: (input: RequestInfo | URL, init?: RequestInit) =>
@@ -561,6 +561,53 @@ test('private Collection identity outage never falls back to anonymous absence, 
   signedIn = false;
   expect(await readEntityEntry(fixture.iri('900'))).toMatchObject({ ok: false, failure: 'missing' });
 });
+
+for (const status of [401, 403, 503]) {
+  test(`private Collection identity ${status} retains its disclosure or recovery outcome through metadata and the document`, async () => {
+    const { readEntityEntry } = await import('../entity-page/read.ts');
+    const { copyOf } = await import('../entity-page/messages.ts');
+    const { default: NotFoundPage } = await import('../../app/[locale]/e/[ref]/not-found.tsx');
+    signedIn = true;
+    actingSubject = fixture.iri('999');
+    privateCollection = true;
+    identityStatus = status;
+    expect(await readEntityEntry(fixture.iri('900'))).toMatchObject(status === 503
+      ? { ok: false, failure: 'identity', status: 503 } : { ok: false, failure: 'missing' });
+    const summaries = requests.filter(request => request.path === '/v1/resources/summaries');
+    if (status === 503) expect(summaries).toEqual([]);
+    else {
+      expect(summaries).toHaveLength(1);
+      expect(summaries[0]?.authorization).toBeNull();
+    }
+    const props = { params: Promise.resolve({ ref: fixture.iri('900').slice(-36) }), searchParams: Promise.resolve({}) };
+    const metadata = await generateMetadata(props);
+    expect(metadata.title).toBe(status === 503 ? copyOf('en').pageUnavailableTitle : copyOf('en').notFoundTitle);
+    const request = new Request(new URL(localizedPath(resourceHref('/e/', fixture.iri('900')), 'en'), 'https://rezics.test'));
+    const response = await originalTransport.withServerRequest(request, async () => {
+      let tree: ReactNode, documentStatus = 200;
+      try { tree = await EntityRoute(props); }
+      catch (error) {
+        expect(error).toMatchObject({ digest: expect.stringMatching(/^NEXT_HTTP_ERROR_FALLBACK;404$|^NEXT_NOT_FOUND$/) });
+        tree = await NotFoundPage();
+        documentStatus = 404;
+      }
+      return originalTransport.serverDocumentResponse(request,
+        new Response(await renderToReadableStream(tree), { status: documentStatus, headers: { 'content-type': 'text/html' } }));
+    });
+    expect(response.status).toBe(status === 503 ? 503 : 404);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(await response.text()).not.toContain('Public reading list');
+    expect(collectionCalls).toBe(0);
+    // Restoring the same token, session and selected Agent reopens its private destination.
+    identityStatus = 200;
+    expect((await readEntityEntry(fixture.iri('900'))).ok).toBe(true);
+    if (status !== 503) {
+      identityStatus = status;
+      privateCollection = false;
+      expect((await readEntityEntry(fixture.iri('900'))).ok).toBe(true);
+    }
+  });
+}
 
 test('later Collection entry or member-name failures keep the initial document unavailable and recover on the same URL', async () => {
   const request = new Request(new URL(`${localizedPath(resourceHref('/e/', fixture.iri('900')), 'en')}?after=members-page-2&parent=${encodeURIComponent(fixture.iri('9'))}&tag=a&tag=b`, 'https://rezics.test'));
