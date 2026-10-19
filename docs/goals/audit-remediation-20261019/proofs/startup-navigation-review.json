@@ -2742,5 +2742,708 @@
       "scope": "Report-only documentation/worker checks; result recorded in the retained receipt after execution. No product test rerun."
     },
     "manager_next": "Use this bounded source verdict for the five exact authored shell paths only. Preserve current Main runtime dependencies and all previous dispositions; G-2758 owns affected native Release composition acceptance and Program owns final integration/class closure. No blocker or new task is introduced by this source review."
+  },
+  "d4_002_site_navigation_component_inspection": {
+    "recorded_at_utc": "2026-10-19T13:20:32.078083+00:00",
+    "claim": "Same original D4-002 criterion 3, bounded missing Site horizontal page-navigation inspection only.",
+    "original_criterion_3": "对同样采用横向页面导航的Studio、Site和Library做同类验收；本项只计已确认的Discover三实例。",
+    "result": "PASS for all four supplied recorded-component states; no actionable counterexample found. Audit manager retains original-class closure authority.",
+    "reviewer": "Existing G-2847 / codex-1 / GPT-6.1 Sol / xhigh, without fallback or nested agents.",
+    "tier": "recorded-component inspection, not genuine Site/API task",
+    "source": {
+      "tested_pin": "967816dada58aef2c90f049fcb9b207cbe62a5ee",
+      "reference_main": "27c4c7fd97d7df00fd8e5a587955d4baa2a572d5",
+      "immutable_snapshot": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/source",
+      "preparation": "git archive exact pin; reflink-copy existing dependencies, no install",
+      "exact_blob_equivalence": [
+        {
+          "path": "apps/web/features/shell/localized-link.tsx",
+          "testedBlob": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba",
+          "referenceMainBlob": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba",
+          "sha256": "2e24fec3a0acd8502950e3d23f60fa304fac7e53a963c665fba24af797eee866",
+          "bytes": 3199,
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/shell/current-page-visibility.ts",
+          "testedBlob": "4580530fd0e47923f4bf9de65a0baba9292b2a45",
+          "referenceMainBlob": "4580530fd0e47923f4bf9de65a0baba9292b2a45",
+          "sha256": "768dc8535fdf2a55099d45f26c0ef3a6bbe3d770428dfa0a18102dadff8877e6",
+          "bytes": 2559,
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/zones/site-navigation.tsx",
+          "testedBlob": "17ee6d85ab0d80b564bc9f9ea8870fc03e351799",
+          "referenceMainBlob": "17ee6d85ab0d80b564bc9f9ea8870fc03e351799",
+          "sha256": "856ebca99be7db813086a20f1f52417700a916b318aae1b9474f4b8e531402f4",
+          "bytes": 3158,
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/zones/public-navigation-frame.stories.tsx",
+          "testedBlob": "3c9f4f01a86a5059923dcd229cf8c29ba07650da",
+          "referenceMainBlob": "3c9f4f01a86a5059923dcd229cf8c29ba07650da",
+          "sha256": "c8e85dbdc4ba3ea2f32c1dc41216f1769836cc997856fcc4518612bda9599e7d",
+          "bytes": 4050,
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/zones/zone-frame.tsx",
+          "testedBlob": "78975f822807cc211485ef25fe286eae41021990",
+          "referenceMainBlob": "78975f822807cc211485ef25fe286eae41021990",
+          "sha256": "f76659d5cd95b90b32a2ff831e6fa4acc3bf0131ab5bc67ce5e1238ac405b004",
+          "bytes": 5992,
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/zones/site-cuts.ts",
+          "testedBlob": "b191edace8b4a3d683bddcdba2ff766a1eca3edd",
+          "referenceMainBlob": "b191edace8b4a3d683bddcdba2ff766a1eca3edd",
+          "sha256": "3abf6bcb138418de29f01a025c81a9f1cd2d9ba8febe51a3ae36698afafcc2df",
+          "bytes": 1433,
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/zones/fixtures.ts",
+          "testedBlob": "1c0e2d0e401bb6628cb32a62744b0cf21506186f",
+          "referenceMainBlob": "1c0e2d0e401bb6628cb32a62744b0cf21506186f",
+          "sha256": "747776b2e148180b378267c152efa8ce683e78ce184eb36643f5b17f0b7f3c7e",
+          "bytes": 21903,
+          "equal": true
+        },
+        {
+          "path": "apps/web/.storybook/preview.tsx",
+          "testedBlob": "1ba5806d7f8720646dfe0a591067966745179187",
+          "referenceMainBlob": "1ba5806d7f8720646dfe0a591067966745179187",
+          "sha256": "b6a0488d6b05e049eb07e1a560c1d78ef7fe8af5a9e674975b984fc7615b4003",
+          "bytes": 4767,
+          "equal": true
+        },
+        {
+          "path": "apps/web/.storybook/main.ts",
+          "testedBlob": "9ff3e4e1f77dac7c040eb566b6cb102b83cce455",
+          "referenceMainBlob": "9ff3e4e1f77dac7c040eb566b6cb102b83cce455",
+          "sha256": "7ef8b85080a875db37683511d92df8c28c29552ecc37deff79f12a912257c524",
+          "bytes": 2855,
+          "equal": true
+        },
+        {
+          "path": "package.json",
+          "testedBlob": "4aed970288778fefd485dd2e401e6fdf458f7a2d",
+          "referenceMainBlob": "4aed970288778fefd485dd2e401e6fdf458f7a2d",
+          "sha256": "487061c605dc753c9e60c657ecaa4dd7cf417a213ac65c2e906380367b98acaf",
+          "bytes": 1285,
+          "equal": true
+        },
+        {
+          "path": "yarn.lock",
+          "testedBlob": "e70dcbe4159d3fcab2585962a1cf3688937eb0e5",
+          "referenceMainBlob": "e70dcbe4159d3fcab2585962a1cf3688937eb0e5",
+          "sha256": "026c93ddc3085e43b1ff6727a42f7c55b03a03cc1aa4c11cbf57438ce5b9d391",
+          "bytes": 436830,
+          "equal": true
+        }
+      ],
+      "qualification": "All eleven listed inputs are byte-identical between tested 967816d and reference Main 27c4c7f. This is runtime provenance for this inspection, not another source review or a claim about unlisted files.",
+      "readiness_metadata_limit": "The retained original-readiness metadata assessed earlier Main feb3d091d0dcc6c96f40021b706fdcdeb87daa2b. Current listed-input equivalence is independently recorded in source-provenance.json; the old assessment is not relabeled current."
+    },
+    "supplied_navigation": {
+      "story_file": "apps/web/features/zones/public-navigation-frame.stories.tsx",
+      "compositions": [
+        "RealmSite",
+        "StandaloneSite"
+      ],
+      "data": "Existing unmodified 51 Guide mount entries plus Home, 52 links; current supplied destination Guide 51 at /en/z/harbor-library/guide-51. No fixture data added.",
+      "baseline_limit": "Existing completeNavigation calls last.scrollIntoView before measuring; retained normal play is not initial visibility evidence. Installed embed=true disables play only.",
+      "measurement_method": "Installed Storybook embed=true sets autoplay=false. Before any manual scroll, focus, or key, wait for fonts and five stable geometry samples 150ms apart; retain first observation and all samples. Native scrollIntoView/focus/key instrumentation records no Site calls/events before observation. Then use actual Shift+Tab and settle again.",
+      "selection": "Current Guide 51 uses the existing darker medium-weight label and sole aria-current=page; no separate underline or marker is invented.",
+      "clipping": "Check selected anchor and painted ring against viewport and every actual overflow clipping ancestor, including the horizontal UL. The full label rectangles and viewed PNGs agree."
+    },
+    "executed_check": {
+      "recorded_job": "c3ac3b1c-6b31-4b76-b889-3da3c618102b",
+      "exit_status": 0,
+      "command": "env PLAYWRIGHT_BROWSERS_PATH=/home/edge/.cache/ms-playwright bun scripts/goal/goalctl.ts test ./.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/site-navigation.test.ts apps/web/features/zones/public-navigation-frame.stories.tsx",
+      "qa_run": "20261019t131524-19c776",
+      "independent_test": "1 passed, 0 failed, 5 expect calls; 36 named cell checks all true across four cells.",
+      "normal_stories": "2 passed with original play and normal a11y test:error configuration. No axe rule or assertion was weakened; no separate applicable-node count is claimed.",
+      "browser": {
+        "version": "153.0.8010.12",
+        "executable": "/home/edge/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome",
+        "officialInstalled": true
+      },
+      "setup_errors": [],
+      "outcome_failures": [],
+      "browser_errors": [],
+      "network_errors": [],
+      "nonfailing_diagnostics": [
+        "Existing Vite native-config ESM warnings.",
+        "Failed to resolve dependency: @storybook/react-dom-shim, present in client optimizeDeps.include; both normal stories still passed. Original log retained."
+      ]
+    },
+    "cells": [
+      {
+        "id": "RealmSite-390",
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "story_id": "zones-public-navigation-continuation--realm-site",
+        "selected_label": "Guide 51",
+        "href": "/en/z/harbor-library/guide-51",
+        "aria_current": "page",
+        "current_links": 1,
+        "body_headings": [
+          "Guide 51"
+        ],
+        "selected_style": {
+          "fontWeight": "500",
+          "color": "rgb(43, 52, 61)",
+          "background": "rgba(0, 0, 0, 0)"
+        },
+        "before_focus": {
+          "selected_rect": {
+            "left": 296,
+            "top": 202.5,
+            "right": 374,
+            "bottom": 238.5,
+            "width": 78,
+            "height": 36
+          },
+          "label_rects": [
+            {
+              "left": 308,
+              "top": 210.5,
+              "right": 362,
+              "bottom": 229.5,
+              "width": 54,
+              "height": 19
+            }
+          ],
+          "active": false,
+          "focus_visible": false,
+          "document_scroll": {
+            "x": 0,
+            "y": 0
+          },
+          "stable_samples": 5,
+          "story_autoplay": false,
+          "instrumentation": {
+            "started": 178.79999999701977,
+            "scrollIntoView": [],
+            "focusCalls": [],
+            "focusEvents": [],
+            "keys": []
+          },
+          "actual_clipping_ancestors": [
+            {
+              "tag": "UL",
+              "className": "mx-auto flex w-full max-w-6xl px-4 sm:px-6 lg:px-10 gap-1 overflow-x-auto py-1 [scrollbar-width:none]",
+              "rect": {
+                "left": 0,
+                "top": 198.5,
+                "right": 390,
+                "bottom": 242.5,
+                "width": 390,
+                "height": 44
+              },
+              "clientLeft": 0,
+              "clientTop": 0,
+              "clientWidth": 390,
+              "clientHeight": 44,
+              "scrollLeft": 3879,
+              "scrollWidth": 4269,
+              "overflowX": "auto",
+              "overflowY": "auto",
+              "clipsX": true,
+              "clipsY": true
+            }
+          ],
+          "fully_visible": true
+        },
+        "keyboard": [
+          {
+            "key": "Shift+Tab",
+            "active": {
+              "label": "Guide 51",
+              "tag": "A",
+              "current": "page",
+              "inSite": true
+            }
+          }
+        ],
+        "focused": {
+          "active": true,
+          "focus_visible": true,
+          "document_focus": true,
+          "selected_rect": {
+            "left": 296,
+            "top": 202.5,
+            "right": 374,
+            "bottom": 238.5,
+            "width": 78,
+            "height": 36
+          },
+          "painted_ring_rect": {
+            "left": 294,
+            "right": 376,
+            "top": 200.5,
+            "bottom": 240.5
+          },
+          "ring_outsets_px": {
+            "left": 2,
+            "right": 2,
+            "top": 2,
+            "bottom": 2
+          },
+          "box_shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(47, 99, 173) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "ring_inside_actual_clips": true,
+          "stable_samples": 5
+        },
+        "checks": {
+          "originalPlayDisabled": true,
+          "noManualScrollBeforeObservation": true,
+          "noKeyboardOrSiteFocusBeforeObservation": true,
+          "completeExistingNavigation": true,
+          "currentLabelMarkerAndBodyAgree": true,
+          "selectedFullyVisibleBeforeFocus": true,
+          "genuineKeyboardFocusAgreesWithCurrent": true,
+          "paintedFocusRingExists": true,
+          "paintedFocusRingInsideViewportAndActualClippingAncestors": true
+        },
+        "assertion_reached": true
+      },
+      {
+        "id": "RealmSite-1440",
+        "viewport": {
+          "width": 1440,
+          "height": 1000
+        },
+        "story_id": "zones-public-navigation-continuation--realm-site",
+        "selected_label": "Guide 51",
+        "href": "/en/z/harbor-library/guide-51",
+        "aria_current": "page",
+        "current_links": 1,
+        "body_headings": [
+          "Guide 51"
+        ],
+        "selected_style": {
+          "fontWeight": "500",
+          "color": "rgb(43, 52, 61)",
+          "background": "rgba(0, 0, 0, 0)"
+        },
+        "before_focus": {
+          "selected_rect": {
+            "left": 1178,
+            "top": 140,
+            "right": 1256,
+            "bottom": 176,
+            "width": 78,
+            "height": 36
+          },
+          "label_rects": [
+            {
+              "left": 1190,
+              "top": 148,
+              "right": 1244,
+              "bottom": 167,
+              "width": 54,
+              "height": 19
+            }
+          ],
+          "active": false,
+          "focus_visible": false,
+          "document_scroll": {
+            "x": 0,
+            "y": 0
+          },
+          "stable_samples": 5,
+          "story_autoplay": false,
+          "instrumentation": {
+            "started": 26.30000001192093,
+            "scrollIntoView": [],
+            "focusCalls": [],
+            "focusEvents": [],
+            "keys": []
+          },
+          "actual_clipping_ancestors": [
+            {
+              "tag": "UL",
+              "className": "mx-auto flex w-full max-w-6xl px-4 sm:px-6 lg:px-10 gap-1 overflow-x-auto py-1 [scrollbar-width:none]",
+              "rect": {
+                "left": 144,
+                "top": 136,
+                "right": 1296,
+                "bottom": 180,
+                "width": 1152,
+                "height": 44
+              },
+              "clientLeft": 0,
+              "clientTop": 0,
+              "clientWidth": 1152,
+              "clientHeight": 44,
+              "scrollLeft": 3165,
+              "scrollWidth": 4317,
+              "overflowX": "auto",
+              "overflowY": "auto",
+              "clipsX": true,
+              "clipsY": true
+            }
+          ],
+          "fully_visible": true
+        },
+        "keyboard": [
+          {
+            "key": "Shift+Tab",
+            "active": {
+              "label": "Guide 51",
+              "tag": "A",
+              "current": "page",
+              "inSite": true
+            }
+          }
+        ],
+        "focused": {
+          "active": true,
+          "focus_visible": true,
+          "document_focus": true,
+          "selected_rect": {
+            "left": 1178,
+            "top": 140,
+            "right": 1256,
+            "bottom": 176,
+            "width": 78,
+            "height": 36
+          },
+          "painted_ring_rect": {
+            "left": 1176,
+            "right": 1258,
+            "top": 138,
+            "bottom": 178
+          },
+          "ring_outsets_px": {
+            "left": 2,
+            "right": 2,
+            "top": 2,
+            "bottom": 2
+          },
+          "box_shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(47, 99, 173) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "ring_inside_actual_clips": true,
+          "stable_samples": 5
+        },
+        "checks": {
+          "originalPlayDisabled": true,
+          "noManualScrollBeforeObservation": true,
+          "noKeyboardOrSiteFocusBeforeObservation": true,
+          "completeExistingNavigation": true,
+          "currentLabelMarkerAndBodyAgree": true,
+          "selectedFullyVisibleBeforeFocus": true,
+          "genuineKeyboardFocusAgreesWithCurrent": true,
+          "paintedFocusRingExists": true,
+          "paintedFocusRingInsideViewportAndActualClippingAncestors": true
+        },
+        "assertion_reached": true
+      },
+      {
+        "id": "StandaloneSite-390",
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "story_id": "zones-public-navigation-continuation--standalone-site",
+        "selected_label": "Guide 51",
+        "href": "/en/z/harbor-library/guide-51",
+        "aria_current": "page",
+        "current_links": 1,
+        "body_headings": [
+          "Guide 51"
+        ],
+        "selected_style": {
+          "fontWeight": "500",
+          "color": "rgb(43, 52, 61)",
+          "background": "rgba(0, 0, 0, 0)"
+        },
+        "before_focus": {
+          "selected_rect": {
+            "left": 296,
+            "top": 148.5,
+            "right": 374,
+            "bottom": 184.5,
+            "width": 78,
+            "height": 36
+          },
+          "label_rects": [
+            {
+              "left": 308,
+              "top": 156.5,
+              "right": 362,
+              "bottom": 175.5,
+              "width": 54,
+              "height": 19
+            }
+          ],
+          "active": false,
+          "focus_visible": false,
+          "document_scroll": {
+            "x": 0,
+            "y": 0
+          },
+          "stable_samples": 5,
+          "story_autoplay": false,
+          "instrumentation": {
+            "started": 21,
+            "scrollIntoView": [],
+            "focusCalls": [],
+            "focusEvents": [],
+            "keys": []
+          },
+          "actual_clipping_ancestors": [
+            {
+              "tag": "UL",
+              "className": "mx-auto flex w-full max-w-6xl px-4 sm:px-6 lg:px-10 gap-1 overflow-x-auto py-1 [scrollbar-width:none]",
+              "rect": {
+                "left": 0,
+                "top": 144.5,
+                "right": 390,
+                "bottom": 188.5,
+                "width": 390,
+                "height": 44
+              },
+              "clientLeft": 0,
+              "clientTop": 0,
+              "clientWidth": 390,
+              "clientHeight": 44,
+              "scrollLeft": 3879,
+              "scrollWidth": 4269,
+              "overflowX": "auto",
+              "overflowY": "auto",
+              "clipsX": true,
+              "clipsY": true
+            }
+          ],
+          "fully_visible": true
+        },
+        "keyboard": [
+          {
+            "key": "Shift+Tab",
+            "active": {
+              "label": "Guide 51",
+              "tag": "A",
+              "current": "page",
+              "inSite": true
+            }
+          }
+        ],
+        "focused": {
+          "active": true,
+          "focus_visible": true,
+          "document_focus": true,
+          "selected_rect": {
+            "left": 296,
+            "top": 148.5,
+            "right": 374,
+            "bottom": 184.5,
+            "width": 78,
+            "height": 36
+          },
+          "painted_ring_rect": {
+            "left": 294,
+            "right": 376,
+            "top": 146.5,
+            "bottom": 186.5
+          },
+          "ring_outsets_px": {
+            "left": 2,
+            "right": 2,
+            "top": 2,
+            "bottom": 2
+          },
+          "box_shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(47, 99, 173) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "ring_inside_actual_clips": true,
+          "stable_samples": 5
+        },
+        "checks": {
+          "originalPlayDisabled": true,
+          "noManualScrollBeforeObservation": true,
+          "noKeyboardOrSiteFocusBeforeObservation": true,
+          "completeExistingNavigation": true,
+          "currentLabelMarkerAndBodyAgree": true,
+          "selectedFullyVisibleBeforeFocus": true,
+          "genuineKeyboardFocusAgreesWithCurrent": true,
+          "paintedFocusRingExists": true,
+          "paintedFocusRingInsideViewportAndActualClippingAncestors": true
+        },
+        "assertion_reached": true
+      },
+      {
+        "id": "StandaloneSite-1440",
+        "viewport": {
+          "width": 1440,
+          "height": 1000
+        },
+        "story_id": "zones-public-navigation-continuation--standalone-site",
+        "selected_label": "Guide 51",
+        "href": "/en/z/harbor-library/guide-51",
+        "aria_current": "page",
+        "current_links": 1,
+        "body_headings": [
+          "Guide 51"
+        ],
+        "selected_style": {
+          "fontWeight": "500",
+          "color": "rgb(43, 52, 61)",
+          "background": "rgba(0, 0, 0, 0)"
+        },
+        "before_focus": {
+          "selected_rect": {
+            "left": 1178,
+            "top": 140,
+            "right": 1256,
+            "bottom": 176,
+            "width": 78,
+            "height": 36
+          },
+          "label_rects": [
+            {
+              "left": 1190,
+              "top": 148,
+              "right": 1244,
+              "bottom": 167,
+              "width": 54,
+              "height": 19
+            }
+          ],
+          "active": false,
+          "focus_visible": false,
+          "document_scroll": {
+            "x": 0,
+            "y": 0
+          },
+          "stable_samples": 5,
+          "story_autoplay": false,
+          "instrumentation": {
+            "started": 20.599999994039536,
+            "scrollIntoView": [],
+            "focusCalls": [],
+            "focusEvents": [],
+            "keys": []
+          },
+          "actual_clipping_ancestors": [
+            {
+              "tag": "UL",
+              "className": "mx-auto flex w-full max-w-6xl px-4 sm:px-6 lg:px-10 gap-1 overflow-x-auto py-1 [scrollbar-width:none]",
+              "rect": {
+                "left": 144,
+                "top": 136,
+                "right": 1296,
+                "bottom": 180,
+                "width": 1152,
+                "height": 44
+              },
+              "clientLeft": 0,
+              "clientTop": 0,
+              "clientWidth": 1152,
+              "clientHeight": 44,
+              "scrollLeft": 3165,
+              "scrollWidth": 4317,
+              "overflowX": "auto",
+              "overflowY": "auto",
+              "clipsX": true,
+              "clipsY": true
+            }
+          ],
+          "fully_visible": true
+        },
+        "keyboard": [
+          {
+            "key": "Shift+Tab",
+            "active": {
+              "label": "Guide 51",
+              "tag": "A",
+              "current": "page",
+              "inSite": true
+            }
+          }
+        ],
+        "focused": {
+          "active": true,
+          "focus_visible": true,
+          "document_focus": true,
+          "selected_rect": {
+            "left": 1178,
+            "top": 140,
+            "right": 1256,
+            "bottom": 176,
+            "width": 78,
+            "height": 36
+          },
+          "painted_ring_rect": {
+            "left": 1176,
+            "right": 1258,
+            "top": 138,
+            "bottom": 178
+          },
+          "ring_outsets_px": {
+            "left": 2,
+            "right": 2,
+            "top": 2,
+            "bottom": 2
+          },
+          "box_shadow": "rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgba(0, 0, 0, 0) 0px 0px 0px 0px, rgb(47, 99, 173) 0px 0px 0px 2px, rgba(0, 0, 0, 0) 0px 0px 0px 0px",
+          "ring_inside_actual_clips": true,
+          "stable_samples": 5
+        },
+        "checks": {
+          "originalPlayDisabled": true,
+          "noManualScrollBeforeObservation": true,
+          "noKeyboardOrSiteFocusBeforeObservation": true,
+          "completeExistingNavigation": true,
+          "currentLabelMarkerAndBodyAgree": true,
+          "selectedFullyVisibleBeforeFocus": true,
+          "genuineKeyboardFocusAgreesWithCurrent": true,
+          "paintedFocusRingExists": true,
+          "paintedFocusRingInsideViewportAndActualClippingAncestors": true
+        },
+        "assertion_reached": true
+      }
+    ],
+    "screenshots": {
+      "measurement_pngs_viewed": 8,
+      "normal_play_pngs_viewed": 2,
+      "manifest": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/evidence-manifest.json",
+      "manifest_sha256": "271fca547cf9a68f0ef4c2e21b43264a3e5bf2bffdf73fbb85054046d3616027",
+      "observations": "Both compositions keep the late Guide 51 label and matching content visible at both widths. A real Shift+Tab reaches that current link in one step in each fresh document; its visible blue rounded 2px ring is not clipped. At 390px only the preceding nonselected continuation is partly clipped, consistent with horizontal overflow."
+    },
+    "product_audit_disposition": {
+      "principle": "The supplied current destination must be visible before user repair; current semantics, body, keyboard focus and painted focus must agree.",
+      "affected_compositions": "Both existing RealmSite and StandaloneSite share ZoneSiteNavigation/LocalizedLink and were inspected at 390/1440. No new counterexample or G-2747 repair request.",
+      "tier_limit": "No genuine Site/API task, route activation, backend, identity or data success is inferred from this component inspection.",
+      "preserved_evidence": "All prior G-2825 271b/aae78 actual 196a Discover direct/reload/back/forward/filter and seven keyboard destinations retain their original pins/backend provenance; early Lists/People failures and all source/private/shell/AT dispositions remain unchanged. Original 45/145 texts and three confirmed Discover instances are not altered.",
+      "scope": "No additional Proposals, SSR, AT, unread, Studio inventory, Library reading, full Site journey or whole-domain checks."
+    },
+    "cleanup": {
+      "observed_at_utc": "2026-10-19T13:20:32.078083+00:00",
+      "owned_storybook_pid": 3921242,
+      "owned_pid_present": false,
+      "owned_port": 46615,
+      "port_connect_errno": 111,
+      "runtime_cleanup": {
+        "browserClosed": true,
+        "ownedStorybookStopped": true,
+        "sourceHeadUnchanged": true,
+        "productTrackedDiff": ""
+      },
+      "other_processes_stopped": false,
+      "new_borrower_custody": false,
+      "previous_book_lease": "Preserved cumulative release and G-2831 restoration receipts; no new Book access or writes in this component inspection."
+    },
+    "evidence_directory": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection",
+    "previous_report_sha256": "7bac36159b7fcc6eeef1ccb0cf1c37e0e5d80695042b205f7b41a52f71683a6b",
+    "report_validation": {
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "receipt": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-navigation-inspection/report-checks.json",
+      "scope": "Report-only documentation and worker checks; retained receipt records the result after execution."
+    },
+    "manager_next": "Use this bounded recorded-component result to supply the originally missing Site peer inspection after listed Main equivalence. G-2825 remains closed. Audit manager owns D4-002 acceptance/class closure; no new task, product change or unrelated acceptance gate is requested."
   }
 }
