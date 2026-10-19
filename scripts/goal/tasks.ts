@@ -487,8 +487,8 @@ export async function resumeTask(id: string, args: string[], waitingToken?: stri
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--class') {
       const value = args[++i];
-      if (value !== 'baselineRed' && value !== 'environment' && value !== 'fixRound')
-        throw new Error('--class must be baselineRed, environment or fixRound');
+      if (value !== 'baselineRed' && value !== 'environment' && value !== 'fixRound' && value !== 'sameScope')
+        throw new Error('--class must be baselineRed, environment, fixRound or sameScope');
       resumeClass = value;
     } else if (args[i] === '-m') message = args[++i] ?? '';
     else if (args[i] === '--file') message = readFileSync(args[++i] ?? '', 'utf8');
@@ -522,7 +522,12 @@ export async function resumeTask(id: string, args: string[], waitingToken?: stri
     }
     if (!result.error && handoffResult(result.text) === 'blocked' && blockedAttemptUnchanged(task, previous)) round = 'step';
     if ((task as CapacityTask).claudeCapacity?.pause) round = 'step';
-    const refusal = round === 'fix' ? resumeDecisionError(task.attempts, source.text) : undefined;
+    // A manager can record an exact correction without manufacturing a new brief Decision.
+    // Changed claims still require the ordinary fresh decision and cannot use this class.
+    if (resumeClass === 'sameScope' && (replacement.changed.length || !message.trim()))
+      throw new Error('sameScope resume requires unchanged claims and a recorded correction message');
+    const refusal = round === 'fix' && resumeClass !== 'sameScope'
+      ? resumeDecisionError(task.attempts, source.text) : undefined;
     if (refusal) throw new Error(`${task.id}: ${refusal}`);
     const previousEngine = engineOf(previous);
     const nextEngine = engine === 'sol'
