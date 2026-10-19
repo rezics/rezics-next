@@ -158,8 +158,14 @@ export async function snapshotRefreshDatabase(container: string, sourceUrl: stri
   const scratch = `rezics_rehearsal_${randomBytes(12).toString('hex')}`;
   const controller = new AbortController();
   const drop = () => {
-    try { postgresCommand(container, 'cleanup', ['dropdb', '--host=/var/run/postgresql',
-      '--username=postgres', '--force', '--if-exists', scratch]); }
+    // Wait for termination acknowledgement before DROP's backend check. The
+    // same five-second wall covers both operations and only this random copy's
+    // sessions qualify, including a migration interrupted inside a transaction.
+    try { postgresCommand(container, 'cleanup', ['bash', '-e', '-c', `
+      psql -XAt --host=/var/run/postgresql --username=postgres --dbname=postgres \\
+        --set=ON_ERROR_STOP=1 -c "SELECT pg_terminate_backend(pid, 1000) FROM pg_stat_activity WHERE datname='$1' AND pid<>pg_backend_pid()" >/dev/null
+      exec dropdb --host=/var/run/postgresql --username=postgres --force --if-exists "$1"
+    `, '--', scratch]); }
     finally { postgresCommand(container, 'copy bookkeeping cleanup',
       ['rm', '-f', `/tmp/${scratch}.pid`, `/tmp/${scratch}.dump`]); }
   };
