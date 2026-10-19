@@ -239,6 +239,6 @@ export async function readWorkHeader(session: WorkReadSession, work: string) {
     selectedLanguage: basis.selectedLanguage, sourcePosition: { ...session.position,
       ...(session.options.localBasis ? { dependencyToken: basis.dependencyToken } : {}) },
     links: { versions: '/v1/query#work-versions', classifications: `${path}/classifications`,
-      adoptions: '/v1/query#work-adoptions', ratings: `${path}/ratings`, history: `${path}/history`, credits: `${path}/credits`,
+      adoptions: '/v1/query#work-adoptions', ratings: `/v1/resources/${work.slice(-36)}/ratings`, history: `${path}/history`, credits: `${path}/credits`,
       metadata: `${path}/metadata`, editions: `${path}/editions` } };
 }
