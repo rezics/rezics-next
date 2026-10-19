@@ -297,6 +297,37 @@ test('one source section retains record identity, exact evidence, missing eviden
   }
 });
 
+test('a publication source links once while every distinct attribution and licence remains readable', () => {
+  const url = 'https://www.gutenberg.org/ebooks/59047';
+  const source = { record: 'publication-record', observation: 'publication-observation',
+    provider: 'gutenberg', externalId: '59047', url, license: null, author: null, transcriber: fixture.work.id };
+  const facts: Extract<DisplayObligations, { status: 'assessed' }> = {
+    status: 'assessed', use: 'wiki_display', instrument: 'https://creativecommons.org/licenses/by/4.0/',
+    obligations: [{ kind: 'attribution', instrument: 'https://creativecommons.org/licenses/by/4.0/',
+      appliesTo: 'display', notice: `Project Gutenberg facts ${url}` }] };
+  const description: Extract<DisplayObligations, { status: 'assessed' }> = {
+    status: 'assessed', use: 'wiki_display', instrument: 'https://creativecommons.org/licenses/by-sa/4.0/',
+    obligations: [{ kind: 'attribution', instrument: 'https://creativecommons.org/licenses/by-sa/4.0/',
+      appliesTo: 'display', notice: `Distinct synopsis credit ${url}` }] };
+  const work = { ...fixture.work, rights: { basis: 'public-domain' as const, source },
+    factObligations: facts, descriptionObligations: description };
+  const html = render(<WorkSources work={work} locale="en" messages={t} />);
+  expect(html.match(/href="https:\/\/www.gutenberg.org\/ebooks\/59047"/g)).toHaveLength(1);
+  expect(html).toContain('gutenberg · 59047');
+  expect(html).toContain('Project Gutenberg facts');
+  expect(html).toContain('Distinct synopsis credit');
+  expect(html).toContain('CC BY 4.0');
+  expect(html).toContain('CC BY-SA 4.0');
+  expect(html.match(/data-rights-mark/g)).toHaveLength(2);
+  const other = 'https://www.gutenberg.org/ebooks/65061';
+  const different = { ...work, factObligations: { ...facts, obligations: [
+    { ...facts.obligations[0]!, notice: `Different publication ${other}` },
+  ] } };
+  expect(render(<WorkSources work={different} locale="en" messages={t} />)).toContain(`href="${other}"`);
+  const standalone = { ...work, rights: undefined };
+  expect(render(<WorkSources work={standalone} locale="en" messages={t} />)).toContain(`href="${url}"`);
+});
+
 test('empty continued previews still lead to the complete list while completed empty reads stay compact', () => {
   if (!levels.parts.ok || !levels.wholes.ok || !levels.relations.ok) throw new Error('Expected successful fixtures');
   const props = { workRef: zone, pageMessages: t, t: levelsCopy('en') };

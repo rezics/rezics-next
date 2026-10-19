@@ -258,7 +258,8 @@ export const MixedReadFailures: Story = {
   },
 };
 
-function SourcedWork({ at = fixture.workRef }: { at?: WorkAt }) {
+function SourcedWork({ at = fixture.workRef, publication = false }: { at?: WorkAt; publication?: boolean }) {
+  if (attributed.status !== 'assessed') throw new Error('Expected assessed fixture obligations');
   const t = messages.en;
   const page: StatementPage = { ...entity.statements(), factObligations: attributed, groups: [
     { predicate: 'https://schema.org/identifier', items: [{ ...entity.componentStatements.groups[0]!.items[0]!, kind: 'component-property',
@@ -278,7 +279,13 @@ function SourcedWork({ at = fixture.workRef }: { at?: WorkAt }) {
     quote: 'WITHHELD SOURCE QUOTE', quoteWithheld: true, method: { kind: 'manual' }, modality: 'text',
     submitter: 'https://rezics.com/id/00000000-0000-4000-8000-000000000021', rightsBasis: 'quotation',
   }];
-  const work = { ...fixture.work, factObligations: attributed, descriptionObligations: attributed };
+  const source = { record: 'publication-record', observation: 'publication-observation', provider: 'gutenberg',
+    externalId: '59047', url: 'https://www.gutenberg.org/ebooks/59047',
+    license: null, author: null, transcriber: fixture.work.id };
+  const work = { ...fixture.work, factObligations: publication ? { ...attributed, obligations: [
+    { ...attributed.obligations[0]!, notice: `Project Gutenberg facts ${source.url}` },
+  ] } : attributed, descriptionObligations: attributed,
+    ...publication ? { rights: { basis: 'public-domain' as const, source } } : {} };
   return <WorkFrame workRef={at} work={work} credits={null} locale="en" messages={t}
     statementSources={{ ok: true, data: page }} sourceLabels={entity.predicateLabels} factObligations={[attributed]}>
     <WorkAbout work={work} messages={t} />
@@ -323,6 +330,25 @@ export const ZoneSourcesAndEvidence: Story = { ...MobileSourcesAndEvidence,
   render: () => <SourcedWork at={zone} />,
   parameters: { route: { pathname: workHref(zone), search: '' } },
 };
+
+export const PublicationSourceOnce: Story = {
+  render: () => <SourcedWork publication />, globals: { viewport: { value: 'desktop1440' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const footer = canvas.getByRole('contentinfo', { name: 'Sources and licenses' });
+    const source = within(footer).getByRole('link', { name: 'gutenberg · 59047' });
+    await expect(source).toHaveAttribute('href', 'https://www.gutenberg.org/ebooks/59047');
+    await expect(footer.querySelectorAll('a[href="https://www.gutenberg.org/ebooks/59047"]')).toHaveLength(1);
+    await expect(within(footer).getByText('Source: Project Gutenberg facts')).toBeVisible();
+    await expect(within(footer).getAllByRole('link', { name: 'CC BY-SA 3.0' })).toHaveLength(2);
+    await expect(within(footer).getByText('Open Library · works · OL123W')).toBeVisible();
+    source.focus();
+    await expect(source).toHaveFocus();
+    footer.scrollIntoView({ block: 'start' });
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+export const MobilePublicationSourceOnce: Story = { ...PublicationSourceOnce, globals: { viewport: { value: 'phone' } } };
 
 export const WorkObjectMenu: Story = {
   globals: { viewport: { value: 'phone' } },
