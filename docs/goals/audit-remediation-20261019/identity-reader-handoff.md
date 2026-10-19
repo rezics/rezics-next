@@ -67,6 +67,16 @@ publication/disclosure/rights revocation and the seven invalid-bearer surfaces.
 Preparation failures reach no outcome assertions. Code and stack-free owner
 regressions alone do not close D4-007 or D4-008.
 
+The current wave now provides that preparation in the existing launch owner:
+`task launch:corpus -- --book-recipes-build`, introduced at `ed3ec31af9` with
+authenticated command receipts corrected at `42cfea6a66`. Its native Book
+helper publishes the Main introduction/default and Gutenberg chapters through
+the existing command owners. G-2791/G-2778 should use this single producer and
+the current [preparation prerequisites](../../testing/audit-corpus-prerequisites.md),
+retaining source identities, rights assessments and the stopped-owner backup.
+Private attempt receipts are not a ready consumer manifest; compatible target
+admission remains with its existing owner.
+
 ## Source counterexamples and owner corrections
 
 The preserved G-2805 source review is
