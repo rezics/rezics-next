@@ -57,6 +57,9 @@ async function copyDatabase(container: string, database: string, scratch: string
     'umask 077; echo $$ > "$1"; shift; exec "$@"', '--', pidFile,
     'timeout', '--signal=TERM', '--kill-after=2s', `${snapshotSeconds}s`,
     'bash', '-c', `
+      # PostgreSQL is PID 1 in its container. Reap children on group signals:
+      # an orphaned exec child would otherwise be mistaken for a crashed backend.
+      trap 'trap "" TERM INT; wait; exit 124' TERM INT
       echo 'REHEARSAL dump start' >&2
       PGAPPNAME='${scratch}_dump' PGOPTIONS='-c default_transaction_read_only=on' pg_dump \
         --host=/var/run/postgresql --username="$3" --dbname="$1" \
@@ -120,7 +123,23 @@ async function copyDatabase(container: string, database: string, scratch: string
     // process by name or any PostgreSQL backend outside this exact copy.
     try {
       postgresCommand(container, 'cancel copy', ['bash', '-c',
-        'if [ -f "$1" ]; then read -r pid < "$1"; kill -TERM -- "-$pid" 2>/dev/null || true; sleep 2; kill -KILL -- "-$pid" 2>/dev/null || true; fi', '--', pidFile]);
+        `if [ -f "$1" ]; then
+          read -r pid < "$1"
+          case "$pid" in ''|*[!0-9]*) exit 1;; esac
+          [ "$pid" -gt 1 ] || exit 1
+          [ -r "/proc/$pid/stat" ] || exit 0
+          read -r current command state parent group rest < "/proc/$pid/stat"
+          [ "$current" = "$pid" ] && [ "$command" = '(timeout)' ] && [ "$group" = "$pid" ] || exit 1
+          kill -TERM -- "-$pid" 2>/dev/null || true
+          sleep 2
+          # The group may disappear while the signal is handled. Recheck its
+          # leader before escalation so a reused PID cannot widen this scope.
+          if [ -r "/proc/$pid/stat" ]; then
+            read -r current command state parent group rest < "/proc/$pid/stat"
+            [ "$current" = "$pid" ] && [ "$command" = '(timeout)' ] && [ "$group" = "$pid" ] || exit 1
+            kill -KILL -- "-$pid" 2>/dev/null || true
+          fi
+        fi`, '--', pidFile]);
     } catch { cancelFailed = true; }
     // The container group has its own termination above. Bound a broken Docker
     // transport too; disconnecting it alone is never the cleanup mechanism.
@@ -163,6 +182,7 @@ export async function snapshotRefreshDatabase(container: string, sourceUrl: stri
     // same five-second wall covers both operations and only this random copy's
     // sessions qualify, including a migration interrupted inside a transaction.
     try { postgresCommand(container, 'cleanup', ['bash', '-e', '-c', `
+      trap 'trap "" TERM INT; wait; exit 124' TERM INT
       export PGAPPNAME='${scratch}_cleanup'
       echo 'REHEARSAL cleanup terminate' >&2
       psql -XAt --host=/var/run/postgresql --username=postgres --dbname=postgres \\
