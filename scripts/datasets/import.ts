@@ -781,7 +781,9 @@ export async function importDataset(
   const elected = electedDatasetCovers(snapshot.sources.flatMap(source => source.images));
   for (const [index, image] of snapshot.images.entries()) {
     const path = `/images/${index}`;
-    if (!inView({ record: image.record, kind: 'image', path })) continue;
+    // Intake custody retains every original occurrence for this record. Native
+    // admission and coverage still use the separately bounded selected view.
+    if (!selectedKeys.has(image.record)) continue;
     const listed = imagesByRecord.get(image.record) ?? [];
     listed.push(image);
     imagesByRecord.set(image.record, listed);
@@ -791,14 +793,16 @@ export async function importDataset(
   }
   snapshot.sources.forEach((source, sourceIndex) => source.edges.forEach((edge, index) => {
     const path = `/sources/${sourceIndex}/edges/${index}`;
-    if (inView({ record: edge.from, kind: 'edge', path })) occurrences(edge.from).edges.push(path);
+    if (selectedKeys.has(edge.from)) occurrences(edge.from).edges.push(path);
   }));
   const outgoing = new Map<string, DatasetEdge[]>(),
     neighbors = new Map<string, string[]>();
-  for (const edge of allEdges) {
+  for (const edge of snapshot.sources.flatMap(source => source.edges)) {
     if (!byKey.has(edge.from) || !byKey.has(edge.to))
       throw new Error(`Dataset has a missing relationship endpoint: ${edge.from} -> ${edge.to}`);
     outgoing.set(edge.from, [...(outgoing.get(edge.from) ?? []), edge]);
+  }
+  for (const edge of allEdges) {
     neighbors.set(edge.from, [...(neighbors.get(edge.from) ?? []), edge.to]);
     neighbors.set(edge.to, [...(neighbors.get(edge.to) ?? []), edge.from]);
   }
@@ -815,17 +819,20 @@ export async function importDataset(
   });
   const epoch = (basis.sourcePosition as { dataEpoch?: unknown } | undefined)?.dataEpoch;
   if (typeof epoch !== 'string') throw new Error('Public catalogue returned no product epoch');
-  const context = sha256(
+  const intakeContext = sha256(canonical([mainOrigin, actingSubject, epoch, snapshot.id, snapshot.digest]));
+  const context = selection ? sha256(
     canonical([mainOrigin, actingSubject, epoch, snapshot.id, snapshot.digest,
-      ...(selection ? [sha256(canonical(selection))] : [])]),
-  );
+      sha256(canonical(selection))]),
+  ) : intakeContext;
   // Different snapshots share native source identities in one product/Account.
   // Keep the legacy exact-context lease as well for an older client's retry.
   const identityContext = sha256(canonical([mainOrigin, actingSubject, epoch]));
   const releaseIdentityLock = acquireDatasetImportLock(identityContext);
   let releaseLock: (() => void) | undefined;
+  let releaseIntakeLock: (() => void) | undefined;
   try {
     releaseLock = acquireDatasetImportLock(context);
+    if (context !== intakeContext) releaseIntakeLock = acquireDatasetImportLock(intakeContext);
     const receiptFile = join(root, 'imports', `${context}.json`);
     let journal: Journal = existsSync(receiptFile)
       ? (JSON.parse(readFileSync(receiptFile, 'utf8')) as Journal)
@@ -852,13 +859,38 @@ export async function importDataset(
       throw new Error('Dataset import checkpoint belongs to another snapshot or API instance');
     }
     const entryDirectory = join(root, 'imports', context, 'requests');
+    const intakeEntryDirectory = join(root, 'imports', intakeContext, 'requests');
+    const isIntake = (entry: Pick<JournalEntry, 'method' | 'path'>) =>
+      entry.method === 'POST' && entry.path === '/v1/sources/intakes';
+    const ownsIntake = (label: string, entry: JournalEntry) => isIntake(entry)
+      || /^(record|scope|images):/.test(label) || entry.phase === 'cover-evidence';
+    const commandContext = (entry: Pick<JournalEntry, 'method' | 'path'>) => isIntake(entry) ? intakeContext : context;
+    const saveEntry = (label: string, entry: JournalEntry) =>
+      atomicJson(join(isIntake(entry) ? intakeEntryDirectory : entryDirectory, `${sha256(label)}.json`), { label, entry });
     mkdirSync(entryDirectory, { recursive: true });
-    for (const file of readdirSync(entryDirectory)) {
+    mkdirSync(intakeEntryDirectory, { recursive: true });
+    if (context !== intakeContext) {
+      // A selected journal cannot replace a parent's intake with selected bytes
+      // or rebind an old acknowledgement to its native-selection command key.
+      for (const [label, entry] of Object.entries(journal.entries))
+        if (ownsIntake(label, entry)) delete journal.entries[label];
+      const parentReceiptFile = join(root, 'imports', `${intakeContext}.json`);
+      if (existsSync(parentReceiptFile)) {
+        const parent = JSON.parse(readFileSync(parentReceiptFile, 'utf8')) as Journal;
+        if (parent.snapshot !== snapshot.id || parent.digest !== snapshot.digest || parent.dataEpoch !== epoch
+          || parent.mainOrigin !== mainOrigin || parent.actingSubject !== actingSubject || parent.selection)
+          throw new Error('Dataset parent intake checkpoint belongs to another snapshot or API instance');
+        for (const [label, entry] of Object.entries(parent.entries))
+          if (ownsIntake(label, entry)) journal.entries[label] = entry;
+      }
+    }
+    for (const directory of new Set([entryDirectory, intakeEntryDirectory])) for (const file of readdirSync(directory)) {
       if (!file.endsWith('.json')) continue;
-      const saved = JSON.parse(readFileSync(join(entryDirectory, file), 'utf8')) as {
+      const saved = JSON.parse(readFileSync(join(directory, file), 'utf8')) as {
         label: string;
         entry: JournalEntry;
       };
+      if (context !== intakeContext && ownsIntake(saved.label, saved.entry) !== (directory === intakeEntryDirectory)) continue;
       // Older interrupted clients could have cached a 202 reconciliation body.
       // It is an operation status, never an allocated native/source receipt.
       if (
@@ -866,7 +898,7 @@ export async function importDataset(
         saved.entry.result?.status === 'pending'
       ) {
         delete saved.entry.result;
-        atomicJson(join(entryDirectory, file), saved);
+        atomicJson(join(directory, file), saved);
       }
       journal.entries[saved.label] = saved.entry;
     }
@@ -884,8 +916,6 @@ export async function importDataset(
         requestCount: Object.keys(journal.entries).length,
       });
     };
-    const saveEntry = (label: string, entry: JournalEntry) =>
-      atomicJson(join(entryDirectory, `${sha256(label)}.json`), { label, entry });
     journal.completed = false;
     save(true);
     const note = (message: string) => {
@@ -909,7 +939,7 @@ export async function importDataset(
     };
     const command = (label: string, method: 'GET' | 'POST' | 'PUT', path: string,
       body?: unknown, itemKeys?: string[], intake?: DatasetIntakeCoordinate): Promise<Record<string, unknown>> => {
-      const key = `dataset:${sha256(`${context}:${label}`)}`;
+      const key = `dataset:${sha256(`${commandContext({ method, path })}:${label}`)}`;
       // The first persisted request binds child IDs and search receipts before dispatch.
       return replayCommand<JournalEntry, Record<string, unknown>>({
         read: () => journal.entries[label],
@@ -950,7 +980,7 @@ export async function importDataset(
         saveEntry(label, entry);
       }
       entry.phase = phase;
-      const key = method === 'GET' ? undefined : `dataset:${sha256(`${context}:${label}`)}`;
+      const key = method === 'GET' ? undefined : `dataset:${sha256(`${commandContext(entry)}:${label}`)}`;
       const response = await responseWithRetry(api, method, path,
         () => api.request(method, path, body, key), response => {
           coverResponse(entry, response);
@@ -993,7 +1023,7 @@ export async function importDataset(
       const entry = journal.entries[label];
       if (!entry?.intake || entry.method !== 'POST' || entry.path !== '/v1/sources/intakes')
         throw new DatasetIntakeCustodyError('coordinate', `missing actual intake coordinate: ${label}`);
-      return structuredClone({ label, key: `dataset:${sha256(`${context}:${label}`)}`,
+      return structuredClone({ label, key: `dataset:${sha256(`${commandContext(entry)}:${label}`)}`,
         method: entry.method, path: entry.path, request: entry.body as DatasetIntakeRequest,
         coordinate: entry.intake,
         responses: entry.responses ?? (entry.result ? [{ body: entry.result }] : []),
@@ -1057,9 +1087,9 @@ export async function importDataset(
           if (entry.intake && canonical(entry.intake) !== canonical(binding))
             throw new DatasetIntakeCustodyError('coordinate', `recorded frozen intake coordinate changed: ${partLabel}`);
           // Older real journals have exact requests/replies but no producer annotation.
-          // Enrich only after checking their actual bytes and frozen coordinates.
+          // Bind the export after checking bytes and coordinates. A cached
+          // acknowledgement does not require rewriting its historical file.
           entry.intake = structuredClone(binding);
-          saveEntry(partLabel, entry);
         }
         await command(partLabel, 'POST', '/v1/sources/intakes', expected, undefined, binding);
         const receipt = datasetIntakeReceipt(intakeCommand(partLabel), expected);
@@ -1271,7 +1301,8 @@ export async function importDataset(
           save(true);
         }
       }
-      for (const source of sources) {
+      for (const [sourceIndex, source] of snapshot.sources.entries()) {
+        if (selection && !selection.sources.some(selectedSource => selectedSource.source === sourceIndex)) continue;
         const record = source.records[0];
         if (record)
           await retained(
@@ -1292,11 +1323,9 @@ export async function importDataset(
           `images:${source.provider}:snapshot-image-candidates-v1`,
           { ...record, kind: 'dataset-image-candidates', externalId: snapshot.id },
           { format: 'rezics-dataset-image-candidates-v1', snapshot: snapshot.id, digest: snapshot.digest,
-            ...(selection ? { selection } : {}), provider: source.provider,
+            provider: source.provider,
             images: snapshot.sources.flatMap((parent, sourceIndex) => parent.provider === source.provider
-              ? parent.images.flatMap((image, index) => inView({ record: image.record, kind: 'source-image',
-                path: `/sources/${sourceIndex}/images/${index}` })
-                ? [{ path: `/sources/${sourceIndex}/images/${index}`, image }] : []) : []) },
+              ? parent.images.map((image, index) => ({ path: `/sources/${sourceIndex}/images/${index}`, image })) : []) },
         );
       }
       if (options.native !== false) {
@@ -2030,7 +2059,7 @@ export async function importDataset(
         format: 'rezics-dataset-intake-receipts-v1', snapshot: snapshotReference,
         commands: intakeEntries.filter(([, entry]) => entry.intake).map(([label]) => intakeCommand(label)),
         unboundCommands: intakeEntries.filter(([, entry]) => !entry.intake).map(([label, entry]) => ({
-          label, key: `dataset:${sha256(`${context}:${label}`)}`, method: 'POST', path: '/v1/sources/intakes',
+          label, key: `dataset:${sha256(`${commandContext(entry)}:${label}`)}`, method: 'POST', path: '/v1/sources/intakes',
           request: entry.body, responses: entry.responses ?? (entry.result ? [{ body: entry.result }] : []),
           ...(entry.result ? { result: entry.result } : {}),
         })),
@@ -2077,6 +2106,7 @@ export async function importDataset(
     atomicJson(join(root, 'import-latest.json'), result);
     return result;
   } finally {
+    releaseIntakeLock?.();
     releaseLock?.();
     releaseIdentityLock();
   }

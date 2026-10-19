@@ -506,8 +506,10 @@ describe('actual importer intake custody', () => {
     expect(retained.envelope.images).toEqual(source.images.slice(1));
     expect(retained.occurrences).toEqual({ edges: ['/sources/0/edges/1'],
       images: ['/images/1', '/images/2'], electedImages: ['/images/2'] });
+    const parentContext = sha256(canonical([importOptions.mainOrigin, importOptions.actingSubject,
+      result.dataEpoch, source.id, source.digest]));
     const originals = retained.intakes.map(part => {
-      const file = requestFile(result.receiptFile, part.command.label);
+      const file = requestFile(join(directory, 'imports', `${parentContext}.json`), part.command.label);
       return { file, before: readFileSync(file, 'utf8') };
     });
     const mutations: [keyof DatasetRecordEnvelope, unknown][] = [
@@ -659,6 +661,129 @@ describe('actual importer intake custody', () => {
     expect(evidence).toBeDefined();
     expect(canonical(source)).toBe(frozen);
     expect(intakeJournal(result.intakeReceiptsFile).records[original.key]!.record).toEqual(original);
+  });
+});
+
+describe('selected native view and original parent intake custody', () => {
+  function parentCase(multipart = false) {
+    const outside = { ...record('vndb:vn:v99', 'work'), externalId: 'v99' };
+    const work = { ...record('vndb:vn:v11', 'work'), externalId: 'v11' };
+    const character = { ...record('vndb:character:c1', 'character'), kind: 'character', externalId: 'c1',
+      data: { captured: true, ...(multipart ? { text: '字'.repeat(40_000) } : {}) } };
+    const source = snapshot([outside, character, work]);
+    const appearance = { from: character.key, to: work.key, kind: 'appearance', data: { order: 1 } };
+    source.sources[0]!.roots = [outside.key, work.key];
+    source.sources[0]!.scope = { complete: true, originalAnchor: outside.key };
+    source.sources[0]!.edges = [{ from: work.key, to: character.key, kind: 'character', data: { order: 0 } },
+      appearance, structuredClone(appearance),
+      { from: character.key, to: outside.key, kind: 'appearance', data: { order: 2 } }];
+    source.images = [outside.key, character.key, character.key, work.key].map((key, index) => ({ record: key,
+      role: index === 1 ? 'candidate-cover' : 'selected-cover', url: `https://images.example.test/${index}.png`,
+      captureRole: 'cover', capture: null, missing: true }));
+    source.sources[0]!.images = source.images.map(({ record, role, url }) => ({ record, role, url }));
+    sealSnapshot(source);
+    return { source, work, outside, character,
+      selection: { roots: [work.key], budget: selectionBudget, relatedWorkDepth: 0 } };
+  }
+
+  for (const multipart of [false, true]) test(`selection reuses complete ${multipart ? 'multipart' : 'single-part'} parent records, scope and media receipts without rewriting history`, async () => {
+    const fixture = apiFixture(), directory = root(), { source, work, character, selection } = parentCase(multipart);
+    const frozen = freezeSnapshotFile(directory, source), input = { ...options(fixture.api), native: false };
+    const previous = await importDataset(directory, source, input), prior = intakeJournal(previous.intakeReceiptsFile);
+    const oldCharacter = prior.records[character.key]!;
+    const historical = oldCharacter.intakes.map(part => {
+      const file = requestFile(previous.receiptFile, part.command.label), saved = JSON.parse(readFileSync(file, 'utf8'));
+      const rights = { basis: 'unknown',
+        note: `Frozen local development evidence from ${character.sourceUrl}; raw provider data and images retain their original rights. No redistribution permission is asserted.` };
+      saved.entry.body.rightsEvidence = rights;
+      saved.entry.result.observation.rightsEvidence = rights;
+      delete saved.entry.result.observation.rawBytesBase64;
+      delete saved.entry.intake;
+      delete saved.entry.responses;
+      delete saved.entry.responseStatus;
+      const bytes = JSON.stringify(saved);
+      writeFileSync(file, bytes);
+      return { file, bytes, command: { ...part.command, request: saved.entry.body, result: saved.entry.result,
+        responses: [{ body: saved.entry.result }] } };
+    });
+    const parentJournal = readFileSync(previous.receiptFile, 'utf8'), calls = fixture.requests.length;
+    for (let replay = 0; replay < 2; replay++) {
+      const selected = await importDataset(directory, source, { ...input, maxRecords: 0, selection });
+      const current = intakeJournal(selected.intakeReceiptsFile), retained = current.records[character.key]!;
+      expect(selected.records).toBe(2);
+      expect(selected.receiptFile).not.toBe(previous.receiptFile);
+      expect(selected.selection!.sources[0]!.edges).toEqual([0, 1, 2]);
+      expect(retained.envelope).toEqual(oldCharacter.envelope);
+      expect(retained.envelope.edges).toEqual(source.sources[0]!.edges.filter(edge => edge.from === character.key));
+      expect(retained.envelope.edges).toHaveLength(3);
+      expect(retained.envelope.images).toEqual(source.images.slice(1, 3));
+      expect(retained.occurrences).toEqual({ edges: ['/sources/0/edges/1', '/sources/0/edges/2', '/sources/0/edges/3'],
+        images: ['/images/1', '/images/2'], electedImages: ['/images/2'] });
+      expect(retained.intakes.map(part => part.command)).toEqual(historical.map(saved => saved.command));
+      for (const command of prior.commands.filter(command => command.coordinate.purpose !== 'record'))
+        expect(current.commands.find(item => item.label === command.label)).toEqual(command);
+      const scope = current.commands.find(command => command.coordinate.purpose === 'scope')!;
+      expect(scope.coordinate.identity.key).toBe(source.sources[0]!.records[0]!.key);
+      expect(reconstructIntake([Buffer.from(scope.request.rawBytesBase64, 'base64')])).toEqual({
+        format: 'rezics-dataset-scope-v1', snapshot: source.id, digest: source.digest, provider: 'vndb',
+        roots: source.sources[0]!.roots, scope: source.sources[0]!.scope,
+        intendedRecords: source.sources[0]!.records.map(record => record.key), totalRecords: 3,
+      });
+      const candidates = current.commands.find(command => command.coordinate.purpose === 'image-candidates')!;
+      expect(reconstructIntake([Buffer.from(candidates.request.rawBytesBase64, 'base64')])).toEqual({
+        format: 'rezics-dataset-image-candidates-v1', snapshot: source.id, digest: source.digest, provider: 'vndb',
+        images: source.sources[0]!.images.map((image, index) => ({ path: `/sources/0/images/${index}`, image })),
+      });
+      expect(current.records[work.key]!.intakes).toEqual(prior.records[work.key]!.intakes);
+      expect(readFileSync(previous.receiptFile, 'utf8')).toBe(parentJournal);
+      for (const saved of historical) expect(readFileSync(saved.file, 'utf8')).toBe(saved.bytes);
+      expect(readFileSync(join(directory, 'snapshots', source.id, 'snapshot.json'))).toEqual(frozen);
+    }
+    expect(fixture.requests.slice(calls).filter(request => request.path === '/v1/sources/intakes')).toEqual([]);
+  });
+
+  test('retaining outside adjacency does not create native records outside the accepted view', async () => {
+    const fixture = apiFixture(), directory = root(), { source, work, outside, character, selection } = parentCase();
+    const selected = await importDataset(directory, source, { ...options(fixture.api), maxRecords: 0, selection });
+    const native = JSON.parse(readFileSync(selected.receiptFile, 'utf8')).native;
+    expect(Object.keys(native).sort()).toEqual([character.key, work.key].sort());
+    expect(native[outside.key]).toBeUndefined();
+    expect(fixture.nativeWorks).toHaveLength(1);
+    const retained = intakeJournal(selected.intakeReceiptsFile).records[character.key]!;
+    expect(retained.envelope.edges.at(-1)!.to).toBe(outside.key);
+    expect(selected.selection!.sources[0]!.edges).toEqual([0, 1, 2]);
+  });
+
+  test('an interrupted selected multipart intake resumes through the parent context without changing its key or bytes', async () => {
+    const fixture = apiFixture(), directory = root(), { source, character, selection } = parentCase(true);
+    let fail = true;
+    const api: DatasetApi = { ...fixture.api, async request(method, path, body, key) {
+      const response = await fixture.api.request(method, path, body, key);
+      if (fail && path === '/v1/sources/intakes'
+        && (body as DatasetIntakeRequest).externalId === 'c1:part:1') throw new Error('closed socket after parent intake commit');
+      return response;
+    } };
+    const input = { ...options(api), native: false };
+    await expect(importDataset(directory, source, { ...input, selection })).rejects.toThrow('closed socket');
+    const file = readdirSync(directory).find(name => name.startsWith('intakes-'))!;
+    const interrupted = intakeJournal(join(directory, file));
+    const pending = interrupted.commands.find(command => command.request.externalId === 'c1:part:1')!;
+    expect(pending.result).toBeUndefined();
+    expect(pending.responses).toEqual([]);
+    const acknowledged = fixture.receipts.get(pending.key)!;
+    fail = false;
+    const full = await importDataset(directory, source, input), receipts = intakeJournal(full.intakeReceiptsFile);
+    const resumed = receipts.records[character.key]!.intakes[1]!.command;
+    expect(resumed.key).toBe(pending.key);
+    expect(resumed.request).toEqual(pending.request);
+    expect(resumed.result).toEqual({ ...acknowledged, replayed: true });
+    expect(resumed.coordinate).toEqual(pending.coordinate);
+    expect(receipts.records[character.key]!.envelope.edges).toHaveLength(3);
+    const before = fixture.requests.length;
+    const otherSubject = await importDataset(directory, source, { ...input, actingSubject: iri(999), selection });
+    const other = intakeJournal(otherSubject.intakeReceiptsFile).records[character.key]!.intakes[1]!.command;
+    expect(other.key).not.toBe(pending.key);
+    expect(fixture.requests.slice(before).some(request => request.path === '/v1/sources/intakes')).toBe(true);
   });
 });
 
