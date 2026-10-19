@@ -68,6 +68,13 @@ export interface VerifiedPrincipal {
   currentAssertion?: () => Promise<VerifiedPrincipal>;
 }
 
+/** An actual acknowledged command from the Access ledger, not a receipt name
+ * reconstructed by a consumer from an admission, component or revision. */
+export interface AcknowledgedOwnerCommand {
+  admissionId: string; receipt: string; action: string; actingSubject: string; scope: string;
+  requestDigest: string; authorityEpoch: string; dataEpoch: string; sequence: string;
+}
+
 export interface AdmissionRequest {
   /** Owner-only restriction, bound by requestDigest: a sourced publication cannot borrow its transcriber's creator baseline. */
   requireExplicitGrant?: boolean;
@@ -1097,6 +1104,28 @@ export class AccessAdmissionRegistry {
     [principal.issuer, principal.subject])).rows[0];
     if (!row?.open) throw new AdmissionUnavailable('Access recovery is held');
     return row.id;
+  }
+
+  /** Private owner verification: the verified Account subject must own the
+   * admission. A sealed receipt conveys acknowledgment, never current authority. */
+  async readAcknowledgedOwnerCommand(principal: VerifiedPrincipal, receipt: string):
+    Promise<AcknowledgedOwnerCommand | null> {
+    if (!/^urn:rezics:receipt:[a-f0-9]{64}$/.test(receipt)) return null;
+    const principalId = await this.activePrincipalId(principal);
+    if (!principalId) return null;
+    const row = (await (accessClient(this.pool) ?? this.pool).query<{
+      id: string; graph_receipt: string; action: string; acting_subject: string; scope_id: string;
+      request_digest: string; authority_epoch: string; graph_data_epoch: string; graph_sequence: string;
+    }>(`SELECT id,graph_receipt,action,acting_subject,scope_id,request_digest,
+      authority_epoch::text,graph_data_epoch,graph_sequence::text
+      FROM access.admission WHERE principal_id=$1 AND graph_receipt=$2
+        AND state='sealed' AND graph_outcome='succeeded' LIMIT 2`, [principalId, receipt])).rows;
+    if (row.length !== 1) return null;
+    if (await this.activePrincipalId(principal) !== principalId) return null;
+    const proof = row[0]!;
+    return { admissionId: proof.id, receipt: proof.graph_receipt, action: proof.action,
+      actingSubject: proof.acting_subject, scope: proof.scope_id, requestDigest: proof.request_digest,
+      authorityEpoch: proof.authority_epoch, dataEpoch: proof.graph_data_epoch, sequence: proof.graph_sequence };
   }
 
   private async canReadScopedResource(
