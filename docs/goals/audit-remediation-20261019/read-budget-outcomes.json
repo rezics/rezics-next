@@ -3011,7 +3011,7 @@
   "populationEnvironmentContinuation": {
     "authority": "Latest maintainer continuation: qualify only the two original frozen D5-006 populations on disposable migrated copies of the retained command-created corpora; G-2826 performs independent original-suite execution after qualification.",
     "scope": "Environment preparation and existing matrix metadata only. No baseline product rerun, catalogue build, production/helper/frozen-test edit, peer mutation, new producer, new fault mechanism or finding closure.",
-    "status": "partial: Zone compatible restore, history verification/adoption and owner migration completed; corrected strict source-preservation witness authored. Both candidate Task migration and standing reconstruction commands exist; actual environment qualification remains pending.",
+    "status": "partial: Zone derivative qualified by genuine migration, public smoke, clean stopped-owner backup and fresh restore; rating environment qualification remains next. Independent original suites have not run.",
     "originalOutcomeAssertionReached": false,
     "canonicalFindingClosed": false,
     "fixedProductPassCertified": false,
@@ -3267,6 +3267,165 @@
           "notCertified": "The combined graph hash/count cannot identify the actual 27 added triples. They must be captured and checked against exact migration receipts; source inspection alone supplies no preservation certification.",
           "nextWitness": "Exact original current/revision facts and old receipts, all four owners original-column row digests, local/S3 immutable bytes, and explicit exact migration/recovery metadata differences. No frozen product assertion changes."
         }
+      },
+      {
+        "job": "f2dea7bc-ecf6-41e0-8863-c7a99c691b0f",
+        "command": "task --taskfile .temp/read-budget-migration/Taskfile.yml qualify -- zones",
+        "receipt": {
+          "path": ".temp/read-budget-migration/zones-attempt3/environment-qualification.json",
+          "sha256": "8d273af63a3947c2fb48fbaa3582fe1ff78aa7fa156883ff5c17d1d46bff51be"
+        },
+        "classification": "Passed environment qualification only; no original frozen-suite execution or finding closure.",
+        "startedAt": "2026-10-19T12:31:26.618Z",
+        "finishedAt": "2026-10-19T12:35:29.015Z",
+        "ready": true,
+        "originalOutcomeAssertionReached": false,
+        "originalRestore": {
+          "restoreMs": 15500,
+          "volumeCopyMs": {
+            "postgres_data": 9340,
+            "fuseki_data": 3279,
+            "rustfs_data": 2168
+          },
+          "objectCopyMs": 41,
+          "startupMs": 51669,
+          "readinessMs": 1450,
+          "totalMs": 68619,
+          "admissionWaitMs": 33786,
+          "collationRepairs": []
+        },
+        "preparationThroughSmokeMs": 155400,
+        "derivative": {
+          "manifest": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/source-fixed/.temp/read-budget-derivatives/zones/owners/backup.json",
+          "sha256": "81c40acf12d49b07a524211a73773d054ff4f7a78b17da06db2c3c8af32a61cb",
+          "project": "rezics-catalogue-corpus-budget-zone-7a1305717b-bounded-reads-zones-6b500023d9273076",
+          "compatibilityDigest": "6b500023d92730766795edd9771f36b3550e60095d6cd748273eb38e99076264",
+          "preparationMs": 180030,
+          "corpus": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/zones-attempt3/corpus.json",
+          "corpusSha256": "169b7dde39f3c9719001c1a5e0674b5b3c7ef6b4c0beff16b01b4983dd57e016",
+          "parentManifest": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/audit-bounded-reads/zones/owners/backup.json",
+          "parentManifestSha256": "89331d2a132d937b34a975668ae92dc250b09b09edc918e253ee113f20d4f9ba",
+          "parentCompatibilityDigest": "79c3488519b38ec7f919d85713c4027c4226fc582f4afb19f1f4a7d2f1b1b056"
+        },
+        "smoke": {
+          "kind": "retained-identity-environment-smoke",
+          "capability": "zones",
+          "originalOutcomeAssertionReached": false,
+          "recreatedIdentities": false,
+          "publicChecks": [
+            {
+              "path": "/health/ready",
+              "status": 200
+            },
+            {
+              "path": "/v1/onboarding/suggested-follows?languages=en",
+              "status": 200,
+              "items": 3,
+              "privateRealmAbsent": true
+            }
+          ],
+          "retainedRealms": 2,
+          "retainedPersonaSessions": 10,
+          "ready": true,
+          "elapsedMs": 8497
+        },
+        "appliedMigrations": [
+          "services/main/migrations/access/2045_standing_rating_components.sql",
+          "services/main/migrations/access/2077_standing_rating_publication.sql",
+          "services/main/migrations/access/2605_discovery_refresh_disposition.sql",
+          "services/main/migrations/access/2606_standing_rating_affected_cuts.sql",
+          "services/main/migrations/access/2607_standing_rating_bounded_progress.sql"
+        ],
+        "cleanupErrors": [],
+        "run": "budget-zone-7a1305717b",
+        "derivativeRestoreRun": "budget-check-363faf98b4",
+        "preservation": {
+          "originalSqlTableCount": 714,
+          "changedDerivedTables": [
+            "alias_graph_import",
+            "also_enjoyed_source_change",
+            "discovery_source_change",
+            "recovery_fence"
+          ],
+          "unexpectedSql": [],
+          "recoveryValid": true,
+          "aliasValid": true,
+          "discoveryValid": true,
+          "enjoyedValid": true,
+          "exactUpgradeReceipts": [
+            "urn:rezics:name-migration:statement-upgrade:acquire:1f71d636d4cc990db7eac4ec02cdc3ea35508afe959c660412cd876593edb0ba",
+            "urn:rezics:name-migration:statement-upgrade:complete:fd4a61e22baaf88149d26dbf807749e8456e0688cd7ebffe691aa8e8ad9215d6",
+            "urn:rezics:name-migration:statement-upgrade:release:f03a12ec7b2afa8d7384f720ae7efad2a1dfd9c51aa20caa9fe08677441edd8f"
+          ],
+          "onlyExactUpgradeReceipts": true,
+          "immutableGraphFactsUnchanged": true,
+          "objectsUnchanged": true,
+          "originalCorpusUnchanged": true,
+          "originalBackupUnchanged": true,
+          "ready": true
+        },
+        "graphDelta": {
+          "removed": 0,
+          "added": 27
+        },
+        "objectCounts": {
+          "local": 126,
+          "s3": 43
+        },
+        "freshRestore": {
+          "restoreMs": 8802,
+          "volumeCopyMs": {
+            "postgres_data": 3543,
+            "fuseki_data": 2939,
+            "rustfs_data": 1752
+          },
+          "objectCopyMs": 12,
+          "startupMs": 21308,
+          "readinessMs": 2435,
+          "totalMs": 32545,
+          "admissionWaitMs": 2359,
+          "changedSourceTables": [
+            "access.access.owner_partition_route"
+          ],
+          "unexpectedSourceTables": [],
+          "routeRewriteValid": true,
+          "objectsUnchanged": true,
+          "smoke": {
+            "kind": "retained-identity-environment-smoke",
+            "capability": "zones",
+            "originalOutcomeAssertionReached": false,
+            "recreatedIdentities": false,
+            "publicChecks": [
+              {
+                "path": "/health/ready",
+                "status": 200
+              },
+              {
+                "path": "/v1/onboarding/suggested-follows?languages=en",
+                "status": 200,
+                "items": 3,
+                "privateRealmAbsent": true
+              }
+            ],
+            "retainedRealms": 2,
+            "retainedPersonaSessions": 10,
+            "ready": true,
+            "elapsedMs": 8823
+          },
+          "preparationThroughSmokeMs": 50217
+        },
+        "freshRestoreGraphUnchanged": true,
+        "history": {
+          "verify": {
+            "receipt": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/zones-attempt3/qa-history-verify.json",
+            "sha256": "da19fb60470510004a2fae4c73833be86f6b757693af213c29059710001d97ea"
+          },
+          "adopt": {
+            "receipt": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/zones-attempt3/qa-history-adopt.json",
+            "sha256": "9d4eed9050457dcd0897aa9a8f0d4470e540f762860d115592c64407b2dc0a8e"
+          }
+        },
+        "contentLedgerLimitation": "Ordinary dev:prepare completed Content migration; this attempt collected only Access migration names. Content source/archive facts were covered by original-column preservation."
       }
     ],
     "ratingsDisposition": {
@@ -3291,12 +3450,25 @@
     },
     "nextWitness": {
       "driver": ".temp/read-budget-migration/qualify.ts",
-      "syntaxCommand": "task --taskfile .temp/read-budget-migration/Taskfile.yml syntax",
-      "syntaxResult": "passed; Bun compiled both temporary drivers in 8 ms",
-      "executionStatus": "authored and syntax checked; separate zones-attempt3 receipt pending execution",
-      "nextPreparationCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --taskfile .temp/read-budget-migration/Taskfile.yml qualify -- zones"
+      "executionStatus": "Zone attempt3 passed; retain it without rerun. Adapt temporary preparation for the existing supported rating standing reconstruction and projection refresh.",
+      "nextPreparationCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --taskfile .temp/read-budget-migration/Taskfile.yml qualify -- ratings",
+      "originalSuitesReservedFor": "G-2826 independent owner"
     },
-    "qualifiedManifest": null,
+    "qualifiedManifest": {
+      "zones": {
+        "manifest": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/source-fixed/.temp/read-budget-derivatives/zones/owners/backup.json",
+        "sha256": "81c40acf12d49b07a524211a73773d054ff4f7a78b17da06db2c3c8af32a61cb",
+        "project": "rezics-catalogue-corpus-budget-zone-7a1305717b-bounded-reads-zones-6b500023d9273076",
+        "compatibilityDigest": "6b500023d92730766795edd9771f36b3550e60095d6cd748273eb38e99076264",
+        "preparationMs": 180030,
+        "corpus": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/zones-attempt3/corpus.json",
+        "corpusSha256": "169b7dde39f3c9719001c1a5e0674b5b3c7ef6b4c0beff16b01b4983dd57e016",
+        "parentManifest": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/audit-bounded-reads/zones/owners/backup.json",
+        "parentManifestSha256": "89331d2a132d937b34a975668ae92dc250b09b09edc918e253ee113f20d4f9ba",
+        "parentCompatibilityDigest": "79c3488519b38ec7f919d85713c4027c4226fc582f4afb19f1f4a7d2f1b1b056"
+      },
+      "ratings": null
+    },
     "independentOriginalSuiteCommandAuthorizedNow": false,
     "handoffAfterReady": "Supply root the actual qualified derivative/corpus digests, stopped-owner lifecycle, exact immutable source and frozen fixture/test selection for G-2826; do not execute the original suites in parallel.",
     "peerSafety": "G-2791 peer stack46775 remained read-only; no global stack reaper invoked; cleanup only owned disposable projects; original backup/corpus bytes unchanged.",
@@ -3311,6 +3483,15 @@
     "preflightAttempt3": {
       "path": ".temp/read-budget-migration/attempt3-preflight.json",
       "sha256": "d73106da49a87057e80b98161ce2b1250eb5f4691ace2cd9b3f0f30d9a5aa8f2"
-    }
+    },
+    "previousNextWitnesses": [
+      {
+        "driver": ".temp/read-budget-migration/qualify.ts",
+        "syntaxCommand": "task --taskfile .temp/read-budget-migration/Taskfile.yml syntax",
+        "syntaxResult": "passed; Bun compiled both temporary drivers in 8 ms",
+        "executionStatus": "authored and syntax checked; separate zones-attempt3 receipt pending execution",
+        "nextPreparationCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --taskfile .temp/read-budget-migration/Taskfile.yml qualify -- zones"
+      }
+    ]
   }
 }
