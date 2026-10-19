@@ -1,12 +1,14 @@
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { appendFileSync, constants, copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, realpathSync,
+import { appendFileSync, constants, copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync,
   renameSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { FixtureWorkBudget } from '../../fixture/budget.ts';
 import { sha256, stable } from '../../fixture/corpus.ts';
 import { isRetainedJson, type RetainedJson, type RetainedOwnerState } from '../../fixture/manifest.ts';
 import { canonicalJson } from '../../lib/canonical-json.ts';
+import { classicText } from '../../dev/seed/classics-text.ts';
+import { gutenbergBooks } from '../../../tests/fixtures/sources/gutenberg.ts';
 import { loadCompatibility } from '../../load/compatibility.ts';
 import { readSnapshot, verifySnapshot } from '../../datasets/snapshot.ts';
 import { blobPath, verifiedBlob } from '../../datasets/store.ts';
@@ -20,7 +22,7 @@ import { RetainedSources, sourceFileDigests, sourceKey, type RetainedSourceAdapt
 import matrix from '../../../tests/qa/fixtures/catalogue/import-outcomes.json';
 import { retainedAdmissionCases, type RetainedRecordInput } from '../../../tests/qa/fixtures/catalogue/import-admission-contract.ts';
 import { informationMatrix } from '../../../tests/qa/fixtures/catalogue-information-matrix.ts';
-import { publicDomainBaseline } from '../../../tests/qa/fixtures/catalogue-public-domain.ts';
+import { assertPublicDomainNativeCreation, publicDomainBaseline } from '../../../tests/qa/fixtures/catalogue-public-domain.ts';
 import { auditBaseline, auditConsumerForFile, auditConsumers, auditOwnerPrerequisites,
   auditPreparationBudgetMs, type AuditCommand, type AuditCommandReceipt, type AuditConsumer,
   type AuditFilePin, type AuditGrantReceipt, type AuditImport, type AuditManifests, type AuditOriginals, type AuditPreparationMetadata,
@@ -918,6 +920,142 @@ interface AuditProjectionSource {
   key: string; metadata: RetainedJson;
   readBackup?: string;
   provenance: { producerRevision: string; elapsedMs: number; backupPath: string };
+}
+
+/** Read-only projection of the launch owner's retained small Book preparation.
+ * It neither prepares another corpus nor publishes a ready fixture. Independent
+ * execution, ledger and selected-consumer admission still run on the result. */
+export function projectRetainedPublicDomainBook(checkout: string, preparationFile: string, originals: AuditFilePin): {
+  manifest: RetainedJson; custody: RetainedJson;
+} {
+  const pins = new Map<string, AuditFilePin>();
+  const read = (path: string, expected?: string): Record<string, unknown> => {
+    const file = relative(checkout, auditLocalFile(checkout, path, false)), bytes = readFileSync(resolve(checkout, file));
+    const digest = sha256(bytes);
+    requireFact(expected === undefined || digest === expected, `file digest differs: ${file}`);
+    pins.set(file, { file, sha256: digest });
+    return jsonObject(JSON.parse(bytes.toString('utf8')));
+  };
+  const preparation = read(preparationFile), directory = dirname(auditLocalFile(checkout, preparationFile));
+  const book = read(String(preparation.book)), execution = read(String(preparation.execution));
+  const backup = read(String(preparation.backup)), personas = read(String(preparation.personas));
+  assertRetainedRealm(personas);
+  requireFact(backup.format === 'command-catalogue-backup-v1' && backup.runId === preparation.sourceRunId
+    && execution.format === 'audit-execution-v1' && execution.productBaseline === auditBaseline
+    && execution.fixtureGeneration === preparation.sourceRunId && typeof execution.productRevision === 'string'
+    && /^[a-f0-9]{40}$/.test(execution.productRevision) && execution.testRevision === execution.productRevision
+    && typeof preparation.preparationMs === 'number' && preparation.preparationMs > 0
+    && preparation.preparationMs <= auditPreparationBudgetMs, 'retained Book preparation/execution/backup custody differs');
+  // Keep the existing array bytes and their digest; a wrapper must not replace
+  // this original association ledger merely to satisfy a later helper premise.
+  const ledgerBytes = pinnedBytes(checkout, originals), ledger: unknown = JSON.parse(ledgerBytes.toString('utf8'));
+  const bindings = Array.isArray(ledger) ? ledger : object(ledger) ? ledger.bindings : undefined;
+  requireFact(Array.isArray(bindings) && bindings.length === 113 && bindings.every(binding => object(binding)
+    && typeof binding.sourceKey === 'string' && native.test(String(binding.resource))
+    && native.test(String(binding.mainVersion)) && native.test(String(binding.revision))), 'original 113 ledger is incomplete');
+  for (const key of ['resource', 'mainVersion', 'sourceKey'])
+    requireFact(new Set(bindings.map(binding => (binding as Record<string, unknown>)[key])).size === 113, `original ${key} differs`);
+  pins.set(originals.file, originals);
+  const receipts = readdirSync(join(directory, 'receipts')).filter(name => name.endsWith('.json')).map(name => {
+    const file = relative(checkout, join(directory, 'receipts', name));
+    return { file, value: read(file) };
+  });
+  const used = new Set<string>();
+  const receipt = (path: string, matches: (body: Record<string, unknown>, answer: Record<string, unknown>) => boolean) => {
+    const found = receipts.filter(({ value }) => value.method === 'POST' && value.path === path
+      && typeof value.status === 'number' && value.status >= 200 && value.status < 300 && !('error' in value)
+      && object(value.body) && object(value.answer) && matches(value.body, value.answer));
+    requireFact(found.length === 1, `retained Book needs one actual successful receipt: ${path}`);
+    used.add(found[0]!.file);
+    return found[0]!.value;
+  };
+  const made = receipt('/v1/works', (_, answer) => answer.work === book.work);
+  assertPublicDomainNativeCreation({ work: String(book.work), mainVersion: String(book.mainVersion) }, made);
+  const author = jsonObject(book.author), description = jsonObject(book.description), mainText = jsonObject(book.mainText);
+  const authorMade = receipt('/v1/agents', (_, answer) => answer.agent === author.agent);
+  const authorName = auditPointer(authorMade, '/body/displayName');
+  requireFact(typeof authorName === 'string' && authorName.length > 0, 'retained Book author name is missing');
+  const draft = receipt('/v1/contributions', (_, answer) => answer.contribution === auditPointer(mainText, '/draft/contribution'));
+  const publication = receipt('/v1/contribution-publications', (body, answer) =>
+    body.contribution === auditPointer(draft, '/answer/contribution') && body.expectedDraftHead === auditPointer(draft, '/answer/draftRevision')
+    && body.rightsBasis === 'original-contribution' && body.disclosure === 'public'
+    && answer.publicationDecision === auditPointer(mainText, '/publication/publicationDecision'));
+  receipt('/v1/publication-selections', (body, answer) => body.work === book.work
+    && body.contribution === auditPointer(draft, '/answer/contribution')
+    && body.publicationDecision === auditPointer(publication, '/answer/publicationDecision')
+    && auditPointer(body, '/context/kind') === 'main-version-default' && auditPointer(body, '/context/id') === book.mainVersion
+    && answer.selectedDraft === auditPointer(draft, '/answer/draftRevision'));
+  const header = jsonObject(auditPointer(book, '/anonymous/header'));
+  const contents = jsonObject(auditPointer(book, '/anonymous/contents'));
+  requireFact(header.id === book.work && header.publicationState === 'published' && header.disclosure === 'public'
+    && contents.work === book.work && contents.nextCursor === null && Array.isArray(contents.items), 'retained anonymous Book read is incomplete');
+  const fixture = jsonObject(book.fixture), frozen = read(String(fixture.file), String(fixture.sha256));
+  const canonical = classicText(checkout, gutenbergBooks[0]);
+  requireFact(hash(book.chapters) === hash(canonical.chapters) && frozen.sourceSha256 === auditPointer(book, '/source/byteDigest')
+    && typeof frozen.text === 'string', 'retained chapters differ from their existing frozen-text selection');
+  const quote = (pin: AuditFilePin, exact: string) => ({ ...pin, exact });
+  const descriptionRecord = read(String(description.file), String(description.sha256));
+  const sourceDescription = typeof descriptionRecord.description === 'string' ? descriptionRecord.description
+    : auditPointer(descriptionRecord, '/description/value');
+  requireFact(typeof sourceDescription === 'string' && sourceDescription === description.sourceValue
+    && sourceDescription.replace(/\s+/gu, ' ').trim() === description.value && sourceDescription.includes(authorName),
+  'retained Book description/author source correspondence differs');
+  const chapters = (contents.items as unknown[]).map((item, index) => {
+    const chapter = jsonObject(item), body = canonical.chapters[index]?.body;
+    requireFact(chapter.role === 'chapter' && chapter.availability === 'available' && typeof body === 'string', 'retained chapter is unavailable');
+    const madeChapter = receipt(`/v1/works/${String(book.work).slice(-36)}/chapters`, (_, answer) =>
+      answer.post === chapter.target && answer.occurrence === chapter.occurrence && answer.structure === contents.composition);
+    const saved = receipt('/v1/content-drafts', (request, answer) => request.resourceId === chapter.target
+      && request.variantId === auditPointer(madeChapter, '/answer/variantId') && request.body === body
+      && `urn:rezics:content:revision:${String(answer.revisionId)}` === chapter.selectedRevision);
+    const published = receipt('/v1/content-publications', (request, answer) => request.resourceId === chapter.target
+      && request.variantId === auditPointer(saved, '/body/variantId') && request.revisionId === auditPointer(saved, '/answer/revisionId')
+      && request.expectedDigest === auditPointer(saved, '/answer/byteDigest') && answer.status === 'active');
+    receipt('/v1/content-search-eligibility', (request, answer) => request.resourceId === chapter.target
+      && request.variantId === auditPointer(saved, '/body/variantId') && request.publicationDecision === auditPointer(published, '/answer/decision')
+      && request.disclosure === 'public' && request.rightsBasis === 'public-domain' && answer.outcome === 'succeeded');
+    // The oracle is an exact, meaningful source excerpt. Preserve printed line
+    // wrapping in its quote and the native full body in the existing draft pin.
+    const excerpt = body.slice(0, 400).replace(/\s+\S*$/u, '');
+    const pattern = excerpt.split(/\s+/u).map(word => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+');
+    const exact = new RegExp(pattern, 'u').exec(frozen.text as string)?.[0];
+    requireFact(excerpt.length >= 200 && exact, 'chapter source excerpt is not present in frozen bytes');
+    return { occurrence: chapter.occurrence, parent: chapter.parent, target: chapter.target, selectedRevision: chapter.selectedRevision,
+      body: quote({ file: String(fixture.file), sha256: String(fixture.sha256) }, exact), bodyText: excerpt };
+  });
+  requireFact(chapters.length === canonical.chapters.length, 'retained chapter count differs');
+  const lock = JSON.parse(readFileSync(join(checkout, 'tests/fixtures/fixtures.lock.json'), 'utf8')) as {
+    entries: Array<{ id: string; seed: string; sha256: string }>;
+  };
+  const editions = book.editions as Array<Record<string, unknown>>;
+  const releaseAnswers = auditPointer(book, '/anonymous/releases/items') as Array<Record<string, unknown>>;
+  requireFact(Array.isArray(editions) && Array.isArray(releaseAnswers) && editions.length === releaseAnswers.length
+    && auditPointer(book, '/anonymous/releases/nextCursor') === null, 'retained release inventory is incomplete');
+  const releases = editions.map(edition => {
+    const answer = releaseAnswers.find(item => item.id === edition.release), entry = lock.entries.find(item => item.id === `edition-${String(edition.externalId)}`);
+    requireFact(answer && answer.revision === edition.revision && entry, 'retained release identity/source is missing');
+    const source = read(entry.seed, entry.sha256), coverage = (answer.coverage as Array<Record<string, unknown>>).filter(item => item.work === book.work);
+    requireFact(source.key === `/books/${String(edition.externalId)}` && source.title === edition.title
+      && coverage.length === 1 && coverage[0]!.realization === edition.realization && coverage[0]!.revision === edition.realizationRevision,
+    'retained release coverage/source correspondence differs');
+    return { id: answer.id, revision: answer.revision, platform: answer.platform,
+      realization: coverage[0]!.realization, realizationRevision: coverage[0]!.revision, language: coverage[0]!.language,
+      evidence: quote({ file: entry.seed, sha256: entry.sha256 }, String(source.title)) };
+  });
+  const creationFile = receipts.find(entry => entry.value === made)!.file;
+  return { manifest: json({ profile: 'catalogue-public-domain-corpus-v1', productRevision: auditBaseline,
+    execution, backup: relative(checkout, auditLocalFile(checkout, String(preparation.backup))),
+    preparationMs: preparation.preparationMs, preparationQaRun: preparation.sourceRunId, personas,
+    originals, importedWorks: bindings.map(binding => (binding as Record<string, unknown>).resource),
+    book: { work: book.work, creationReceipt: { path: creationFile, sha256: pins.get(creationFile)!.sha256 },
+      title: auditPointer(header, '/title/value'), language: header.selectedLanguage,
+      description: { value: description.value, language: auditPointer(header, '/description/language'),
+        evidence: quote({ file: String(description.file), sha256: String(description.sha256) }, sourceDescription) },
+      author: { agent: author.agent, name: authorName,
+        evidence: quote({ file: String(description.file), sha256: String(description.sha256) }, authorName) },
+      composition: contents.composition, compositionRevision: contents.compositionRevision, chapters, releases } }),
+  custody: json({ inputs: [...pins.values()], usedReceipts: [...used].map(file => pins.get(file)!),
+    assertionsReached: false, selected: 'book', ready: false }) };
 }
 
 /** Product/proof identity, timing and backup custody are producer-owned fields.

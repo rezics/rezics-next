@@ -393,3 +393,58 @@ overlay and fixed-wave proof; no source publication or stack-free test promotes
 an outcome. Preserve failed attempts, exact source/model/restore generations,
 replay keys and native bindings. Each file/body's supported restore owner must
 isolate writable state; never share one mutable corpus between proofs.
+
+## Retained small Book qualification — 2026-10-19
+
+The manager's 09:30:45Z cut selects the already prepared
+`recipes-build-mveymfp0-c3acb7` Book independently of the full-corpus prerequisites
+above. Its command-created Book and Recipe, stopped backup
+`launch-book-recipe-aa32916c0c4d822307ea`, and smoke-restore receipts survived the
+final teardown failure in job `0304e894-b8ed-4d9f-8164-35a6257de012`.
+Do not rebuild, repeat intake, or use the unrelated thirty-Recipe recovery mode.
+
+[`projectRetainedPublicDomainBook`](../../scripts/qa/fixtures/audit-corpus.ts)
+reads the existing launch `preparation.json`, saved native receipts and Book
+answers, and an exact original-ledger file/digest pin. It projects the existing
+`catalogue-public-domain-corpus-v1` shape with only `book` supplied. The projection
+keeps the real launch generation, historical baseline alias, actual product pin,
+all 113 original associations, all six releases and five chapters. It validates
+full chapter bodies against the existing frozen-text selector, while the consumer
+receives meaningful exact source excerpts with their original printed wrapping.
+Missing native creation, Main publication/default selection, exact Content draft,
+publication or public search-eligibility receipts stop projection. Its custody
+result always says `ready: false` and `assertionsReached: false`; independent
+consumer admission and product proof remain separate.
+
+Retained preparation is **151289.81984799998 ms**; the isolated smoke restore is
+**155137.380307 ms**, each below 600000 ms. Read-only qualification found all
+three physical volumes, no running backup-project container, 28 retained object
+files, and all 534 compatibility-file hashes matching product
+`4a616b079a364b8f5ac7fe4d4ff56bc99849e766`. This does not admit a restore on the
+current wave or main product. The original outcome files still have SHA-256
+`f7e73b921abc432ea86f8abeaf9447b74e18ace1c31a68a7fc337c097e031598` (Book) and
+`f2e36b4d4063e2e47c08b6233927201ce1515c852e901bd5e008ce085b34d10a` (Recipe),
+unchanged from that product pin.
+
+| Existing admission stage | Exact retained input and remaining prerequisite | Owner |
+| --- | --- | --- |
+| `assertPublicDomainOriginalWorks` | The original `native-bindings.json` is a 113-entry array, SHA-256 `bf9f7abc94aa30887511c05c61bd0433c0fdbb894a2d7d7e30aacdb7e12efa6e`; the helper currently requires a wrapper object. Admit the genuine array without rewriting its bytes or substituting another ledger. | Existing public-domain fixture owner, G-2793. |
+| `assertAuditExecution` | The retained generation is `recipes-build-mveymfp0-c3acb7`; the helper currently permits only `rs-…-<digest>`. Qualify this actual launch metadata with its real preparation/backup custody; do not invent a registered retained-source generation. A later proof also needs a clean compatible product checkout with a separately committed support-overlay test pin. | Existing execution-admission owner, G-2793. |
+| `RealBook.releases` / C28 release enumeration | Keep every observed release. The French release has null realization, revision and coverage language; three releases have null platform. Reconcile the fixture's non-null types with those actual answers, without filling missing correspondence or omitting a release. | Existing public-domain fixture owner, G-2793. |
+| CLI teardown after saved smoke readiness | `AsyncLocalStorage.exit()` in `realm-directory/worker.ts:46` clears the store; the overridden `FusekiReadBudgets.run()` dereferences `store.signal`. Retain the failed exit and route the bounded runtime correction, rather than suppressing it as acceptance. | Existing Fuseki budget/worker owner via manager. |
+| Recorded adoption preparation fault | `NestedPoolCheckoutError` records outer `realm-submission/store.ts:42 transaction` and inner `access/admission.ts:340 admissionClient`. Later command successes remain actual receipts; the fault is not an outcome assertion. | Existing Realm submission/admission owner via manager. |
+
+The worktree retains the candidate at
+`.temp/goal/public-domain-corpus.candidate.json`, its input/receipt pins at
+`.temp/goal/public-domain-book-custody.json`, the two actual admission failures at
+`.temp/goal/public-domain-book-qualification.json`, and physical/source/hash
+qualification at `.temp/goal/public-domain-retained-custody-qualification.json`.
+No ready manifest is published at the consumer's fixed path while admission
+fails. Both selected tests still register six `test.failing` bodies; process
+exit zero alone would not establish repaired acceptance.
+
+The retained Recipe has genuine import/publication/adoption receipts and source
+servings, duration and replacement text, but lacks the rich consumer's duplicate
+ingredient and fractional-quantity premises. Nutrition remains unqualified.
+Neither branch is synthesized in the Book projection. No original persona cell
+or original 113-identity topology proof is claimed by this qualification.

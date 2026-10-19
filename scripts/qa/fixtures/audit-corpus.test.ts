@@ -1,11 +1,13 @@
 import { afterEach, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
-import { isAbsolute, join, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 import { FixtureWorkBudget } from '../../fixture/budget.ts';
 import { sha256 } from '../../fixture/corpus.ts';
 import type { RetainedJson } from '../../fixture/manifest.ts';
 import { canonicalJson } from '../../lib/canonical-json.ts';
+import { classicText } from '../../dev/seed/classics-text.ts';
+import { gutenbergBooks } from '../../../tests/fixtures/sources/gutenberg.ts';
 import { intakeChunks } from '../../datasets/import.ts';
 import { datasetIntakeReceipt } from '../../datasets/native/context.ts';
 import { selectDatasetRoots, type DatasetSelectionBudget } from '../../datasets/selection.ts';
@@ -20,7 +22,7 @@ import { retainedRequirementKinds, retainedRequirements } from '../retained-requ
 import { sourceKey, type SourceContext } from '../retained-source.ts';
 import { assertAuditGenerationProvenance, assertAuditManifest, assertAuditNativeProvenance, assertAuditOriginals, assertAuditRecipe,
   assertAuditStorage, AuditCorpusBlocked, auditBaselineBlockers, auditProductBlockers, auditCorpusAdapter, auditLocalFile, auditPointer, AuditRecorder, auditRestorePlan,
-  auditSelectionBlockers, auditSelectionIsWholeSnapshot, projectAuditManifest, resolveAuditValue,
+  auditSelectionBlockers, auditSelectionIsWholeSnapshot, projectAuditManifest, projectRetainedPublicDomainBook, resolveAuditValue,
   type AuditImportInputs, type AuditInspection, type AuditRuntime, type AuditSession } from './audit-corpus.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -542,6 +544,112 @@ test('public-domain backup projections retain the same cut using the relative pa
   expect(fixed.productRevision).toBe(current);
   const outside = { ...source, readBackup: backup, provenance: { ...source.provenance, backupPath: '/tmp/outside-audit' } };
   expect(() => projectAuditManifest('publicDomain', {}, outside, undefined, root, auditBaseline)).toThrow('inside this worktree .temp');
+});
+
+// Sanitized native receipts use real frozen source bodies, never product evidence.
+function retainedBookProjection() {
+  const base = directory(), receipts = join(base, 'receipts');
+  mkdirSync(receipts);
+  const save = (name: string, value: unknown) => {
+    const file = join(base, name); writeFileSync(file, JSON.stringify(value)); return relative(root, file);
+  };
+  const work = id(20_000), mainVersion = id(20_001), composition = id(20_002), compositionRevision = id(20_003);
+  const actor = realm().identities.owner.actingSubject;
+  const commands: Array<{ name: string; value: Record<string, unknown> }> = [];
+  const command = (name: string, path: string, body: Record<string, unknown>, answer: Record<string, unknown>) => {
+    const value = { id: name, phase: 'prepare', method: 'POST', path, key: name, body: { actingSubject: actor, ...body }, answer,
+      status: 201, startedAt: 1000, finishedAt: 1001, caller: { realm: realm().realm, persona: 'owner', accountId: 'unit-account', actingSubject: actor } };
+    commands.push({ name, value }); save(`receipts/${name}.json`, value); return answer;
+  };
+  command('native', '/v1/works', { profile: 'metadata-only-v1', title: 'Pride and Prejudice' },
+    { work, mainVersion, workRevision: id(20_004), mainRevision: id(20_005), admissionId: 'unit-admission', replayed: false,
+      sourcePosition: { datasetId: 'product', dataEpoch: 'unit-epoch', sequence: '1' } });
+  const author = command('author', '/v1/agents', { displayName: 'Jane Austen' }, { agent: id(20_006) });
+  const draft = command('introduction', '/v1/contributions', { work }, { contribution: id(20_007), draftRevision: id(20_008) });
+  const publication = command('publication', '/v1/contribution-publications', { contribution: draft.contribution,
+    expectedDraftHead: draft.draftRevision, disclosure: 'public', rightsBasis: 'original-contribution' }, { publicationDecision: id(20_009) });
+  command('selection', '/v1/publication-selections', { work, contribution: draft.contribution,
+    publicationDecision: publication.publicationDecision, context: { kind: 'main-version-default', id: mainVersion } },
+  { selectedDraft: draft.draftRevision });
+  const canonical = classicText(root, gutenbergBooks[0]);
+  const items = canonical.chapters.map((chapter, index) => {
+    const target = id(30_000 + index), occurrence = id(31_000 + index), revision = `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
+    const variantId = `urn:rezics:variant:${index}`;
+    command(`chapter-${index}`, `/v1/works/${work.slice(-36)}/chapters`, {}, { post: target, occurrence, structure: composition, variantId });
+    command(`draft-${index}`, '/v1/content-drafts', { resourceId: target, variantId, body: chapter.body },
+      { revisionId: revision, byteDigest: sha256(chapter.body) });
+    command(`publish-${index}`, '/v1/content-publications', { resourceId: target, variantId, revisionId: revision, expectedDigest: sha256(chapter.body) },
+      { status: 'active', decision: `unit-publication-${index}` });
+    command(`eligible-${index}`, '/v1/content-search-eligibility', { resourceId: target, variantId,
+      publicationDecision: `unit-publication-${index}`, disclosure: 'public', rightsBasis: 'public-domain' }, { outcome: 'succeeded' });
+    return { occurrence, parent: composition, target, selectedRevision: `urn:rezics:content:revision:${revision}`, role: 'chapter', availability: 'available' };
+  });
+  const lock = JSON.parse(readFileSync(join(root, 'tests/fixtures/fixtures.lock.json'), 'utf8')) as {
+    entries: Array<{ id: string; seed: string; sha256: string }>;
+  };
+  const editions = ['OL40859253M', 'OL51673567M'].map((externalId, index) => {
+    const entry = lock.entries.find(item => item.id === `edition-${externalId}`)!;
+    const source = JSON.parse(readFileSync(join(root, entry.seed), 'utf8')) as { title: string };
+    return { externalId, release: id(32_000 + index), revision: id(33_000 + index), title: source.title,
+      realization: index ? id(34_000) : null, realizationRevision: index ? id(35_000) : null };
+  });
+  const descriptionFile = 'tests/fixtures/seeds/open-library/dd0fa391ab9fe17e0c22fdc272215be29a815eeadc9bba709b1e88c2ae56469b.json';
+  const bytes = readFileSync(join(root, descriptionFile)), source = JSON.parse(bytes.toString()) as { description: string | { value: string } };
+  const sourceDescription = typeof source.description === 'string' ? source.description : source.description.value;
+  const description = { value: sourceDescription.replace(/\s+/gu, ' ').trim(), sourceValue: sourceDescription, file: descriptionFile, sha256: sha256(bytes) };
+  const fixture = lock.entries.find(entry => entry.id === 'pg1342')!;
+  const book = { work, mainVersion, author, mainText: { draft, publication }, description,
+    fixture: { file: fixture.seed, sha256: fixture.sha256 }, source: { byteDigest: canonical.fixture.sourceSha256 },
+    chapters: canonical.chapters, editions, anonymous: {
+      header: { id: work, title: { value: 'Pride and Prejudice' }, selectedLanguage: 'en', description: { language: 'en' }, publicationState: 'published', disclosure: 'public' },
+      contents: { work, composition, compositionRevision, items, nextCursor: null },
+      releases: { items: editions.map((edition, index) => ({ id: edition.release, revision: edition.revision, platform: null,
+        coverage: [{ work, realization: edition.realization, revision: edition.realizationRevision, language: index ? 'en' : null }] })), nextCursor: null },
+    } };
+  const bookFile = save('book.json', book), sourceRunId = 'recipes-build-unit-retained';
+  const preparation = { sourceRunId, preparationMs: 151290, book: bookFile, personas: save('personas.json', realm()),
+    backup: save('backup.json', { format: 'command-catalogue-backup-v1', runId: sourceRunId }),
+    execution: save('execution.json', { format: 'audit-execution-v1', productBaseline: auditBaseline,
+      productRevision: '4a616b079a364b8f5ac7fe4d4ff56bc99849e766', testRevision: '4a616b079a364b8f5ac7fe4d4ff56bc99849e766', fixtureGeneration: sourceRunId }) };
+  const originalsFile = save('originals.json', inspection().originals.bindings);
+  const originals = { file: originalsFile, sha256: sha256(readFileSync(resolve(root, originalsFile))) };
+  const preparationFile = save('preparation.json', preparation);
+  return { project: () => projectRetainedPublicDomainBook(root, preparationFile, originals), base, save, book, originals, commands };
+}
+
+test('retained Book projection preserves actual identities, unknown release coverage and unselected absences', () => {
+  const fixture = retainedBookProjection(), before = readFileSync(resolve(root, fixture.originals.file));
+  const { manifest, custody } = fixture.project();
+  expect(auditPointer(manifest, '/productRevision')).toBe(auditBaseline);
+  expect(auditPointer(manifest, '/execution/fixtureGeneration')).toBe('recipes-build-unit-retained');
+  expect(auditPointer(manifest, '/book/releases/0')).toMatchObject({ realization: null, realizationRevision: null, language: null, platform: null });
+  expect(auditPointer(manifest, '/book/chapters')).toHaveLength(5);
+  expect(auditPointer(manifest, '/importedWorks')).toHaveLength(113);
+  expect(auditPointer(manifest, '/importedWorks')).not.toContain(fixture.book.work);
+  expect(manifest).not.toHaveProperty('richRecipe');
+  expect(manifest).not.toHaveProperty('nutritionRecipes');
+  expect(custody).toMatchObject({ ready: false, assertionsReached: false });
+  expect(readFileSync(resolve(root, fixture.originals.file))).toEqual(before);
+});
+
+for (const name of ['native', 'publication', 'selection', 'publish-0', 'eligible-0']) test(`retained Book cannot project absent ${name} command success`, () => {
+  const fixture = retainedBookProjection();
+  rmSync(join(fixture.base, 'receipts', `${name}.json`));
+  expect(fixture.project).toThrow('actual successful receipt');
+});
+
+test('retained Book refuses a selected Content revision different from the saved draft', () => {
+  const fixture = retainedBookProjection();
+  fixture.book.anonymous.contents.items[0]!.selectedRevision = 'urn:rezics:content:revision:another';
+  fixture.save('book.json', fixture.book);
+  expect(fixture.project).toThrow('/v1/content-drafts');
+});
+
+test('retained Book refuses a source file digest substitution', () => {
+  const fixture = retainedBookProjection();
+  fixture.book.fixture.sha256 = sha256('different frozen bytes');
+  fixture.save('book.json', fixture.book);
+  expect(fixture.project).toThrow('file digest differs');
 });
 
 function inspection(): AuditInspection {
