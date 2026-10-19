@@ -63,7 +63,7 @@ export async function aspireSmokeOutput(command: string[], milliseconds: number)
   };
   // Reserve cleanup inside the existing wall, including acknowledgement that
   // an orphaned native process can no longer execute after its pipes close.
-  const wall = setTimeout(() => { void terminate(); }, milliseconds - Math.min(1000, milliseconds / 4));
+  const wall = setTimeout(() => { void terminate(); }, milliseconds - Math.min(1000, milliseconds / 2));
   process.once('SIGINT', terminate);
   process.once('SIGTERM', terminate);
   try {

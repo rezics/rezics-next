@@ -1903,8 +1903,9 @@ require('node:child_process').spawn(process.execPath, [${JSON.stringify(native)}
 ${launcherExits ? 'setTimeout(() => process.exit(0), 50);' : 'setInterval(() => {}, 1000);'}`);
       const sibling = Bun.spawn(['node', '-e', 'setInterval(() => {}, 1000)'], { stdout: 'ignore', stderr: 'ignore' });
       let bounded = false;
+      const wallMs = 2000;
       const started = Date.now();
-      const result = aspireSmokeOutput(['node', launcher], 1000).then(() => 'passed', () => 'failed');
+      const result = aspireSmokeOutput(['node', launcher], wallMs).then(() => 'passed', () => 'failed');
       // A failed implementation must release its exact fixture too. This outer
       // wall is a test failure, never the owner's cancellation mechanism.
       const rescue = setTimeout(() => {
@@ -1912,11 +1913,11 @@ ${launcherExits ? 'setTimeout(() => process.exit(0), 50);' : 'setInterval(() => 
         if (existsSync(pidFile)) {
           try { process.kill(Number(readFileSync(pidFile, 'utf8')), 'SIGKILL'); } catch {}
         }
-      }, 2500);
+      }, wallMs + 500);
       try {
         expect(await result).toBe('failed');
         expect(bounded).toBe(false);
-        expect(Date.now() - started).toBeLessThan(2000);
+        expect(Date.now() - started).toBeLessThan(wallMs);
         expect(existsSync(pidFile)).toBe(true);
         for (const file of [pidFile, launcherPidFile]) {
           const pid = Number(readFileSync(file, 'utf8'));
