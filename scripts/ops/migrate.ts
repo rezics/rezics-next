@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { compareMigrationPaths, migrationVersion } from '../lib/migration-order.ts';
 import { applySqlMigration, sqlMigration } from '../lib/concurrent-index.ts';
 import { Pool, type PoolClient } from 'pg';
@@ -38,23 +39,36 @@ function migrationFiles(root: string, owner: SchemaOwner) {
   }));
 }
 
-async function withDatabaseLock<T>(
+export async function withDatabaseLock<T>(
   url: string,
   action: (pool: Pool, lock: PoolClient) => Promise<T>,
+  lockTimeoutMs?: number,
 ): Promise<T> {
   const pool = new Pool({ connectionString: url, max: 2, connectionTimeoutMillis: 5_000 });
   let lock: PoolClient | undefined;
+  let acquired = false;
   try {
     lock = await pool.connect();
     // Session lock spans provider DDL and all per-file transactions. Every owner
     // in one database shares the same key, including concurrent release jobs.
-    await lock.query("SELECT pg_advisory_lock(hashtextextended('rezics-release-migrations', 0))");
+    // A blocking lock query retains a virtual transaction that CREATE INDEX
+    // CONCURRENTLY may wait for, deadlocking the current runner with its waiter.
+    // Poll between completed statements, retaining the same exclusive lock.
+    const deadline = lockTimeoutMs === undefined ? Infinity : Date.now() + lockTimeoutMs;
+    while (true) {
+      acquired = (await lock.query<{ locked: boolean }>(
+        "SELECT pg_try_advisory_lock(hashtextextended('rezics-release-migrations', 0)) AS locked",
+      )).rows[0]!.locked;
+      if (acquired) break;
+      if (Date.now() >= deadline) throw new Error('Timed out waiting for migration lock');
+      await sleep(Math.min(100, deadline - Date.now()));
+    }
     return await action(pool, lock);
   } finally {
     try {
       if (lock) {
         try {
-          await lock.query(
+          if (acquired) await lock.query(
             "SELECT pg_advisory_unlock(hashtextextended('rezics-release-migrations', 0))",
           );
         } finally {
@@ -71,8 +85,13 @@ async function trackedIn(
   client: PoolClient,
   root: string,
   owner: Exclude<SchemaOwner, 'content'>,
+  selected?: readonly string[],
 ): Promise<string[]> {
-  const files = migrationFiles(root, owner);
+  const inventory = migrationFiles(root, owner);
+  if (selected && (new Set(selected).size !== selected.length
+    || selected.some(name => !inventory.some(file => basename(file.name) === name))))
+    throw new Error(`Invalid ${owner} migration selection`);
+  const files = selected ? inventory.filter(file => selected.includes(basename(file.name))) : inventory;
   await client.query(`CREATE TABLE IF NOT EXISTS public.rezics_local_migration (
     name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
   const history = (
@@ -104,13 +123,14 @@ export async function migrateTracked(
   url: string,
   root: string,
   directory: string,
+  files?: readonly string[],
 ): Promise<string[]> {
   const owner = (Object.keys(migrationDirectories) as SchemaOwner[]).find(
     (owner) => migrationDirectories[owner] === directory,
   );
   if (!owner || owner === 'content' || owner === 'account')
     throw new Error('Use the owner migration runner');
-  return withDatabaseLock(url, (_pool, client) => trackedIn(client, root, owner));
+  return withDatabaseLock(url, (_pool, client) => trackedIn(client, root, owner, files));
 }
 
 export async function migrateContentFromArtifact(url: string, root: string, accessUrl?: string): Promise<string[]> {
