@@ -761253,10 +761253,18 @@
           {
             "in": "query",
             "name": "actingSubject",
-            "required": true,
+            "required": false,
             "schema": {
-              "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-              "type": "string"
+              "anyOf": [
+                {
+                  "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                },
+                {
+                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                  "type": "string"
+                }
+              ]
             }
           },
           {
@@ -761266,20 +761274,40 @@
             "schema": {
               "anyOf": [
                 {
-                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                  "type": "string"
+                  "anyOf": [
+                    {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    {
+                      "const": "all",
+                      "type": "string"
+                    },
+                    {
+                      "const": "mine",
+                      "type": "string"
+                    },
+                    {
+                      "const": "start",
+                      "type": "string"
+                    }
+                  ]
                 },
                 {
-                  "const": "all",
-                  "type": "string"
-                },
-                {
-                  "const": "mine",
-                  "type": "string"
-                },
-                {
-                  "const": "start",
-                  "type": "string"
+                  "anyOf": [
+                    {
+                      "const": "start",
+                      "type": "string"
+                    },
+                    {
+                      "const": "all",
+                      "type": "string"
+                    },
+                    {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    }
+                  ]
                 }
               ]
             }
@@ -761289,7 +761317,93 @@
             "name": "profile",
             "required": false,
             "schema": {
-              "const": "relation-change-v2",
+              "anyOf": [
+                {
+                  "const": "relation-change-v2",
+                  "type": "string"
+                },
+                {
+                  "const": "association-evidence-v1",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "context",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "global",
+                  "type": "string"
+                },
+                {
+                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "claim",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "claimRevision",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "frame",
+            "required": false,
+            "schema": {
+              "items": {
+                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                "type": "string"
+              },
+              "maxItems": 8,
+              "type": "array",
+              "uniqueItems": true
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "~elyTyp": 1,
+              "anyOf": [
+                {
+                  "maximum": 16,
+                  "minimum": 1,
+                  "multipleOf": 1,
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "maxLength": 2048,
+              "minLength": 1,
               "type": "string"
             }
           }
@@ -761913,6 +762027,163 @@
                         "attributionProofs"
                       ],
                       "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "claim": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "claimRevision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "complete": {
+                          "type": "boolean"
+                        },
+                        "count": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "kind": {
+                              "const": "exact-page",
+                              "type": "string"
+                            },
+                            "total": {
+                              "type": "null"
+                            },
+                            "value": {
+                              "maximum": 16,
+                              "minimum": 0,
+                              "type": "integer"
+                            }
+                          },
+                          "required": [
+                            "value",
+                            "kind",
+                            "total"
+                          ],
+                          "type": "object"
+                        },
+                        "items": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "id": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "locator": {},
+                              "method": {},
+                              "modality": {
+                                "type": "string"
+                              },
+                              "quote": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "quoteWithheld": {
+                                "type": "boolean"
+                              },
+                              "representationSha256": {
+                                "pattern": "^[a-f0-9]{64}$",
+                                "type": "string"
+                              },
+                              "rightsBasis": {
+                                "type": "string"
+                              },
+                              "sourceWork": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                "type": "string"
+                              },
+                              "submitter": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "sourceWork",
+                              "representationSha256",
+                              "locator",
+                              "quote",
+                              "quoteWithheld",
+                              "method",
+                              "modality",
+                              "submitter",
+                              "rightsBasis"
+                            ],
+                            "type": "object"
+                          },
+                          "maxItems": 16,
+                          "type": "array"
+                        },
+                        "modelGeneration": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "nextCursor": {
+                          "~elyTyp": 7,
+                          "maxLength": 2048,
+                          "minLength": 1,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "occurrence": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "association-evidence-v1",
+                          "type": "string"
+                        },
+                        "revision": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "sourcePosition": {
+                          "properties": {
+                            "dataEpoch": {
+                              "type": "string"
+                            },
+                            "datasetId": {
+                              "const": "product",
+                              "type": "string"
+                            },
+                            "sequence": {
+                              "pattern": "^[0-9]+$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "datasetId",
+                            "dataEpoch",
+                            "sequence"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "occurrence",
+                        "revision",
+                        "claim",
+                        "claimRevision",
+                        "sourcePosition",
+                        "modelGeneration",
+                        "items",
+                        "nextCursor",
+                        "complete",
+                        "count"
+                      ],
+                      "type": "object"
                     }
                   ]
                 }
@@ -762031,134 +762302,74 @@
             "content": {
               "application/problem+json": {
                 "schema": {
-                  "anyOf": [
-                    {
+                  "additionalProperties": false,
+                  "properties": {
+                    "basis": {
+                      "maxLength": 128,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "validation": {
                       "additionalProperties": false,
                       "properties": {
-                        "basis": {
-                          "maxLength": 128,
-                          "minLength": 1,
-                          "type": "string"
-                        },
-                        "code": {
-                          "type": "string"
-                        },
-                        "currentHead": {
+                        "constraint": {
                           "~elyTyp": 7,
+                          "maxLength": 180,
                           "nullable": true,
                           "type": [
                             "string",
                             "null"
                           ]
                         },
-                        "detail": {
-                          "maxLength": 512,
-                          "type": "string"
-                        },
-                        "status": {
-                          "const": 401,
-                          "type": "number"
-                        },
-                        "title": {
-                          "type": "string"
-                        },
-                        "type": {
-                          "type": "string"
-                        },
-                        "validation": {
-                          "additionalProperties": false,
-                          "properties": {
-                            "constraint": {
-                              "~elyTyp": 7,
-                              "maxLength": 180,
-                              "nullable": true,
-                              "type": [
-                                "string",
-                                "null"
-                              ]
-                            },
-                            "path": {
-                              "~elyTyp": 7,
-                              "maxLength": 180,
-                              "nullable": true,
-                              "type": [
-                                "string",
-                                "null"
-                              ]
-                            }
-                          },
-                          "required": [
-                            "path",
-                            "constraint"
-                          ],
-                          "type": "object"
+                        "path": {
+                          "~elyTyp": 7,
+                          "maxLength": 180,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         }
                       },
                       "required": [
-                        "type",
-                        "title",
-                        "status",
-                        "code"
+                        "path",
+                        "constraint"
                       ],
                       "type": "object"
-                    },
-                    {
-                      "anyOf": [
-                        {
-                          "additionalProperties": false,
-                          "properties": {
-                            "code": {
-                              "const": "unauthorized",
-                              "type": "string"
-                            },
-                            "status": {
-                              "const": 401,
-                              "type": "number"
-                            },
-                            "title": {
-                              "type": "string"
-                            },
-                            "type": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "type",
-                            "title",
-                            "status",
-                            "code"
-                          ],
-                          "type": "object"
-                        },
-                        {
-                          "additionalProperties": false,
-                          "properties": {
-                            "code": {
-                              "const": "invalid_account_assertion",
-                              "type": "string"
-                            },
-                            "status": {
-                              "const": 401,
-                              "type": "number"
-                            },
-                            "title": {
-                              "type": "string"
-                            },
-                            "type": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "type",
-                            "title",
-                            "status",
-                            "code"
-                          ],
-                          "type": "object"
-                        }
-                      ]
                     }
-                  ]
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
                 }
               }
             },
@@ -762470,6 +762681,95 @@
                         "schema"
                       ],
                       "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "basis": {
+                          "maxLength": 128,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "code": {
+                          "const": "stale_query_result",
+                          "type": "string"
+                        },
+                        "currentHead": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "detail": {
+                          "maxLength": 512,
+                          "type": "string"
+                        },
+                        "restart": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "method": {
+                              "const": "GET",
+                              "type": "string"
+                            },
+                            "path": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "method",
+                            "path"
+                          ],
+                          "type": "object"
+                        },
+                        "status": {
+                          "const": 409,
+                          "type": "number"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string"
+                        },
+                        "validation": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "constraint": {
+                              "~elyTyp": 7,
+                              "maxLength": 180,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "path": {
+                              "~elyTyp": 7,
+                              "maxLength": 180,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            }
+                          },
+                          "required": [
+                            "path",
+                            "constraint"
+                          ],
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "title",
+                        "status",
+                        "code",
+                        "restart"
+                      ],
+                      "type": "object"
                     }
                   ]
                 }
@@ -762662,12 +762962,133 @@
             "description": "Response for status 503"
           }
         },
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ],
-        "x-rezics-exposure": "public"
+        "x-rezics-exposure": "public",
+        "x-rezics-query-schema": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "actingSubject": {
+                  "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                  "type": "string"
+                },
+                "position": {
+                  "anyOf": [
+                    {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    {
+                      "const": "all",
+                      "type": "string"
+                    },
+                    {
+                      "const": "mine",
+                      "type": "string"
+                    },
+                    {
+                      "const": "start",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "profile": {
+                  "const": "relation-change-v2",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "actingSubject"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "actingSubject": {
+                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                  "type": "string"
+                },
+                "claim": {
+                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                  "type": "string"
+                },
+                "claimRevision": {
+                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                  "type": "string"
+                },
+                "context": {
+                  "anyOf": [
+                    {
+                      "const": "global",
+                      "type": "string"
+                    },
+                    {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "cursor": {
+                  "maxLength": 2048,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "frame": {
+                  "items": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "maxItems": 8,
+                  "type": "array",
+                  "uniqueItems": true
+                },
+                "limit": {
+                  "~elyTyp": 1,
+                  "anyOf": [
+                    {
+                      "maximum": 16,
+                      "minimum": 1,
+                      "multipleOf": 1,
+                      "type": "number"
+                    },
+                    {
+                      "type": "string"
+                    }
+                  ]
+                },
+                "position": {
+                  "anyOf": [
+                    {
+                      "const": "start",
+                      "type": "string"
+                    },
+                    {
+                      "const": "all",
+                      "type": "string"
+                    },
+                    {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "profile": {
+                  "const": "association-evidence-v1",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "profile",
+                "context",
+                "position",
+                "claim",
+                "claimRevision"
+              ],
+              "type": "object"
+            }
+          ]
+        }
       }
     },
     "/v1/relations/changes": {

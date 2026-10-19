@@ -97,12 +97,15 @@ async function titleApplicability(
   const read = await settle(() =>
     main.v1.relations({ id }).revisions({ revision }).get({ query: { actingSubject, position } }),
   );
-  if (!read.ok) return null;
+  if (!read.ok || read.data.profile === 'association-evidence-v1') return null;
   const names = await namesOf(read.data.applicability, position);
   if (read.data.applicability.some((ref) => names.get(ref)?.status !== 'available')) return null;
-  return [...names.values()].filter(
-    (item): item is AvailableSummary => item.status === 'available',
-  );
+  const applicable: AvailableSummary[] = [];
+  for (const item of names.values()) {
+    if (item.status !== 'available') return null;
+    applicable.push(item);
+  }
+  return applicable;
 }
 
 export async function readIdentitySections(

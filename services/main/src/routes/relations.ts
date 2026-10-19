@@ -26,6 +26,8 @@ import { relationAttributionVerifier } from '../modules/relation/attribution.ts'
 import { readAttributedOccurrence, validateAttributedOccurrence } from '../modules/relation/v2-read.ts';
 import { InvalidParticipationAttribution, UnsupportedRelationModel } from '../modules/relation/v2-schema.ts';
 import { SemanticChangeRejected } from '../modules/semantic/command.ts';
+import { associationEvidenceQuery, associationEvidenceResult, associationEvidenceStale } from '../modules/relation/evidence-contract.ts';
+import { associationEvidenceFailure, executeAssociationEvidence } from '../modules/relation/evidence.ts';
 
 const native = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 const position = t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(), sequence: t.String() });
@@ -108,7 +110,7 @@ export async function disclosedRelationParticipations(
 export const openApiOperations = {
   '/v1/relations/changes': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
   '/v1/relations/{id}': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: true } },
-  '/v1/relations/{id}/revisions/{revision}': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: true } },
+  '/v1/relations/{id}/revisions/{revision}': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: false } },
 } as const;
 
 export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
@@ -241,15 +243,22 @@ export function relationRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     })
     .get('/v1/relations/:id/revisions/:revision', {
       params: t.Object({ id: groupUuid, revision: groupUuid }),
-      query: t.Object({ actingSubject: native, position: readingPositionQuery, profile: t.Optional(t.Literal('relation-change-v2')) }, { additionalProperties: false }),
-      response: transportResponses(openApiOperations["/v1/relations/{id}/revisions/{revision}"].get, { 200: t.Union([relationRead, relationReadV2]), ...authorizedReadProblems,
-        409: t.Union([problemResult(409), relationProfileProblem]) }, 'GET'),
+      query: t.Union([t.Object({ actingSubject: native, position: readingPositionQuery,
+        profile: t.Optional(t.Literal('relation-change-v2')) }, { additionalProperties: false }), associationEvidenceQuery]),
+      response: transportResponses(openApiOperations["/v1/relations/{id}/revisions/{revision}"].get, {
+        200: t.Union([relationRead, relationReadV2, associationEvidenceResult]), ...authorizedReadProblems,
+        400: problemResult(400), 409: t.Union([problemResult(409), relationProfileProblem, associationEvidenceStale]) }, 'GET'),
     }, async ({ request, params, query }) => {
       try {
+        if (query.profile === 'association-evidence-v1') return await executeAssociationEvidence(work, request,
+          `https://rezics.com/id/${params.id}`, `https://rezics.com/id/${params.revision}`, query);
         const read = await exact(request, query.actingSubject, `https://rezics.com/id/${params.id}`,
           `https://rezics.com/id/${params.revision}`, query.profile);
         if (!read) return problem(404, 'revision_unavailable', 'Revision is unavailable');
         return Response.json(read, { headers: { 'cache-control': 'no-store' } });
-      } catch (error) { return relationError(error, true); }
+      } catch (error) {
+        if (query.profile === 'association-evidence-v1') return associationEvidenceFailure(error) ?? relationError(error, true);
+        return relationError(error, true);
+      }
     });
 }

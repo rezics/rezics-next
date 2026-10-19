@@ -176,16 +176,15 @@ async function readableReferences(session: WorkReadSession, references: readonly
   return allowed;
 }
 
-/** A trait's decision cannot adopt its occurrence. Find an independently adopted exact assertion. */
-async function requireOccurrenceAssertion(session: WorkReadSession, snapshot: StatementV2Snapshot,
-  context: string, frames: readonly string[], canReadPrivate: (context: string) => Promise<boolean>): Promise<void> {
-  const coverage = snapshot.meaning.coverage;
-  if (coverage.kind !== 'participation') return;
+/** The occurrence has its own adoption, independently of any trait's decision.
+ * Exact revision reads and evidence continuation consume the same owner proof. */
+export async function readAdoptedOccurrenceV2(session: WorkReadSession, occurrence: string, occurrenceRevision: string,
+  context: string, frames: readonly string[], canReadPrivate: (context: string) => Promise<boolean>) {
   const candidates = await session.query(`SELECT DISTINCT ?statement ?revision WHERE {
     GRAPH ${iri(GRAPHS.current)} { ?statement a <${RDF}Statement> ; rv:modelRevision ${iri(STATEMENT_V2_PROFILE)} ;
       rv:statementState rv:Active ; rv:head ?revision ; rv:statementCoverage rv:OccurrenceCoverage ;
-      rv:coveredOccurrence ${iri(coverage.occurrence)} ; rv:coveredOccurrenceRevision ${iri(coverage.occurrenceRevision)} ;
-      <${RDF}subject> ${iri(coverage.occurrence)} ; <${RDF}object> ${iri(coverage.occurrenceRevision)} }
+      rv:coveredOccurrence ${iri(occurrence)} ; rv:coveredOccurrenceRevision ${iri(occurrenceRevision)} ;
+      <${RDF}subject> ${iri(occurrence)} ; <${RDF}object> ${iri(occurrenceRevision)} }
   } ORDER BY STR(?statement) LIMIT ${MAX_PUBLIC_STATEMENT_BATCH + 1}`, MAX_PUBLIC_STATEMENT_BATCH + 1);
   if (candidates.length > MAX_PUBLIC_STATEMENT_BATCH) throw new WorkReadUnavailable('Occurrence assertion support bound exceeded');
   for (const candidate of candidates) {
@@ -193,13 +192,25 @@ async function requireOccurrenceAssertion(session: WorkReadSession, snapshot: St
     try {
       // This resolves that assertion's own exact receipt, meaning, DecisionSlots,
       // frame, authority and final disclosure. Occurrence coverage cannot recurse.
-      await readAdoptedStatementV2(session, candidate.statement.value, candidate.revision.value, context, frames, canReadPrivate);
-      return;
+      const assertion = await readAdoptedStatementV2(session, candidate.statement.value, candidate.revision.value, context, frames, canReadPrivate);
+      if (assertion.coverage.kind !== 'occurrence' || assertion.coverage.occurrence !== occurrence
+        || assertion.coverage.occurrenceRevision !== occurrenceRevision) {
+        throw new WorkReadUnavailable('Occurrence assertion differs from its exact owner coverage');
+      }
+      return assertion;
     } catch (error) {
       if (!(error instanceof StatementNotFound || error instanceof StatementCoverageHidden)) throw error;
     }
   }
   throw new StatementNotFound('Statement is unavailable');
+}
+
+/** A trait's decision cannot adopt its occurrence. */
+async function requireOccurrenceAssertion(session: WorkReadSession, snapshot: StatementV2Snapshot,
+  context: string, frames: readonly string[], canReadPrivate: (context: string) => Promise<boolean>): Promise<void> {
+  const coverage = snapshot.meaning.coverage;
+  if (coverage.kind === 'participation') await readAdoptedOccurrenceV2(session, coverage.occurrence,
+    coverage.occurrenceRevision, context, frames, canReadPrivate);
 }
 
 /** Public exact reads require current adoption. The writer uses the receipt-bound snapshot above for its draft result. */

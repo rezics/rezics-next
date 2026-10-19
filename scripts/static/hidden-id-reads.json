@@ -2040,6 +2040,9 @@
       "path:id",
       "path:revision",
       "query:actingSubject",
+      "query:claim",
+      "query:claimRevision",
+      "query:context",
       "query:position"
     ],
     "status": "unregistered"

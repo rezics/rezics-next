@@ -31,11 +31,11 @@ export type RelationAttributionVerifier = (definition: ExactDefinition,
   participations: readonly AttributedParticipation[]) => Promise<{ proofs: RelationAttributionProof[]; guard: string }>;
 
 export function relationAttributionVerifier(owner: RelationAttributionOwner | undefined,
-  principal: VerifiedPrincipal, actingSubject: string): RelationAttributionVerifier {
+  principal: VerifiedPrincipal | null, actingSubject: string | undefined): RelationAttributionVerifier {
   return async (definition, participations) => {
     const requests = participations.flatMap(participation => participation.attributionSupports.map(support => ({ participation, support })));
     if (!requests.length) return { proofs: [], guard: '' };
-    if (!owner) throw new PendingActivation('exact Source/credit/publication attribution owner is unavailable');
+    if (!owner || !principal || !actingSubject) throw new PendingActivation('exact Source/credit/publication attribution owner is unavailable');
     const verified = await owner.verify({ principal, actingSubject, ...structuredClone({ definition, participations, requests }) });
     if (!verified) throw new SemanticChangeRejected('unavailable-reference', 'a referenced attribution is unavailable');
     if (verified.proofs.length !== requests.length || !verified.guard.trim()) throw new PendingActivation('attribution owner receipt or current support guard is unavailable');
