@@ -59,7 +59,7 @@ async function prepare(): Promise<Source> {
   for (let n = 0; n < 10; n++) {
     const community = n === 0 ? { space: people.space, realm: people.realm } : await json<{ space: string; realm: string }>(
       people.owner.main('POST', '/v1/spaces', { profile: 'space-realm-v2', name: `Context community ${n}`,
-        handle: `context-${randomUUID()}`, language: 'en', capabilities: ['realm'], ...own(people.owner),
+        handle: `context-${randomUUID().slice(0, 12)}`, language: 'en', capabilities: ['realm'], ...own(people.owner),
         initialSettings: { visibility: 'public', reviewRequired: false, reviewMode: 'open', whoMaySubmit: 'members', selfJoin: true, rules: [] } }), 201);
     await grant(people.owner, `rating:context:${community.realm}`, 'rating.context.create');
     const contexts: Context[] = [];
