@@ -34,7 +34,9 @@ export function selectAssociations(input: unknown, language = 'en'): Association
     && (parameters.direction !== 'subject-to-work' || parameters.kind !== 'credit'))) {
     throw new WorkReadInvalid('External roots require an inverse credit selection');
   }
-  const roots = parameters.roots?.map(root => checkedSemanticValue(root) as Participant);
+  let roots: Participant[] | undefined;
+  try { roots = parameters.roots?.map(root => checkedSemanticValue(root) as Participant); }
+  catch { throw new WorkReadInvalid('Invalid exact association root'); }
   if (roots && new Set(roots.map(associationParticipantKey)).size !== roots.length) throw new WorkReadInvalid('Association roots must be distinct');
   const match = { ...parameters.match };
   for (const mode of ['all', 'any', 'none'] as const) {

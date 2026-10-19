@@ -14,6 +14,7 @@ const id = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}
 const slug = t.String({ pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', maxLength: 64 });
 const iri = t.String({ pattern: '^https?://[^\\s<>"{}|\\\\^`]+$', maxLength: 2048 });
 const key = t.String({ minLength: 1, maxLength: EXACT_LIMITS.key, pattern: '^[^\\u0000-\\u001f\\u007f]+$' });
+const exactLanguage = t.String({ minLength: 2, maxLength: 35 });
 const resource = t.Object({ kind: t.Literal('resource'), ref: id }, closed);
 const external = t.Object({ kind: t.Literal('external'), provider: slug, namespace: slug, key }, closed);
 export const associationParticipant = t.Union([resource, external]);
@@ -30,11 +31,11 @@ export const associationValue = t.Unsafe<SemanticValue>(t.Union([
   t.Object({ kind: t.Literal('boolean'), lexical: t.Union([t.Literal('true'), t.Literal('false')]) }, closed),
   t.Object({ kind: t.Literal('string'), lexical: t.String({ maxLength: EXACT_LIMITS.text }) }, closed),
   t.Object({ kind: t.Literal('language-string'), lexical: t.String({ maxLength: EXACT_LIMITS.text }),
-    language: readLanguage, direction: t.Optional(t.Union([t.Literal('ltr'), t.Literal('rtl')])) }, closed),
+    language: exactLanguage, direction: t.Optional(t.Union([t.Literal('ltr'), t.Literal('rtl')])) }, closed),
   t.Object({ kind: t.Literal('temporal'), lexical: t.String({ minLength: 1, maxLength: 64 }),
     precision: t.Union([t.Literal('year'), t.Literal('month'), t.Literal('day'), t.Literal('hour'),
       t.Literal('minute'), t.Literal('second')]), calendar: t.Literal('gregorian'),
-    timeZone: t.Optional(t.String({ maxLength: 6 })) }, closed),
+    timeZone: t.Optional(t.String({ maxLength: 64 })) }, closed),
   t.Object({ kind: t.Literal('quantity'), lexical: numberLexical, value: exactNumber, unit: iri,
     quantityKind: t.Optional(iri), uncertainty: t.Optional(exactNumber) }, closed),
   t.Object({ kind: t.Literal('unknown') }, closed), t.Object({ kind: t.Literal('no-value') }, closed),
@@ -52,7 +53,7 @@ export const associationRequest = t.Object({ profile: t.Literal('template-query-
     projection: t.Union([t.Literal('work'), t.Literal('occurrence')]), context: associationContext,
     frame: t.Array(id, { maxItems: ASSOCIATION_COST.frames, uniqueItems: true }),
     position: t.Union([t.Literal('start'), t.Literal('all'), id]),
-    match: t.Object({ role: t.Optional(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}/role/[a-z][a-z0-9-]*$', maxLength: 200 })),
+    match: t.Object({ role: t.Optional(t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/role/[a-z][a-z0-9-]{0,31}$', maxLength: 200 })),
       all: predicates, any: predicates, none: predicates }, closed), snapshot: t.Optional(associationSnapshot),
   }, closed), presentation: t.Optional(templatePresentation), ...templatePaging }, closed);
 

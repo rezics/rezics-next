@@ -1,13 +1,16 @@
 import { WorkReadUnavailable } from '../work/read-session.ts';
+import { checkedNativeIri } from '../semantic/schema.ts';
 import { ASSOCIATION_COST, ASSOCIATION_QUERY, type AssociationResult, type AssociationSelection,
   type AssociationWitness, type AssociationWorkMatch } from './association-contract.ts';
 import { associationMatchSelection, associationOrderKey, issueAssociationCursor, readAssociationCursor,
-  type AssociationFrontier, type AssociationKey, type AssociationReadBasis, type AssociationSurface } from './association-cursor.ts';
+  AssociationCursorInvalid, type AssociationFrontier, type AssociationKey, type AssociationReadBasis, type AssociationSurface } from './association-cursor.ts';
+import { matchesAssociation } from './association-match.ts';
 
 /** The query composes existing owners through one request/session. Candidates
  * carry only ordered references. witness() must prove current disclosure,
  * adoption, exact coverage, compatible frames and evidence before returning a
- * complete witness; null means a withheld/nonmatching candidate. An unavailable
+ * complete witness; null means a withheld candidate. A matches frontier must
+ * remain within its key's Work, including hidden-only windows. An unavailable
  * owner throws. It must never be represented by null or an empty window. */
 export interface AssociationPageSource {
   candidates(after: AssociationFrontier | null, limit: number): Promise<{ items: AssociationKey[]; more: boolean }>;
@@ -16,7 +19,8 @@ export interface AssociationPageSource {
 }
 function afterFrontier(key: AssociationKey, frontier: AssociationFrontier | null): boolean {
   return !frontier || (frontier.kind === 'work' ? key.work > frontier.work
-    : associationOrderKey(key) > associationOrderKey(frontier.key));
+    : (frontier.kind !== 'matches' || key.work === frontier.key.work)
+      && associationOrderKey(key) > associationOrderKey(frontier.key));
 }
 function laterWorkPossible(selection: AssociationSelection, work: string): boolean {
   return selection.parameters.direction !== 'work-to-subject' || !selection.parameters.roots
@@ -31,7 +35,9 @@ export async function readAssociationPage(source: AssociationPageSource, selecti
   basis: AssociationReadBasis, surface: AssociationSurface, token?: string): Promise<AssociationResult> {
   const cursor = readAssociationCursor(token, selection, basis, surface);
   const workProjection = selection.parameters.projection === 'work';
-  if (cursor.frontier?.kind === 'work' && !workProjection) throw new WorkReadUnavailable('Association frontier differs from its projection');
+  if ((cursor.frontier?.kind === 'work' && !workProjection) || (cursor.frontier?.kind === 'matches' && workProjection)) {
+    throw new AssociationCursorInvalid('Association frontier differs from its projection');
+  }
   // At most 64 candidate hydrations, including withheld candidates. The 256
   // candidate ceiling is an upper bound, never a global population size.
   const window = await source.candidates(cursor.frontier, ASSOCIATION_COST.witnesses);
@@ -40,8 +46,10 @@ export async function readAssociationPage(source: AssociationPageSource, selecti
   }
   let previous = cursor.frontier;
   for (const key of window.items) {
+    try { for (const value of [key.work, key.occurrence, key.subjectParticipation]) checkedNativeIri(value); }
+    catch { throw new WorkReadUnavailable('Association candidate identity is unavailable'); }
     if (!afterFrontier(key, previous)) throw new WorkReadUnavailable('Association candidate order is unavailable');
-    previous = { kind: 'occurrence', key };
+    previous = { kind: cursor.frontier?.kind === 'matches' ? 'matches' : 'occurrence', key };
   }
   const occurrences: AssociationWitness[] = [], works: AssociationWorkMatch[] = [];
   let examined: AssociationKey | null = null, consumed = 0;
@@ -49,7 +57,7 @@ export async function readAssociationPage(source: AssociationPageSource, selecti
   const finishGroup = (exhausted: boolean) => {
     if (!group?.items.length) { group = null; return; }
     const nested = exhausted ? null : issueAssociationCursor(associationMatchSelection(selection, group.work), basis,
-      surface, { kind: 'occurrence', key: group.after }, cursor.expiresAt);
+      surface, { kind: 'matches', key: group.after }, cursor.expiresAt);
     works.push({ work: group.work, matches: { items: group.items, complete: nested === null, nextCursor: nested } });
     group = null;
   };
@@ -68,6 +76,7 @@ export async function readAssociationPage(source: AssociationPageSource, selecti
     if (associationOrderKey(witness) !== associationOrderKey(key) || witness.kind !== selection.parameters.kind) {
       throw new WorkReadUnavailable('Association witness differs from its exact candidate');
     }
+    if (!matchesAssociation(selection, witness)) continue;
     if (workProjection) group!.items.push(witness);
     else {
       occurrences.push(witness);
@@ -76,7 +85,8 @@ export async function readAssociationPage(source: AssociationPageSource, selecti
   }
   const remaining = consumed < window.items.length || window.more;
   finishGroup(!remaining);
-  let frontier: AssociationFrontier | null = remaining && examined ? { kind: 'occurrence', key: examined } : null;
+  let frontier: AssociationFrontier | null = remaining && examined
+    ? { kind: cursor.frontier?.kind === 'matches' ? 'matches' : 'occurrence', key: examined } : null;
   if (frontier && workProjection && works.at(-1)?.work === examined!.work) {
     frontier = laterWorkPossible(selection, examined!.work) ? { kind: 'work', work: examined!.work } : null;
   }

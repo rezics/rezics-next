@@ -5,7 +5,7 @@ import { ASSOCIATION_COST, type AssociationSelection, type AssociationSnapshot }
 import { associationCanonical, restartAssociations } from './association-selection.ts';
 
 export interface AssociationKey { work: string; occurrence: string; subjectParticipation: string }
-export type AssociationFrontier = { kind: 'occurrence'; key: AssociationKey } | { kind: 'work'; work: string };
+export type AssociationFrontier = { kind: 'occurrence' | 'matches'; key: AssociationKey } | { kind: 'work'; work: string };
 export interface AssociationReadBasis {
   snapshot: AssociationSnapshot;
   /** Verified account identity, effective actor and negotiated display policy. Never a bearer. */
@@ -31,7 +31,7 @@ function checkedFrontier(value: unknown): AssociationFrontier {
   if (row.kind === 'work' && Object.keys(row).length === 2 && typeof row.work === 'string' && id.test(row.work)) {
     return { kind: 'work', work: row.work };
   }
-  if (row.kind === 'occurrence' && Object.keys(row).length === 2 && row.key && typeof row.key === 'object') {
+  if ((row.kind === 'occurrence' || row.kind === 'matches') && Object.keys(row).length === 2 && row.key && typeof row.key === 'object') {
     const key = row.key as Record<string, unknown>;
     if (Object.keys(key).length === 3 && [key.work, key.occurrence, key.subjectParticipation]
       .every(value => typeof value === 'string' && id.test(value))) return row as unknown as AssociationFrontier;
@@ -73,8 +73,11 @@ export function issueAssociationCursor(selection: AssociationSelection, basis: A
   return token;
 }
 
-/** A nested continuation fixes one Work and keeps all other predicate/reader selectors. */
+/** The encrypted matches frontier fixes one Work. An inverse request retains
+ * all native/external subject roots; replacing them with a Work would change
+ * the subject selection. Forward requests also narrow their explicit roots. */
 export function associationMatchSelection(selection: AssociationSelection, work: string): AssociationSelection {
   return { ...selection, limit: ASSOCIATION_COST.witnesses, parameters: { ...selection.parameters,
-    roots: [{ kind: 'resource', ref: work }], projection: 'occurrence' } };
+    ...(selection.parameters.direction === 'work-to-subject' ? { roots: [{ kind: 'resource' as const, ref: work }] } : {}),
+    projection: 'occurrence' } };
 }

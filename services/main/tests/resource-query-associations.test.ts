@@ -1,12 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import { Value } from 'typebox/value';
 import { ASSOCIATION_QUERY, associationRequest, associationResult, type AssociationSelection,
-  type AssociationWitness } from '../src/modules/query/association-contract.ts';
+  type AssociationStatement, type AssociationWitness } from '../src/modules/query/association-contract.ts';
 import { selectAssociations } from '../src/modules/query/association-selection.ts';
 import { AssociationCursorInvalid, AssociationStaleQuery, associationMatchSelection, associationOrderKey,
   issueAssociationCursor, readAssociationCursor, type AssociationFrontier, type AssociationReadBasis,
   type AssociationKey } from '../src/modules/query/association-cursor.ts';
 import { readAssociationPage, type AssociationPageSource } from '../src/modules/query/association-page.ts';
+import { matchesAssociation } from '../src/modules/query/association-match.ts';
 import { WorkReadInvalid, WorkReadUnavailable } from '../src/modules/work/read-session.ts';
 import { templates } from '../../../generated/query/templates.ts';
 
@@ -39,7 +40,7 @@ function source(rows: AssociationKey[], visible: (key: AssociationKey) => Associ
     candidates: async (after, limit) => {
       calls.candidates++;
       const remaining = rows.filter(k => !after || (after.kind === 'work' ? k.work > after.work
-        : associationOrderKey(k) > associationOrderKey(after.key)));
+        : (after.kind !== 'matches' || k.work === after.key.work) && associationOrderKey(k) > associationOrderKey(after.key)));
       return { items: remaining.slice(0, limit), more: remaining.length > limit };
     }, witness: async k => { calls.witnesses++; return visible(k); }, fence: async () => { calls.fences++; },
   };
@@ -64,6 +65,8 @@ describe('Subject association selection', () => {
       roots: [external, { ...external, namespace: 'organization' }] } };
     expect(selectAssociations(inverse).parameters.roots).toEqual(inverse.parameters.roots);
     expect(() => selectAssociations({ ...inverse, parameters: { ...inverse.parameters, roots: [external, { ...external }] } })).toThrow();
+    expect(() => selectAssociations({ ...inverse, parameters: { ...inverse.parameters,
+      roots: [{ ...external, key: 'invalid\ud800' }] } })).toThrow(WorkReadInvalid);
     for (const template of templates) {
       const parameters = { roots: [external] };
       expect(Value.Check(template.request, { profile: 'template-query-v1', query: template.query,
@@ -76,7 +79,11 @@ describe('Subject association selection', () => {
     const selection = (all: unknown[]) => ({ ...input, parameters: { ...input.parameters,
       match: { all, any: [], none: [] } } });
     expect(selectAssociations(selection([predicate])).parameters.match.all).toEqual([predicate]);
+    const temporal = { predicate: id(8), value: { kind: 'temporal' as const, lexical: '2026-10-19', precision: 'day' as const,
+      calendar: 'gregorian' as const, timeZone: 'America/New_York' } };
+    expect(selectAssociations(selection([temporal])).parameters.match.all).toEqual([temporal]);
     for (const all of [[{ ...predicate, value: { kind: 'rational', lexical: '2/4' } }],
+      [{ ...predicate, value: { kind: 'language-string', lexical: 'red', language: 'en_US' } }],
       [predicate, { value: predicate.value, predicate: predicate.predicate }], Array(17).fill(predicate)]) {
       expect(() => selectAssociations(selection(all))).toThrow(WorkReadInvalid);
     }
@@ -85,6 +92,58 @@ describe('Subject association selection', () => {
       { ...input, parameters: { ...input.parameters, frame: [id(9), id(9)] } }]) {
       expect(Value.Check(associationRequest, malformed)).toBe(false);
     }
+  });
+});
+
+describe('Subject association predicate correlation', () => {
+  const red = { predicate: id(70), value: { kind: 'language-string' as const, lexical: 'red', language: 'en' } };
+  const black = { ...red, value: { ...red.value, lexical: 'black' } };
+  function statement(overrides: Partial<AssociationStatement> = {}): AssociationStatement {
+    return { id: id(71), revision: id(72), subject, ...red, occurrence: key(1).occurrence,
+      context: 'global', applicability: [], qualification: 'asserted', decisionRevision: id(73),
+      citations: witness(1).citations, ...overrides };
+  }
+  const selection = (match: AssociationSelection['parameters']['match']) => selectAssociations({
+    ...request(), parameters: { ...request().parameters, match } });
+  const positive = selection({ role, all: [red], any: [], none: [] });
+  test('all, any and none compare exact adopted values on the same subject and occurrence', () => {
+    const current = { ...witness(1), statements: [statement()] };
+    expect(matchesAssociation(positive, current)).toBe(true);
+    expect(matchesAssociation(selection({ all: [red, black], any: [], none: [] }), current)).toBe(false);
+    expect(matchesAssociation(selection({ all: [], any: [black, red], none: [] }), current)).toBe(true);
+    expect(matchesAssociation(selection({ all: [], any: [], none: [red] }), current)).toBe(false);
+    expect(matchesAssociation(selection({ all: [], any: [], none: [black] }), current)).toBe(true);
+    for (const other of [statement({ subject: { kind: 'resource', ref: id(90) } }),
+      statement({ occurrence: key(2).occurrence }), statement({ predicate: id(74) }),
+      statement({ value: { ...red.value, language: 'fr' } }), statement({ value: { ...red.value, direction: 'rtl' } })]) {
+      expect(matchesAssociation(positive, { ...current, statements: [other] })).toBe(false);
+    }
+    expect(matchesAssociation(positive, { ...current, statements: [statement({ occurrence: null })] })).toBe(true);
+    // A role is never a predicate mapping, including protagonist to gender.
+    expect(matchesAssociation(positive, { ...current, statements: [] })).toBe(false);
+    expect(matchesAssociation({ ...positive, parameters: { ...positive.parameters,
+      match: { ...positive.parameters.match, role: `${id(3)}/role/male` } } }, current)).toBe(false);
+  });
+  test('unknown, uncertain and conflicting assertions remain inspectable without satisfying positives', () => {
+    for (const qualification of ['uncertain', 'conflicting'] as const) {
+      const current = { ...witness(1), statements: [statement({ qualification })] };
+      expect(matchesAssociation(positive, current)).toBe(false);
+      expect(matchesAssociation(selectAssociations(request()), current)).toBe(true);
+      expect(matchesAssociation(selection({ all: [], any: [], none: [red] }), current)).toBe(true);
+      expect(matchesAssociation(positive, { ...current, qualification, statements: [statement()] })).toBe(false);
+    }
+    const unknown = { predicate: red.predicate, value: { kind: 'unknown' as const } };
+    expect(matchesAssociation(selection({ all: [unknown], any: [], none: [] }), {
+      ...witness(1), statements: [statement({ value: unknown.value })] })).toBe(false);
+  });
+  test('matching precedes Work grouping and counts and never joins two witnesses', async () => {
+    const rows = [key(1), key(2)];
+    const { owner } = source(rows, k => k.occurrence === rows[0]!.occurrence
+      ? { ...witness(1), statements: [] }
+      : { ...witness(2), role: `${id(3)}/role/supporting`, statements: [statement({ occurrence: key(2).occurrence })] });
+    const result = await readAssociationPage(owner, { ...positive, parameters: {
+      ...positive.parameters, projection: 'work' } }, basis(), 'query');
+    expect(result.items).toEqual([]); expect(result.count.value).toBe(0); expect(result.complete).toBe(true);
   });
 });
 
@@ -174,6 +233,32 @@ describe('Subject association continuation', () => {
     expect(rest.complete).toBe(true);
     expect([...match.items, ...rest.items as AssociationWitness[]].map(associationOrderKey)).toEqual(keys.map(associationOrderKey));
   });
+  test('inverse nested continuations retain full external roots and stay within one Work', async () => {
+    const external = { kind: 'external' as const, provider: 'retained', namespace: 'person', key: 'same' };
+    const keys = [...Array.from({ length: 65 }, (_, n) => key(n)), key(66, id(9))];
+    const map = new Map(keys.map((k, n) => [associationOrderKey(k), { ...witness(n, k.work), ...k,
+      kind: 'credit' as const, subject: external }]));
+    const { owner } = source(keys, k => map.get(associationOrderKey(k))!);
+    const selection = selectAssociations({ ...request(), limit: 1, parameters: { ...request().parameters,
+      kind: 'credit', direction: 'subject-to-work', projection: 'work', roots: [external,
+        ...Array.from({ length: 63 }, (_, n) => ({ ...external, key: `${n}${'x'.repeat(500)}` }))] } });
+    const first = await readAssociationPage(owner, selection, basis(), 'query');
+    expect(first.items.map(item => item.work)).toEqual([work]);
+    const match = (first.items[0] as { matches: { items: AssociationWitness[]; nextCursor: string } }).matches;
+    const nestedSelection = associationMatchSelection(selection, work);
+    expect(nestedSelection.parameters.roots).toEqual(selection.parameters.roots);
+    expect(match.nextCursor.length).toBeLessThanOrEqual(2048);
+    const rest = await readAssociationPage(owner, nestedSelection, basis(), 'query', match.nextCursor);
+    expect(rest.items.map(item => item.work)).toEqual([work]); expect(rest.complete).toBe(true);
+    expect([...match.items, ...rest.items as AssociationWitness[]].map(associationOrderKey)).toEqual(keys.slice(0, 65).map(associationOrderKey));
+    const second = await readAssociationPage(owner, selection, basis(), 'query', first.nextCursor!);
+    expect(second.items.map(item => item.work)).toEqual([id(9)]);
+    // Provider and key equality cannot absorb another external namespace.
+    const otherNamespace = { ...map.get(associationOrderKey(keys[0]!))!, subject: { ...external, namespace: 'organization' } };
+    expect(matchesAssociation(selection, otherNamespace)).toBe(false);
+    owner.candidates = async () => ({ items: [keys.at(-1)!], more: false });
+    await expect(readAssociationPage(owner, nestedSelection, basis(), 'query', match.nextCursor)).rejects.toBeInstanceOf(WorkReadUnavailable);
+  });
   test('outer Work continuations skip emitted groups and current fences run before return', async () => {
     const keys = [key(1), key(2), key(3, id(9)), key(4, id(10))];
     const map = new Map(keys.map((k, n) => [associationOrderKey(k), witness(n + 1, k.work)]));
@@ -194,6 +279,8 @@ describe('Subject association continuation', () => {
     owner.candidates = async () => ({ items: [], more: true });
     await expect(readAssociationPage(owner, selection, basis(), 'query')).rejects.toBeInstanceOf(WorkReadUnavailable);
     owner.candidates = async () => ({ items: [key(1), key(1)], more: false });
+    await expect(readAssociationPage(owner, selection, basis(), 'query')).rejects.toBeInstanceOf(WorkReadUnavailable);
+    owner.candidates = async () => ({ items: [{ ...key(1), occurrence: 'invalid' }], more: true });
     await expect(readAssociationPage(owner, selection, basis(), 'query')).rejects.toBeInstanceOf(WorkReadUnavailable);
     owner.candidates = async () => { throw new WorkReadUnavailable('association coverage is not active'); };
     await expect(readAssociationPage(owner, selection, basis(), 'query')).rejects.toBeInstanceOf(WorkReadUnavailable);
