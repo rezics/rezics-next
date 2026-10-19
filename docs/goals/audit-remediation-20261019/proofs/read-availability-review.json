@@ -6038,5 +6038,436 @@
       ],
       "qualification": "Report only; no product or runtime proof rerun. Only receipt metadata finalized afterward. Non-blocking harness-behind-main notice retained in raw output; both commands exited0."
     }
+  },
+  "retainedBookRecipeHistoryExtensionFirstReview": {
+    "reviewedAt": "2026-10-19T16:54:25.035596+00:00",
+    "authority": "Maintainer continuation: first independent review of the finite second-source G-2842 retained Book/Recipe history extension; reuse exact producer checks and run report documentation checks only. No actual retained-copy adoption, implementation or landing by G-2846.",
+    "reviewer": {
+      "worker": "G-2846",
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independentOfAuthor": true,
+      "reviewCount": 1,
+      "nestedAgents": false,
+      "accountFallback": false
+    },
+    "decision": {
+      "verdict": "approve",
+      "owner": "G-2842",
+      "canLandThisThreePathToolingDeltaAfterNormalGate": true,
+      "blockingFindings": [],
+      "reason": "The finite 4a616 source extension retains actual schema/template/seed replay before canonical receipt adoption. Exact historical/current SQL identities, copy-bound durable lineage, refusal cases, rollback and interrupted replay are checked; the producer exercised the real subsequent 2609 migration without repeating renamed DDL/backfills. No actionable source defect was found in this incremental boundary.",
+      "doesNotCertifyActualRetainedCopy": true,
+      "doesNotCloseOriginalProductFindings": true,
+      "doesNotRelandOrRereviewPriorAcceptedSource": true
+    },
+    "source": {
+      "candidate": "a43d318e10661e887b3fd831907bd63f52c80afc",
+      "parent": "a05621a0fd8bee0a98cea1744b271fb0c876fa29",
+      "candidateParentVerified": true,
+      "changedPathsExact": true,
+      "pathCount": 3,
+      "manifest": [
+        {
+          "path": "docs/testing/test-harness.md",
+          "before": {
+            "blob": "dd655e0a4aa19f6f1b8c610e75d9fac790303afd",
+            "sha256": "00f9cec5071388911b1375126be6001d68b3c443f6fb482b8972fba26cdba09a"
+          },
+          "after": {
+            "blob": "12f5da426b2434b6057748e5fde14de71c8c470a",
+            "sha256": "2e35d2128ffca2358c1d586fdf04d5b6d22b909b1a27f8ec84e038f1f8b4b0ee"
+          }
+        },
+        {
+          "path": "scripts/qa/history-transition.test.ts",
+          "before": {
+            "blob": "3d7b449b32e4af68c7577dfcc6d8643a2c7f0621",
+            "sha256": "c795f49f996764a342525dd6f7f896d7c860c3fafa223f75a94363f0cf00fa10"
+          },
+          "after": {
+            "blob": "7db895ff9734207b810b9af183792bc1a686547a",
+            "sha256": "3e2a7ec053b05627e4fd1e4dc7cf86c54fa9bb1b7adc79c44b4d5c0c062e59d6"
+          }
+        },
+        {
+          "path": "scripts/qa/history-transition.ts",
+          "before": {
+            "blob": "d2349d9e6797e8d8d7fe4cafc48463cad7b8fe57",
+            "sha256": "fdfe1af26418f26c04ea67a8b4a0e9580022ef5ba9daddc4cf28b416ab666363"
+          },
+          "after": {
+            "blob": "b80ae02d1cad5aa79968efb91f7b44411b4a8f70",
+            "sha256": "6ba2203c7c3a7f7d804e9a609b0c4fc80afe3ac70b7fc68cc63b9d2d14c9bf80"
+          }
+        }
+      ],
+      "authorCheckoutHead": "a43d318e10661e887b3fd831907bd63f52c80afc",
+      "authorCheckoutClean": true,
+      "mainAtPreimageRecheck": "49c33b1c0b3333d084d6dd4e5853ccdb7ef10a79",
+      "allThreeMainPreimagesStillEqualBase": true,
+      "rootPacket": ".temp/audit-remediation-20261019/two-hour-sprint/history-4a616-first-review/",
+      "rootCandidatePatchSha256": "02bfe2a7718ebdd32e21c415748cc0fa188f9bbf44fd00263d385171d6b6cdf0",
+      "rootManifestSha256": "e10540d23b2f1fbf56de4586cb41609d630e598d19ace8026ce7d047bb4e4819",
+      "sourceOrTestOrAssertionChangedByReviewer": false
+    },
+    "retainedInputs": {
+      "newSupportedSource": "4a616b079a364b8f5ac7fe4d4ff56bc99849e766",
+      "completeFrozenInventoryFiles": 534,
+      "everyInventoryPathAndHashVerifiedAgainstImmutableGit": true,
+      "sourceCompatibilityDigest": "eac0b47cf9ddb55c380ef50a880c1a98917d786b67f11dea26f6743670e54b82",
+      "currentBaseCompatibilityDigest": "69ae78b9ff640a2afc3c3089addb7cb15b2f802afef4355ce1600b1e97f46876",
+      "sourceOwnerCounts": {
+        "access": 303,
+        "relay": 23,
+        "content": 171,
+        "account": 32
+      },
+      "currentBaseOwnerCounts": {
+        "access": 304,
+        "relay": 23,
+        "content": 172,
+        "account": 32
+      },
+      "actualProducerManifestsVerified": [
+        {
+          "name": "book",
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2791/.temp/launch-corpus/book-recipes/backups/launch-book-recipe-aa32916c0c4d822307ea/backup.json",
+          "sha256": "7f6d8d7645e870959b050028d53ed1b7997c243065f236915af13db2720b09ca",
+          "project": "rezics-catalogue-work-profile-recipes-build-mveymfp0-c3acb7-launch-book-recipe-aa32916c0c4d822307ea-eac0b47cf9ddb55c",
+          "runId": "recipes-build-mveymfp0-c3acb7",
+          "compatibilityDigest": "eac0b47cf9ddb55c380ef50a880c1a98917d786b67f11dea26f6743670e54b82",
+          "inventoryFiles": 534,
+          "completeInventoryEqualGit": true
+        },
+        {
+          "name": "c27",
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2791/.temp/a15-retained/backups/recipe-measures-c27-measures-20261019-r1/backup.json",
+          "sha256": "dd34b7c94d6aa70bb78b3e09d653ee4a40e47293c51ee3a514d936007e8cd470",
+          "project": "rezics-catalogue-work-profile-c27-measures-20261019-r1-recipe-measures-c27-measures-20261019-r1-eac0b47cf9ddb55c",
+          "runId": "c27-measures-20261019-r1",
+          "compatibilityDigest": "eac0b47cf9ddb55c380ef50a880c1a98917d786b67f11dea26f6743670e54b82",
+          "inventoryFiles": 534,
+          "completeInventoryEqualGit": true
+        }
+      ],
+      "qualificationRefusal": {
+        "sha256": "8015dc790944b5703345dfd1482eb3b3499d51db27bbb347504ced303ebf29c2",
+        "job": "9023a0b9-5987-4784-bbef-959581d4561e",
+        "target": "510d591dd0d348176dd29a823c8f08c3cc657fef",
+        "result": "Retained full-backup strict compatibility refusal before copy allocation; historical evidence only, not rerun or waived."
+      },
+      "priorSourcePreserved": {
+        "source": "759244e365ad64bcb97fac0ea7d7b9caebe144b2",
+        "backupSha256": "d7059aeceef904aa9ccba02dfabb87f8a41f10756ccd4f56567841097d328a8c",
+        "accessFiles": 299,
+        "relayFiles": 23,
+        "acceptedReview": "transitionDependencyReview",
+        "acceptedCandidate": "b0b3a5e7cbf47f03eda24f53ee7ca3a492436aff",
+        "job": "bdbd6f7e-9d41-40ad-b699-fac2a6ee2ec7",
+        "qaRun": "20261019t072939-b7610f",
+        "executed": 8,
+        "passed": 8,
+        "assertions": 70,
+        "rerun": false
+      },
+      "manifestInventoryIsNotProofOfAppliedDatabaseHistory": true,
+      "actualRetainedVolumesInspectedOrTransitionedByReviewer": false
+    },
+    "canonicalMappings": [
+      {
+        "source": "services/main/migrations/access/2045_standing_rating_components.sql",
+        "current": "services/main/migrations/access/2606_standing_rating_components.sql",
+        "sha256": "65d2a75a859182d5808f7ad8ca3b197006c9d684a7c1bb41c005880e800314f5"
+      },
+      {
+        "source": "services/main/migrations/access/2077_standing_rating_publication.sql",
+        "current": "services/main/migrations/access/2607_standing_rating_publication.sql",
+        "sha256": "6583a1657afe45a3ee250a0ec4eb11fc244bf88820b05bf7a7e739ad5cce7b41"
+      },
+      {
+        "source": "services/main/migrations/access/2606_standing_rating_affected_cuts.sql",
+        "current": "services/main/migrations/access/2608_standing_rating_affected_cuts.sql",
+        "sha256": "7d1f1743e6b8c771b275fe8dd1afa601cab07fb62b553699bce52ab76f2b4677"
+      }
+    ],
+    "materialDependencyPins": [
+      {
+        "sourcePin": "a43d318e10661e887b3fd831907bd63f52c80afc",
+        "path": "scripts/ops/migrate.ts",
+        "blob": "9598c341d744c32c65d2a2568e72c1a22f5b2d8c",
+        "sha256": "344882de8e53bdea11e61b1f01458bd85a6cc533374558170015013e08300214"
+      },
+      {
+        "sourcePin": "a43d318e10661e887b3fd831907bd63f52c80afc",
+        "path": "scripts/load/compatibility.ts",
+        "blob": "82d4cf905b3db35a049440d0254da999a4bb3fe4",
+        "sha256": "2d89f8f7bfd5e85653e62896c3f2d2d6d46e7d1bd8f3edc3fc9e30bdb0dc7e23"
+      },
+      {
+        "sourcePin": "a43d318e10661e887b3fd831907bd63f52c80afc",
+        "path": "scripts/qa/bootstrap.ts",
+        "blob": "4404aa1c2c2087f44c0cba8eb4f000982c6ca96e",
+        "sha256": "a1ae68baba2446c09b573c981a0c7c75cf17e12d1f2376fe8d498513b8306d48"
+      },
+      {
+        "sourcePin": "4a616b079a364b8f5ac7fe4d4ff56bc99849e766",
+        "path": "scripts/qa/bootstrap.ts",
+        "blob": "2b9522085f430d2223ee9a4f32add3197cdad51d",
+        "sha256": "1035b33b6b5bf781f1b3eadc74a7de47483fb3c66c8fd6ffcdf27b5cacb392d1"
+      },
+      {
+        "sourcePin": "a43d318e10661e887b3fd831907bd63f52c80afc",
+        "path": "services/main/migrations/access/2609_standing_rating_bounded_progress.sql",
+        "blob": "92ca05e467c3b03be3570330e05508055286d71c",
+        "sha256": "96ee20fb3ce837f1f89354f7906974cb1cebc596b81fa50d94396ad24c25356a"
+      }
+    ],
+    "incrementalReviewCoverage": [
+      {
+        "path": "scripts/qa/history-transition.ts",
+        "lines": "11-30,77-118,120-135,311-320",
+        "finding": "Only the two fixed Git sources are accepted. Every retained manifest inventory entry must match the frozen archived source and independent backup digest. The new branch checks all historical Access/relay SQL bytes against current canonical files, requires all three old identities and exact reviewed hashes, refuses surviving aliases/missing or changed bytes, and rejects colliding mapped identities. Filename mapping alone never reaches adoption."
+      },
+      {
+        "path": "scripts/qa/history-transition.ts",
+        "lines": "138-182,252-267,318-334",
+        "finding": "The existing explicit transition retains checkout-local inputs, distinct persistent disposable QA project, matching PostgreSQL container/volume/loopback endpoints and stopped-owner-client checks. New owner lineage captures both backup project and restored project. Both release locks and SHARE table locks cover verification through receipt commits; no new migration owner or data-transform path is introduced."
+      },
+      {
+        "path": "scripts/qa/history-transition.ts",
+        "lines": "185-240,268-305,335-365",
+        "finding": "Before first adoption, actual owner schemas equal their frozen templates, indexes are valid, populated stable seed identities/fixed values remain, and a fresh replay of the immutable historical SQL matches definitions plus every normalized frozen template seed row. Schema/seed comparison is not an object count or a caller receipt. Only timestamp defaults and the existing volatile revision are normalized; mutable application counters/gates may advance."
+      },
+      {
+        "path": "scripts/qa/history-transition.ts",
+        "lines": "268-290",
+        "finding": "Unknown nonempty tracker history without a verified transition refuses. Retry requires one receipt with the exact source, independent backup SHA, canonical list, backup/restored project, historical source list and rename hashes; missing lineage, transplant/conflict and surviving old receipt names refuse. Previously committed owner evidence is trusted on matching retry, preserving later legitimate changes; this is not a fresh certification of arbitrary post-adoption schema/data drift."
+      },
+      {
+        "path": "scripts/qa/history-transition.ts",
+        "lines": "327-387",
+        "finding": "Both owners are verified before metadata insertion. Target writes are limited to migration/transition tables; historical application DDL/backfills execute only in temporary empty reference databases. Verify rolls back; precommit write failure rolls both owners back. Commits remain per-owner, explicitly non-atomic across databases. A matching committed Access receipt allows verification/adoption of the still-untracked relay after interruption. Reference databases and staged source are removed in finally."
+      },
+      {
+        "path": "scripts/qa/history-transition.test.ts",
+        "lines": "17-22,71-144,146-255",
+        "finding": "The selected eight-case second-source test uses real PostgreSQL 18.6 and the actual old untracked ordered SQL helper, freezing templates before any test application writes. It explicitly labels its synthetic history-test manifest separately from genuine retained Book/C27 manifests. Missing/drift/extra inventory, wrong source, each missing/changed rename, partial history, schema drift, missing seed effects, mutually corrupted target/template seeds, and receipt-write failure exercise refusals rather than fabricate completion."
+      },
+      {
+        "path": "scripts/qa/history-transition.test.ts",
+        "lines": "257-353",
+        "finding": "Real dump equality excluding only migration metadata proves read-only verify and preservation across adoption. Tests retain a principal ID, enforcement epoch, changed counter and closed fixture gate; reject conflicting lineage/source/digest/old names; construct the genuine durable interrupted-commit state; and preserve post-adoption mutation on retries. The normal owner runner skips adopted canonical names, applies only actual 2609, then no-ops. A separate test-only ALTER/DML upgrade exercises later state change and the enforcement trigger, rather than count renamed files as applied work."
+      },
+      {
+        "path": "docs/testing/test-harness.md",
+        "lines": "72-137",
+        "finding": "The procedure names both finite sources and exact renames, requires compatible historical restore/admitted stopped disposable copy and independent pins, explains replay before metadata adoption, and separates SQL history from current native/model alignment, owner readiness and qualified backup/restore. Ordinary startup has no transition import/call and never adopts historical state automatically."
+      }
+    ],
+    "producerChecksReused": {
+      "job": "dcdb23e1-c25d-45a3-8db7-835cd7d9bcd6",
+      "allFourRecordedStepsExitCode": 0,
+      "qaRun": "20261019t163725-945206",
+      "command": "bun scripts/goal/goalctl.ts test scripts/qa/history-transition.test.ts -t QAHISTORY02 --timeout 600000",
+      "exitCode": 0,
+      "admission": "Normal recorded Goal job and QA host memory/CPU admission; isolated actual PostgreSQL; no product stack or existing corpus access.",
+      "sourceQualification": {
+        "recordedSource": {
+          "head": "a05621a0fd8bee0a98cea1744b271fb0c876fa29",
+          "fingerprint": "260deed528ffd456b4d23e57c82d93f9e419d56d2d8798c2d47822f861fb0750",
+          "clean": false
+        },
+        "sourceStable": true,
+        "reconstructedFingerprint": "260deed528ffd456b4d23e57c82d93f9e419d56d2d8798c2d47822f861fb0750",
+        "exactCandidateBytesVerified": true,
+        "method": "SHA-256(parent HEAD plus newline and exact tracked binary diff), matching sourceIdentity; all three changed files were already tracked."
+      },
+      "nativeDependency": {
+        "image": "postgres:18.6-trixie@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722",
+        "kind": "PostgreSQL history tooling test; no Fuseki/native-model proof was executed or requalified."
+      },
+      "counts": {
+        "executed": 8,
+        "pass": 8,
+        "fail": 0,
+        "error": 0,
+        "skip": 7,
+        "skipReason": "Seven QAHISTORY01 cases filtered; previous first-source migration/history eight-case proof is reused, not rerun.",
+        "assertions": 101,
+        "elapsedSeconds": 302.242161899
+      },
+      "cases": [
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 146,
+          "name": "retained lineage requires both independently recorded bytes and every pinned migration byte",
+          "result": "pass",
+          "assertions": 9,
+          "elapsedSeconds": 42.715356
+        },
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 165,
+          "name": "canonical receipt names require each exact inspected old and new SQL identity",
+          "result": "pass",
+          "assertions": 33,
+          "elapsedSeconds": 40.704524
+        },
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 213,
+          "name": "partial or unknown historical receipts are refused without adopting the other owner",
+          "result": "pass",
+          "assertions": 3,
+          "elapsedSeconds": 21.799636
+        },
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 221,
+          "name": "an existing schema with a missing migration effect cannot gain receipts",
+          "result": "pass",
+          "assertions": 3,
+          "elapsedSeconds": 9.658396
+        },
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 227,
+          "name": "a populated owner missing a seeded data-only effect cannot gain receipts",
+          "result": "pass",
+          "assertions": 3,
+          "elapsedSeconds": 8.531452
+        },
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 233,
+          "name": "a template with matching object counts is checked against the actual pinned SQL effects",
+          "result": "pass",
+          "assertions": 3,
+          "elapsedSeconds": 46.63657
+        },
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 244,
+          "name": "a failed receipt write rolls back both verified owners without changing application state",
+          "result": "pass",
+          "assertions": 6,
+          "elapsedSeconds": 40.093585
+        },
+        {
+          "file": "scripts/qa/history-transition.test.ts",
+          "line": 257,
+          "name": "verification is read-only and adoption preserves all owner schema, data, identities and rights",
+          "result": "pass",
+          "assertions": 41,
+          "elapsedSeconds": 60.210772
+        }
+      ],
+      "otherSteps": [
+        {
+          "step": 2,
+          "command": "task docs:check",
+          "exitCode": 0,
+          "tests": 13,
+          "markdownFiles": 259
+        },
+        {
+          "step": 3,
+          "command": "task goal -- check",
+          "exitCode": 0,
+          "types": "PASS: 1675 files, 11.6 seconds",
+          "lint": "PASS",
+          "ast": "PASS",
+          "repositoryGuards": {
+            "selectedFiles": 17,
+            "availableFiles": 45,
+            "reportedSuite": {
+              "tests": "129",
+              "failures": "0",
+              "skipped": "4",
+              "time": "39.211194830000004"
+            },
+            "namedCases": 129,
+            "executed": 125,
+            "skipped": 4,
+            "fail": 0,
+            "assertions": 18374
+          },
+          "briefTests": "No tests named in brief; actual selected history tests are the separate first job step."
+        },
+        {
+          "step": 4,
+          "command": "bun scripts/goal/goalctl.ts test --affected --list",
+          "exitCode": 0,
+          "meaning": "Selection inventory only, not another test execution; the owner test plus 17 guard files are listed, native module COPY inputs not selected."
+        }
+      ],
+      "productAcceptance": {
+        "passed": 0,
+        "partialPass": 0,
+        "failed": 0,
+        "uncovered": 292,
+        "certifiesFull": false
+      },
+      "cleanup": "Producer reports removal of all owned history-test containers, volumes and reference databases. The positive test asserts no qa_history_% reference databases remain. G-2846 performed no lifecycle or retained-data operation."
+    },
+    "preservedNewSourceFailure": {
+      "job": "7280d7e2-23a7-4a76-bb22-8977e12ae198",
+      "qaRun": "20261019t162919-75a563",
+      "resultClass": "assertion",
+      "sourceHead": "a05621a0fd8bee0a98cea1744b271fb0c876fa29",
+      "sourceFingerprint": "df2c8a3a9738d80c1101ceb5abf47d79c03cb84aee795eef360bb82f9e3be21f",
+      "sourceStable": true,
+      "counts": {
+        "executed": 8,
+        "pass": 7,
+        "fail": 1,
+        "error": 0,
+        "skip": 7,
+        "assertions": 94,
+        "elapsedSeconds": 385.470061582
+      },
+      "file": "scripts/qa/history-transition.test.ts",
+      "line": 331,
+      "case": "verification is read-only and adoption preserves all owner schema, data, identities and rights",
+      "actualFailure": "Expected to_regclass text access.rating_standing_progress, received visible unqualified rating_standing_progress under the owner search path. The actual current migration had run; the failure was relation-name spelling in the existence assertion.",
+      "correction": "Final source checks to_regclass(...) IS NOT NULL AS present and true. Complete second-source verification/refusal/upgrade assertions remain; the final eight cases pass. This is an assertion correction, not a history-validation waiver."
+    },
+    "originalAcceptanceDisposition": {
+      "toolingSourceBoundary": "APPROVE finite second-source extension; exact normal three-path source plus report gate is ready.",
+      "actualBookC27Transition": "UNREACHED by this review. G-2791 alone performs compatible historical restore into a distinct admitted persistent QA copy, verifies/adopts exact history, then normal current owner upgrades and native/model alignment, readbacks/readiness and a stopped qualified current backup/restore. Preserve originals and independent backup hashes.",
+      "originalD5001D5004ZoneIdentitySourceEvidence": "All prior top-level keys/values retained exactly; no passing proof or unchanged source review repeated. Prior failures, setup errors and public workload/persona limits remain independently qualified.",
+      "classClosure": "None. Tooling source approval and synthetic PostgreSQL history verification do not establish original public read-availability, browser journeys, genuine corpus qualification, native/Source independent citation authority or another class acceptance."
+    },
+    "reviewerExecutedChecks": {
+      "sourceAndEvidenceVerification": "Read-only immutable source/diff, full 534-entry source inventory and actual retained manifest hash comparisons, exact three SQL identities, recorded fingerprint reconstruction, and raw XML/log assertion reach. No new test run or counterexample needed; no concrete blocking source concern remained.",
+      "documentation": {
+        "job": "7d845e9d-1ccc-4a1b-94df-6bdcd8475596",
+        "command": "task docs:check",
+        "exitCode": 0,
+        "result": "pass",
+        "tests": 13,
+        "markdownFiles": 249,
+        "limits": "Local links, fragments and design navigation only; external URLs and runtime behavior not tested.",
+        "log": ".temp/read-availability-review/history-4a616-a43d318/jobs/7d845e9d-1ccc-4a1b-94df-6bdcd8475596.log"
+      }
+    },
+    "evidence": {
+      "bundle": ".temp/read-availability-review/history-4a616-a43d318",
+      "verification": ".temp/read-availability-review/history-4a616-a43d318/verification.json",
+      "sourceManifest": ".temp/read-availability-review/history-4a616-a43d318/source-manifest.json",
+      "dependencyManifest": ".temp/read-availability-review/history-4a616-a43d318/dependency-pins.json",
+      "rawManifest": ".temp/read-availability-review/history-4a616-a43d318/raw-manifest.json",
+      "rawEvidenceContainsCredentials": false,
+      "rawManifestSha256": "35431957f9a703b34fbfdfb4bd6a89b41e8f93e49c3ec9291c13f938a809f836",
+      "rawEvidenceFiles": 43
+    },
+    "historyPreservation": {
+      "previousTopLevelKeys": 33,
+      "allPreviousValuesUnchanged": true,
+      "currentMainReportAtReviewIdenticalToPriorOwnReport": true,
+      "newKeyOnly": "retainedBookRecipeHistoryExtensionFirstReview"
+    }
   }
 }
