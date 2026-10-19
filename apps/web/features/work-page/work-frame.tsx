@@ -7,6 +7,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { type ReaderActions, ReaderActionsProvider, ShelfButton } from '../catalogue/reader-actions.tsx';
 import type { RatingTarget, ReaderSeed } from '../catalogue/reader-store.ts';
 import { coverKindOf, type CatalogueAuthor } from '../catalogue/work.ts';
+import { typeEntry } from '../catalogue/types.ts';
 import { CatalogueCover } from '../catalogue/cover.tsx';
 import { RelationshipControl } from '../relationships/control.tsx';
 import Link from '../shell/localized-link.tsx';
@@ -124,7 +125,8 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
     {sources}
   </WorkSources>;
   if (!showsBookControls(experience)) {
-    const recipeType = work.types.find(type => type === 'https://schema.org/Recipe');
+    const nativeType = typeEntry(work.types);
+    const recipeType = nativeType?.presentation === 'recipe' ? nativeType.type : undefined;
     return <ReaderActionsProvider signedIn={signedIn} signInHref={signInHref ?? '/auth/start'}
       actingSubject={actingSubject} seed={readerSeed} ratingTarget={ratingTarget} actions={readerActions}>
       <PageContainer className="grid gap-7 max-lg:pb-24 [text-autospace:normal]">

@@ -23,9 +23,9 @@ describe('Work page selection from the served registry and the projection’s se
     expect(recipe.typeSection?.href).toMatch(/^\/v1\/recipes\/works\//);
     const prompt = experienceOf(['https://rezics.com/vocab/PromptTemplate']);
     expect(prompt.typeSection?.href).toMatch(/^\/v1\/hub\/works\//);
-    // Without the projection the page shows less: no recipe section is guessed from the type.
+    // Keep the admitted Recipe identity, but never guess its section link from that type.
     expect(experienceOf(['https://schema.org/Recipe'], false).typeSection).toBeNull();
-    expect(experienceOf(['https://schema.org/Recipe'], false).kind).toBe('plain');
+    expect(experienceOf(['https://schema.org/Recipe'], false).kind).toBe('recipe');
   });
 
   test('guides read from their registry presentation; only books get book controls', () => {
