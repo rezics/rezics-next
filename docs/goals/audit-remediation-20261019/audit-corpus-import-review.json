@@ -1,0 +1,1939 @@
+{
+  "format": "rezics-audit-corpus-import-source-review-v1",
+  "worker": "G-2819",
+  "goal": "audit-remediation-20261019",
+  "result": {
+    "source_review": "complete",
+    "correction_disposition": "changes_required_from_source_review",
+    "execution_confirmed_blocking_failures": 0,
+    "new_source_findings": 4,
+    "carried_forward_source_findings": 8,
+    "ready_corpus_established": false,
+    "product_outcome_established": false,
+    "preparation_admitted": false,
+    "proof_admitted": false,
+    "landing": "Manager decision; no automatic landing."
+  },
+  "execution_identity": {
+    "engine": "codex-1",
+    "model": "GPT-6.1 Sol",
+    "effort": "xhigh",
+    "identity_basis": "Worker assignment/session, not an independent model-service introspection.",
+    "fallback_used": false,
+    "nested_agents_used": false
+  },
+  "review_scope": {
+    "correction_head": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+    "correction_immediate_parent": "13b5d13eecbde62c2cf42032d73f2ba8e9981ec4",
+    "producer_original_build_base": "0215222300fb8573a6d2438ac98b96d47198dea7",
+    "predecessor_review_head": "30227838eb190084cfec4eb2966aab80531fc7f7",
+    "delivery_branch": "goal/g-2819",
+    "delivery_branch_committed_main_base": "0570918b5b017eee42d4cc8b905c3ab4e367212d",
+    "pin_policy": "All source inspections use git show/diff of these immutable pins, not the moving wave. Delivery branch began at committed main and carries only the report.",
+    "original_product_baseline": "69eac3ceeaf885be70205a70248bc951e9d81cc9",
+    "historical_product_head": "79be80d4d0e1cad1639b6a65e8f0795d6a95929a",
+    "historical_test_support_overlay": "4cddf34c79572fb07fc293f122d526fa83011530",
+    "generation_policy": "Product baseline, test/helper overlay, producer/build/review head, frozen snapshot/file/record/selection digests, exact native revisions, source/model/index positions and restore generations are different coordinates. No current compatibility digest or successful unit check certifies a baseline restore.",
+    "owner_commits": [
+      {
+        "commit": "f944ed677a906d31e1d3380cf87851e493fe8b20",
+        "parent": "0215222300fb8573a6d2438ac98b96d47198dea7",
+        "subject": "Build a shared command-backed audit corpus producer",
+        "changed_paths": [
+          "docs/README.md",
+          "docs/testing/audit-corpus.md",
+          "scripts/goal/commands/prepare-audit.ts",
+          "scripts/qa/cli.ts",
+          "scripts/qa/fixtures/audit-corpus.test.ts",
+          "scripts/qa/fixtures/audit-corpus.ts",
+          "scripts/qa/isolated-integration-files.ts",
+          "scripts/qa/retained-preflight.test.ts",
+          "scripts/qa/retained-requirements.ts",
+          "tests/qa/fixtures/audit-corpus-contract.ts",
+          "tests/qa/fixtures/catalogue-information-contract.ts",
+          "tests/qa/integration/support/catalogue-information.ts",
+          "tests/qa/support/identity-reader-fixture.ts"
+        ]
+      },
+      {
+        "commit": "d7c1d02e2ea1a2ea827c315271d6f8909f97341a",
+        "parent": "f944ed677a906d31e1d3380cf87851e493fe8b20",
+        "subject": "Retain the audit operator and charge complete preparation work",
+        "changed_paths": [
+          "docs/testing/audit-corpus.md",
+          "scripts/fixture/budget.ts",
+          "scripts/qa/fixtures/audit-corpus.test.ts",
+          "scripts/qa/fixtures/audit-corpus.ts",
+          "tests/qa/fixtures/audit-corpus-contract.ts"
+        ]
+      },
+      {
+        "commit": "8235f24a93f82977961cdfa81eee2d871ed258ad",
+        "parent": "29296efb226b6801f667e1ab4811bb38e38821e7",
+        "subject": "Match audit corpus evidence and paths to existing consumers",
+        "changed_paths": [
+          "scripts/qa/fixtures/audit-corpus.test.ts",
+          "scripts/qa/fixtures/audit-corpus.ts"
+        ]
+      },
+      {
+        "commit": "8fc009b4cd7e1d5f19a40faa3df30b0c68619dc9",
+        "parent": "8235f24a93f82977961cdfa81eee2d871ed258ad",
+        "subject": "Record audit consumer stages and unresolved preparation owners",
+        "changed_paths": [
+          "docs/testing/audit-corpus-prerequisites.md",
+          "docs/testing/audit-corpus.md"
+        ]
+      },
+      {
+        "commit": "30227838eb190084cfec4eb2966aab80531fc7f7",
+        "parent": "20bab85f0d7ff90d906684f5e338a798c2b893b0",
+        "subject": "Correct Book and Recipe audit publication prerequisites",
+        "changed_paths": [
+          "docs/testing/audit-corpus-prerequisites.md"
+        ]
+      },
+      {
+        "commit": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+        "parent": "13b5d13eecbde62c2cf42032d73f2ba8e9981ec4",
+        "subject": "fix(qa): validate exact retained import projection inputs",
+        "changed_paths": [
+          "docs/testing/audit-corpus-prerequisites.md",
+          "scripts/qa/fixtures/audit-corpus.test.ts",
+          "scripts/qa/fixtures/audit-corpus.ts"
+        ]
+      }
+    ],
+    "owner_path_union": [
+      {
+        "path": "docs/README.md",
+        "git_blob": "07dbd530dc27ec9276aab44aaa05a0b33f628479",
+        "sha256": "a1307a84d7ad6f113adf267d1cc1a4e9c92e5005f7b82a76d1c34d22fcee4f2f",
+        "lines": 227,
+        "review": "Owner adds testing navigation for the audit-corpus procedure; no product behavior or readiness evidence."
+      },
+      {
+        "path": "docs/testing/audit-corpus-prerequisites.md",
+        "git_blob": "57c05fafbe7938bf9f59e087c125ec155f612bb8",
+        "sha256": "5b64907ab4fd1294256ed42faf1f9d5f29e24a7e1afd343356d6ab896992b99c",
+        "lines": 295,
+        "review": "Complete prerequisite document and correction reviewed against actual consumers. Preserves historical pre-assertion failures and deferred owners; claims about complete selection and guarded joins are qualified by findings below."
+      },
+      {
+        "path": "docs/testing/audit-corpus.md",
+        "git_blob": "ce64c53114b78d872ff7a9290724a66ec870505d",
+        "sha256": "317227cb9cf8186fc456c74eb67f81aa7a045fe4f3903e25485ca4096daaebbe",
+        "lines": 206,
+        "review": "Complete procedure, projections, command/receipt operators, retained operator, single stopped cut, isolated proof restores and unchanged budgets reviewed. Selection wording and baseline assumptions remain subject to F01/F07."
+      },
+      {
+        "path": "scripts/fixture/budget.ts",
+        "git_blob": "4c7e5cfb90ac880c32a0bcab76500280de3a3e40",
+        "sha256": "3fcfe67f286cd65c16277f61b5d2693050bd4dc9df3810fa857cceb8d277d118",
+        "lines": 33,
+        "review": "Admission exclusion and remaining/total budget accounting reviewed with restore callers; F08 remains."
+      },
+      {
+        "path": "scripts/goal/commands/prepare-audit.ts",
+        "git_blob": "37da86464830e05b2974058787304e76fe8eb037",
+        "sha256": "34402abb2416415a33d3fb1e746df54a2e1ce857abd293d59be3e4df09e4056a",
+        "lines": 19,
+        "review": "Existing inspect/prepare facade; explicit preparation entry, no independent readiness authority."
+      },
+      {
+        "path": "scripts/qa/cli.ts",
+        "git_blob": "cf2ca32b2fab70333e56a6855dcb1e4030d8a6c7",
+        "sha256": "da2d1d8983f63b95d33fc340e71b00ab3d778777a8a4617751a304768e77b149",
+        "lines": 1626,
+        "review": "Owner-added audit selection/prepare/run and teardown wiring reviewed against run-shard caller and actual consumer restore ownership; not proof admission."
+      },
+      {
+        "path": "scripts/qa/fixtures/audit-corpus.test.ts",
+        "git_blob": "52a9ec4b3a791e91ff018096f7627db39a188c1e",
+        "sha256": "9ce69051933d42e670c063923b9681b5ef9efc08783014b4aa7267f872908cc6",
+        "lines": 519,
+        "review": "Complete final unit file reviewed. Synthetic HTTP seam demonstrates tooling predicates only. Positive premises and refusal reach assessed explicitly below; no rerun."
+      },
+      {
+        "path": "scripts/qa/fixtures/audit-corpus.ts",
+        "git_blob": "c0b42829a6a87618ec8a53ece6d17f4f2c3862c9",
+        "sha256": "817b1840c1a1cc20c5fdb64eb88377f369a09de18d9ec1dfd5eeb3cd93c40ab7",
+        "lines": 1250,
+        "review": "Complete final producer plus complete three-path correction reviewed, including inspection, recorder, native/generation provenance, all projections, source cut/round trip, cached integrity, runtime import and consumer publication."
+      },
+      {
+        "path": "scripts/qa/isolated-integration-files.ts",
+        "git_blob": "d26fb104acfc2d37ee6fe5f80976b1de0289b990",
+        "sha256": "cd134419199939a64410072239977118154fa343f8baffc463b53b8295a4023e",
+        "lines": 595,
+        "review": "Audit selection exclusion/isolated routing reviewed; file list derives from existing auditProofFiles, not another mutable corpus."
+      },
+      {
+        "path": "scripts/qa/retained-preflight.test.ts",
+        "git_blob": "02a04cf4c47a2cc9aba8696e322022ed3f4da6c5",
+        "sha256": "97e0ba5e5d78c0f6dfca44d4359469d0d71551769ed5df1215836f9756ebaab4",
+        "lines": 262,
+        "review": "Owner-added audit canary and retained-preflight ordering reviewed; do not interpret source/preflight evidence as outcome success."
+      },
+      {
+        "path": "scripts/qa/retained-requirements.ts",
+        "git_blob": "428488b5bb9e25ab44b44a38b20c4fba6cf68c86",
+        "sha256": "3be9d9f44d551eab7d1d29eb179a9c54161f49c1eb157b1c503a1bcc01f2f99a",
+        "lines": 97,
+        "review": "Audit proof-file membership and retained-source prerequisites reviewed with CLI and all 18 consumers."
+      },
+      {
+        "path": "tests/qa/fixtures/audit-corpus-contract.ts",
+        "git_blob": "6b280ce2e93ef57b3600472d081b54b8e486b7c2",
+        "sha256": "7b524310007cc6bb56ae7a4490278ba1c72af2e91d01409d2f037a4bd713e224",
+        "lines": 190,
+        "review": "All eight existing consumer shapes, 18 proof files, 113 native binding and evidence/recipe contracts reviewed. Type compatibility is not deep setup conformance."
+      },
+      {
+        "path": "tests/qa/fixtures/catalogue-information-contract.ts",
+        "git_blob": "a62111871927a5729f991295e3c8b5f1c392db65",
+        "sha256": "4fb81131fcbf3f62183fe7adfaafd4c53d9a5533d41c658aefe0f4b7b804a9d6",
+        "lines": 190,
+        "review": "Owner type extraction preserves assertions. Later optional nativeAdmission extensions are separate non-owner wave work and remain independent outcome-body expectations."
+      },
+      {
+        "path": "tests/qa/integration/support/catalogue-information.ts",
+        "git_blob": "e72b8bb1a4bb32e66fcbb0fc492cb0995776d291",
+        "sha256": "8ffbdd62abe74dfbe2d2057c5370a50a678f39accf33f93b16ce164f93de69aa",
+        "lines": 839,
+        "review": "Owner import/type extraction and existing load/open/body assertion callers reviewed. Independent values, sections, native-admission and support assertions preserved; no edits."
+      },
+      {
+        "path": "tests/qa/support/identity-reader-fixture.ts",
+        "git_blob": "850c068c851125117853f0a4db45e1dc5d52205f",
+        "sha256": "8e46baef8cb308987f46801445b9f90ab9366a0547ba48c8801cd1d7774e815f",
+        "lines": 331,
+        "review": "Owner exports only helper contracts; retained helper path bypasses old build fallback. Pre-existing unsupported final Book Structure publication is P05, not introduced by those exports."
+      }
+    ],
+    "correction_paths": [
+      "docs/testing/audit-corpus-prerequisites.md",
+      "scripts/qa/fixtures/audit-corpus.test.ts",
+      "scripts/qa/fixtures/audit-corpus.ts"
+    ],
+    "intervening_non_owner_changes_in_union": [
+      {
+        "commit": "08dd2f50abe0017572c6cf87bc001f02a0c0a26b",
+        "subject": "Align information admission with shared Source contract",
+        "paths_in_owner_union": [
+          "tests/qa/fixtures/catalogue-information-contract.ts",
+          "tests/qa/integration/support/catalogue-information.ts"
+        ],
+        "attribution": "Inspected final composition; excluded from G-2791 owner attribution."
+      },
+      {
+        "commit": "5006fb526afbcf205f4a73dbe74d065d0f842ba7",
+        "subject": "Specify joint native value and retained Source support admission",
+        "paths_in_owner_union": [
+          "tests/qa/fixtures/catalogue-information-contract.ts",
+          "tests/qa/integration/support/catalogue-information.ts"
+        ],
+        "attribution": "Inspected final composition; excluded from G-2791 owner attribution."
+      }
+    ],
+    "other_relevant_non_owner_change": {
+      "commit": "9aafcf3a9d7fffe46cb810897e6517eddfa36886",
+      "interface": "DatasetImportOptions.selection/selectDatasetRoots",
+      "attribution": "Existing selection support at review head; not an owner commit and not a replacement interface proposal."
+    },
+    "relevant_caller_blobs": [
+      {
+        "path": "scripts/datasets/import.ts",
+        "git_blob": "75c948936209b7b2beb4d358197db55e18bb6a41",
+        "sha256": "edaad8c741c48f1870a8b6f3bc8b1979980f9af64d9cedf683ccf612b92a26d9",
+        "lines": 1924
+      },
+      {
+        "path": "scripts/datasets/types.ts",
+        "git_blob": "3450cc747ca3d6cb6c4dc7b6235e25eb9ef0f285",
+        "sha256": "5f538ddd0e4ffae4f069f5a15e69cb013c6e4ceef5b262c1123934a16b697d7f",
+        "lines": 171
+      },
+      {
+        "path": "scripts/datasets/selection.ts",
+        "git_blob": "c22ba75edd5a9ba0d6ec06c8562c78070ab7c05d",
+        "sha256": "ca04cf81fa0b7077b7d0c6daadf2d7609c80c465166c656736b4444f89fbd36f",
+        "lines": 659
+      },
+      {
+        "path": "tests/qa/support/import-outcomes.ts",
+        "git_blob": "0b46a845a96fb72086ab51da388f476f32062260",
+        "sha256": "163f1b5196be6284d03b42d2a7cd145e1c6947a5349a50a8467a2939317162f8",
+        "lines": 1023
+      },
+      {
+        "path": "tests/qa/fixtures/catalogue/import-admission-contract.ts",
+        "git_blob": "1344e875844416952351979668b858c2ac5a2d90",
+        "sha256": "280879a40dbabc009afee63d0b1ab3ddc632fc201e5935cf4c8982ff0beb4994",
+        "lines": 105
+      },
+      {
+        "path": "tests/qa/fixtures/catalogue/import-outcomes.json",
+        "git_blob": "0330c978cac66bc61121125ff86ec6308180ed19",
+        "sha256": "7bb2ccf430df74728df1a5ee48ca6ee40628d1376bd97ad6f78c0067d023d457",
+        "lines": 20221
+      },
+      {
+        "path": "services/main/src/routes/sources.ts",
+        "git_blob": "51416eeb2ebf91716244f0d9fa2e7705815bdf92",
+        "sha256": "243a9d8a71ad27a9bf94b64d07c75aab84318820f229d61b4cb778d8701c170e",
+        "lines": 713
+      },
+      {
+        "path": "services/main/src/routes/source-supports.ts",
+        "git_blob": "0e17b8db85116da314445ab09cdfc3e55168c9fb",
+        "sha256": "32c4602ddaf164601a2dd52b8f4e24400ea96a2f4518b418be47c7e2c156d157",
+        "lines": 878
+      },
+      {
+        "path": "services/main/src/modules/source/field-application.ts",
+        "git_blob": "478176afbe2272b60eb3af4ad9a63a90fd741388",
+        "sha256": "c090be85b445dd52079db9af505d6e9a17e277782812af8187065cd77eaef15f",
+        "lines": 174
+      },
+      {
+        "path": "services/main/src/routes/content.ts",
+        "git_blob": "4cdafe43c7e74c9ab88ed528edc946d910177ac0",
+        "sha256": "eb4c1097f772ed9584e1f88704c6348727ea271d0d80d7acb2b891f23d42b0e7",
+        "lines": 496
+      },
+      {
+        "path": "scripts/qa/retained-source.ts",
+        "git_blob": "0a50c794159e1a8f05b6bfb7eb17b61c2b2fc39c",
+        "sha256": "c6aa63bced9f580dfacb819d287e02f0270949151e5276a26706af5ec2c2a588",
+        "lines": 613
+      },
+      {
+        "path": "scripts/load/catalogue-backup.ts",
+        "git_blob": "a77bcdec0094d324cfaa60d5e02b31578bdaf346",
+        "sha256": "e17d1baa98cf54cf2a2764f0b14c3febdd9bc10b258892a8debf27be74d082fc",
+        "lines": 385
+      },
+      {
+        "path": "scripts/load/corpus-backup-driver.ts",
+        "git_blob": "23dd6090280e6685a2d5b901af79836925d9ee4e",
+        "sha256": "8144437a788b02edd045e88217461cbd998735109c6c2380a8aa72a1a5bc2ca0",
+        "lines": 191
+      },
+      {
+        "path": "scripts/load/compatibility.ts",
+        "git_blob": "82d4cf905b3db35a049440d0254da999a4bb3fe4",
+        "sha256": "2d89f8f7bfd5e85653e62896c3f2d2d6d46e7d1bd8f3edc3fc9e30bdb0dc7e23",
+        "lines": 77
+      },
+      {
+        "path": "tests/qa/support/context-outcomes.ts",
+        "git_blob": "fd7bab4102609fc81b1e70c46a66c0993538f59a",
+        "sha256": "77351e6cb8089e91a3ab73d78e430a33219f43d7c7764fb7157d3b4ad70f1c23",
+        "lines": 327
+      },
+      {
+        "path": "tests/qa/integration/support/catalogue-release-media.ts",
+        "git_blob": "1bf7d50538a69da6409b3cb654ef567b75d4d70c",
+        "sha256": "38a6ffd616ea9e8cd9bab58afa1fcc291b841357fee5f7c8ec84d59c0642eaad",
+        "lines": 329
+      },
+      {
+        "path": "tests/qa/support/catalogue-public-domain.ts",
+        "git_blob": "4b07e460b46c27ea6e9b85523ef426c8d33a661d",
+        "sha256": "7d36b995f7bd5f7a811127421700c83cddc5bb8318dfc5b3e595375fbebcf447",
+        "lines": 216
+      },
+      {
+        "path": "tests/qa/fixtures/catalogue-public-domain.ts",
+        "git_blob": "d396d9b150b4f890bc59fd258095ac571a0d0bc6",
+        "sha256": "a3ac85e8a3d98cb0ebecc81ff88db8e9be4dc3b77fc43dc9bc5f3c598eeea49a",
+        "lines": 84
+      },
+      {
+        "path": "tests/qa/support/author-management-fixture.ts",
+        "git_blob": "4f3cac47504b2ed470a5b3ab146c4f7a96eac97e",
+        "sha256": "f1c95fb45fd44e5caaeb212b9bfad9d201bc0c5a5cfe2436bbf8565860713dee",
+        "lines": 301
+      }
+    ],
+    "limits": "Source review only; complete owner-changed files at the final pin and relevant callers, eight projections and 18 consumer boundaries. No implementation/source edits, source acquisition, corpus readiness assignment or re-opening G-2812.",
+    "delivery_invariant": "The committed diff from delivery_branch_committed_main_base contains exactly docs/goals/audit-remediation-20261019/audit-corpus-import-review.json; no owner, consumer, prior handoff or wave source changes are inherited."
+  },
+  "evidence_provenance": {
+    "staged_references": [
+      {
+        "staged_path": ".temp/ref/G-2791.md",
+        "sha256": "33c255c6c8e16e8194121b91503c3895b687374396943d1f11c4fcd149960c1b",
+        "bytes": 16747
+      },
+      {
+        "staged_path": ".temp/ref/attempt-14.last.md",
+        "sha256": "f9706e147ddc699d429e16ff1b332848e1e6f06bf99cbebbfec77d3b1a9a717f",
+        "bytes": 1544
+      },
+      {
+        "staged_path": ".temp/ref/attempt-1.json",
+        "sha256": "855923d24fbe4ce1254f8fd27e8f89fa4891eded3395b05ea717c79f81b39c36",
+        "bytes": 1284608
+      },
+      {
+        "staged_path": ".temp/ref/attempt-2.json",
+        "sha256": "7b30e18954c4019c2b9b4e0511f6ba5e190ca48abf9d312c4da644ed2eee67b3",
+        "bytes": 23320
+      },
+      {
+        "staged_path": ".temp/ref/attempt-2.last.md",
+        "sha256": "03cfecf8612898f6be9a33ec05f9f79f93c427050cdd38d8314e99e5efd92a07",
+        "bytes": 1019
+      }
+    ],
+    "predecessor_report_availability": "Advertised .temp/goal/audit-corpus-review.json no longer exists. This report does not claim to read that missing file or verify its original bytes.",
+    "predecessor_reconstruction": "F01-F08, P01-P08 and eight consumer descriptions were recovered as literal report-generation data from the successful command in staged attempt-1.json JSONL line 169; final validation is the successful command/output in staged attempt-2.json line 15 (with enumerated findings at line 13). Only literal dictionaries/loc calls were extracted, not executed as commands. Original line coordinates are labelled predecessor_review_head; current locations and dispositions were independently checked.",
+    "predecessor_final_handoff": "attempt-2.last.md reports 15 paths, eight projections/18 consumers, eight findings, no production or corpus outcome, G-2812 closed verified. That lifecycle is not resumed, landed or closed here.",
+    "authority": "Staged report-generation/final validation and handoffs are retained historical evidence. Reported historical checks are attributed as reports, not new local execution or direct access to former QA logs.",
+    "current_validation_reproducibility": "The temporary Task validator checks the report against git-pinned blobs/line ranges, exact commit/path union, consumer inventory, staged reference hashes and branch diff. Its criteria and result are recorded here; it does not execute retained historical report-generation commands or product tests."
+  },
+  "correction_assessment": {
+    "full_three_path_review": true,
+    "retained_admission_cases": [
+      {
+        "key": "vndb:vn:v11",
+        "guard": "Shared loop checks exact identity, full snapshot triple, full normalized DatasetRecord and canonical recordDigest, strict request/retained keys, ordered actual part references and distinct assembled-payload byte metadata.",
+        "ordinary_conversion_optional": true,
+        "legacy_conversion_and_proposal_required": false,
+        "current_disposition": "Necessary retainedRequest checks present, but intake coordinates/envelope/support joins and source prerequisites remain unresolved. No actual case receipts, conversion, product outcome or ready corpus established.",
+        "representation_evidence": "Actual importer uses complete record envelope, single JSON or ordered chunks according to actual byte size. Unit uses synthetic provider-data/api_subject; only the synthetic artist is forced multipart. Actual frozen corpus part count was not acquired or inferred."
+      },
+      {
+        "key": "bangumi:subject:1014",
+        "guard": "Shared loop checks exact identity, full snapshot triple, full normalized DatasetRecord and canonical recordDigest, strict request/retained keys, ordered actual part references and distinct assembled-payload byte metadata.",
+        "ordinary_conversion_optional": false,
+        "legacy_conversion_and_proposal_required": true,
+        "current_disposition": "Necessary retainedRequest checks present, but intake coordinates/envelope/support joins and source prerequisites remain unresolved. No actual case receipts, conversion, product outcome or ready corpus established.",
+        "representation_evidence": "Actual importer uses complete record envelope, single JSON or ordered chunks according to actual byte size. Unit uses synthetic provider-data/api_subject; only the synthetic artist is forced multipart. Actual frozen corpus part count was not acquired or inferred."
+      },
+      {
+        "key": "musicbrainz:artist:24f1766e-9635-4d58-a4d4-9413f9f98a4c",
+        "guard": "Shared loop checks exact identity, full snapshot triple, full normalized DatasetRecord and canonical recordDigest, strict request/retained keys, ordered actual part references and distinct assembled-payload byte metadata.",
+        "ordinary_conversion_optional": true,
+        "legacy_conversion_and_proposal_required": false,
+        "current_disposition": "Necessary retainedRequest checks present, but intake coordinates/envelope/support joins and source prerequisites remain unresolved. No actual case receipts, conversion, product outcome or ready corpus established.",
+        "representation_evidence": "Actual importer uses complete record envelope, single JSON or ordered chunks according to actual byte size. Unit uses synthetic provider-data/api_subject; only the synthetic artist is forced multipart. Actual frozen corpus part count was not acquired or inferred."
+      },
+      {
+        "key": "musicbrainz:release:2ab08baa-b1c6-4aca-8cf7-c31565ef71b4",
+        "guard": "Shared loop checks exact identity, full snapshot triple, full normalized DatasetRecord and canonical recordDigest, strict request/retained keys, ordered actual part references and distinct assembled-payload byte metadata.",
+        "ordinary_conversion_optional": true,
+        "legacy_conversion_and_proposal_required": false,
+        "current_disposition": "Necessary retainedRequest checks present, but intake coordinates/envelope/support joins and source prerequisites remain unresolved. No actual case receipts, conversion, product outcome or ready corpus established.",
+        "representation_evidence": "Actual importer uses complete record envelope, single JSON or ordered chunks according to actual byte size. Unit uses synthetic provider-data/api_subject; only the synthetic artist is forced multipart. Actual frozen corpus part count was not acquired or inferred."
+      }
+    ],
+    "what_is_preserved": [
+      "Snapshot file SHA-256, logical snapshot digest, createdAt, frozen record digests, original edge indexes/digests and closure are checked at inspection. The complete normalized DatasetRecord, including title/language/native and other fields outside data, is hashed and compared in retainedRequest.",
+      "recordDigest is canonical normalized-record hashing; per-intake raw digest is exact request bytes; assembled chunk digest/length is validated by reconstructIntake and retained.payload. They are never assumed equal.",
+      "Only matching command:<id> receipts with success status 200/201 and no recorded error can witness intake or observed optional results. read/progress/import summaries and unrelated UUIDs do not supply the required intake receipt.",
+      "Ordinary import sources do not require conversion. Bangumi subject 1014 keeps genuine legacy conversion/proposal setup for editorial and negative-authority cases. retainedBinding and synopsisSupport remain optional when unobserved.",
+      "When retainedBinding is present, exact request, first actual observation path, returned conversion id and full returned retainedRecord match are required. Input identity/snapshot/recordDigest/intakes/payload and mappingRevision are compared; normalizationRevision must be nonempty and match the actual result. A canonical original sourceRecord may differ from multipart part-record identities; do not invent equality.",
+      "The consumer retains independent full-record admission/replay/refusal assertions in the operator outcome body. Proposed result unavailability is observed there; no successful proposed setup receipt is manufactured.",
+      "Real recorder command evidence retains exact method/path/body/key/status/answer/caller and private single-command files alongside failed-attempt evidence; raw unsupported commands are not inferred to have succeeded."
+    ],
+    "proposed_interface_status": {
+      "existing_conversion_route": {
+        "path": "services/main/src/routes/sources.ts",
+        "line": 374,
+        "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+        "end_line": 390
+      },
+      "observation": "At the pin, conversion request schema accepts only profile with additionalProperties:false. Proposed retained request fields and the unit legacy request's extra mappingRevision are not demonstrated supported route inputs. The unit retainedBinding response is a synthetic result for a pending interface, not a registered mapping/normalization implementation.",
+      "approval": "No Source/native profile, mapper revision, normalization revision, canonical Source record, support admission or publication interface is approved merely because a validator/type accepts its shape."
+    },
+    "prepublication_order": {
+      "locations": [
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 537,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 566
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 1188,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 1220
+        },
+        {
+          "path": "scripts/qa/retained-source.ts",
+          "line": 541,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 570
+        }
+      ],
+      "conclusion": "On fresh source build, full projection guards run in restored smoke before adapter.build returns; RetainedSources writes/renames ready manifest only after that return. On consumer preparation, guards run before writeAuditConsumer. Missing inputs/receipts therefore refuse publication when their guards detect them; I01-I03 describe gaps inside those guards, F04/F05/F06 remain broader. Source ordering checked, no failure-injection build or publication executed."
+    },
+    "unit_test_reach": {
+      "locations": [
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.test.ts",
+          "line": 240,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 304
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.test.ts",
+          "line": 306,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 397
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.test.ts",
+          "line": 399,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 414
+        }
+      ],
+      "positive_scope": "Synthetic recorder seam and normalized frozen-input maps, not frozen actual corpus receipts or server execution. Four case requests are constructed, ordinary conversions omitted, Bangumi legacy prerequisites retained; synthetic artist forces multipart.",
+      "mutation_assessment": "Full-record/identity/snapshot/digest/request-key mutations assert retainedRequest refusals, giving useful targeted guard reach. Part identity/order/raw digest/metadata mutations mostly assert generic throws. Replaced envelope bytes lack replacement command receipts and fail earlier receipt premises; no acknowledgement-matched envelope mutation proves deeper validation. Optional result negatives check missing/mismatched recorded results, but synopsis positive is invalid against the existing route schema.",
+      "required_follow_up": "Use contract-valid successful prerequisite shapes before single-field corruption and assert exact refusal stage/message. Preserve all independent consumer assertions; no new test or source edit is made by this review."
+    }
+  },
+  "findings": [
+    {
+      "id": "I01",
+      "severity": "high",
+      "classification": "source_finding_not_executed_outcome_failure",
+      "title": "Actual intake receipts are not tied to the frozen original identity or multipart coordinates",
+      "locations": [
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 644,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 661
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 949,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 966
+        },
+        {
+          "path": "services/main/src/routes/sources.ts",
+          "line": 78,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 103
+        }
+      ],
+      "reasoning": "The intake predicate compares response namespace/externalId only with its submitted body. It never compares either coordinate with frozen.identity or the actual importer's ordered part naming. A genuine successful intake of the exact frozen bytes under another namespace or externalId therefore satisfies this predicate. For multipart, unrelated/relabelled part-record identities can be put in the ordered request as long as each receipt agrees with itself. Matching provider, sourceRevision, byte digest and normalized record does not establish the original Source identity. mediaType, coverage and rights evidence are also not compared to the actual elected importer envelope; an arbitrary rightsEvidence object is enough.",
+      "required_assertions": [
+        "Start with successful, contract-valid single-part and multipart intake request/response pairs and the exact frozen record. Assert original provider/kind/externalId for single parts and the importer's kind-dataset-part / externalId:part:index coordinates for every ordered multipart part. Do not require a multipart part-record to equal the canonical original Source record.",
+        "Change namespace or externalId consistently in both a genuine-shaped intake body and its successful matching observation, leaving bytes and the retained frozen identity unchanged: readiness must refuse for the coordinate mismatch rather than missing receipt. Exercise each of the four retainedAdmissionCases.",
+        "Bind the real importer mediaType, retention, coverage and source rights evidence to the frozen record/part and acknowledged observation. Do not infer authority or rights from a string UUID or a self-consistent unrelated request."
+      ],
+      "owner": "existing audit producer and dataset importer/Source intake owners",
+      "disposition": "Open; repair before treating import validation as complete. No intake was executed for this review."
+    },
+    {
+      "id": "I02",
+      "severity": "high",
+      "classification": "source_finding_not_executed_outcome_failure",
+      "title": "The actual importer record envelope is reduced to record and loses frozen snapshot/edge/image checks",
+      "locations": [
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 664,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 670
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 1155,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 1162
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.test.ts",
+          "line": 345,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 362
+        }
+      ],
+      "reasoning": "For format rezics-dataset-record-v1, validation compares payload.record alone. The real importer serializes snapshot, digest, record, outgoing edges and images. An actually acknowledged envelope with the correct complete normalized DatasetRecord but a wrong snapshot id/digest, omitted or changed outgoing edges, or wrong images passes this comparison. retainedRequest.snapshot may still equal the frozen pin and retainedRequest.payload may accurately digest these wrong bytes: neither check joins the envelope metadata back to that pin/selection. This is distinct from the intentionally different normalized-record and raw/assembled-byte digests.",
+      "required_assertions": [
+        "Exercise actual importer-shaped record envelopes for both single-part and multipart paths. Compare snapshot/digest and exact elected original-index outgoing-edge/image content to frozen normalized inputs, without rewriting their selection, original indexes or digests.",
+        "Construct a positive acknowledged envelope, then change each envelope metadata field while preserving the exact record; generate matching successful intake receipts and matching actual assembled byte metadata so validation reaches the envelope comparison. Assert the specific mismatch refusal.",
+        "Keep valid provider-data/Bangumi api_subject representations only where the existing consumer actually accepts them. Do not substitute a hand-invented minimal envelope for the real importer representation."
+      ],
+      "coverage_gap": "The unit mutation at lines 355-357 replaces part bytes without replacing the recorded intake request/response. It is rejected at import-intake-receipts before payload validation. A generic toThrow cannot prove the envelope guard. The positive fixture uses provider data/api_subject, with an enlarged synthetic MusicBrainz artist for multipart; it does not exercise an actual importer record envelope.",
+      "owner": "existing audit producer and dataset importer owners",
+      "disposition": "Open; no mismatched envelope was submitted to a live owner."
+    },
+    {
+      "id": "I03",
+      "severity": "high",
+      "classification": "source_finding_not_executed_outcome_failure",
+      "title": "Observed synopsis support can be stale, withdrawn or tied to different field heads while satisfying the guard",
+      "locations": [
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 719,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 734
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.test.ts",
+          "line": 399,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 414
+        },
+        {
+          "path": "services/main/src/routes/source-supports.ts",
+          "line": 89,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 119
+        },
+        {
+          "path": "services/main/src/routes/source-supports.ts",
+          "line": 286,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 295
+        },
+        {
+          "path": "tests/qa/support/import-outcomes.ts",
+          "line": 773,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 801
+        }
+      ],
+      "reasoning": "The optional synopsisSupport branch correctly demands a matching control URL/support id and private management id/source/target/conversion. It does not join the expectedWorkHead, field/content/control basis, source mapping, mapped value, actingSubject or full terminal control result to the target, nor management state/slot/mappingRevision/valueDigest/nativeRevision/graphReceipt/headGuarantee/outcome to that result. A genuine old successful source-control receipt (including replay), together with a current management receipt now marked withdrawn for the same support/source/conversion, still satisfies every predicate. The existing private support schema explicitly carries those distinguishing fields. The positive unit bypasses the real request contract: it omits required expectedWorkHead, basis, value, source.mapping and actingSubject and fabricates a response containing only support; its private response omits the management fields. That passing shape does not demonstrate an executable existing-owner prerequisite.",
+      "required_assertions": [
+        "Keep synopsisSupport absent when unobserved. When present, start from a contract-valid actual command/result and the existing private management response, joining the exact target/slot, pre-command work and field basis, resulting content/control heads, original source record/observation/conversion, mapping and support receipt coordinates.",
+        "Refuse a withdrawn or wrong-slot support, stale/mismatched work/native/control/content head, wrong mapping/normalization/value digest or receipt guarantee, unrelated caller and reused support result from a different target. Use an otherwise valid prerequisite and assert the specific failed join.",
+        "Preserve the independent same-value human confirmation and withdrawal/replay assertions in import-outcomes. Do not move proposed Source admission success into setup or fabricate new server interface results."
+      ],
+      "owner": "existing audit producer and native field/Source support owners",
+      "disposition": "Open; source/dataflow finding, with no executed editorial or support outcome."
+    },
+    {
+      "id": "I04",
+      "severity": "medium",
+      "classification": "source_finding_not_executed_outcome_failure",
+      "title": "Several new prerequisite refusals lose the existing owner and exact blocked stage",
+      "locations": [
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 37,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 54
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 569,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 573
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 674,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 690
+        }
+      ],
+      "reasoning": "Missing real Bangumi conversion/proposal, missing exact retainedRequest, or mismatched optional conversion/binding/support calls use requireFact, which throws an ordinary Error. build's failed-attempt handler labels these preparation / owner-stage, unlike missing frozen inputs (retained-source/import-retained-inputs) and missing actual intakes (dataset-importer/import-intake-receipts). Readiness is refused, but the new guards do not supply the required existing owner and precise blocked prerequisite. An unavailable proposed retained-conversion result must continue to be an outcome-body observation; only genuinely required legacy/setup prerequisites should be owner-blocked.",
+      "required_assertions": [
+        "For absent required legacy Bangumi conversion/proposal and missing frozen request inputs, assert AuditCorpusBlocked with the existing Source or importer owner and the actual blocked stage before any manifest publication.",
+        "Exercise optional present-but-unmatched bindings/support with otherwise valid input and retain exact refusal provenance. Keep absence of optional retainedBinding/synopsisSupport acceptable.",
+        "Assert that a missing proposed successful conversion response does not block ordinary import setup; the independent admission assertion observes it in the body."
+      ],
+      "owner": "existing audit producer, dataset importer and Source legacy-conversion/proposal owners",
+      "disposition": "Open. Generic refusal is safer than publication, but not the precise prerequisite handoff requested."
+    }
+  ],
+  "predecessor_findings": [
+    {
+      "id": "F01",
+      "severity": "high",
+      "priority": "P1",
+      "classification": "carried_forward_source_finding_not_executed_outcome_failure",
+      "title": "Supported bounded dataset selection is rejected and never forwarded",
+      "concrete_source_case": "For a complete selectDatasetRoots result whose elected closure is smaller than its immutable parent, inspectAuditRecipe unconditionally adds a dataset-import-selection blocker. liveAuditRuntime.import also requires wholeSnapshot and omits options.selection. At this same pinned tree DatasetImportOptions.selection already exists and importDataset selects/persists the original-index view before opening an API session. The claimed maxRecords-only prerequisite is false at the final tree.",
+      "impact": "An admitted bounded source selection cannot reach preparation; the prerequisite table requests an API seam already present. Importing the whole parent instead would evade the elected preparation workload and source closure.",
+      "attribution": "The producer guard and omitted argument are owner code. Selection support landed in non-owner wave commit 9aafcf3a9d; this review evaluates final composition without attributing that importer change to G-2791.",
+      "required_assertions": [
+        "A complete non-prefix selection is passed as the existing DatasetSelectionOptions to importDataset with its immutable parent; original record/edge/image indexes and parent digests are preserved.",
+        "A refused/incomplete selection makes no API call. The adapter imports the entire elected view, never maxRecords or a rewritten snapshot/digest."
+      ],
+      "disposition": "Producer integration and prerequisite wording need repair. Ask the existing dataset importer owner to confirm the supported pinned selection contract and any identity-journal constraints; do not commission a replacement selection API.",
+      "execution": "Source trace only; no import or preparation was executed.",
+      "predecessor_locations": [
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 283,
+          "end_line": 286,
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 881,
+          "end_line": 903,
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 209,
+          "end_line": 216,
+          "note": "existing owner interface",
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 698,
+          "end_line": 710,
+          "note": "existing selected-view implementation",
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "docs/testing/audit-corpus-prerequisites.md",
+          "line": 80,
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "tests/qa/fixtures/audit-corpus-contract.ts",
+          "line": 181,
+          "end_line": 183,
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        }
+      ],
+      "locations": [
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 277,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 295
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 1027,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 1054
+        },
+        {
+          "path": "docs/testing/audit-corpus-prerequisites.md",
+          "line": 85,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199"
+        }
+      ],
+      "current_disposition": "open_source_finding; import-only correction does not resolve this independent finding",
+      "current_review": "Rechecked at the correction pin against the relevant consumer/owner caller. Required assertions are retained; no new execution or outcome confirmation."
+    },
+    {
+      "id": "F02",
+      "severity": "high",
+      "priority": "P1",
+      "classification": "carried_forward_source_finding_not_executed_outcome_failure",
+      "title": "Fresh import staging loses the journals that bind original source records to native Works",
+      "concrete_source_case": "On a fresh isolated restore containing the 113 original Works, import a frozen Work record already represented in originals. The producer copies snapshot.json and blobs into a new run-local inputRoot, but supplies neither the original import journals nor an admitted native binding interface. importDataset can reuse identities only from that inputRoot/imports and matching mainOrigin/actingSubject/dataEpoch. The new root has no such journal; the fresh localhost endpoint also participates in replay-key identityContext. The record therefore enters freshWorks with expectedWorkHead:null and no input.work; the service derives Work/Main/revisions from a new admission. verifyOriginals merely rereads the old bindings, so retaining the old Work alongside a duplicate does not fail that check.",
+      "impact": "Original IDs may remain present while projections/relationships adopt newly created duplicates. Existence checks do not establish replay onto the same original 113 source-to-native identities or preserved original edge/role correspondence.",
+      "required_assertions": [
+        "For every imported original source identity, the importer result/journal resolves to the retained resource, Main, revision and applicable occurrence/role bindings; no second Work is admitted.",
+        "Replay after a restored endpoint change uses the existing owner-supported journal/receipt identity mechanism and preserves uncertain-request custody. Count and identity assertions detect duplication, not merely survival of old reads."
+      ],
+      "disposition": "Producer repair needs an existing importer/journal owner decision for safe retained-binding reuse across isolated origins. Do not manufacture a journal, overwrite historical requests, map by title, inject business state or assign replacement IDs.",
+      "execution": "Conditional source case for overlapping imported/original Work records. No duplicate was created or observed in a live outcome.",
+      "predecessor_locations": [
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 889,
+          "end_line": 910,
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 421,
+          "end_line": 430,
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 455,
+          "end_line": 465,
+          "note": "journal reuse",
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 779,
+          "end_line": 805,
+          "note": "origin/identity-scoped empty journal",
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 1237,
+          "end_line": 1261,
+          "note": "new Work imports",
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "services/main/src/modules/work/catalogue-import.ts",
+          "line": 108,
+          "end_line": 111,
+          "note": "new admission-derived native identities",
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        }
+      ],
+      "locations": [
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 423,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 433
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 1033,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 1056
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 779,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 805
+        },
+        {
+          "path": "scripts/datasets/import.ts",
+          "line": 1237,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 1261
+        }
+      ],
+      "current_disposition": "open_source_finding; import-only correction does not resolve this independent finding",
+      "current_review": "Rechecked at the correction pin against the relevant consumer/owner caller. Required assertions are retained; no new execution or outcome confirmation."
+    },
+    {
+      "id": "F03",
+      "severity": "high",
+      "priority": "P1",
+      "classification": "carried_forward_source_finding_not_executed_outcome_failure",
+      "title": "Nonterminal and rejected publication responses can complete a successful stage",
+      "concrete_source_case": "A recipe command POST /v1/content-publications can set expected status 202. The real route returns 202 for result.status=pending. A rejected publication returns 200 and can likewise match expected status 200. assertAuditRecipe accepts both; AuditRecorder.command checks only the numeric match, publishes receipt/command bindings and allows stage-completed. There is no required terminal publication-body assertion. A recipe whose generic readiness probes concern other records can continue without proving this publication succeeded.",
+      "impact": "The recorded HTTP answer is genuine, but it is promoted into the producer successful-stage namespace while publication is pending or rejected. Dependent references and a ready source are not tied to exact terminal publication/eligibility receipts.",
+      "required_assertions": [
+        "A real pending 202 or rejected 200 is retained as evidence and cannot satisfy a successful publication prerequisite or dependent stage.",
+        "Successful publication/eligibility checks bind the exact Work/Content identity, revision, digest, epoch, preparation/head, caller and terminal state returned by the owning route; an HTTP success code alone is insufficient."
+      ],
+      "disposition": "Producer stage/receipt completion guards need repair using existing route/result contracts. No new Book Structure-publication operation is needed.",
+      "execution": "Source trace only; no publication request was sent.",
+      "predecessor_locations": [
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 155,
+          "end_line": 165,
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 395,
+          "end_line": 410,
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 514,
+          "end_line": 520,
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "services/main/src/routes/content.ts",
+          "line": 323,
+          "end_line": 351,
+          "note": "existing publication status semantics",
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        }
+      ],
+      "locations": [
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 129,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 169
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 387,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 419
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 518,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 521
+        },
+        {
+          "path": "services/main/src/routes/content.ts",
+          "line": 323,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 351
+        }
+      ],
+      "current_disposition": "open_source_finding; import-only correction does not resolve this independent finding",
+      "current_review": "Rechecked at the correction pin against the relevant consumer/owner caller. Required assertions are retained; no new execution or outcome confirmation."
+    },
+    {
+      "id": "F04",
+      "severity": "high",
+      "priority": "P1",
+      "classification": "carried_forward_source_finding_not_executed_outcome_failure",
+      "title": "Ready validation accepts projections missing existing consumer setup inventories",
+      "concrete_source_case": "A search projection with the correct envelope/key/namespace, two valid retained realms and records:{} passes assertAuditManifest(search): the record loop has no iterations. The existing consumer requires exactly the 24 independently specified plan keys and distinct IDs in openRestored, before its outcome bodies. Three realms also pass the producer minimum but violate the consumer schema maxItems:2. Recipe stages may be empty, and its two generic visitor predicates are not required to cover the missing search setup or every other consumer stage.",
+      "impact": "Even after a real backup/round trip of unrelated readiness reads, RetainedSources can receive a structurally accepted ready source that the advertised consumer rejects during setup. This does not satisfy all eight projections/18 consumers or the missing-stage refusal requirement.",
+      "required_assertions": [
+        "Before ready publication, each projection satisfies its existing setup schema and exact mandatory inventories, including search two realms, all 24 keys/distinct identities and required command/visibility/pointer premises.",
+        "Omitting a required stage, setup record or exact receipt binding refuses ready publication, even when unrelated visitor 200/404 probes pass.",
+        "Keep independent query/navigation/cursor/nutrition/outcome assertions in their existing bodies. In particular the later information nativeAdmission baseline body assertions must not be converted into producer setup gates."
+      ],
+      "disposition": "Producer completeness/readiness validation needs repair. Add meaningful stack-free conformance coverage using the actual existing setup contracts; do not weaken consumer plans or expected outcomes.",
+      "execution": "Static empty-inventory/schema counterexamples; no consumer setup or product outcome was run.",
+      "predecessor_locations": [
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 150,
+          "end_line": 169,
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 543,
+          "end_line": 548,
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 689,
+          "end_line": 697,
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "tests/qa/integration/outcomes/catalogue/search-intent.test.ts",
+          "line": 70,
+          "end_line": 94,
+          "note": "consumer schema",
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "tests/qa/integration/outcomes/catalogue/search-intent.test.ts",
+          "line": 222,
+          "end_line": 227,
+          "note": "exact setup inventory",
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        }
+      ],
+      "locations": [
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 835,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 843
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 537,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 554
+        },
+        {
+          "path": "tests/qa/integration/outcomes/catalogue/search-intent.test.ts",
+          "line": 70,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 94
+        },
+        {
+          "path": "tests/qa/integration/outcomes/catalogue/search-intent.test.ts",
+          "line": 222,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 240
+        }
+      ],
+      "current_disposition": "open_source_finding; import-only correction does not resolve this independent finding",
+      "current_review": "Rechecked at the correction pin against the relevant consumer/owner caller. Required assertions are retained; no new execution or outcome confirmation. Import setup has additional necessary guards, but the search empty-inventory/minimum-only cardinality counterexample remains. Optional information nativeAdmission success stays in bodies."
+    },
+    {
+      "id": "F05",
+      "severity": "high",
+      "priority": "P1",
+      "classification": "carried_forward_source_finding_not_executed_outcome_failure",
+      "title": "Flat string provenance does not bind typed identity, revision or generation coordinates",
+      "concrete_source_case": "AuditRecorder.bind collects every string recursively. command:<id> includes the submitted request body, caller, path and response, so a literal native IRI supplied as prose/evidence enters observed even if no owner result created or identified that resource. A later projection using that IRI passes assertAuditNativeProvenance. Any observed string can also satisfy modelGeneration/dataEpoch/sequence checks, with no typed owner/revision association. UUID Content revisions and urn:rezics:variant coordinates are not matched by the native-IRI guard, and generation keys such as indexGeneration/selectedGeneration/restoreGeneration are not covered by the narrow key expression.",
+      "impact": "The producer can accept body-only/native or unrelated-generation literals as owner-bound coordinates. Membership in a global string set does not establish exact resource/revision/source/model/restore/persona joins across preparation, projection, replay and restore.",
+      "required_assertions": [
+        "A native IRI occurring only in a request body or unrelated response field cannot become a created-resource/revision binding.",
+        "UUID/URN and native-IRI coordinates use their actual owning contract and are validated as the right coordinate for the exact resource, caller and receipt.",
+        "A generation token observed for another owner/resource/phase, or merely as unrelated text, cannot satisfy a source/model/index/restore generation reference. Preserve exact returned token types and joins rather than minting counters."
+      ],
+      "disposition": "Producer provenance representation/validation needs repair through typed owner results and explicit receipt-coordinate bindings. Source expectations may remain literals; they must not certify successful native operations.",
+      "execution": "Source dataflow inspection only; no forged resource or generation was executed.",
+      "predecessor_locations": [
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 298,
+          "end_line": 320,
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 361,
+          "end_line": 363,
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 390,
+          "end_line": 410,
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 546,
+          "end_line": 547,
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        }
+      ],
+      "locations": [
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 302,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 322
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 363,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 365
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 491,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 494
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 550,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 553
+        }
+      ],
+      "current_disposition": "open_source_finding; import-only correction does not resolve this independent finding",
+      "current_review": "Rechecked at the correction pin against the relevant consumer/owner caller. Required assertions are retained; no new execution or outcome confirmation. Binding full frozen record inputs also adds literal strings; that does not make them typed owner-created coordinates."
+    },
+    {
+      "id": "F06",
+      "severity": "medium",
+      "priority": "P2",
+      "classification": "carried_forward_source_finding_not_executed_outcome_failure",
+      "title": "Projected command evidence is not required to belong to the retained executed receipt set",
+      "concrete_source_case": "The producer now writes genuine private single-command JSON evidence and exposes receipt:<id>, matching the consumer format. However a recipe can place literal evidence:[{path:...,sha256:...}] in a search record. assertAuditManifest only checks that evidence is nonempty; it never reads/checks the file or requires membership in recorder.receiptPins/sourcePins and the exact successful command binding. A missing or synthetic command file can survive producer ready validation and fail only the independent consumer; a separately supplied JSON file with an invented answer is not authenticated by these guards.",
+      "impact": "Correct file formatting is implemented, but custody of every projected successful command receipt is not enforced. The ready manifest need not bind the actual executed method/path/key/caller/status/answer that created its exact record.",
+      "required_assertions": [
+        "Every projected command-evidence path/hash resolves within private worktree custody to the matching retained executed single-command receipt, with the target identity in the owning result and the correct request/caller/replay key.",
+        "A nonexistent, altered, unrelated or literal synthetic evidence file cannot satisfy readiness; hash checks alone must not promote an invented successful answer. Preserve the consumer single-JSON contract and outcome assertions."
+      ],
+      "disposition": "Repair producer projection/evidence linkage. Continue retaining the real single-command JSON files and the full failed-attempt ledger.",
+      "execution": "Source acceptance gap only; no fake evidence file was created or consumed.",
+      "predecessor_locations": [
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 400,
+          "end_line": 410,
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 529,
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 694,
+          "end_line": 697,
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "tests/qa/fixtures/audit-corpus-contract.ts",
+          "line": 113,
+          "end_line": 119,
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "tests/qa/integration/outcomes/catalogue/search-intent.test.ts",
+          "line": 228,
+          "end_line": 240,
+          "note": "single-command evidence consumer",
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        }
+      ],
+      "locations": [
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 405,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 419
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 533,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199"
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 835,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 843
+        },
+        {
+          "path": "tests/qa/integration/outcomes/catalogue/search-intent.test.ts",
+          "line": 228,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 240
+        }
+      ],
+      "current_disposition": "open_source_finding; import-only correction does not resolve this independent finding",
+      "current_review": "Rechecked at the correction pin against the relevant consumer/owner caller. Required assertions are retained; no new execution or outcome confirmation. The correction improves import-specific command/result matching. It does not authenticate every other projected evidence file against recorder custody."
+    },
+    {
+      "id": "F07",
+      "severity": "high",
+      "priority": "P1",
+      "classification": "carried_forward_source_finding_not_executed_outcome_failure",
+      "title": "Projection stamps baseline/pristine provenance without establishing that product tree",
+      "concrete_source_case": "Call projectAuditManifest(publicDomain, ..., productRevision=<reviewed wave or other candidate head>). It unconditionally emits productRevision=69eac3ceeaf885be70205a70248bc951e9d81cc9. The runtime actually restores/migrates using current-tree owner code and loadCompatibility, while auditBaselineBlockers compares only consumer constants. No original-baseline compatibility receipt is checked. The context projection also emits pristineProduct=the supplied current head and testOverlay:[] despite runtime allowing committed preparation/test overlays and requesting that they be identified separately.",
+      "impact": "A later-wave source/cut can be labelled as original-baseline evidence and accepted by the public-domain baseline metadata guard. Current model/migration/compose/storage compatibility is not proof of original-baseline compatibility; a clean committed tree is not proof of an absent overlay.",
+      "required_assertions": [
+        "When actual product provenance differs from the original product baseline or lacks an admitted baseline-compatible restore/overlay proof, the baseline-only projection refuses rather than rewriting its productRevision.",
+        "Preserve distinct original product SHA, actual product/build/producer SHA, test/helper overlay pins, reviewed wave SHA and source/model/restore generations. A current storage-compatibility digest must not certify an untested baseline combination.",
+        "A committed test/support overlay is recorded separately and cannot be implicitly represented as testOverlay:[] plus pristineProduct=currentHead."
+      ],
+      "disposition": "Producer provenance repair plus existing storage/model/migration/baseline owners must establish the supported original-baseline preparation and restore combination before execution. This review approves no proposed compatibility contract.",
+      "execution": "Source counterexample using the projection parameter and runtime checks only. No original-baseline or later-wave backup was restored.",
+      "predecessor_locations": [
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 57,
+          "end_line": 64,
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 725,
+          "end_line": 729,
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 739,
+          "end_line": 746,
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 804,
+          "end_line": 818,
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "tests/qa/support/catalogue-public-domain.ts",
+          "line": 39,
+          "end_line": 48,
+          "note": "baseline admission consumer",
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "scripts/load/compatibility.ts",
+          "line": 1,
+          "note": "current-tree storage compatibility",
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        }
+      ],
+      "locations": [
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 59,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 66
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 871,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 892
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 949,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 964
+        }
+      ],
+      "current_disposition": "open_source_finding; import-only correction does not resolve this independent finding",
+      "current_review": "Rechecked at the correction pin against the relevant consumer/owner caller. Required assertions are retained; no new execution or outcome confirmation."
+    },
+    {
+      "id": "F08",
+      "severity": "medium",
+      "priority": "P2",
+      "classification": "carried_forward_source_finding_not_executed_outcome_failure",
+      "title": "Host-admission accounting corrupts phase timing and still consumes the absolute deadline",
+      "concrete_source_case": "restoreCatalogueBackup returns raw startupMs containing admission and also admissionWaitMs separately. liveAuditRuntime.open subtracts admission from totalMs, then computes readinessMs=activeTotal-rawRestore-rawStartup. For raw restore 1000 ms, raw startup 110000 ms containing 100000 ms admission, and post-start/readiness/persona work 5000 ms, active total is 16000 ms but emitted readinessMs is -95000 ms. The imports consumer rejects negative values. Independently, AbortSignal.timeout(budget.remaining()) is created before host admission; excluding admission after restore cannot extend that already-running wall-clock signal.",
+      "impact": "Valid admitted work can fail preparation premises or time out even when active preparation fits the unchanged 600-second policy. Timings do not consistently describe active phases.",
+      "required_assertions": [
+        "With nonzero admission, emitted restore/startup/readiness phases are nonnegative, consistently exclude admission once, and their sum is bounded by active total.",
+        "Host admission alone does not exhaust the active deadline; inspection, setup, source work, migrations, shutdown, backup, round trip and cleanup remain charged.",
+        "Keep 600000 ms for complete producer work and a separate existing 600000 ms for each proof restore; do not raise either limit or infer a measured duration from this arithmetic review."
+      ],
+      "disposition": "Producer timing/deadline integration needs repair with the existing budget/restore/admission owners.",
+      "execution": "Arithmetic/source trace only. No waiting, admission, restore or timing measurement was performed.",
+      "predecessor_locations": [
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 809,
+          "end_line": 818,
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 842,
+          "end_line": 847,
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "scripts/load/catalogue-backup.ts",
+          "line": 349,
+          "end_line": 371,
+          "note": "raw timing includes startup admission",
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "tests/qa/support/import-outcomes.ts",
+          "line": 167,
+          "end_line": 173,
+          "note": "nonnegative phase/total premise",
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        }
+      ],
+      "locations": [
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 955,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 958
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 988,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 993
+        },
+        {
+          "path": "scripts/load/catalogue-backup.ts",
+          "line": 349,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 371
+        },
+        {
+          "path": "tests/qa/support/import-outcomes.ts",
+          "line": 167,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 173
+        }
+      ],
+      "current_disposition": "open_source_finding; import-only correction does not resolve this independent finding",
+      "current_review": "Rechecked at the correction pin against the relevant consumer/owner caller. Required assertions are retained; no new execution or outcome confirmation."
+    }
+  ],
+  "projection_and_prove_consumers": [
+    {
+      "projection": "imports",
+      "restore_owner": "producer external isolated copy",
+      "files": [
+        {
+          "path": "tests/qa/integration/outcomes/catalogue/import-fidelity.test.ts",
+          "git_blob": "dd3c33169cefd2a3e6ad0eec84e0e0631e7adf3c",
+          "sha256": "b2c08e0e7e48f11f79c4185cb4f43ab6ebdfda1215895184160cc47b8c785de3",
+          "lines": 35
+        },
+        {
+          "path": "tests/qa/integration/outcomes/catalogue/source-coverage.test.ts",
+          "git_blob": "f1bd63eba4d2b53edd8bf56063f216900950fbb8",
+          "sha256": "5df205a57e9d05339cca06bc67f3f266b23b7e0de54f8040083e3a43fc232ba2",
+          "lines": 42
+        }
+      ],
+      "setup": "openImportFixture validates required env/manifest, matrix/sourceRoot/frozen bytes, source receipts/native bindings, exact SHA/runId, grants and nonnegative preparation timing.",
+      "body_boundary": "Record identity/facts/relations/tags/music, replay, source support withdrawal and atomic refresh remain independent body assertions.",
+      "premises": [
+        "F01",
+        "F02",
+        "F04",
+        "F05",
+        "F07",
+        "F08",
+        "P01",
+        "P02",
+        "P03",
+        "P06"
+      ],
+      "current_disposition": "source-reviewed; setup and independent body boundaries preserved; not executed or ready"
+    },
+    {
+      "projection": "context",
+      "restore_owner": "producer external isolated copy",
+      "files": [
+        {
+          "path": "tests/qa/integration/outcomes/catalogue/contextual-associations.test.ts",
+          "git_blob": "b0872022752ca38ba208738af7cfc3618494da2f",
+          "sha256": "ae80ce136f59af544487eaf2c9c2b6609d85a857b9a09ed4040a565c7ff8ce04",
+          "lines": 165
+        },
+        {
+          "path": "tests/qa/integration/outcomes/catalogue/credits-and-inverse.test.ts",
+          "git_blob": "5805f53b27158264ecd6e9e903526231943f60f0",
+          "sha256": "0727e00509157e112d96a2a90bb35e6a2540b37f61cea0c936a59705b400ef6d",
+          "lines": 218
+        }
+      ],
+      "setup": "contextHarness requires run-local restored manifest, private receipt ledger, real retained personas, finite scoped witnesses, sparse/overflow and obsolete-history controls.",
+      "body_boundary": "First public associations/query HTTP 200 is a body assertion; exact occurrence/credit role/inverse/sparse-tail/cursor/source correlation stays independent.",
+      "premises": [
+        "F02",
+        "F04",
+        "F05",
+        "F07",
+        "P02",
+        "P06"
+      ],
+      "current_disposition": "source-reviewed; setup and independent body boundaries preserved; not executed or ready"
+    },
+    {
+      "projection": "releases",
+      "restore_owner": "producer external isolated copy",
+      "files": [
+        {
+          "path": "tests/qa/integration/outcomes/catalogue/releases-and-media.test.ts",
+          "git_blob": "04477f49a25487dc11220e8f31d91e47c9441a2f",
+          "sha256": "5838a8d50549d49ecb46a9d0297fdba5ef7620f788ed130f8ccee839483a6c05",
+          "lines": 275
+        },
+        {
+          "path": "tests/qa/integration/catalogue-discovery-navigation.test.ts",
+          "git_blob": "8ddee18729419f96f194d24ebce515e9de3834a4",
+          "sha256": "90dc8911b2da6eba9471f9211791ed00ed5c0ed98fa32095f334c07fd2da1803",
+          "lines": 136
+        }
+      ],
+      "setup": "openReleaseMediaFixture validates fixed native release/realization/media/source evidence, licensed captured bytes, backup and restored personas.",
+      "body_boundary": "Advertised methods/profiles/facets/navigation, exact constraints and actual media delivery remain body assertions.",
+      "premises": [
+        "F02",
+        "F04",
+        "F05",
+        "F06",
+        "P02",
+        "P03",
+        "P06"
+      ],
+      "current_disposition": "source-reviewed; setup and independent body boundaries preserved; not executed or ready"
+    },
+    {
+      "projection": "information",
+      "restore_owner": "producer external isolated copy",
+      "files": [
+        {
+          "path": "tests/qa/integration/outcomes/catalogue/supporting-information.test.ts",
+          "git_blob": "04d74fc91c3ebdd1b1a2e0d30be0163c8008f8be",
+          "sha256": "d9070ef332648b933592c46339bcf39053f96ff6134d80ccfdde9880784eac5a",
+          "lines": 84
+        },
+        {
+          "path": "tests/qa/integration/outcomes/catalogue/ordered-domain-read.test.ts",
+          "git_blob": "97c72bf19b2491a813b65eae3b25f22f70e539a9",
+          "sha256": "6d7460fe110436244365fdbb0a0248093ead87581a5f02fa0de294a8c280f6d6",
+          "lines": 71
+        },
+        {
+          "path": "tests/qa/integration/catalogue-partial-read.test.ts",
+          "git_blob": "b3f2fd53ec253a008e9b984dc76d955b384f4de4",
+          "sha256": "5363965ded18d6450c1704b1c2aac5ea19f61780154219a063b021c52e5a8799",
+          "lines": 177
+        },
+        {
+          "path": "tests/qa/integration/collection-domain-roles.test.ts",
+          "git_blob": "c70b79027c5c91f6a2b62a4e33b29a9364984e4d",
+          "sha256": "c6d149bc04ca1080c5c2333950615adccc90b3cae6e798ae19ad9a058dee25fa",
+          "lines": 95
+        }
+      ],
+      "setup": "loadInformationCorpus/openInformationCorpus require complete frozen source identity/value/section counts, inverse/order/collection/recovery controls and retained personas; partial-read proxy selectors must match actual queries.",
+      "body_boundary": "Page/facts/inverse, order/Collection/cursor and partial recovery assertions remain independent. Later nativeAdmission optional inputs and proposed model/source support are checked in bodies, not an excuse to relabel product failures as missing setup.",
+      "premises": [
+        "F02",
+        "F04",
+        "F05",
+        "P02",
+        "P03",
+        "P06",
+        "P07"
+      ],
+      "current_disposition": "source-reviewed; setup and independent body boundaries preserved; not executed or ready"
+    },
+    {
+      "projection": "publicDomain",
+      "restore_owner": "existing consumer corpus-backup driver",
+      "files": [
+        {
+          "path": "tests/qa/integration/catalogue-real-book-reading.test.ts",
+          "git_blob": "2a170a2a17c5ad7e56c08349821d39963491db92",
+          "sha256": "f7e73b921abc432ea86f8abeaf9447b74e18ace1c31a68a7fc337c097e031598",
+          "lines": 156
+        },
+        {
+          "path": "tests/qa/integration/catalogue-public-recipe.test.ts",
+          "git_blob": "021b34e6be0b8aba9410a23a163276657fbbfaa3",
+          "sha256": "f2e36b4d4063e2e47c08b6233927201ce1515c852e901bd5e008ce085b34d10a",
+          "lines": 62
+        },
+        {
+          "path": "tests/qa/integration/outcomes/recipes/nutrition-and-substitutions.test.ts",
+          "git_blob": "852fd5b1ba1a92d1c2bcbd516249cc391005a7b4",
+          "sha256": "f75e92cfa4f0ec88cc787acbf28d01536b73083cb3c50a8a4d33481a88a4e8bc",
+          "lines": 117
+        }
+      ],
+      "setup": "loadPublicDomainCorpus enforces checkout-contained relative paths, original baseline metadata, 113 original native Works, source quote digests/meaningful chapters and reviewed recipe nutrition/coverage/provenance/alternative premises. Restores require public Book header; Recipe publishes supported exact Structure with a non-null visitor read and private draft control.",
+      "body_boundary": "Release/chapter navigation, exact reading/cooking/scaling/numeric provenance/substitution and own-return assertions remain independent.",
+      "premises": [
+        "F02",
+        "F03",
+        "F04",
+        "F05",
+        "F07",
+        "P03",
+        "P04",
+        "P06"
+      ],
+      "current_disposition": "source-reviewed; setup and independent body boundaries preserved; not executed or ready"
+    },
+    {
+      "projection": "search",
+      "restore_owner": "existing consumer corpus-backup driver",
+      "files": [
+        {
+          "path": "tests/qa/integration/outcomes/catalogue/search-intent.test.ts",
+          "git_blob": "7cbc01c63545c525d25de8942bf9efbfb7b9be9a",
+          "sha256": "17de769653392db4f6ecb3ed6ef914c224c0910695997dc41f29a97b84c8b41c",
+          "lines": 500
+        }
+      ],
+      "setup": "Existing retained envelope, exactly two realms, 24 exact plan records, unique native IDs, private checksummed single-command JSON, method/path/status/answer identity, restored public/private visibility and exact pointers are checked before bodies.",
+      "body_boundary": "Intent plan queries, fields/scope/ranking/cursors/executable links remain independent; no query snapshot is used as the producer oracle.",
+      "premises": [
+        "F03",
+        "F04",
+        "F05",
+        "F06",
+        "P02",
+        "P06"
+      ],
+      "current_disposition": "source-reviewed; setup and independent body boundaries preserved; not executed or ready"
+    },
+    {
+      "projection": "identity",
+      "restore_owner": "existing identity-reader helper",
+      "files": [
+        {
+          "path": "tests/qa/integration/outcomes/realm/identity-discovery.test.ts",
+          "git_blob": "6c46479e5aed04315fea258b01f7742382ea1b64",
+          "sha256": "9968c98b679ef125abdd75fff9545a5e1f0ae1bf120c1da1e6d25a66498fd77b",
+          "lines": 167
+        },
+        {
+          "path": "tests/qa/integration/audit-public-reading.test.ts",
+          "git_blob": "1fdb07b567b2bdb7c6ccf963864861e33329171a",
+          "sha256": "d76938aaf9776926c9520c374467ec0a41c6290c6c0d8d8c17c124ef50dcfc41",
+          "lines": 240
+        }
+      ],
+      "setup": "Retained manifest/hash/compatibility, public/empty/private/unpublished Books, chapter exact Content/publication/eligibility, public Main/default selection, retained empty Account/personas and OAuth reader callbacks precede body reached() evidence. Manifest reuse bypasses the old createBook build fallback.",
+      "body_boundary": "Discovery, exact chapter/default/phrase/cursor results, concealment, refusal/unavailable recovery and Account survival remain independent. Historical failures reached none.",
+      "premises": [
+        "F03",
+        "F04",
+        "F05",
+        "P04",
+        "P05",
+        "P06"
+      ],
+      "current_disposition": "source-reviewed; setup and independent body boundaries preserved; not executed or ready"
+    },
+    {
+      "projection": "author",
+      "restore_owner": "existing author-management helper; lifecycle restores per beforeEach",
+      "files": [
+        {
+          "path": "tests/qa/integration/outcomes/realm/studio-inventory.test.ts",
+          "git_blob": "622956753c2e10a7de7e8f09fd7751b28f3148b2",
+          "sha256": "9dee3f417dd78c34c8e63284ea57472cca051aa0a47880608d34a99f9b1242ae",
+          "lines": 237
+        },
+        {
+          "path": "tests/qa/integration/outcomes/realm/published-author-lifecycle.test.ts",
+          "git_blob": "7876fc50360472c72a364d3b44649dac38382fc8",
+          "sha256": "d9e9270968dd6c6c591edaa5fdc6d30cedb54b36eb86611cd60d4359489cec09",
+          "lines": 322
+        }
+      ],
+      "setup": "Retained source recipe digest/current compatibility, independent realms/authority, inventory, Book Main text, chapter/Post Content, separate supported Recipe Structure adoption and member replies are restored through the existing helper.",
+      "body_boundary": "AMGT01 inventory/sorts/cursors/occurrence counts and AMGT02 lifecycle/adoption/history/private/public observations stay in bodies. Last historical attempt stopped at backup certification before an AMGT01 assertion.",
+      "premises": [
+        "F02",
+        "F03",
+        "F04",
+        "F05",
+        "P02",
+        "P04",
+        "P06"
+      ],
+      "current_disposition": "source-reviewed; setup and independent body boundaries preserved; not executed or ready"
+    }
+  ],
+  "existing_owner_prerequisites": [
+    {
+      "id": "P01",
+      "classification": "existing_interface_not_missing_api",
+      "owners": [
+        "dataset selection/import/journal owner"
+      ],
+      "interfaces": [
+        "scripts/datasets/selection.ts::selectDatasetRoots",
+        "scripts/datasets/import.ts::DatasetImportOptions.selection",
+        "scripts/datasets/import.ts::reuseNativeIdentities/importDataset"
+      ],
+      "question": "Confirm and consume the existing pinned selected-parent options. Which supported original-journal/binding receipts can be reused after a restored origin changes while preserving all 113 native identities and uncertain request custody?",
+      "related_findings": [
+        "F01",
+        "F02"
+      ],
+      "approval": "No replacement interface or synthetic journal contract approved.",
+      "current_disposition": "open; required for any later retained import admission",
+      "precise_blocked_stage": "selected-view forwarding and original journal/replay identity reuse",
+      "review_execution": "none; existing owner prerequisite carried forward, not a missing API approval"
+    },
+    {
+      "id": "P02",
+      "classification": "mapper_and_source_adoption_owner_gaps",
+      "owners": [
+        "dataset native field/relation/credit/release/media owners",
+        "Source/model/adoption owners"
+      ],
+      "interfaces": [
+        "scripts/datasets/native/fields.ts::projectDatasetFields (pure plan)",
+        "scripts/datasets/native/relations.ts::datasetRelationMapper",
+        "scripts/datasets/native/credits.ts::DatasetCreditAdoptionBinding/datasetCreditMapper",
+        "scripts/datasets/native/releases.ts::DatasetReleaseCorrespondence/datasetReleaseMapper",
+        "scripts/datasets/native/media.ts::datasetMediaMapper",
+        "scripts/datasets/types.ts::DatasetNativeMapper"
+      ],
+      "question": "Supply or identify actual registered mapper id/revision and acknowledged conversion/observation/proposal/adoption/coverage receipts for every elected original record/edge/role. Credits need source/native ordinal, expected head, base support and correspondence; releases need source reference plus exact Work/release/projection/realization correspondence verified through existing GETs. Which source/model generations and unsupported dispositions are actually returned?",
+      "distinction": "Only the media mapper is registered by the default producer. Existing relation/credit/release implementations do not prove source qualification or completed adoption; descriptive Person is not an Agent, PublicationEvent is not a native Release.",
+      "approval": "No proposed mapper/source/model contract accepted and no raw credit/adoption fallback authorized.",
+      "current_disposition": "open; registered conversion/native adoption prerequisites; broader non-import scope deferred",
+      "precise_blocked_stage": "registered mapper/conversion, exact source/native correspondence and acknowledged adoption/coverage receipts",
+      "review_execution": "none; existing owner prerequisite carried forward, not a missing API approval"
+    },
+    {
+      "id": "P03",
+      "classification": "genuine_missing_custodian_inputs",
+      "owners": [
+        "original frozen corpus custodian",
+        "public-domain/nutrition source owner",
+        "licensed media source owner"
+      ],
+      "interfaces": [
+        "tests/qa/fixtures/audit-corpus-contract.ts::AuditOriginals/AuditEvidence",
+        "tests/qa/support/catalogue-public-domain.ts::sourceQuote/loadPublicDomainCorpus",
+        "tests/qa/fixtures/catalogue-public-domain.ts"
+      ],
+      "question": "Provide the independently pinned original 113 ledger, retained original operator/OAuth state and compatible backup; complete frozen source byte pins/record/edge/role observations; reviewed Book/chapter and Recipe rights/author/quotes; qualified base/per-serving/per-100g coverage/provenance/calculation/author-declared substitutions; real licensed cover/portrait bytes with original record pointer, role, credit, rights and obligations. Which exact retained evidence satisfies each existing consumer cell?",
+      "distinction": "No acquisition was performed. Existing Gutenberg/Open Library references alone do not qualify all requested nutrition/alternative/media cases. Original prose, API outputs, an empty array or unknown coverage cannot substitute for these inputs.",
+      "current_disposition": "open; source custody unresolved, Book/Recipe/nutrition/media acquisition deferred",
+      "precise_blocked_stage": "frozen byte/selection/original113/operator/backup custody; independently qualified source and rights evidence",
+      "review_execution": "none; existing owner prerequisite carried forward, not a missing API approval"
+    },
+    {
+      "id": "P04",
+      "classification": "supported_publication_receipt_and_readiness_premises",
+      "owners": [
+        "Main text/default selection owner",
+        "Content publication/search eligibility owner",
+        "Recipe Structure/source correspondence owner"
+      ],
+      "interfaces": [
+        "services/main/src/routes/contributions.ts",
+        "services/main/src/routes/publication.ts::main-default-selection-v1",
+        "services/main/src/modules/work/select-main.ts",
+        "services/main/src/routes/content.ts::content-publications/content-search-eligibilities",
+        "services/main/src/modules/structure/profiles.ts::workPublicationProfileFor",
+        "services/main/src/modules/work/structured-publication.ts",
+        "services/main/src/modules/work/public-patterns.ts",
+        "tests/qa/support/catalogue-public-domain.ts::publishPublicRecipe"
+      ],
+      "question": "Which actual command bodies and terminal receipts supply exact Main draft/text-publication/default-selection, chapter Content revision/digest/epoch/preparation/publication and separate eligibility, and supported Recipe Structure plus reviewed source correspondence on the admitted baseline? Bind each to persona/authority/source and exact read predicates.",
+      "verified_contracts": [
+        "Book disclosure requires selected public Main text; publishing or making a chapter searchable alone does not disclose its parent Book.",
+        "Default selection returns mainRevision and accepts expectedSelectionHead; its strict input has no expectedMainRevision field.",
+        "Content publication and search eligibility are separate commands/receipts. Pending/rejected publication cannot establish completion.",
+        "book-composition has no supported Work Structure-publication profile; Recipe retains its supported exact Structure-publication route."
+      ],
+      "approval": "No Book Structure-publication API is proposed or approved.",
+      "current_disposition": "open; Book/Recipe/author work deferred by final import-only cut",
+      "precise_blocked_stage": "supported terminal Main/Content/eligibility/Recipe publication and exact visitor readiness",
+      "review_execution": "none; existing owner prerequisite carried forward, not a missing API approval"
+    },
+    {
+      "id": "P05",
+      "classification": "known_existing_helper_setup_mismatch",
+      "owners": [
+        "existing identity-reader-fixture owner"
+      ],
+      "interfaces": [
+        "tests/qa/support/identity-reader-fixture.ts::createBook",
+        "tests/qa/support/identity-reader-fixture.ts::identityReaderFixture"
+      ],
+      "question": "Remove the unsupported final Book work-structure-publication-v1 stage and its Work-head read through the helper owner, preserving the existing Main draft/publication/default-selection, chapter Content/publication/eligibility sequence, all four controls and independent assertions. Do not exercise the missing-manifest fallback during this review.",
+      "attribution": "Pre-existing helper mismatch, not introduced by G-2791 export and not evidence of a missing producer Book API. A correctly retained producer manifest bypasses the helper build fallback; any future fallback execution requires this owner repair.",
+      "historical_evidence": {
+        "qa_run": "20261018t195855-5055f7",
+        "job": "3f79ebcf-cdf9-4317-9a21-ec407fe53fa8",
+        "phase": "beforeAll/create-public-book",
+        "status": 404,
+        "code": "contribution_unavailable",
+        "assertionsReached": false
+      },
+      "predecessor_locations": [
+        {
+          "path": "tests/qa/support/identity-reader-fixture.ts",
+          "line": 113,
+          "end_line": 121,
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        },
+        {
+          "path": "docs/testing/audit-corpus-prerequisites.md",
+          "line": 145,
+          "end_line": 154,
+          "review_pin": "30227838eb190084cfec4eb2966aab80531fc7f7"
+        }
+      ],
+      "current_disposition": "open; helper-owner prerequisite deferred, not a G-2791 source regression",
+      "precise_blocked_stage": "identity-reader createBook final unsupported Book Structure-publication request, before outcome assertions",
+      "review_execution": "none; existing owner prerequisite carried forward, not a missing API approval"
+    },
+    {
+      "id": "P06",
+      "classification": "baseline_model_storage_restore_and_shutdown_owner_prerequisites",
+      "owners": [
+        "retained-source/backup/storage owner",
+        "Account/Access/Content/graph/object owners",
+        "compose/migration/generated-model compatibility owners"
+      ],
+      "interfaces": [
+        "scripts/qa/retained-source.ts::RetainedSources",
+        "scripts/load/catalogue-backup.ts::retainStoppedOwnerBackup/restoreCatalogueBackup",
+        "scripts/qa/fixtures/audit-corpus.ts::stopCorpusSourcePostgres/liveAuditRuntime",
+        "scripts/load/compatibility.ts::loadCompatibility/compatibleLoadStorage",
+        "scripts/load/work-profile-restore-migrations.ts"
+      ],
+      "question": "Establish the original-baseline compose/migration/model/storage combination and retained operator/persona credentials. Diagnose the existing 30-second pg_controldata shutdown-certificate failure through its owner. What supported real stopped certificate plus matching all-owner inventory/hash/graph/object state admits one cut and isolated writable restores at that baseline?",
+      "distinction": "Current-wave loadCompatibility and migrations are not an original-baseline proof. A plan, docker-stop call, mocked unit or file backup alone cannot certify PostgreSQL clean shutdown or matching all-owner custody. Do not bypass the certifier or reuse a live source.",
+      "historical_evidence": {
+        "qa_run": "20261018t200648-4ee118",
+        "job": "07c130ea-16df-41ff-8cbb-cb29c0d9770b",
+        "phase": "backup certification",
+        "failure": "pg_controldata read-only shutdown certifier timed out at 30000 ms with exitCode null",
+        "assertionsReached": false,
+        "body_ms": 197811,
+        "active_ms": 271424,
+        "admission_ms": 13172,
+        "result": "No retained backup, successful preparation duration or AMGT01 body proof."
+      },
+      "current_disposition": "open; no execution or storage admission in this review",
+      "precise_blocked_stage": "original-baseline model/migration/compose compatibility; stopped all-owner certificate and isolated restore",
+      "review_execution": "none; existing owner prerequisite carried forward, not a missing API approval",
+      "current_interface_correction": "stopCorpusSourcePostgres is owned by scripts/load/corpus-backup-driver.ts, imported by audit-corpus.ts; the old interface label is retained as predecessor text only."
+    },
+    {
+      "id": "P07",
+      "classification": "independent_information_model_source_outcome_work",
+      "owners": [
+        "existing information/native-admission/Source/model owners"
+      ],
+      "interfaces": [
+        "tests/qa/fixtures/catalogue-information-contract.ts::InformationCorpus.nativeAdmission",
+        "tests/qa/integration/support/catalogue-information.ts::nativeCases/assertReadableNativeFacts",
+        "tests/qa/integration/outcomes/catalogue/supporting-information.test.ts",
+        "tests/qa/integration/outcomes/catalogue/ordered-domain-read.test.ts"
+      ],
+      "question": "Retain required fixture source identity/value/section premises while allowing the original product baseline to reach independent pending native-admission/support outcome assertions. Which actual owner behavior is implemented and which pending model/source receipt expectations remain product work?",
+      "distinction": "Later unrelated wave commits add optional nativeAdmission and body assertions. Their absence must not be misclassified as corpus setup failure or hidden by changing the assertions; no outcome has been proved here.",
+      "current_disposition": "open; independent product outcome remains unexecuted",
+      "precise_blocked_stage": "information/native-admission Source/model behavior in existing outcome bodies, after legitimate fixture premises",
+      "review_execution": "none; existing owner prerequisite carried forward, not a missing API approval"
+    },
+    {
+      "id": "P08",
+      "classification": "historical_independent_unit_test_premise",
+      "owners": [
+        "existing Structure/composition source-evidence test owner"
+      ],
+      "interfaces": [
+        "composition source evidence joins the selected generation to its exact revision unit",
+        "current native-ID validation"
+      ],
+      "question": "Reconcile the synthetic revision/generation URNs with existing native-ID validators through the test owner without changing the independent source/revision join expectation.",
+      "historical_evidence": {
+        "job": "e9870ddf-e2eb-47ba-b83a-52596d97c8f7",
+        "phase": "before first assertion",
+        "assertionsReached": false,
+        "classification": "test-premise failure",
+        "producer_tests": "19 passed in the same reported job"
+      },
+      "distinction": "This is not an executed composition product failure or a failing producer unit. No correction was made in this review.",
+      "current_disposition": "open; historical test premise, deferred and not a confirmed product failure",
+      "precise_blocked_stage": "composition synthetic revision/generation ID validation before first source-evidence join assertion",
+      "review_execution": "none; existing owner prerequisite carried forward, not a missing API approval"
+    },
+    {
+      "id": "IMPORT-RECEIPTS",
+      "owners": [
+        "existing dataset importer owner",
+        "audit recorder/producer owner"
+      ],
+      "current_disposition": "open; explicit final G-2791 import-only blocker",
+      "precise_blocked_stage": "dataset-importer / import-intake-receipts",
+      "reason": "runtime.import's API callback returns successful request answers to importDataset without AuditRecorder.command binding for each intake. Its summary/receiptFile is not a command:<id> intake receipt. Need actual ordered request/body/status/response and native Source IDs with frozen-byte custody; do not invent them.",
+      "locations": [
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 1046,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 1056
+        },
+        {
+          "path": "scripts/qa/fixtures/audit-corpus.ts",
+          "line": 644,
+          "review_pin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+          "end_line": 661
+        }
+      ]
+    },
+    {
+      "id": "IMPORT-PROPOSED-OUTCOMES",
+      "owners": [
+        "existing Source conversion/normalization/mapping owners",
+        "existing native field/support owners"
+      ],
+      "current_disposition": "unexecuted pending product interface/outcome; absence must not become fabricated successful setup",
+      "precise_blocked_stage": "Independent retained-record admission / replay / mutation-refusal and optional native support outcomes in existing test bodies",
+      "reason": "Source-registered full-record adapter and sole importer wiring named in G-2781/G-2778 remain their owner work. Existing type acceptance and synthetic response cannot establish actual registration, normalization/mapping revision, canonical record, field application or support receipt joins."
+    }
+  ],
+  "historical_execution_evidence": {
+    "producer_handoff": {
+      "source": ".temp/ref/attempt-14.last.md",
+      "disposition": "G-2791 partial and exited; correction source-only tests/types are not ready corpus or outcome evidence.",
+      "reported_checks": [
+        {
+          "job": "a5758b74-8d5a-4af3-8276-63e5d6b17c68",
+          "result": "25 producer tests plus recorded types/lint/guards passed"
+        },
+        {
+          "job": "267bef90-758a-4f0d-abea-e1c82ba7235e",
+          "result": "docs check passed; initial type error corrected in worker history"
+        },
+        {
+          "job": "514033b5-b6e2-4861-a91a-c27501a8fa34",
+          "result": "final post-rebase types passed"
+        }
+      ],
+      "assertion_reach": "Producer tooling/unit assertions only. No real stack/corpus/preparation/retained admission/product outcome."
+    },
+    "identity_before_all": [
+      {
+        "job": "6b07d19a-f509-4c96-9b37-e584b3d38be7",
+        "qa": "20261018t195139-618183",
+        "failure": "over-wide composition request 400 in beforeAll; corrected historically",
+        "outcome_assertions_reached": false
+      },
+      {
+        "job": "3f79ebcf-cdf9-4317-9a21-ec407fe53fa8",
+        "qa": "20261018t195855-5055f7",
+        "failure": "unsupported final Book Structure publication 404 contribution_unavailable in beforeAll",
+        "outcome_assertions_reached": false
+      }
+    ],
+    "composition_unit": {
+      "job": "e9870ddf-e2eb-47ba-b83a-52596d97c8f7",
+      "failure": "synthetic native revision/generation URNs rejected before first assertion",
+      "outcome_assertions_reached": false,
+      "reported_producer_tests": "19 passed in same historical job",
+      "classification": "unconfirmed test premise, not executed product outcome failure"
+    },
+    "author": [
+      {
+        "job": "1cf6c970-e48a-42b8-86e0-d840499a1dde",
+        "qa": "20261018t195727-b5748c",
+        "failure": "depth-2 composition_conflict 409 during preparation; 101075ms body",
+        "outcome_assertions_reached": false
+      },
+      {
+        "job": "07c130ea-16df-41ff-8cbb-cb29c0d9770b",
+        "qa": "20261018t200648-4ee118",
+        "failure": "after public chapter/Post smoke, stopped-backup pg_controldata certificate timed out after 30000ms; no published backup",
+        "reported_timing_ms": {
+          "body": 197811,
+          "active": 271424,
+          "admission": 13172
+        },
+        "outcome_assertions_reached": false
+      }
+    ],
+    "other_reports": "Information missing-corpus attempt reached no product assertion. Public-domain/search corrected baselines unexecuted. Zone reader fixture tests outside these 18 do not establish corpus omission: ready module type assertion precedes link assertions; editors-list lookup throws before mounted-Collection href assertion."
+  },
+  "checks_actually_run": [
+    {
+      "command": "task --taskfile .temp/import-review/Taskfile.yml validate",
+      "recorded_job": "b3d035e4-0086-4ee0-b9e6-c69cb7306079",
+      "step": 1,
+      "result": "pass",
+      "exit_status": 0,
+      "log": ".temp/goal/jobs/b3d035e4-0086-4ee0-b9e6-c69cb7306079.1.log",
+      "log_sha256": "10ccdd2bef2fc741ae95b9c1f1064d9c83ab7fc3e7fb756fcc154b9fd4696550",
+      "assertion_reach": "Report JSON, six exact owner commits and 15-path union, correction paths, eight projections/18 consumers, all four admission cases, F01-F08/P01-P08 dispositions, 95 immutable line references and 53 source blob/hash/line counts, five staged evidence hashes, report-only isolated branch. No production or corpus assertion."
+    },
+    {
+      "command": "task docs:check",
+      "recorded_job": "b3d035e4-0086-4ee0-b9e6-c69cb7306079",
+      "step": 2,
+      "result": "pass",
+      "exit_status": 0,
+      "log": ".temp/goal/jobs/b3d035e4-0086-4ee0-b9e6-c69cb7306079.2.log",
+      "log_sha256": "def8aff96d15454aaf2da5a9e87316dff938b5f3c4b19007a052b389b007d331",
+      "assertion_reach": "13 documentation-check self tests passed; 225 Markdown files checked for local links/fragments/navigation. This does not validate JSON semantics, external URLs, corpus readiness or runtime behavior."
+    },
+    {
+      "command": "task goal -- check",
+      "recorded_job": "b3d035e4-0086-4ee0-b9e6-c69cb7306079",
+      "step": 3,
+      "result": "pass",
+      "exit_status": 0,
+      "log": ".temp/goal/jobs/b3d035e4-0086-4ee0-b9e6-c69cb7306079.3.log",
+      "log_sha256": "354a71494ada500934c4a3e6d2780d3b8a1766e2bfb0954f628b58da589b359b",
+      "assertion_reach": "Types: no TypeScript workspace changed; tests: none named in brief; lint: no source changed; AST passed; 1/44 repository guards selected for report path and passed. No producer, native, integration, browser or outcome tests ran. Dependency preparation was automatic within this check and changed no tracked file.",
+      "check_output": ".temp/goal/check/run-oN2XeD/output.log"
+    }
+  ],
+  "proof_gaps": {
+    "execution_this_review": "No source capture, preparation, stack, shared refresh, backup/restore, native-heavy/integration/browser or baseline/fixed run. No producer tests repeated. Tests:none for this source-report task.",
+    "findings_status": "Source acceptance/dataflow/arithmetic conclusions and concrete required assertions, not newly executed failing outcomes. No assertion reach is claimed for unrun cases, unsupported commands or historical setup failures.",
+    "original_corpus": {
+      "native_binding_count": 113,
+      "policy": "Keep original frozen source bytes and source-pin matrix, selections, exact resource/mainVersion/revision/sourceKey ledger, original edges/roles, credentials and actual command receipt custody. No title matching, fabricated journal/envelope/receipt, new snapshot, prefix import, native business-state insertion or replacement native IDs.",
+      "frozen_matrix": {
+        "path": "tests/qa/fixtures/catalogue/import-outcomes.json",
+        "git_blob": "0330c978cac66bc61121125ff86ec6308180ed19",
+        "sha256": "7bb2ccf430df74728df1a5ee48ca6ee40628d1376bd97ad6f78c0067d023d457",
+        "lines": 20221,
+        "authority": "Immutable matrix is authoritative for complete selected recordKeys/recordDigests, original edgeIndexes/edgeDigest, roots and selection scope; these arrays are referenced rather than rewritten."
+      },
+      "frozen_source_pins_from_independent_matrix": [
+        {
+          "id": "dataset-904aa4496a525e699074",
+          "digest": "904aa4496a525e699074365819fd4f5682755645980c3ef11c220b8df155a7de",
+          "fileSha256": "e32b3489a7a178fba54aa6d9dcbe93aeb57fb3f5ca0deecb2e0d035a2e31a5bd",
+          "createdAt": "2026-10-02T15:11:16.692Z",
+          "provider": "vndb",
+          "roots": [
+            "vndb:vn:v11"
+          ],
+          "edgeDigest": "42baccec81e059c4e32781cca2b2aba990cf926f5e9e93ef71f4b5fb362f31f3",
+          "edgeCount": 10156,
+          "excludedRecordCount": 6540,
+          "selectionScope": "Only these exact records and original edge occurrences; other source fields remain retained, not implicitly adopted. No maxRecords prefix or new capture.",
+          "matrix_pointer": "/sources/0",
+          "record_count": 262,
+          "record_digests_count": 262,
+          "edge_indexes_count": 10156,
+          "selected_record_digests_for_four_admission_cases": {
+            "vndb:vn:v11": "838ca9f503f660bea9faaaf548a5ebe8df2d18c32c8687b4ed92648fcac49c47"
+          }
+        },
+        {
+          "id": "dataset-424753e973cbd3609613",
+          "digest": "424753e973cbd3609613c7ef373d214c9d1576bce1d05da4fe21b23826eef88d",
+          "fileSha256": "89ba2f7bb2b874ec77886bae97007d959c0e3409af1d8581fa7d05a7f9911625",
+          "createdAt": "2026-10-02T15:26:33.567Z",
+          "provider": "bangumi",
+          "roots": [
+            "bangumi:subject:1014"
+          ],
+          "edgeDigest": "aa9d937e2fd8be923a975a0383f1ef4204e627427f7360a8f29b1373046d5a73",
+          "edgeCount": 78,
+          "excludedRecordCount": 16016,
+          "selectionScope": "Only these exact records and original edge occurrences; other source fields remain retained, not implicitly adopted. No maxRecords prefix or new capture.",
+          "matrix_pointer": "/sources/1",
+          "record_count": 80,
+          "record_digests_count": 80,
+          "edge_indexes_count": 78,
+          "selected_record_digests_for_four_admission_cases": {
+            "bangumi:subject:1014": "8a4dfc1161a390bc177ead9d1c28c5d3597e49c33d187ab02ec37fb425d544cd"
+          }
+        },
+        {
+          "id": "dataset-a178e59cbd2efe477b79",
+          "digest": "a178e59cbd2efe477b79547e69fc8d22c9930e8d38cbeff942ca78f31050a949",
+          "fileSha256": "ca9e77b44671bef775b607e2c8799c05eabb79b73f3fb7939ddc0b075b13d9e5",
+          "createdAt": "2026-10-02T15:33:21.883Z",
+          "provider": "musicbrainz",
+          "roots": [
+            "musicbrainz:release-group:7c8f2d45-d764-347a-9ab9-0aa771a3447d"
+          ],
+          "edgeDigest": "3411717f4133c3eac130c22945db7e3d2cf448fae3172fb2559e4e40d013e186",
+          "edgeCount": 6,
+          "excludedRecordCount": 6872,
+          "selectionScope": "Only these exact records and original edge occurrences; other source fields remain retained, not implicitly adopted. No maxRecords prefix or new capture.",
+          "matrix_pointer": "/sources/2",
+          "record_count": 7,
+          "record_digests_count": 7,
+          "edge_indexes_count": 6,
+          "selected_record_digests_for_four_admission_cases": {
+            "musicbrainz:artist:24f1766e-9635-4d58-a4d4-9413f9f98a4c": "84b6143525afb033ebbe301e4f1d7718fa32e2f1f608bc146bd6319ba835ef45",
+            "musicbrainz:release:2ab08baa-b1c6-4aca-8cf7-c31565ef71b4": "10aec6173e99a8da2e85d3023f4bcf977b802a28fca3a8eb7ead410f8c802f01"
+          }
+        }
+      ]
+    },
+    "future_execution_prerequisites": [
+      "Existing owners close required source/custody/mapper and importer receipt prerequisites and manager explicitly admits a separate execution phase.",
+      "Establish original product baseline with separately recorded test/support overlays and compatible source/model/migration/storage/restore generations; never infer it from a current-wave compatibility digest.",
+      "Retain one compatible stopped all-owner backup covering catalogue graph/objects plus Account/Access/Content/relay state and actual operator/persona authority; verify its custody, shutdown certificate and hashes.",
+      "Restore a fresh isolated writable copy per consuming file/body using its existing restore owner, retaining all 113 original native bindings and exact command/authority/publication/readiness joins.",
+      "Use unchanged 600000ms active complete-preparation and separate 600000ms per-restore budgets. Book, Recipe, author, runner and storage prerequisites remain deferred by final import-only scope cut.",
+      "Observe any missing proposed retained conversion/admission result as the independent body outcome, preserving refusal/replay/control/support assertions; do not require invented success to get there."
+    ],
+    "ready_source": false,
+    "baseline_outcome": false,
+    "fixed_outcome": false,
+    "automatic_landing": false
+  }
+}
