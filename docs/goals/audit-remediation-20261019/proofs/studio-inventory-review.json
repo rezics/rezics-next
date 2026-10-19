@@ -9218,5 +9218,252 @@
       "log": ".temp/goal/jobs/bcdfe139-98db-4f04-a66c-df5eb4102d1b.log",
       "result": "13 documentation checker tests passed; 259 Markdown files checked. JSON syntax, preserved prior sections, actual job exits and qualification invariants also validated separately. This is report validation, not product acceptance."
     }
+  },
+  "duplicateRevisionBatchFirstReview": {
+    "reviewedAtUtc": "2026-10-19T16:34:15.984535+00:00",
+    "result": "approve exact two-file duplicate-revision hydration correction on compatible main preimages; source and affected owner regression only",
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independent": true,
+      "candidateAuthoredByReviewer": false,
+      "nestedAgents": 0,
+      "accountOrModelFallback": false,
+      "firstIndependentReviewOfThisTwoPathDelta": true
+    },
+    "scope": "Only the complete parent-to-9aaf diff in the two named files and the directly needed unchanged Content exact-batch contract. All original Studio source, rendered, count, 105-Work and D4-014 evidence/dispositions remain preserved in their existing sections.",
+    "pins": {
+      "source": "9aaf3df4f8b9e75f09a4aa3e828fea85db6b6d20",
+      "parent": "c6d99a317355ba5c83f46efad2c6ae8ca9d63d3f",
+      "sourceWorktree": ".temp/worktrees/g-2753",
+      "cleanExactSourceHeadVerifiedBeforeReading": true,
+      "changedPaths": [
+        {
+          "path": "services/main/src/modules/studio/chapters.ts",
+          "sourceBlob": "39b42541832c5499ff77a7ec18dcf07d0dcd0a09",
+          "parentBlob": "bfd0fc170069cd912842352952742344ec3c28bd",
+          "mainBlobAtQualification": "bfd0fc170069cd912842352952742344ec3c28bd",
+          "mainPreimageCompatible": true
+        },
+        {
+          "path": "services/main/tests/studio-chapter-length.test.ts",
+          "sourceBlob": "f6ae2da595d00c6e6991dc6b3d53fa75e87cbcf9",
+          "parentBlob": "0132036a92f02b9138e1dab575bd7cdcc0315a5a",
+          "mainBlobAtQualification": "0132036a92f02b9138e1dab575bd7cdcc0315a5a",
+          "mainPreimageCompatible": true
+        }
+      ],
+      "onlyTwoRequestedPathsChanged": true,
+      "diffSha256": "ea886918b12e918b8dbd4ecbf054bbb8643d400a6e702ff1b139c4fb2c5c6539",
+      "mainAtInitialReview": "2ae2f5080d546cab9560c4490ac538b01882e930",
+      "mainAtQualification": "475c770b339a80320dd97d2c6a15099ac7f21413",
+      "bothMainPreimagesCompatible": true,
+      "sourceManifest": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/site-AUD011-duplicate-revision-first-review.json",
+        "sha256": "5642ab92cc99b3837f22602190a4239cc15732bbb15d3b0263084446c66a5259"
+      },
+      "unchangedContentContract": {
+        "path": "services/content/src/core.ts",
+        "revision": "9aaf3df4f8b9e75f09a4aa3e828fea85db6b6d20",
+        "blob": "2e1c25587dcb1ec2a593d44306e3f19f0605ee77",
+        "sha256": "0cbab66fbb8fd9cb2d0e0c59953ce9cc30ba785b1dfa93856e6b35421d120802",
+        "lines": "1004-1050; constants 187-188",
+        "unchangedFromParent": true
+      },
+      "testSource": {
+        "revision": "9aaf3df4f8b9e75f09a4aa3e828fea85db6b6d20",
+        "checkout": ".temp/studio-review/duplicate-revision-first-review/source",
+        "detached": true,
+        "cleanTrackedBeforeAndAfter": true,
+        "qaSourceStable": true,
+        "qaSourceFingerprintPrefix": "a1592bb701ea",
+        "productionOrAssertionOverlay": false
+      },
+      "runner": "Main goalctl recorded job and slot; exact candidate Task goal -- test; normal owner-tier QA admission. Automatic supported dependency preparation ran in the owned worker/clone.",
+      "productIntegration": null,
+      "runtime": null,
+      "nativeImage": null,
+      "schema": null,
+      "backupRestoredByReviewer": null,
+      "runtimePinQualification": "No stack or product API/browser execution in this correction review. Existing runtime/native/schema/backup pins remain historical evidence in the earlier sections and owner diagnosis; none is requalified here.",
+      "finalMainVerification": {
+        "source": "475c770b339a80320dd97d2c6a15099ac7f21413",
+        "paths": [
+          {
+            "path": "services/main/src/modules/studio/chapters.ts",
+            "mainBlob": "bfd0fc170069cd912842352952742344ec3c28bd",
+            "matchesReviewedParent": true,
+            "matchesReviewedSource": false
+          },
+          {
+            "path": "services/main/tests/studio-chapter-length.test.ts",
+            "mainBlob": "0132036a92f02b9138e1dab575bd7cdcc0315a5a",
+            "matchesReviewedParent": true,
+            "matchesReviewedSource": false
+          }
+        ],
+        "allPreimagesCompatible": true
+      }
+    },
+    "historicalTrigger": {
+      "evidenceKind": "root-owned genuine negative receipt; not independently rerun by this reviewer",
+      "receipt": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/site-AUD011-actual413-diagnosis.json",
+      "receiptSha256": "49322c7fb5666d7601c5fea39db8644a6d33f977006defab73fde703747d66a6",
+      "case": "original-23-before",
+      "reachedState": "Exact Work and Studio list HTTP 200, then the first original parent/language chapter callback returned HTTP 413 content_limit instead of expected 200.",
+      "actualProductSource": "3d6097238d9bc63de4da2b8fb797774a3da31df2",
+      "actualSupportSource": "9da346a1ec56a7dc2417cb0a8662c2dea8b16900",
+      "answerSha256": "bbb9742487afc6bdbfd4b8275fe34b3a13c253380deacc5ea4faf82a053c4c24",
+      "cause": "Repeated genuine placements can select the same exact revision. The former caller forwarded duplicate revision IDs to ContentCore.readExactBatch, whose unchanged contract rejects duplicates before body hydration.",
+      "laterOriginalCasesReached": false,
+      "negativePreserved": true
+    },
+    "sourceReview": [
+      {
+        "path": "services/main/src/modules/studio/chapters.ts",
+        "lines": "118-134",
+        "finding": "No blocker",
+        "reason": "Hydrates a Set of distinct revision IDs once per existing four-occurrence batch. Results are matched by revisionId, then mapped back in original occurrence order with each occurrence’s own language. Repeated placements remain separate; exact revision identity is preserved."
+      },
+      {
+        "path": "services/main/src/modules/studio/chapters.ts",
+        "lines": "227-237",
+        "finding": "No blocker",
+        "reason": "The caller retains its exact controlled-draft versus published-selected revision choice and identical language fallback. Only revision read deduplication and result association change. Unavailable, missing, denied, corrupt, or non-text bodies yield null lengths; owner errors still propagate."
+      },
+      {
+        "path": "services/main/src/modules/studio/chapters.ts",
+        "lines": "16-99, 137-226, 238-265",
+        "finding": "No blocker in preserved fences",
+        "reason": "The full two-path diff leaves count traversal and completeness, active placement identity, parent/language/continuation read options, initial/final Book authority, writer controls, public/private target masking, live/erasure checks, variant-head rechecks and response ordering unchanged. This is source comparison, not a new disclosure/API acceptance result."
+      },
+      {
+        "path": "services/main/src/modules/studio/chapters.ts",
+        "lines": "19-23, 121-124",
+        "finding": "No budget increase",
+        "reason": "Production input remains one contents page of at most 20 occurrences. Partitioning occurrences in groups of four retains at most five body calls per page and at most four distinct revision IDs per call. Deduplication is per bounded batch; it does not collapse occurrences or enlarge pages, count traversal, variants, or Content byte limits."
+      },
+      {
+        "path": "services/content/src/core.ts",
+        "lines": "1004-1050",
+        "finding": "Unchanged owner contract respected",
+        "reason": "Content requires at most 64 distinct UUID revision IDs and at most 4 MiB per exact batch, checks authorization, snapshot identity, availability, digest and body integrity, and returns revisionId-keyed statuses. The new four-ID subset meets that distinctness contract. The existing authorization callback and surrounding Studio fences are unchanged."
+      },
+      {
+        "path": "services/main/tests/studio-chapter-length.test.ts",
+        "lines": "23-46",
+        "finding": "Meaningful affected regression",
+        "reason": "A strict exact-batch double rejects duplicate requests, checks batch and authorization inputs, and verifies all 23 synthetic placements across 20+3 page inputs retain order and lengths with six bounded reads. This does not constitute genuine native pagination or the original retained 23-occurrence API acceptance."
+      },
+      {
+        "path": "services/main/tests/studio-chapter-length.test.ts",
+        "lines": "48-69",
+        "finding": "Meaningful affected regression",
+        "reason": "Reordered exact snapshots verify matching by revision identity, separate English/Chinese measures for one shared revision, and null unavailable/non-text lengths. The original manuscript-length assertions remain unchanged."
+      }
+    ],
+    "findings": [],
+    "affectedCheck": {
+      "jobId": "job:90587282-011d-48ce-a0ca-574131f4d70d",
+      "exitStatus": 0,
+      "status": "passed",
+      "command": "GOAL_ID=audit-remediation-20261019 bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts slot -- task --dir .temp/studio-review/duplicate-revision-first-review/source goal -- test services/main/tests/studio-chapter-length.test.ts",
+      "jobLog": ".temp/goal/jobs/90587282-011d-48ce-a0ca-574131f4d70d.log",
+      "qaRunId": "20261019t163202-c380c3",
+      "tier": "owner",
+      "qaArtifacts": ".temp/studio-review/duplicate-revision-first-review/source/.artifacts/qa/20261019t163202-c380c3",
+      "junit": {
+        "path": ".temp/studio-review/duplicate-revision-first-review/source/.artifacts/qa/20261019t163202-c380c3/owner.xml",
+        "sha256": "6775cbb99d68965c1af4620c561656f8b7eafb18b7fcd7b1f03ee1536fe83d89"
+      },
+      "testFiles": 1,
+      "testsPassed": 3,
+      "testsFailed": 0,
+      "testsSkipped": 0,
+      "assertionsExecuted": 32,
+      "bodies": [
+        {
+          "name": "STUDIO: a chapter is measured as its writers count it: characters in Chinese and Japanese, words elsewhere",
+          "line": 5,
+          "assertions": 5,
+          "status": "passed",
+          "bodyReached": true
+        },
+        {
+          "name": "Studio hydrates distinct bounded revisions while retaining all 23 repeated placements across pages",
+          "line": 23,
+          "assertions": 25,
+          "status": "passed",
+          "bodyReached": true
+        },
+        {
+          "name": "Studio matches exact snapshots by revision and preserves placement language and unavailable lengths",
+          "line": 48,
+          "assertions": 2,
+          "status": "passed",
+          "bodyReached": true
+        }
+      ],
+      "acceptanceQualification": "Selected owner regression only; QA reports zero acceptance IDs passed and no full qualification. No AMGT, native corpus, original four-case API, lifecycle or browser test body ran."
+    },
+    "verdict": {
+      "sourceApproved": true,
+      "currentMainPreimagesCompatible": true,
+      "action": "Manager may integrate these exact reviewed two-file bytes normally; approval is source-only and independent of the owner’s ongoing genuine replay.",
+      "productRepairProved": false,
+      "originalAud011Closed": false,
+      "newClassClosure": false,
+      "canonicalRegistryEdited": false
+    },
+    "originalCriteriaDisposition": {
+      "D4-014": "Unchanged previously qualified original composed evidence and disposition; no rerun.",
+      "AUD-011": "No new genuine product assertion passed in this addendum. Preserve the original four-chapter record and 23-occurrence evidence, all historical failures and separate count/disclosure/completeness limits. G-2753 retains the original four-case 23/8/0/5 genuine replay on the qualified runner and retained backup.",
+      "D4-002": "Unchanged prior Studio navigation proof and limits; no Discover/class closure.",
+      "AMGT_and_STUDIO01": "Unchanged wider journey limits; no new claim."
+    },
+    "executionBoundary": {
+      "ownerJob93ecb089Interrupted": false,
+      "ownerJob93ecb089ReportReviewed": false,
+      "otherWorkersOrJobsModified": false,
+      "newServers": [],
+      "newScreenshots": [],
+      "newApiCalls": [],
+      "dataPreparationActions": [],
+      "productionEdits": [],
+      "assertionEdits": [],
+      "mainEdits": [],
+      "privateCredentialOrFixtureContentRead": false,
+      "ownedResourcesToStop": []
+    },
+    "evidence": {
+      "sourceVerification": ".temp/studio-review/duplicate-revision-first-review/source-verification.json",
+      "testPremise": ".temp/studio-review/duplicate-revision-first-review/test-premise.json",
+      "completeReviewedDiff": ".temp/studio-review/duplicate-revision-first-review/source.diff",
+      "priorReportPreservation": ".temp/studio-review/duplicate-revision-first-review/report-before.json"
+    },
+    "reportChecks": {
+      "status": "passed",
+      "jobId": "job:67178a4a-7fbc-44c5-be15-4316025a9125",
+      "exitStatus": 0,
+      "command": "GOAL_ID=audit-remediation-20261019 bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "steps": [
+        {
+          "command": "task docs:check",
+          "exitStatus": 0,
+          "log": ".temp/goal/jobs/67178a4a-7fbc-44c5-be15-4316025a9125.1.log",
+          "result": "13 checker tests passed; 259 Markdown files checked."
+        },
+        {
+          "command": "task goal -- check",
+          "exitStatus": 0,
+          "log": ".temp/goal/jobs/67178a4a-7fbc-44c5-be15-4316025a9125.2.log",
+          "fullOutput": ".temp/goal/check/run-nU3wG9/output.log",
+          "result": "AST scan passed. Selected guard scripts/static/one-language-parser-debt.test.ts passed 2 tests and 6 assertions. Types/lint had no changed source files; no test files named in brief."
+        }
+      ],
+      "scope": "Only the claimed report differs from the worker check base. No unchanged Studio source suite, browser journey or owner job was replayed.",
+      "preservationValidation": "Every pre-existing report key/value equals report-before.json; exactly duplicateRevisionBatchFirstReview is added. JSON parsing and git diff --check pass."
+    }
   }
 }
