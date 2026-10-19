@@ -5638,7 +5638,7 @@
       "operation": "<syntax>",
       "rule": "dropped-continuation",
       "expression": "route.items",
-      "context": "356a16711e341aeb7a255c13bfc072ea53bfc9477a47e9882fb2d72d6d0ec7d0"
+      "context": "f7a5c91602b97e606adecd4431be2bf902db300ec6c0837d305156470b373bb6"
     },
     {
       "path": "apps/web/features/zones/site-route.tsx",
@@ -5646,7 +5646,7 @@
       "operation": "<syntax>",
       "rule": "invented-continuation",
       "expression": "{\"type\":\"VariableDeclarator\",\"id\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"cursor\",\"optional\":false,\"typeAnnotation\":null},\"init\":{\"type\":\"CallExpression\",\"callee\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"routeCursor\",\"optional\":false,\"typeAnnotation\":null},\"typeArguments\":null,\"arguments\":[{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"path\",\"optional\":false,\"typeAnnotation\":null},{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"search\",\"optional\":false,\"typeAnnotation\":null}],\"optional\":false},\"definite\":false}",
-      "context": "356a16711e341aeb7a255c13bfc072ea53bfc9477a47e9882fb2d72d6d0ec7d0"
+      "context": "f7a5c91602b97e606adecd4431be2bf902db300ec6c0837d305156470b373bb6"
     },
     {
       "path": "apps/web/features/zones/site-route.tsx",
