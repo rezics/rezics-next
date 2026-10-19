@@ -3,13 +3,21 @@ import { expect, within } from 'storybook/test';
 import { realizations as fixtureRealizations, releases as fixtureReleases, names as fixtureNames, summary } from '../work-levels/fixtures.ts';
 import { copyOf as editionCopy } from '../work-levels/messages.ts';
 import { ReleaseView } from '../work-levels/release-page.tsx';
+import { EditionsSection, RealizationRow } from '../work-levels/editions.tsx';
+import type { SelectedRealizationRead } from '../work-levels/read.ts';
 import { messages as workMessages } from '../work-page/messages.ts';
 import type { Loaded, Realization, Release } from '../work-levels/types.ts';
 import { copyOf } from './messages.ts';
+import { citationNames, citedStatements, predicateLabels } from './fixtures.ts';
+import { StatementSourcesView } from './sources.tsx';
+import { standaloneHrefFor } from './route.ts';
+import { resourceHref } from '../address/path.ts';
 
 // Contract-built states, not evidence of native revision history. The prove phase creates R1/release/R2 through commands.
 const iri = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 if (!fixtureRealizations.ok || !fixtureReleases.ok) throw new Error('Expected edition fixtures');
+const realizationPage = fixtureRealizations.data;
+const releasePage = fixtureReleases.data;
 const selected: Realization = { ...fixtureRealizations.data.items[0]!, id: iri(1), work: iri(2), revision: iri(11),
   source: { kind: 'unresolved', work: iri(2) } };
 const release: Release = { ...fixtureReleases.data.items[0]!, id: iri(3), revision: iri(30),
@@ -88,3 +96,73 @@ export const DeniedRevision: Story = {
 };
 
 export const NativeEvidencePhone: Story = { ...NativeEvidence, globals: { viewport: { value: 'phone' } } };
+
+const safeCfi = 'epubcfi(/6/2!/4,/1:0,/1:8)';
+const withheldClaims = citedStatements(true);
+const claim = withheldClaims.groups[1]!.items[0]!;
+if (claim.kind !== 'statement' || !claim.evidence?.[0]) throw new Error('Expected structured claim evidence');
+claim.evidence[0].locator = { version: 'rezics-locator-v1', source: { type: 'external',
+  representationSha256: claim.evidence[0].representationSha256, mediaType: 'application/epub+zip' },
+  selector: { type: 'EpubCfiSelector', cfi: safeCfi } };
+
+export const WithheldCompoundLocator: Story = {
+  render: () => <div className="mx-auto max-w-4xl px-4 py-6"><StatementSourcesView
+    page={{ ok: true, data: withheldClaims }} labels={predicateLabels} names={citationNames} locale="en" t={copyOf('en')}
+    hrefFor={standaloneHrefFor({}, resourceHref('/e/', selected.work))} /></div>,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const sources = canvas.getByRole('region', { name: 'Sources, licences and evidence' });
+    await expect(within(sources).getByText(safeCfi, { exact: true })).toBeVisible();
+    await expect(within(sources).getByText(copyOf('en').quotationWithheld)).toBeVisible();
+    await expect(sources.textContent).not.toContain('WITHHELD');
+    await expect(sources.querySelector('blockquote')).toBeNull();
+    await expect(sources.querySelector('[data-claim-evidence]')).not.toBeNull();
+  },
+};
+
+export const WithheldCompoundLocatorPhone: Story = { ...WithheldCompoundLocator, globals: { viewport: { value: 'phone' } } };
+
+const refusedSources: SelectedRealizationRead[] = (['missing', 'identity', 'unavailable'] as const).map((failure, index) => ({
+  id: iri(300 + index), work: selected.work, revision: iri(310 + index), read: { ok: false, failure },
+}));
+const translations: Realization[] = refusedSources.map((source, index) => ({ ...selected,
+  id: iri(320 + index), evidence: null, source: { kind: 'realization', work: source.work,
+    realization: source.id, revision: source.revision },
+}));
+
+export const EditionsSourceRefusals: Story = {
+  render: () => <div className="mx-auto max-w-4xl px-4 py-6"><EditionsSection
+    realizations={{ ok: true, data: { ...realizationPage, items: translations, nextCursor: 'opaque-text-next' } }}
+    sources={[]} sourceReads={refusedSources} releases={{ ok: true, data: { ...releasePage, items: [], nextCursor: null } }}
+    names={names} workRef={selected.work.slice(-36)} query={{}} locale="en" t={editionCopy('en')} pageMessages={workMessages.en} /></div>,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    for (const message of [workMessages.en.regionMissing, workMessages.en.regionDenied, workMessages.en.regionUnavailable])
+      await expect(canvas.getByText(message)).toBeVisible();
+    for (const source of refusedSources) {
+      await expect(canvas.getByText(source.id, { exact: true })).toBeVisible();
+      await expect(canvas.getByText(`${copyOf('en').realizationRevision}: ${source.revision}`)).toBeVisible();
+    }
+    await expect(canvas.queryByText(editionCopy('en').continuityOther)).toBeNull();
+    await expect(canvasElement.querySelectorAll('[data-source-refusal]')).toHaveLength(3);
+    await expect(canvas.getByRole('link', { name: editionCopy('en').showMore })).toHaveAttribute('href',
+      expect.stringContaining('realizationsAfter=opaque-text-next'));
+  },
+};
+
+export const EditionsSourceRefusalsPhone: Story = { ...EditionsSourceRefusals, globals: { viewport: { value: 'phone' } } };
+
+export const EditionsEvidenceReferences: Story = {
+  render: () => <div className="mx-auto max-w-4xl px-4 py-6"><ul className="grid gap-5">
+    <RealizationRow realization={{ ...selected, evidence: evidenceId }} all={[]} releases={[]} names={names} locale="en" t={editionCopy('en')} />
+    <RealizationRow realization={{ ...selected, id: iri(401), evidence: 'https://example.test/source/revision/1' }}
+      all={[]} releases={[]} names={names} locale="en" t={editionCopy('en')} />
+  </ul></div>,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText(evidenceId, { exact: true })).toBeVisible();
+    await expect(canvasElement.querySelector(`a[href="${evidenceId}"]`)).toBeNull();
+    await expect(canvas.getByRole('link', { name: 'https://example.test/source/revision/1' })).toHaveAttribute('href',
+      'https://example.test/source/revision/1');
+  },
+};

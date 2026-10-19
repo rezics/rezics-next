@@ -87,6 +87,7 @@ export async function EditionsPage({
       <EditionsSection
         realizations={realizations}
         sources={sources}
+        sourceReads={sourceReads}
         releases={releases}
         names={await namesOf(references)}
         workRef={workRef}

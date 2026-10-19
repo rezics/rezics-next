@@ -44,6 +44,10 @@ type Evidence = NonNullable<Extract<StatementItem, { kind: 'statement' }>['evide
 /** Retained locators/methods are structured public data, not executable links or a fresh rights assessment. */
 function RecordedValue({ value, t, quoteWithheld = false }: { value: unknown; t: Copy; quoteWithheld?: boolean }) {
   if (value === null || value === undefined) return <span className="text-muted-foreground">{t.notSupplied}</span>;
+  // The API owns CFI redaction and retains safe paths. An older unredacted
+  // compound selector is never a display fallback for a withheld quotation.
+  if (quoteWithheld && typeof value === 'string' && value.includes('epubcfi(') && (value.includes('[') || value.includes(']')))
+    return <span className="text-muted-foreground">{t.notSupplied}</span>;
   if (Array.isArray(value)) return <ol className="grid gap-1 ps-4 [list-style:decimal]">
     {value.map((child, index) => <li key={index}><RecordedValue value={child} t={t} quoteWithheld={quoteWithheld} /></li>)}
   </ol>;

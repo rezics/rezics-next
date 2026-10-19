@@ -4,14 +4,18 @@ import { buttonVariants } from '@rezics/ui/button';
 import { LocalizedText } from '@rezics/ui/localized-text';
 import { BookCopyIcon } from 'lucide-react';
 import type { UiLocale } from '../../i18n/define.ts';
+import { copyOf as detailCopy } from '../entity-page/messages.ts';
+import { sourceHref } from '../entity-page/sources.tsx';
 import { contentText } from '../language/untagged.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import { releaseLookupHref } from '../release-lookup/route.ts';
 import Link from '../shell/localized-link.tsx';
 import { languageName } from '../work-page/format.ts';
 import type { WorkPageMessages } from '../work-page/messages.ts';
+import { messages as workMessages } from '../work-page/messages.ts';
 import { Region, RegionFailure } from '../work-page/region.tsx';
 import type { Copy } from './messages.ts';
+import type { SelectedRealizationRead } from './read.ts';
 import { NameLink } from './names.tsx';
 import { anchors, editionsHref, type EditionsQuery, releaseHref } from './route.ts';
 import type { Loaded, Names, Realization, RealizationPage, Release, ReleasePage } from './types.ts';
@@ -37,8 +41,9 @@ function Status({ status, t }: { status: Release['status']; t: Copy }) {
 }
 
 /** Where a realization's text comes from: another realization of the same Work, its Main Version, or nowhere known yet. */
-function SourceContinuity({ realization, all, names, locale, t }: {
+function SourceContinuity({ realization, all, sourceReads, names, locale, t }: {
   realization: Realization; all: readonly Realization[]; names: Names; locale: UiLocale; t: Copy;
+  sourceReads: readonly SelectedRealizationRead[];
 }) {
   const source = realization.source;
   if (source.kind === 'unresolved') return <span>{t.continuityUnresolved}</span>;
@@ -48,6 +53,12 @@ function SourceContinuity({ realization, all, names, locale, t }: {
       <NameLink reference={source.mainVersion} names={names} unavailable={t.unavailable} unnamed={t.unnamed} /></span>;
   }
   const from = all.find(item => item.id === source.realization && item.revision === source.revision);
+  const selected = sourceReads.find(item => item.id === source.realization && item.revision === source.revision);
+  if (!from && selected && !selected.read.ok) return <div data-source-refusal className="grid min-w-0 gap-2">
+    <p className="[overflow-wrap:anywhere]">{source.realization}</p>
+    <p className="text-muted-foreground text-xs [overflow-wrap:anywhere]">{detailCopy(locale).realizationRevision}: {source.revision}</p>
+    <RegionFailure title={t.realizationUnavailable} failure={selected.read.failure} messages={workMessages[locale]} />
+  </div>;
   return from ? <span>{t.continuityFrom}{' '}<LanguageName tag={from.language} locale={locale} /></span>
     : <span>{t.continuityOther}</span>;
 }
@@ -62,8 +73,9 @@ function Parties({ label, agents, names, t }: { label: string; agents: readonly 
 }
 
 /** One realization: who made this text and how far it can be trusted. */
-export function RealizationRow({ realization, all, releases, names, locale, t, showLanguage = false, showEvidence = true, anchor }: {
+export function RealizationRow({ realization, all, sourceReads = [], releases, names, locale, t, showLanguage = false, showEvidence = true, anchor }: {
   realization: Realization; all: readonly Realization[]; releases: readonly Release[]; names: Names; locale: UiLocale; t: Copy;
+  sourceReads?: readonly SelectedRealizationRead[];
   /** True where no group heading already names the language (a release's own page). */
   showLanguage?: boolean;
   /** A detail host can collect evidence once at its page end. */
@@ -72,8 +84,8 @@ export function RealizationRow({ realization, all, releases, names, locale, t, s
   anchor?: string;
 }) {
   const covering = releases.filter(release => release.coverage.some(entry => entry.realization === realization.id));
-  const evidence = realization.evidence?.startsWith('https://') && !realization.evidence.startsWith('https://rezics.com/id/')
-    ? realization.evidence : null;
+  const evidence = realization.evidence;
+  const evidenceHref = sourceHref(evidence);
   return <li id={anchor ?? `realization-${realization.id.slice(-12)}`} className="grid min-w-0 gap-3 border-border/70 border-b pb-4">
     <div className="flex flex-wrap items-center gap-2">
       {showLanguage ? <span className="font-medium"><LanguageName tag={realization.language} locale={locale} /></span> : null}
@@ -86,14 +98,15 @@ export function RealizationRow({ realization, all, releases, names, locale, t, s
     <dl className="grid min-w-0 gap-3 sm:grid-cols-2">
       <div className="grid gap-0.5">
         <dt className="text-muted-foreground text-xs">{t.continuity}</dt>
-        <dd className="text-sm"><SourceContinuity realization={realization} all={all} names={names} locale={locale} t={t} /></dd>
+        <dd className="min-w-0 text-sm"><SourceContinuity realization={realization} all={all} sourceReads={sourceReads} names={names} locale={locale} t={t} /></dd>
       </div>
       <Parties label={t.translators} agents={realization.translators} names={names} t={t} />
       <Parties label={t.publishers} agents={realization.publishers} names={names} t={t} />
       {showEvidence && evidence ? <div className="grid min-w-0 gap-0.5">
         <dt className="text-muted-foreground text-xs">{t.evidence}</dt>
-        <dd className="min-w-0 text-sm"><a href={evidence} rel="noreferrer"
-          className="break-all text-primary underline-offset-4 hover:underline">{evidence}</a></dd>
+        <dd className="min-w-0 text-sm [overflow-wrap:anywhere]">{evidenceHref ? <a href={evidenceHref} rel="noreferrer noopener"
+          className="rounded-sm text-primary underline-offset-4 hover:underline focus-visible:ring-2 focus-visible:ring-ring">{evidence}</a>
+          : <span>{evidence}</span>}</dd>
       </div> : null}
       {covering.length ? <div className="grid gap-0.5 sm:col-span-2">
         <dt className="text-muted-foreground text-xs">{t.releasesOfText}</dt>
@@ -106,8 +119,9 @@ export function RealizationRow({ realization, all, releases, names, locale, t, s
 }
 
 /** Realizations gathered by the language and script they are written in: zh-Hant and zh-Hans stay apart. */
-export function RealizationGroups({ realizations, sources, releases, names, locale, t }: {
+export function RealizationGroups({ realizations, sources, sourceReads = [], releases, names, locale, t }: {
   realizations: readonly Realization[]; sources: readonly Realization[]; releases: readonly Release[]; names: Names;
+  sourceReads?: readonly SelectedRealizationRead[];
   locale: UiLocale; t: Copy;
 }) {
   const groups = new Map<string, Realization[]>();
@@ -117,7 +131,7 @@ export function RealizationGroups({ realizations, sources, releases, names, loca
       data-language-group={language} className="grid gap-3">
       <h3 className="font-semibold text-base"><LanguageName tag={language} locale={locale} /></h3>
       <ul className="grid gap-4">
-        {rows.map(row => <RealizationRow key={row.id} realization={row} all={[...realizations, ...sources]} releases={releases}
+        {rows.map(row => <RealizationRow key={row.id} realization={row} all={[...realizations, ...sources]} sourceReads={sourceReads} releases={releases}
           names={names} locale={locale} t={t} />)}
       </ul>
     </section>)}
@@ -213,8 +227,9 @@ function Pager({ label, first, next, t }: { label: string; first: string | null;
  * releases, each with the facts that tell one edition from another. Both continue on
  * Main's cursors under their own anchors.
  */
-export function EditionsSection({ realizations, sources, releases, names, workRef, query, locale, t, pageMessages }: {
+export function EditionsSection({ realizations, sources, sourceReads = [], releases, names, workRef, query, locale, t, pageMessages }: {
   realizations: Loaded<RealizationPage>; /** Realizations the listed ones follow that are not on this page. */ sources: readonly Realization[];
+  sourceReads?: readonly SelectedRealizationRead[];
   releases: Loaded<ReleasePage>; names: Names; workRef: WorkAt;
   query: EditionsQuery; locale: UiLocale; t: Copy; pageMessages: WorkPageMessages;
 }) {
@@ -225,7 +240,7 @@ export function EditionsSection({ realizations, sources, releases, names, workRe
         ? <RegionFailure title={t.realizationsUnavailable} failure={realizations.failure} messages={pageMessages}
           restartHref={editionsHref(workRef, { ...query, realizationsAfter: undefined }, anchors.realizations)} />
         : realizations.data.items.length
-          ? <RealizationGroups realizations={realizations.data.items} sources={sources} releases={knownReleases} names={names} locale={locale} t={t} />
+          ? <RealizationGroups realizations={realizations.data.items} sources={sources} sourceReads={sourceReads} releases={knownReleases} names={names} locale={locale} t={t} />
           : <EmptyState icon={BookCopyIcon} headingLevel={3} title={t.noRealizations} description={t.noRealizationsBody} />}
       {realizations.ok ? <Pager label={t.realizationsPages} t={t}
         first={query.realizationsAfter ? editionsHref(workRef, { ...query, realizationsAfter: undefined }, anchors.realizations) : null}

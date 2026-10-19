@@ -76,7 +76,7 @@ export async function projectWikiEvidence(
     locator: withheld.has(row.id) ? withholdPassage(row.locator) : row.locator,
     quote: withheld.has(row.id) ? null : row.quote,
     quoteWithheld: withheld.has(row.id),
-    method: row.method,
+    method: withheld.has(row.id) ? withholdPassage(row.method) : row.method,
     modality: row.modality,
     submitter: row.submitter,
     rightsBasis: row.rightsBasis,

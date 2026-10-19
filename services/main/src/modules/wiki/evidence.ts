@@ -18,10 +18,36 @@ export interface WikiEvidenceRow {
   method: unknown; modality: string; submitter: string; rightsBasis: string; sourceWork: string;
   claim: string | null; claimKind: 'statement' | 'relation' | null;
 }
+
+/** CFI assertions can contain copied passage text. Keep the numeric location,
+ * removing every assertion, including escaped delimiters inside it. A malformed
+ * compound selector has no safe public fallback when quotation is withheld. */
+function withholdCfiAssertions(value: string): string | null {
+  if (!value.endsWith(')')) return null;
+  let location = 'epubcfi(', assertion = false, escaped = false;
+  for (const char of value.slice(8, -1)) {
+    if (escaped) {
+      if (!assertion) location += char;
+      escaped = false;
+    } else if (char === '^') {
+      if (!assertion) location += char;
+      escaped = true;
+    } else if (char === '[') {
+      if (assertion) return null;
+      assertion = true;
+    } else if (char === ']') {
+      if (!assertion) return null;
+      assertion = false;
+    } else if (!assertion) location += char;
+  }
+  return assertion || escaped ? null : `${location})`;
+}
+
 export function withholdPassage(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(withholdPassage);
   if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value)
     .map(([key,child]) => [key,['quote','exact','prefix','suffix'].includes(key) ? null : withholdPassage(child)]));
+  if (typeof value === 'string' && value.startsWith('epubcfi(')) return withholdCfiAssertions(value);
   return value;
 }
 

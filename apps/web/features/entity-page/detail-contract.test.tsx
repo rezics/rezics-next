@@ -173,6 +173,26 @@ describe('non-Work detail sources', () => {
     expect(html).not.toContain('<blockquote');
     expect(html).toContain(t.noEvidence);
   });
+
+  test('withheld compound locators use the safe public CFI without exposing an old assertion fallback', () => {
+    const page = citedStatements(true);
+    const item = page.groups[1]!.items[0]!;
+    if (item.kind !== 'statement' || !item.evidence?.[0]) throw new Error('Expected structured evidence');
+    const evidence = item.evidence[0];
+    const safeCfi = 'epubcfi(/6/2!/4,/1:0,/1:8)';
+    evidence.locator = { selector: { type: 'EpubCfiSelector', cfi: safeCfi } };
+    let html = render(<StatementSourcesView hrefFor={hrefFor} page={{ ok: true, data: page }} locale="en" t={t} />);
+    expect(html).toContain(safeCfi);
+    expect(html).toContain(t.quotationWithheld);
+    expect(html).toContain(evidence.representationSha256);
+    evidence.locator = { selector: { type: 'EpubCfiSelector', cfi: 'epubcfi(/6/2!/4,/1:0[WITHHELD,],/1:8[,WITHHELD])' } };
+    evidence.method = { agent: 'tool', model: 'epubcfi(/6/2!/4,/1:0[WITHHELD,],/1:8[,WITHHELD])', inference: 'local' };
+    html = render(<StatementSourcesView hrefFor={hrefFor} page={{ ok: true, data: page }} locale="en" t={t} />);
+    expect(html).not.toContain('WITHHELD');
+    expect(html).toContain(evidence.id);
+    expect(html).toContain(evidence.representationSha256);
+    expect(html).not.toContain('<blockquote');
+  });
 });
 
 describe('non-Work detail hosts', () => {
