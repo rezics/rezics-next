@@ -3,6 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { retainStoppedOwnerBackup, restoreCatalogueBackup } from '../../../../../scripts/load/catalogue-backup.ts';
+import { root, stream, dockerEnvironment } from '../../../../../scripts/fixture/stack.ts';
+import { readEnv } from '../../../../../scripts/dev/config.ts';
+import { runQaStartupChildAsync } from '../../../../../scripts/qa/stack-startup.ts';
 import { stopCorpusSourcePostgres } from '../../../../../scripts/load/corpus-backup-driver.ts';
 import { migrateOwnerData, assertOwnerMigrationsComplete } from '../../../../../scripts/fixture/migrate.ts';
 import { GLOBAL_CONTEXT_SCOPE } from '../../../../../services/main/src/modules/rating/global.ts';
@@ -110,6 +113,16 @@ async function prepare(): Promise<Source> {
   return { realms: [retainPersonaRealm(people), retainPersonaRealm(privatePeople)], communities, ...work,
     other: other.work, global, privateContext, incompatible };
 }
+// Preserve the harness-selected raw-update mode across backup lifecycle commands.
+async function stackTask(args: string[]) {
+  const runId = args[args.indexOf('--run-id') + 1]!;
+  const compose = readEnv(resolve(root, '.temp/stack', `rezics-qa-${runId}`, 'compose.env'));
+  const command = [...args, ...(compose.REZICS_STACK_RAW_UPDATE === '1' ? ['--raw-update'] : [])];
+  if (args[0] !== 'stack:up') return stream('task', command, dockerEnvironment(), undefined, 120_000);
+  const result = await runQaStartupChildAsync(root, command.filter(arg => arg !== '--'), 180_000, dockerEnvironment());
+  if (!result.ok) throw new Error(`Context fixture startup failed: ${result.output.slice(-2000)}`);
+  return result.output;
+}
 beforeAll(async () => {
   const started = Date.now();
   try {
@@ -122,11 +135,11 @@ beforeAll(async () => {
       await retainStoppedOwnerBackup(Bun.env.REZICS_QA_RUN_ID!, 'rating-context-selection', resolve(directory, 'owners'), started, {
         resumeSource: false, purpose: 'corpus', signal: AbortSignal.timeout(Math.max(1, 600_000 - (Date.now() - started))),
         stopSourcePostgres: () => stopCorpusSourcePostgres(Bun.env.REZICS_QA_RUN_ID!, AbortSignal.timeout(120_000)),
-      });
+      }, { task: stackTask });
     } else source = JSON.parse(readFileSync(resolve(directory, 'source.json'), 'utf8')) as Source;
     const restoreStarted = Date.now();
     const restoreRunId = `ratings-${randomUUID().slice(0, 18)}`;
-    copy = await restoreCatalogueBackup(resolve(directory, 'owners/backup.json'), restoreRunId, { resourceClass: 'ordinary' });
+    copy = await restoreCatalogueBackup(resolve(directory, 'owners/backup.json'), restoreRunId, { resourceClass: 'ordinary', task: stackTask });
     Object.assign(Bun.env, copy.apps, { REZICS_QA_RUN_ID: restoreRunId });
     assertOwnerMigrationsComplete(await migrateOwnerData(copy.apps));
     [people, privatePeople] = await restorePersonaRealms(source.realms) as [PersonaSessions, PersonaSessions];
