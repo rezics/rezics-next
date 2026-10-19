@@ -3,6 +3,10 @@ areas: []
 ---
 # Audit remediation
 
+The current [execution reset](execution-reset.md) delegates routine decisions and
+authorizes targeted proof of ready slices during unrelated builds. It supersedes
+prior internal Program-reading and global prove-phase holds.
+
 Implement the complete site and catalogue audits of 2026-10-18. The canonical
 union has 61 finding classes (2 P0, 27 P1, 32 P2); aliases and overlapping
 observations do not add classes. Every class requires a recorded disposition,
