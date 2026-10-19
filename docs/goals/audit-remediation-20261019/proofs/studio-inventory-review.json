@@ -1,0 +1,1876 @@
+{
+  "goal": "audit-remediation-20261019",
+  "worker": "G-2848",
+  "reportVersion": 1,
+  "reportedAtUtc": "2026-10-19T07:37:35.421391+00:00",
+  "result": "blocked: independent source/check/render review delivered; genuine original acceptance remains unproved",
+  "reviewer": {
+    "engine": "codex-1",
+    "model": "GPT-6.1 Sol",
+    "effort": "xhigh",
+    "independent": true,
+    "candidateAuthoredByReviewer": false,
+    "reviewCount": 1,
+    "nestedAgents": 0,
+    "accountOrModelFallback": false,
+    "existingIndependentReviewReuse": "No valid independent review of these exact bytes was found in supplied receipts; source receipt reviewPerformed=false. Existing producer and dependency evidence retained as such."
+  },
+  "scope": {
+    "onlyTrackedFile": "docs/goals/audit-remediation-20261019/proofs/studio-inventory-review.json",
+    "productionChanges": [],
+    "assertionChanges": [],
+    "registryChanges": [],
+    "mainMutation": false,
+    "integrationCreatedByReviewer": false,
+    "findingsClosed": [],
+    "landingAuthorizedOrPerformed": false,
+    "chapterEditingOrIndependentAuthorContractsAdopted": false
+  },
+  "pins": {
+    "reviewedCandidate": {
+      "base": "82067635061c20a9a3d0301a63aa652bf120d14b",
+      "head": "af37c8991ffb8997c06f055279301fb9b173f842",
+      "branch": "candidate/site-studio-20261019",
+      "tree": "fc0ba238d4b23917775c2c4d8586fb7ae44796c6",
+      "diffSha256": "acf3249ac7f3b6b915a116b93a5165f8ab84e838990ce83cb412a95e07bf8946",
+      "checkout": ".temp/worktrees/site-studio-candidate",
+      "cleanExactHeadVerifiedBeforeReview": true,
+      "finalVerification": {
+        "head": "af37c8991ffb8997c06f055279301fb9b173f842",
+        "status": ""
+      }
+    },
+    "checkSource": {
+      "head": "af37c8991ffb8997c06f055279301fb9b173f842",
+      "checkout": ".temp/studio-review/source",
+      "isolation": "Owned shared-object clone with separate checkout, index, dependencies and temporary artifacts; detached exact candidate; local main ref points to reviewed base for changed-path selection. No tracked overlays.",
+      "finalVerification": {
+        "head": "af37c8991ffb8997c06f055279301fb9b173f842",
+        "status": ""
+      }
+    },
+    "managerIntegration": {
+      "receipt": ".temp/audit-remediation-20261019/two-hour-sprint/site-auth-studio-candidate.json",
+      "base": "a27bcfc6bad849dd912cbd3f721de5defeba1c86",
+      "head": "b23f7cace550dc6f77d82d16773a1a297ed0dc40",
+      "tree": "be11acb0e631c74e68a5bfc4c95da0212724e404",
+      "status": "prepared; clean; unreviewed and unproved",
+      "finalVerification": {
+        "head": "b23f7cace550dc6f77d82d16773a1a297ed0dc40",
+        "status": ""
+      },
+      "compileAndRuntimeCompatibilityChecked": false,
+      "productProofPerformedByReviewer": false,
+      "byteBoundary": "Receipt maps the same five Studio imports. StudioHome retains the existing startup/navigation dependency p-1 padding instead of af37 px-1; Work tabs also retain that dependency repair. This report reviews af37, not the new combined integration. Preserve unchanged Studio review/check evidence; qualify the dependency delta and actual runtime separately."
+    },
+    "testProducer": "c46b03f06343b7b308485e8b3d597d9cedebfa4c",
+    "testAndSupportOverlay": [
+      {
+        "path": "tests/qa/integration/outcomes/realm/studio-inventory.test.ts",
+        "revision": "c46b03f06343b7b308485e8b3d597d9cedebfa4c",
+        "sha256": "9dee3f417dd78c34c8e63284ea57472cca051aa0a47880608d34a99f9b1242ae",
+        "blob": "622956753c2e10a7de7e8f09fd7751b28f3148b2"
+      },
+      {
+        "path": "scripts/qa/cases/outcomes/realm/studio-inventory.ts",
+        "revision": "c46b03f06343b7b308485e8b3d597d9cedebfa4c",
+        "sha256": "6bcd6f8cfa1e26b12a456e5b8068cbff2b3aaee179222e70457050d575cd61c8",
+        "blob": "21937fd7f357015d1a030854f96ed88d9e4eb957"
+      },
+      {
+        "path": "tests/qa/support/author-management-fixture.ts",
+        "revision": "c46b03f06343b7b308485e8b3d597d9cedebfa4c",
+        "sha256": "f1c95fb45fd44e5caaeb212b9bfad9d201bc0c5a5cfe2436bbf8565860713dee",
+        "blob": "4f3cac47504b2ed470a5b3ab146c4f7a96eac97e"
+      },
+      {
+        "path": "tests/qa/support/outcome-test.ts",
+        "revision": "c46b03f06343b7b308485e8b3d597d9cedebfa4c",
+        "sha256": "6f1b34c0b23565214708679251e93caad29b4065e3ddaf2ecd22db7bfc4bd7c0",
+        "blob": "390bcb259c1216fac5092b01e83f34848cf33296"
+      },
+      {
+        "path": "tests/qa/support/personas.ts",
+        "revision": "c46b03f06343b7b308485e8b3d597d9cedebfa4c",
+        "sha256": "b2b2be661dd39b9baab070d0b823c3cee0d0109bb93de275058f02c65fd7f574",
+        "blob": "f21cb38c0bab91cb730d7fda4adb21b275548769"
+      }
+    ],
+    "testOverlayInstalled": false,
+    "runner": {
+      "candidateHead": "af37c8991ffb8997c06f055279301fb9b173f842",
+      "actualCandidateChecks": "scripts/goal/goalctl.ts test through Task and recorded Goal admission",
+      "overlayForGenuineAcceptance": null,
+      "limitation": "scripts/qa/test.ts:59-66 resolves explicit test paths inside its own checkout and rejects missing/outside files; scripts/qa/core.ts:160-193 has no independent product/test source pin option, and sourceIdentity at core.ts:247 records one checkout HEAD/fingerprint. A supported separately pinned original test/runner overlay against the qualified product source is still required."
+    },
+    "runtime": {
+      "productHead": null,
+      "webHead": null,
+      "mainHead": null,
+      "accountsHead": null,
+      "nativeImage": null,
+      "nativeImageDigest": null,
+      "modelOrRecipeDigest": null,
+      "schemaMigrationHistory": null,
+      "backup": null,
+      "restore": null,
+      "readiness": null,
+      "publicApiRequests": [],
+      "apiStatusesOrAnswers": [],
+      "reason": "No qualified integrated runtime or retained all-owner data was supplied for this worker; no product stack started, no restore performed and no genuine API assertions reached."
+    },
+    "authEvidence": {
+      "receipt": ".temp/ref/site-auth-fixture.json",
+      "sourceHead": "196a6f4a98413857dbf3e178d05ef65415035f29",
+      "web": "http://127.0.0.1:43125",
+      "main": "http://127.0.0.1:3001",
+      "accounts": "http://127.0.0.1:3004",
+      "issuer": "http://127.0.0.1:3004/api/auth",
+      "resource": "https://main.rezics.test",
+      "scope": "Existing G-2825 development sign-in fixture, plus any later production auth result in that receipt, belongs to 196a6. It establishes neither af37/b23 Studio API behavior nor current session/runtime readiness. Recorded development server stopped. Private storage-state contents were not opened or copied into this report.",
+      "currentCompatibleSessionPreparedByReviewer": false
+    },
+    "sourceContextDifferences": [
+      {
+        "path": "services/main/src/modules/work/read-session.ts",
+        "candidateBlob": "936bf9993703b5070e22d924610c7c1a0713a898",
+        "authoredContextBlob": "85381184a0704f74645f97e0b0327a2b13d0d27d",
+        "equal": false
+      },
+      {
+        "path": "services/main/src/modules/structure/graph.ts",
+        "candidateBlob": "af29502f09ad8f550781aac1273d77fa40281e1d",
+        "authoredContextBlob": "ca6f9bdba18c0331e940b73c7406ac1b9e22e69b",
+        "equal": false
+      }
+    ],
+    "migrationOrImageChangeInStudioChain": {
+      "migrations": [],
+      "nativeImageChange": false,
+      "note": "No new migration does not exempt an isolated restore from the selected runtime existing owner migrations and compatible native image."
+    }
+  },
+  "inputsRead": [
+    "docs/goals/audit-remediation-20261019/tasks/G-2753.md: original brief and both reconciliation decisions (API inventory contract and revised pagination premises)",
+    "docs/goals/audit-remediation-20261019/decisions.md: Studio reconciliation decisions",
+    ".temp/goal-orchestration/runs/G-2753/attempt-12.last.md",
+    ".temp/goal-orchestration/runs/G-2753/attempt-14.last.md",
+    ".temp/ref/site-studio-candidate.json",
+    ".temp/ref/studio-inventory-findings.json: original AUD-011 and D4-014",
+    ".temp/ref/all-findings.json: original D4-002",
+    ".temp/ref/author-management-outcomes.json: contracts.studioInventory and original AMGT01 bodies/personas",
+    "c46b03f06343b7b308485e8b3d597d9cedebfa4c:docs/goals/audit-remediation-20261019/author-management-outcomes.json: exact contracts.studioInventory selection verified equal to staged matrix",
+    ".temp/ref/site-auth-fixture.json: public receipt only"
+  ],
+  "historicalEvidence": {
+    "preserved": true,
+    "canonicalMatrixPathAbsentOnCandidate": true,
+    "adoptedSelectionOnly": "contracts.studioInventory",
+    "baselinePreparationRepeated": false,
+    "note": "Historical setup/baseline holds remain historical evidence and are superseded by this sprint. No AMGT00, new corpus preparation, graph/authority seeding, shared reset/import or independent author correction/withdrawal contract was adopted."
+  },
+  "reviewedPaths": [
+    "apps/web/app/[locale]/studio/[agent]/page.tsx",
+    "apps/web/features/studio/fixtures.ts",
+    "apps/web/features/studio/messages.ts",
+    "apps/web/features/studio/messages/de.ts",
+    "apps/web/features/studio/messages/es.ts",
+    "apps/web/features/studio/messages/fr.ts",
+    "apps/web/features/studio/messages/ja.ts",
+    "apps/web/features/studio/messages/ko.ts",
+    "apps/web/features/studio/messages/zh-Hans.ts",
+    "apps/web/features/studio/messages/zh-Hant.ts",
+    "apps/web/features/studio/read.ts",
+    "apps/web/features/studio/studio-home.stories.tsx",
+    "apps/web/features/studio/studio-home.tsx",
+    "apps/web/features/studio/types.ts",
+    "apps/web/tests/studio-inventory.test.ts",
+    "generated/openapi/main/public.json",
+    "scripts/static/web-continuations.inventory.json",
+    "scripts/static/web-continuations.test.ts",
+    "services/main/src/modules/studio/access.ts",
+    "services/main/src/modules/studio/chapters.ts",
+    "services/main/src/modules/studio/works.ts",
+    "services/main/src/routes/studio.ts",
+    "services/main/tests/studio-inventory.test.ts",
+    "services/main/tests/studio-transfer-parity.test.ts"
+  ],
+  "receiptVerification": {
+    "authoredMapping": [
+      {
+        "source": "7624af5a74cacf252ff1f5dfd0e1435d1dffe92b",
+        "candidate": "4c14caa57efdca43a8ac8d03e28b419ca2a1501d"
+      },
+      {
+        "source": "668fdf346fc72e2704046bfa3a934d9a923fbf82",
+        "candidate": "fa8cff8b596c1cffdcb6a7cbfde6ad823d11e69b"
+      },
+      {
+        "source": "e6189970e9e181bf0c213850baac2200ff99c2fb",
+        "candidate": "527aadc2ffdaeea111aa407d9004782b9c908ac5"
+      },
+      {
+        "source": "2b806391d548b46bec35ab4d17e6de5382f8dd65",
+        "candidate": "5d22e88f869a4a7481ac680b087bd7ee9c6da075"
+      },
+      {
+        "source": "260d5afda57f21febfa1a64d863aba5ae75633d7",
+        "candidate": "af37c8991ffb8997c06f055279301fb9b173f842"
+      }
+    ],
+    "nonSharedAuthoredBlobEquality": [
+      {
+        "path": "apps/web/app/[locale]/studio/[agent]/page.tsx",
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/studio/fixtures.ts",
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/studio/messages.ts",
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/studio/messages/de.ts",
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/studio/messages/es.ts",
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/studio/messages/fr.ts",
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/studio/messages/ja.ts",
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/studio/messages/ko.ts",
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/studio/messages/zh-Hans.ts",
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/studio/messages/zh-Hant.ts",
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/studio/read.ts",
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/studio/studio-home.stories.tsx",
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/studio/studio-home.tsx",
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/studio/types.ts",
+        "equal": true
+      },
+      {
+        "path": "apps/web/tests/studio-inventory.test.ts",
+        "equal": true
+      },
+      {
+        "path": "scripts/static/web-continuations.test.ts",
+        "equal": true
+      },
+      {
+        "path": "services/main/src/modules/studio/access.ts",
+        "equal": true
+      },
+      {
+        "path": "services/main/src/modules/studio/chapters.ts",
+        "equal": true
+      },
+      {
+        "path": "services/main/src/modules/studio/works.ts",
+        "equal": true
+      },
+      {
+        "path": "services/main/src/routes/studio.ts",
+        "equal": true
+      },
+      {
+        "path": "services/main/tests/studio-inventory.test.ts",
+        "equal": true
+      },
+      {
+        "path": "services/main/tests/studio-transfer-parity.test.ts",
+        "equal": true
+      }
+    ],
+    "mechanicalContinuationResolutions": [
+      {
+        "source": "7624af5a74cacf252ff1f5dfd0e1435d1dffe92b",
+        "candidate": "4c14caa57efdca43a8ac8d03e28b419ca2a1501d",
+        "removed": 5,
+        "added": 5,
+        "exactRemoved": true,
+        "exactAdded": true,
+        "unrelatedByteOrderRetained": true
+      },
+      {
+        "source": "e6189970e9e181bf0c213850baac2200ff99c2fb",
+        "candidate": "527aadc2ffdaeea111aa407d9004782b9c908ac5",
+        "removed": 3,
+        "added": 2,
+        "exactRemoved": true,
+        "exactAdded": true,
+        "unrelatedByteOrderRetained": true
+      }
+    ],
+    "resolutionMethod": "Compared actual authored and mapped commit diffs, exact removed/added JSON row bytes, and the byte/order-preserved unrelated rows in each resolution; did not rely solely on the handoff. Final actual diff and both resolutions inspected.",
+    "generatedOpenApi": {
+      "changedPaths": [
+        "/v1/me/agents/{agent}/works",
+        "/v1/me/agents/{agent}/works/{id}"
+      ],
+      "operationsEqualAuthored": true,
+      "allOtherFieldsEqualBase": true
+    },
+    "transientHelpers": "Final counts.ts retains main baseline bytes; obsolete inventory-counts.ts absent. No unrelated helper repair imported.",
+    "matrixSelectionEqual": true
+  },
+  "sourceReview": [
+    {
+      "topic": "Complete authorized inventory before filtering/order/pagination",
+      "paths": [
+        "services/main/src/modules/studio/works.ts:43",
+        "services/main/src/modules/studio/works.ts:57",
+        "services/main/src/modules/studio/works.ts:150",
+        "services/main/src/modules/studio/access.ts:52"
+      ],
+      "conclusion": "Source consistent with adopted contract; affected tests passed. Five raw SQL candidate cuts of 200 with a 201-row lookahead bound the inventory at 1000. Denied/stale/non-authored candidates consume the bounded cut but are removed before title/state/type/view filters, sorting and page slicing. More than 1000 yields unavailable, not a misleading partial inventory. Exact 1000 termination is source-inferred; the 1001 unavailable boundary is exercised in the stack-free tests. This is not measured native latency."
+    },
+    {
+      "topic": "Title normalization, Unicode bounds and order",
+      "paths": [
+        "services/main/src/modules/studio/works.ts:43",
+        "services/main/src/routes/studio.ts",
+        "apps/web/features/studio/read.ts",
+        "apps/web/features/studio/studio-home.tsx"
+      ],
+      "conclusion": "q is at most 200 Unicode scalar values with unpaired surrogates rejected. Matching uses NFKC, trim and locale-independent lowercase; it searches title only across the complete authorized cut. UTF-8 Buffer comparison preserves Unicode scalar order for valid normalized strings. recent/created descend using SQL timestamp keys retaining microseconds; normalized title ascends; every tie uses full Work IRI ascending. Browser input accepts 200 astral values, with UTF-16 maxLength 400 and scalar pattern. All three orders have source/test support; no genuine large-inventory order journey was reached."
+    },
+    {
+      "topic": "Continuation and authority movement",
+      "paths": [
+        "services/main/src/modules/studio/works.ts:150",
+        "services/main/src/modules/studio/access.ts:52",
+        "services/main/src/modules/work/read-session.ts"
+      ],
+      "conclusion": "Agent control is checked before cursor decode or private inventory facts. v4 cursor binds controlled Agent, view/state/type, normalized q, explicit/default sort, page size and source/dependency basis. Changed binding is 400 invalid_read; a valid moved source/authority basis is 409 read_basis_changed; read-session fence/dependencies and final candidate recut prevent silently continuing a changed source. Current-main cancellation/diagnostic behavior differs from authored context and is retained. Stack-free denial/binding/movement coverage is not a public authority proof."
+    },
+    {
+      "topic": "Receipt denials, authored versus curated, private disclosure",
+      "paths": [
+        "services/main/src/modules/studio/access.ts:52",
+        "services/main/src/modules/studio/works.ts:99",
+        "services/main/src/modules/studio/works.ts:226"
+      ],
+      "conclusion": "Admission requires the controlled active-generation Agent and existing maintained authority proof. Candidates require succeeded creation receipts, valid graph/live-main state and permitted protection state. Creation writer credit determines authored/curated; curation grants no author controls. Private drafts/publication/submission facts are queried only for the acting author Agent after authority. Chapter aggregation returns counts, not chapter bodies/IDs or another author private facts. All six genuine persona denials remain unproved."
+    },
+    {
+      "topic": "Required list/exact Book counts, lower bounds and nested occurrences",
+      "paths": [
+        "services/main/src/modules/studio/chapters.ts:21",
+        "services/main/src/modules/studio/chapters.ts:97",
+        "services/main/src/modules/studio/works.ts",
+        "services/main/src/routes/studio.ts",
+        "generated/openapi/main/public.json",
+        "apps/web/features/studio/studio-home.tsx"
+      ],
+      "conclusion": "Both list and exact item require Book chapterCount={value>=0,complete}; non-Book is null. Breadth-first traversal follows nested groups and continuation pages and counts active occurrence addresses, including repeated placements of one chapter target. Groups and removed occurrences do not count; duplicate occurrence addresses are not counted twice. Mapping/header dependencies are observed. Consistent absent composition is complete zero; unavailable/corrupt/mismatched sources remain incomplete. Positive incomplete totals render as lower bounds; incomplete zero renders unavailable. Unit cases exercise an immutable 23-occurrence tree and bounds, but are not the retained genuine 23-occurrence API corpus or original four-chapter record."
+    },
+    {
+      "topic": "Count/query bounds and source/live consistency",
+      "paths": [
+        "services/main/src/modules/studio/chapters.ts",
+        "services/main/src/modules/work/read-session.ts",
+        "services/main/src/modules/structure/graph.ts"
+      ],
+      "conclusion": "Count traversal has a 20-pages-per-Book and shared 40-pages-per-inventory budget. Exhaustion returns honest lower bounds; moved read basis is rethrown. Immutable page/header dependency observations and the Work session fence protect consistency. The session global 160-call/4MB/deadline constraints may return unavailable before theoretical per-count limits; descriptive Studio cost estimates are not a measured public latency or successful author journey. Native query performance and live mutation behavior require the genuine runtime."
+    },
+    {
+      "topic": "Two revised owner pagination premises",
+      "paths": [
+        "services/main/tests/studio-transfer-parity.test.ts:275",
+        "services/main/tests/studio-transfer-parity.test.ts:390"
+      ],
+      "conclusion": "203-Work case erases first 200: list now returns final three as one exact page with no cursor; erased exact reads stay denied. Moving one of remaining sources leaves two and denies stale exact reads. 201-Work case makes first 200 curated: authored list returns final one with no continuation, curated first page returns 20 with a continuation. These revisions match filtering before pagination without weakening receipt denials or authored/curated distinction. Existing 227-Work proof binds <=65 and graph limit 16384, Access raw limit <=201 and keyset premises remain. New 105-Work microsecond/tie/cursor cases inspected. These PostgreSQL-backed owner assertions were not executed."
+    },
+    {
+      "topic": "UI hierarchy, return conditions and translations",
+      "paths": [
+        "apps/web/features/studio/studio-home.tsx",
+        "apps/web/features/studio/read.ts",
+        "apps/web/app/[locale]/studio/[agent]/page.tsx",
+        "apps/web/features/studio/messages.ts",
+        "apps/web/features/studio/messages/zh-Hans.ts"
+      ],
+      "conclusion": "Source passes q/sort/filters through API and links, uses explicit pagination and condition-bearing Work return URLs, and does not filter three loaded cards. Recorded rows put title first, keep state/time/actions/chapters repeatable and collapse secondary type/language/review details. Long Latin/CJK and no-cover rows were inspected at both widths. Localization/generation checks pass; Chinese story still expects a removed published chapter label and fails. Genuine Work open/back return, pagination and search acceptance remain unproved."
+    }
+  ],
+  "checks": [
+    {
+      "jobId": "job:9e260eb3-6b67-492b-9350-b1f5a0fd374f",
+      "sequenceStep": 1,
+      "command": "task --dir .temp/studio-review/source install",
+      "exitStatus": 0,
+      "log": ".temp/goal/jobs/9e260eb3-6b67-492b-9350-b1f5a0fd374f.1.log",
+      "result": "Dependency installation only."
+    },
+    {
+      "jobId": "job:9e260eb3-6b67-492b-9350-b1f5a0fd374f",
+      "sequenceStep": 2,
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts slot -- task --dir .temp/studio-review/source goal -- test apps/web/tests/studio-inventory.test.ts services/main/tests/studio-inventory.test.ts",
+      "exitStatus": 0,
+      "log": ".temp/goal/jobs/9e260eb3-6b67-492b-9350-b1f5a0fd374f.2.log",
+      "result": "Web 4 tests / 36 assertions; Main 7 tests / 83 assertions. All 11 passed. Boundary doubles and immutable in-memory structures; no genuine public API acceptance.",
+      "qaRun": "20261019t070116-387ff8",
+      "artifacts": ".temp/studio-review/source/.artifacts/qa/20261019t070116-387ff8",
+      "assertionReached": true,
+      "assertions": 119,
+      "sourceStable": true,
+      "clean": true,
+      "sourceFingerprint": "0cb043220703d0881e1de43d6851509d06f7ea15dc47049a32768d96968492b8",
+      "certifiesFull": false,
+      "acceptanceIdsCovered": []
+    },
+    {
+      "jobId": "job:9e260eb3-6b67-492b-9350-b1f5a0fd374f",
+      "sequenceStep": 3,
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts slot -- task --dir .temp/studio-review/source goal -- check",
+      "exitStatus": 0,
+      "log": ".temp/goal/jobs/9e260eb3-6b67-492b-9350-b1f5a0fd374f.3.log",
+      "result": "Exact 24 changed paths selected. Types, inference, lint, AST and 33/44 selected guards passed. Three timeout-only guard failures passed the supported automatic serial retries. Brief frontmatter names no tests, so this command itself ran no assigned test file.",
+      "fullOutput": ".temp/studio-review/source/.temp/goal/check/run-LMHyWd/output.log",
+      "timeoutRetries": [
+        "scripts/static/web-accepted-commands.test.ts: 7.367s passed",
+        "services/main/tests/platform-exposure.test.ts: 4.263s passed",
+        "tests/qa/unit/acceptance.test.ts: 6.690s passed"
+      ]
+    },
+    {
+      "jobId": "job:9e260eb3-6b67-492b-9350-b1f5a0fd374f",
+      "sequenceStep": 4,
+      "command": "task --dir .temp/studio-review/source i18n:check",
+      "exitStatus": 0,
+      "log": ".temp/goal/jobs/9e260eb3-6b67-492b-9350-b1f5a0fd374f.4.log",
+      "result": "Catalogs match; all eight changed locale files inspected."
+    },
+    {
+      "jobId": "job:9e260eb3-6b67-492b-9350-b1f5a0fd374f",
+      "sequenceStep": 5,
+      "command": "task --dir .temp/studio-review/source gen:check",
+      "exitStatus": 0,
+      "log": ".temp/goal/jobs/9e260eb3-6b67-492b-9350-b1f5a0fd374f.5.log",
+      "result": "Generation consistency passed without changing the candidate."
+    },
+    {
+      "jobId": "job:9e260eb3-6b67-492b-9350-b1f5a0fd374f",
+      "sequenceStep": 6,
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts slot -- task --dir .temp/studio-review/source goal -- test apps/web/features/studio/studio-home.stories.tsx",
+      "exitStatus": 201,
+      "log": ".temp/goal/jobs/9e260eb3-6b67-492b-9350-b1f5a0fd374f.6.log",
+      "result": "21 Storybook tests: 20 passed; Chinese failed at an executed assertion, underlying Vitest exit 1.",
+      "qaRun": "20261019t070627-d301b6",
+      "artifacts": ".temp/studio-review/source/.artifacts/qa/20261019t070627-d301b6",
+      "assertionReached": true,
+      "rawFailure": "TestingLibraryElementError: Unable to find an element with the text: 已发布 2 章",
+      "failureLocation": "apps/web/features/studio/studio-home.stories.tsx:141",
+      "warning": "Failed to resolve dependency: @storybook/react-dom-shim, present in client optimizeDeps.include. This warning does not explain away the reached Chinese assertion."
+    },
+    {
+      "jobId": "job:8d8cc2be-e1fa-4524-af60-7bd9be6b61f1",
+      "command": "task goal -- slot -- bun .temp/studio-review/render.ts",
+      "exitStatus": 201,
+      "log": ".temp/goal/jobs/8d8cc2be-e1fa-4524-af60-7bd9be6b61f1.log",
+      "result": "Setup failure: Storybook index readiness deadline exceeded; zero scenarios reached. Server selected port 43149 while the first temporary probe polled 43148. Temporary probe corrected to discover the actual server port; no product changes.",
+      "classification": "setup failure"
+    },
+    {
+      "jobId": "job:a7e50a7c-8cf5-4c73-a73d-128d594abd49",
+      "command": "task goal -- slot -- bun .temp/studio-review/render.ts",
+      "exitStatus": 0,
+      "log": ".temp/goal/jobs/a7e50a7c-8cf5-4c73-a73d-128d594abd49.log",
+      "result": "72 recorded-input scenarios, 62 root screenshots, no page errors; server stopped. This is rendered Storybook evidence, not genuine inventory/API proof.",
+      "classification": "recorded-story evidence"
+    },
+    {
+      "jobId": "job:9ab1127c-88af-487b-8292-583c5d5be8ac",
+      "command": "task goal -- slot -- bun .temp/studio-review/navigation.ts",
+      "exitStatus": 201,
+      "log": ".temp/goal/jobs/9ab1127c-88af-487b-8292-583c5d5be8ac.log",
+      "result": "10 recorded-input navigation scenarios; 8 measured failures (7 Work focus-ring checks, 1 selected Studio view check). Temporary script exit 1 propagated through Task as 201. Phone Chapters focus check inconclusive; no setup failure. Server stopped.",
+      "classification": "recorded-story evidence"
+    },
+    {
+      "command": "task docs:check",
+      "status": "passed",
+      "scope": "This review report only; report validation does not close product findings.",
+      "exitStatus": 0,
+      "jobId": "job:5afe691c-8995-4b06-b349-19453e08dff9",
+      "log": ".temp/goal/jobs/5afe691c-8995-4b06-b349-19453e08dff9.log",
+      "result": "13 documentation checker tests passed; 250 Markdown files checked for local links/fragments/design navigation. JSON syntax and report invariants also validated separately; this is not a product check."
+    }
+  ],
+  "renderedEvidence": {
+    "source": "af37c8991ffb8997c06f055279301fb9b173f842",
+    "kind": "recorded Storybook inputs; no genuine API authority",
+    "index": ".temp/studio-review/render/index.json",
+    "evidence": ".temp/studio-review/render/evidence.json",
+    "navigationEvidence": ".temp/studio-review/navigation/evidence.json",
+    "homeStoryIds": [
+      "studio-home--works",
+      "studio-home--in-review",
+      "studio-home--curated",
+      "studio-home--drafts-empty",
+      "studio-home--empty",
+      "studio-home--denied",
+      "studio-home--unavailable",
+      "studio-home--pen-name",
+      "studio-home--chinese",
+      "studio-home--dark",
+      "studio-home--phone",
+      "studio-home--large-inventory",
+      "studio-home--large-inventory-phone",
+      "studio-home--located-work",
+      "studio-home--no-matches",
+      "studio-home--search-continuation",
+      "studio-home--incomplete-counts",
+      "studio-home--lifecycle-states",
+      "studio-home--lifecycle-states-phone",
+      "studio-home--loading",
+      "studio-home--not-your-identity"
+    ],
+    "workStoryIdsDiscovered": [
+      "studio-work--chapters",
+      "studio-work--transferred-chapters",
+      "studio-work--chapter-writers",
+      "studio-work--first-chapter",
+      "studio-work--created-chapter-while-outline-loads",
+      "studio-work--chapters-refused",
+      "studio-work--volumes",
+      "studio-work--bulk-actions",
+      "studio-work--drag-and-drop",
+      "studio-work--volumes-chinese",
+      "studio-work--volumes-dark",
+      "studio-work--volumes-phone",
+      "studio-work--introduction",
+      "studio-work--story-text",
+      "studio-work--details",
+      "studio-work--details-stale",
+      "studio-work--details-denied",
+      "studio-work--realms",
+      "studio-work--realm-open",
+      "studio-work--realm-refused",
+      "studio-work--realms-need-text",
+      "studio-work--chinese",
+      "studio-work--dark",
+      "studio-work--phone",
+      "studio-work--phone-realms"
+    ],
+    "workStoryIdsInspected": [
+      "studio-work--introduction",
+      "studio-work--details",
+      "studio-work--realms",
+      "studio-work--chapters"
+    ],
+    "viewports": [
+      {
+        "width": 1440,
+        "height": 1000
+      },
+      {
+        "width": 390,
+        "height": 844
+      }
+    ],
+    "scenarioCount": 72,
+    "rootScreenshotsCaptured": 62,
+    "pageErrors": [],
+    "bothThemes": "All 21 home states at both widths; five states (works, large inventory, located Work, incomplete counts, Chinese) additionally forced dark at both widths and verified actual dark class. Existing Dark story also inspected.",
+    "screenshotsActuallyViewed": [
+      ".temp/studio-review/render/sheets/390-01.png",
+      ".temp/studio-review/render/sheets/390-02.png",
+      ".temp/studio-review/render/sheets/390-03.png",
+      ".temp/studio-review/render/sheets/390-04.png",
+      ".temp/studio-review/render/sheets/390-05.png",
+      ".temp/studio-review/render/sheets/390-06.png",
+      ".temp/studio-review/render/sheets/390-07.png",
+      ".temp/studio-review/render/sheets/390-08.png",
+      ".temp/studio-review/render/sheets/1440-01.png",
+      ".temp/studio-review/render/sheets/1440-02.png",
+      ".temp/studio-review/render/sheets/1440-03.png",
+      ".temp/studio-review/render/sheets/1440-04.png",
+      ".temp/studio-review/render/sheets/1440-05.png",
+      ".temp/studio-review/render/sheets/1440-06.png",
+      ".temp/studio-review/render/sheets/1440-07.png",
+      ".temp/studio-review/render/sheets/1440-08.png",
+      ".temp/studio-review/render/studio-home--curated-390.png",
+      ".temp/studio-review/render/studio-home--works-390.png",
+      ".temp/studio-review/render/studio-home--large-inventory-390.png",
+      ".temp/studio-review/render/studio-home--works-1440.png",
+      ".temp/studio-review/render/studio-home--incomplete-counts-390.png",
+      ".temp/studio-review/render/home-keyboard-focus-390.png",
+      ".temp/studio-review/render/large-inventory-1440-top-crop.png",
+      ".temp/studio-review/render/large-inventory-390-bottom-crop.png",
+      ".temp/studio-review/navigation/work-introduction-390-focus.png",
+      ".temp/studio-review/navigation/work-details-1440-focus.png",
+      ".temp/studio-review/navigation/work-realms-390-focus.png",
+      ".temp/studio-review/source/.artifacts/qa/20261019t070627-d301b6/story-screenshots/apps-web-features-studio-studio-home.stories.tsx/Chinese.png",
+      ".temp/studio-review/source/.artifacts/qa/20261019t070627-d301b6/story-screenshots/apps-web-features-studio-studio-home.stories.tsx/Works.png"
+    ],
+    "viewMethod": "16 contact sheets were opened and visually inspected, covering all 62 root screenshots. Contact sheets show top crops (phone first 1020px, desktop first 2000px, scaled); they do not establish unviewed long-page tails. Listed individual images/crops were also opened. Large inventory phone bottom crop confirms rows 17-20 and Show more; desktop top crop inspected at native width. No claim that every long-page pixel was viewed.",
+    "capturedScenarios": [
+      {
+        "story": "studio-home--works",
+        "width": 1440,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--works-1440.png"
+      },
+      {
+        "story": "studio-home--in-review",
+        "width": 1440,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--in-review-1440.png"
+      },
+      {
+        "story": "studio-home--curated",
+        "width": 1440,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--curated-1440.png"
+      },
+      {
+        "story": "studio-home--drafts-empty",
+        "width": 1440,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--drafts-empty-1440.png"
+      },
+      {
+        "story": "studio-home--empty",
+        "width": 1440,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--empty-1440.png"
+      },
+      {
+        "story": "studio-home--denied",
+        "width": 1440,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--denied-1440.png"
+      },
+      {
+        "story": "studio-home--unavailable",
+        "width": 1440,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--unavailable-1440.png"
+      },
+      {
+        "story": "studio-home--pen-name",
+        "width": 1440,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--pen-name-1440.png"
+      },
+      {
+        "story": "studio-home--chinese",
+        "width": 1440,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--chinese-1440.png"
+      },
+      {
+        "story": "studio-home--dark",
+        "width": 1440,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--dark-1440.png"
+      },
+      {
+        "story": "studio-home--phone",
+        "width": 1440,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--phone-1440.png"
+      },
+      {
+        "story": "studio-home--large-inventory",
+        "width": 1440,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--large-inventory-1440.png"
+      },
+      {
+        "story": "studio-home--large-inventory-phone",
+        "width": 1440,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--large-inventory-phone-1440.png"
+      },
+      {
+        "story": "studio-home--located-work",
+        "width": 1440,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--located-work-1440.png"
+      },
+      {
+        "story": "studio-home--no-matches",
+        "width": 1440,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--no-matches-1440.png"
+      },
+      {
+        "story": "studio-home--search-continuation",
+        "width": 1440,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--search-continuation-1440.png"
+      },
+      {
+        "story": "studio-home--incomplete-counts",
+        "width": 1440,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--incomplete-counts-1440.png"
+      },
+      {
+        "story": "studio-home--lifecycle-states",
+        "width": 1440,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--lifecycle-states-1440.png"
+      },
+      {
+        "story": "studio-home--lifecycle-states-phone",
+        "width": 1440,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--lifecycle-states-phone-1440.png"
+      },
+      {
+        "story": "studio-home--loading",
+        "width": 1440,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--loading-1440.png"
+      },
+      {
+        "story": "studio-home--not-your-identity",
+        "width": 1440,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--not-your-identity-1440.png"
+      },
+      {
+        "story": "studio-home--works",
+        "width": 1440,
+        "journey": "dark theme",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--works-1440-dark.png"
+      },
+      {
+        "story": "studio-home--large-inventory",
+        "width": 1440,
+        "journey": "dark theme",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--large-inventory-1440-dark.png"
+      },
+      {
+        "story": "studio-home--located-work",
+        "width": 1440,
+        "journey": "dark theme",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--located-work-1440-dark.png"
+      },
+      {
+        "story": "studio-home--incomplete-counts",
+        "width": 1440,
+        "journey": "dark theme",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--incomplete-counts-1440-dark.png"
+      },
+      {
+        "story": "studio-home--chinese",
+        "width": 1440,
+        "journey": "dark theme",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--chinese-1440-dark.png"
+      },
+      {
+        "story": "studio-work--introduction",
+        "width": 1440,
+        "journey": "Work tab direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-work--introduction-1440.png"
+      },
+      {
+        "story": "studio-work--details",
+        "width": 1440,
+        "journey": "Work tab direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-work--details-1440.png"
+      },
+      {
+        "story": "studio-work--realms",
+        "width": 1440,
+        "journey": "Work tab direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-work--realms-1440.png"
+      },
+      {
+        "story": "studio-work--chapters",
+        "width": 1440,
+        "journey": "Work tab direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-work--chapters-1440.png"
+      },
+      {
+        "width": 1440,
+        "journey": "story URL refresh"
+      },
+      {
+        "width": 1440,
+        "journey": "story URL back"
+      },
+      {
+        "width": 1440,
+        "journey": "story URL forward"
+      },
+      {
+        "width": 1440,
+        "journey": "native search scalar limit 200 astral"
+      },
+      {
+        "width": 1440,
+        "journey": "edit query, choose created order, submit native form with capture"
+      },
+      {
+        "width": 1440,
+        "journey": "Tab from All works to Drafts",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/home-keyboard-focus-1440.png"
+      },
+      {
+        "story": "studio-home--works",
+        "width": 390,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--works-390.png"
+      },
+      {
+        "story": "studio-home--in-review",
+        "width": 390,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--in-review-390.png"
+      },
+      {
+        "story": "studio-home--curated",
+        "width": 390,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--curated-390.png"
+      },
+      {
+        "story": "studio-home--drafts-empty",
+        "width": 390,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--drafts-empty-390.png"
+      },
+      {
+        "story": "studio-home--empty",
+        "width": 390,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--empty-390.png"
+      },
+      {
+        "story": "studio-home--denied",
+        "width": 390,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--denied-390.png"
+      },
+      {
+        "story": "studio-home--unavailable",
+        "width": 390,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--unavailable-390.png"
+      },
+      {
+        "story": "studio-home--pen-name",
+        "width": 390,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--pen-name-390.png"
+      },
+      {
+        "story": "studio-home--chinese",
+        "width": 390,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--chinese-390.png"
+      },
+      {
+        "story": "studio-home--dark",
+        "width": 390,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--dark-390.png"
+      },
+      {
+        "story": "studio-home--phone",
+        "width": 390,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--phone-390.png"
+      },
+      {
+        "story": "studio-home--large-inventory",
+        "width": 390,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--large-inventory-390.png"
+      },
+      {
+        "story": "studio-home--large-inventory-phone",
+        "width": 390,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--large-inventory-phone-390.png"
+      },
+      {
+        "story": "studio-home--located-work",
+        "width": 390,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--located-work-390.png"
+      },
+      {
+        "story": "studio-home--no-matches",
+        "width": 390,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--no-matches-390.png"
+      },
+      {
+        "story": "studio-home--search-continuation",
+        "width": 390,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--search-continuation-390.png"
+      },
+      {
+        "story": "studio-home--incomplete-counts",
+        "width": 390,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--incomplete-counts-390.png"
+      },
+      {
+        "story": "studio-home--lifecycle-states",
+        "width": 390,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--lifecycle-states-390.png"
+      },
+      {
+        "story": "studio-home--lifecycle-states-phone",
+        "width": 390,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--lifecycle-states-phone-390.png"
+      },
+      {
+        "story": "studio-home--loading",
+        "width": 390,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--loading-390.png"
+      },
+      {
+        "story": "studio-home--not-your-identity",
+        "width": 390,
+        "journey": "direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--not-your-identity-390.png"
+      },
+      {
+        "story": "studio-home--works",
+        "width": 390,
+        "journey": "dark theme",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--works-390-dark.png"
+      },
+      {
+        "story": "studio-home--large-inventory",
+        "width": 390,
+        "journey": "dark theme",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--large-inventory-390-dark.png"
+      },
+      {
+        "story": "studio-home--located-work",
+        "width": 390,
+        "journey": "dark theme",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--located-work-390-dark.png"
+      },
+      {
+        "story": "studio-home--incomplete-counts",
+        "width": 390,
+        "journey": "dark theme",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--incomplete-counts-390-dark.png"
+      },
+      {
+        "story": "studio-home--chinese",
+        "width": 390,
+        "journey": "dark theme",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-home--chinese-390-dark.png"
+      },
+      {
+        "story": "studio-work--introduction",
+        "width": 390,
+        "journey": "Work tab direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-work--introduction-390.png"
+      },
+      {
+        "story": "studio-work--details",
+        "width": 390,
+        "journey": "Work tab direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-work--details-390.png"
+      },
+      {
+        "story": "studio-work--realms",
+        "width": 390,
+        "journey": "Work tab direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-work--realms-390.png"
+      },
+      {
+        "story": "studio-work--chapters",
+        "width": 390,
+        "journey": "Work tab direct story load",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/studio-work--chapters-390.png"
+      },
+      {
+        "width": 390,
+        "journey": "story URL refresh"
+      },
+      {
+        "width": 390,
+        "journey": "story URL back"
+      },
+      {
+        "width": 390,
+        "journey": "story URL forward"
+      },
+      {
+        "width": 390,
+        "journey": "native search scalar limit 200 astral"
+      },
+      {
+        "width": 390,
+        "journey": "edit query, choose created order, submit native form with capture"
+      },
+      {
+        "width": 390,
+        "journey": "Tab from All works to Drafts",
+        "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/render/home-keyboard-focus-390.png"
+      }
+    ],
+    "executedDomJourneys": [
+      "Direct-load all 21 discovered Studio home story IDs at 1440/390, plus selected Work tabs at both widths.",
+      "Story iframe navigation Works to Curated, refresh, back and forward at both widths; selection geometry measured. This is story URL history, not actual product Work open/back navigation.",
+      "Focus All works, press Tab to Drafts and capture actual ring edges at both widths.",
+      "Fill title input with CJK/fullwidth text, select Recently created through the real combobox/option, and submit native GET form while capturing and preventing navigation. Captured q/sort/action prove DOM control wiring only.",
+      "Fill 200 astral characters, check native validity and UTF-16 length 400/maxLength 400; no API request claimed.",
+      "Direct-load four Work tabs per width, focus Chapters then Tab to Introduction, reset vertical scroll, measure outline against scroll clip. Phone Chapters had no focused link after its existing play and is inconclusive."
+    ],
+    "limits": [
+      "Recorded large inventory contains 105 fixture Works but displays a 20-row page. It is not 100+ genuine retained Works.",
+      "Selecting Title in a recorded story does not exercise server ordering.",
+      "Clear/retry/continuation controls were visually inspected; no genuine API recovery or pagination journey ran.",
+      "Stories cannot prove Agent authority, private disclosure, live source movement, native image compatibility or public latency."
+    ],
+    "navigationProbeFailures": [
+      {
+        "criterion": "D4-002 Studio focus ring edges",
+        "story": "introduction",
+        "width": 1440,
+        "assertionReached": true,
+        "clip": {
+          "x": 180,
+          "y": 349,
+          "right": 1260,
+          "bottom": 387,
+          "width": 1080,
+          "height": 38
+        },
+        "scrollLeft": 0,
+        "focused": {
+          "text": "Introduction",
+          "current": "page",
+          "focused": true,
+          "rect": {
+            "x": 272,
+            "y": 349,
+            "right": 375,
+            "bottom": 387,
+            "width": 103,
+            "height": 38
+          },
+          "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 3px",
+          "outlineOffset": "0px"
+        },
+        "selected": {
+          "text": "Introduction",
+          "current": "page",
+          "focused": true,
+          "rect": {
+            "x": 272,
+            "y": 349,
+            "right": 375,
+            "bottom": 387,
+            "width": 103,
+            "height": 38
+          },
+          "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 3px",
+          "outlineOffset": "0px"
+        }
+      },
+      {
+        "criterion": "D4-002 Studio focus ring edges",
+        "story": "details",
+        "width": 1440,
+        "assertionReached": true,
+        "clip": {
+          "x": 180,
+          "y": 349,
+          "right": 1260,
+          "bottom": 387,
+          "width": 1080,
+          "height": 38
+        },
+        "scrollLeft": 0,
+        "focused": {
+          "text": "Introduction",
+          "current": null,
+          "focused": true,
+          "rect": {
+            "x": 272,
+            "y": 349,
+            "right": 375,
+            "bottom": 387,
+            "width": 103,
+            "height": 38
+          },
+          "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 1px",
+          "outlineOffset": "1px"
+        },
+        "selected": {
+          "text": "Details",
+          "current": "page",
+          "focused": false,
+          "rect": {
+            "x": 379,
+            "y": 349,
+            "right": 448,
+            "bottom": 387,
+            "width": 69,
+            "height": 38
+          },
+          "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) none 3px",
+          "outlineOffset": "0px"
+        }
+      },
+      {
+        "criterion": "D4-002 Studio focus ring edges",
+        "story": "realms",
+        "width": 1440,
+        "assertionReached": true,
+        "clip": {
+          "x": 180,
+          "y": 349,
+          "right": 1260,
+          "bottom": 387,
+          "width": 1080,
+          "height": 38
+        },
+        "scrollLeft": 0,
+        "focused": {
+          "text": "Introduction",
+          "current": null,
+          "focused": true,
+          "rect": {
+            "x": 272,
+            "y": 349,
+            "right": 375,
+            "bottom": 387,
+            "width": 103,
+            "height": 38
+          },
+          "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 3px",
+          "outlineOffset": "0px"
+        },
+        "selected": {
+          "text": "Realms",
+          "current": "page",
+          "focused": false,
+          "rect": {
+            "x": 452,
+            "y": 349,
+            "right": 523,
+            "bottom": 387,
+            "width": 71,
+            "height": 38
+          },
+          "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) none 3px",
+          "outlineOffset": "0px"
+        }
+      },
+      {
+        "criterion": "D4-002 Studio focus ring edges",
+        "story": "chapters",
+        "width": 1440,
+        "assertionReached": true,
+        "clip": {
+          "x": 180,
+          "y": 349,
+          "right": 1260,
+          "bottom": 387,
+          "width": 1080,
+          "height": 38
+        },
+        "scrollLeft": 0,
+        "focused": {
+          "text": "Introduction",
+          "current": null,
+          "focused": true,
+          "rect": {
+            "x": 272,
+            "y": 349,
+            "right": 375,
+            "bottom": 387,
+            "width": 103,
+            "height": 38
+          },
+          "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 3px",
+          "outlineOffset": "0px"
+        },
+        "selected": {
+          "text": "Chapters",
+          "current": "page",
+          "focused": false,
+          "rect": {
+            "x": 184,
+            "y": 349,
+            "right": 268,
+            "bottom": 387,
+            "width": 84,
+            "height": 38
+          },
+          "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) none 3px",
+          "outlineOffset": "0px"
+        }
+      },
+      {
+        "criterion": "D4-002 Studio focus ring edges",
+        "story": "introduction",
+        "width": 390,
+        "assertionReached": true,
+        "clip": {
+          "x": 12,
+          "y": 338.5,
+          "right": 378,
+          "bottom": 376.5,
+          "width": 366,
+          "height": 38
+        },
+        "scrollLeft": 0,
+        "focused": {
+          "text": "Introduction",
+          "current": "page",
+          "focused": true,
+          "rect": {
+            "x": 104,
+            "y": 338.5,
+            "right": 207,
+            "bottom": 376.5,
+            "width": 103,
+            "height": 38
+          },
+          "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 1px",
+          "outlineOffset": "1px"
+        },
+        "selected": {
+          "text": "Introduction",
+          "current": "page",
+          "focused": true,
+          "rect": {
+            "x": 104,
+            "y": 338.5,
+            "right": 207,
+            "bottom": 376.5,
+            "width": 103,
+            "height": 38
+          },
+          "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 1px",
+          "outlineOffset": "1px"
+        }
+      },
+      {
+        "criterion": "D4-002 Studio focus ring edges",
+        "story": "details",
+        "width": 390,
+        "assertionReached": true,
+        "clip": {
+          "x": 12,
+          "y": 338.5,
+          "right": 378,
+          "bottom": 376.5,
+          "width": 366,
+          "height": 38
+        },
+        "scrollLeft": 0,
+        "focused": {
+          "text": "Introduction",
+          "current": null,
+          "focused": true,
+          "rect": {
+            "x": 104,
+            "y": 338.5,
+            "right": 207,
+            "bottom": 376.5,
+            "width": 103,
+            "height": 38
+          },
+          "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 3px",
+          "outlineOffset": "0px"
+        },
+        "selected": {
+          "text": "Details",
+          "current": "page",
+          "focused": false,
+          "rect": {
+            "x": 211,
+            "y": 338.5,
+            "right": 280,
+            "bottom": 376.5,
+            "width": 69,
+            "height": 38
+          },
+          "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) none 3px",
+          "outlineOffset": "0px"
+        }
+      },
+      {
+        "criterion": "D4-002 Studio focus ring edges",
+        "story": "realms",
+        "width": 390,
+        "assertionReached": true,
+        "clip": {
+          "x": 12,
+          "y": 338.5,
+          "right": 378,
+          "bottom": 376.5,
+          "width": 366,
+          "height": 38
+        },
+        "scrollLeft": 0,
+        "focused": {
+          "text": "Introduction",
+          "current": null,
+          "focused": true,
+          "rect": {
+            "x": 104,
+            "y": 338.5,
+            "right": 207,
+            "bottom": 376.5,
+            "width": 103,
+            "height": 38
+          },
+          "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 1px",
+          "outlineOffset": "1px"
+        },
+        "selected": {
+          "text": "Realms",
+          "current": "page",
+          "focused": false,
+          "rect": {
+            "x": 284,
+            "y": 338.5,
+            "right": 355,
+            "bottom": 376.5,
+            "width": 71,
+            "height": 38
+          },
+          "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) none 3px",
+          "outlineOffset": "0px"
+        }
+      },
+      {
+        "criterion": "D4-002 Studio selected view visible",
+        "story": "studio-home--curated",
+        "width": 390,
+        "assertionReached": true,
+        "clip": {
+          "x": 12,
+          "y": 229,
+          "right": 378,
+          "bottom": 267,
+          "width": 366,
+          "height": 38
+        },
+        "scrollLeft": 0,
+        "focused": null,
+        "selected": {
+          "text": "Imported & curated",
+          "current": "page",
+          "focused": false,
+          "rect": {
+            "x": 343,
+            "y": 229,
+            "right": 491,
+            "bottom": 267,
+            "width": 148,
+            "height": 38
+          },
+          "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) none 3px",
+          "outlineOffset": "0px"
+        }
+      }
+    ],
+    "serverStopped": true
+  },
+  "findings": [
+    {
+      "id": "studio-chinese-story-contract",
+      "owner": "G-2753",
+      "classification": "executed original Storybook assertion failure",
+      "source": "af37c8991ffb8997c06f055279301fb9b173f842",
+      "path": "apps/web/features/studio/studio-home.stories.tsx",
+      "line": 141,
+      "severity": "blocks selected story check",
+      "minimalReproduction": "Run unchanged studio-home.stories.tsx through supported goal test on clean af37. Chinese play reaches total 3 章 then getByText(已发布 2 章) throws.",
+      "expected": "Original story and adopted inventory chapter-count presentation agree.",
+      "actual": "New row renders aggregate 3 章 and no published-2 label; unchanged assertion fails. The following 菜谱 assertion at line 142 is not reached and is not a second confirmed failure.",
+      "assertionReached": true,
+      "rawFailure": "TestingLibraryElementError: Unable to find an element with the text: 已发布 2 章",
+      "evidence": ".temp/studio-review/source/.artifacts/qa/20261019t070627-d301b6",
+      "repair": "Owner must reconcile the original story with the adopted count contract and rerun the affected story without relabelling this failure as harness-only."
+    },
+    {
+      "id": "studio-curated-selected-view-clipped",
+      "owner": "existing shared navigation owners G-2747/G-2825",
+      "classification": "recorded-story rendered failure; genuine product reproduction unproved",
+      "source": "af37c8991ffb8997c06f055279301fb9b173f842",
+      "path": "apps/web/features/studio/studio-home.tsx",
+      "line": 187,
+      "relatedLines": [
+        188,
+        189,
+        190,
+        191,
+        192
+      ],
+      "minimalReproduction": "Direct-load studio-home--curated at width 390; do not manually scroll horizontally. Repeat refresh and Works/back/forward story URL navigation.",
+      "expected": "Current destination text and selected marker fully visible without manual horizontal scrolling.",
+      "actual": "Nav clip x=12..378, y=229..267; selected Imported & curated x=343..491, width 148, scrollLeft=0. Its last 113px is clipped. Refresh and forward retain the clipping. Desktop 1440 selected view is within the clip.",
+      "assertionReached": true,
+      "screenshotActuallyViewed": ".temp/studio-review/render/studio-home--curated-390.png",
+      "geometry": ".temp/studio-review/navigation/evidence.json",
+      "repair": "Route to existing shared-navigation owner for selected destination visibility and verify against the qualified integration. Preserve existing Discover/Site/Library evidence; this does not close the three Discover instances or D4-002 as a class."
+    },
+    {
+      "id": "studio-navigation-focus-ring-clipped",
+      "owner": "existing shared navigation owners G-2747/G-2825",
+      "classification": "recorded-story rendered failure; inherited Work navigation source",
+      "source": "af37c8991ffb8997c06f055279301fb9b173f842",
+      "path": "apps/web/features/studio/studio-work.tsx",
+      "line": 200,
+      "relatedPath": "apps/web/features/studio/studio-home.tsx:187",
+      "minimalReproduction": "At 390/1440 focus Chapters then press Tab to Introduction in Work tab stories; inspect all focus-ring edges. Also focus All works then Tab to Drafts on Studio home.",
+      "expected": "The full keyboard focus outline stays visible inside the scrolling navigation strip.",
+      "actual": "At 1440 Work nav y=349..387 and focused Introduction y=349..387; at 390 nav and link y=338.5..376.5. No vertical padding surrounds the outline; overflow clips top/bottom and screenshots retain side edges. Seven Work checks fail; phone Chapters focus inconclusive. Studio home ring also clips.",
+      "assertionReached": true,
+      "screenshotsActuallyViewed": [
+        ".temp/studio-review/navigation/work-introduction-390-focus.png",
+        ".temp/studio-review/navigation/work-details-1440-focus.png",
+        ".temp/studio-review/navigation/work-realms-390-focus.png",
+        ".temp/studio-review/render/home-keyboard-focus-390.png"
+      ],
+      "geometry": ".temp/studio-review/navigation/evidence.json",
+      "integrationCaveat": "b23 retains existing p-1 dependency padding in both nav surfaces, so do not carry this af37 failure forward as a reproduced b23 defect. Existing owner must inspect the actual combined runtime/changed dependency bytes; no second unchanged dependency review requested."
+    }
+  ],
+  "originalCriteria": [
+    {
+      "id": "AUD-011-top-level",
+      "criterion": "Same Work real top-level chapter total",
+      "status": "unproved",
+      "evidence": [
+        "Source and stack-free count support only. Original retained four-chapter Work 01a14a2f-2a17-770f-91a6-1a90b29fb32a was not rerun."
+      ],
+      "genuineProductAcceptance": "unproved"
+    },
+    {
+      "id": "AUD-011-volumes",
+      "criterion": "Same Work volume/nested-group chapter total",
+      "status": "unproved",
+      "evidence": [
+        "Nested-group occurrence unit test passed; genuine same-Work inventory not reached."
+      ],
+      "genuineProductAcceptance": "unproved"
+    },
+    {
+      "id": "AUD-011-extras",
+      "criterion": "Same Work extras chapter total",
+      "status": "unproved",
+      "evidence": [
+        "Source traverses all active chapter occurrences; genuine extras journey not reached."
+      ],
+      "genuineProductAcceptance": "unproved"
+    },
+    {
+      "id": "AUD-011-pagination",
+      "criterion": "Same Work paginated chapter total",
+      "status": "unproved",
+      "evidence": [
+        "Stack-free continuation/budget coverage passed; retained genuine 23-occurrence API corpus/backup not supplied or rerun. No substitute is claimed as original."
+      ],
+      "genuineProductAcceptance": "unproved"
+    },
+    {
+      "id": "AUD-011-incomplete",
+      "criterion": "Incomplete scan never appears as definite zero",
+      "status": "proved",
+      "evidence": [
+        "Stack-free incomplete-count assertions passed; Incomplete Counts screenshots at 1440/390 show positive lower bound and unavailable unknown zero."
+      ],
+      "limit": "Proof is limited to source/tests/recorded rendering; genuine API acceptance remains unproved.",
+      "genuineProductAcceptance": "unproved"
+    },
+    {
+      "id": "AUD-011-publication",
+      "criterion": "Publication facts remain correct and private drafts stay private",
+      "status": "unproved",
+      "evidence": [
+        "Source checks preserve acting-author fact queries and authority-first processing; genuine owner/other-persona API assertions not reached."
+      ],
+      "genuineProductAcceptance": "unproved"
+    },
+    {
+      "id": "D4-014-title",
+      "criterion": "Locate a Work by title across complete authorized inventory, including CJK/normalization",
+      "status": "unproved",
+      "evidence": [
+        "227-candidate stack-free test and located/no-match stories passed; actual CJK input/form wiring measured. No large genuine inventory query reached."
+      ],
+      "genuineProductAcceptance": "unproved"
+    },
+    {
+      "id": "D4-014-order",
+      "criterion": "Explicit recent/created/title order across pages, full IRI ties",
+      "status": "unproved",
+      "evidence": [
+        "Source and stack-free order tests pass. 105-Work PostgreSQL case inspected but not executed. No genuine all-order/pagination journey."
+      ],
+      "genuineProductAcceptance": "unproved"
+    },
+    {
+      "id": "D4-014-large",
+      "criterion": "Sufficiently large genuine inventory (original recommendation 100 items crossing pages)",
+      "status": "unproved",
+      "evidence": [
+        "Recorded 105-Work story is not a genuine retained inventory. No replacement rich corpus prepared."
+      ],
+      "genuineProductAcceptance": "unproved"
+    },
+    {
+      "id": "D4-014-return",
+      "criterion": "Conditions preserved after Work open/back return",
+      "status": "unproved",
+      "evidence": [
+        "URL/return-condition unit tests pass. Story URL refresh/back/forward measured; actual signed-in Work open/back not reached."
+      ],
+      "genuineProductAcceptance": "unproved"
+    },
+    {
+      "id": "D4-014-not-three-cards",
+      "criterion": "Filtering applies before pagination, beyond three loaded cards",
+      "status": "proved",
+      "evidence": [
+        "Actual source and executed 227-candidate stack-free test filter/order the complete bounded authorized cut before slicing."
+      ],
+      "limit": "Source/test proof only; public API journey remains unproved.",
+      "genuineProductAcceptance": "unproved"
+    },
+    {
+      "id": "D4-014-layout",
+      "criterion": "At 1440/390 title anchors each row; state/time/continue/chapters are repeatable and readable; secondary metadata recedes",
+      "status": "proved",
+      "evidence": [
+        "All recorded home states inspected at both widths; titles lead rows, count/state and actions stay readable, Details collapses type/language/review metadata."
+      ],
+      "limit": "Recorded-story visual evidence only; not genuine product acceptance.",
+      "genuineProductAcceptance": "unproved"
+    },
+    {
+      "id": "D4-014-diversity",
+      "criterion": "Multiple states, long CJK/Latin titles and no-cover rows usable without returning to inventory start",
+      "status": "unproved",
+      "evidence": [
+        "Lifecycle, large inventory, Chinese, located Work and no-match inputs inspected at both widths and in dark/light themes; wrapping and bottom-page continuation reviewed."
+      ],
+      "limit": "Recorded layout is usable; genuine title location without returning to the inventory start remains unproved.",
+      "genuineProductAcceptance": "unproved",
+      "recordedLayoutStatus": "proved"
+    },
+    {
+      "id": "D4-002-Studio-home",
+      "criterion": "Studio views: direct links, refresh, back/forward and changed filters keep current destination/marker visible",
+      "status": "failed",
+      "evidence": [
+        "Curated selected view is clipped at 390 on direct/refresh/forward; desktop view visible. Actual q/sort form control wiring measured."
+      ],
+      "limit": "Recorded-story failure at af37; product route/filter navigation and b23 not proved.",
+      "genuineProductAcceptance": "unproved"
+    },
+    {
+      "id": "D4-002-Studio-work",
+      "criterion": "Work tabs: selection, content and focus agree with complete actual focus-ring edges at 390/1440",
+      "status": "failed",
+      "evidence": [
+        "Work selection/content agree in four direct story states, but keyboard outline clips vertically in seven measured checks. Phone Chapters focus inconclusive."
+      ],
+      "limit": "af37 recorded evidence only; new integration has known padding dependency delta requiring existing-owner proof.",
+      "genuineProductAcceptance": "unproved"
+    },
+    {
+      "id": "D4-002-class-boundary",
+      "criterion": "Preserve original Discover/Site/Library evidence and avoid claiming entire navigation class closed",
+      "status": "proved",
+      "evidence": [
+        "Existing G-2747/G-2825 ownership retained; no broad unchanged navigation rerun or Discover closure claimed."
+      ],
+      "limit": "This records scope discipline, not closure of an original product finding.",
+      "genuineProductAcceptance": "no closure claimed"
+    }
+  ],
+  "originalAcceptanceTests": {
+    "productAssertionsReached": false,
+    "apiRequests": [],
+    "apiStatuses": [],
+    "sourceResponsesPreserved": [],
+    "genuineScreenshots": [],
+    "testProducerRevision": "c46b03f06343b7b308485e8b3d597d9cedebfa4c",
+    "matrixHistoricalPendingStatePreserved": true,
+    "expectedFailureWrapperIsAcceptance": false,
+    "sixPersonas": [
+      {
+        "case": "AMGT01",
+        "persona": "visitor",
+        "expected": "401; no Studio inventory or private chapter disclosure",
+        "status": "not run: setup prerequisites unmet",
+        "assertionReached": false,
+        "declaration": "pending (unchanged)",
+        "wrapperStatus": null,
+        "actualHttpStatus": null,
+        "actualAnswer": null,
+        "rawAssertionFailure": null,
+        "unexpectedPass": null,
+        "crossAgentExpectedStatus": 401
+      },
+      {
+        "case": "AMGT01",
+        "persona": "stranger",
+        "expected": "Own controlled Agent inventory empty; cannot borrow owner Agent/control/cursor",
+        "status": "not run: setup prerequisites unmet",
+        "assertionReached": false,
+        "declaration": "pending (unchanged)",
+        "wrapperStatus": null,
+        "actualHttpStatus": null,
+        "actualAnswer": null,
+        "rawAssertionFailure": null,
+        "unexpectedPass": null,
+        "crossAgentExpectedStatus": 403,
+        "ownAgentExpectedStatus": 200
+      },
+      {
+        "case": "AMGT01",
+        "persona": "member",
+        "expected": "Own single matching private Book only; Realm membership grants no other-author Studio authority",
+        "status": "not run: setup prerequisites unmet",
+        "assertionReached": false,
+        "declaration": "pending (unchanged)",
+        "wrapperStatus": null,
+        "actualHttpStatus": null,
+        "actualAnswer": null,
+        "rawAssertionFailure": null,
+        "unexpectedPass": null,
+        "crossAgentExpectedStatus": 403,
+        "ownAgentExpectedStatus": 200
+      },
+      {
+        "case": "AMGT01",
+        "persona": "owner",
+        "expected": "23 matching retained inventory Works across multiple pages; title/CJK/normalization/no-match results and own private facts. Four separate bodies below cover orders, bindings, 23 chapter occurrences and source movement.",
+        "status": "not run: setup prerequisites unmet",
+        "assertionReached": false,
+        "declaration": "pending (unchanged)",
+        "wrapperStatus": null,
+        "actualHttpStatus": null,
+        "actualAnswer": null,
+        "rawAssertionFailure": null,
+        "unexpectedPass": null,
+        "crossAgentExpectedStatus": 403,
+        "ownAgentExpectedStatus": 200
+      },
+      {
+        "case": "AMGT01",
+        "persona": "moderator",
+        "expected": "Own empty inventory; moderation grants no other-author Studio authority",
+        "status": "not run: setup prerequisites unmet",
+        "assertionReached": false,
+        "declaration": "pending (unchanged)",
+        "wrapperStatus": null,
+        "actualHttpStatus": null,
+        "actualAnswer": null,
+        "rawAssertionFailure": null,
+        "unexpectedPass": null,
+        "crossAgentExpectedStatus": 403,
+        "ownAgentExpectedStatus": 200
+      },
+      {
+        "case": "AMGT01",
+        "persona": "operator",
+        "expected": "Own empty inventory; platform status grants no other-author Studio authority",
+        "status": "not run: setup prerequisites unmet",
+        "assertionReached": false,
+        "declaration": "pending (unchanged)",
+        "wrapperStatus": null,
+        "actualHttpStatus": null,
+        "actualAnswer": null,
+        "rawAssertionFailure": null,
+        "unexpectedPass": null,
+        "crossAgentExpectedStatus": 403,
+        "ownAgentExpectedStatus": 200
+      }
+    ],
+    "fourAdditionalBodies": [
+      {
+        "title": "AMGT01 Studio recent created and title sorts are stable across every page",
+        "wrapper": "test.failing (unchanged)",
+        "status": "not run: setup prerequisites unmet",
+        "assertionReached": false,
+        "actualBodyStatus": null,
+        "rawAssertionFailure": null,
+        "unexpectedPass": null,
+        "note": "A passing expected-failure wrapper or aggregate exit zero would not establish acceptance; actual body execution and raw result must be recorded."
+      },
+      {
+        "title": "AMGT01 Studio continuations bind query sort filters page size and controlled acting Agent",
+        "wrapper": "test.failing (unchanged)",
+        "status": "not run: setup prerequisites unmet",
+        "assertionReached": false,
+        "actualBodyStatus": null,
+        "rawAssertionFailure": null,
+        "unexpectedPass": null,
+        "note": "A passing expected-failure wrapper or aggregate exit zero would not establish acceptance; actual body execution and raw result must be recorded."
+      },
+      {
+        "title": "AMGT01 Studio counts nested and paginated chapter occurrences without counting groups",
+        "wrapper": "test.failing (unchanged)",
+        "status": "not run: setup prerequisites unmet",
+        "assertionReached": false,
+        "actualBodyStatus": null,
+        "rawAssertionFailure": null,
+        "unexpectedPass": null,
+        "note": "A passing expected-failure wrapper or aggregate exit zero would not establish acceptance; actual body execution and raw result must be recorded."
+      },
+      {
+        "title": "AMGT01 Studio rejects a continuation whose valid inventory source basis moved",
+        "wrapper": "test.failing (unchanged)",
+        "status": "not run: setup prerequisites unmet",
+        "assertionReached": false,
+        "actualBodyStatus": null,
+        "rawAssertionFailure": null,
+        "unexpectedPass": null,
+        "note": "A passing expected-failure wrapper or aggregate exit zero would not establish acceptance; actual body execution and raw result must be recorded."
+      }
+    ],
+    "otherRequiredFiles": [
+      {
+        "path": "services/main/tests/studio-transfer-parity.test.ts",
+        "case": "203/201-Work reconciliation and existing receipt/query-bound cases",
+        "status": "not run: qualified runtime/data prerequisites unmet",
+        "assertionReached": false,
+        "actualBodyStatus": null,
+        "rawAssertionFailure": null,
+        "unexpectedPass": null
+      },
+      {
+        "path": "tests/qa/integration/studio-heads.test.ts",
+        "case": "original Studio heads",
+        "status": "not run: qualified runtime/data prerequisites unmet",
+        "assertionReached": false,
+        "actualBodyStatus": null,
+        "rawAssertionFailure": null,
+        "unexpectedPass": null
+      },
+      {
+        "path": "tests/qa/integration/search-studio-chapter-content.test.ts",
+        "case": "original search/Studio chapter-content",
+        "status": "not run: qualified runtime/data prerequisites unmet",
+        "assertionReached": false,
+        "actualBodyStatus": null,
+        "rawAssertionFailure": null,
+        "unexpectedPass": null
+      },
+      {
+        "path": "apps/web/tests/studio.e2e.ts",
+        "case": "STUDIO01: wider existing author flows kept separate from Studio inventory",
+        "status": "not run: qualified runtime/data prerequisites unmet",
+        "assertionReached": false,
+        "actualBodyStatus": null,
+        "rawAssertionFailure": null,
+        "unexpectedPass": null
+      }
+    ],
+    "outcomeFile": "tests/qa/integration/outcomes/realm/studio-inventory.test.ts",
+    "rawFailureNote": "No original genuine assertion ran, so there is no raw product failure or successful persona/body result to report. Setup prerequisites are not product failures."
+  },
+  "setupBlockers": [
+    {
+      "owner": "manager / compatible dependency owners",
+      "premise": "Qualified integrated product source and actual runtime",
+      "evidence": ".temp/audit-remediation-20261019/two-hour-sprint/site-auth-studio-candidate.json",
+      "detail": "b23 is a clean prepared integration pin, but manifest explicitly marks it unreviewed/unproved, compileAndRuntimeCompatibilityChecked=false and testsRun=[]. No compatible actual Main/native/image/schema/readiness manifest or current supported auth session for this product pin supplied. af37 and 196 auth evidence cannot be combined by assumption.",
+      "required": "Publish the clean qualified integration/runtime manifest, accounting for existing startup/navigation/Main/native dependency reviews and the StudioHome nav delta, without importing/reviewing a new wave here."
+    },
+    {
+      "owner": "G-2778/G-2791 retained corpus/import owners",
+      "premise": "One consistent stopped all-owner retained backup and original records",
+      "detail": "The retained author-management corpus/manifest was not present at checked worker/main/G-2753 .temp/author-management-corpus/retained.json locations. This is not a claim of global filesystem absence. No verified backup identity, producer/compatibility/recipe digest, actual migration history or ready isolated restore for original four-chapter/23-occurrence/100+ inventory evidence was supplied.",
+      "required": "Supply the retained AMGT manifest and consistent all-owner backup with original-record identities, restore recipe/compatibility and budget evidence. Preserve backup; restore only owned disposable copies within 600 seconds. No AMGT00 or new seeding/import."
+    },
+    {
+      "owner": "G-2842 migration transition owner",
+      "premise": "Published existing verified QA-bootstrap migration-history transition, if required by selected restore",
+      "detail": "Inspected existing transition premise/owner records; no published verified G-2842 transition was supplied to this worker. Existing parked/in-progress attempt is not migration acceptance. No transition invented, migrations skipped or migration receipts fabricated.",
+      "required": "Consume only the existing G-2842 transition after its verification is published, and verify actual selected runtime migration history."
+    },
+    {
+      "owner": "manager / supported QA runner owner",
+      "premise": "Independent original test/runner pin against actual product pin",
+      "detail": "Minimal candidate lacks the original AMGT01 outcome/declaration/support files. Their exact retained c46 producer blobs are pinned above. Current supported runner resolves files and source identity from one checkout; no independent overlay product/test pin interface was found.",
+      "required": "Provide supported separately pinned exact producer test/runner overlay against the qualified product source, with no production overlay, assertion edits or pending-state edits. Keep genuine test results separate from candidate source checks."
+    }
+  ],
+  "resourceAndDataUse": {
+    "ownedStorybookServersStopped": true,
+    "renderServerPid": 2433892,
+    "productStacksStarted": 0,
+    "backupsRestored": 0,
+    "preparationSeconds": 0,
+    "sharedDataMutated": false,
+    "newCorpusPrepared": false,
+    "privateCredentialsReported": false,
+    "temporaryArtifactsRoot": ".temp/studio-review",
+    "diagnosticProbeOnlyChanges": [
+      ".temp/studio-review/render.ts: actual-port discovery after setup failure",
+      ".temp/studio-review/navigation.ts: supplemental rectangle/focus checks"
+    ]
+  },
+  "proposedTasks": [
+    {
+      "owner": "G-2753",
+      "work": "Reconcile Chinese original chapter-label story assertion with adopted total-count contract; rerun this unchanged-review failure after authorized owner repair."
+    },
+    {
+      "owner": "G-2747/G-2825",
+      "work": "Consume exact af37 rectangles/screenshots for Studio selected-view visibility and focus edges; verify existing p-1 repair and selected-tab visibility on qualified b23 runtime. Preserve previous Discover/Site/Library proof and ownership."
+    },
+    {
+      "owner": "manager, G-2842, G-2778/G-2791 and supported QA runner owner",
+      "work": "Supply qualified integration/runtime/session, verified original backup/transition and separated test-runner pin; then execute every original persona/body/file and genuine search/order/count/private-disclosure journey without assertion edits."
+    }
+  ],
+  "completionBoundary": "One independent review of the frozen complete Studio candidate is recorded. Candidate units/types/inference/lint/AST/localization/generation/selected guards passed. Original Chinese story and recorded navigation checks fail. No genuine original API/browser acceptance reached, no public latency claimed, no finding closed and no automatic landing.",
+  "procedure": {
+    "protocol": "docs/goals/worker.md",
+    "skills": [
+      ".agents/skills/goal-worker/SKILL.md",
+      ".agents/skills/product-audit/SKILL.md",
+      ".agents/skills/storybook-ui-review/SKILL.md",
+      ".agents/skills/local-development/SKILL.md"
+    ],
+    "instructionEffect": "The task brief explicitly limits this worker to the proof report and forbids implementation/assertion/registry edits, so rendered/test failures are routed to existing owners. No permission request or extra approval gate was introduced."
+  }
+}
