@@ -27,6 +27,7 @@ import { useOperationGate } from '../shell/shell-provider.tsx';
 import { newPostProgress, postWriteState, submitPost, type PostProgress } from './api.ts';
 import type { DocumentSaveState } from '../document-editor/publication.ts';
 import { postText as words } from './messages.ts';
+import { persistDraftBody } from './draft-body.ts';
 
 export interface CommunityChoice {
   id: string;
@@ -263,12 +264,23 @@ export function PostComposer({
   function change(patch: Partial<Draft>) {
     if (locked) return;
     setPostedHref(null);
-    setDraft((before) => ({
+    const before = draftRef.current;
+    const next = {
       ...before,
       ...patch,
       // Editing an unwritten attempt discards its cached root and operation keys together.
       progress: postWriteState(before.progress) === 'none' ? null : before.progress,
-    }));
+    };
+    draftRef.current = next;
+    setDraft(next);
+  }
+  function saveBody(body: string) {
+    if (locked) throw new Error('draft-not-editable');
+    // Clearing raw recovery acknowledges a complete device write, just as publication progress does.
+    let next: Draft;
+    try { next = persistDraftBody(draftRef.current, body, persist); } catch (cause) { setStorageError(true); throw cause; }
+    draftRef.current = next;
+    setDraft(next);
   }
   function saveProgress(progress: PostProgress) {
     const before = draftRef.current;
@@ -552,7 +564,7 @@ export function PostComposer({
               disabled={busy}
               recoveryValue={draft.recoveryBody}
               onRecoveryChange={(recoveryBody) => change({ recoveryBody })}
-              onChange={(body) => change({ body, recoveryBody: undefined })}
+              onChange={saveBody}
               onSaveStateChange={(state) => {
                 bodySaveState.current = state;
                 setBodyState(state);
