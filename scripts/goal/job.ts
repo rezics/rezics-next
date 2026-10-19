@@ -9,11 +9,11 @@ import { checkFailureLines } from './check.ts';
 import { lastAttempt, launch, readResult, running } from './launch.ts';
 import { admitWorkers } from './tasks.ts';
 import { git, managerOf, readLedger, stateDir, withLedger } from './ledger.ts';
-import { engineOf, type Ledger, type Task } from './types.ts';
+import { engineOf, isClaudeCode, type Ledger, type Task } from './types.ts';
 import { processAlive, processIdentity, type ProcessIdentity } from '../qa/process/identity.ts';
 import { gateRefusal } from './queue.ts';
 import { GoalMailStore } from './mail.ts';
-import type { CapacityTask } from './claude-capacity.ts';
+import { assertClaudeCapacity, type CapacityTask } from './claude-capacity.ts';
 
 export const JOB_INLINE_MS = 20_000;
 // A parked worker costs nothing while it waits; a dead command is caught by the owner check, so this bound only
@@ -334,19 +334,29 @@ export async function wakeJobs(store: JobStore, options: JobPassOptions = {}, id
         if (job.capacityPausedAt === undefined) store.update(job.id, current => { current.capacityPausedAt = pause.at; });
         return;
       }
-      if (job.capacityPausedAt !== undefined) {
+      const endCapacityWait = () => {
+        if (job.capacityPausedAt === undefined) return;
         const updated = store.update(job.id, current => {
           current.capacityDelayMs = (current.capacityDelayMs ?? 0)
             + Math.max(0, now - Math.max(current.capacityPausedAt!, waitingSince ?? now));
           delete current.capacityPausedAt;
         });
         job.capacityDelayMs = updated.capacityDelayMs;
-      }
+        delete job.capacityPausedAt;
+      };
       const report = (reason: string) => {
         (options.report ?? reportJob)(job, reason, ledger);
         store.update(job.id, current => { current.phase = 'reported'; current.reason = reason; });
       };
-      if (waitingSince !== undefined && now - waitingSince - (job.capacityDelayMs ?? 0) > JOB_WAIT_MS) { report('wait exceeded 4 hours'); return; }
+      const expired = () => {
+        if (waitingSince === undefined || now - waitingSince - (job.capacityDelayMs ?? 0) <= JOB_WAIT_MS) return false;
+        report('wait exceeded 4 hours'); return true;
+      };
+      // A completed Claude job can owe a quota-blocked continuation even when its caller exited
+      // naturally. Ask admission before expiring that wait; live commands still have their deadline.
+      const claudeWake = task && attempt && lastAttempt(task).n === job.attempt && job.code !== undefined
+        && isClaudeCode(engineOf(attempt));
+      if (!claudeWake) { endCapacityWait(); if (expired()) return; }
       const later = task && lastAttempt(task).n > job.attempt && !['verified', 'cancelled', 'stopped'].includes(task.state)
         ? lastAttempt(task) : undefined;
       if (later) {
@@ -390,12 +400,23 @@ export async function wakeJobs(store: JobStore, options: JobPassOptions = {}, id
       if (final && final !== 'parked') { report(`worker handed off RESULT: ${final} while its job ran`); return; }
       const session = attempt.session || result.session;
       if (!session) { report('worker session is missing; cannot resume'); return; }
-      try { (options.admit ?? admitWorkers)(Object.values(ledger.tasks), engineOf(attempt), false); }
+      try {
+        if (!options.admit) assertClaudeCapacity(engineOf(attempt), task, ledger);
+        (options.admit ?? admitWorkers)(Object.values(ledger.tasks), engineOf(attempt), false);
+      }
       catch (error) {
         const reason = error instanceof Error ? error.message : String(error);
+        if (isClaudeCode(engineOf(attempt)) && /^Claude usage is (?:restricted|critical)\b/.test(reason)) {
+          if (job.capacityPausedAt === undefined) store.update(job.id, current => { current.capacityPausedAt = now; });
+          return;
+        }
+        endCapacityWait();
+        if (expired()) return;
         if (!gateRefusal(reason)) report(reason);
         return;
       }
+      endCapacityWait();
+      if (expired()) return;
       store.update(job.id, current => { current.phase = 'waking'; current.resultClass = jobResultClass(store, current); });
       try {
         attempt.endedAt ??= new Date().toISOString(); attempt.session = session;

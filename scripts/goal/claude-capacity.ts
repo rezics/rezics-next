@@ -187,8 +187,8 @@ export function capacityDecision(cache: CapacityCache | undefined, released = fa
     reason: exhausted ? 'allowance-exhausted' : stop ? 'about-reserve' : 'available', margin, stopAt };
 }
 export function providerReset(previous: CapacityWindow | undefined, current: CapacityWindow | undefined, at: number): boolean {
-  return !!previous && !!current && at >= previous.resetsAt && current.resetsAt > previous.resetsAt
-    && (current.used < previous.used || current.used === 0);
+  // The account is shared: about may already have consumed the new window when we observe it.
+  return !!previous && validWindow(current, at) && at >= previous.resetsAt && current.resetsAt > previous.resetsAt;
 }
 export function capacityStatus() {
   const files = capacityFiles(), policy = readCapacityPolicy(files.policy), cache = readCapacityCache(files.observation);
@@ -227,9 +227,14 @@ export function assertClaudeCapacity(engine: string, task?: Pick<Brief, 'id' | '
       throw refusal('waiting for provider-confirmed reset');
     }
   }
-  if (Object.values(ledger.tasks).some(other => other.id !== task?.id && ['starting', 'running'].includes(other.state)
-    && isClaudeCode(engineOf(other.attempts.at(-1) ?? other))
-    && (other.state === 'starting' || processIdentity(other.attempts.at(-1)?.pid ?? 0)))) throw refusal('one Claude worker at a time');
+}
+/** Ledger state is checkpointed before signalling. It cannot prove that the old writer has exited. */
+export function assertPreviousClaudeExited(task: Task): void {
+  const record = (task as CapacityTask).claudeCapacity, attempt = task.attempts.at(-1);
+  if (record && attempt && record.attempt === attempt.n && record.owner.pid === attempt.pid
+    && isClaudeCode(engineOf(attempt)) && sameProcess(record.owner)) {
+    throw new Error(`${task.id}: previous Claude process ${attempt.pid} is still running; wait for it to exit before resuming`);
+  }
 }
 export function recordClaudeLaunch(task: Task, attempt: Attempt): void {
   if (!isClaudeCode(engineOf(attempt))) {
@@ -246,12 +251,15 @@ export function recordClaudeLaunch(task: Task, attempt: Attempt): void {
 }
 export function pauseCanResume(pause: CapacityPause, cache: CapacityCache, completion?: CapacityPolicy['aboutCompletion']): boolean {
   const current = cache.current;
+  if (!capacityDecision(cache, !!completion, current.observedAt).admit) return false;
+  // Policy, review, grant and observation faults need their actual cause repaired, not a future reset.
+  // Both admission and the controller recheck policy/review/grants before using this decision.
+  if (pause.reason !== 'about-reserve' && pause.reason !== 'allowance-exhausted') return true;
   // Explicit completion verification releases a reserve pause without pretending a reset happened.
-  if (pause.reason === 'about-reserve' && completion && Date.parse(completion.verifiedAt) >= pause.at
-    && capacityDecision(cache, true, current.observedAt).admit) return true;
-  return !current.error && (pause.seven_day?.used === 100
+  if (pause.reason === 'about-reserve' && completion && Date.parse(completion.verifiedAt) >= pause.at) return true;
+  return pause.seven_day?.used === 100
     ? providerReset(pause.seven_day, current.seven_day, current.observedAt)
-    : providerReset(pause.five_hour, current.five_hour, current.observedAt));
+    : providerReset(pause.five_hour, current.five_hour, current.observedAt);
 }
 export function ownsClaudeProcess(task: CapacityTask, procRoot = '/proc'): boolean {
   const record = task.claudeCapacity, attempt = task.attempts.at(-1);
@@ -320,12 +328,15 @@ export async function coordinateClaudeCapacity(options: CapacityPassOptions = {}
         } else signal(task, 'SIGKILL');
         continue;
       }
+      if (sameProcess(record.owner)) continue;
       attempt.endedAt ??= new Date(now).toISOString();
       pause.stage = 'waiting';
       if (policy.enabled && reviewed && cache && decision.admit && pauseCanResume(pause, cache, policy.aboutCompletion)
         && !claudeGrantError(policy, task.id, ledger) && !task.waitingResume) {
         task.waitingResume = { token: randomUUID(), queuedAt: new Date(now).toISOString(),
-          reason: pauseCanResume(pause, cache) ? 'provider-confirmed Claude reset' : 'verified about completion released the reserve', fresh: false, forceUsage: false,
+          reason: ['about-reserve', 'allowance-exhausted'].includes(pause.reason)
+            ? pauseCanResume(pause, cache) ? 'provider-confirmed Claude reset' : 'verified about completion released the reserve'
+            : `Claude capacity pause resolved: ${pause.reason}`, fresh: false, forceUsage: false,
           message: 'The capacity controller interrupted your previous turn. Inspect retained dirty files and commits, '
             + 'then resume the reviewed brief from the same native session. The interruption was not a handoff.' };
       }

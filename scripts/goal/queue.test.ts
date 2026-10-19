@@ -6,6 +6,7 @@ import type { QueueLedger } from './queue.ts';
 import type { Task } from './types.ts';
 import { GoalMailStore } from './mail.ts';
 import { testAccountSettings } from './fixtures/accounts.ts';
+import { normalizeClaudeUsage } from './claude-capacity.ts';
 
 const spawnSync = fixtureSpawns(60_000);
 const fixtures: { directory: string }[] = [];
@@ -425,9 +426,12 @@ test('other resume refusals fail without being kept', async () => {
   expect(result.status).toBe(1); expect(result.stderr).toContain('effort must be');
   expect(f.ledger().tasks[task.id]!.waitingResume).toBeUndefined();
   writeFileSync(f.meminfo, 'MemAvailable: 67108864 kB\n');
-  writeFileSync(f.env.GOAL_USAGE_FILE, JSON.stringify({ at: Date.now() / 1000, rate_limits: {
-    five_hour: { used_percentage: 100, resets_at: Date.now() / 1000 + 3600 },
-  } }));
+  const now = Date.now();
+  writeFileSync(join(f.state, 'claude-capacity.json'), JSON.stringify({ current: normalizeClaudeUsage({
+    five_hour: { utilization: 100, resets_at: new Date(now + 3600_000).toISOString() },
+    seven_day: { utilization: 70, resets_at: new Date(now + 86400_000).toISOString() },
+    extra_usage: { is_enabled: false },
+  }, now) }));
   const usage = f.run('resume', task.id, '-m', 'Continue.', '--engine', 'claude', '--effort', 'high');
   expect(usage.status).toBe(0); expect(usage.stdout).toContain('Claude usage is restricted');
   expect(f.ledger().tasks[task.id]!.waitingResume!.reason).toContain('policy disabled or independent review missing');

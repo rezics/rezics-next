@@ -9,7 +9,7 @@ import { homedir } from 'node:os';
 import { type ChangedFile, isGeneratedOutput, outOfScope } from './briefs.ts';
 import { handoverPrompt, prepareHandover, type WorkerHandover } from './handover.ts';
 import { handoffResult } from './land.ts';
-import { assertClaudeCapacity, recordClaudeLaunch } from './claude-capacity.ts';
+import { assertClaudeCapacity, assertPreviousClaudeExited, recordClaudeLaunch } from './claude-capacity.ts';
 
 // Workers run in bypass permission mode, as the manager does, and accept no inbound session
 // messages; the manager changes a worker's instructions only by stopping or resuming it.
@@ -190,6 +190,7 @@ export function workerSessionEnvironment(parent: NodeJS.ProcessEnv): NodeJS.Proc
 
 export function launch(task: Task, effort: string, session: string, prompt: string, resume: boolean,
   manager: string, engine: Engine = engineOf(task), round: NonNullable<Attempt['round']> = task.attempts.length ? 'fix' : 'initial'): Attempt {
+  assertPreviousClaudeExited(task);
   assertClaudeCapacity(engine, task);
   const env = { ...workerSessionEnvironment(isClaudeCode(engine) ? claudeSubscriptionEnvironment(process.env) : process.env),
     ...engineEnv(engine), GOAL_TASK_ID: task.id, GOAL_WORKTREE: resolve(task.worktree), GOAL_MANAGER: manager,

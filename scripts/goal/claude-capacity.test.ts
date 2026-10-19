@@ -2,11 +2,12 @@ import { afterEach, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { briefDigest, capacityDecision, capacityFingerprint, coordinateClaudeCapacity, fetchClaudeCapacity,
+import { assertPreviousClaudeExited, briefDigest, capacityDecision, capacityFingerprint, coordinateClaudeCapacity, fetchClaudeCapacity,
   normalizeClaudeUsage, ownsClaudeProcess, pauseCanResume, providerReset, readCapacityCache, recordClaudeLaunch,
   refreshClaudeCapacity, type CapacityCache, type CapacityPolicy, type CapacityTask } from './claude-capacity.ts';
 import type { Ledger, Task } from './types.ts';
 import { jobDirectory, JOB_WAIT_MS, JobStore, wakeJobs } from './job.ts';
+import { processIdentity } from '../qa/process/identity.ts';
 
 const NOW = Date.parse('2026-10-19T00:00:00Z');
 const directories: string[] = [];
@@ -47,6 +48,17 @@ test('an exhausted session remains closed after its clock reset until the provid
   expect(capacityDecision(refreshed, false, refreshed.current.observedAt).admit).toBe(true);
   expect(providerReset(exhausted.current.five_hour, refreshed.current.five_hour, NOW + 1000)).toBe(false);
   expect(providerReset(exhausted.current.five_hour, exhausted.current.five_hour, NOW + 3600_001)).toBe(false);
+});
+
+test('an advanced provider window confirms a reset even when a frozen zero baseline has since been used by about', () => {
+  const previous = cache(0).current.five_hour;
+  const at = NOW + 3600_001;
+  const current = cache(12, 72, at, NOW + 5 * 3600_000).current.five_hour;
+  expect(providerReset(previous, current, at)).toBe(true);
+  expect(providerReset(previous, current, NOW + 1000)).toBe(false);
+  expect(providerReset(previous, previous, at)).toBe(false);
+  expect(providerReset(previous, { used: 12, resetsAt: at - 1 }, at)).toBe(false);
+  expect(providerReset(undefined, current, at)).toBe(false);
 });
 
 test('stale, future, missing or invalid session/weekly evidence fails closed, including a seven-day-only cache', () => {
@@ -240,6 +252,42 @@ test('loss of the usage cache checkpoints a task baseline and still permits resu
   expect(f.ledger().tasks[f.task.id]!.waitingResume).toBeDefined();
 });
 
+test.each(['stop', 'source', 'revoke', 'request-failed', 'capacity-unknown'] as const)(
+  'a resolved %s pause resumes in the same window without completing the interrupted worker', async cause => {
+    const { settlementOwed } = await import('./settle.ts');
+    const f = managedFixture(), grant = f.policy.tasks[f.task.id]!;
+    if (cause === 'source') f.policy.review!.fingerprint = 'changed-source';
+    if (cause === 'revoke') delete f.policy.tasks[f.task.id];
+    const failed: CapacityCache = cause === 'request-failed' ? { current: { observedAt: NOW, error: 'request-failed' } }
+      : cause === 'capacity-unknown' ? cache(0, 70, NOW - 45_001) : cache(0);
+    await f.pass(failed, NOW, cause !== 'stop');
+    expect(f.signals).toEqual(['SIGINT']);
+    f.policy.review!.fingerprint = capacityFingerprint(); f.policy.tasks[f.task.id] = grant;
+    // Fixing policy/observations cannot replace a process which is still exiting.
+    await f.pass(cache(12, 71, NOW + 1000), NOW + 1000);
+    expect(f.ledger().tasks[f.task.id]!.waitingResume).toBeUndefined();
+    f.alive(false);
+    await f.pass(cache(12, 71, NOW + 2000), NOW + 2000);
+    const task = f.ledger().tasks[f.task.id] as CapacityTask;
+    expect(task.waitingResume).toMatchObject({ fresh: false, forceUsage: false });
+    expect(task.state).toBe('stopped'); expect(task.attempts).toHaveLength(1);
+    expect(task.claudeCapacity?.pause?.stage).toBe('waiting');
+    expect(settlementOwed(task)).toBe(false);
+    const token = task.waitingResume!.token;
+    await f.pass(cache(12, 71, NOW + 3000), NOW + 3000);
+    expect(f.ledger().tasks[f.task.id]!.waitingResume!.token).toBe(token);
+  });
+
+test('recovering a configuration pause still waits for real headroom and retains the about reserve', async () => {
+  const f = managedFixture(); await f.pass(cache(0), NOW, false); f.alive(false);
+  for (const [five, seven] of [[100, 70], [0, 100], [60, 70], [52, 70]]) {
+    await f.pass(cache(five, seven, NOW + 1000), NOW + 1000);
+    expect(f.ledger().tasks[f.task.id]!.waitingResume).toBeUndefined();
+  }
+  await f.pass(cache(12, 71, NOW + 2000), NOW + 2000);
+  expect(f.ledger().tasks[f.task.id]!.waitingResume).toBeDefined();
+});
+
 test('weekly exhaustion resumes only on a provider-confirmed weekly reset, even when about reserve is released', async () => {
   const f = managedFixture(); f.policy.aboutCompletion = { verifiedAt: new Date(NOW).toISOString(), evidence: 'About accepted after explicit verification' };
   await f.pass(cache(20, 100), NOW); f.alive(false);
@@ -277,6 +325,18 @@ test('process ownership requires the recorded native attempt, start/boot identit
   f.task.claudeCapacity!.owner.start = '124'; expect(ownsClaudeProcess(f.task, proc)).toBe(false);
   f.task.claudeCapacity!.owner.start = '123'; f.task.claudeCapacity!.owner.boot = 'old-boot';
   expect(ownsClaudeProcess(f.task, proc)).toBe(false);
+});
+
+test('replacement waits for the exact recorded process generation independently of stopped ledger state', () => {
+  const f = managedFixture(), owner = processIdentity(process.pid)!;
+  f.task.state = 'stopped'; f.task.attempts[0]!.pid = owner.pid; f.task.claudeCapacity!.owner = { ...owner };
+  expect(() => assertPreviousClaudeExited(f.task)).toThrow('previous Claude process');
+  f.task.claudeCapacity!.owner.start += '0';
+  expect(() => assertPreviousClaudeExited(f.task)).not.toThrow();
+  f.task.claudeCapacity!.owner = { ...owner, boot: 'previous-boot' };
+  expect(() => assertPreviousClaudeExited(f.task)).not.toThrow();
+  f.task.claudeCapacity!.owner = owner; f.task.attempts[0]!.engine = 'codex-2';
+  expect(() => assertPreviousClaudeExited(f.task)).not.toThrow();
 });
 
 test('capacity pause suppresses settlement and natural worker exit is not turned into a paused completion', async () => {
