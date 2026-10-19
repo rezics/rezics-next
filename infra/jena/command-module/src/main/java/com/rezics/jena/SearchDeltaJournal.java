@@ -286,6 +286,9 @@ final class SearchDeltaJournal {
     static void invalidate(DatasetGraph data, String reason, String caller) {
         record("journal invalidated: " + reason + " [" + caller + "]", true);
         try (var fence = publicationFence()) { qualified.remove(data); }
+        scheduleRecovery(data);
+    }
+    private static void scheduleRecovery(DatasetGraph data) {
         if (lucene(data) == null) return;
         synchronized (recovering) {
             // Single flight per dataset, including while the audit is running.
@@ -888,14 +891,23 @@ final class SearchDeltaJournal {
         }
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> deltas = (List<Map<String, Object>>) replay.get("deltas");
-        if (deltas.stream().anyMatch(delta -> Boolean.TRUE.equals(delta.get("contentQualificationChanged")))) {
-            invalidate(data, "Content qualification changed", "qualifiedProof");
-            return unavailable(data, UnavailableReason.GENERATION_UNQUALIFIED);
-        }
+        boolean contentChanged = false;
         long population = baseline.population();
         for (Map<String, Object> delta : deltas) {
             @SuppressWarnings("unchecked")
             List<Map<String, Object>> changes = (List<Map<String, Object>>) delta.get("changes");
+            if (Boolean.TRUE.equals(delta.get("contentQualificationChanged"))) {
+                // Bounded replay already verifies each changed unit against
+                // this committed RDF/Lucene cut, including retained Content
+                // source/body pins. Keep that physical proof while withdrawing
+                // Content completeness until its maintenance owner re-audits.
+                // An authority-only write has no such delivery evidence.
+                if (changes.stream().noneMatch(change -> contentUnit((String) change.get("unit")))) {
+                    invalidate(data, "Content qualification changed without a unit delivery", "qualifiedProof");
+                    return unavailable(data, UnavailableReason.GENERATION_UNQUALIFIED);
+                }
+                contentChanged = true;
+            }
             for (Map<String, Object> change : changes) {
                 if (Boolean.TRUE.equals(change.get("before"))) population--;
                 if (Boolean.TRUE.equals(change.get("after"))) population++;
@@ -908,7 +920,7 @@ final class SearchDeltaJournal {
         }
         Qualification next = new Qualification(baseline.epoch(), baseline.generation(),
             Long.parseLong((String) replay.get("ordinal")), luceneGeneration, population,
-            (String) replay.get("sequence"), baseline.content());
+            (String) replay.get("sequence"), contentChanged ? null : baseline.content());
         try (var fence = publicationFence()) {
             // A slower read must not overwrite a later writer's qualification.
             if (qualified.get(data) == baseline) {
@@ -920,6 +932,7 @@ final class SearchDeltaJournal {
             || !requested.get("ordinal").equals(replay.get("ordinal"))
             || !requested.get("luceneGeneration").equals(replay.get("luceneGeneration")))
             return unavailable(data, UnavailableReason.REPLAY_UNAVAILABLE);
+        if (contentChanged) scheduleRecovery(data);
         Map<String, Object> response = new LinkedHashMap<>(requested);
         response.put("qualifiedPopulation", Long.toString(population));
         if (next.content() != null) response.put("contentQualification", next.content().envelope());
