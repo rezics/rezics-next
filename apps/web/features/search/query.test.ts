@@ -47,7 +47,7 @@ test('a valid refetch reuses its original continuations without treating later c
     await observer.fetchNextPage({ throwOnError: true });
     const refreshed = await observer.refetch({ throwOnError: true });
     expect(refreshed.data?.pages.map(item => item.next)).toEqual([token(1), token(2), null]);
-    expect(refreshed.hasNextPage).toBe(false);
+    expect(observer.getCurrentResult().hasNextPage).toBe(false);
   } finally { unsubscribe(); observer.destroy(); client.clear(); }
 });
 
