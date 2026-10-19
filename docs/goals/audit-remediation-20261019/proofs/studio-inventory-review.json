@@ -1,9 +1,9 @@
 {
   "goal": "audit-remediation-20261019",
   "worker": "G-2848",
-  "reportVersion": 4,
-  "reportedAtUtc": "2026-10-19T11:26:53.503434+00:00",
-  "result": "partial: exact two-file WorkMaintainers SSR correction approved; two missing genuine Details390/1440 rings now visibly proved; prior six rings/Curated histories preserved; original Studio inventory/title/count acceptance remains separately unproved",
+  "reportVersion": 5,
+  "reportedAtUtc": "2026-10-19T12:36:03.067886+00:00",
+  "result": "partial: exact328792cc one-line admission fixture UUID cast source-approved; affected PostgreSQL selection execution remains with root capture; all previous Studio proof and original unreached inventory/count limits preserved",
   "reviewer": {
     "engine": "codex-1",
     "model": "GPT-6.1 Sol",
@@ -7281,5 +7281,124 @@
       "normalBrowserEffects": "Supported OAuth renewal and ordinary UI reads; no Work/maintainer save/add/remove was invoked. Normal auth/session or Home landing effects are not represented as manual data preparation."
     },
     "completionBoundary": "Two-file SSR correction approved after actual independent source review, targeted10/58 units, valid retained affected checks and two actual genuine Details visible-ring assertions. All historical proof and failures preserved. Overall original Studio inventory audit acceptance remains partial; review/check/story/focus success closes no inventory/count/title finding and causes no automatic landing."
+  },
+  "admissionFixtureCastReview": {
+    "reportedAtUtc": "2026-10-19T12:36:03.067886+00:00",
+    "authority": "Manager sameScope continuation of original outcome/claims/authority/acceptance. Review ONLY the parent..candidate one-line fixture cast; no repeated Studio source, Storybook, browser, whole types, original acceptance or genuine catalogue preparation. Root capture owns affected failing-selection execution through existing gates.",
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "sameIndependentReviewer": true,
+      "candidateAuthoredByReviewer": false,
+      "nestedAgents": 0,
+      "accountOrModelFallback": false,
+      "secondReviewerCommissioned": false
+    },
+    "preservedReport": {
+      "commit": "a1af782bfc799e57778b226c6fc208e551489a78",
+      "sha256": "ce08500baa4e7d241d2a290d7b86c7617679540c342aae3038fb4f37d2df3f43",
+      "allExistingSectionsUnchanged": true,
+      "rootMetadataOnlyChanges": [
+        "reportVersion",
+        "reportedAtUtc",
+        "result"
+      ],
+      "boundary": "All original24-path review/checks, story and genuine browser proof, historical failures, prior source approvals, original unreached chapter-count/private-disclosure/large-inventory limits and latest two Details-ring results retained without replay or relabeling."
+    },
+    "pins": {
+      "sourceAndTest": {
+        "base": "488a0a0579d57774ba3a0693c00ffa3aa0d6d727",
+        "head": "328792cc910713e965db1a48346d80c85fb537d0",
+        "parentExact": true,
+        "externalCleanExactBeforeReading": true,
+        "externalCleanExactAfterReview": true,
+        "onlyChangedPath": "services/main/tests/studio-transfer-parity.test.ts",
+        "beforeBlob": "cd7af6f33696a3ab10852bfc0a92007913bbd828",
+        "afterBlob": "10e9b7d8dcd3a97ec9165c226c0d43c4f028ce83",
+        "afterSha256": "ad08d3d1643c2ff136d1cc5eab92db0c9800c69c9eb5122b0ab8ee92c4ee4ee1",
+        "exactOnlyReplacement": {
+          "before": "graph_data_epoch,graph_sequence,sealed_at) VALUES ($1,$2,$3,$4,'work.edit',$1::text,$5,0,",
+          "after": "graph_data_epoch,graph_sequence,sealed_at) VALUES ($1::uuid,$2,$3,$4,'work.edit',$1::text,$5,0,",
+          "occurrences": 1
+        },
+        "assertionsAndAllOtherBytesUnchanged": true,
+        "gitDiffCheckExit": 0,
+        "receiptSha256": "04f835121c267e4e49de5b34e0c13aa93f783d70694e262951afcea96017b8a9",
+        "patchSha256Verified": "365e6b9e9a3bd1dfd05ca163742444d865c468b8dd9b504f3cabf1b13d8f441e"
+      },
+      "receipt": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-studio-admission-cast-candidate.json",
+        "sha256": "04f835121c267e4e49de5b34e0c13aa93f783d70694e262951afcea96017b8a9",
+        "patch": ".temp/audit-remediation-20261019/two-hour-sprint/site-studio-admission-cast-candidate.patch",
+        "patchSha256": "365e6b9e9a3bd1dfd05ca163742444d865c468b8dd9b504f3cabf1b13d8f441e"
+      },
+      "productRuntimeIntegration": "Not started or measured in this source-only correction. Product code is byte-identical to parent488a0a0579d57774ba3a0693c00ffa3aa0d6d727; prior product/runtime proof retains its own separate pins.",
+      "runner": "No candidate test runner execution by this reviewer in this continuation. Root normal capture will execute affected original failing selection; report docs check uses main Goalctl job ownership from this worker cwd.",
+      "nativeImageSchemaBackup": "No image/schema/migration/backup/data change, restore or preparation. No new runtime/native/backup assertion; all prior pins and limits retained."
+    },
+    "sourceVerdict": {
+      "verdict": "approve exact one-line fixture correction",
+      "reviewedPath": "services/main/tests/studio-transfer-parity.test.ts",
+      "line": 437,
+      "case": "Studio recent, created and title orders traverse 105 Works without losing microsecond order",
+      "scope": "Actual parent..candidate diff plus immediate case context406-447 and same-file existing helper55-60; no unchanged implementation re-review.",
+      "reason": "The first VALUES occurrence explicitly treats the generated edit ID as uuid for access.admission.id. The reused idempotency value still explicitly casts that same parameter to text. This removes the reported conflicting inferred parameter types without changing the generated UUID, bound parameters, identity, admission facts or digest. Existing provision helper at59 already uses the same $1::uuid / $1::text pattern.",
+      "assertionIntegrity": "Machine-verified that replacing this single exact substring reconstructs the complete candidate file. All105-Work recent/created/title iteration, microsecond order, uniqueness, bound-continuation rejection, subsequent latest-edit recent-versus-created assertions, transfer denial, query bounds and all other assertions/fixtures are byte-identical.",
+      "productCodeChanged": false,
+      "assertionsChanged": false,
+      "fixtureIdentityChanged": false,
+      "orderingChanged": false,
+      "findings": [],
+      "limit": "Source approval of the exact cast, not an independently reproduced PostgreSQL fix or passing test outcome."
+    },
+    "reportedFailureAndReach": {
+      "attribution": "Manager report and candidate receipt; not independently rerun in this continuation.",
+      "producerRun": "f751",
+      "sourceSnapshot": "488a0a0579d57774ba3a0693c00ffa3aa0d6d727",
+      "reportedFailure": "PostgreSQL42P08 text versus uuid fixture parameter$1; deterministic initial and isolated gate failures.",
+      "failureLocation": "Existing105-Work case late admission INSERT at437, before subsequent recent/created/transfer assertions440-446. Earlier loop assertions appear before this INSERT in source; their actual execution is not independently measured by this source-only continuation.",
+      "currentCandidateTestExecutedByReviewer": false,
+      "currentCandidateOutcomeAssertionReachedByReviewer": false,
+      "rootGatedAffectedSelectionResult": "pending root capture; no green or failure claimed by this report"
+    },
+    "checks": {
+      "sourceVerification": {
+        "artifact": ".temp/studio-review/admission-cast/source-verification.json",
+        "cleanExactHeadAndParent": true,
+        "onlyOneChangedPath": true,
+        "onlyOneSubstringReplacement": true,
+        "allOtherBytesUnchanged": true,
+        "actualGitBlobMatchesReceipt": true,
+        "patchShaMatchesReceipt": true,
+        "gitDiffCheckExit": 0
+      },
+      "docsCheck": {
+        "jobId": "job:d2e3d763-3c6c-4d33-b5c1-d73c5397eeae",
+        "command": "GOAL_ID=audit-remediation-20261019 bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task docs:check",
+        "exit": 0,
+        "tests": 13,
+        "markdownFiles": 258,
+        "log": ".temp/goal/jobs/d2e3d763-3c6c-4d33-b5c1-d73c5397eeae.log",
+        "limit": "Local links/fragments/design navigation; no runtime acceptance. Final receipt metadata added afterward and JSON/preservation validated."
+      },
+      "notRepeated": "No candidate test, whole types, unchanged source/dependency review, Storybook, browser, AMGT or genuine Studio journey rerun; manager specifically assigns affected test execution to normal root capture."
+    },
+    "originalAcceptanceCarryForward": {
+      "source": "All originalCriteria, originalAcceptanceTests, runtimeCompatibilityVerification.currentOriginalCriteria, maintainersSsrCorrectionVerification.criterionCarryForward and originalAcceptanceReach retained exactly.",
+      "newGenuineProductAssertions": 0,
+      "chapterCounts": "Unproved original same-Work top-level/volume/extras/paginated counts and original four-chapter/23-occurrence reruns remain unproved. No aggregate complete flag or story placeholder substituted.",
+      "largeInventory": "Original genuine100-plus inventory/title/CJK/all-orders/pagination/return acceptance remains distinct and unproved by this fixture correction.",
+      "navigation": "Previously proved visible-focus/marker results retain their original pins and bounded claims. No new navigation or whole D4-002 closure.",
+      "activeOwner": "ExistingG-2753 genuine browser proof remains separate and active; no review-of-review, extra prerequisite or full-class closure requested."
+    },
+    "resourcesAndScope": {
+      "onlyTrackedReportModified": true,
+      "candidateAndMainReadOnly": true,
+      "productAssertionRegistryLedgerDataMutation": false,
+      "ownedStackOrBrowserStarted": false,
+      "newCredentialsOrFixturePreparation": false
+    },
+    "completionBoundary": "Exact cast approved once on source evidence only. Root should capture the reviewed bytes normally and execute the affected original failing selection. This review creates no test-pass or original Studio finding-closure claim; all existing limits and histories remain."
   }
 }
