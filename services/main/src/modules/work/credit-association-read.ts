@@ -1,4 +1,8 @@
 import type { VerifiedPrincipal } from '../access/admission.ts';
+import {
+  AccountAssertionDenied,
+  type VerifiedAccountAssertion,
+} from '../account/verify-assertion.ts';
 import { familyReceiptIri, readComponent } from '../semantic/command.ts';
 import {
   readActiveModelGeneration,
@@ -42,11 +46,16 @@ export interface RetainedCreditActivation {
   coverageReceipt: string;
   complete: true;
 }
-export interface RetainedCreditAssociationReadBasis {
+/** Serializable continuation identity. Live authority and token expiry belong
+ * to this request's read basis, never its cursor or returned owner position. */
+export interface RetainedCreditAssociationReadPosition {
   sourcePosition: RetainedCreditSourcePosition;
   generation: ActiveModelGeneration;
   activation: RetainedCreditActivation;
-  reader: VerifiedPrincipal;
+  reader: Omit<VerifiedAccountAssertion, 'currentAssertion' | 'accountExpiresAt'>;
+}
+export interface RetainedCreditAssociationReadBasis extends RetainedCreditAssociationReadPosition {
+  principal: VerifiedPrincipal;
 }
 export interface RetainedCreditSourceValidation {
   basis: CreditAttributionSupport['basis'];
@@ -86,28 +95,28 @@ export interface RetainedCreditAssociationReadOwners {
   mapping?(input: {
     principal: VerifiedPrincipal;
     mapping: RetainedCreditMapping;
-    basis: RetainedCreditAssociationReadBasis;
+    basis: RetainedCreditAssociationReadPosition;
   }): Promise<RetainedCreditMappingValidation | null>;
   coverage?(input: {
     principal: VerifiedPrincipal;
     view: RetainedCreditAssociationState;
     associationHead: string;
     compatibilityReceipt: string;
-    basis: RetainedCreditAssociationReadBasis;
+    basis: RetainedCreditAssociationReadPosition;
   }): Promise<RetainedCreditCoverage | { state: 'withheld' } | null>;
   attribution?(input: {
     principal: VerifiedPrincipal;
     view: RetainedCreditAssociationState;
     participation: RetainedCreditParticipation;
     support: CreditAttributionSupport;
-    basis: RetainedCreditAssociationReadBasis;
+    basis: RetainedCreditAssociationReadPosition;
   }): Promise<RetainedCreditSourceValidation | null>;
   /** Selected-publication and source-reported origins require their existing
    * owner; the bounded legacy credit reader must not infer those identities. */
   origin?(input: {
     principal: VerifiedPrincipal;
     view: RetainedCreditAssociationState;
-    basis: RetainedCreditAssociationReadBasis;
+    basis: RetainedCreditAssociationReadPosition;
   }): Promise<{
     credit: string;
     creditRevision: string;
@@ -145,7 +154,7 @@ export interface RetainedCreditAssociationView {
     currentFields: CreditAttributionField[];
     unsupportedFields: CreditAttributionField[];
   }[];
-  position: RetainedCreditAssociationReadBasis;
+  position: RetainedCreditAssociationReadPosition;
   headGuarantee: 'verified-before-commit';
 }
 export interface RetainedCreditAssociationCandidate {
@@ -163,6 +172,62 @@ const uuid = (value: string | undefined) =>
   !!value && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value);
 const validationToken = (value: string) => /^[0-9a-f]{64}$/.test(value);
 const keyOf = (item: RetainedCreditAssociationCandidate) => `${item.work}\0${item.credit}`;
+
+function snapshotPrincipal(principal: VerifiedPrincipal): VerifiedAccountAssertion {
+  const { currentAssertion, ...data } = principal;
+  return { ...structuredClone(data), ...(currentAssertion ? { currentAssertion } : {}) };
+}
+function readerIdentity(principal: VerifiedAccountAssertion) {
+  const { currentAssertion: _verify, accountExpiresAt: _expiry, ...identity } = principal;
+  return structuredClone(identity);
+}
+function readPosition(
+  basis: RetainedCreditAssociationReadPosition,
+): RetainedCreditAssociationReadPosition {
+  return structuredClone({
+    sourcePosition: basis.sourcePosition,
+    generation: basis.generation,
+    activation: basis.activation,
+    reader: basis.reader,
+  });
+}
+function snapshotBasis(
+  basis: RetainedCreditAssociationReadBasis,
+): RetainedCreditAssociationReadBasis {
+  return { ...readPosition(basis), principal: snapshotPrincipal(basis.principal) };
+}
+function assertUnexpired(principal: VerifiedAccountAssertion) {
+  if (
+    principal.accountExpiresAt !== undefined &&
+    (!Number.isSafeInteger(principal.accountExpiresAt) ||
+      principal.accountExpiresAt * 1000 <= Date.now())
+  ) {
+    throw new AccountAssertionDenied('Account assertion expired during retained credit read');
+  }
+}
+async function currentReader(
+  basis: Pick<RetainedCreditAssociationReadBasis, 'reader' | 'principal'>,
+): Promise<VerifiedPrincipal> {
+  assertUnexpired(basis.principal);
+  const current = basis.principal.currentAssertion
+    ? await basis.principal.currentAssertion()
+    : basis.principal;
+  assertUnexpired(basis.principal);
+  assertUnexpired(current);
+  if (current.issuer !== basis.reader.issuer || current.subject !== basis.reader.subject) {
+    throw new AccountAssertionDenied('Account identity changed during retained credit read');
+  }
+  if (!equal(readerIdentity(current), basis.reader)) {
+    throw new RetainedCreditReadMoved(
+      'Account consent or disclosure changed during retained credit read',
+    );
+  }
+  // Keep the original token/scope/signal callback when an owner revalidates it.
+  return snapshotPrincipal({
+    ...current,
+    currentAssertion: basis.principal.currentAssertion ?? current.currentAssertion,
+  });
+}
 
 async function currentNativeCredit(env: WorkActivationEnvironment, credit: string) {
   let witness: CreditOwnerWitness | null;
@@ -220,7 +285,9 @@ export async function openRetainedCreditAssociationRead(
   deps: RetainedCreditAssociationReadDependencies,
   principal: VerifiedPrincipal,
 ): Promise<RetainedCreditAssociationReadBasis> {
-  const reader = structuredClone(principal);
+  const authority = snapshotPrincipal(principal);
+  const reader = readerIdentity(authority);
+  const current = await currentReader({ reader, principal: authority });
   if (!deps.owners.activation) unavailable('retained credit activation owner unavailable');
   const sourcePosition = await position(deps.environment);
   let generation: ActiveModelGeneration;
@@ -230,14 +297,15 @@ export async function openRetainedCreditAssociationRead(
     return unavailable('retained credit model generation unavailable');
   }
   const activation = checkedActivation(
-    await deps.owners.activation(
-      structuredClone({ principal: reader, sourcePosition, generation }),
-    ),
+    await deps.owners.activation({
+      principal: current,
+      ...structuredClone({ sourcePosition, generation }),
+    }),
     generation,
   );
-  const basis = { sourcePosition, generation, activation, reader };
+  const basis = { sourcePosition, generation, activation, reader, principal: authority };
   await fenceRetainedCreditAssociationRead(deps, basis);
-  return structuredClone(basis);
+  return snapshotBasis(basis);
 }
 
 /** Register this fence with the query-owned witness page. A continuation binds
@@ -247,7 +315,8 @@ export async function fenceRetainedCreditAssociationRead(
   deps: RetainedCreditAssociationReadDependencies,
   supplied: RetainedCreditAssociationReadBasis,
 ): Promise<void> {
-  const basis = structuredClone(supplied);
+  const basis = snapshotBasis(supplied);
+  const principal = await currentReader(basis);
   if (!deps.owners.activation) unavailable('retained credit activation owner unavailable');
   const currentPosition = await position(deps.environment);
   let generation: ActiveModelGeneration;
@@ -260,13 +329,15 @@ export async function fenceRetainedCreditAssociationRead(
     throw new RetainedCreditReadMoved('retained credit source position or generation changed');
   }
   const activation = checkedActivation(
-    await deps.owners.activation(
-      structuredClone({ principal: basis.reader, sourcePosition: currentPosition, generation }),
-    ),
+    await deps.owners.activation({
+      principal,
+      ...structuredClone({ sourcePosition: currentPosition, generation }),
+    }),
     generation,
   );
   if (!equal(activation, basis.activation))
     throw new RetainedCreditReadMoved('retained credit activation or coverage changed');
+  await currentReader(basis);
 }
 
 /** Server-only ordered candidates, not public witnesses. Hydration applies
@@ -280,7 +351,12 @@ export async function readRetainedCreditAssociationCandidates(
     limit: number;
   },
 ): Promise<{ items: RetainedCreditAssociationCandidate[]; more: boolean }> {
-  const { basis, works, after, limit } = structuredClone(input);
+  const basis = snapshotBasis(input.basis);
+  const { works, after, limit } = structuredClone({
+    works: input.works,
+    after: input.after,
+    limit: input.limit,
+  });
   if (
     !Number.isInteger(limit) ||
     limit < 1 ||
@@ -405,15 +481,18 @@ async function originalCredit(
   deps: RetainedCreditAssociationReadDependencies,
   basis: RetainedCreditAssociationReadBasis,
   state: RetainedCreditAssociationState,
+  principal: VerifiedPrincipal,
 ): Promise<RetainedCreditSourceValidation[]> {
   if (
     state.retainedProfile === 'source-reported-credit-v1' ||
     state.origin.kind === 'selected-publication'
   ) {
     if (!deps.owners.origin) unavailable('retained credit origin owner unavailable');
-    const origin = await deps.owners.origin(
-      structuredClone({ principal: basis.reader, view: state, basis }),
-    );
+    const origin = await deps.owners.origin({
+      principal: snapshotPrincipal(principal),
+      view: structuredClone(state),
+      basis: readPosition(basis),
+    });
     if (
       !origin ||
       origin.credit !== state.credit ||
@@ -468,9 +547,11 @@ async function originalCredit(
   // The Source owner revalidates the retained tuple and rights, including every
   // coordinate and original intent/correspondence; no provider defaults here.
   if (!deps.owners.origin) unavailable('retained source binding owner unavailable');
-  const origin = await deps.owners.origin(
-    structuredClone({ principal: basis.reader, view: state, basis }),
-  );
+  const origin = await deps.owners.origin({
+    principal: snapshotPrincipal(principal),
+    view: structuredClone(state),
+    basis: readPosition(basis),
+  });
   if (
     !origin ||
     origin.credit !== state.credit ||
@@ -512,6 +593,7 @@ async function attributions(
   deps: RetainedCreditAssociationReadDependencies,
   basis: RetainedCreditAssociationReadBasis,
   state: RetainedCreditAssociationState,
+  principal: VerifiedPrincipal,
 ) {
   const validation: RetainedCreditSourceValidation[] = [];
   const attribution: RetainedCreditAssociationView['attribution'] = [];
@@ -551,9 +633,11 @@ async function attributions(
         };
       } else {
         if (!deps.owners.attribution) unavailable('retained attribution owner unavailable');
-        result = await deps.owners.attribution(
-          structuredClone({ principal: basis.reader, view: state, participation, support, basis }),
-        );
+        result = await deps.owners.attribution({
+          principal: snapshotPrincipal(principal),
+          ...structuredClone({ view: state, participation, support }),
+          basis: readPosition(basis),
+        });
       }
       if (!result) unavailable('retained attribution evidence unavailable');
       const proof = checkedSourceValidation(result, support);
@@ -590,26 +674,37 @@ export async function readRetainedCreditAssociationView(
     associationHead?: string;
   },
 ): Promise<RetainedCreditAssociationView | null> {
-  const { basis, work, credit, associationHead } = structuredClone(input);
+  const basis = snapshotBasis(input.basis);
+  const { work, credit, associationHead } = structuredClone({
+    work: input.work,
+    credit: input.credit,
+    associationHead: input.associationHead,
+  });
   if (
     ![work, credit].every(creditNativeId) ||
     (associationHead !== undefined && !creditNativeId(associationHead))
   )
     unavailable('invalid retained credit view selection');
   await fenceRetainedCreditAssociationRead(deps, basis);
-  if (!(await deps.canReadWork(structuredClone(basis.reader), work))) return null;
+  if (!(await deps.canReadWork(await currentReader(basis), work))) {
+    await fenceRetainedCreditAssociationRead(deps, basis);
+    return null;
+  }
   const currentAssociationHead = await viewHead(deps.environment, credit, work);
   const head = associationHead ?? currentAssociationHead;
   const sealed = await sealedView(deps.environment, credit, head);
   const { state } = sealed;
   if (state.work !== work) unavailable('retained credit target differs');
   const readOwners = async () => {
-    const source = await originalCredit(deps, basis, state);
+    const principal = await currentReader(basis);
+    const source = await originalCredit(deps, basis, state, principal);
     if (!deps.owners.mapping || !deps.owners.coverage)
       unavailable('retained credit mapping or coverage owner unavailable');
-    const mapping = await deps.owners.mapping(
-      structuredClone({ principal: basis.reader, mapping: state.mapping, basis }),
-    );
+    const mapping = await deps.owners.mapping({
+      principal: snapshotPrincipal(principal),
+      mapping: structuredClone(state.mapping),
+      basis: readPosition(basis),
+    });
     if (
       !mapping ||
       !equal(mapping.mapping, state.mapping) ||
@@ -618,15 +713,15 @@ export async function readRetainedCreditAssociationView(
       !validationToken(mapping.validationToken)
     )
       unavailable('retained credit exact mapping unavailable');
-    const coverage = await deps.owners.coverage(
-      structuredClone({
-        principal: basis.reader,
+    const coverage = await deps.owners.coverage({
+      principal: snapshotPrincipal(principal),
+      ...structuredClone({
         view: state,
         associationHead: head,
         compatibilityReceipt: sealed.receipt,
-        basis,
       }),
-    );
+      basis: readPosition(basis),
+    });
     if (coverage?.state === 'withheld') return null;
     if (
       !coverage ||
@@ -645,7 +740,7 @@ export async function readRetainedCreditAssociationView(
       new Set(coverage.statements.map((item) => item.statement)).size !== coverage.statements.length
     )
       unavailable('retained credit exact Statement coverage or adoption unavailable');
-    const supported = await attributions(deps, basis, state);
+    const supported = await attributions(deps, basis, state, principal);
     return {
       mappingValidation: structuredClone(mapping),
       coverage: structuredClone(coverage),
@@ -657,13 +752,16 @@ export async function readRetainedCreditAssociationView(
     };
   };
   const verified = await readOwners();
-  if (!verified) return null;
+  if (!verified) {
+    await fenceRetainedCreditAssociationRead(deps, basis);
+    return null;
+  }
   // Source supports and publication/rights state may change independently of
   // the graph counter. Re-read their owner validations as well as graph heads.
   const current = await readOwners();
   if (
     !current ||
-    !(await deps.canReadWork(structuredClone(basis.reader), work)) ||
+    !(await deps.canReadWork(await currentReader(basis), work)) ||
     !equal(verified, current) ||
     (await viewHead(deps.environment, credit, work)) !== currentAssociationHead
   ) {
@@ -680,7 +778,7 @@ export async function readRetainedCreditAssociationView(
     admission: sealed.admission,
     state,
     ...verified,
-    position: basis,
+    position: readPosition(basis),
     headGuarantee: 'verified-before-commit',
   });
 }

@@ -1,9 +1,16 @@
-import { expect, test } from 'bun:test';
+import { expect, test, setSystemTime } from 'bun:test';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { mkdirSync, rmSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type { SparqlResult } from '../src/infrastructure/fuseki.ts';
 import type { VerifiedPrincipal } from '../src/modules/access/admission.ts';
+import {
+  AccountAssertionDenied,
+  AccountAssertionUnavailable,
+  AccountAssertionVerifier,
+  type VerifiedAccountAssertion,
+} from '../src/modules/account/verify-assertion.ts';
 import { familyReceiptIri } from '../src/modules/semantic/command.ts';
 import { nativeCreditDigest } from '../src/modules/profiles/credits.ts';
 import {
@@ -65,6 +72,73 @@ const attributedFields: CreditAttributionField[] = [
   'note',
 ];
 
+/** Account's actual verifier produces the live enumerable callback. Only its
+ * issuer HTTP transport is local; no Account or read-owner module is mocked. */
+async function accountReader() {
+  const { privateKey, publicKey } = await generateKeyPair('RS256');
+  const jwk = { ...(await exportJWK(publicKey)), kid: 'credit-reader', alg: 'RS256', use: 'sig' };
+  const state = { active: true, emailVerified: true, available: true, calls: 0 };
+  const server = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    fetch(request) {
+      if (new URL(request.url).pathname === '/jwks') return Response.json({ keys: [jwk] });
+      state.calls++;
+      if (!state.available) return new Response('unavailable', { status: 503 });
+      return Response.json({
+        active: state.active,
+        iss: principal.issuer,
+        sub: principal.subject,
+        aud: 'main-credit-read',
+        scope: 'work:read',
+        client_id: 'credit-reader',
+        email_verified: state.emailVerified,
+        exp: Math.floor(Date.now() / 1000) + 300,
+        rezics_content_evidence: {
+          age: 'adult',
+          country: 'US',
+          accountEligible: true,
+          adultAvailable: true,
+          categories: { general: true, r15: true, r18: false, r18g: false },
+        },
+      });
+    },
+  });
+  try {
+    const token = await new SignJWT({
+      rezics_auth_mode: 'user',
+      rezics_consent_id: 'credit-read-consent',
+      rezics_consent_generation: '1',
+    })
+      .setProtectedHeader({ alg: 'RS256', kid: 'credit-reader' })
+      .setIssuer(principal.issuer)
+      .setSubject(principal.subject)
+      .setAudience('main-credit-read')
+      .setIssuedAt()
+      .setExpirationTime('5m')
+      .sign(privateKey);
+    const base = `http://127.0.0.1:${server.port}`;
+    const verifier = new AccountAssertionVerifier({
+      issuer: principal.issuer,
+      audience: 'main-credit-read',
+      jwksUrl: `${base}/jwks`,
+      introspectUrl: `${base}/introspect`,
+      clientId: 'credit-reader',
+      clientSecret: 'test-secret',
+    });
+    const reader = await verifier.verify(
+      new Request('https://main.test/v1/works/credits', {
+        headers: { authorization: `Bearer ${token}` },
+      }),
+      ['work:read'],
+    );
+    return { reader, state, close: () => server.stop(true) };
+  } catch (error) {
+    server.stop(true);
+    throw error;
+  }
+}
+
 /** Actual immutable component encoding and credit/receipt readers; graph and
  * relation/Source authority transports are bounded doubles. This grants no
  * installed activation, provider adoption or public API outcome coverage. */
@@ -73,6 +147,7 @@ function fixture(
   role: NativeCreditRole = 'artist',
   provider = 'vndb',
   namespace = 'staff',
+  readerPrincipal: VerifiedPrincipal = principal,
 ) {
   const directory = join(import.meta.dir, '../../../.temp/retained-credit-reads', randomUUID());
   mkdirSync(directory, { recursive: true });
@@ -339,7 +414,7 @@ function fixture(
       lineage: { dataEpoch: 'credit-epoch', routingEpoch: 'routing-1' },
     } as unknown as WorkActivationEnvironment,
     async canReadWork(reader, work) {
-      expect(reader).toEqual(principal);
+      expect(reader).toEqual(readerPrincipal);
       expect(work).toBe(id(1));
       live.readCalls++;
       const allowed = live.readable;
@@ -418,7 +493,7 @@ function fixture(
     },
   };
   store();
-  const open = () => openRetainedCreditAssociationRead(deps, principal);
+  const open = () => openRetainedCreditAssociationRead(deps, readerPrincipal);
   const read = async (head?: string) =>
     readRetainedCreditAssociationView(deps, {
       basis: await open(),
@@ -956,3 +1031,242 @@ test('selected-publication transcriber reads preserve the actual decision credit
     f.clean();
   }
 });
+
+test('Account-issued principals open, fence, page and hydrate without cloning live authority', async () => {
+  const account = await accountReader();
+  const f = fixture(false, 'artist', 'vndb', 'staff', account.reader);
+  try {
+    expect(Object.keys(account.reader)).toContain('currentAssertion');
+    expect(account.reader.accountScopes).toEqual(['work:read']);
+    expect(account.reader.accountConsentId).toBe('credit-read-consent');
+    f.addAttribution();
+    const seen = new Set<string>();
+    const original = { ...f.deps.owners };
+    const liveAuthority = (operation: string, reader: VerifiedPrincipal) => {
+      seen.add(operation);
+      expect(reader.currentAssertion).toBe(account.reader.currentAssertion);
+      expect((reader as VerifiedAccountAssertion).accountExpiresAt).toBe(
+        account.reader.accountExpiresAt,
+      );
+      expect(reader.contentEvidence).toEqual(account.reader.contentEvidence);
+    };
+    f.deps.owners.activation = async (input) => {
+      liveAuthority('activation', input.principal);
+      return original.activation!(input);
+    };
+    f.deps.owners.mapping = async (input) => {
+      liveAuthority('mapping', input.principal);
+      expect(() => structuredClone(input.basis)).not.toThrow();
+      return original.mapping!(input);
+    };
+    f.deps.owners.coverage = async (input) => {
+      liveAuthority('coverage', input.principal);
+      expect(() => structuredClone(input.basis)).not.toThrow();
+      return original.coverage!(input);
+    };
+    f.deps.owners.attribution = async (input) => {
+      liveAuthority('attribution', input.principal);
+      expect(() => structuredClone(input.basis)).not.toThrow();
+      return original.attribution!(input);
+    };
+    const initialCalls = account.state.calls;
+    const opening = f.open();
+    await expect(opening).resolves.toMatchObject({ reader: { subject: principal.subject } });
+    const basis = await opening;
+    expect(Object.keys(basis.reader)).not.toContain('currentAssertion');
+    expect(Object.keys(basis.reader)).not.toContain('accountExpiresAt');
+    expect(() => structuredClone(basis.reader)).not.toThrow();
+    await fenceRetainedCreditAssociationRead(f.deps, basis);
+    const page = await readRetainedCreditAssociationCandidates(f.deps, { basis, limit: 2 });
+    expect(page.items.map((item) => item.credit)).toEqual([f.value.credit]);
+    const view = await readRetainedCreditAssociationView(f.deps, {
+      basis,
+      work: f.value.work,
+      credit: f.value.credit,
+    });
+    expect(view?.occurrence).toBe(f.value.credit);
+    expect(view?.sourceValidation).toHaveLength(2);
+    expect(view?.position.reader).toEqual(basis.reader);
+    expect(() => structuredClone(view)).not.toThrow();
+    expect([...seen].sort()).toEqual(['activation', 'attribution', 'coverage', 'mapping']);
+    expect(account.state.calls).toBeGreaterThan(initialCalls);
+
+    account.state.active = false;
+    for (const read of [
+      () => f.open(),
+      () => fenceRetainedCreditAssociationRead(f.deps, basis),
+      () => readRetainedCreditAssociationCandidates(f.deps, { basis, limit: 2 }),
+      () =>
+        readRetainedCreditAssociationView(f.deps, {
+          basis,
+          work: f.value.work,
+          credit: f.value.credit,
+        }),
+    ])
+      await expect(read()).rejects.toBeInstanceOf(AccountAssertionDenied);
+  } finally {
+    f.clean();
+    account.close();
+  }
+});
+
+test('Account expiry, unavailable enforcement and changed disclosure refuse every retained read entry point', async () => {
+  const account = await accountReader();
+  const f = fixture(true, 'artist', 'vndb', 'staff', account.reader);
+  try {
+    const basis = await f.open();
+    const reads = [
+      () => f.open(),
+      () => fenceRetainedCreditAssociationRead(f.deps, basis),
+      () => readRetainedCreditAssociationCandidates(f.deps, { basis, limit: 2 }),
+      () =>
+        readRetainedCreditAssociationView(f.deps, {
+          basis,
+          work: f.value.work,
+          credit: f.value.credit,
+        }),
+    ];
+    account.state.available = false;
+    for (const read of reads)
+      await expect(read()).rejects.toBeInstanceOf(AccountAssertionUnavailable);
+    account.state.available = true;
+    account.state.emailVerified = false;
+    // A fresh opening can bind the changed reader; an existing continuation cannot.
+    for (const read of reads.slice(1))
+      await expect(read()).rejects.toBeInstanceOf(RetainedCreditReadMoved);
+    account.state.emailVerified = true;
+    setSystemTime(account.reader.accountExpiresAt! * 1000);
+    for (const read of reads) await expect(read()).rejects.toBeInstanceOf(AccountAssertionDenied);
+  } finally {
+    setSystemTime();
+    f.clean();
+    account.close();
+  }
+});
+
+for (const phase of [
+  'empty-page',
+  'witness',
+  'withheld-disclosure',
+  'withheld-coverage',
+] as const) {
+  test(`Account revocation during ${phase} cannot return a completed retained read`, async () => {
+    const account = await accountReader();
+    const f = fixture(true, 'artist', 'vndb', 'staff', account.reader);
+    try {
+      const basis = await f.open();
+      const revoke = () => {
+        account.state.active = false;
+      };
+      if (phase === 'empty-page') {
+        f.live.headAvailable = false;
+        const query = f.deps.environment.fuseki.query.bind(f.deps.environment.fuseki);
+        f.deps.environment.fuseki.query = async (...args) => {
+          const result = await query(...args);
+          if (args[0].includes('ORDER BY ?work ?credit ?associationHead')) revoke();
+          return result;
+        };
+      } else if (phase === 'witness') f.live.afterMapping = revoke;
+      else if (phase === 'withheld-disclosure') {
+        f.live.readable = false;
+        f.live.afterRead = revoke;
+      } else {
+        f.live.withheld = true;
+        const coverage = f.deps.owners.coverage!;
+        f.deps.owners.coverage = async (input) => {
+          const result = await coverage(input);
+          revoke();
+          return result;
+        };
+      }
+      const read =
+        phase === 'empty-page'
+          ? readRetainedCreditAssociationCandidates(f.deps, { basis, limit: 2 })
+          : readRetainedCreditAssociationView(f.deps, {
+              basis,
+              work: f.value.work,
+              credit: f.value.credit,
+            });
+      await expect(read).rejects.toBeInstanceOf(AccountAssertionDenied);
+    } finally {
+      f.clean();
+      account.close();
+    }
+  });
+}
+
+for (const origin of ['source-binding', 'selected-publication'] as const) {
+  test(`Account authority reaches the ${origin} origin owner independently of serialized positions`, async () => {
+    const account = await accountReader();
+    const f = fixture(false, 'artist', 'vndb', 'staff', account.reader);
+    try {
+      f.live.native = false;
+      f.live.sourceIntent = id(60);
+      if (origin === 'source-binding') {
+        f.state.origin = {
+          kind: origin,
+          binding: id(60),
+          proposal: id(61),
+          conversion: id(62),
+          record: id(63),
+          observation: id(64),
+          sourceOccurrence: `urn:rezics:source-occurrence:${'a'.repeat(64)}`,
+          sourceOrdinal: 0,
+        };
+      } else {
+        f.state.role = 'transcriber';
+        f.state.mapping.originRole = 'transcriber';
+        f.state.mapping.subjectRole = `${id(30)}/role/transcriber`;
+        f.state.participations[1]!.role = f.state.mapping.subjectRole;
+        f.state.origin = {
+          kind: origin,
+          decision: f.state.credit,
+          source: id(66),
+          record: id(67),
+          observation: id(68),
+        };
+      }
+      f.addAttribution();
+      const original = structuredClone(f.state);
+      let originReads = 0;
+      f.deps.owners.origin = async (input) => {
+        originReads++;
+        expect(input.principal.currentAssertion).toBe(account.reader.currentAssertion);
+        expect(input.basis.reader.accountConsentId).toBe(account.reader.accountConsentId);
+        expect(() => structuredClone(input.basis)).not.toThrow();
+        return {
+          credit: original.credit,
+          creditRevision: original.creditRevision,
+          work: original.work,
+          workRevision: original.workRevision,
+          role: original.role,
+          retainedProfile: original.retainedProfile,
+          origin: original.origin,
+          receipt: origin === 'source-binding' ? workEditReceiptIri(uuid(5)) : receipt(65),
+          participations: original.participations,
+          validation: [
+            {
+              basis:
+                origin === 'source-binding'
+                  ? { kind: 'source-binding', binding: id(60) }
+                  : { kind: 'selected-publication', decision: original.credit },
+              state: 'current',
+              receipt: receipt(60),
+              validationToken: hash('current'),
+              fields: {},
+              evidence: [id(90)],
+            },
+          ],
+        };
+      };
+      const view = await f.read();
+      expect(view?.occurrence).toBe(original.credit);
+      expect(view?.state.origin).toEqual(original.origin);
+      expect(originReads).toBeGreaterThan(1);
+      expect(() => structuredClone(view)).not.toThrow();
+    } finally {
+      f.clean();
+      account.close();
+    }
+  });
+}
