@@ -39,7 +39,7 @@ export interface SourceEvidenceWindow {
 /** Compose the existing evidence and Rights owner without substituting import
  * authority for a public-read identity or inventing a SourceWork binding. */
 export function retainedFieldEvidenceOwners(owner: Pick<SourceRetainedRecordEvidenceOwner,
-  'authorizeRetainedFieldReuse' | 'projectPublicRetainedField'>): Pick<RetainedFieldOwners,'authorizeReuse' | 'publicEvidence'> {
+  'authorizeRetainedFieldReuse' | 'projectPublicRetainedFieldForReader'>): Pick<RetainedFieldOwners,'authorizeReuse' | 'publicEvidence'> {
   return {
     authorizeReuse: async (principal,actor,custody,claimedSourceRecord = custody.sourceRecord) => {
       await owner.authorizeRetainedFieldReuse(principal,actor,claimedSourceRecord,custody.observations);
@@ -48,8 +48,8 @@ export function retainedFieldEvidenceOwners(owner: Pick<SourceRetainedRecordEvid
       }
     },
     publicEvidence: (evidence,field,input,context) => {
-      if (!context?.principal || field.correspondence.payloadPointers.length !== 1) return supportUnavailable();
-      return owner.projectPublicRetainedField(context.principal,input.actingSubject,evidence,
+      if (!context || field.correspondence.payloadPointers.length !== 1) return supportUnavailable();
+      return owner.projectPublicRetainedFieldForReader({ principal: context.principal },evidence,
         field.correspondence.payloadPointers[0]!,suppliedLanguage(input.evidence.field));
     },
   };

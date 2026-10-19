@@ -16,7 +16,7 @@ import { SourceRetainedFieldSupportStore, retainedFieldEvidenceOwners,
   type RetainedPublicEvidence } from '../src/modules/source/field-support-retained.ts';
 import { SourceFieldWithdrawalStore } from '../src/modules/source/withdrawal.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
-import type { AccessAdmissionRegistry } from '../src/modules/access/admission.ts';
+import type { AccessAdmissionRegistry, VerifiedPrincipal } from '../src/modules/access/admission.ts';
 import { WorkReadSession, WorkReadMoved, withWorkReadSession } from '../src/modules/work/read-session.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 
@@ -362,6 +362,8 @@ test('Source evidence windows preserve the evidence owner projection, hidden pos
     const client = await pool.connect(); try { return await operation(client); } finally { client.release(); }
   } };
   const hidden = new Set<string>(), projections = new Map<string,RetainedPublicEvidence>();
+  const publicReaders: Array<VerifiedPrincipal | null> = [];
+  const deniedReader = { issuer: principal.issuer,subject: 'denied-public-reader' };
   let reuseChecks = 0, nativeChecks = 0;
   let deniedRecord: string | null = null;
   const evidenceOwners = retainedFieldEvidenceOwners({
@@ -370,11 +372,11 @@ test('Source evidence windows preserve the evidence owner projection, hidden pos
       expect(sourceRecord).toMatch(/^https:\/\/rezics.com\/id\//); expect(observations.length).toBeGreaterThan(0);
       if (sourceRecord === deniedRecord) throw new SourceFieldProblem(403,'rights_denied','Reuse denied');
     },
-    projectPublicRetainedField: async (who,actingSubject,evidence,pointer,language) => {
-      expect(who).toEqual(principal); expect(actingSubject).toBe(actor);
+    projectPublicRetainedFieldForReader: async (context,evidence,pointer,language) => {
+      publicReaders.push(context.principal);
       expect(pointer).toBe('/record/data/name'); expect(language).toEqual({ state: 'omitted' });
       const binding = evidence.conversion.retainedRecord;
-      if (hidden.has(binding.sourceRecord)) return null;
+      if (context.principal?.subject === deniedReader.subject || hidden.has(binding.sourceRecord)) return null;
       const projection: RetainedPublicEvidence = { id: binding.sourceRecord,sourceWork: null,
         representationSha256: binding.payload.byteDigest,locator: { pointer },
         attribution: { sourceName: binding.identity.provider,sourceUrl: evidence.record.sourceUrl,licence: null },
@@ -417,10 +419,10 @@ test('Source evidence windows preserve the evidence owner projection, hidden pos
   await expect(store.attach(principal,principalId,randomUUID(),mismatched))
     .rejects.toMatchObject({ status: 409,basis: 'record' });
   expect(nativeChecks).toBe(beforeNative); expect(await store.evidenceGeneration(selection)).toBe(beforeRefusal);
-  const session = () => {
+  const session = (reader: VerifiedPrincipal | null = principal) => {
     const read = new WorkReadSession({ environment: env } as MainWorkDependencies,
       new Request('https://rezics.test/v1/query'),{}, { dataEpoch: ack.dataEpoch,sequence: ack.sequence });
-    read.principal = principal; return read;
+    read.principal = reader; return read;
   };
   await expect(store.readEvidenceWindow(session(),selection)).rejects.toMatchObject({ status: 503 });
   const active = session();
@@ -437,6 +439,34 @@ test('Source evidence windows preserve the evidence owner projection, hidden pos
     for (const privateField of ['binding','intakes','attachment','native','requestDigest']) expect(item).not.toHaveProperty(privateField);
   }
   await active.fenceDependencies();
+  expect(publicReaders.every(reader => reader === principal)).toBe(true);
+  const reuseBeforePublicRead = reuseChecks;
+  for (const reader of [null,{ issuer: principal.issuer,subject: 'ordinary-public-reader' }]) {
+    publicReaders.length = 0;
+    const readerSession = session(reader);
+    const readerPage = await withWorkReadSession(readerSession,() => store.readEvidenceWindow(readerSession,selection));
+    expect(readerPage).toEqual(page);
+    expect(publicReaders).toHaveLength(16);
+    expect(publicReaders.every(actual => actual === reader)).toBe(true);
+    await readerSession.fenceDependencies();
+  }
+  publicReaders.length = 0;
+  const deniedSession = session(deniedReader);
+  const deniedPage = await withWorkReadSession(deniedSession,() => store.readEvidenceWindow(deniedSession,selection));
+  expect(deniedPage.items).toEqual([]); expect(deniedPage.more).toBe(true); expect(deniedPage.next).toEqual(page.next);
+  expect(publicReaders).toHaveLength(16); expect(publicReaders.every(reader => reader === deniedReader)).toBe(true);
+  await deniedSession.fenceDependencies();
+  expect(reuseChecks).toBe(reuseBeforePublicRead);
+  const input = entries[0]!.input, field = await verifyRetainedField(input,first.evidence);
+  const publicChecks = publicReaders.length;
+  expect(() => evidenceOwners.publicEvidence(first.evidence,field,input))
+    .toThrow(expect.objectContaining({ status: 503,code: 'source_support_unavailable' }));
+  for (const payloadPointers of [[],[...field.correspondence.payloadPointers,'/record/title']]) {
+    expect(() => evidenceOwners.publicEvidence(first.evidence,{ ...field,
+      correspondence: { ...field.correspondence,payloadPointers } },input,{ principal: null }))
+      .toThrow(expect.objectContaining({ status: 503,code: 'source_support_unavailable' }));
+  }
+  expect(publicReaders).toHaveLength(publicChecks); expect(reuseChecks).toBe(reuseBeforePublicRead);
   const before = await store.evidenceGeneration(selection);
   await store.attach(principal,principalId,entries[0]!.key,entries[0]!.input);
   expect(await store.evidenceGeneration(selection)).toBe(before);
