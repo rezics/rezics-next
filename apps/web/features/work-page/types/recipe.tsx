@@ -17,10 +17,18 @@ import { formatMeasure } from '../../recipe-editor/quantity.ts';
 import Link from '../../shell/localized-link.tsx';
 import { recipePageReader } from '../recipe-reading-recorded-page.ts';
 import type { WorkPageMessages } from '../messages.ts';
-import { Region } from '../region.tsx';
-import type { RecipeWorkPage } from '../types.ts';
+import { Region, RegionFailure } from '../region.tsx';
+import type { ReadFailure, RecipeWorkPage } from '../types.ts';
 import { InstructionReading } from '../../recipe-editor/instruction-reading.tsx';
-import type { Instruction } from '../../recipe-editor/instructions.ts';
+import { recipeMethodReady, RECIPE_METHOD_STATE, type Instruction } from '../../recipe-editor/instructions.ts';
+
+/** A known Recipe keeps its task and explanation while the owner read remains explicitly failed and retryable. */
+export function RecipeReadFailure({ failure, messages }: { failure: ReadFailure; messages: WorkPageMessages }) {
+  return <Region id="recipe-experience" title={messages.recipeMethod}>
+    <p className="text-muted-foreground text-sm">{messages.recipeUnavailable}</p>
+    <RegionFailure title={messages.recipeMethod} failure={failure} messages={messages} />
+  </Region>;
+}
 
 /** What the published page and the editor's preview both render. The editor fills it from its own state. */
 export interface ReadableRecipe {
@@ -97,7 +105,8 @@ export function shownLine(item: ReadableIngredient, units: Units, page: Readable
   const qualifier = page.occurrences.find(node => node.occurrence === item.occurrence)?.qualifier;
   // An exchanged line may carry its quantity separately from its name. Render the retained
   // exact quantity, using Main's scaled amount when present; never merge duplicate occurrences.
-  if (qualifier?.type === 'ingredient-line' && qualifier.originalText?.language) {
+  if (qualifier?.type === 'ingredient-line' && qualifier.originalText?.language
+    && qualifier.originalText.value === item.originalText) {
     const ingredient = qualifier as unknown as IngredientQualifier;
     return readingLine({ ...ingredient, ...(item.amount ? { amount: item.amount } : {}) });
   }
@@ -243,7 +252,9 @@ function CookMode({ page, messages: t, units, onClose, recordingFetch }: {
       document.removeEventListener('visibilitychange', visible);
       document.removeEventListener('keydown', escape);
       void sentinel?.release();
-      opener?.focus();
+      const returnTo = opener?.isConnected && opener !== document.body ? opener
+        : document.querySelector<HTMLElement>('#work-primary-action [data-next-action]');
+      returnTo?.focus();
     };
   }, [onClose]);
   return <div role="dialog" aria-modal="true" aria-label={t.cookMode}
@@ -264,6 +275,24 @@ function CookMode({ page, messages: t, units, onClose, recordingFetch }: {
   </div>;
 }
 
+/** Known yield and times, shared by the identity and the recipe reading surface. */
+export function RecipeFacts({ page, messages: t }: { page: ReadableRecipe; messages: WorkPageMessages }) {
+  const measures = page.measures;
+  const facts = [
+    [t.servings, measures.find(item => item.kind === 'servings')],
+    [t.recipeYield, measures.find(item => item.kind === 'yield')],
+    [t.prepTime, measures.find(item => item.kind === 'preparation-duration')],
+    [t.cookTime, measures.find(item => item.kind === 'cooking-duration')],
+    [t.totalTime, measures.find(item => item.kind === 'total-duration')],
+  ] as const;
+  if (!facts.some(([, measure]) => measure)) return null;
+  return <dl className="flex flex-wrap gap-x-6 gap-y-2 text-sm" data-recipe-facts>
+    {facts.map(([label, measure]) => measure ? <div key={label} className="flex gap-1">
+      <dt className="font-semibold">{label}</dt><dd>{formatMeasure(measure.value, measure.unitText)}</dd>
+    </div> : null)}
+  </dl>;
+}
+
 /** Yield, times, ingredients and method, shared by the Work page and the editor's preview. */
 export function RecipeContent({ page, units, messages: t, notes, controls, columns = true, recordingFetch }: {
   page: ReadableRecipe; units: Units; messages: WorkPageMessages; notes?: string | null; controls?: ReactNode;
@@ -271,19 +300,8 @@ export function RecipeContent({ page, units, messages: t, notes, controls, colum
   columns?: boolean;
   recordingFetch?: typeof fetch;
 }) {
-  const measures = page.measures;
-  const total = measures.find(item => item.kind === 'total-duration');
-  const prep = measures.find(item => item.kind === 'preparation-duration');
-  const cook = measures.find(item => item.kind === 'cooking-duration');
-  const yieldMeasure = measures.find(item => item.kind === 'yield');
-  const facts = Boolean(yieldMeasure || prep || cook || total);
   return <div className="grid gap-4">
-    {facts ? <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
-      {yieldMeasure ? <span><strong>{t.recipeYield}</strong> {formatMeasure(yieldMeasure.value, yieldMeasure.unitText)}</span> : null}
-      {prep ? <span><strong>{t.prepTime}</strong> {formatMeasure(prep.value, prep.unitText)}</span> : null}
-      {cook ? <span><strong>{t.cookTime}</strong> {formatMeasure(cook.value, cook.unitText)}</span> : null}
-      {total ? <span><strong>{t.totalTime}</strong> {formatMeasure(total.value, total.unitText)}</span> : null}
-    </div> : null}
+    <RecipeFacts page={page} messages={t} />
     {controls}
     <div className={cn('grid gap-8', columns && 'md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]')}>
       <section className="grid content-start gap-3"><h3 className="font-semibold text-lg">{t.ingredients}</h3>
@@ -327,6 +345,7 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, loc
   const [continueFailed, setContinueFailed] = useState(false);
   const [changed, setChanged] = useState(false);
   const [cooking, setCooking] = useState(false);
+  const methodReady = recipeMethodReady(page) && !busy && !continuing;
   const applied = useRef(wholeServings(initial));
   /** A newer scale or reload ignores a continuation that was already on its way. */
   const generation = useRef(0);
@@ -341,14 +360,20 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, loc
     setError(false);
     setContinueFailed(false);
     setChanged(false);
-    setCooking(false);
+    setCooking(recipeMethodReady(initial) && window.location.hash === '#cook');
   }, [initial, href, actingSubject]);
   const read = readPage ?? ((query: { cursor?: string; servings?: number }) => recipePageReader({ main: browserMainApi(), actingSubject }, href)(query));
   useEffect(() => {
-    const open = () => setCooking(true);
+    const open = () => { if (methodReady) setCooking(true); };
+    const followLink = () => { if (window.location.hash === '#cook') open(); };
     window.addEventListener('rezics-cook', open);
-    return () => window.removeEventListener('rezics-cook', open);
-  }, []);
+    window.addEventListener('hashchange', followLink);
+    return () => { window.removeEventListener('rezics-cook', open); window.removeEventListener('hashchange', followLink); };
+  }, [methodReady]);
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent(RECIPE_METHOD_STATE, { detail: { href, ready: methodReady } }));
+    if (!methodReady) setCooking(false);
+  }, [href, methodReady]);
   const convertible = page?.ingredients.some(item => item.alternateLine) ?? false;
   const base = initial?.measures.find(item => item.kind === 'servings');
   const editorLink = edit ? <Link href={edit.href} className={buttonVariants({ variant: 'outline' })}>
@@ -441,6 +466,8 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, loc
       <div aria-busy={busy || continuing || undefined} className="grid gap-4">
         <RecipeContent page={page} units={units} messages={t} notes={text} recordingFetch={recordingFetch} controls={<>
           {controls}
+          {!recipeMethodReady(page) ? <p className="text-muted-foreground text-sm">
+            {page.next ? t.recipeCookNeedsMore : t.recipeUnavailable}</p> : null}
           {error ? <p role="alert" className="text-destructive text-sm">{t.scaleFailed}</p> : null}
         </>} />
         {page.next || changed || continueFailed ? <div className="grid justify-items-start gap-2">
@@ -450,11 +477,17 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, loc
             {continuing ? t.loadingMoreRecipe : t.showMoreRecipe}</Button> : null}
         </div> : null}
       </div>
-      {cooking ? <CookMode page={page} messages={t} units={units} recordingFetch={recordingFetch}
-        onClose={() => setCooking(false)} /> : null}
+      {cooking && methodReady ? <CookMode page={page} messages={t} units={units} recordingFetch={recordingFetch}
+        onClose={() => {
+          setCooking(false);
+          if (window.location.hash === '#cook') {
+            window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search);
+          }
+        }} /> : null}
     </> : <>
       {editorLink}
-      <p className="text-muted-foreground text-sm">{t.recipeUnstructured}</p>
+      <p className="text-muted-foreground text-sm">{t.recipeUnavailable}</p>
+      {edit ? <p className="text-muted-foreground text-sm">{t.recipeUnstructured}</p> : null}
       {text ? <p className="whitespace-pre-wrap leading-7">{text}</p> : null}
     </>}
   </Region>;

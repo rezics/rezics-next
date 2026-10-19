@@ -13,14 +13,15 @@ import type { ReadStart } from './read.ts';
 import { globalWorkHref, idOf } from './route.ts';
 import type { Loaded } from './types.ts';
 import { ReadButton } from './work-frame.tsx';
+import { WorkTaskLink } from './work-nav.tsx';
 import type { WorkAt } from './route.ts';
 
 // The one action a Work's identity leads with. Main decides what is next (G-835's progress summary and the
 // reader's edition preference); this only maps its answers to a button and renders it.
 
 export type NextAction =
-  /** Hosted text to read: chapters, a text, or Contents when Main could not say. */
-  | { kind: 'read'; start: NonNullable<ReadStart> }
+  /** Hosted text to read: chapters, a text, or admitted Contents. */
+  | { kind: 'read'; start: Exclude<ReadStart, { kind: 'unavailable' } | null> }
   /** The next part of a composition, as Main names it. `continue` once the reader has finished a part. */
   | { kind: 'part'; mode: 'continue' | 'start'; href: string; part: string | null }
   /** The reader has no edition for what comes next: the page that lets them choose one. */
@@ -52,8 +53,8 @@ export function nextAction({ start, progress, preference, releases }: {
     }
     return { kind: 'part', mode: series.furthestCompleted ? 'continue' : 'start', href: globalWorkHref(work), part };
   }
-  if (start) return { kind: 'read', start };
-  const chosen = Boolean(preference?.ok && preference.data?.edition);
+  if (start && start.kind !== 'unavailable') return { kind: 'read', start };
+  const chosen = Boolean(preference?.ok && preference.data);
   return releases > 0 && !chosen ? { kind: 'choose', href: `#${hubAnchors.availability}`, part: null } : null;
 }
 
@@ -69,7 +70,7 @@ export function NextActionView({ action, workRef, locale, messages }: {
     {choose ? t.chooseRelease : action.mode === 'continue' ? t.continueNext : t.startFirst}</>;
   return <div className="grid gap-1.5">
     {action.href.startsWith('#')
-      ? <a href={action.href} {...{ [ACTION_ATTRIBUTE]: '' }} className={button}>{link}</a>
+      ? <WorkTaskLink workRef={workRef} anchor={action.href.slice(1)} className={button}>{link}</WorkTaskLink>
       : <Link href={action.href} {...{ [ACTION_ATTRIBUTE]: '' }} className={button}>{link}</Link>}
     {action.part ? <p className="truncate text-center text-muted-foreground text-xs">{t.upNext({ part: action.part })}</p>
       : null}

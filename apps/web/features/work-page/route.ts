@@ -5,7 +5,7 @@ import { withoutLocale } from '../../i18n/locale.ts';
 import { type AddressTarget, parseAddressSegment, resourceHref } from '../address/path.ts';
 
 /** The Work's views, in tab order. Each is its own URL. */
-export const workTabs = ['overview', 'contents', 'versions', 'discussion', 'history'] as const;
+export const workTabs = ['overview', 'contents', 'versions', 'editions', 'connections', 'discussion', 'history'] as const;
 export type WorkTab = (typeof workTabs)[number];
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -117,6 +117,14 @@ export function scopeAt(at: WorkAt, params: SearchParams): WorkScope | null {
     ? defaultScope(at) : parseScope(params);
 }
 
+/** Reading choices travel between views; inventory filters and cursors belong to their own view. */
+export function workNavigationQuery(params: URLSearchParams): Record<string, string> {
+  return Object.fromEntries(['language', 'open'].flatMap(key => {
+    const value = params.get(key);
+    return value ? [[key, value]] : [];
+  }));
+}
+
 /**
  * A Work view's address. Scope is kept across tabs so a Realm reader stays in their Realm; inside a Zone's site
  * the Zone's Realm is the default and adds nothing, and Everyone's view says so.
@@ -136,6 +144,12 @@ export function tabOf(pathname: string, at?: WorkAt): WorkTab {
   const path = withoutLocale(pathname);
   const segment = at && typeof at !== 'string' ? path.slice(at.path.length).split('/')[1] : path.split('/')[3];
   return workTabs.find(tab => tab === segment) ?? 'overview';
+}
+
+/** A task anchored in the overview must still work from every other Work view. */
+export function workTaskHref(at: WorkAt, pathname: string, params: URLSearchParams, anchor: string): string {
+  return tabOf(pathname, at) === 'overview' ? `#${anchor}`
+    : `${workHref(at, 'overview', scopeAt(at, Object.fromEntries(params)), workNavigationQuery(params))}#${anchor}`;
 }
 
 // Main's content-language tag (`readLanguage` in the Work read contract).

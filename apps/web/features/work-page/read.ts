@@ -355,7 +355,7 @@ export const oneTextLanguage = cache(async (id: string, locale: UiLocale, select
  * starts at chapter 1, found by descending the first parts of the contents
  * (at most three levels, one page each). A Work with no contents but a
  * selected text is read as that one text. Null when the Work has nothing to
- * read; `contents` when Main could not say, so Contents explains.
+ * read. A refused contents read remains unavailable, with its owner refusal.
  */
 export const readStart = cache(async (id: string, work: string, locale: UiLocale, selected: string | null,
   client?: SuppliedClient): Promise<ReadStart> => {
@@ -378,6 +378,7 @@ export const readEditionPreference = cache(async (id: string, client?: SuppliedC
 export type ReadStart =
   | { kind: 'start' | 'continue'; href: string; chapter: string | null }
   | { kind: 'contents' }
+  | ({ kind: 'unavailable' } & Extract<Loaded<never>, { ok: false }>)
   | null;
 
 /**

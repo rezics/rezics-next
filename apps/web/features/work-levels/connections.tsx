@@ -1,3 +1,4 @@
+import type { WorkAt } from '../work-page/route.ts';
 import { Badge } from '@rezics/ui/badge';
 import { buttonVariants } from '@rezics/ui/button';
 import { LocalizedText } from '@rezics/ui/localized-text';
@@ -161,7 +162,7 @@ export function RelationRows({ rows, locale, t, hrefFor, people }: { rows: reado
   </div>;
 }
 
-function GrainSwitch({ workRef, query, t }: { workRef: string; query: ConnectionsQuery; t: Copy }) {
+function GrainSwitch({ workRef, query, t }: { workRef: WorkAt; query: ConnectionsQuery; t: Copy }) {
   const label: Record<Grain, string> = { series: t.grainSeries, parts: t.grainParts };
   return <nav aria-label={t.grainSwitch} className="flex flex-wrap items-center gap-2">
     <span className="text-muted-foreground text-sm">{t.grainLabel}</span>
@@ -176,7 +177,7 @@ function GrainSwitch({ workRef, query, t }: { workRef: string; query: Connection
 }
 
 function Members({ franchise, current, names, workRef, query, t }: {
-  franchise: Franchise; current: string; names: Names; workRef: string; query: ConnectionsQuery; t: Copy;
+  franchise: Franchise; current: string; names: Names; workRef: WorkAt; query: ConnectionsQuery; t: Copy;
 }) {
   const members = franchise.members;
   if (!members.ok) return <p role="status" className="text-muted-foreground text-sm">{t.membersUnavailable}</p>;
@@ -217,7 +218,7 @@ function Members({ franchise, current, names, workRef, query, t }: {
 }
 
 function Franchises({ franchises, names, workRef, current, query, t }: {
-  franchises: readonly Franchise[]; names: Names; workRef: string; current: string; query: ConnectionsQuery; t: Copy;
+  franchises: readonly Franchise[]; names: Names; workRef: WorkAt; current: string; query: ConnectionsQuery; t: Copy;
 }) {
   if (!franchises.length) return null;
   return <div id={anchors.franchises} className="grid scroll-mt-20 gap-3">
@@ -240,7 +241,7 @@ function Franchises({ franchises, names, workRef, current, query, t }: {
  * the Work with their series ⇄ parts grain, and Main's continuation of both.
  */
 export function ConnectionsSection({ relations, franchises, names, people, workRef, current, query, locale, t, pageMessages }: {
-  relations: Loaded<RelationsPage>; franchises: readonly Franchise[]; names: Names; people?: People; workRef: string;
+  relations: Loaded<RelationsPage>; franchises: readonly Franchise[]; names: Names; people?: People; workRef: WorkAt;
   /** The Work's UUID, to mark it among its franchise's members. */
   current: string; query: ConnectionsQuery; locale: UiLocale; t: Copy; pageMessages: WorkPageMessages;
 }) {

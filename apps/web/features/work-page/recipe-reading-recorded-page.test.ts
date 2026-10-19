@@ -3,6 +3,7 @@ import type { AnswerPersona, AnswerRecord, AnswerSample } from '../../../../scri
 import recipes from '../../../../tests/qa/fixtures/outcomes/recipes/read-a-recipe.json';
 import { mainApiWithToken } from '../api/main.ts';
 import { formatMeasure, formatQuantity } from '../recipe-editor/quantity.ts';
+import { recipeMethodReady, type Instruction } from '../recipe-editor/instructions.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import type { RecordedProblem } from './books-language-recorded-page.ts';
 import {
@@ -17,6 +18,23 @@ import type { AgentCreditPage, RecipeWorkPage, WorkHeader } from './types.ts';
 const record = recipes as AnswerRecord;
 const personas = ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const;
 const disposals: (() => void)[] = [];
+
+test('cooking mode requires a complete loaded method, retaining unavailable native selections', () => {
+  const occurrence = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
+  const legacy = { occurrences: [{ occurrence, role: 'step', qualifier: {
+    type: 'recipe-step', instructionText: { value: 'Mix the sauce.' },
+  } }], instructions: [] as Instruction[] };
+  expect(recipeMethodReady(null)).toBe(false);
+  expect(recipeMethodReady({ occurrences: [] })).toBe(false);
+  expect(recipeMethodReady({ ...legacy, next: 'later-method-page' })).toBe(false);
+  expect(recipeMethodReady(legacy)).toBe(true);
+  const selected: Instruction = { occurrence, reference: { target: occurrence,
+    selector: { grain: 'representation', revision: occurrence, representation: occurrence } }, status: 'unavailable' };
+  // A native selected instruction takes precedence over an older qualifier on the same occurrence.
+  expect(recipeMethodReady({ ...legacy, instructions: [selected] })).toBe(false);
+  expect(recipeMethodReady({ ...legacy, instructions: [{ ...selected, status: 'available' }] })).toBe(false);
+  expect(recipeMethodReady({ ...legacy, instructions: [{ ...selected, status: 'available', text: 'Mix.' }] })).toBe(true);
+});
 afterEach(() => {
   for (const dispose of disposals.splice(0)) dispose();
 });
