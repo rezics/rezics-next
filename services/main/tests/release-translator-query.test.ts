@@ -72,6 +72,6 @@ test('a resource-scope translator returns typed HTTP 422 before owner reads', as
     body: JSON.stringify({ ...query,filter: { all: [translator] } }),
   }));
   expect(response.status).toBe(422);
-  expect(await response.json()).toMatchObject({ code: 'invalid_query',status: 422,
+  expect(await response.json()).toMatchObject({ code: 'misplaced_facet',status: 422,
     title: 'misplaced_facet: releaseTranslator needs an occurrence' });
 });
