@@ -1,0 +1,30 @@
+{
+  "format": 1,
+  "goal": "audit-remediation-20261019",
+  "kind": "manager-integration-receipt-for-actual-independent-review",
+  "candidate": "54d1ade3403ebe71c45857185f42f5434b74d9b3",
+  "base": "5a99c7d18979ebed15fca6ac6ef60b55ec9d68f4",
+  "review": {
+    "commit": "67f252d5c7bc366f929dfa91c2e9225fe57b2196",
+    "report": "docs/goals/audit-remediation-20261019/proofs/catalogue-work-detail-review.json",
+    "sha256": "95ec3a0fe4dab665cb3506440cc2dfcea5d007ab8bfe29c7b2c4a9a860b0460c",
+    "reviewer": {
+      "account": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independent": true,
+      "delegation": false,
+      "fallback": false
+    },
+    "checkpoint": "boundedBookCoverCheckpoint.nonBookCover"
+  },
+  "exactProductionPaths": [
+    "apps/web/features/work-page/work-frame.tsx",
+    "apps/web/features/work-page/nonbook-cover.stories.tsx"
+  ],
+  "preservedAuthorship": "Edge-coordinates <Edgecoordinates@gmail.com>",
+  "checks": "Exact candidate types, six actual browser cover states and eight affected regression states passed; independent reviewer verified source and actual screenshots. See immutable actual report and candidate receipt.",
+  "knownUnchangedFailures": "Four source-recipe fixture inline-provenance assertions fail identically on exact base and candidate, retained in actual review. No weakening or whole selected regression pass claimed.",
+  "originalAcceptance": "Genuine C13 and full A10 remain open. Book WORK-REVIEW-08 is a separate three-file candidate; it is not part of these two accepted cover paths.",
+  "closedFindingIds": []
+}
