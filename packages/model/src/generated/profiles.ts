@@ -1400,6 +1400,18 @@ export const profileRegistry = {
       "revision"
     ]
   },
+  "statement-v2": {
+    "sha256": "f491f13329de73fd3e216a94ef691692a92785553b718c19bbdfce2bd5ea5f2d",
+    "file": "shapes/statement-v2.ttl",
+    "shapes": [
+      "https://rezics.com/definition/statement-v2/statement-shape",
+      "https://rezics.com/definition/statement-v2/revision-shape"
+    ],
+    "focusRoles": [
+      "statement",
+      "revision"
+    ]
+  },
   "structure-book-v1": {
     "sha256": "5598fd9d04b2729c3008a647c92c03c9f1580b5c103dbe2e1a84f10e226e6242",
     "file": "shapes/structure-book-v1.ttl",

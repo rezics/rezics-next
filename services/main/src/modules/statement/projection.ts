@@ -118,6 +118,17 @@ export function normalizeRetainedClaimStatementSubject(subject: string): { subje
   return { subject: retainedClaimStatementReference(subject), applicability: [] };
 }
 
+/** Covered Statements inherit the occurrence's coordinates through the same slot and Work rules as projections. */
+export async function normalizeCoveredStatementApplicability(env: WorkActivationEnvironment,
+  occurrence: readonly string[], statement: readonly string[], readTargets?: StatementTargetReader): Promise<string[]> {
+  const union = [...new Set([...occurrence, ...statement])];
+  if (union.length > STATEMENT_LIMITS.applicability) throw tooLarge();
+  if (!union.length) return [];
+  const coordinates = await readCoordinates(env, union, readTargets);
+  const byIri = new Map(coordinates.map(coordinate => [coordinate.iri, coordinate]));
+  return projectionStatementMeaning('', occurrence.map(ref => byIri.get(ref)!), statement.map(ref => byIri.get(ref)!)).applicability;
+}
+
 /** The request digest retains the supplied subject; only the stored meaning is normalized.
  * Projection parts are immutable, so admission retries always resolve to the same meaning. */
 export async function normalizeStatementSubject(env: WorkActivationEnvironment,
