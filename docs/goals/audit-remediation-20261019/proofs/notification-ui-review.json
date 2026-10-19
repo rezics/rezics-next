@@ -751,15 +751,43 @@
   },
   "ownValidation": {
     "documentationCheck": {
-      "status": "pending"
+      "status": "passed",
+      "job": "job:2ea8c18d-c16b-4289-82cd-8bc9bbe9967c",
+      "step": 1,
+      "command": "task docs:check",
+      "exitStatus": 0,
+      "log": ".temp/goal/jobs/2ea8c18d-c16b-4289-82cd-8bc9bbe9967c.1.log",
+      "sha256": "9b1da8d257440b4c1e574f696a5c7b47f77a2e95e5769c2b97f91b6c4c782277",
+      "result": "13 tests passed; 250 Markdown files checked for local links, fragments and design navigation. External URLs and runtime behavior not tested."
     },
     "workerCheck": {
-      "status": "pending"
+      "status": "passed",
+      "job": "job:2ea8c18d-c16b-4289-82cd-8bc9bbe9967c",
+      "step": 2,
+      "command": "task goal -- check",
+      "exitStatus": 0,
+      "log": ".temp/goal/jobs/2ea8c18d-c16b-4289-82cd-8bc9bbe9967c.2.log",
+      "sha256": "cd86cc2e815c8b790820ad0c93956a8a95ed682c64d771da7feaf6b1c72b9090",
+      "result": {
+        "types": "ok; no TypeScript workspace changed",
+        "tests": "ok; no test files named in brief",
+        "lint": "ok; no source file changed",
+        "ast": "ok",
+        "guards": "ok; 1/45 selected for report-only changed path"
+      },
+      "scope": "Report-only worker integrity checks; no new candidate product or Storybook run.",
+      "automaticCheckRebase": {
+        "before": "52bf40ab939c4db460219baee1c6d61d9dd73321",
+        "after": "a5124de7975821e544c665fca03fba490ed43944",
+        "mainBase": "a6ad1ad22408aa3190aa0e52d8d30c90c32096b7",
+        "note": "The required check command automatically rebased this report onto two newer main commits. No manual worker rebase or product edit. All five reviewed before-blobs and 30 dependency blobs were reverified unchanged afterward; side-nav remains 78da75177b25e3775d5e8ccfff7ff58fb9d8e609. Incoming backend report/task edits were preserved; their independent review was not repeated."
+      }
     }
   },
   "managerNext": [
     "Use the completed five-path source verdict immediately; canonical class disposition remains with the manager.",
     "Supply the exact published G-2747 correction and, if assembled, immutable compatible current-main candidate. Append only that delta review, computed name evidence and the one affected normal-a11y case result.",
     "Do not add a new capability, contract, persona matrix, nonzero backend fixture or whole-domain journey as a precondition for the original D4-015 Storybook row class."
-  ]
+  ],
+  "validationCompletedAt": "2026-10-19T10:37:48.403616+00:00"
 }
