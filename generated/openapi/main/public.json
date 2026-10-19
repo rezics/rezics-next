@@ -80770,7 +80770,8 @@
                                     "editor",
                                     "director",
                                     "artist",
-                                    "animation-studio"
+                                    "animation-studio",
+                                    "performer"
                                   ],
                                   "type": "string"
                                 }
@@ -168733,7 +168734,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -168849,7 +168851,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -168942,7 +168945,8 @@
                                         "animation-studio",
                                         "translator",
                                         "editor",
-                                        "transcriber"
+                                        "transcriber",
+                                        "performer"
                                       ],
                                       "type": "string"
                                     }
@@ -226804,7 +226808,8 @@
                                                           "animation-studio",
                                                           "translator",
                                                           "editor",
-                                                          "transcriber"
+                                                          "transcriber",
+                                                          "performer"
                                                         ],
                                                         "type": "string"
                                                       }
@@ -226920,7 +226925,8 @@
                                                           "animation-studio",
                                                           "translator",
                                                           "editor",
-                                                          "transcriber"
+                                                          "transcriber",
+                                                          "performer"
                                                         ],
                                                         "type": "string"
                                                       }
@@ -227013,7 +227019,8 @@
                                                       "animation-studio",
                                                       "translator",
                                                       "editor",
-                                                      "transcriber"
+                                                      "transcriber",
+                                                      "performer"
                                                     ],
                                                     "type": "string"
                                                   }
@@ -263189,7 +263196,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -263305,7 +263313,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -263398,7 +263407,8 @@
                                         "animation-studio",
                                         "translator",
                                         "editor",
-                                        "transcriber"
+                                        "transcriber",
+                                        "performer"
                                       ],
                                       "type": "string"
                                     }
@@ -574176,7 +574186,8 @@
                                                 "animation-studio",
                                                 "translator",
                                                 "editor",
-                                                "transcriber"
+                                                "transcriber",
+                                                "performer"
                                               ],
                                               "type": "string"
                                             }
@@ -574292,7 +574303,8 @@
                                                 "animation-studio",
                                                 "translator",
                                                 "editor",
-                                                "transcriber"
+                                                "transcriber",
+                                                "performer"
                                               ],
                                               "type": "string"
                                             }
@@ -574385,7 +574397,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -576487,7 +576500,8 @@
                                                 "animation-studio",
                                                 "translator",
                                                 "editor",
-                                                "transcriber"
+                                                "transcriber",
+                                                "performer"
                                               ],
                                               "type": "string"
                                             }
@@ -576603,7 +576617,8 @@
                                                 "animation-studio",
                                                 "translator",
                                                 "editor",
-                                                "transcriber"
+                                                "transcriber",
+                                                "performer"
                                               ],
                                               "type": "string"
                                             }
@@ -576696,7 +576711,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -578807,7 +578823,8 @@
                                                 "animation-studio",
                                                 "translator",
                                                 "editor",
-                                                "transcriber"
+                                                "transcriber",
+                                                "performer"
                                               ],
                                               "type": "string"
                                             }
@@ -578923,7 +578940,8 @@
                                                 "animation-studio",
                                                 "translator",
                                                 "editor",
-                                                "transcriber"
+                                                "transcriber",
+                                                "performer"
                                               ],
                                               "type": "string"
                                             }
@@ -579016,7 +579034,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -581278,7 +581297,8 @@
                                                 "animation-studio",
                                                 "translator",
                                                 "editor",
-                                                "transcriber"
+                                                "transcriber",
+                                                "performer"
                                               ],
                                               "type": "string"
                                             }
@@ -581394,7 +581414,8 @@
                                                 "animation-studio",
                                                 "translator",
                                                 "editor",
-                                                "transcriber"
+                                                "transcriber",
+                                                "performer"
                                               ],
                                               "type": "string"
                                             }
@@ -581487,7 +581508,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -583760,7 +583782,8 @@
                                                 "animation-studio",
                                                 "translator",
                                                 "editor",
-                                                "transcriber"
+                                                "transcriber",
+                                                "performer"
                                               ],
                                               "type": "string"
                                             }
@@ -583876,7 +583899,8 @@
                                                 "animation-studio",
                                                 "translator",
                                                 "editor",
-                                                "transcriber"
+                                                "transcriber",
+                                                "performer"
                                               ],
                                               "type": "string"
                                             }
@@ -583969,7 +583993,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -586269,7 +586294,8 @@
                                                 "animation-studio",
                                                 "translator",
                                                 "editor",
-                                                "transcriber"
+                                                "transcriber",
+                                                "performer"
                                               ],
                                               "type": "string"
                                             }
@@ -586385,7 +586411,8 @@
                                                 "animation-studio",
                                                 "translator",
                                                 "editor",
-                                                "transcriber"
+                                                "transcriber",
+                                                "performer"
                                               ],
                                               "type": "string"
                                             }
@@ -586478,7 +586505,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -592035,7 +592063,8 @@
                                                 "animation-studio",
                                                 "translator",
                                                 "editor",
-                                                "transcriber"
+                                                "transcriber",
+                                                "performer"
                                               ],
                                               "type": "string"
                                             }
@@ -592151,7 +592180,8 @@
                                                 "animation-studio",
                                                 "translator",
                                                 "editor",
-                                                "transcriber"
+                                                "transcriber",
+                                                "performer"
                                               ],
                                               "type": "string"
                                             }
@@ -592244,7 +592274,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -593157,7 +593188,8 @@
                                                 "animation-studio",
                                                 "translator",
                                                 "editor",
-                                                "transcriber"
+                                                "transcriber",
+                                                "performer"
                                               ],
                                               "type": "string"
                                             }
@@ -593273,7 +593305,8 @@
                                                 "animation-studio",
                                                 "translator",
                                                 "editor",
-                                                "transcriber"
+                                                "transcriber",
+                                                "performer"
                                               ],
                                               "type": "string"
                                             }
@@ -593366,7 +593399,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -594291,7 +594325,8 @@
                                                 "animation-studio",
                                                 "translator",
                                                 "editor",
-                                                "transcriber"
+                                                "transcriber",
+                                                "performer"
                                               ],
                                               "type": "string"
                                             }
@@ -594407,7 +594442,8 @@
                                                 "animation-studio",
                                                 "translator",
                                                 "editor",
-                                                "transcriber"
+                                                "transcriber",
+                                                "performer"
                                               ],
                                               "type": "string"
                                             }
@@ -594500,7 +594536,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -595573,7 +595610,8 @@
                                                 "animation-studio",
                                                 "translator",
                                                 "editor",
-                                                "transcriber"
+                                                "transcriber",
+                                                "performer"
                                               ],
                                               "type": "string"
                                             }
@@ -595689,7 +595727,8 @@
                                                 "animation-studio",
                                                 "translator",
                                                 "editor",
-                                                "transcriber"
+                                                "transcriber",
+                                                "performer"
                                               ],
                                               "type": "string"
                                             }
@@ -595782,7 +595821,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -596865,7 +596905,8 @@
                                                 "animation-studio",
                                                 "translator",
                                                 "editor",
-                                                "transcriber"
+                                                "transcriber",
+                                                "performer"
                                               ],
                                               "type": "string"
                                             }
@@ -596981,7 +597022,8 @@
                                                 "animation-studio",
                                                 "translator",
                                                 "editor",
-                                                "transcriber"
+                                                "transcriber",
+                                                "performer"
                                               ],
                                               "type": "string"
                                             }
@@ -597074,7 +597116,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -598184,7 +598227,8 @@
                                                 "animation-studio",
                                                 "translator",
                                                 "editor",
-                                                "transcriber"
+                                                "transcriber",
+                                                "performer"
                                               ],
                                               "type": "string"
                                             }
@@ -598300,7 +598344,8 @@
                                                 "animation-studio",
                                                 "translator",
                                                 "editor",
-                                                "transcriber"
+                                                "transcriber",
+                                                "performer"
                                               ],
                                               "type": "string"
                                             }
@@ -598393,7 +598438,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -600029,7 +600075,8 @@
                                   "animation-studio",
                                   "translator",
                                   "editor",
-                                  "transcriber"
+                                  "transcriber",
+                                  "performer"
                                 ],
                                 "type": "string"
                               },
@@ -602322,7 +602369,8 @@
                                   "animation-studio",
                                   "translator",
                                   "editor",
-                                  "transcriber"
+                                  "transcriber",
+                                  "performer"
                                 ],
                                 "type": "string"
                               },
@@ -604615,7 +604663,8 @@
                                   "animation-studio",
                                   "translator",
                                   "editor",
-                                  "transcriber"
+                                  "transcriber",
+                                  "performer"
                                 ],
                                 "type": "string"
                               },
@@ -607259,7 +607308,8 @@
                                                             "animation-studio",
                                                             "translator",
                                                             "editor",
-                                                            "transcriber"
+                                                            "transcriber",
+                                                            "performer"
                                                           ],
                                                           "type": "string"
                                                         }
@@ -607375,7 +607425,8 @@
                                                             "animation-studio",
                                                             "translator",
                                                             "editor",
-                                                            "transcriber"
+                                                            "transcriber",
+                                                            "performer"
                                                           ],
                                                           "type": "string"
                                                         }
@@ -607468,7 +607519,8 @@
                                                         "animation-studio",
                                                         "translator",
                                                         "editor",
-                                                        "transcriber"
+                                                        "transcriber",
+                                                        "performer"
                                                       ],
                                                       "type": "string"
                                                     }
@@ -608381,7 +608433,8 @@
                                                             "animation-studio",
                                                             "translator",
                                                             "editor",
-                                                            "transcriber"
+                                                            "transcriber",
+                                                            "performer"
                                                           ],
                                                           "type": "string"
                                                         }
@@ -608497,7 +608550,8 @@
                                                             "animation-studio",
                                                             "translator",
                                                             "editor",
-                                                            "transcriber"
+                                                            "transcriber",
+                                                            "performer"
                                                           ],
                                                           "type": "string"
                                                         }
@@ -608590,7 +608644,8 @@
                                                         "animation-studio",
                                                         "translator",
                                                         "editor",
-                                                        "transcriber"
+                                                        "transcriber",
+                                                        "performer"
                                                       ],
                                                       "type": "string"
                                                     }
@@ -609515,7 +609570,8 @@
                                                             "animation-studio",
                                                             "translator",
                                                             "editor",
-                                                            "transcriber"
+                                                            "transcriber",
+                                                            "performer"
                                                           ],
                                                           "type": "string"
                                                         }
@@ -609631,7 +609687,8 @@
                                                             "animation-studio",
                                                             "translator",
                                                             "editor",
-                                                            "transcriber"
+                                                            "transcriber",
+                                                            "performer"
                                                           ],
                                                           "type": "string"
                                                         }
@@ -609724,7 +609781,8 @@
                                                         "animation-studio",
                                                         "translator",
                                                         "editor",
-                                                        "transcriber"
+                                                        "transcriber",
+                                                        "performer"
                                                       ],
                                                       "type": "string"
                                                     }
@@ -610797,7 +610855,8 @@
                                                             "animation-studio",
                                                             "translator",
                                                             "editor",
-                                                            "transcriber"
+                                                            "transcriber",
+                                                            "performer"
                                                           ],
                                                           "type": "string"
                                                         }
@@ -610913,7 +610972,8 @@
                                                             "animation-studio",
                                                             "translator",
                                                             "editor",
-                                                            "transcriber"
+                                                            "transcriber",
+                                                            "performer"
                                                           ],
                                                           "type": "string"
                                                         }
@@ -611006,7 +611066,8 @@
                                                         "animation-studio",
                                                         "translator",
                                                         "editor",
-                                                        "transcriber"
+                                                        "transcriber",
+                                                        "performer"
                                                       ],
                                                       "type": "string"
                                                     }
@@ -612089,7 +612150,8 @@
                                                             "animation-studio",
                                                             "translator",
                                                             "editor",
-                                                            "transcriber"
+                                                            "transcriber",
+                                                            "performer"
                                                           ],
                                                           "type": "string"
                                                         }
@@ -612205,7 +612267,8 @@
                                                             "animation-studio",
                                                             "translator",
                                                             "editor",
-                                                            "transcriber"
+                                                            "transcriber",
+                                                            "performer"
                                                           ],
                                                           "type": "string"
                                                         }
@@ -612298,7 +612361,8 @@
                                                         "animation-studio",
                                                         "translator",
                                                         "editor",
-                                                        "transcriber"
+                                                        "transcriber",
+                                                        "performer"
                                                       ],
                                                       "type": "string"
                                                     }
@@ -613408,7 +613472,8 @@
                                                             "animation-studio",
                                                             "translator",
                                                             "editor",
-                                                            "transcriber"
+                                                            "transcriber",
+                                                            "performer"
                                                           ],
                                                           "type": "string"
                                                         }
@@ -613524,7 +613589,8 @@
                                                             "animation-studio",
                                                             "translator",
                                                             "editor",
-                                                            "transcriber"
+                                                            "transcriber",
+                                                            "performer"
                                                           ],
                                                           "type": "string"
                                                         }
@@ -613617,7 +613683,8 @@
                                                         "animation-studio",
                                                         "translator",
                                                         "editor",
-                                                        "transcriber"
+                                                        "transcriber",
+                                                        "performer"
                                                       ],
                                                       "type": "string"
                                                     }
@@ -614560,7 +614627,8 @@
                                                         "animation-studio",
                                                         "translator",
                                                         "editor",
-                                                        "transcriber"
+                                                        "transcriber",
+                                                        "performer"
                                                       ],
                                                       "type": "string"
                                                     }
@@ -614676,7 +614744,8 @@
                                                         "animation-studio",
                                                         "translator",
                                                         "editor",
-                                                        "transcriber"
+                                                        "transcriber",
+                                                        "performer"
                                                       ],
                                                       "type": "string"
                                                     }
@@ -614769,7 +614838,8 @@
                                                     "animation-studio",
                                                     "translator",
                                                     "editor",
-                                                    "transcriber"
+                                                    "transcriber",
+                                                    "performer"
                                                   ],
                                                   "type": "string"
                                                 }
@@ -615726,7 +615796,8 @@
                                                         "animation-studio",
                                                         "translator",
                                                         "editor",
-                                                        "transcriber"
+                                                        "transcriber",
+                                                        "performer"
                                                       ],
                                                       "type": "string"
                                                     }
@@ -615842,7 +615913,8 @@
                                                         "animation-studio",
                                                         "translator",
                                                         "editor",
-                                                        "transcriber"
+                                                        "transcriber",
+                                                        "performer"
                                                       ],
                                                       "type": "string"
                                                     }
@@ -615935,7 +616007,8 @@
                                                     "animation-studio",
                                                     "translator",
                                                     "editor",
-                                                    "transcriber"
+                                                    "transcriber",
+                                                    "performer"
                                                   ],
                                                   "type": "string"
                                                 }
@@ -616847,7 +616920,8 @@
                                                         "animation-studio",
                                                         "translator",
                                                         "editor",
-                                                        "transcriber"
+                                                        "transcriber",
+                                                        "performer"
                                                       ],
                                                       "type": "string"
                                                     }
@@ -616963,7 +617037,8 @@
                                                         "animation-studio",
                                                         "translator",
                                                         "editor",
-                                                        "transcriber"
+                                                        "transcriber",
+                                                        "performer"
                                                       ],
                                                       "type": "string"
                                                     }
@@ -617056,7 +617131,8 @@
                                                     "animation-studio",
                                                     "translator",
                                                     "editor",
-                                                    "transcriber"
+                                                    "transcriber",
+                                                    "performer"
                                                   ],
                                                   "type": "string"
                                                 }
@@ -618178,7 +618254,8 @@
                                                             "animation-studio",
                                                             "translator",
                                                             "editor",
-                                                            "transcriber"
+                                                            "transcriber",
+                                                            "performer"
                                                           ],
                                                           "type": "string"
                                                         }
@@ -618294,7 +618371,8 @@
                                                             "animation-studio",
                                                             "translator",
                                                             "editor",
-                                                            "transcriber"
+                                                            "transcriber",
+                                                            "performer"
                                                           ],
                                                           "type": "string"
                                                         }
@@ -618387,7 +618465,8 @@
                                                         "animation-studio",
                                                         "translator",
                                                         "editor",
-                                                        "transcriber"
+                                                        "transcriber",
+                                                        "performer"
                                                       ],
                                                       "type": "string"
                                                     }
@@ -618934,7 +619013,8 @@
                                                   "animation-studio",
                                                   "translator",
                                                   "editor",
-                                                  "transcriber"
+                                                  "transcriber",
+                                                  "performer"
                                                 ],
                                                 "type": "string"
                                               }
@@ -619050,7 +619130,8 @@
                                                   "animation-studio",
                                                   "translator",
                                                   "editor",
-                                                  "transcriber"
+                                                  "transcriber",
+                                                  "performer"
                                                 ],
                                                 "type": "string"
                                               }
@@ -691803,7 +691884,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -691919,7 +692001,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -692012,7 +692095,8 @@
                                         "animation-studio",
                                         "translator",
                                         "editor",
-                                        "transcriber"
+                                        "transcriber",
+                                        "performer"
                                       ],
                                       "type": "string"
                                     }
@@ -696457,7 +696541,8 @@
                                                 "animation-studio",
                                                 "translator",
                                                 "editor",
-                                                "transcriber"
+                                                "transcriber",
+                                                "performer"
                                               ],
                                               "type": "string"
                                             }
@@ -696573,7 +696658,8 @@
                                                 "animation-studio",
                                                 "translator",
                                                 "editor",
-                                                "transcriber"
+                                                "transcriber",
+                                                "performer"
                                               ],
                                               "type": "string"
                                             }
@@ -696666,7 +696752,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -698093,7 +698180,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -698209,7 +698297,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -698302,7 +698391,8 @@
                                         "animation-studio",
                                         "translator",
                                         "editor",
-                                        "transcriber"
+                                        "transcriber",
+                                        "performer"
                                       ],
                                       "type": "string"
                                     }
@@ -701521,7 +701611,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -701637,7 +701728,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -701730,7 +701822,8 @@
                                         "animation-studio",
                                         "translator",
                                         "editor",
-                                        "transcriber"
+                                        "transcriber",
+                                        "performer"
                                       ],
                                       "type": "string"
                                     }
@@ -827560,7 +827653,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -827676,7 +827770,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -827769,7 +827864,8 @@
                                         "animation-studio",
                                         "translator",
                                         "editor",
-                                        "transcriber"
+                                        "transcriber",
+                                        "performer"
                                       ],
                                       "type": "string"
                                     }
@@ -829008,7 +829104,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -829124,7 +829221,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -829217,7 +829315,8 @@
                                         "animation-studio",
                                         "translator",
                                         "editor",
-                                        "transcriber"
+                                        "transcriber",
+                                        "performer"
                                       ],
                                       "type": "string"
                                     }
@@ -843108,7 +843207,8 @@
                             "editor",
                             "director",
                             "artist",
-                            "animation-studio"
+                            "animation-studio",
+                            "performer"
                           ],
                           "type": "string"
                         },
@@ -844116,7 +844216,8 @@
                                 "editor",
                                 "director",
                                 "artist",
-                                "animation-studio"
+                                "animation-studio",
+                                "performer"
                               ],
                               "type": "string"
                             },
@@ -844401,7 +844502,8 @@
                                 "editor",
                                 "director",
                                 "artist",
-                                "animation-studio"
+                                "animation-studio",
+                                "performer"
                               ],
                               "type": "string"
                             },
@@ -903746,7 +903848,8 @@
                                     "editor",
                                     "director",
                                     "artist",
-                                    "animation-studio"
+                                    "animation-studio",
+                                    "performer"
                                   ],
                                   "type": "string"
                                 },
@@ -908019,7 +908122,8 @@
                                         "editor",
                                         "director",
                                         "artist",
-                                        "animation-studio"
+                                        "animation-studio",
+                                        "performer"
                                       ],
                                       "type": "string"
                                     },
@@ -911464,7 +911568,8 @@
                                         "editor",
                                         "director",
                                         "artist",
-                                        "animation-studio"
+                                        "animation-studio",
+                                        "performer"
                                       ],
                                       "type": "string"
                                     },
@@ -967942,7 +968047,8 @@
                                 "editor",
                                 "director",
                                 "artist",
-                                "animation-studio"
+                                "animation-studio",
+                                "performer"
                               ],
                               "type": "string"
                             }
@@ -968179,7 +968285,8 @@
                                 "editor",
                                 "director",
                                 "artist",
-                                "animation-studio"
+                                "animation-studio",
+                                "performer"
                               ],
                               "type": "string"
                             }
@@ -968416,7 +968523,8 @@
                                 "editor",
                                 "director",
                                 "artist",
-                                "animation-studio"
+                                "animation-studio",
+                                "performer"
                               ],
                               "type": "string"
                             }
@@ -969837,7 +969945,8 @@
                                       "editor",
                                       "director",
                                       "artist",
-                                      "animation-studio"
+                                      "animation-studio",
+                                      "performer"
                                     ],
                                     "type": "string"
                                   }
@@ -970093,7 +970202,8 @@
                                       "editor",
                                       "director",
                                       "artist",
-                                      "animation-studio"
+                                      "animation-studio",
+                                      "performer"
                                     ],
                                     "type": "string"
                                   }
@@ -970349,7 +970459,8 @@
                                       "editor",
                                       "director",
                                       "artist",
-                                      "animation-studio"
+                                      "animation-studio",
+                                      "performer"
                                     ],
                                     "type": "string"
                                   }
@@ -979312,7 +979423,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -979428,7 +979540,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -979521,7 +979634,8 @@
                                         "animation-studio",
                                         "translator",
                                         "editor",
-                                        "transcriber"
+                                        "transcriber",
+                                        "performer"
                                       ],
                                       "type": "string"
                                     }
@@ -982860,7 +982974,8 @@
                               "editor",
                               "director",
                               "artist",
-                              "animation-studio"
+                              "animation-studio",
+                              "performer"
                             ],
                             "type": "string"
                           }
@@ -983662,7 +983777,8 @@
                           "editor",
                           "director",
                           "artist",
-                          "animation-studio"
+                          "animation-studio",
+                          "performer"
                         ],
                         "type": "string"
                       }
@@ -983738,7 +983854,8 @@
                           "editor",
                           "director",
                           "artist",
-                          "animation-studio"
+                          "animation-studio",
+                          "performer"
                         ],
                         "type": "string"
                       }
@@ -983789,7 +983906,8 @@
                           "editor",
                           "director",
                           "artist",
-                          "animation-studio"
+                          "animation-studio",
+                          "performer"
                         ],
                         "type": "string"
                       }
@@ -983865,7 +983983,8 @@
                           "editor",
                           "director",
                           "artist",
-                          "animation-studio"
+                          "animation-studio",
+                          "performer"
                         ],
                         "type": "string"
                       }
@@ -983916,7 +984035,8 @@
                           "editor",
                           "director",
                           "artist",
-                          "animation-studio"
+                          "animation-studio",
+                          "performer"
                         ],
                         "type": "string"
                       }
@@ -983992,7 +984112,8 @@
                           "editor",
                           "director",
                           "artist",
-                          "animation-studio"
+                          "animation-studio",
+                          "performer"
                         ],
                         "type": "string"
                       }
@@ -984083,7 +984204,8 @@
                         "editor",
                         "director",
                         "artist",
-                        "animation-studio"
+                        "animation-studio",
+                        "performer"
                       ],
                       "type": "string"
                     },
@@ -984196,7 +984318,8 @@
                         "editor",
                         "director",
                         "artist",
-                        "animation-studio"
+                        "animation-studio",
+                        "performer"
                       ],
                       "type": "string"
                     },
@@ -985703,7 +985826,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -985819,7 +985943,8 @@
                                             "animation-studio",
                                             "translator",
                                             "editor",
-                                            "transcriber"
+                                            "transcriber",
+                                            "performer"
                                           ],
                                           "type": "string"
                                         }
@@ -985912,7 +986037,8 @@
                                         "animation-studio",
                                         "translator",
                                         "editor",
-                                        "transcriber"
+                                        "transcriber",
+                                        "performer"
                                       ],
                                       "type": "string"
                                     }
@@ -988901,7 +989027,8 @@
                         "editor",
                         "director",
                         "artist",
-                        "animation-studio"
+                        "animation-studio",
+                        "performer"
                       ],
                       "type": "string"
                     },
@@ -996911,7 +997038,8 @@
                                       "animation-studio",
                                       "translator",
                                       "editor",
-                                      "transcriber"
+                                      "transcriber",
+                                      "performer"
                                     ],
                                     "type": "string"
                                   }
@@ -997027,7 +997155,8 @@
                                       "animation-studio",
                                       "translator",
                                       "editor",
-                                      "transcriber"
+                                      "transcriber",
+                                      "performer"
                                     ],
                                     "type": "string"
                                   }
@@ -1029903,7 +1030032,8 @@
                                 "editor",
                                 "director",
                                 "artist",
-                                "animation-studio"
+                                "animation-studio",
+                                "performer"
                               ],
                               "type": "string"
                             },
@@ -1030188,7 +1030318,8 @@
                                 "editor",
                                 "director",
                                 "artist",
-                                "animation-studio"
+                                "animation-studio",
+                                "performer"
                               ],
                               "type": "string"
                             },

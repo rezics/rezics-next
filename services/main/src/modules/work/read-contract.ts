@@ -110,9 +110,10 @@ export { NATIVE_CREDIT_ROLES, WORK_CREDIT_ROLES, isNativeCreditRole, type Native
 export const nativeCreditRole = t.Union([
   t.Literal('author'), t.Literal('translator'), t.Literal('editor'),
   t.Literal('director'), t.Literal('artist'), t.Literal('animation-studio'),
+  t.Literal('performer'),
 ]);
 export const workCreditRole = t.Union([
-  t.Literal('author'), t.Literal('director'), t.Literal('artist'), t.Literal('animation-studio'), t.Literal('translator'), t.Literal('editor'), t.Literal('transcriber'),
+  t.Literal('author'), t.Literal('director'), t.Literal('artist'), t.Literal('animation-studio'), t.Literal('translator'), t.Literal('editor'), t.Literal('transcriber'), t.Literal('performer'),
 ]);
 export const externalCreditParticipant = t.Object({ kind: t.Literal('external-reference'),
   provider: t.String({ pattern: '^[a-z][a-z0-9-]{0,63}$' }), namespace: t.String({ pattern: '^[a-z][a-z0-9-]{0,63}$' }),
