@@ -147,7 +147,14 @@ final class CanonicalPolicy {
             && subjectTypes.equals(Set.of(RV + "ClassificationContext"))
             && (RV + "GlobalClassification").equals(singleObject(dataset, graph(false),
                 NodeFactory.createURI(subject), RV + "contextRole"))) return null;
-        return profiles.bindingDemand(subjectTypes);
+        String demand = profiles.bindingDemand(subjectTypes);
+        if (demand == null) return null;
+        Selection selected = select(profiles, dataset, subject, revision);
+        // A successor refines the same demanded owner binding. Selection alone
+        // must not impose bindings on types which never demanded one.
+        if (selected != null && profiles.get(selected.route().profile()).binding() != null)
+            return selected.route().profile();
+        return demand;
     }
 
     private static Node graph(boolean revision) {

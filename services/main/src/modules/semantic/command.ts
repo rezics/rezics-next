@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { profileRegistry } from '@rezics/model';
 import { CommandRejected, type CommandResult, type CommandValidation } from '../../infrastructure/fuseki.ts';
 import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
 import { profileValidations, COMMAND_MODULE_VERSION, type ProfileId } from '../../infrastructure/profile.ts';
@@ -289,9 +290,12 @@ export async function assertSemanticDispatchable(env: WorkActivationEnvironment,
   return null;
 }
 
-export async function validationsFor(env: WorkActivationEnvironment, profile: ProfileId,
+export async function validationsFor(env: WorkActivationEnvironment, profile: string,
   entries: readonly { role: string; focus: readonly string[] }[]): Promise<CommandValidation[]> {
-  return profileValidations(env.fuseki, profile, entries.filter(entry => entry.focus.length).map(entry => ({
+  if (!Object.hasOwn(profileRegistry, profile)) {
+    throw new SemanticChangeRejected('unsupported-model-revision', `model profile ${profile} is not installed`);
+  }
+  return profileValidations(env.fuseki, profile as ProfileId, entries.filter(entry => entry.focus.length).map(entry => ({
     shape: `https://rezics.com/definition/${profile}/${entry.role}-shape`, focus: entry.focus,
     graphs: [GRAPHS.current, GRAPHS.revisions] })));
 }

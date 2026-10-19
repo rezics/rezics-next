@@ -954,5 +954,1387 @@
         "trackedChanges": "Only an appended correction disposition in the claimed JSON report; every historical JSON value remains unchanged."
       }
     }
-  ]
+  ],
+  "preciseRefusalCorrectionReview": {
+    "reviewedAtUtc": "2026-10-19T14:56:40.662446+00:00",
+    "reviewer": {
+      "worker": "G-2849",
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "accountFallback": false
+    },
+    "status": "bounded-source-review-complete-exact-candidate-test-premise-blocked",
+    "conclusion": {
+      "productionDelta": "The two production edits correctly admit misplaced_facet in QueryRefusal and preserve that exact InvalidFilter basis. No actionable defect found in the mapping change by source inspection.",
+      "candidateDisposition": "Do not describe cd9b00126f7e47599a0a6cc1e3243bb5f38d2b81 as independently passing the new refusal test. Its frozen base omits navigation dependencies present in the owner QA context. The unchanged published test fails during module loading; its outcome assertions are not reached.",
+      "reproducedClassification": "Dependency/setup failure, not an actual public outcome failure and not a new product acceptance counterexample. The original owner machine-code failures remain recorded below with their actual different source context.",
+      "confirmedPublicOutcomeFailures": 0,
+      "newAcceptanceIdsClosed": 0,
+      "liveC16Acceptance": "not established",
+      "nextAction": "Return the exact missing advertised-shape and translator-registry inputs to the existing navigation owner/manager for a coherent bounded candidate. Preserve the original C16 assertion and the owner test; no full-wave, corpus, stack or fresh catalogue prerequisite is requested."
+    },
+    "pins": {
+      "base": "a8e44a3372a7ed61a0d0124b5d5667bf7ddf9502",
+      "candidate": "cd9b00126f7e47599a0a6cc1e3243bb5f38d2b81",
+      "candidateParentVerified": "a8e44a3372a7ed61a0d0124b5d5667bf7ddf9502",
+      "ownerPublication": "adc3ab0b8d8049253bedb01907e35d6a1b85de51",
+      "changedPaths": [
+        "services/main/src/modules/query/compile.ts",
+        "services/main/tests/resource-query-facet-refusal.test.ts"
+      ],
+      "changedPathCount": 2,
+      "frozenManifest": ".temp/audit-remediation-20261019/two-hour-sprint/precise-query-refusal-candidate.json",
+      "frozenManifestSha256": "d1c2b07afdc8e8f6f4207604723ad0bf42a0888f1655b4db7580f63c0bfbf4b0",
+      "namedIsolation": ".temp/worktrees/catalogue-precise-query-refusal-candidate-20261019",
+      "independentSnapshot": ".temp/precise-query-refusal-review/snapshot",
+      "reviewWorkerHead": "f90729f88d103abbd8fe15e1fbac6187ce8598fb",
+      "originalIntegrationAssertion": {
+        "path": ".temp/audit-remediation-20261019/reviews/import-corpus-g2819/.temp/import-review/pin/tests/qa/integration/catalogue-discovery-navigation.test.ts",
+        "sha256": "90dc8911b2da6eba9471f9211791ed00ed5c0ed98fa32095f334c07fd2da1803",
+        "trackedInCandidate": false,
+        "originalPath": "tests/qa/integration/catalogue-discovery-navigation.test.ts",
+        "line": 123,
+        "assertion": "expect(refused.code).toBe('misplaced_facet')",
+        "request": "resource-scope releaseTranslator; required HTTP 422",
+        "provenanceLimit": "Read preserved immutable test copy because the original integration path is absent from this candidate git tree. No original assertion or fixture was changed or executed."
+      }
+    },
+    "exactFiles": [
+      {
+        "path": "services/main/src/modules/query/compile.ts",
+        "pin": "cd9b00126f7e47599a0a6cc1e3243bb5f38d2b81",
+        "gitBlob": "7949cdf054c08e89be1ca5d74eb198e30cdfd92a",
+        "sha256": "d22bfbbb2eb1689f760c46a354b0632d0d1be7f1db074e2f16f8c6bb93bfe572",
+        "bytes": 28421,
+        "base": {
+          "path": "services/main/src/modules/query/compile.ts",
+          "pin": "a8e44a3372a7ed61a0d0124b5d5667bf7ddf9502",
+          "gitBlob": "8e7107a5be9ead51cadebdc41111499f0d3e6c97",
+          "sha256": "077243562898dafe33217416b6f48528eb75d5f33d562a9050b3a74283f28526",
+          "bytes": 28316
+        },
+        "publishedBlob": "7949cdf054c08e89be1ca5d74eb198e30cdfd92a",
+        "matchesPublication": true,
+        "matchesSnapshot": true
+      },
+      {
+        "path": "services/main/tests/resource-query-facet-refusal.test.ts",
+        "pin": "cd9b00126f7e47599a0a6cc1e3243bb5f38d2b81",
+        "gitBlob": "ae6077c99a4a0987a8ee1765941255aeee611800",
+        "sha256": "df4d8ffe1e1110d7081c112619533309fa98075ecf98f8097511597e5616c74e",
+        "bytes": 5301,
+        "base": {
+          "path": "services/main/tests/resource-query-facet-refusal.test.ts",
+          "pin": "a8e44a3372a7ed61a0d0124b5d5667bf7ddf9502",
+          "exists": false
+        },
+        "publishedBlob": "ae6077c99a4a0987a8ee1765941255aeee611800",
+        "matchesPublication": true,
+        "matchesSnapshot": true
+      }
+    ],
+    "sourceInspection": [
+      {
+        "path": "services/main/src/modules/query/compile.ts",
+        "lines": [
+          22,
+          71,
+          74
+        ],
+        "finding": "Only QueryRefusal and the InvalidFilter mapping change. filter_too_large still becomes query_budget_exceeded; misplaced_facet now survives; other InvalidFilter refusals remain invalid_query. The message retains its original precise basis."
+      },
+      {
+        "path": "services/main/src/modules/facets/schema.ts",
+        "lines": [
+          138,
+          140,
+          148,
+          153,
+          161
+        ],
+        "finding": "Unchanged checkedFilter validates node/depth bounds and resource/occurrence/declared-related-owner placement before planner selection. any/all/none share placement validation. Existing scope, operator, nested-node and value budgets remain unchanged."
+      },
+      {
+        "path": "services/main/src/routes/query.ts",
+        "lines": [
+          120,
+          122,
+          258
+        ],
+        "finding": "Unchanged registered POST /v1/query compiles before capability, Account and graph/owner reads, then serializes QueryRejected.refusal as the problem code (422; stale_ codes remain 409). Source evidence only at this main candidate: the owner receipt proves the composed invalid-placement assertions on its own dependencies."
+      },
+      {
+        "path": "services/main/tests/resource-query-facet-refusal.test.ts",
+        "lines": [
+          14,
+          33,
+          52,
+          77
+        ],
+        "finding": "The 90-line test covers name/exact-reference any/all/none, wrong related owner, valid release nesting, disconnected owner-read traps for anonymous/bearer registered-handler requests, invalid/unsupported/allocation refusals. Its top-level discovery queryShapes assumption is incompatible with the frozen candidate, and the translator entry it subsequently selects is also absent."
+      }
+    ],
+    "findings": [
+      {
+        "id": "precise-refusal-frozen-navigation-dependency-mismatch",
+        "severity": "blocks-exact-candidate-test-qualification",
+        "classification": "reproduced setup failure; no outcome assertion reached",
+        "affectedCheck": "services/main/tests/resource-query-facet-refusal.test.ts:14",
+        "actualFailure": "TypeError: undefined is not an object (evaluating 'discovery.queryShapes.find')",
+        "caseDisposition": "Failure occurs at module loading, before registration/execution of all three named tests. It cannot establish a new public refusal-code failure, an Account/backend-read failure or success, or original C16 closure.",
+        "missingInputs": [
+          "facetList contract has no queryShapes property; facetListBody supplies no release-works-v1 advertised shape.",
+          "The generated facetRegistry contains no current releaseTranslator entry, and model/definitions/facet-release-translator-v1.ts is absent. The owner QA head contains both.",
+          "The owner-context translator-aware release-query compiler differs too. Its valid-nesting branch is part of the owner test, so exact owner-passing context cannot be reduced to the two matching blobs. This observation is dependency provenance, not an independent review of that omitted planner work."
+        ],
+        "boundedCorrection": "Have the existing navigation owner/manager supply only the identified already-owned dependency inputs in a coherent frozen candidate, preserving the original 422 misplaced_facet assertion and genuine advertised translator contract. Do not fabricate discovery fields or translator entries in review fixtures; do not weaken the assertion to invalid_query or substitute an unrelated registered facet.",
+        "productOutcomeFailureConfirmed": false,
+        "workerImplementationMutation": false
+      },
+      {
+        "id": "precise-refusal-owner-receipt-context",
+        "classification": "verified matching changed blobs; incompatible dependency context",
+        "finding": "Both changed blobs exactly match the published owner correction. Independent reconstruction of the passing QA source fingerprint also matches. However, the QA head is f0051004bcab4d10e42bc2904e1c87af4a6d854a, not the frozen main candidate; its necessary navigation source blobs differ. Reuse the owner checks only as owner-context evidence. Do not label affected Main types, lint/guards or 27 tests as freshly passing on cd9b00126f7e47599a0a6cc1e3243bb5f38d2b81."
+      }
+    ],
+    "dependencyComparison": [
+      {
+        "path": "services/main/src/modules/facets/contract.ts",
+        "ownerChecked": {
+          "path": "services/main/src/modules/facets/contract.ts",
+          "pin": "f0051004bcab4d10e42bc2904e1c87af4a6d854a",
+          "gitBlob": "16b4d1247da6a13b008e4e416a5c55de7857d16c",
+          "sha256": "f42e07088a8b6b092879c19b2d0739a7eea1c61ef98153182a861bd1b74f0e69",
+          "bytes": 4891
+        },
+        "candidate": {
+          "path": "services/main/src/modules/facets/contract.ts",
+          "pin": "cd9b00126f7e47599a0a6cc1e3243bb5f38d2b81",
+          "gitBlob": "e0c503cf3fcd8dc0f5ef865051407ea6239d06e8",
+          "sha256": "364181971329d069c45964964412adea013a99a491b041a09c967c3665b539f8",
+          "bytes": 4117
+        },
+        "sameBlob": false,
+        "snapshotMatchesCandidate": true
+      },
+      {
+        "path": "services/main/src/modules/facets/registry.ts",
+        "ownerChecked": {
+          "path": "services/main/src/modules/facets/registry.ts",
+          "pin": "f0051004bcab4d10e42bc2904e1c87af4a6d854a",
+          "gitBlob": "5897fa8cc0abc82ce6fb87ad091701e9875b2ab1",
+          "sha256": "36dcbab65279d36ccf7624255e72adf0df7b1873b0bc71fabe953a031510c8c5",
+          "bytes": 2830
+        },
+        "candidate": {
+          "path": "services/main/src/modules/facets/registry.ts",
+          "pin": "cd9b00126f7e47599a0a6cc1e3243bb5f38d2b81",
+          "gitBlob": "dd1ad7ef0beb4813710213f9ac06460dc1d44ab2",
+          "sha256": "a6f2698364dc5a5733d306c95e305630ccb26dca10ab9d50121427c8ee67020d",
+          "bytes": 1737
+        },
+        "sameBlob": false,
+        "snapshotMatchesCandidate": true
+      },
+      {
+        "path": "packages/model/src/generated/facets.ts",
+        "ownerChecked": {
+          "path": "packages/model/src/generated/facets.ts",
+          "pin": "f0051004bcab4d10e42bc2904e1c87af4a6d854a",
+          "gitBlob": "6305669b5354c3fcc0f9427f681406fde95a0bc1",
+          "sha256": "61ff7aa9a35c7692eaeead5adb9bf8a78d9477b7344619e036e9568472a632b4",
+          "bytes": 26586
+        },
+        "candidate": {
+          "path": "packages/model/src/generated/facets.ts",
+          "pin": "cd9b00126f7e47599a0a6cc1e3243bb5f38d2b81",
+          "gitBlob": "c86e7a694ff3c91c23a1c44632acd61492c09235",
+          "sha256": "a290c6c2b41c872d292fbbc50042d23716a1c5b67a7d665cb52f2d0c7c2470c6",
+          "bytes": 25168
+        },
+        "sameBlob": false,
+        "snapshotMatchesCandidate": true
+      },
+      {
+        "path": "model/definitions/facet-release-translator-v1.ts",
+        "ownerChecked": {
+          "path": "model/definitions/facet-release-translator-v1.ts",
+          "pin": "f0051004bcab4d10e42bc2904e1c87af4a6d854a",
+          "gitBlob": "59aa0881e6fd1671293538f13953c89262d8d470",
+          "sha256": "2dd57ff68742c9d6d1a81f20fd7fd12b4202cc1dd806549588da1fc253c37a0d",
+          "bytes": 1029
+        },
+        "candidate": {
+          "path": "model/definitions/facet-release-translator-v1.ts",
+          "pin": "cd9b00126f7e47599a0a6cc1e3243bb5f38d2b81",
+          "exists": false
+        },
+        "sameBlob": false
+      },
+      {
+        "path": "services/main/src/modules/facets/release-query.ts",
+        "ownerChecked": {
+          "path": "services/main/src/modules/facets/release-query.ts",
+          "pin": "f0051004bcab4d10e42bc2904e1c87af4a6d854a",
+          "gitBlob": "991f58bfba5a573fab9e842618ea0170231667df",
+          "sha256": "84f4670407f3b80cfc09b4aeb0d8b00e0c86f335d61d975882991cfa9a5b117a",
+          "bytes": 12909
+        },
+        "candidate": {
+          "path": "services/main/src/modules/facets/release-query.ts",
+          "pin": "cd9b00126f7e47599a0a6cc1e3243bb5f38d2b81",
+          "gitBlob": "6e8b941550b926b9a38a0b3c6adfdd3c0518eeec",
+          "sha256": "36d06909e40641eb78557cbd165f738c1d04a67e91c53e71c6eb19cf347781c3",
+          "bytes": 11485
+        },
+        "sameBlob": false,
+        "snapshotMatchesCandidate": true
+      },
+      {
+        "path": "services/main/src/modules/facets/schema.ts",
+        "ownerChecked": {
+          "path": "services/main/src/modules/facets/schema.ts",
+          "pin": "f0051004bcab4d10e42bc2904e1c87af4a6d854a",
+          "gitBlob": "9fd0070d3a004a9bf65ca3ad8e9e5b8b2c3febbb",
+          "sha256": "458356d9cc4e2a3e7bd0e5f48f62834fcac91c4d61086792bc3f9e0aa172762b",
+          "bytes": 9627
+        },
+        "candidate": {
+          "path": "services/main/src/modules/facets/schema.ts",
+          "pin": "cd9b00126f7e47599a0a6cc1e3243bb5f38d2b81",
+          "gitBlob": "9fd0070d3a004a9bf65ca3ad8e9e5b8b2c3febbb",
+          "sha256": "458356d9cc4e2a3e7bd0e5f48f62834fcac91c4d61086792bc3f9e0aa172762b",
+          "bytes": 9627
+        },
+        "sameBlob": true,
+        "snapshotMatchesCandidate": true
+      },
+      {
+        "path": "services/main/src/routes/query.ts",
+        "ownerChecked": {
+          "path": "services/main/src/routes/query.ts",
+          "pin": "f0051004bcab4d10e42bc2904e1c87af4a6d854a",
+          "gitBlob": "070b9b2cd088613b14561878cd6ef8d8f4636d9c",
+          "sha256": "18e382dcd5d93d0f81fa299436937f03ab1d64f012cb62a70bd68722c2421f59",
+          "bytes": 17580
+        },
+        "candidate": {
+          "path": "services/main/src/routes/query.ts",
+          "pin": "cd9b00126f7e47599a0a6cc1e3243bb5f38d2b81",
+          "gitBlob": "070b9b2cd088613b14561878cd6ef8d8f4636d9c",
+          "sha256": "18e382dcd5d93d0f81fa299436937f03ab1d64f012cb62a70bd68722c2421f59",
+          "bytes": 17580
+        },
+        "sameBlob": true,
+        "snapshotMatchesCandidate": true
+      }
+    ],
+    "ownerEvidence": {
+      "handoff": ".temp/worktrees/g-2764/.temp/goal/navigation-facet-refusal-handoff.txt",
+      "handoffSha256": "a134fbc03e7231eb8a66b1ddf2f96148aedf5ca3b73a7d4be0b50710cd9c8503",
+      "qa": [
+        {
+          "qaRun": "20261019t142901-216463",
+          "source": {
+            "head": "f0051004bcab4d10e42bc2904e1c87af4a6d854a",
+            "fingerprint": "73fbec1339d4510d23a94d944527a9cdad3cdcb894163bc08261ff11566d3650",
+            "clean": false
+          },
+          "acceptancePath": ".temp/worktrees/g-2764/.artifacts/qa/20261019t142901-216463/acceptance.json",
+          "acceptanceSha256": "d35cc617d8ab4db4e1507015694eb389c2c8ffee07346dec18879273b2d5dfd2",
+          "junitPath": ".temp/worktrees/g-2764/.artifacts/qa/20261019t142901-216463/owner.xml",
+          "junitSha256": "0ed7b4f1c4598425d6489b99015b066b48c2c6801c12332ac2c926d119a5384b",
+          "tests": 3,
+          "failures": 2,
+          "assertions": 18,
+          "skipped": 0,
+          "meaning": "Original controlled compiler and registered-handler machine-code assertions reached and failed as invalid_query rather than misplaced_facet; one independent preservation case passed. No live public/persona proof."
+        },
+        {
+          "qaRun": "20261019t143238-18d1b3",
+          "source": {
+            "head": "f0051004bcab4d10e42bc2904e1c87af4a6d854a",
+            "fingerprint": "44a637d3071fe704bd81982774f5c695565470a5371a2b2093a6e0888bbee131",
+            "clean": false
+          },
+          "acceptancePath": ".temp/worktrees/g-2764/.artifacts/qa/20261019t143238-18d1b3/acceptance.json",
+          "acceptanceSha256": "afba23584893904bd152b854e536e9d82a3793e3b8fea38f7eec2fb22f3a303b",
+          "junitPath": ".temp/worktrees/g-2764/.artifacts/qa/20261019t143238-18d1b3/owner.xml",
+          "junitSha256": "15733e90f36ac5578c3005feedd51d758e66593886760fc96970af9614c83ddb",
+          "tests": 27,
+          "failures": 0,
+          "assertions": 261,
+          "skipped": 0,
+          "meaning": "27 owner tests passed on the owner dependency context, including compiler/handler placement refusals and adjacent query/facet/release checks. This is not a passing exact-main-candidate receipt."
+        }
+      ],
+      "passingFingerprintVerification": {
+        "qaHead": "f0051004bcab4d10e42bc2904e1c87af4a6d854a",
+        "reconstructedQaFingerprint": "44a637d3071fe704bd81982774f5c695565470a5371a2b2093a6e0888bbee131",
+        "expected": "44a637d3071fe704bd81982774f5c695565470a5371a2b2093a6e0888bbee131",
+        "matchesPassingOwnerQa": true,
+        "trackedPaths": [
+          "services/main/src/modules/query/compile.ts"
+        ],
+        "untrackedTestPath": "services/main/tests/resource-query-facet-refusal.test.ts"
+      },
+      "recordedJobs": [
+        {
+          "jobId": "b642336e-8e1c-4242-a914-c12f42d83de0",
+          "result": "Baseline compiler and registered-handler assertions fail with invalid_query rather than misplaced_facet. Independently inspected QA acceptance/JUnit artifacts; the baseline job log itself was not present in the inspected owner job directory."
+        },
+        {
+          "jobId": "5276b085-f417-4367-9a33-61ceed787f86",
+          "result": "Test-only generic Proxy inference TS2345 failure; no runtime outcome. Owner supplied explicit FusekiClient/MainWorkDependencies Proxy types before the passing receipt."
+        },
+        {
+          "jobId": "256743ae-5f07-4546-80fb-51dbfff3bbca",
+          "result": "Inspected recorded sequence: affected Main types passed; four owner test files passed (27 tests/261 assertions); type-aware lint, AST and selected guards passed. Supporting owner context, not a current-main pass."
+        },
+        {
+          "jobId": "587a5ae4-91d8-499b-b5fb-ac4da2ff01b6",
+          "result": "Inspected publication log records successful push to adc3ab0b8d. Two published correction blobs match the frozen candidate. No independent publication, push or landing performed by this reviewer."
+        }
+      ],
+      "checksReusedOnlyInOwnerContext": [
+        "services/main/tests/resource-query-facet-refusal.test.ts",
+        "services/main/tests/query-compile.test.ts",
+        "services/main/tests/facet-navigation.test.ts",
+        "services/main/tests/g-851-release-query.test.ts"
+      ],
+      "acceptanceLimit": "Controlled compiler/registered-handler owner checks are not installed public/persona outcomes. No accepted eight-counterexample suite, registry suite, native suite, whole tier or live corpus was replayed."
+    },
+    "freshTargetedChecks": [
+      {
+        "jobId": "51dae76f-4da3-4fc1-bb23-24e325f0a61d",
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/precise-query-refusal-review/snapshot/services/main/tests/resource-query-facet-refusal.test.ts",
+        "sourcePin": "cd9b00126f7e47599a0a6cc1e3243bb5f38d2b81",
+        "runner": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- <command>",
+        "exitCode": 1,
+        "result": "0 pass, 1 fail, 1 error; module-load TypeError at unchanged candidate test line 14: discovery.queryShapes.find",
+        "outcomeAssertionReached": false,
+        "classification": "dependency/setup; harness class does not establish product failure"
+      },
+      {
+        "jobId": "21999ff9-b6e1-42f1-bdf7-1d754dc3a8d9",
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/precise-query-refusal-review/precise-refusal-caller-review.test.ts",
+        "diagnostic": {
+          "path": ".temp/precise-query-refusal-review/precise-refusal-caller-review.test.ts",
+          "sha256": "6f1ef68c19840b21f6b775b306644f08d6dfd97a5bcc988851568cffcfdefa78"
+        },
+        "sourcePin": "cd9b00126f7e47599a0a6cc1e3243bb5f38d2b81",
+        "exitCode": 1,
+        "result": "0 pass, 1 fail, 1 error; independent direct-handler diagnostic also stops in setup at line 14: translator.name is undefined because no releaseTranslator is registered",
+        "outcomeAssertionReached": false,
+        "classification": "dependency/setup; no outcome claim",
+        "limit": "One attempted setup-independent diagnostic avoided an advertised-shape assumption but still required the genuine admitted translator. No replacement entry, fabricated shape or further setup workaround was added. The original test remains byte-identical."
+      }
+    ],
+    "evidenceLogs": [
+      {
+        "root": "worker",
+        "path": ".temp/goal/jobs/51dae76f-4da3-4fc1-bb23-24e325f0a61d.log",
+        "sha256": "aaa09063b13a7f25ecff90496afb692b5a01120a6fffb227aeff3769bd10d346"
+      },
+      {
+        "root": "worker",
+        "path": ".temp/goal/jobs/21999ff9-b6e1-42f1-bdf7-1d754dc3a8d9.log",
+        "sha256": "03aea29796c4d165c4139981b1db7bbdb54d7362bb975257a8e7c45da77d2133"
+      },
+      {
+        "root": "G-2764",
+        "path": ".temp/goal/jobs/256743ae-5f07-4546-80fb-51dbfff3bbca.1.log",
+        "sha256": "a087f9ee462f7eec1ed744ed57caf3a70deaf881b95317740138bf8f305ae5bc"
+      },
+      {
+        "root": "G-2764",
+        "path": ".temp/goal/jobs/256743ae-5f07-4546-80fb-51dbfff3bbca.2.log",
+        "sha256": "6b5e35a6fc324974f535daf44981c57789c0df092174744b93f13e9f85e591af"
+      },
+      {
+        "root": "G-2764",
+        "path": ".temp/goal/jobs/256743ae-5f07-4546-80fb-51dbfff3bbca.3.log",
+        "sha256": "6b593985c9f9b12fabae13d4d61ef913f4afee94f7a0c336d790a1dbd5cb9609"
+      },
+      {
+        "root": "G-2764",
+        "path": ".temp/goal/jobs/5276b085-f417-4367-9a33-61ceed787f86.1.log",
+        "sha256": "d30edcade0ea354f1a113491203ba349580f8a1fadac53ba1e57832b8db0e51e"
+      },
+      {
+        "root": "G-2764",
+        "path": ".temp/goal/jobs/587a5ae4-91d8-499b-b5fb-ac4da2ff01b6.2.log",
+        "sha256": "1a79387634d0b1a4b849e7b6bbba0783441e3dbb6eee768f8c9a44dbeea16e70"
+      }
+    ],
+    "preservation": {
+      "priorReportHashes": {
+        "docs/goals/audit-remediation-20261019/proofs/catalogue-query-credit-privacy-review.json": {
+          "sha256": "932e9988230d884a6585a2df4c03a371bfb73945940e50405a7bc430354dd922",
+          "gitBlob": "3381ff36e0ecc6b28a854771a4a2f18579c98d71"
+        },
+        "docs/goals/audit-remediation-20261019/proofs/catalogue-supporting-registry-review.json": {
+          "sha256": "9080de934c3808d1096925b7b2eacb3514bb82df858b37d64cb05e7aef6d8429",
+          "gitBlob": "e42c9961b0fb62189b7b720ecde824dd3f8d0c23"
+        },
+        "docs/goals/audit-remediation-20261019/proofs/catalogue-native-credit-successor-review.json": {
+          "sha256": "9261acc40dc6d2d5f37d1e92ce31d76f1a1fb0e614338898fb7f5afc04b379c7",
+          "gitBlob": "7d6af79b1abb44055daf7e3c809dacaa74428377"
+        }
+      },
+      "queryReportHistory": "Every pre-existing top-level JSON value is unchanged, including original pins/findings, all eight caller counterexamples and the accepted 0ec51a648571cdffdff667ca9b2ca86b6ffa69a6 correction consuming unchanged G2800 authority. Prior accepted 5c1f50 and actual-main 0a44 principal/privacy repair are not reopened.",
+      "otherReports": "Accepted supporting-registry and native-successor review files remain byte-identical to the captured hashes. This append does not rereview or await a later G2800 native candidate.",
+      "assertionsAndData": "No implementation, original/owner test, fixture identity, corpus or original assertion was edited. The two frozen changed files match the independent snapshot before and after checks."
+    },
+    "limits": [
+      "The refusal mapping is assessed by actual two-file diff and unchanged caller source. The new exact-main test receipt is a setup failure, not a product outcome assertion. No passing exact-main claim is made.",
+      "No current-main type/lint or full owner suite rerun was needed after the concrete missing-dependency failure. Candidate type compatibility of queryShapes is source-inferred from its absent contract property, not a reproduced TypeScript diagnostic.",
+      "No allocation/budget, stale-query, authority, registry, Source, privacy or OpenAPI contract implementation changed in this correction. Existing budgets and stale HTTP mappings were inspected as unchanged; they were not freshly qualified in a public run.",
+      "Ordinary native APIs gain no provider transformation. Manual citations remain independent of conversion; no converter, evidence, mapper or retained settlement is made mandatory. Source settlement and query activation/coverage retain their explicit owners.",
+      "No network/browser/server, live runtime/corpus preparation, shared lifecycle, import, backup/reset, whole-wave prerequisites or landing were performed. No original finding class, 1440/390 proof, six-persona C16 or native acceptance is closed."
+    ],
+    "reportValidation": {
+      "status": "pass",
+      "completedAtUtc": "2026-10-19T14:58:04.199830+00:00",
+      "jobId": "fb8464ec-a049-45d7-af84-dd869489c7c0",
+      "docsCheck": "task docs:check passed: 13 tests; 249 Markdown files; local links, fragments and design navigation. External URLs and runtime behavior not tested.",
+      "workerGate": "task goal -- check passed: AST and selected 1/44 repository guards; no TypeScript/source file change or tests named in the brief. This validates the report, not the candidate implementation.",
+      "logs": [
+        {
+          "path": ".temp/goal/jobs/fb8464ec-a049-45d7-af84-dd869489c7c0.1.log",
+          "sha256": "69e27e0317048425aa158b1eb821a696cc1845ae068f5c7d923b31903c684498"
+        },
+        {
+          "path": ".temp/goal/jobs/fb8464ec-a049-45d7-af84-dd869489c7c0.2.log",
+          "sha256": "9af477070f3416ed2ac285213be801d718ad3dad2fe89c62fb0e52cce4ccb165"
+        },
+        {
+          "path": ".temp/goal/check/run-NAx3pB/output.log",
+          "sha256": "357061fe0eefc50ea104df0f4387a952941dcd0c3f3f5c0a254dfd0b62b7bd4f"
+        }
+      ],
+      "sourcePinPreservation": "The report was staged throughout validation and HEAD remained f90729f88d103abbd8fe15e1fbac6187ce8598fb. No rebase, merge or source mutation performed.",
+      "trackedChanges": "Only the preciseRefusalCorrectionReview append in the claimed JSON report. All historical top-level JSON values and both other reports remain unchanged."
+    }
+  },
+  "coherentNavigationDependencyReview": {
+    "reviewedAtUtc": "2026-10-19T15:30:51.353569Z",
+    "reviewer": {
+      "worker": "G-2849",
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "accountFallback": false
+    },
+    "status": "accepted-within-bounded-source-and-controlled-caller-scope",
+    "scope": "Independent incremental review of the coherent 22-path Work/facet/navigation and precise misplaced_facet dependency gap. Accepted principal/privacy/native/registry deltas are not reopened.",
+    "conclusion": "The coherent 22-path dependency extraction is accepted within this source/API-contract and controlled-caller scope. All files and the complete diff match the frozen manifest. The original 90-line refusal test and compiler remain byte-identical; the clean exact-candidate owner receipt reaches all three original bodies and passes 110 assertions. The unchanged independent diagnostic now independently reaches its three bodies and passes 97 assertions, including the exact problem type and 14 anonymous/bearer registered-route requests with no Account/backend reads. The two historical setup failures remain recorded with their original pins; the missing genuine inputs are now supplied. No additional actionable issue was found. Java translator behavior, genuine public C16/association acceptance and the separate pending entity schema are not established by this bounded review.",
+    "pins": {
+      "base": "f1792f86d9fac79e7d2101fb9ba9a9ab2e6e8b44",
+      "candidate": "c7084ab8360a8a0416831a7981c270f27af2e76c",
+      "candidateTree": "0dde0df72c1f4ee7c06698b6bf4412ac0c759a6b",
+      "pathCount": 22,
+      "diffSha256": "dddf180c0fabe15b7f8bdd6072d748832b872fa9a16eecc39e7628ad93dbadf0",
+      "manifestPath": ".temp/worktrees/g-2764/.temp/goal/navigation-candidate/manifest.json",
+      "manifestSha256": "626005f58c78f33a5d7a42544da24f84659ca31f47c8c903258e0b44e1c4c0f5",
+      "reviewerHeadBeforeAppend": "8b56863ffe66cb7535fccc125bde8582361ba4d3",
+      "staticCheckHead": "d8550487ceb5187186200d36522f167b5b1fd793",
+      "allCommittedFileBlobsSizesAndSha256Verified": true,
+      "sourceProvenance": [
+        {
+          "pin": "7335261b39eb867f136e9ec79157df4cbddc4939",
+          "paths": [
+            "model/definitions/facet-release-translator-v1.ts",
+            "model/tests/facet-definitions.test.ts",
+            "model/tests/g-851-release-facets.test.ts",
+            "services/main/src/modules/facets/release-query.ts",
+            "services/main/tests/release-translator-query.test.ts",
+            "infra/jena/command-module/src/main/java/com/rezics/jena/CommandModule.java",
+            "infra/jena/command-module/src/main/java/com/rezics/jena/RealizationTranslators.java",
+            "infra/jena/command-module/src/test/java/com/rezics/jena/RealizationTranslatorsTest.java"
+          ]
+        },
+        {
+          "pin": "2ce4b1d8816d007482a3d1bf5e8156fc5164b84c",
+          "paths": [
+            "services/main/src/modules/query/navigation-contract.ts"
+          ]
+        },
+        {
+          "pin": "73c9b2a96af2fd8f31c03abfbf2e2b1bc2a27aff",
+          "paths": [
+            "services/main/src/modules/facets/contract.ts",
+            "services/main/src/modules/facets/registry.ts",
+            "services/main/tests/facet-navigation.test.ts"
+          ]
+        },
+        {
+          "pin": "62fa571e09dd47dfca0ea981ff717081d9f8afe6",
+          "paths": [
+            "services/main/src/modules/work/read-contract.ts"
+          ]
+        },
+        {
+          "pin": "365f5d7225a2ee749de722f0172766ec4b751b30",
+          "paths": [
+            "services/main/src/modules/work/read-header.ts",
+            "services/main/tests/work-navigation.test.ts"
+          ]
+        },
+        {
+          "pin": "adc3ab0b8d8049253bedb01907e35d6a1b85de51",
+          "paths": [
+            "services/main/src/modules/query/compile.ts",
+            "services/main/tests/resource-query-facet-refusal.test.ts"
+          ]
+        },
+        {
+          "pin": "d921c61830dc137612cce5058a15303205413e4c",
+          "paths": [
+            "services/main/tests/release-translator-query.test.ts"
+          ]
+        }
+      ],
+      "extractedAuthorship": [
+        {
+          "pin": "b8e455e302eb9e2d80e271012d19ea55d79a012f",
+          "author": "Edge-coordinates",
+          "authorEmail": "Edgecoordinates@gmail.com",
+          "authorDate": "2026-10-19T21:54:14+08:00",
+          "subject": "feat(releases): correlate translators and disclose exact retained evidence"
+        },
+        {
+          "pin": "27a00a108f8de62797e52684805463b3b4da0cd1",
+          "author": "Edge-coordinates",
+          "authorEmail": "Edgecoordinates@gmail.com",
+          "authorDate": "2026-10-19T21:56:02+08:00",
+          "subject": "feat(query): define typed catalogue navigation descriptors"
+        },
+        {
+          "pin": "41527d67a5749f18c798db58d2f8cc7afd05470b",
+          "author": "Edge-coordinates",
+          "authorEmail": "Edgecoordinates@gmail.com",
+          "authorDate": "2026-10-19T22:07:24+08:00",
+          "subject": "feat(facets): advertise the executable release query shape"
+        },
+        {
+          "pin": "4cac9f296b75aca348ad1628bf1666533b836ecd",
+          "author": "Edge-coordinates",
+          "authorEmail": "Edgecoordinates@gmail.com",
+          "authorDate": "2026-10-19T22:14:21+08:00",
+          "subject": "fix(work): admit catalogue navigation in work headers"
+        },
+        {
+          "pin": "2480089f6e7cebe8b2acd6f0376a94d75921b9e4",
+          "author": "Edge-coordinates",
+          "authorEmail": "Edgecoordinates@gmail.com",
+          "authorDate": "2026-10-19T22:17:50+08:00",
+          "subject": "feat(work): expose executable catalogue navigation"
+        },
+        {
+          "pin": "724929d71f9d511f06d871c1b61228e40e564d64",
+          "author": "Edge-coordinates",
+          "authorEmail": "Edgecoordinates@gmail.com",
+          "authorDate": "2026-10-19T22:34:37+08:00",
+          "subject": "fix(query): preserve misplaced facet refusal codes"
+        },
+        {
+          "pin": "6472aa2dff63280bd0be78147081f9e2ce4b27b3",
+          "author": "Edge-coordinates",
+          "authorEmail": "Edgecoordinates@gmail.com",
+          "authorDate": "2026-10-19T22:46:28+08:00",
+          "subject": "test(releases): require precise misplaced facet refusal"
+        },
+        {
+          "pin": "0f07a4ab27816fcac57d88c0ec3a900a3a39fe0a",
+          "author": "Edge-coordinates",
+          "authorEmail": "Edgecoordinates@gmail.com",
+          "authorDate": "2026-10-19T23:08:27+08:00",
+          "subject": "chore(api): generate coherent catalogue navigation contracts"
+        },
+        {
+          "pin": "c7084ab8360a8a0416831a7981c270f27af2e76c",
+          "author": "Edge-coordinates",
+          "authorEmail": "Edgecoordinates@gmail.com",
+          "authorDate": "2026-10-19T23:12:07+08:00",
+          "subject": "test(model): compare release facet digests without literal narrowing"
+        }
+      ]
+    },
+    "exactFiles": [
+      {
+        "path": "docs/development/toolchain.md",
+        "blob": "06ac2e2b8a3c00cee725280e2ffd22668a4f1bd8",
+        "sha256": "c07f1a205cb762674f3553b6da87af705fb0ddc7a24eb94e9afc7ba6e41047e8",
+        "bytes": 55589,
+        "sourcePins": []
+      },
+      {
+        "path": "generated/openapi/main/public.json",
+        "blob": "ae28e95a9f15dad0de04d354573810027bb4de47",
+        "sha256": "5a29d3407e0beaee8898952de570086852916422e4ea2216c1daae4b56f6b339",
+        "bytes": 39260734,
+        "sourcePins": []
+      },
+      {
+        "path": "infra/dev/compose.yaml",
+        "blob": "f6f8ac4f4d3cbe2193a1a1960fdfc8eff9822bf6",
+        "sha256": "0a579a16fab8a152b93f52a93ab635b2ebf87280f435b2847c226adafc9eca49",
+        "bytes": 4154,
+        "sourcePins": []
+      },
+      {
+        "path": "infra/jena/command-module/src/main/java/com/rezics/jena/CommandModule.java",
+        "blob": "947c8b71c06444a6b95d0bcd3d6fb2905101a71a",
+        "sha256": "e3aa574bbf56a64968da45bea45e8e9c3b384ac300d56f738040fed7313a8de0",
+        "bytes": 7776,
+        "sourcePins": [
+          "7335261b39eb867f136e9ec79157df4cbddc4939"
+        ]
+      },
+      {
+        "path": "infra/jena/command-module/src/main/java/com/rezics/jena/RealizationTranslators.java",
+        "blob": "b030bc0dfb25a0ce9bc8074827e97323cebaf370",
+        "sha256": "a33e6def90ccbecc4d2bb2d38de79eff808770e6ffcc9fd42a356854eb541ea5",
+        "bytes": 2078,
+        "sourcePins": [
+          "7335261b39eb867f136e9ec79157df4cbddc4939"
+        ]
+      },
+      {
+        "path": "infra/jena/command-module/src/test/java/com/rezics/jena/RealizationTranslatorsTest.java",
+        "blob": "b1745b19a1027c0d8873a1b2d6b68191e5068168",
+        "sha256": "269b2d6e0dcff61754155fee8066e20d0bb5519de368eb19666e3fe63e246300",
+        "bytes": 6151,
+        "sourcePins": [
+          "7335261b39eb867f136e9ec79157df4cbddc4939"
+        ]
+      },
+      {
+        "path": "model/definitions/facet-release-translator-v1.ts",
+        "blob": "59aa0881e6fd1671293538f13953c89262d8d470",
+        "sha256": "2dd57ff68742c9d6d1a81f20fd7fd12b4202cc1dd806549588da1fc253c37a0d",
+        "bytes": 1029,
+        "sourcePins": [
+          "7335261b39eb867f136e9ec79157df4cbddc4939"
+        ]
+      },
+      {
+        "path": "model/tests/facet-definitions.test.ts",
+        "blob": "b3f7b28324eccbbb86366337c881e731438fcbd6",
+        "sha256": "d28f9f2eae82749e84b0d6e494041bd74504f4d2881dfba6c357930b7a1ed52c",
+        "bytes": 10639,
+        "sourcePins": [
+          "7335261b39eb867f136e9ec79157df4cbddc4939"
+        ]
+      },
+      {
+        "path": "model/tests/g-851-release-facets.test.ts",
+        "blob": "10e0ded49932f9b132ba087f28682304d9ae4740",
+        "sha256": "d10e551043a438c49e5eb855748f93dd263415ba992a12a1e2b9eac6275ccf66",
+        "bytes": 2461,
+        "sourcePins": [
+          "7335261b39eb867f136e9ec79157df4cbddc4939"
+        ]
+      },
+      {
+        "path": "packages/model/src/generated/facets.ts",
+        "blob": "6305669b5354c3fcc0f9427f681406fde95a0bc1",
+        "sha256": "61ff7aa9a35c7692eaeead5adb9bf8a78d9477b7344619e036e9568472a632b4",
+        "bytes": 26586,
+        "sourcePins": []
+      },
+      {
+        "path": "scripts/dev/release-manifest.ts",
+        "blob": "77532a580ac5a00807a2f01c52a2835e1cd326c5",
+        "sha256": "f074736cd3d839e360d98896c35d26d3fca3dd1429c552e4c97a8b9d87421a85",
+        "bytes": 3045,
+        "sourcePins": []
+      },
+      {
+        "path": "services/main/src/modules/facets/contract.ts",
+        "blob": "16b4d1247da6a13b008e4e416a5c55de7857d16c",
+        "sha256": "f42e07088a8b6b092879c19b2d0739a7eea1c61ef98153182a861bd1b74f0e69",
+        "bytes": 4891,
+        "sourcePins": [
+          "73c9b2a96af2fd8f31c03abfbf2e2b1bc2a27aff"
+        ]
+      },
+      {
+        "path": "services/main/src/modules/facets/registry.ts",
+        "blob": "5897fa8cc0abc82ce6fb87ad091701e9875b2ab1",
+        "sha256": "36dcbab65279d36ccf7624255e72adf0df7b1873b0bc71fabe953a031510c8c5",
+        "bytes": 2830,
+        "sourcePins": [
+          "73c9b2a96af2fd8f31c03abfbf2e2b1bc2a27aff"
+        ]
+      },
+      {
+        "path": "services/main/src/modules/facets/release-query.ts",
+        "blob": "991f58bfba5a573fab9e842618ea0170231667df",
+        "sha256": "84f4670407f3b80cfc09b4aeb0d8b00e0c86f335d61d975882991cfa9a5b117a",
+        "bytes": 12909,
+        "sourcePins": [
+          "7335261b39eb867f136e9ec79157df4cbddc4939"
+        ]
+      },
+      {
+        "path": "services/main/src/modules/query/compile.ts",
+        "blob": "7949cdf054c08e89be1ca5d74eb198e30cdfd92a",
+        "sha256": "d22bfbbb2eb1689f760c46a354b0632d0d1be7f1db074e2f16f8c6bb93bfe572",
+        "bytes": 28421,
+        "sourcePins": [
+          "adc3ab0b8d8049253bedb01907e35d6a1b85de51"
+        ]
+      },
+      {
+        "path": "services/main/src/modules/query/navigation-contract.ts",
+        "blob": "62f4e172f5b2c36d37b41563ee433b1c51bc282f",
+        "sha256": "1b71bec1ae67b877e5e5e0b473bed9bdb628e6971080a20c45933fe8a4b18a15",
+        "bytes": 1394,
+        "sourcePins": [
+          "2ce4b1d8816d007482a3d1bf5e8156fc5164b84c"
+        ]
+      },
+      {
+        "path": "services/main/src/modules/work/read-contract.ts",
+        "blob": "377d4c72290a22296fa9b7306eaaef01dea941c1",
+        "sha256": "5d8deaa5b3da350bcdcdf67a9c5d6f8f6d273301cae211cfa660a3b44bbe1f6b",
+        "bytes": 11055,
+        "sourcePins": [
+          "62fa571e09dd47dfca0ea981ff717081d9f8afe6"
+        ]
+      },
+      {
+        "path": "services/main/src/modules/work/read-header.ts",
+        "blob": "39ef4fdefd08f8ec638b2d49558b100c08b27865",
+        "sha256": "0b783246bcce0087ed202b17ed10a06aeeb596232cbffd06f87cfec2580acc37",
+        "bytes": 17271,
+        "sourcePins": [
+          "365f5d7225a2ee749de722f0172766ec4b751b30"
+        ]
+      },
+      {
+        "path": "services/main/tests/facet-navigation.test.ts",
+        "blob": "0637df4c4f4a0f77ccdbc62a76bd765369977015",
+        "sha256": "51e02416174e9599defde60c3c797e3b893adec1a34188cd6780d50008be26a3",
+        "bytes": 4328,
+        "sourcePins": [
+          "73c9b2a96af2fd8f31c03abfbf2e2b1bc2a27aff"
+        ]
+      },
+      {
+        "path": "services/main/tests/release-translator-query.test.ts",
+        "blob": "3569135b692ab010de5309c63ea28a24336959c8",
+        "sha256": "18de3b787397c529c60b68bbbb726c7d90fd3f11be1e769805035950ddc494d2",
+        "bytes": 5175,
+        "sourcePins": [
+          "7335261b39eb867f136e9ec79157df4cbddc4939",
+          "d921c61830dc137612cce5058a15303205413e4c"
+        ]
+      },
+      {
+        "path": "services/main/tests/resource-query-facet-refusal.test.ts",
+        "blob": "ae6077c99a4a0987a8ee1765941255aeee611800",
+        "sha256": "df4d8ffe1e1110d7081c112619533309fa98075ecf98f8097511597e5616c74e",
+        "bytes": 5301,
+        "sourcePins": [
+          "adc3ab0b8d8049253bedb01907e35d6a1b85de51"
+        ]
+      },
+      {
+        "path": "services/main/tests/work-navigation.test.ts",
+        "blob": "7fd0c29ee8956b5c3554e313faa769a39e7925ad",
+        "sha256": "a8ccc06472a87341084b0acec7e66235db7268e2c74c23d342a5adf3ea900023",
+        "bytes": 5352,
+        "sourcePins": [
+          "365f5d7225a2ee749de722f0172766ec4b751b30"
+        ]
+      }
+    ],
+    "authoredSourceComparison": {
+      "comparisons": [
+        {
+          "path": "model/definitions/facet-release-translator-v1.ts",
+          "source": "7335261b39eb867f136e9ec79157df4cbddc4939",
+          "candidateMatchesWholeSourceBlob": true
+        },
+        {
+          "path": "model/tests/facet-definitions.test.ts",
+          "source": "7335261b39eb867f136e9ec79157df4cbddc4939",
+          "candidateMatchesWholeSourceBlob": true
+        },
+        {
+          "path": "model/tests/g-851-release-facets.test.ts",
+          "source": "7335261b39eb867f136e9ec79157df4cbddc4939",
+          "candidateMatchesWholeSourceBlob": false
+        },
+        {
+          "path": "services/main/src/modules/facets/release-query.ts",
+          "source": "7335261b39eb867f136e9ec79157df4cbddc4939",
+          "candidateMatchesWholeSourceBlob": true
+        },
+        {
+          "path": "services/main/tests/release-translator-query.test.ts",
+          "source": "7335261b39eb867f136e9ec79157df4cbddc4939",
+          "candidateMatchesWholeSourceBlob": false
+        },
+        {
+          "path": "infra/jena/command-module/src/main/java/com/rezics/jena/CommandModule.java",
+          "source": "7335261b39eb867f136e9ec79157df4cbddc4939",
+          "candidateMatchesWholeSourceBlob": true
+        },
+        {
+          "path": "infra/jena/command-module/src/main/java/com/rezics/jena/RealizationTranslators.java",
+          "source": "7335261b39eb867f136e9ec79157df4cbddc4939",
+          "candidateMatchesWholeSourceBlob": true
+        },
+        {
+          "path": "infra/jena/command-module/src/test/java/com/rezics/jena/RealizationTranslatorsTest.java",
+          "source": "7335261b39eb867f136e9ec79157df4cbddc4939",
+          "candidateMatchesWholeSourceBlob": true
+        },
+        {
+          "path": "services/main/src/modules/query/navigation-contract.ts",
+          "source": "2ce4b1d8816d007482a3d1bf5e8156fc5164b84c",
+          "candidateMatchesWholeSourceBlob": true
+        },
+        {
+          "path": "services/main/src/modules/facets/contract.ts",
+          "source": "73c9b2a96af2fd8f31c03abfbf2e2b1bc2a27aff",
+          "candidateMatchesWholeSourceBlob": true
+        },
+        {
+          "path": "services/main/src/modules/facets/registry.ts",
+          "source": "73c9b2a96af2fd8f31c03abfbf2e2b1bc2a27aff",
+          "candidateMatchesWholeSourceBlob": true
+        },
+        {
+          "path": "services/main/tests/facet-navigation.test.ts",
+          "source": "73c9b2a96af2fd8f31c03abfbf2e2b1bc2a27aff",
+          "candidateMatchesWholeSourceBlob": true
+        },
+        {
+          "path": "services/main/src/modules/work/read-contract.ts",
+          "source": "62fa571e09dd47dfca0ea981ff717081d9f8afe6",
+          "candidateMatchesWholeSourceBlob": false
+        },
+        {
+          "path": "services/main/src/modules/work/read-header.ts",
+          "source": "365f5d7225a2ee749de722f0172766ec4b751b30",
+          "candidateMatchesWholeSourceBlob": false
+        },
+        {
+          "path": "services/main/tests/work-navigation.test.ts",
+          "source": "365f5d7225a2ee749de722f0172766ec4b751b30",
+          "candidateMatchesWholeSourceBlob": true
+        },
+        {
+          "path": "services/main/src/modules/query/compile.ts",
+          "source": "adc3ab0b8d8049253bedb01907e35d6a1b85de51",
+          "candidateMatchesWholeSourceBlob": true
+        },
+        {
+          "path": "services/main/tests/resource-query-facet-refusal.test.ts",
+          "source": "adc3ab0b8d8049253bedb01907e35d6a1b85de51",
+          "candidateMatchesWholeSourceBlob": true
+        },
+        {
+          "path": "services/main/tests/release-translator-query.test.ts",
+          "source": "d921c61830dc137612cce5058a15303205413e4c",
+          "candidateMatchesWholeSourceBlob": true
+        }
+      ],
+      "composedFiles": [
+        {
+          "path": "services/main/src/modules/work/read-contract.ts",
+          "disposition": "Reviewed the actual minimal header-schema delta against the frozen main base; did not inherit an unrelated whole source file or its credit role changes."
+        },
+        {
+          "path": "services/main/src/modules/work/read-header.ts",
+          "disposition": "Reviewed the actual navigation producer delta while retaining the main canonical /v1/resources/{resource}/ratings GET URL. This is a composed file, not a whole-source blob match."
+        },
+        {
+          "path": "model/tests/g-851-release-facets.test.ts",
+          "disposition": "The later one-line type correction reverses the same digest equality operands. Values and assertion meaning are preserved."
+        },
+        {
+          "path": "services/main/tests/release-translator-query.test.ts",
+          "disposition": "Matches actual precise-refusal publication d921c61830dc137612cce5058a15303205413e4c; the earlier 7335261 test is not claimed byte-identical. The precise misplaced_facet expectation preserves the original independent C16 requirement."
+        }
+      ]
+    },
+    "historicalSetupDisposition": {
+      "preservedReview": "preciseRefusalCorrectionReview in this report; c2ffa81a98a198fb08c02caee0e7758fbe57f966",
+      "originalCandidate": "cd9b00126f7e47599a0a6cc1e3243bb5f38d2b81",
+      "originalSetupFailures": [
+        {
+          "job": "job:51dae76f-4da3-4fc1-bb23-24e325f0a61d",
+          "reason": "discovery.queryShapes.find at module load; no outcome assertion reached"
+        },
+        {
+          "job": "job:21999ff9-b6e1-42f1-bdf7-1d754dc3a8d9",
+          "reason": "translator.name at module load; no outcome assertion reached"
+        }
+      ],
+      "actualNewInputs": "Optional closed queryShapes discovery contract plus its real ready release-works-v1 descriptor; registered facet-release-translator-v1; exact-revision translator planner and registered bounded Java accessor. No fabricated discovery entries or substitute translator fixture was inserted.",
+      "unchangedRefusalFiles": {
+        "services/main/src/modules/query/compile.ts": {
+          "sha256": "d22bfbbb2eb1689f760c46a354b0632d0d1be7f1db074e2f16f8c6bb93bfe572",
+          "byteIdenticalToEarlierFailedSnapshot": true
+        },
+        "services/main/tests/resource-query-facet-refusal.test.ts": {
+          "sha256": "df4d8ffe1e1110d7081c112619533309fa98075ecf98f8097511597e5616c74e",
+          "byteIdenticalToEarlierFailedSnapshot": true
+        }
+      },
+      "oldOwnerAssertions": {
+        "receipt": "job:939fc3b8-12e0-4dc6-9edf-608ab0e5004e; QA 20261019t151400-fbbccd",
+        "source": {
+          "head": "c7084ab8360a8a0416831a7981c270f27af2e76c",
+          "fingerprint": "53e884ae310815b7c70385cbb99bff755f10ce857c1b8672b54b1b0d62c6b526",
+          "clean": true
+        },
+        "assertionReached": true,
+        "result": "passed",
+        "cases": [
+          {
+            "name": "Advertised translator conditions retain precise placement refusals for resource and foreign occurrence scopes",
+            "classname": "",
+            "time": "0.000788",
+            "file": "services/main/tests/resource-query-facet-refusal.test.ts",
+            "line": "34",
+            "assertions": "28"
+          },
+          {
+            "name": "Advertised Query route returns machine-readable misplaced_facet before any owner or Account read",
+            "classname": "",
+            "time": "0.013657",
+            "file": "services/main/tests/resource-query-facet-refusal.test.ts",
+            "line": "52",
+            "assertions": "70"
+          },
+          {
+            "name": "Precise placement codes preserve existing invalid, unsupported and filter allocation refusals",
+            "classname": "",
+            "time": "0.001143",
+            "file": "services/main/tests/resource-query-facet-refusal.test.ts",
+            "line": "77",
+            "assertions": "12"
+          }
+        ],
+        "assertions": 110,
+        "scope": "Exact unchanged original owner test at the clean immutable candidate. Reused execution, not a fresh reviewer run or live public outcome."
+      },
+      "independentDiagnosticDisposition": "The exact prior diagnostic SHA256 6f1ef68c19840b21f6b775b306644f08d6dfd97a5bcc988851568cffcfdefa78 now passes 3 tests/97 assertions in job:8011188f-a626-4071-b94d-7d88494f317c against the genuine frozen c7084ab836 snapshot. Its earlier translator.name setup failure remains historical; no assertion, identity, expected code or data was changed."
+    },
+    "newCompositionInspection": [
+      {
+        "area": "Work navigation producer and closed operation contracts",
+        "disposition": "No additional actionable issue found.",
+        "checked": "Ten descriptors cover every legacy link plus native releases/realizations. Work versions/adoptions use actual POST /v1/query template-query-v1 bodies, exact revision 1, native Work roots and page limit 20; legacy fragment links are not presented as GET operations. Resource descriptors identify mounted GET operation IDs and actual response profiles/null where no named profile exists. Canonical resource ratings remains intact. Catalogue operation and request objects are closed; navigation and the two added links are optional in the header schema. Legacy header bodies still validate. executeTemplate actually wraps results in query-v1; the credits GET keeps its template-result-v1 profile."
+      },
+      {
+        "area": "Facet discovery, registry metadata and real query admission",
+        "disposition": "No additional actionable issue found.",
+        "checked": "All 20 old generated facet entries remain structurally identical, including digests, labels, cost and membership; only releaseTranslator is added. The descriptor names six exact current definition IDs and actual POST /v1/query filter-document-v1 admission, page bound 20 and page.continuation/result.nextCursor fields. requestProfile describes the protocol; filter-document-v1 bodies still have no profile property. Ready and unsupported descriptors are distinct closed variants. The ETag/digest now binds the registry digest plus queryShapes, and the existing 64-facet/64-KiB response bounds remain."
+      },
+      {
+        "area": "Covered realization translator composition",
+        "disposition": "Source and controlled planner assertions inspected; native execution is explicitly unproved.",
+        "checked": "The release group binds the same release and same Work coverage entry, whose exact pinned realization revision supplies native realizationState. No mutable realization head supplies translators. The planner checks realization identity/Work, stored model revision, protection and erased revision, with existing covered-public-Work and release fences. any/all/none stay inside the same known immutable realization. Missing/invalid state is unknown even for none; legacy aggregate release-v1/v2 branches cannot establish this correlation and return false for this condition. No provider key creates an Agent or role. Registration of realizationTranslators and the exact authored native implementation are present, rather than only a generated facet claim."
+      },
+      {
+        "area": "Bounded native accessor",
+        "disposition": "Compiled by the reused generation receipt; Java behavior tests were not executed.",
+        "checked": "RealizationTranslators accepts a string state of at most 8192 Java characters with realization-v1 profile and exact component/Work identities. At most 16 distinct native translator IRIs are admitted. Valid empty lists remain distinguishable from malformed/missing state, which throws ExprEvalException. The planner adds BOUND before negative matching. The two actual Java test bodies cover invalid/oversized/duplicate/provider identifiers, covered old revision versus current head, cross-release/platform/language/Work confusion and unknown state; their presence and image compilation are not a native behavior pass."
+      },
+      {
+        "area": "Precise refusal mapping and unchanged guard composition",
+        "disposition": "Original compiler/test bytes preserved; exact-candidate owner assertions pass.",
+        "checked": "InvalidFilter misplaced_facet is retained as the machine code. filter_too_large still becomes query_budget_exceeded; other invalid, unsupported and stale mappings remain. Name and DefinitionRef any/all/none at resource scope and wrong related owner refuse; proper release nesting remains executable. Registered route serialization precedes any Account/graph/owner access, including bearer headers. Query allocation/depth/read budgets and the existing admission/current/disclosure authorities were not weakened. No ordinary API conversion or mandatory citation derivation was introduced."
+      }
+    ],
+    "derivedOutputs": {
+      "facetsBefore": 20,
+      "facetsAfter": 21,
+      "allExistingFacetEntriesIdentical": true,
+      "newFacet": {
+        "id": "https://rezics.com/definition/facet-release-translator-v1",
+        "digest": "61a11baa70f9156f70a0d4e3e91cfea792956951e0d013b450aa270981ab35db",
+        "within": "https://rezics.com/definition/facet-release-v1"
+      },
+      "openapiRecursiveDifferences": [
+        {
+          "kind": "added",
+          "path": "/components/schemas/WorkHeader/properties/navigation"
+        },
+        {
+          "kind": "added",
+          "path": "/components/schemas/WorkHeader/properties/links/properties/realizations"
+        },
+        {
+          "kind": "added",
+          "path": "/components/schemas/WorkHeader/properties/links/properties/releases"
+        },
+        {
+          "kind": "added",
+          "path": "/paths//v1/facets/get/responses/200/content/application/json/schema/properties/queryShapes"
+        },
+        {
+          "kind": "added",
+          "path": "/paths//v1/resources/{resource}/page/get/responses/200/content/application/json/schema/properties/mergedFacts/properties/origins/items/properties/work/properties/navigation"
+        },
+        {
+          "kind": "added",
+          "path": "/paths//v1/resources/{resource}/page/get/responses/200/content/application/json/schema/properties/mergedFacts/properties/origins/items/properties/work/properties/links/properties/realizations"
+        },
+        {
+          "kind": "added",
+          "path": "/paths//v1/resources/{resource}/page/get/responses/200/content/application/json/schema/properties/mergedFacts/properties/origins/items/properties/work/properties/links/properties/releases"
+        },
+        {
+          "kind": "added",
+          "path": "/paths//v1/resources/{resource}/page/get/responses/200/content/application/json/schema/properties/work/properties/navigation"
+        },
+        {
+          "kind": "added",
+          "path": "/paths//v1/resources/{resource}/page/get/responses/200/content/application/json/schema/properties/work/properties/links/properties/realizations"
+        },
+        {
+          "kind": "added",
+          "path": "/paths//v1/resources/{resource}/page/get/responses/200/content/application/json/schema/properties/work/properties/links/properties/releases"
+        }
+      ],
+      "openapiDisposition": "Exactly ten added optional properties: navigation and releases/realizations links in WorkHeader and its two inline embedded Work copies, plus facets.queryShapes. Every other JSON value is unchanged. This does not add entity-page navigation beside sections or mergedFacts.origins[].sections.",
+      "nativeImage": "rezics/fuseki:6.2.0-cmd0.5.43-0f459f70f41e",
+      "imagePins": "Toolchain, compose and release-manifest differ only by the same input-pinned image replacement. Task generation compiled this image; this reviewer neither regenerated nor installed it."
+    },
+    "reusedChecks": {
+      "generation": {
+        "command": "task gen",
+        "job": "job:da67b451-58b7-4165-8f30-5397ca921659",
+        "result": "passed",
+        "image": "rezics/fuseki:6.2.0-cmd0.5.43-0f459f70f41e",
+        "note": "Task generated the five contract/image-pin artifacts and compiled the input-pinned native image; this is not native behavior or public proof."
+      },
+      "recordedJob": "job:939fc3b8-12e0-4dc6-9edf-608ab0e5004e",
+      "selectedTypes": {
+        "result": "passed",
+        "source": "c7084ab8360a8a0416831a7981c270f27af2e76c",
+        "filesChecked": 1342,
+        "projects": 2,
+        "command": "task goal:type-files -- services/main/src/modules/facets/contract.ts services/main/src/modules/facets/registry.ts services/main/src/modules/facets/release-query.ts services/main/src/modules/query/navigation-contract.ts services/main/src/modules/query/compile.ts services/main/src/modules/work/read-contract.ts services/main/src/modules/work/read-header.ts services/main/tests/facet-navigation.test.ts services/main/tests/release-translator-query.test.ts services/main/tests/resource-query-facet-refusal.test.ts services/main/tests/work-navigation.test.ts model/definitions/facet-release-translator-v1.ts model/tests/facet-definitions.test.ts model/tests/g-851-release-facets.test.ts"
+      },
+      "behavior": {
+        "result": "passed",
+        "runId": "20261019t151400-fbbccd",
+        "source": {
+          "head": "c7084ab8360a8a0416831a7981c270f27af2e76c",
+          "fingerprint": "53e884ae310815b7c70385cbb99bff755f10ce857c1b8672b54b1b0d62c6b526",
+          "clean": true
+        },
+        "sourceStable": true,
+        "tests": 93,
+        "assertions": 1189,
+        "tiers": [
+          {
+            "tier": "unit",
+            "tests": 9,
+            "assertions": 425,
+            "failures": 0,
+            "files": [
+              "model/tests/facet-definitions.test.ts",
+              "model/tests/g-851-release-facets.test.ts"
+            ]
+          },
+          {
+            "tier": "owner",
+            "tests": 84,
+            "assertions": 764,
+            "failures": 0,
+            "files": [
+              "scripts/api/authored-responses.test.ts",
+              "scripts/api/query-parameters.test.ts",
+              "services/main/tests/facet-read.test.ts",
+              "services/main/tests/g-851-release-query.test.ts",
+              "services/main/tests/query-compile.test.ts",
+              "services/main/tests/work-read-session-fences.test.ts",
+              "services/main/tests/facet-navigation.test.ts",
+              "services/main/tests/work-navigation.test.ts",
+              "services/main/tests/resource-query-facet-refusal.test.ts",
+              "services/main/tests/release-translator-query.test.ts"
+            ]
+          }
+        ],
+        "certifiesFull": false,
+        "acceptedIdsPassed": 0,
+        "acceptedIdsUncovered": 292,
+        "command": "/bin/sh -c bun scripts/goal/goalctl.ts test services/main/tests/resource-query-facet-refusal.test.ts services/main/tests/release-translator-query.test.ts services/main/tests/facet-navigation.test.ts services/main/tests/facet-read.test.ts services/main/tests/g-851-release-query.test.ts services/main/tests/query-compile.test.ts services/main/tests/work-navigation.test.ts services/main/tests/work-read-session-fences.test.ts model/tests/facet-definitions.test.ts model/tests/g-851-release-facets.test.ts scripts/api/authored-responses.test.ts scripts/api/query-parameters.test.ts"
+      },
+      "sourceBindingVerification": {
+        "sourceStable": true,
+        "clean": true,
+        "recordedHead": "c7084ab8360a8a0416831a7981c270f27af2e76c",
+        "fingerprint": "53e884ae310815b7c70385cbb99bff755f10ce857c1b8672b54b1b0d62c6b526",
+        "independentlyReconstructedCleanFingerprint": "53e884ae310815b7c70385cbb99bff755f10ce857c1b8672b54b1b0d62c6b526"
+      },
+      "junit": {
+        "unit": {
+          "name": "bun test",
+          "tests": "9",
+          "assertions": "425",
+          "failures": "0",
+          "skipped": "0",
+          "time": "2.402453737"
+        },
+        "owner": {
+          "name": "bun test",
+          "tests": "84",
+          "assertions": "764",
+          "failures": "0",
+          "skipped": "0",
+          "time": "11.014533739"
+        }
+      },
+      "lintAstGuards": {
+        "result": "passed",
+        "source": "d8550487ceb5187186200d36522f167b5b1fd793",
+        "command": "task goal -- check --only lint,guards",
+        "guardsSelected": 35,
+        "guardsTotal": 45,
+        "logDirectory": ".temp/goal/check/run-Ppi1Rl",
+        "automaticTimeoutRetriesPassed": [
+          "scripts/static/anti-silo.test.ts > a shared read cannot import package solving",
+          "scripts/static/anti-silo.test.ts > a feature cannot import an official Zone package except through the loader",
+          "scripts/static/web-accepted-commands.test.ts > production adapters introduce no completion of admitted commands beyond exact existing debt"
+        ]
+      },
+      "docs": {
+        "result": "passed",
+        "source": "d8550487ceb5187186200d36522f167b5b1fd793",
+        "command": "task docs:check",
+        "pythonChecks": 13,
+        "markdownFiles": 259
+      },
+      "documentationOnlyRebaseIndependentlyVerified": {
+        "performedBy": "task goal -- check --only lint,guards",
+        "from": "c7084ab8360a8a0416831a7981c270f27af2e76c",
+        "to": "d8550487ceb5187186200d36522f167b5b1fd793",
+        "integrationBase": "eade69c812b1d0c797726f6653e8d5d0a44be94e",
+        "integrationRef": "refs/heads/candidate/catalogue-navigation-g2764-d8550487c",
+        "changedPaths": [
+          "docs/goals/audit-remediation-20261019/coverage.json",
+          "docs/goals/audit-remediation-20261019/tasks/G-2775.md",
+          "docs/goals/product-completion-20261019/state.md"
+        ],
+        "allOtherTrackedEntriesIdentical": true,
+        "equalTrackedEntryCount": 9992,
+        "equalTreeManifestSha256": "25180bd0468fb2e71ed81238b656c56bf9210bfd7011347d31bc0dd6dc43f34c",
+        "encoding": "git ls-tree -r -z, excluding exactly the three named manager documentation files",
+        "note": "Types and focused QA ran at the immutable candidate; lint/AST/guards/docs ran at the documentation-only rebased head. Neither source pin is substituted for the other."
+      },
+      "earlierTypeOnlyFailure": {
+        "job": "job:accd932d-1c5a-4b3e-a2ba-0572fa757ac0",
+        "class": "harness",
+        "case": "model/tests/g-851-release-facets.test.ts:14 literal matcher versus unknown compiled digest",
+        "assertionReached": false,
+        "disposition": "One-line equality operand correction; assertions preserved; selected types and both model behavior files now pass."
+      },
+      "nativeBehavior": {
+        "result": "not run in this cut",
+        "file": "infra/jena/command-module/src/test/java/com/rezics/jena/RealizationTranslatorsTest.java",
+        "cases": [
+          "immutablePropertyIsBoundedAndUnknownIsNotAnEmptyTranslatorSet",
+          "sameReleaseAndSameWorkEntryUseTheCoveredRevisionAfterItsCurrentHeadChanges"
+        ],
+        "generationCompiledNativeImage": true
+      },
+      "evidence": [
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2764/.temp/goal/navigation-candidate/manifest.json",
+          "sha256": "626005f58c78f33a5d7a42544da24f84659ca31f47c8c903258e0b44e1c4c0f5"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2764/.temp/goal/navigation-coherent-candidate-handoff.txt",
+          "sha256": "73f4f585e86144002213289b954288be0811e473e76fc223125b38ecb941c6a7"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2764/.temp/goal/navigation-candidate/coherent-candidate.mbox",
+          "sha256": "36ca6b4c5ce292080b08c970edb3361c02204f2cfa91c8cb767916a1488fab62"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2764/.temp/goal/jobs/da67b451-58b7-4165-8f30-5397ca921659.log",
+          "sha256": "9cc4f9a2530cfbc99443c435412f9f2fb50eec8b2ff3acac0c5f08b8585a7165"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2764/.temp/goal/check/run-Ppi1Rl/output.log",
+          "sha256": "1459431d1aecc8083b63ffb66d8b107f46838d141efe03ab9fa3855fd6c3aef1"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2764/.temp/goal/jobs/939fc3b8-12e0-4dc6-9edf-608ab0e5004e.1.log",
+          "sha256": "0d01ee6a6a0f03d378d9457922cd3bf885a9021c9107abce44b39d566dd03eba"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2764/.temp/goal/jobs/939fc3b8-12e0-4dc6-9edf-608ab0e5004e.2.log",
+          "sha256": "7bb8bc8993bbb27c383db96f8ca3f1fba08722b28b75ad6a4afb0c4631a5f951"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2764/.temp/goal/jobs/939fc3b8-12e0-4dc6-9edf-608ab0e5004e.3.log",
+          "sha256": "3e9988ad44262563758cc06af1d3b330bb1d44a9cb47c5f4b0e8b0af49cb07da"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2764/.temp/goal/jobs/939fc3b8-12e0-4dc6-9edf-608ab0e5004e.4.log",
+          "sha256": "772ce99ea0197991a5e6853931bcb35cf8582c582f110a4205845961d7bbad93"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2764/.artifacts/qa/20261019t151400-fbbccd/acceptance.json",
+          "sha256": "5a8d3b7fb3b2127d2d0d92e9f55be2d2c569586d98a44527ba4492bfd40cd7b5"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2764/.artifacts/qa/20261019t151400-fbbccd/unit.xml",
+          "sha256": "0ba9cbca291bd4637a48afeaf526854e6f4ad19961c8d063c3f288930875b15f"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2764/.artifacts/qa/20261019t151400-fbbccd/owner.xml",
+          "sha256": "d81351edd6d67c2761570bb6360c6a502d507f9917c5e6c4076309608321de8c"
+        }
+      ],
+      "limit": "Types and all 93 cases/1189 assertions ran at clean c7084ab836. Lint/AST/35 selected guards and docs ran at d8550487 after its three documented manager-document changes; all other 9992 tracked entries are independently verified identical. Three internal guard timeout retries passed. These source pins are not substituted for one another. No accepted principal/privacy suite or whole tier was rerun."
+    },
+    "freshIndependentDiagnostic": {
+      "status": "passed",
+      "path": ".temp/navigation-coherent-review/precise-refusal-caller-review.test.ts",
+      "sha256": "6f1ef68c19840b21f6b775b306644f08d6dfd97a5bcc988851568cffcfdefa78",
+      "byteIdenticalToPriorDiagnostic": true,
+      "snapshot": ".temp/navigation-coherent-review/snapshot",
+      "sourcePin": "c7084ab8360a8a0416831a7981c270f27af2e76c",
+      "command": "bun scripts/goal/goalctl.ts test ./.temp/navigation-coherent-review/precise-refusal-caller-review.test.ts",
+      "purpose": "Settle the exact independent diagnostic that previously failed at translator.name setup, including its problem-type assertion, using genuine frozen transitive inputs. No test, assertion, fixture identity or implementation was changed.",
+      "limit": "Fresh execution of the byte-identical prior independent diagnostic against archived candidate c7084ab836, through the required Task-backed goalctl test entry. The temporary diagnostic uses disconnected read-denying proxies and the real compiler/registered handler. It reaches its assertions, including problem type and 14 anonymous/bearer requests, without Account/backend access. This is controlled caller proof, not an installed HTTP/public/persona or Java behavior result.",
+      "recordedJob": "job:8011188f-a626-4071-b94d-7d88494f317c",
+      "exitCode": 0,
+      "tests": 3,
+      "assertions": 97,
+      "failures": 0,
+      "outcomeAssertionsReached": true,
+      "setupFailureResolved": true,
+      "snapshotAllTrackedBlobsVerifiedAfterExecution": 9995,
+      "log": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2849/.temp/goal/jobs/8011188f-a626-4071-b94d-7d88494f317c.1.log",
+        "sha256": "dd472491dec7b5afb4d54ee27cbd181c2ef151d6ca48a0f193cf6d688456e48e"
+      },
+      "cases": [
+        "Exact frozen compiler preserves placement code for name and DefinitionRef any/all/none and wrong related owner",
+        "Exact frozen registered route returns 422 misplaced_facet before Account or backend reads",
+        "Exact frozen compiler retains invalid, unsupported and bounded allocation refusals"
+      ]
+    },
+    "newFindings": [],
+    "preservation": {
+      "priorReports": [
+        {
+          "path": "docs/goals/audit-remediation-20261019/proofs/catalogue-query-credit-privacy-review.json",
+          "sha256": "36ab0ba333c13f2aad77c8db4d9b31b8066016ed0890b5acea3627c8c8d43ee9",
+          "gitBlob": "588e302148b5640db8611f6a3750ee2224ce0d34"
+        },
+        {
+          "path": "docs/goals/audit-remediation-20261019/proofs/catalogue-supporting-registry-review.json",
+          "sha256": "9080de934c3808d1096925b7b2eacb3514bb82df858b37d64cb05e7aef6d8429",
+          "gitBlob": "e42c9961b0fb62189b7b720ecde824dd3f8d0c23"
+        },
+        {
+          "path": "docs/goals/audit-remediation-20261019/proofs/catalogue-native-credit-successor-review.json",
+          "sha256": "74b17fc962b3a33a319cc28532654b1108d1ebc87506c2f5b14963b3272c2223",
+          "gitBlob": "99e184e8f599758c4bd2d00a09449f0f6c5088bd"
+        }
+      ],
+      "everyPreexistingQueryReportValueUnchanged": true,
+      "acceptedPrincipalPrivacy": [
+        {
+          "path": "services/main/src/modules/query/association-credit.ts",
+          "unchangedFromBase": true,
+          "blob": "89fdd5bdf7d68c75bbda7d4436d69161930fac3f",
+          "sha256": "270b59fe5f7a88cf53b9236ebdd1bbab9007f03dde1eae4431cd25ed4eac081d"
+        },
+        {
+          "path": "services/main/tests/resource-query-credit-composition.test.ts",
+          "unchangedFromBase": true,
+          "blob": "22f940d06106d3b9002ea5ab73f64af38ded6d6c",
+          "sha256": "b6866e4d41148ca83700a18fdc073b4a041f4e564268b35f3a20123dd7ac1073"
+        },
+        {
+          "path": "services/main/src/modules/work/credit-association-read.ts",
+          "unchangedFromBase": true,
+          "blob": "7bd929bf694c01d9358f571ce684dd8e5a470c46",
+          "sha256": "534579d2786e828e66836737d675889fb41bde7a8491e09cb0cd96272ada1038"
+        },
+        {
+          "path": "services/main/src/modules/entity-page/contract.ts",
+          "unchangedFromBase": true,
+          "blob": "e416b7a9def196594f49c6e8e574d62c8138cc3f",
+          "sha256": "11d09143359d7e1ad689b9687f262cddb096250b5274b703c95b2ae1c788f0ef"
+        }
+      ],
+      "otherReportsByteIdentical": true,
+      "scope": "All original eight query caller counterexamples, earlier actual setup failures, accepted principal/privacy correction and supporting-registry/native review history remain intact. Per the manager, the Source dependency in native gap review 8b56863ffe has separately received independent correction acceptance 7b30661fe2; those exact deltas are not reviewed again here or assumed installed in this query cut."
+    },
+    "remainingDependenciesAndLimits": [
+      "G2799's minimal optional entity navigation schema remains separate and excluded. The entity-page contract is byte-identical to the frozen base. No entity producer or substitute schema was invented; its publication is a remaining original C16 dependency, not evidence that this Work/facet source cut failed.",
+      "RealizationTranslatorsTest.java and actual Java translator query behavior were not executed by this cut or reviewer. Native image compilation and controlled SPARQL/planner assertions do not establish same-release runtime behavior, mixed-load or cancellation acceptance.",
+      "Original catalogue-discovery-navigation.test.ts and its six visitor/stranger/member/owner/moderator/operator public C16 cells remain unexecuted. Both independent contextual-association files and all twelve persona cells remain pending. Accepted IDs are zero passed and 292 uncovered; certifiesFull is false.",
+      "No live HTTP/native/public outcome, class closure, rendered 1440/390 acceptance or full association acceptance is claimed. The manager retains actual native owner installation, composed output and compatible original public proof.",
+      "Ordinary native APIs perform no provider transformation. Manual citations remain independent of conversion, with no converter/evidence/mapper requirement. Optional Source settlement and query activation/coverage retain their separate explicit authorities.",
+      "No product edit, assertion weakening, shared service/lifecycle action, network/browser, corpus preparation/import/reset, main/wave landing or account fallback occurred. All temporary snapshot and diagnostic files are inside this reviewer's worktree."
+    ],
+    "reportValidation": {
+      "status": "passed",
+      "completedAtUtc": "2026-10-19T15:32:21.074651Z",
+      "recordedJob": "job:8011188f-a626-4071-b94d-7d88494f317c",
+      "runner": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job",
+      "sequence": [
+        {
+          "command": "bun scripts/goal/goalctl.ts test ./.temp/navigation-coherent-review/precise-refusal-caller-review.test.ts",
+          "exitCode": 0,
+          "result": "3 pass; 97 assertions; 0 fail; exact independent diagnostic outcome bodies reached",
+          "evidence": {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2849/.temp/goal/jobs/8011188f-a626-4071-b94d-7d88494f317c.1.log",
+            "sha256": "dd472491dec7b5afb4d54ee27cbd181c2ef151d6ca48a0f193cf6d688456e48e"
+          }
+        },
+        {
+          "command": "task docs:check",
+          "exitCode": 0,
+          "result": "13 checker tests passed; 249 Markdown files checked; runtime/external URLs not tested",
+          "evidence": {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2849/.temp/goal/jobs/8011188f-a626-4071-b94d-7d88494f317c.2.log",
+            "sha256": "125f71887cf748f868b8adc65342b993b8c41e336c7408bc0450f3304a577451"
+          }
+        },
+        {
+          "command": "task goal -- check",
+          "exitCode": 0,
+          "result": {
+            "types": "ok: no TypeScript workspace changed",
+            "tests": "ok: no test files named in brief",
+            "lint": "ok: no source file changed",
+            "ast": "ok",
+            "guards": "ok: 1/44 selected for claimed report paths"
+          },
+          "evidence": {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2849/.temp/goal/jobs/8011188f-a626-4071-b94d-7d88494f317c.3.log",
+            "sha256": "ab10bdf06392518add8e2c0ad6f9ffcb98704c5fdc1e54c78c2f3d11a6e56b4a"
+          }
+        }
+      ],
+      "gateOutput": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2849/.temp/goal/check/run-n7J5UT/output.log",
+        "sha256": "66a2580a9f58ed764d63647b94b8262a86fe6970f8f978d132e86cefee90ebca"
+      },
+      "sourcePinPreservation": "Report staged during the recorded sequence; reviewer HEAD stayed 8b56863ffe66cb7535fccc125bde8582361ba4d3. The harness noted it was four commits behind main; all selected checks passed. No rebase, merge, source change or implementation edit occurred.",
+      "historyAndSnapshotVerification": "All 24 preexisting query-report top-level values remain unchanged. Other accepted reports keep their recorded SHA256. All 9995 tracked snapshot blob identities match the immutable candidate after execution, including the 22 manifest paths; the independent diagnostic is byte-identical before/after.",
+      "scope": "Report-only gate plus one necessary independent diagnostic; matching passing owner suites reused."
+    }
+  }
 }

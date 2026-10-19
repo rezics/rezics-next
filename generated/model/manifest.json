@@ -432,6 +432,11 @@
       "file": "shapes/native-agent-credit-v1.ttl"
     },
     {
+      "id": "native-agent-credit-v2",
+      "sha256": "79a0b3b6a7bbf8314cbcc70b5178c94b3dc1ce7559e6eade873c2792d4b16b8b",
+      "file": "shapes/native-agent-credit-v2.ttl"
+    },
+    {
       "id": "poll-allocation-v1",
       "sha256": "c277302719c0570563b7889276e106b9a1cee676551b2932299ad7cf03910ae4",
       "file": "shapes/poll-allocation-v1.ttl"
@@ -1292,6 +1297,36 @@
       }
     },
     {
+      "id": "work-author-credit-v2",
+      "sha256": "48e2f78abb9e38070c8a46d5d8b838ac141f6ce9e41a846079c79c3acf09989a",
+      "file": "shapes/work-author-credit-v2.ttl",
+      "binding": {
+        "required": [
+          "credit",
+          "revision",
+          "work",
+          "work-head",
+          "key",
+          "ordinal",
+          "actor",
+          "receipt",
+          "scope",
+          "epoch",
+          "intent"
+        ],
+        "optional": [
+          "source-role",
+          "provider",
+          "namespace",
+          "role"
+        ],
+        "roles": [
+          "credit",
+          "revision"
+        ]
+      }
+    },
+    {
       "id": "work-derivation-unresolved-v1",
       "sha256": "d47d816b777674c9142e2b7b3238f6728d4e89a072268a46acc0303cb992ad52",
       "file": "shapes/work-derivation-unresolved-v1.ttl",
@@ -1501,6 +1536,16 @@
       "type": "https://rezics.com/vocab/AuthorCredit",
       "routes": [
         {
+          "profile": "work-author-credit-v2",
+          "shape": "https://rezics.com/definition/work-author-credit-v2/credit-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/work-author-credit-v2"
+            }
+          ]
+        },
+        {
           "profile": "work-author-credit-v1",
           "shape": "https://rezics.com/definition/work-author-credit-v1/credit-shape",
           "when": []
@@ -1510,6 +1555,16 @@
     {
       "type": "https://rezics.com/vocab/AuthorCreditRevision",
       "routes": [
+        {
+          "profile": "work-author-credit-v2",
+          "shape": "https://rezics.com/definition/work-author-credit-v2/revision-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/work-author-credit-v2"
+            }
+          ]
+        },
         {
           "profile": "work-author-credit-v1",
           "shape": "https://rezics.com/definition/work-author-credit-v1/revision-shape",
@@ -3063,6 +3118,16 @@
       "type": "https://rezics.com/vocab/NativeAgentCredit",
       "routes": [
         {
+          "profile": "native-agent-credit-v2",
+          "shape": "https://rezics.com/definition/native-agent-credit-v2/credit-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/native-agent-credit-v2"
+            }
+          ]
+        },
+        {
           "profile": "native-agent-credit-v1",
           "shape": "https://rezics.com/definition/native-agent-credit-v1/credit-shape",
           "when": []
@@ -3072,6 +3137,16 @@
     {
       "type": "https://rezics.com/vocab/NativeAgentCreditRevision",
       "routes": [
+        {
+          "profile": "native-agent-credit-v2",
+          "shape": "https://rezics.com/definition/native-agent-credit-v2/revision-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/native-agent-credit-v2"
+            }
+          ]
+        },
         {
           "profile": "native-agent-credit-v1",
           "shape": "https://rezics.com/definition/native-agent-credit-v1/revision-shape",
@@ -4459,6 +4534,7 @@
     "contexts/main-package-release-recommendation-v1.jsonld": "583eb256a54cade90585067b0cbb9659a6d2fb42052c0772f830de5c5f1a944a",
     "contexts/name-registry-cleanup-v1.jsonld": "beb63423f81a42c509b6202832e13b0dd99fb98a907cccbf76d1c71a361d215c",
     "contexts/native-agent-credit-v1.jsonld": "ff3c086f0ed4894a5f3ef9f365d2dceb2136f86014d5da82a21c2cd872c52b70",
+    "contexts/native-agent-credit-v2.jsonld": "3dfaf1974ae35ebaaafc48d2c5d1b2b52690a3027f0cacfaf00e357ef72ccf5f",
     "contexts/poll-allocation-v1.jsonld": "d9e2c115b4ede5d0d2e6e63bc246f59c90f17ce112d9047bc8c669f12aab9a57",
     "contexts/poll-resolution-v1.jsonld": "b2356c588847862a3fbdb887d87fb070c498e7ce38fb9f0af497ab696f6094c5",
     "contexts/poll-snapshot-v1.jsonld": "eaaa282f97a5751a7cab5ef9e673cc76312b4cfce4a9c9bfe82aed33a19d7f5a",
@@ -4536,6 +4612,7 @@
     "contexts/work-address-disposition-v1.jsonld": "6d19bf63e9535af917fd9a8404114f031ce83a24b212565559225c196e304e2e",
     "contexts/work-address-lifecycle-v1.jsonld": "9baa534891b117f48797b0b180b5dded93b594a16aa45380448af98a92dd74d5",
     "contexts/work-author-credit-v1.jsonld": "1fd534059e7dddc60845e915f4de70cf6a5ced2b710c21e007b3ac4430cec790",
+    "contexts/work-author-credit-v2.jsonld": "1fd534059e7dddc60845e915f4de70cf6a5ced2b710c21e007b3ac4430cec790",
     "contexts/work-derivation-unresolved-v1.jsonld": "d1fdd26fc0e2b347d986df2ecb6c7bc5e4ca3cc9b49864f855cf5f03857bf3d5",
     "contexts/work-derivation-v1.jsonld": "1361b50b75a374f9d6cd7e290a8ae5c4f440476ce19bbc79222935c4b2b1be30",
     "contexts/work-derivation-v2.jsonld": "611e74cfed2166276f58a98b6891f5f1abdb04ccbdae75c86fcf3ab79c32ba69",
@@ -4608,6 +4685,7 @@
     "shapes/main-package-release-recommendation-v1.ttl": "2560da59cda40c7ac9fd0fb38b39e2d63666e6fdb06dccf250728d7d28faab60",
     "shapes/name-registry-cleanup-v1.ttl": "72c16910157a5eeaafe965a11817f926259c09bc79ae7d21cdbc978646a380bf",
     "shapes/native-agent-credit-v1.ttl": "307be7d1ac523958e6b5e9c83210288214ce2bf53a2046202b8c2f7e35d3c0de",
+    "shapes/native-agent-credit-v2.ttl": "79a0b3b6a7bbf8314cbcc70b5178c94b3dc1ce7559e6eade873c2792d4b16b8b",
     "shapes/poll-allocation-v1.ttl": "c277302719c0570563b7889276e106b9a1cee676551b2932299ad7cf03910ae4",
     "shapes/poll-resolution-v1.ttl": "47413e42bb40731c023a3129dd1c878b335e73ea20bc6e45204cb166bf2a4654",
     "shapes/poll-snapshot-v1.ttl": "f9471026df8866e1ce6379325f83fe20f7be7b3b68d160386e5a1319665b8214",
@@ -4685,6 +4763,7 @@
     "shapes/work-address-disposition-v1.ttl": "9c4f852c5ff565984ef8a1c228d2c580b58c98c8e397cfdfb5305800fdc676de",
     "shapes/work-address-lifecycle-v1.ttl": "4057be5cb9790c3aa94c846707224cbe7c211f1eb3b3f17f03ecb3b039715134",
     "shapes/work-author-credit-v1.ttl": "c24cb44e45b1b096f5a26862e4fe6ecd1aa862db2af26c33f1a6cb624bf1e732",
+    "shapes/work-author-credit-v2.ttl": "48e2f78abb9e38070c8a46d5d8b838ac141f6ce9e41a846079c79c3acf09989a",
     "shapes/work-derivation-unresolved-v1.ttl": "d47d816b777674c9142e2b7b3238f6728d4e89a072268a46acc0303cb992ad52",
     "shapes/work-derivation-v1.ttl": "27e4e0f2871f58bd1b7434dff809342721109220daec1b5b0f817da8abf176df",
     "shapes/work-derivation-v2.ttl": "629ed8a8a60013eecc334a84298687e02c57dbaf75d201f49bb9d3b597abd634",
@@ -4709,8 +4788,8 @@
     "shapes/zone-capability-v1.ttl": "a7296e09f052999c0578caa2894ebdbd272cedd04357e4f291e2506e73eed611",
     "shapes/zone-presentation-v1.ttl": "6aecbd83013a8a9f9e2dc712d26b6450df29554f2f2c7d6174c2897b418bece7",
     "shapes/zone-presentation-v2.ttl": "e331efea63e2bfb3ce883fb4d005ab63d7dd976973e43fd1599f655eef3ea730",
-    "packages/model/src/generated/profiles.ts": "6d2766e1c2e140e08b553af583fa6806f7b15c4dbf60984e7bb30bee76e85591",
-    "packages/model/src/generated/schemas.ts": "beb49e9f19988f20f0148f27373e328ee7c826767ebc7896c0da01e872446dc3",
-    "packages/model/src/generated/vocabulary.ts": "94e49e10cdd095caf3cf45887fe0fb0f6b5d247a150ac7ffad425a1d1fd10765"
+    "packages/model/src/generated/profiles.ts": "0d9cd42e0b354429cef8c42197b3ca50eb5baf9932e2ed422100cffcc19b660b",
+    "packages/model/src/generated/schemas.ts": "4836b832e7a41b19dfcc705ae864f313c5467b875e702fac13e832408787fd12",
+    "packages/model/src/generated/vocabulary.ts": "144a54285e92bbb03936c04d7285821813001592b505f35e57f56d4e44c3ce26"
   }
 }

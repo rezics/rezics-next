@@ -6,6 +6,7 @@ import { RV, type WorkActivationEnvironment } from '../src/modules/work/activate
 import { authorCreditDigest, type AuthorCreditValue } from '../src/modules/work/author-credit.ts';
 import { workEditReceiptIri } from '../src/modules/work/edit.ts';
 import { nativeCreditDigest } from '../src/modules/profiles/credits.ts';
+import { readCreditOwnerWitness } from '../src/modules/work/credit-verification.ts';
 import {
   verifyCreditNativeBasis,
   verifyVndbCreditNativeBasis,
@@ -91,6 +92,7 @@ function fixture(provider = 'vndb', namespace = 'staff', agent = false) {
     afterSource: undefined as (() => void) | undefined,
     authorityEpoch: '7',
     queries: [] as string[],
+    pins: null as Record<string, string> | null,
     support: null as SourceAuthorCreditSupport | null,
   };
   const digest = () =>
@@ -137,6 +139,11 @@ function fixture(provider = 'vndb', namespace = 'staff', agent = false) {
             actor: value.actingSubject,
             epoch: state.revisionEpoch,
             sequence: state.sequence,
+            ...(state.pins ?? {
+              model: value.modelRevision ?? 'https://rezics.com/definition/work-author-credit-v1',
+              shape: value.modelRevision ?? 'https://rezics.com/definition/work-author-credit-v1',
+              ...(value.modelRevision ? { currentModel: value.modelRevision } : {}),
+            }),
             ...(value.sourceRoleKey === null ? {} : { role: value.sourceRoleKey }),
           });
     if (sparql.includes('SELECT ?work ?head ?agent'))
@@ -150,6 +157,11 @@ function fixture(provider = 'vndb', namespace = 'staff', agent = false) {
             actor: value.actingSubject,
             epoch: state.revisionEpoch,
             sequence: state.sequence,
+            ...(state.pins ?? {
+              model: value.modelRevision ?? 'https://rezics.com/definition/native-agent-credit-v1',
+              shape: value.modelRevision ?? 'https://rezics.com/definition/native-agent-credit-v1',
+              ...(value.modelRevision ? { currentModel: value.modelRevision } : {}),
+            }),
           });
     if (sparql.includes('SELECT DISTINCT ?receipt ?admission'))
       return rows(
@@ -313,6 +325,30 @@ function fixture(provider = 'vndb', namespace = 'staff', agent = false) {
     };
   }
   return { state, deps, input, source, receipt };
+}
+
+for (const agent of [false, true]) {
+  test(`exact V2 ${agent ? 'Agent' : 'external'} credit retains its original native receipt on repeated reads`, async () => {
+    const { state, deps, receipt } = fixture('vndb', 'staff', agent);
+    state.value.role = 'performer';
+    state.value.modelRevision = `https://rezics.com/definition/${agent ? 'native-agent-credit' : 'work-author-credit'}-v2`;
+    const first = await readCreditOwnerWitness(deps.environment, state.value.credit);
+    expect(first).toMatchObject({ value: { role: 'performer', modelRevision: state.value.modelRevision },
+      receipt: { receipt, credit: state.value.credit, revision: state.value.revision, expectedHead: state.value.expectedHead } });
+    expect(await readCreditOwnerWitness(deps.environment, state.value.credit)).toEqual(first);
+    const mismatchedPins: Record<string, string>[] = [
+      { model: state.value.modelRevision, shape: state.value.modelRevision },
+      { model: state.value.modelRevision, shape: state.value.modelRevision, currentModel: 'https://rezics.com/definition/wrong-v2' },
+      { model: state.value.modelRevision, shape: state.value.modelRevision.replace('-v2', '-v1'), currentModel: state.value.modelRevision },
+    ];
+    for (const pins of mismatchedPins) {
+      state.pins = pins;
+      await expect(readCreditOwnerWitness(deps.environment, state.value.credit)).rejects.toThrow();
+    }
+    state.pins = null;
+    state.receiptRevision = id(99);
+    await expect(readCreditOwnerWitness(deps.environment, state.value.credit)).rejects.toThrow();
+  });
 }
 
 function disposition(

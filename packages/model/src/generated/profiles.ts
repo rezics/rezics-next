@@ -608,6 +608,18 @@ export const profileRegistry = {
       "revision"
     ]
   },
+  "native-agent-credit-v2": {
+    "sha256": "79a0b3b6a7bbf8314cbcc70b5178c94b3dc1ce7559e6eade873c2792d4b16b8b",
+    "file": "shapes/native-agent-credit-v2.ttl",
+    "shapes": [
+      "https://rezics.com/definition/native-agent-credit-v2/credit-shape",
+      "https://rezics.com/definition/native-agent-credit-v2/revision-shape"
+    ],
+    "focusRoles": [
+      "credit",
+      "revision"
+    ]
+  },
   "poll-allocation-v1": {
     "sha256": "c277302719c0570563b7889276e106b9a1cee676551b2932299ad7cf03910ae4",
     "file": "shapes/poll-allocation-v1.ttl",
@@ -1642,6 +1654,18 @@ export const profileRegistry = {
     "shapes": [
       "https://rezics.com/definition/work-author-credit-v1/credit-shape",
       "https://rezics.com/definition/work-author-credit-v1/revision-shape"
+    ],
+    "focusRoles": [
+      "credit",
+      "revision"
+    ]
+  },
+  "work-author-credit-v2": {
+    "sha256": "48e2f78abb9e38070c8a46d5d8b838ac141f6ce9e41a846079c79c3acf09989a",
+    "file": "shapes/work-author-credit-v2.ttl",
+    "shapes": [
+      "https://rezics.com/definition/work-author-credit-v2/credit-shape",
+      "https://rezics.com/definition/work-author-credit-v2/revision-shape"
     ],
     "focusRoles": [
       "credit",

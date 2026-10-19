@@ -65,9 +65,23 @@ export const facetDefinition = t.Object({
 /** Cost: no graph read; one body per deploy, built and bounded when Main loads. */
 export const FACETS_READ_COST = { graphReads: 0, maxFacets: 64, maxBytes: 64 * 1024 } as const;
 
+const queryShapeFields = {
+  id: t.Literal('release-works-v1'),
+  facets: t.Array(iri, { maxItems: FACETS_READ_COST.maxFacets, uniqueItems: true }),
+  method: t.Literal('POST'), href: t.Literal('/v1/query'), requestProfile: t.Literal('filter-document-v1'),
+  maxPageSize: t.Integer({ minimum: 1, maximum: 20 }),
+  continuation: t.Object({ request: t.Literal('page.continuation'), response: t.Literal('result.nextCursor') }, closed),
+};
+export const facetQueryShape = t.Union([
+  t.Object({ ...queryShapeFields, state: t.Literal('ready') }, closed),
+  t.Object({ ...queryShapeFields, state: t.Literal('unsupported'),
+    refusal: t.String({ minLength: 1, maxLength: 512 }) }, closed),
+]);
+
 export const facetList = t.Object({
   profile: t.Literal('facets-v1'),
-  /** Changes whenever any admitted Facet does; also the response ETag. */
+  /** Changes with admitted Facets or executable query shapes; also the response ETag. */
   digest: t.String({ pattern: '^[0-9a-f]{64}$' }),
   facets: t.Array(facetDefinition, { maxItems: FACETS_READ_COST.maxFacets }),
+  queryShapes: t.Optional(t.Array(facetQueryShape, { maxItems: 1 })),
 }, closed);

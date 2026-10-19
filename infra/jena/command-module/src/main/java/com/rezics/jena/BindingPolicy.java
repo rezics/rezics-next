@@ -93,7 +93,7 @@ final class BindingPolicy {
             case "translation-link-v1" -> translationLink();
             case "work-derivation-v1" -> workDerivation();
             case "fixed-native-text-release-v1" -> fixedRelease();
-            case "work-author-credit-v1" -> authorCredit();
+            case "work-author-credit-v1", "work-author-credit-v2" -> authorCredit();
             // A registry-only binding has only the generic key and role checks.
             default -> { }
         }
