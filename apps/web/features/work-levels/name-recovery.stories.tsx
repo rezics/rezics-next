@@ -116,3 +116,19 @@ export const PreviewPhoneDarkJapanese: Story = {
   play: verifyRecovery,
 };
 export const UndisclosedAfterRetry: Story = { args: { surface: 'edition', undisclosed: true }, play: verifyRecovery };
+
+export const UnavailableEditionPhoneJapanese: Story = {
+  args: { surface: 'edition', locale: 'ja' },
+  globals: { locale: 'ja', theme: 'dark', viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement), t = copyOf('ja');
+    await expect(canvasElement.querySelector('[data-name-state="unavailable"]')).toHaveTextContent(t.unavailable);
+    await expect(canvas.getByRole('button', { name: pageMessages.ja.retry })).toBeVisible();
+    await expect(canvas.getByRole('status')).toHaveTextContent(t.namesUnavailable);
+    await expect(canvas.getByText('Known source version')).toBeVisible();
+    await expect(canvas.getByText('台灣角川')).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'https://example.com/evidence' })).toBeVisible();
+    await expect(canvas.queryByText(t.unnamed)).toBeNull();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
