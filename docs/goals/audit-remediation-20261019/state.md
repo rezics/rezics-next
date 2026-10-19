@@ -1,12 +1,13 @@
 # Audit remediation state
 
-Checkpoint ce88e116-c596-4511-b973-1b2849303440 reconciles acknowledged mail:
-924d8707-faff-449e-a784-cefb9d6beeaa, 98384e41-c523-415f-a152-9927cec51066,
-95f1e1c3-7375-496d-a7b0-3fb92e0bcebd, 3d9998cd-e5af-44da-8795-69fa57db5a64,
-4ae91121-30f8-44fa-aaf9-34365842f38d, bd809021-899b-46b5-bc63-d3a0bd34a3f9,
-6bd9ea6c-082a-43c5-953f-67f41ae780b2, e96924ef-9365-4c37-ad51-d62791e1dbd9,
-e4f01a43-14f5-48b9-9718-e3a459a2eb0e, 395834b6-c7d9-4967-9caf-b63503dc9e5a,
-63dbeca1-ff80-4d1d-b434-1e3da7a75a00. Detailed receipts remain in Git and owner reports.
+Checkpoint e102e885-f71a-4bdb-8715-b87ab1a56461 reconciles handled events:
+mail:a8213769-9a44-4fd8-a7a2-3adcd4bcc156, task:G-2822:3, task:G-2786:18,
+mail:41af59d9-6e87-4065-a54a-16229ed543b7, task:G-2820:4, task:G-2833:2,
+mail:2c3b6d51-29f9-4b2d-be0a-2b50abc0258d,
+mail:42a5ea5c-5962-4caa-851d-36bc09148031,
+mail:a6a3a998-4c05-42ea-ab6f-ff195cca3935,
+mail:6f233a20-269b-4d0f-8caf-dbc948a57c1c. All six mails are acknowledged.
+Detailed decisions and receipts remain in Git and owner reports.
 
 Progress: 0/61 regression-confirmed findings; 1/61 implemented-main (D4-001 controls,
 bounded proof accepted; authenticated Settings pending). The other 60 remain unconfirmed.
@@ -30,24 +31,31 @@ G-2825's report-only partial landing is main da6924d83f; 25 unit tests, 15 stori
 Zero applicable axe nodes remain unexercised; component signed-in states remain synthetic.
 
 Named baseline blockers: one configured Web startup failure and 12 native failed/error cases.
-At the 05:29 UTC ledger read, Web readiness had been outstanding at least 28m (mail 05:01);
-native baseline failures at least 54m (mail 04:35). Fix publication alone is not final acceptance.
+Fix publication alone is not final acceptance.
 G-2747 owns the RSC react-dom/server.browser resolution and missing renderToReadableStream
 production export, plus viewed Topics outer-ring clipping across owned navigation consumers.
 Decision 39b7143ae1 requires actual development/production readiness on an immutable repaired
 published wave SHA; return those receipts to product so G-2825 resumes its real app/sign-in/
 assistive-technology matrix. Preserve original artifacts and intermittent AUD-006 acceptance.
 
-G-2822's complete frozen native result is 571 run / 559 passed / 10 failures / two errors.
+G-2822's accepted frozen native result is 571 run / 559 passed / 10 failures / two errors,
+zero skips at 92b8a78f1c. Decision 7528cd6651 isolates unchanged report feac6c5a7f
+from wave ancestry onto main; its worker resumed for report-only validation, not a native
+rerun or source repin. Preserve all 17 artifacts and 75 class summaries. D5 remains open.
 G-2827 owns four real disconnect-release failures and the two engine-entry fixture premises.
 Program reports the four fixed in source/selected runtime; full original acceptance remains due.
+Its abc8519409 compiling publication is progress only, not new runtime acceptance.
 Decision 1d254999dd independently permits only minimal transactional current-graph fixture data,
 so the original wallAllocationAbortsOrdinaryAndTemplateEnginesWithoutDiagnostics and
 clientCancellationReleasesNativeExecutionWithinGrace assertions actually reach the engine.
 Preserve assertions and release bounds; new transport tests do not replace original classes.
 Run original boundary/capture, ConsistentReadCapture and transport cases on one frozen repaired
 pin, retaining product/test/runner revisions. G-2828 owns focused Task/Maven selection and its
-isolated cache; root owns runner review/landing. Selected success is not full-suite success.
+isolated cache; Root owns codex-1/xhigh review/landing. Decision 5103793351 includes the
+necessary Fuseki policy parser integration. Accept its unchanged-source selected execution
+as runner proof: 18 tests, six assertion failures, zero errors/skips, nonzero propagated.
+The job's harness label does not erase executed baseline failures. Preserve source/overlay
+pins; no full-suite success claimed.
 G-2765 owns the other six qualification/restart cases: two ContentSearchQualificationTest
 errors, PublicTextRestartTest's expected-null-generation mismatch, QueryCutQualificationTest
 and two SearchDeltaJournalTest qualification-setup failures. Keep assertion reach distinct.
@@ -59,12 +67,23 @@ V2 occurrence/Statement/coverage/frontier reads; G-2800 retained-credit-associat
 and G-2781 exact Source citations with current validation, completeness and support cursor.
 Advertise citation frontiers above 16; missing activation/coverage is unavailable, never exact empty.
 Dedicated credit GET/generic POST share the query witness page and existing relation V2 route.
+G-2764's compiling selection/cursor/page exports at 2b96ad4ecf are progress only.
+AssociationPageSource shares WorkReadSession and current disclosure/adoption/frame/evidence
+owners and budgets; public wiring, reader composition and all twelve persona cells remain due.
 G-2781 owns retained conversion/v2 support and native registry wiring; each native owner exports
 actual principal-scoped command-receipt/current-head verification, exact value/language and
 truthful head guarantees. Preserve distinct mismatches; no component/revision as invented receipt.
 G-2780 retains Source/Media archive/COPY and exact target/role/Content-variant/digest custody.
+Decision 4505cedb37 resumed its bounded retained-record reuse/projection slice for G-2781:
+actual scoped rights reject rights_denied before private mismatches; exact record/payload
+coordinates and SuppliedLanguage project real public evidence without private binding data.
+Publish typed owner exports and pins; Source adapts without duplicating rights policy.
 Existing owners retain G-2773/G-2776/G-2777 implementation; no new Program contract holds.
 G-2786 retains affected-cut standing refusal, immediate revocation and unrelated usable reads.
+Decision 4647b28def commissioned G-2834's one source-review pass of sixteen changed paths
+at e6af19aa60. This grants no native/public proof, landing or closure of G-2786; its original
+isolated selection still needs genuine corpus/backup/restores. Missing setup is no assertion
+failure or implementation fix round. Review disposition belongs to its own event.
 
 G-2778 is sole importer; G-2791 is sole genuine corpus/manifest/consistent-backup producer.
 Integrate actual published retained-conversion/v2-support/head exports and per-part receipts;
@@ -74,12 +93,15 @@ Preserve original 69eac3ceea, frozen bytes, both 113-identity epochs and separat
 test pins. Prepare once within 600s, take one compatible consistent stopped backup and restore
 isolated copies. No shared refresh/reset, duplicate importer or new corpus producer.
 
-Ledger 2026-10-19 05:29 UTC: five live audit owners G-2747/G-2799/G-2800/G-2801/G-2834;
-50 open tasks. G-2829 Settings, G-2830 composer recovery, G-2831 Library/Home and G-2832
+Checkpoint ledger: three live audit owners G-2780/G-2799/G-2800; 48 open audit tasks.
+G-2829 Settings, G-2830 composer recovery, G-2831 Library/Home and G-2832
 catalogue geometry have exited partial; consume their own events, not duplicate verification.
-G-2833 has exited; audit owns focused event-store checks, independent codex-1/xhigh review
-and gated manual landing. Product/Program's existing G-2820 owner retains fingerprint activation:
-send exact reviewed source SHA and successful landing receipt before any policy update.
+G-2833's reviewed checkpoint-lock repair landed at 7f5ae648de and is closed verified;
+its brief is archived. Do not reland, restart or close it again. Product requested its
+completed receipt be routed to Product and Program's existing controller owner.
+G-2820's handoff was routed to Program for Root's independent review and controller
+coordination before landing. The existing owner retains fingerprint activation: require
+exact reviewed source SHA and successful landing receipt before any policy update.
 Preserve the enabled reviewed baseline, about and working Claude sessions.
 Product owns G-2825/G-2826 verification and bounded telemetry/refresh recovery, not audit repairs.
 
@@ -87,9 +109,9 @@ Next: obtain G-2747 readiness and authenticated Settings proof; finish focused n
 consume independent site handoffs and genuine owner/export/corpus proof. Dispatches and
 landings belong to their own events; this checkpoint changes only state and starts no work.
 
-Measures at 05:29 UTC: first-attempt 82/106 (77%; today 14/21, 67%); landed-attempt median
-one/max fourteen. Recorded audit usage 686.3M input/5.3M output; tokens/proved finding undefined.
+Checkpoint measures: first-attempt 82/107 (77%; today 14/22, 64%); landed-attempt median
+one/max fourteen. Recorded audit usage 700.7M input/5.4M output; tokens/proved finding undefined.
 Latest stored 12h window (Oct 18 08:36–20:36 UTC): 552,471,326 input, 96% cached,
 63% worker/37% other. Other does not isolate manager share; no comparable post-change
-window or measured saving is established. Status reports 21 unclassified items and three
+window or measured saving is established. Status reports 22 unclassified items and three
 other-kind refusals; retained receipts must classify them, not count them as product proof.
