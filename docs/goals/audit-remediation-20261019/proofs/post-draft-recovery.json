@@ -2354,5 +2354,486 @@
       "next": "Per recorded continuation, retain exact source verdict/artifacts and return for root additive merge; no manual rebase/merge/reset or repeated source inspection."
     },
     "next": "Root composes approved Media9+Access3 on current Main and retains integration/closure. Existing G-2748 consumes the exact command; later G-2830 continuation proves only remaining original D2-003 image outcomes, reusing accepted D2-002."
+  },
+  "imageConsumerFirstSourceReview": {
+    "recordedAt": "2026-10-19T15:07:09.317251+00:00",
+    "reviewer": "G-2830 / codex-1 / gpt-6.1-sol / xhigh; no fallback or nested agents",
+    "scope": "ONE first independent review of ONLY the immutable nine-file browser consumer delta. Prior composer/current-document, Media9 and Access3 approvals reused unchanged.",
+    "verdict": "SOURCE CHANGES REQUIRED at exact candidate 7d3e19b7: an initiating-render actor closure accepts a late acknowledgement after the current actor changes. Eight other paths have no additional actionable source finding. Later owner commit f610f1da is delivered but is not substituted for this selected candidate or independently approved here.",
+    "candidate": "7d3e19b7d37ee7dfcd57d55dbe9bcdc07aaa5488",
+    "parent": "adc3ab0b8d8049253bedb01907e35d6a1b85de51",
+    "parentQualification": "adc3ab0b is a Query correction and is not the image consumer candidate; no wave ancestry imported.",
+    "patchSha256": "b543b1e0688dacdba49cfa2cd735fb74d8d60de197d12412d36990c6fbe4e17a",
+    "patchBytes": 38370,
+    "suppliedManifestSha256": "2f496b22a81409d2e3b8fe2b8d43c3ecfa7b8a47b1e01e0ccf9593e28cb61659",
+    "nineSourceBlobs": [
+      {
+        "path": "apps/web/features/document-editor/body-editor.tsx",
+        "before": "aa647deb9a9ebe8d268370e530d3ef919c9f74e9",
+        "after": "f3c54cd091b144d026cf303cbd9ffbca6e33c538",
+        "currentMain": "aa647deb9a9ebe8d268370e530d3ef919c9f74e9",
+        "mainPreimageMatches": true,
+        "sha256": "f2892be0a3d27b1b106ff5f5eec30aaf66726c8485f5e95038a3ecb94efc5bd1",
+        "bytes": 12282,
+        "inspected": true
+      },
+      {
+        "path": "apps/web/features/document-editor/image-target.ts",
+        "before": null,
+        "after": "131241010ff90926142ffa7058011e1cd2ada425",
+        "currentMain": null,
+        "mainPreimageMatches": true,
+        "sha256": "a668c9edea2bdd2c9632c9c92dea29c281a397e4580f100fad2b4e4b586a16b7",
+        "bytes": 1644,
+        "inspected": true
+      },
+      {
+        "path": "apps/web/features/document-editor/image-uses.ts",
+        "before": "7a12da994c5bf2a9bec1bca576e1b7e28ef5d740",
+        "after": "4b24ce613851e11a925e138f736aa9cdb977b83e",
+        "currentMain": "7a12da994c5bf2a9bec1bca576e1b7e28ef5d740",
+        "mainPreimageMatches": true,
+        "sha256": "8ea7f122767522bc7a9a7dfe3fd82dacaeb2f52676a5f452de6730b9d87f288d",
+        "bytes": 4761,
+        "inspected": true
+      },
+      {
+        "path": "apps/web/features/document-editor/local-image.ts",
+        "before": "1070c59010d55cdb9d3bde4e669a2ff47b078c90",
+        "after": "fa7e6bc008731ab723da40a9c76caedbee0afffd",
+        "currentMain": "1070c59010d55cdb9d3bde4e669a2ff47b078c90",
+        "mainPreimageMatches": true,
+        "sha256": "7c9e72bc5fbfc92b93825c9a21edc4aae5eea8e0c62171a6c8db9e6d533fa8d8",
+        "bytes": 4424,
+        "inspected": true
+      },
+      {
+        "path": "apps/web/features/document-editor/member-reply-images.test.ts",
+        "before": null,
+        "after": "f0e90b10269247b7d0affa11521b95aadf4c4c32",
+        "currentMain": null,
+        "mainPreimageMatches": true,
+        "sha256": "96550aae909aa523e7b4f7c277e961d14f88cd399204b9e9025579f6610e5777",
+        "bytes": 6905,
+        "inspected": true
+      },
+      {
+        "path": "apps/web/features/post-composer/api.ts",
+        "before": "896a0a063932f185f1101db073f4c97058a4c0f5",
+        "after": "339bcbd0c833ac41d3daac8a8b98e1dc4550ad64",
+        "currentMain": "896a0a063932f185f1101db073f4c97058a4c0f5",
+        "mainPreimageMatches": true,
+        "sha256": "142beb054e1033390d874e940a7e1258c11944574ab1ce11bb152d8c0af0b1de",
+        "bytes": 11677,
+        "inspected": true
+      },
+      {
+        "path": "apps/web/features/post-composer/composer.tsx",
+        "before": "dfd2e775e4cae2cc6f340f96a8bb648feab80d81",
+        "after": "b7e14ccb8410b1b96a2c3fe76936fe69a89b739b",
+        "currentMain": "b9b58f7533361b69e08c54f7c95dbca962875835",
+        "mainPreimageMatches": false,
+        "sha256": "403b83f1508b51ee64454ed8a3cf44fb68d9b72eca19bb938e0ebeeb714747ef",
+        "bytes": 27615,
+        "inspected": true
+      },
+      {
+        "path": "apps/web/features/post-composer/image-draft.test.ts",
+        "before": null,
+        "after": "e814f68b12d9dc50741e94b934eaccf810e08dc4",
+        "currentMain": null,
+        "mainPreimageMatches": true,
+        "sha256": "381dfa8471788392afb41119eee02845d604e3af2b805d0778e0491c8a3664f3",
+        "bytes": 8969,
+        "inspected": true
+      },
+      {
+        "path": "apps/web/features/post-composer/image-draft.ts",
+        "before": null,
+        "after": "300192b373f2cc605de16af8052c93d1937d4e82",
+        "currentMain": null,
+        "mainPreimageMatches": true,
+        "sha256": "c72500e78933551aa0ee5b5210293901722acfc99a9fbadf5a8c7bae27e203e2",
+        "bytes": 3897,
+        "inspected": true
+      }
+    ],
+    "ownerInterfaces": {
+      "pin": "04cbbf3d1d56cf6d16a97ffbc3b4397c2ba515ac",
+      "blobs": [
+        {
+          "path": "services/main/src/modules/media/presentation-contract.ts",
+          "approvedOwnerBlob": "5caa930e28e8a49ab4e07164a16255f44bd4f9c4",
+          "candidateBlob": "c8944844485c2836bf147bf6c752f06a3b630e79",
+          "identical": false
+        },
+        {
+          "path": "services/main/src/routes/media.ts",
+          "approvedOwnerBlob": "05236204854351c06dd276185033ccb7ef1db5e0",
+          "candidateBlob": "05236204854351c06dd276185033ccb7ef1db5e0",
+          "identical": true
+        },
+        {
+          "path": "services/main/src/routes/member-replies.ts",
+          "approvedOwnerBlob": "0fd9bb8cb7ea39bdbdf3636eec16e5a5999ac2a7",
+          "candidateBlob": "0fd9bb8cb7ea39bdbdf3636eec16e5a5999ac2a7",
+          "identical": true
+        },
+        {
+          "path": "services/main/src/modules/content-publication/reply-draft.ts",
+          "approvedOwnerBlob": "9db875dec9a218344b8bc9b24bec861de8d36c13",
+          "candidateBlob": "9db875dec9a218344b8bc9b24bec861de8d36c13",
+          "identical": true
+        },
+        {
+          "path": "apps/web/features/api/browser.ts",
+          "candidateBlob": "5b8c2d862068a9152b77de410bfefb247f047112"
+        },
+        {
+          "path": "apps/web/features/post-composer/page.tsx",
+          "candidateBlob": "1ed386478168d4c15455e7cf4cc5bff329c791fa"
+        },
+        {
+          "path": "apps/web/features/document-editor/publication.ts",
+          "candidateBlob": "f016d7883fd444b45725d3236eed639c8263c46d"
+        }
+      ],
+      "integration": "The selected frontend ancestry lacks the optional Media memberReplyDraft contract. Approved 04cbb owner interface has exactly profile/variantId/expectedHead/rootTarget/rootRevision. Media route, member-reply route and reply-draft implementation are byte-identical in both pins. Treat owner additions as mandatory exact composition, not a reason to import the frontend wave backend. No repeat Media/Access policy review.",
+      "mainPreimage": "At supplied Main f1792f86, eight preimages match. Composer alone differs: Main removed titleInput ref and focus calls. Retained parent-to-main-composer.patch isolates those unchanged Main edits; root must preserve them when composing the nine paths. No whole-file substitution approval."
+    },
+    "inspectedCallChains": [
+      {
+        "paths": [
+          "document-editor/image-target.ts:1",
+          "document-editor/local-image.ts:14"
+        ],
+        "observation": "Image binding is prepared before reserve/bytes. Reply/variant/head are accepted only after native authoring acknowledgement; locally allocated reply/variant IDs alone never authorize a Media Use. The typed request carries exact native root and native root revision. String Work targets keep the ordinary request without memberReplyDraft."
+      },
+      {
+        "paths": [
+          "post-composer/image-draft.ts:27",
+          "post-composer/image-draft.ts:47"
+        ],
+        "observation": "Authoring recovery is separate from publication. The immutable seed intent/key is persisted as unknown before dispatch; same-context uncertain retries preserve body/key/root. Acknowledgement validates reply/variant/head/digest/deleted and persists before binding. Device failures stop dispatch or retain the pending replay record. A confirmed403 can restart with a new key; no silent fallback to Work publishing or new permission."
+      },
+      {
+        "paths": [
+          "post-composer/composer.tsx:137",
+          "document-editor/body-editor.tsx:88",
+          "document-editor/image-uses.ts:19"
+        ],
+        "observation": "Actor/Realm/root/revision/language identify the provider context; ordinary text edits keep the reconciler and immutable occurrence receipts. Restored acknowledged context can retain existing Uses without metadata. Changed context starts without trusting opening Uses. Upload receipts are remembered; copied nodes reconcile exact representation/occurrence. Existing snapshot sequence cancellation/current-document retry/remove/export mechanisms are unchanged. A live cross-context journey is not established by these source observations."
+      },
+      {
+        "paths": [
+          "post-composer/composer.tsx:363",
+          "post-composer/api.ts:227"
+        ],
+        "observation": "Final Post reuses acknowledged reply/variant/root, but uses a distinct publication operation to save the CURRENT complete document against the acknowledged authoring head before identity and placement. The seed revision/digest is not passed as the final document receipt. Existing durable publication step/key recovery and projection navigation remain. Preparation invokes no identity or placement endpoint."
+      },
+      {
+        "paths": [
+          "api/browser.ts:35",
+          "services/main/src/routes/member-replies.ts:32",
+          "services/main/src/modules/content-publication/reply-draft.ts:148",
+          "services/main/src/routes/media.ts:504"
+        ],
+        "observation": "Existing typed browser client retains authenticated BFF transport. Member-reply operation uses complete document, exact root, Realm, expectedHead and idempotency key, with existing Content/Access/CAS receipt path. Media operation forwards the approved optional binding to its owner; server policy remains authoritative. Exact native owner policy, rights, disclosure and fences are reused, not re-reviewed or replaced."
+      }
+    ],
+    "actionableFindings": [
+      {
+        "id": "image-draft-late-actor-receipt",
+        "severity": "source correction required before approving this exact candidate",
+        "path": "apps/web/features/post-composer/composer.tsx",
+        "line": 129,
+        "relatedLines": [
+          124,
+          126,
+          130,
+          131,
+          132,
+          153,
+          158,
+          191,
+          193
+        ],
+        "trigger": "Actor A begins prepareImage. The native member-reply POST is pending after its unknown device record. PostComposer receives actor B in the same mounted component, with the same Realm/root/language and B current text. Then A native acknowledgement arrives. page.tsx does not key the component by actor.",
+        "request": {
+          "method": "POST",
+          "path": "/v1/member-reply-drafts",
+          "profile": "member-reply-draft-v1",
+          "actingSubject": "actor A",
+          "expectedHead": null,
+          "rootTarget": "the selected exact native root",
+          "rootRevision": "the selected exact native root revision",
+          "idempotencyKey": "the retained seed key + :draft"
+        },
+        "actual": "The callback at129 calls currentIntent from A initiating render. Its actingSubject capture at158 is A, so sameImageDraftContext accepts A receipt even though imageIntent.current now reports B. Lines130-132 combine B draftRef current fields with A imageDraft, write them under A captured draftKey, and replace current editor state. The later outer provider guard can reject the upload but cannot undo those device/editor effects. B subsequent persistence can also retain that mixed state.",
+        "correction": "Guard both pending and acknowledged callbacks with a fresh current actor/context reader (the existing imageIntent.current ref is available), and reject stale context before persist or setDraft. Ensure the selected current persistence callback corresponds to that same actor/context. Add an in-flight actor-change regression assertion that no stale receipt mutates either current editor or another actor device record. Preserve exact same-actor immutable replay.",
+        "evidence": "actor-receipt-context.test.ts compiles verbatim retained candidate currentIntent/persist/prepareImage fragments and actual image-draft implementation. It drives a deferred controlled owner receipt, then changes the render actor. Unchanged-actor control passes; late-actor outcome assertion at85 fails with a post-switch acknowledged device write containing B current title/body and A acknowledged imageDraft. This is bounded controlled source evidence, not browser execution, authorization bypass or genuine backend success.",
+        "job": "e891c228-8b1c-470d-b5e7-789440810c64",
+        "assertionReached": true,
+        "result": "1 passed / 1 failed / 5 assertions; failure at outcome assertion",
+        "ownerFollowup": "Owner manifest/handoff now selects f610f1da after 7d3e19b7. Its composer blob differs; this later correction has not been reviewed or claimed to pass this counterexample. Root should select the actual bounded correction rather than land old7d3 as approved."
+      }
+    ],
+    "testsInspectedAndReused": {
+      "authoredTestsRead": [
+        "apps/web/features/document-editor/member-reply-images.test.ts (8 cases)",
+        "apps/web/features/post-composer/image-draft.test.ts (8 cases)"
+      ],
+      "coverage": "Exact acknowledged payload; normal Work upload/copy; preparation blocks image writes;403/503 retry/current snapshot; restored Use without metadata; changed-context rebind; final complete-document CAS before identity/place; exact uncertain seed replay; pre-dispatch storage failure; lost device acknowledgement;403 vs503 state; actor/root/Realm/language context comparisons.",
+      "ownerFinal": {
+        "pin": "f610f1da0061bb7dda9b05552e715daf15a5411f",
+        "job": "69f2a482-a3b3-4ae7-9d5b-fd060fa9f156",
+        "focused": "16 pass / 0 fail / 80 assertions",
+        "sourceEquivalence": "All eight other selected blobs, including both test files and their helper modules, match exact7d3. Composer differs. Reuse focused helper evidence only; this does not establish exact7d3 composer closure behavior.",
+        "checks": "Owner final types/lint/AST/125 guards and Web typecheck passed. These are later-pin evidence, not exact7d3 or current-Main composition gates.",
+        "inference": "Later source and7d3 comparison both26977087 Main instantiations exceed recorded25667613 +5% limit26950993.650000002. Task delta accepted relative to7d3; canonical merge gate remains required. No baseline waiver or attributable first-consumer cost claim."
+      },
+      "earlierOwner": {
+        "job": "7406083b-f6f1-4270-a5fb-4a98ae14ad74",
+        "focused": "16 pass / 80 assertions; types/lint/AST/inference/Web summaries pass",
+        "qualification": "Ran before first commit; no immutable per-file tested manifest in the inspected receipt. Preserve as owner historical evidence, not independently verified exact candidate green. Guard timeout of web-accepted-commands was retained and its authorized timeout retry passed."
+      },
+      "independentCounterexample": {
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/image-consumer-7d3e19b7d37e/actor-receipt-context.test.ts",
+        "job": "e891c228-8b1c-470d-b5e7-789440810c64",
+        "qa": "direct Bun file under normal goalctl QA admission; no hosted-tier QA ID",
+        "outcome": "1 pass,1 fail,5 assertions; actual outcome assertion reached",
+        "premiseCorrection": "First jobb713ea0b-056c-48dd-a6a5-4a36804367a4 matched no tests because hidden .temp filter lacked ./ prefix. One path correction only; source/test assertions unchanged. Both raw logs retained."
+      },
+      "notExecuted": "No broad stories, native/corpus/persona matrix, genuine API journey or repeated composer/Media/Access review. No original independent assertion changed."
+    },
+    "preservation": {
+      "workerBase": "3c65a3daf4b1bbc26d9e3a3a5bc24c5c76957cb0",
+      "mainReadPin": "eade69c812b1d0c797726f6653e8d5d0a44be94e",
+      "oldWorkerKeys": 26,
+      "oldMainKeys": 26,
+      "allOldAndMainValuesPreserved": true,
+      "noManualRebaseMergeReset": true
+    },
+    "findingStatus": {
+      "D2-002": "Accepted original text outcomes and eight input cases reused unchanged; no reopened text condition.",
+      "D2-003": "OPEN. Source verdict closes no finding. Original old image-use403, snapshot/rendered evidence, four genuine failures and original unresolved low-level upload exception preserved. Genuine image/text save/reopen, unavailable preview/metadata, retry/remove/export still require compatible exact composition and supported backend refresh coordinated by root."
+    },
+    "limits": [
+      "Zero real API/account/data writes and zero new screenshots; simulated receipts are not durable backend outcomes.",
+      "No product/assertion/schema/policy changes, stack/server/install, shared refresh/reset/import, corpus, lifecycle or peer job changes.",
+      "No physical input or broader persona prerequisite introduced. Existing source approvals and historical failures remain unchanged."
+    ],
+    "artifactDelivery": {
+      "workerBundle": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/image-consumer-7d3e19b7d37e",
+      "mainCopy": "Root copies the retained private subtree; main/peer write boundary preserved."
+    },
+    "reportChecks": {
+      "job": "c2461a57-54a1-4349-b6a2-57b4437a5186",
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "docs": {
+        "result": "passed",
+        "tests": 13,
+        "markdownFiles": 250,
+        "log": ".temp/goal/jobs/c2461a57-54a1-4349-b6a2-57b4437a5186.1.log"
+      },
+      "worker": {
+        "result": "administrative currency conflict before check execution",
+        "log": ".temp/goal/jobs/c2461a57-54a1-4349-b6a2-57b4437a5186.2.log",
+        "message": "114 commits behind main; automatic rebase undone; only conflicting path docs/goals/audit-remediation-20261019/proofs/post-draft-recovery.json",
+        "restoredHead": "dc63e04396dbbadfbc1dc244691d1f217b05f0f2",
+        "manualRebaseMergeReset": false,
+        "owner": "Root additive merge as explicitly authorized; no repeated source inspection or unrelated rewrite."
+      },
+      "diffCheck": "passed; only claimed proof JSON tracked change"
+    },
+    "next": "Root/G-2748 receives exact7d3 counterexample and selects a frozen bounded correction for the actor guard. Review only that genuinely new correction, retain Main composer preimage edits and normal affected composition gates. Root then coordinates compatible backend refresh; original D2-003 genuine proof remains due, accepted D2-002 reused."
+  },
+  "imageConsumerCorrectionSourceReview": {
+    "recordedAt": "2026-10-19T15:15:20.644686+00:00",
+    "reviewer": "G-2830 / codex-1 / gpt-6.1-sol / xhigh; no fallback or nested agents",
+    "scope": "ONE source inspection of ONLY the new composer.tsx hunk in 7d3e19b7..f610f1da. The first nine-path consumer verdict and approved Media9/Access3 reviews are retained unchanged, not repeated.",
+    "verdict": "SOURCE APPROVE the f610f1da correction. It resolves the retained image-draft-late-actor-receipt counterexample at this exact source pin. Prior nine-path inspection plus this correction supplies bounded consumer source approval; root composition and normal landing gates remain required. No finding closure or genuine image persistence success is inferred.",
+    "pins": {
+      "parent": "7d3e19b7d37ee7dfcd57d55dbe9bcdc07aaa5488",
+      "candidate": "f610f1da0061bb7dda9b05552e715daf15a5411f",
+      "sourceManifest": {
+        "parent": "7d3e19b7d37ee7dfcd57d55dbe9bcdc07aaa5488",
+        "candidate": "f610f1da0061bb7dda9b05552e715daf15a5411f",
+        "changedFiles": [
+          "apps/web/features/post-composer/composer.tsx"
+        ],
+        "path": "apps/web/features/post-composer/composer.tsx",
+        "before": "b7e14ccb8410b1b96a2c3fe76936fe69a89b739b",
+        "after": "f77bc6e3830e3eb2ee26ed3f52d48caa3cc05fb9",
+        "patchSha256": "9b3246bd51b1c74fb7899d9afea9c7f41f23b68d883d659cbc6d5bbc6eda072c",
+        "patchBytes": 1060,
+        "unchangedHelperBlob": "300192b373f2cc605de16af8052c93d1937d4e82",
+        "retainedTestSha256": "b2a6d0a9317d33c2304e0eca1a1d7f62c923257d1b650ac1b1cc4dea612cea9a",
+        "correctionTestSha256": "d453830075d0a6dc1cce39829aaa80e65628a06735169ec95d1bf34f1fe6f703",
+        "assertionsPreserved": true,
+        "testAdaptation": "Only candidate pin literal in diagnostic JSON changed; all assertions/harness logic identical to the retained failing test.",
+        "parentComposerSha256": "403b83f1508b51ee64454ed8a3cf44fb68d9b72eca19bb938e0ebeeb714747ef",
+        "candidateComposerSha256": "2a94f988c787e5f15337aed4609d3c9d9893220b144d9ac203afd2fcf7968783"
+      },
+      "line": 129,
+      "priorNinePathReview": "imageConsumerFirstSourceReview; original 7d3e19b7 SOURCE CHANGES REQUIRED verdict and raw failing evidence preserved",
+      "backendDependencyReviews": [
+        "memberReplyMediaSourceReview",
+        "memberReplyMediaAccessSourceReview"
+      ],
+      "backendCompositionAlreadyOwnedByRoot": "04cbbf3d; no re-review or reland of approved Media9+Access3",
+      "reportHeadBeforeAddition": "bbc7a48613caba0939ccfc9bae41349f7435556a",
+      "mainComparedForCumulativeFields": "eade69c812b1d0c797726f6653e8d5d0a44be94e",
+      "preservation": {
+        "priorWorkerKeysUnchanged": 27,
+        "priorMainKeysUnchanged": 26,
+        "newMainKeysMissing": [],
+        "mainFieldsStillUnchangedAtReportCheckCompletion": true
+      },
+      "mainAtReportCheckCompletion": "97774d61fd2fb5e068b4d8351440305f0bde0601"
+    },
+    "sourceObservations": [
+      "The acknowledgement callback now evaluates sameImageDraftContext(imageIntent.current(), imageDraft), replacing the initiating render currentIntent() closure. The already-reviewed ref supplies the current editor actor and image target context.",
+      "The fresh-context check precedes construction of next, persist(next), draftRef mutation and setDraft. An old-actor acknowledgement throws before any of those effects. The retained counterexample observes no late acknowledged storage write and retains B current title/body.",
+      "The unchanged-actor control still acknowledges its deferred request. The hunk changes no request seed, idempotency key, native reply/head/root context, Work binding, publication progression, cancellation or complete-document recovery code. Prior source conclusions on those paths are reused.",
+      "Only this one line changes from the reviewed parent; the image-draft helper and other eight consumer files are unchanged. No backend policy/schema substitution or new command is introduced by this correction."
+    ],
+    "counterexampleDisposition": {
+      "finding": "image-draft-late-actor-receipt",
+      "parent": {
+        "pin": "7d3e19b7d37ee7dfcd57d55dbe9bcdc07aaa5488",
+        "job": "e891c228-8b1c-470d-b5e7-789440810c64",
+        "result": "1 passed, 1 failed, 5 assertions; failed at outcome assertion expect(late).toEqual([]); retained unchanged in first-review bundle"
+      },
+      "candidate": {
+        "pin": "f610f1da0061bb7dda9b05552e715daf15a5411f",
+        "job": "5c6533bb-18c0-48a9-838e-0dbe281dea47",
+        "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test ./.temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/image-consumer-correction-f610f1da0061/actor-receipt-context.test.ts",
+        "result": "passed",
+        "testsPassed": 2,
+        "testsFailed": 0,
+        "assertions": 5,
+        "outcomeAssertionReached": true,
+        "log": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/image-consumer-correction-f610f1da0061/jobs/5c6533bb-18c0-48a9-838e-0dbe281dea47.log",
+        "qaId": null,
+        "qaAdmission": "Normal goalctl test admission; stack-free Bun test, no hosted-tier QA ID.",
+        "harnessWarning": "2 harness commits behind Main; test reached and passed both outcome assertions. Product fragments retained from exact f610 source, not worker product source."
+      },
+      "assertionsPreserved": true,
+      "onlyTestAdaptation": "Diagnostic candidate pin literal changed from 7d3 to f610; test harness and all assertions byte-identical otherwise. Adaptation patch and both SHA256 values retained.",
+      "observedResult": {
+        "candidate": "f610f1da0061bb7dda9b05552e715daf15a5411f",
+        "kind": "controlled source-fragment counterexample",
+        "requestActor": "https://rezics.com/id/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        "currentActor": "https://rezics.com/id/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        "lateWrites": [],
+        "currentEditor": {
+          "title": "B current title",
+          "body": "B current body",
+          "spoiler": false,
+          "community": {
+            "id": "https://rezics.com/id/11111111-1111-4111-8111-111111111111"
+          },
+          "work": {
+            "id": "https://rezics.com/id/22222222-2222-4222-8222-222222222222",
+            "mainVersion": null,
+            "revision": "https://rezics.com/id/33333333-3333-4333-8333-333333333333"
+          },
+          "language": "en"
+        },
+        "realApiWrites": 0
+      },
+      "limits": "Controlled source-fragment execution with a deferred typed transport, React refs/state substitutes and memory storage. It is neither rendered-component/browser evidence nor genuine native API, image upload, durable storage or publication success."
+    },
+    "ownerEvidenceReused": {
+      "candidate": "f610f1da0061bb7dda9b05552e715daf15a5411f",
+      "manifestSha256": "d5a957aaa925ac406c6a51f3780e65360e0f78f784751a714c49d2aeb1fd5ed6",
+      "manifestUnchangedFromRetainedFirstReviewBundle": true,
+      "job": "69f2a482-a3b3-4ae7-9d5b-fd060fa9f156",
+      "tests": {
+        "command": "bun scripts/goal/goalctl.ts test apps/web/features/document-editor/member-reply-images.test.ts apps/web/features/post-composer/image-draft.test.ts",
+        "passed": 16,
+        "failed": 0,
+        "assertions": 80,
+        "log": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/image-consumer-7d3e19b7d37e/owner-receipts/jobs/69f2a482-a3b3-4ae7-9d5b-fd060fa9f156.1.log"
+      },
+      "affectedChecks": {
+        "command": "task goal -- check --only types,lint,guards",
+        "result": "Affected types, lint, AST and 125 selected guard tests passed; task-delta inference accepted relative to 7d3.",
+        "log": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/image-consumer-7d3e19b7d37e/owner-receipts/jobs/69f2a482-a3b3-4ae7-9d5b-fd060fa9f156.2.log",
+        "detail": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/image-consumer-7d3e19b7d37e/owner-receipts/check/run-Iv8tQ0/output.log"
+      },
+      "webTypecheck": {
+        "command": "task web:typecheck",
+        "result": "passed; no type errors in 4,053 files",
+        "log": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/image-consumer-7d3e19b7d37e/owner-receipts/jobs/69f2a482-a3b3-4ae7-9d5b-fd060fa9f156.3.log"
+      },
+      "canonicalInferenceLimit": {
+        "headAndComparisonBaseInstantiations": 26977087,
+        "recordedBaseline": 25667613,
+        "allowedFivePercentLimit": 26950993.650000002,
+        "result": "Both f610 and 7d3 exceed the canonical recorded baseline limit. Task-delta acceptance does not waive root composition/canonical merge gates or isolate the first consumer commit cost."
+      },
+      "rerun": false,
+      "historicalPremises": "All earlier owner red/fixture/canonical-inference qualifications in imageConsumerFirstSourceReview remain unchanged.",
+      "allNineManifestBlobsMatchExactF610Pin": true
+    },
+    "compositionRequirements": {
+      "owner": "root",
+      "selection": "Compose the bounded reviewed consumer delta with current approved backend interfaces; do not import wave ancestry or restore an old whole composer blob.",
+      "preserveFourMainTitleInputFocusRemovals": [
+        "titleInput ref declaration",
+        "Input ref prop",
+        "cancel-attempt title focus",
+        "retry-device title focus"
+      ],
+      "landingGates": "Normal affected typed consumer/backend composition and canonical inference gates remain root responsibilities; this source verdict is independent of pending integration checks."
+    },
+    "acceptanceAndGenuineLimits": {
+      "D2-002": "Accepted eight genuine text keyboard/touch/locale cases and prior closure history reused unchanged; no repeat matrix.",
+      "D2-003": "OPEN. This source correction closes no original image/persistence finding.",
+      "oldGenuineMedia403": "Retained on dabebfed frontend / 75409 backend with unreadable response body and unconfirmed cause; no retrospective successful-binding claim.",
+      "originalLowLevelUploadException": "Unresolved and unisolated; retained unchanged.",
+      "earlierEvidence": "Original image/SlashMenu premise failures, current-document recovery evidence, all genuine failed attempts and supplemental unconfirmed character discrepancy remain unchanged.",
+      "thisContinuation": {
+        "realApiWrites": 0,
+        "stackStarts": 0,
+        "backendRefreshes": 0,
+        "newScreenshots": 0,
+        "productEdits": 0,
+        "assertionEdits": 0
+      },
+      "nextGenuineProof": "After root composes and installs a compatible backend, the existing original D2-003 journey must prove image/current-text persistence, full-page reopen, unavailable preview/metadata and retry/remove/export/focus at 1440/390 en/zh-Hans. No old754 compatibility assumption or fake durable outcome."
+    },
+    "administrativeChecks": {
+      "job": "d32e8e3c-29b9-46fe-a2a2-fac07e78fc6d",
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "docs": {
+        "result": "passed",
+        "tests": 13,
+        "markdownFiles": 250,
+        "log": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/image-consumer-correction-f610f1da0061/jobs/d32e8e3c-29b9-46fe-a2a2-fac07e78fc6d.1.log"
+      },
+      "worker": {
+        "result": "administrative currency conflict before check execution",
+        "log": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/image-consumer-correction-f610f1da0061/jobs/d32e8e3c-29b9-46fe-a2a2-fac07e78fc6d.2.log",
+        "message": "114 commits behind Main; automatic rebase undone; only conflicting path docs/goals/audit-remediation-20261019/proofs/post-draft-recovery.json",
+        "restoredHead": "fa812c2e9df7277708e3245dec2fc63021d11d77",
+        "manualRebaseMergeReset": false,
+        "owner": "Root additive reconciliation, as explicitly authorized; no repeated source inspection or unrelated proof rewrite."
+      },
+      "commitReceipt": {
+        "commit": "fa812c2e9df7277708e3245dec2fc63021d11d77",
+        "result": "Commit succeeded and HEAD verified. Ancillary pack-refs reference-transaction hook diagnostic retained; no shared-hook repair or Main ref write attempted."
+      },
+      "diffCheck": "passed; sole tracked change is claimed proof JSON"
+    },
+    "artifacts": {
+      "privateBundle": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/image-consumer-correction-f610f1da0061",
+      "mainCopyOwner": "Root; worker writes only its private worktree. No write to Main or peer worktrees.",
+      "artifactManifest": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/image-consumer-correction-f610f1da0061/artifact-manifest.json",
+      "manifestFormat": "SHA256 and byte count of every private correction-bundle file except the manifest itself; generated after final report copy.",
+      "historicalBundle": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/image-consumer-7d3e19b7d37e"
+    }
   }
 }
