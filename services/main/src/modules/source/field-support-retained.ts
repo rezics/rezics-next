@@ -11,22 +11,49 @@ import type { FieldSupportResult } from './withdrawal.ts';
 import type { NativeFieldControlIntent } from './field-control-native.ts';
 import { suppliedLanguage } from './field-control-language.ts';
 import { retainedFieldPlan } from './retained-record.ts';
+import { currentWorkReadSession, WorkReadMoved, type WorkReadSession } from '../work/read-session.ts';
+import type { PublicRetainedFieldEvidence, SourceRetainedRecordEvidenceOwner } from './retained-evidence.ts';
 import { coordinateInvalid, sourceNotFound, supportChanged, supportUnavailable,
   type RetainedSupportRequest, type RetainedSupportAdmission, type FieldAttachmentCertificate,
-  type SuppliedLanguage, type VerifiedNativeAcknowledgement } from './field-support-contract.ts';
+  type VerifiedNativeAcknowledgement } from './field-support-contract.ts';
 
-export interface RetainedPublicEvidence {
-  id: string; sourceWork: string; representationSha256: string; locator: { pointer: string };
-  rightsBasis: string; quoteWithheld: boolean;
-  attribution: { sourceName: string; sourceUrl: string; licence: string | null };
-  language: SuppliedLanguage;
-}
+export type RetainedPublicEvidence = PublicRetainedFieldEvidence;
 /** These functions are supplied by the existing rights/evidence owners. Their
  * absence is unavailable admission, never an implicit factual or expression grant. */
 export interface RetainedFieldOwners extends SourceNativeVerifiers {
-  authorizeReuse(principal: VerifiedPrincipal, actingSubject: string, evidence: RetainedFieldCustody): Promise<void>;
+  authorizeReuse(principal: VerifiedPrincipal, actingSubject: string, evidence: RetainedFieldCustody,
+    claimedSourceRecord?: string): Promise<void>;
   publicEvidence(evidence: RetainedEvidence, field: VerifiedRetainedField,
-    input: RetainedSupportRequest): Promise<RetainedPublicEvidence | null>;
+    input: RetainedSupportRequest, context?: { principal: VerifiedPrincipal | null }): Promise<RetainedPublicEvidence | null>;
+}
+export interface SourceEvidenceSelection {
+  target: string; slot: string; occurrence: string | null; context: string;
+  component: string; revision: string;
+}
+/** Owner-private frontier. The query owner seals it with its existing cursor;
+ * neither this position nor private support identities are public citation data. */
+export interface SourceEvidenceFrontier { generation: string; after: string }
+export interface SourceEvidenceWindow {
+  items: RetainedPublicEvidence[];
+  generation: string; next: SourceEvidenceFrontier | null; more: boolean;
+}
+/** Compose the existing evidence and Rights owner without substituting import
+ * authority for a public-read identity or inventing a SourceWork binding. */
+export function retainedFieldEvidenceOwners(owner: Pick<SourceRetainedRecordEvidenceOwner,
+  'authorizeRetainedFieldReuse' | 'projectPublicRetainedField'>): Pick<RetainedFieldOwners,'authorizeReuse' | 'publicEvidence'> {
+  return {
+    authorizeReuse: async (principal,actor,custody,claimedSourceRecord = custody.sourceRecord) => {
+      await owner.authorizeRetainedFieldReuse(principal,actor,claimedSourceRecord,custody.observations);
+      if (claimedSourceRecord !== custody.sourceRecord) {
+        await owner.authorizeRetainedFieldReuse(principal,actor,custody.sourceRecord,custody.observations);
+      }
+    },
+    publicEvidence: (evidence,field,input,context) => {
+      if (!context?.principal || field.correspondence.payloadPointers.length !== 1) return supportUnavailable();
+      return owner.projectPublicRetainedField(context.principal,input.actingSubject,evidence,
+        field.correspondence.payloadPointers[0]!,suppliedLanguage(input.evidence.field));
+    },
+  };
 }
 export interface RetainedFieldSupportResult extends FieldSupportResult {
   admission: RetainedSupportAdmission; attachment: FieldAttachmentCertificate;
@@ -99,7 +126,7 @@ export class SourceRetainedFieldSupportStore {
     const evidence = await this.evidence(principalId,{ sourceRecord: source.record,
       evidence: { binding: sourceIri(row.id) } },async custody => {
       if (!this.owners.authorizeReuse) return supportUnavailable();
-      await this.owners.authorizeReuse(principal,intent.actingSubject,custody);
+      await this.owners.authorizeReuse(principal,intent.actingSubject,custody,source.record);
     });
     const binding = evidence.conversion.retainedRecord;
     if (source.record !== binding.sourceRecord) return supportChanged('record');
@@ -118,11 +145,12 @@ export class SourceRetainedFieldSupportStore {
   async attach(principal: VerifiedPrincipal, principalId: string, key: string, raw: RetainedSupportRequest):
     Promise<{ support: string; replayed: boolean; step: string }> {
     if (!sourceId(principalId) || !KEY.test(key) || raw.profile !== 'source-field-support-attachment-v2'
+      || raw.slot.length < 1 || raw.slot.length > 512
       || ![raw.target,raw.expectedHead,raw.actingSubject].every(value => sourceId(value))) return coordinateInvalid();
     const input: RetainedSupportRequest = JSON.parse(canonicalJson(raw));
     const evidence = await this.evidence(principalId, input, async custody => {
       if (!this.owners.authorizeReuse) return supportUnavailable();
-      await this.owners.authorizeReuse(principal,input.actingSubject,custody);
+      await this.owners.authorizeReuse(principal,input.actingSubject,custody,input.sourceRecord);
     });
     const field = await verifyRetainedField(input, evidence);
     const admission: RetainedSupportAdmission = { profile: 'source-field-support-admission-v1',
@@ -136,12 +164,12 @@ export class SourceRetainedFieldSupportStore {
       WHERE st.principal_id=$1 AND st.idempotency_key=$2`, [principalId,key])).rows[0];
     if (prior) {
       if (canonicalJson(prior.request) !== canonicalJson(input)) return supportChanged('conversion');
-      const saved = await this.read(principalId, prior.support_id, prior.step_id);
+      const saved = await this.read(principalId, prior.support_id, prior.step_id, principal);
       if (!saved) return supportUnavailable();
       return { support: saved.support, replayed: true, step: sourceIri(prior.step_id) };
     }
     await assertGraphAdmissionOpen(this.env.fuseki, this.env.lineage);
-    const native = await verifySourceNative(this.env, input, this.owners);
+    const native = await verifySourceNative(this.env, input, this.owners,true,{ principal });
     const requestDigest = retainedAttachmentDigest(principalId,input,admission,native);
     return this.access.withOwnerAuthority({ principal, actingSubject: input.actingSubject,
       scope: native.scope, action: native.action }, async () => {
@@ -206,7 +234,8 @@ export class SourceRetainedFieldSupportStore {
     });
   }
 
-  async read(principalId: string, support: string, step?: string): Promise<RetainedFieldSupportResult | null> {
+  async read(principalId: string, support: string, step?: string,
+    principal?: VerifiedPrincipal): Promise<RetainedFieldSupportResult | null> {
     const id = sourceId(support), stepId = step === undefined ? null : sourceId(step);
     if (!sourceId(principalId) || !id || (step !== undefined && !stepId)) return coordinateInvalid();
     const row = (await this.pool.query<SavedAttachment>(savedSql,[id,principalId,stepId])).rows[0];
@@ -218,15 +247,15 @@ export class SourceRetainedFieldSupportStore {
       || retainedAttachmentDigest(principalId,input,admission,row.native_acknowledgement) !== row.request_digest
       || row.certificate.requestDigest !== row.request_digest
       || row.certificate.nativeReceipt !== input.native.receipt) return supportUnavailable();
-    const historical = await verifySourceNative(this.env,input,this.owners,false);
-    if (canonicalJson(historical) !== canonicalJson(row.native_acknowledgement)) return supportUnavailable();
+    // The immutable Source settlement retains the verified acknowledgement.
+    // Historical receipt custody does not require the native head to stay current.
     let publicEvidence: RetainedPublicEvidence | null = null;
     if (!row.withdrawal_id) {
       try {
-        const current = await verifySourceNative(this.env,input,this.owners,true);
+        const current = await verifySourceNative(this.env,input,this.owners,true,principal ? { principal } : undefined);
         if (canonicalJson(current) === canonicalJson(row.native_acknowledgement)) {
           if (!this.owners.publicEvidence) return supportUnavailable();
-          publicEvidence = await this.owners.publicEvidence(evidence,field,input);
+          publicEvidence = await this.owners.publicEvidence(evidence,field,input,{ principal: principal ?? null });
         }
       } catch (error) {
         // A stale native head is historical custody, not current public evidence.
@@ -244,5 +273,61 @@ export class SourceRetainedFieldSupportStore {
       withdrawal: row.withdrawal_id && row.withdrawn_at ? { profile: 'source-field-withdrawal-v1',state: 'withdrawn',
         withdrawal: sourceIri(row.withdrawal_id),support: supportIri,supportIdentity,reason: row.reason!,
         createdAt: row.withdrawn_at.toISOString(),nativeEffect: 'none' } : null };
+  }
+
+  async evidenceGeneration(selection: Pick<SourceEvidenceSelection,'target' | 'slot' | 'occurrence' | 'context'>): Promise<string> {
+    const row = (await this.pool.query<{ generation: string }>(
+      `SELECT generation::text FROM source.field_support_generation
+       WHERE target=$1 AND slot=$2 AND occurrence IS NOT DISTINCT FROM $3 AND context=$4`,
+      [selection.target,selection.slot,selection.occurrence,selection.context])).rows[0];
+    if (row && !/^[1-9][0-9]{0,18}$/.test(row.generation)) return supportUnavailable();
+    return row?.generation ?? '0';
+  }
+
+  /** One bounded physical frontier, including withheld records. The existing
+   * Work session accounts for native/evidence reads and rechecks this selected
+   * Source dependency at its final fence. There is no independent read budget. */
+  async readEvidenceWindow(session: WorkReadSession, selection: SourceEvidenceSelection,
+    frontier?: SourceEvidenceFrontier, limit = 16): Promise<SourceEvidenceWindow> {
+    if (currentWorkReadSession() !== session) return supportUnavailable();
+    if (!sourceId(selection.target) || !sourceId(selection.revision)
+      || !selection.component || selection.component.length > 200
+      || selection.slot.length < 1 || selection.slot.length > 512
+      || selection.context.length < 1 || selection.context.length > 2048
+      || selection.occurrence !== null && !sourceId(selection.occurrence)
+      || !Number.isInteger(limit) || limit < 1 || limit > 16
+      || frontier && (!sourceId(frontier.after) || !/^(0|[1-9][0-9]{0,18})$/.test(frontier.generation))) {
+      return coordinateInvalid();
+    }
+    const generation = frontier?.generation ?? await this.evidenceGeneration(selection);
+    const load = async (): Promise<SourceEvidenceWindow> => {
+      if (await this.evidenceGeneration(selection) !== generation) throw new WorkReadMoved('Source support position changed');
+      const rows = (await this.pool.query<{ id: string; principal_id: string }>(`
+        SELECT s.id,s.principal_id FROM source.field_support s
+        JOIN source.field_support_head h ON h.support_id=s.id
+        JOIN source.field_support_step st ON st.id=h.settled_step_id
+        JOIN source.field_support_attachment a ON a.step_id=st.id
+        WHERE s.target=$1 AND s.slot=$2 AND s.occurrence IS NOT DISTINCT FROM $3 AND s.context=$4
+          AND st.native_acknowledgement->>'component'=$5 AND st.native_acknowledgement->>'revision'=$6
+          AND ($7::uuid IS NULL OR s.id>$7::uuid)
+        ORDER BY s.id LIMIT $8`, [selection.target,selection.slot,selection.occurrence,selection.context,
+        selection.component,selection.revision,frontier ? sourceId(frontier.after) : null,limit+1])).rows;
+      const items: SourceEvidenceWindow['items'] = [];
+      for (const row of rows.slice(0,limit)) {
+        const support = await this.read(row.principal_id,row.id,undefined,session.principal ?? undefined);
+        if (!support) return supportUnavailable();
+        const evidence = support.publicEvidence;
+        if (evidence) items.push(evidence);
+      }
+      if (await this.evidenceGeneration(selection) !== generation) throw new WorkReadMoved('Source support position changed');
+      const more = rows.length > limit, last = rows[Math.min(rows.length,limit)-1];
+      return { items,generation,more,next: more && last ? { generation,after: sourceIri(last.id) } : null };
+    };
+    // The full current evidence projection is fenced, including rights changes
+    // that do not themselves settle or withdraw a Source support.
+    let result: SourceEvidenceWindow | undefined;
+    await session.dependency(`source-field-evidence:${canonicalDigest({ selection,frontier: frontier ?? null,limit })}`,
+      async () => (result = await load()));
+    return result!;
   }
 }

@@ -10,6 +10,7 @@ import { canonical, sha256 } from '../store.ts';
 import type { DatasetRecord, DatasetSourceReference } from '../types.ts';
 import { datasetRecordDigest } from './context.ts';
 import { validSynopsisText, suppliedLanguage, synopsisPropertyValue } from '../../../services/main/src/modules/source/field-control-language.ts';
+import { projectDatasetReleases } from './releases.ts';
 
 const SCHEMA = 'https://schema.org/';
 const XSD = 'http://www.w3.org/2001/XMLSchema#';
@@ -46,7 +47,7 @@ export interface DatasetNativeField {
   reason: string;
   /** A candidate is not adoption, publication, rights clearance or a support receipt. */
   native?: {
-    owner: 'work-metadata' | 'work-editorial' | 'semantic' | 'statement';
+    owner: 'work-metadata' | 'work-editorial' | 'semantic' | 'statement' | 'release' | 'realization';
     property?: SemanticProperty;
     statementValue?: StatementValue;
     predicate: string;
@@ -173,6 +174,7 @@ function statementValue(value: SemanticValue): StatementValue | undefined {
 export function projectDatasetFields(
   record: DatasetRecord,
   source: DatasetSourceReference,
+  options: { releaseCorrespondence?: boolean } = {},
 ): DatasetFieldPlan {
   if (
     source.key !== record.key ||
@@ -796,6 +798,30 @@ export function projectDatasetFields(
         'unmapped',
       );
   };
+  // Consume the release owner's existing pure correspondence. Edition facts
+  // stay on their actual release/covered realization, with the same exact date
+  // precision and supplied language; this creates no native admission.
+  if (record.native === 'release' && options.releaseCorrespondence !== false) {
+    const release = projectDatasetReleases(record,source);
+    if (release.grain === 'release') for (const fact of release.facts) {
+      if (fact.gap || fact.normalized === undefined) continue;
+      const options: Parameters<typeof emit>[5] = { owner: 'release' };
+      let predicate: string, value: SemanticValue;
+      if (fact.role === 'title') {
+        predicate = `${SCHEMA}name`; value = languageValue(record.title,record.language);
+        options.language = record.language; options.expression = true;
+      } else if (fact.role === 'publication-date' && fact.precision === 'year' && typeof fact.normalized === 'string') {
+        predicate = `${SCHEMA}datePublished`;
+        value = { kind: 'temporal',lexical: fact.normalized,precision: 'year',calendar: 'gregorian' };
+      } else if (['status','platform','territory','language'].includes(fact.role) && typeof fact.normalized === 'string') {
+        predicate = `https://rezics.com/vocab/${fact.role === 'status' ? 'releaseStatus'
+          : fact.role === 'language' ? 'contentLanguage' : fact.role}`;
+        value = { kind: 'string',lexical: fact.normalized };
+        if (fact.role === 'language') options.owner = 'realization';
+      } else continue;
+      emit(fact.occurrence.path,fact.value,`release-${fact.role}`,predicate,() => checkedSemanticValue(value),options);
+    }
+  }
   for (const [key, value] of Object.entries(record.data)) inspect(value, child('/data', key), key);
   return { source: structuredClone(source), fields };
 }

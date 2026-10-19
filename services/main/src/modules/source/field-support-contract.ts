@@ -1,6 +1,7 @@
 import type { DatasetRecord } from '../../../../../scripts/datasets/types.ts';
 import type { SemanticProperty } from '../semantic/change.ts';
 import type { StatementValue } from '../statement/schema.ts';
+import type { ReleaseSourceNativeBasis, RealizationSourceNativeBasis } from './release-native-verifier.ts';
 
 /** Private Source refusals. Check evidence custody and reuse before disclosing a basis. */
 export class SourceFieldProblem extends Error {
@@ -46,7 +47,7 @@ export interface RetainedFieldCoordinate {
   presence: 'value' | 'omitted' | 'null' | 'empty-string' | 'empty-array' | 'empty-object';
   valueDigest?: string; language?: string | null; ordinal?: number;
 }
-export type AcknowledgedNativeBasis = {
+export type AcknowledgedNativeBasis = ReleaseSourceNativeBasis | RealizationSourceNativeBasis | {
   kind: 'component-property'; owner: 'semantic'; target: string; component: string;
   revision: string; receipt: string; property: SemanticProperty;
 } | {
@@ -85,4 +86,8 @@ export interface VerifiedNativeAcknowledgement {
   scope: string; action: 'semantic.change' | 'statement.record' | 'work.edit';
   component: string; revision: string;
   editorial?: { workHead: string; controlHead: string; controlEpoch: string; protectionHead: string | null };
+  release?: { currentHeads: { release: string; realization: string };
+    correspondence: { work: string; release: ReleaseSourceNativeBasis['coverage']['realization'];
+      realization: ReleaseSourceNativeBasis['coverage']['realization'];
+      completeness: ReleaseSourceNativeBasis['coverage']['completeness']; language: string } };
 }

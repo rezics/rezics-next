@@ -12,10 +12,13 @@ import { canonicalDigest, sourceDigest, retainedMappingRevision, verifyRetainedR
 import { SourceFieldProblem, supportChanged, type RetainedConversionRequest, type RetainedSupportRequest,
   type VerifiedNativeAcknowledgement } from '../src/modules/source/field-support-contract.ts';
 import { retainedValueAt, verifyRetainedField } from '../src/modules/source/field-support-evidence.ts';
-import { SourceRetainedFieldSupportStore } from '../src/modules/source/field-support-retained.ts';
+import { SourceRetainedFieldSupportStore, retainedFieldEvidenceOwners,
+  type RetainedPublicEvidence } from '../src/modules/source/field-support-retained.ts';
 import { SourceFieldWithdrawalStore } from '../src/modules/source/withdrawal.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import type { AccessAdmissionRegistry } from '../src/modules/access/admission.ts';
+import { WorkReadSession, WorkReadMoved, withWorkReadSession } from '../src/modules/work/read-session.ts';
+import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 
 const snapshot = { id: 'captured-shape-v1', digest: 'a'.repeat(64), fileSha256: 'b'.repeat(64) };
 function record(provider: DatasetRecord['provider'] = 'vndb'): DatasetRecord {
@@ -217,6 +220,45 @@ test('field coordinates prove full-record to payload correspondence and exact da
   expect(retainedValueAt({ a: null,b: '',c: [],d: {} },'/a')).toEqual({ present: true,value: null });
 });
 
+test('release field custody retains primitive booleans and binds the actual edition occurrence', async () => {
+  const original: DatasetRecord = { key: 'vndb:release:r14',provider: 'vndb',kind: 'release',externalId: 'r14',
+    title: 'Exact edition',language: 'ja',sourceUrl: 'https://vndb.org/r14',native: 'release',
+    data: { official: false,released: '20049999',tables: { releases_titles: [{ lang: 'ja',mtl: false }] } } };
+  const principalId = randomUUID(), { evidence,binding,conversions } = await retain(principalId,original,true);
+  const target = sourceIri(randomUUID()), revision = sourceIri(randomUUID()), component = sourceIri(randomUUID());
+  const property = (await retainedFieldPlan(evidence.request)).fields
+    .find(field => field.role === 'release-status')!.native!.property!;
+  const command = { component: sourceIri(randomUUID()),revision: sourceIri(randomUUID()),
+    receipt: `urn:rezics:receipt:${'7'.repeat(64)}`,expectedHead: sourceIri(randomUUID()) };
+  const input: RetainedSupportRequest = { profile: 'source-field-support-attachment-v2',target,
+    slot: `component-property-v1#${property.predicate}`,occurrence: component,context: 'global',
+    sourceRecord: binding.sourceRecord,conversion: binding.conversion,grain: 'release',sourceField: 'official',
+    sourceOccurrence: null,expectedHead: revision,actingSubject: sourceIri(randomUUID()),
+    evidence: { binding: binding.binding,recordDigest: binding.recordDigest,mappingRevision: binding.mappingRevision,
+      field: { pointer: '/data/official',presence: 'value',valueDigest: canonicalDigest(false) } },
+    native: { kind: 'component-property',owner: 'release',target,component,revision,
+      receipt: `urn:rezics:receipt:${'8'.repeat(64)}`,expectedHead: revision,property,
+      coverage: { realization: command,completeness: 'complete' } } };
+  const verified = await verifyRetainedField(input,evidence);
+  expect(verified.value).toBe(false);
+  expect(verified.candidate.native?.owner).toBe('release');
+  expect(verified.correspondence.payloadPointers).toEqual(['/record/data/official']);
+  expect(verified.candidate.native?.property?.value).toEqual({ kind: 'string',lexical: 'unofficial' });
+  const wrong = structuredClone(input); wrong.occurrence = sourceIri(randomUUID());
+  await expect(verifyRetainedField(wrong,evidence)).rejects.toMatchObject({ status: 409,basis: 'native-target' });
+  const value = structuredClone(input);
+  if (value.native.kind === 'component-property') value.native.property.value = { kind: 'string',lexical: 'official' };
+  await expect(verifyRetainedField(value,evidence)).rejects.toMatchObject({ status: 409,basis: 'native-value' });
+  expect(binding.mappingRevision).toBe('vndb-release-retained-map-v2');
+  const legacyRequest = { ...evidence.request,mappingRevision: 'vndb-release-retained-map-v1' };
+  const legacy = await conversions.convert(principalId,legacyRequest.retained.intakes[0]!.observation.slice(-36),legacyRequest);
+  expect(legacy.conversion.fieldInventory.some(field => ['release-status','release-title','release-language'].includes(field.role)))
+    .toBe(false);
+  expect(await conversions.read(principalId,legacy.conversion.conversion)).toEqual(legacy.conversion);
+  expect(await conversions.convert(principalId,legacyRequest.retained.intakes[0]!.observation.slice(-36),legacyRequest))
+    .toEqual({ ...legacy,replayed: true });
+});
+
 test('Source settles separate record supports with delegated native acknowledgements and immutable certificates', async () => {
   // This is the SQL/Source boundary test. The delegated Statement verifier and
   // graph admission are controlled ports; no real native/public outcome is proved.
@@ -249,6 +291,7 @@ test('Source settles separate record supports with delegated native acknowledgem
       if (!permitted) throw new SourceFieldProblem(403,'rights_denied','Reuse denied');
     }, statement: async (input,requireCurrent) => {
       expect(input.native).toEqual(native);
+      expect(requireCurrent).toBe(true);
       if (requireCurrent && !current) return supportChanged('native-head');
       return ack;
     },publicEvidence: async () => null,
@@ -297,4 +340,135 @@ test('Source settles separate record supports with delegated native acknowledgem
   expect(withdrawn?.support.withdrawal?.nativeEffect).toBe('none');
   expect((await store.read(principalId,attachedOther.support))!.state).toBe('recorded');
   expect((await store.read(principalId,attached.support))!.attachment).toEqual(a.attachment);
+});
+
+test('Source evidence windows preserve the evidence owner projection, hidden positions and settlement/withdrawal fences', async () => {
+  // Real Source SQL, immutable certificates and Work dependency fencing, with
+  // controlled native/evidence transports. This is not public/native-stack proof.
+  const principalId = randomUUID(), principal = { issuer: 'https://account.test',subject: 'source-window-owner' };
+  const first = await retain(principalId), target = sourceIri(randomUUID()), revision = sourceIri(randomUUID());
+  const actor = sourceIri(randomUUID()), statement = sourceIri(randomUUID());
+  const native: RetainedSupportRequest['native'] = { kind: 'statement',owner: 'statement',target,revision,statement,
+    receipt: `urn:rezics:receipt:${canonicalDigest({ command: randomUUID() })}`,
+    relationDefinition: sourceIri(randomUUID()),predicate: 'https://schema.org/name',
+    value: { kind: 'literal',lexical: 'Johann Sebastian Bach',datatype: 'http://www.w3.org/2001/XMLSchema#string',language: null },
+    context: 'global',qualifiers: { applicability: [],interpretationDefinitions: [] },acceptance: null };
+  const ack: VerifiedNativeAcknowledgement = { receipt: native.receipt,admissionId: randomUUID(),dataEpoch: randomUUID(),
+    sequence: '31',scope: `statement:speak:${actor}`,action: 'statement.record',component: statement,revision };
+  const env = { lineage: { dataEpoch: ack.dataEpoch,routingEpoch: randomUUID() },fuseki: {
+    query: async () => ({ boolean: true }),
+  } } as unknown as WorkActivationEnvironment;
+  const access: Pick<AccessAdmissionRegistry,'withOwnerAuthority'> = { withOwnerAuthority: async (_request,operation) => {
+    const client = await pool.connect(); try { return await operation(client); } finally { client.release(); }
+  } };
+  const hidden = new Set<string>(), projections = new Map<string,RetainedPublicEvidence>();
+  let reuseChecks = 0, nativeChecks = 0;
+  let deniedRecord: string | null = null;
+  const evidenceOwners = retainedFieldEvidenceOwners({
+    authorizeRetainedFieldReuse: async (who,actingSubject,sourceRecord,observations) => {
+      reuseChecks++; expect(who).toEqual(principal); expect(actingSubject).toBe(actor);
+      expect(sourceRecord).toMatch(/^https:\/\/rezics.com\/id\//); expect(observations.length).toBeGreaterThan(0);
+      if (sourceRecord === deniedRecord) throw new SourceFieldProblem(403,'rights_denied','Reuse denied');
+    },
+    projectPublicRetainedField: async (who,actingSubject,evidence,pointer,language) => {
+      expect(who).toEqual(principal); expect(actingSubject).toBe(actor);
+      expect(pointer).toBe('/record/data/name'); expect(language).toEqual({ state: 'omitted' });
+      const binding = evidence.conversion.retainedRecord;
+      if (hidden.has(binding.sourceRecord)) return null;
+      const projection: RetainedPublicEvidence = { id: binding.sourceRecord,sourceWork: null,
+        representationSha256: binding.payload.byteDigest,locator: { pointer },
+        attribution: { sourceName: binding.identity.provider,sourceUrl: evidence.record.sourceUrl,licence: null },
+        language,quote: null,quoteWithheld: true,rightsBasis: { basisKind: 'unassessed',basisRef: null,
+          licenseExpression: null,notice: null,obligations: [],useScope: 'quotation',result: 'undetermined',memberOrdinals: [1] } };
+      projections.set(binding.sourceRecord,projection); return projection;
+    },
+  });
+  const store = new SourceRetainedFieldSupportStore(pool,env,access,first.conversions,{
+    ...evidenceOwners,statement: async () => { nativeChecks++; return ack; },
+  });
+  const selection = { target,slot: 'statement-v1#value',occurrence: null,context: 'global',component: statement,revision };
+  const entries: Array<{ input: RetainedSupportRequest; key: string; support: string }> = [];
+  for (let index = 0; index < 18; index++) {
+    const original = record('musicbrainz'); original.externalId = randomUUID();
+    original.key = `musicbrainz:artist:${original.externalId}`; original.data.id = original.externalId;
+    original.sourceUrl = `https://musicbrainz.org/artist/${original.externalId}`;
+    const { binding } = index === 0 ? first : await retain(principalId,original,index % 2 === 0);
+    const input: RetainedSupportRequest = { profile: 'source-field-support-attachment-v2',target,
+      slot: 'statement-v1#value',occurrence: null,context: 'global',sourceRecord: binding.sourceRecord,
+      conversion: binding.conversion,grain: 'artist',sourceField: 'name',sourceOccurrence: null,
+      expectedHead: revision,actingSubject: actor,native,evidence: { binding: binding.binding,
+        recordDigest: binding.recordDigest,mappingRevision: binding.mappingRevision,
+        field: { pointer: '/data/name',presence: 'value',valueDigest: canonicalDigest('Johann Sebastian Bach') } } };
+    const key = randomUUID(), attached = await store.attach(principal,principalId,key,input);
+    entries.push({ input,key,support: attached.support });
+  }
+  expect(reuseChecks).toBe(18);
+  expect(await store.evidenceGeneration(selection)).toBe('18');
+  expect(await store.evidenceGeneration({ ...selection,target: sourceIri(randomUUID()) })).toBe('0');
+  expect(await store.evidenceGeneration({ ...selection,occurrence: sourceIri(randomUUID()) })).toBe('0');
+  expect(await store.evidenceGeneration({ ...selection,slot: 'statement-v1#other' })).toBe('0');
+  const beforeRefusal = await store.evidenceGeneration(selection), beforeNative = nativeChecks;
+  const mismatched = structuredClone(entries[0]!.input);
+  mismatched.sourceRecord = entries[1]!.input.sourceRecord; deniedRecord = mismatched.sourceRecord;
+  await expect(store.attach(principal,principalId,randomUUID(),mismatched))
+    .rejects.toMatchObject({ status: 403,code: 'rights_denied' });
+  expect(nativeChecks).toBe(beforeNative); expect(await store.evidenceGeneration(selection)).toBe(beforeRefusal);
+  deniedRecord = null;
+  await expect(store.attach(principal,principalId,randomUUID(),mismatched))
+    .rejects.toMatchObject({ status: 409,basis: 'record' });
+  expect(nativeChecks).toBe(beforeNative); expect(await store.evidenceGeneration(selection)).toBe(beforeRefusal);
+  const session = () => {
+    const read = new WorkReadSession({ environment: env } as MainWorkDependencies,
+      new Request('https://rezics.test/v1/query'),{}, { dataEpoch: ack.dataEpoch,sequence: ack.sequence });
+    read.principal = principal; return read;
+  };
+  await expect(store.readEvidenceWindow(session(),selection)).rejects.toMatchObject({ status: 503 });
+  const active = session();
+  const page = await withWorkReadSession(active,() => store.readEvidenceWindow(active,selection));
+  expect(page.items).toHaveLength(16); expect(page.more).toBe(true); expect(page.next).not.toBeNull();
+  const nextSession = session();
+  const next = await withWorkReadSession(nextSession,() => store.readEvidenceWindow(nextSession,selection,page.next!));
+  expect(next.items).toHaveLength(2); expect(next.more).toBe(false); expect(next.next).toBeNull();
+  const all = [...page.items,...next.items];
+  expect(new Set(all.map(item => item.id)).size).toBe(18);
+  for (const item of all) {
+    expect(item).toEqual(projections.get(item.id)!); expect(item.sourceWork).toBeNull();
+    expect(item.quoteWithheld).toBe(true); expect(item.quote).toBeNull();
+    for (const privateField of ['binding','intakes','attachment','native','requestDigest']) expect(item).not.toHaveProperty(privateField);
+  }
+  await active.fenceDependencies();
+  const before = await store.evidenceGeneration(selection);
+  await store.attach(principal,principalId,entries[0]!.key,entries[0]!.input);
+  expect(await store.evidenceGeneration(selection)).toBe(before);
+  for (const item of page.items) hidden.add(item.id);
+  await expect(active.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
+  const hiddenSession = session();
+  const hiddenPage = await withWorkReadSession(hiddenSession,() => store.readEvidenceWindow(hiddenSession,selection));
+  expect(hiddenPage.items).toEqual([]); expect(hiddenPage.more).toBe(true); expect(hiddenPage.next).toEqual(page.next);
+  const tailSession = session();
+  expect((await withWorkReadSession(tailSession,() => store.readEvidenceWindow(tailSession,selection,hiddenPage.next!)))
+    .items.map(item => item.id)).toEqual(next.items.map(item => item.id));
+  const saved = (await store.read(principalId,entries[0]!.support,undefined,principal))!;
+  const repeated = await retain(principalId,first.evidence.record,true);
+  const repeatedInput = structuredClone(entries[0]!.input);
+  repeatedInput.sourceRecord = repeated.binding.sourceRecord;
+  repeatedInput.conversion = repeated.binding.conversion;
+  repeatedInput.evidence = { ...repeatedInput.evidence,binding: repeated.binding.binding,
+    recordDigest: repeated.binding.recordDigest,mappingRevision: repeated.binding.mappingRevision };
+  const repeatedSupport = await store.attach(principal,principalId,randomUUID(),repeatedInput);
+  expect(repeatedSupport.support).toBe(entries[0]!.support);
+  expect((await pool.query('SELECT count(*)::integer AS n FROM source.field_support WHERE principal_id=$1',[principalId]))
+    .rows[0].n).toBe(18);
+  const afterRepeat = await store.evidenceGeneration(selection);
+  expect(afterRepeat).not.toBe(before);
+  const repeatedSaved = (await store.read(principalId,repeatedSupport.support,undefined,principal))!;
+  expect(repeatedSaved.attachment.nativeReceipt).toBe(saved.attachment.nativeReceipt);
+  expect(repeatedSaved.attachment.receipt).not.toBe(saved.attachment.receipt);
+  await new SourceFieldWithdrawalStore(pool,env,store).withdraw(principalId,randomUUID(),{
+    support: entries[0]!.support,expectedSupport: repeatedSaved.supportIdentity,reason: 'Withdraw a retained record' });
+  expect(await store.evidenceGeneration(selection)).not.toBe(afterRepeat);
+  const staleSession = session();
+  await expect(withWorkReadSession(staleSession,() => store.readEvidenceWindow(staleSession,selection,page.next!)))
+    .rejects.toBeInstanceOf(WorkReadMoved);
+  await expect(hiddenSession.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
 });

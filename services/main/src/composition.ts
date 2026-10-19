@@ -150,7 +150,8 @@ import { SourceAuthorCreditStore } from './modules/source/author-credit.ts';
 import { SourceFieldWithdrawalStore } from './modules/source/withdrawal.ts';
 import { SourceFieldAttachmentStore } from './modules/source/support-attach.ts';
 import { SourceFieldApplicationStore } from './modules/source/field-application.ts';
-import { SourceRetainedFieldSupportStore, type RetainedFieldOwners } from './modules/source/field-support-retained.ts';
+import { SourceRetainedFieldSupportStore, retainedFieldEvidenceOwners, type RetainedFieldOwners } from './modules/source/field-support-retained.ts';
+import { SourceRetainedRecordEvidenceOwner } from './modules/source/retained-evidence.ts';
 import { SourceNativeChildStore } from './modules/source/child-native-support.ts';
 import { ProviderIdentityStore } from './modules/source/provider-identity.ts';
 import { SourceScoreStore } from './modules/source/score.ts';
@@ -435,8 +436,11 @@ export async function composeMain(input: ComposeMainInput) {
   const sourceAdoptions = new SourceNativeWorkAdoptionStore(contentPool, sourceProposals,
     environment, account, access);
   const sourceCorrespondences = new SourceChildCorrespondenceStore(contentPool, sourceConversions);
+  const retainedEvidence = new SourceRetainedRecordEvidenceOwner(contentPool,sourceIntake,access,
+    rightsStore,sourceConversions.retained,environment);
   const sourceRetainedFieldSupports = new SourceRetainedFieldSupportStore(contentPool,environment,
-    access,sourceConversions.retained,input.overrides?.sourceRetainedOwners);
+    access,sourceConversions.retained,{ ...retainedFieldEvidenceOwners(retainedEvidence),
+      ...input.overrides?.sourceRetainedOwners });
   const sourceFieldWithdrawals = new SourceFieldWithdrawalStore(contentPool, environment,sourceRetainedFieldSupports);
   const correctionWorker = new VerificationCorrectionWorker(new VerificationCorrectionPublisher(
     new VerificationStore(contentPool), new NotificationStore(pool)));

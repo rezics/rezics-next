@@ -73,7 +73,10 @@ export async function verifyRetainedField(input: RetainedSupportRequest,
   }
   const digest = canonicalDigest(selected.value);
   if (field.valueDigest !== digest) return supportChanged('value-digest');
-  if (input.sourceOccurrence !== null || input.occurrence !== null) return coordinateInvalid();
+  const component = input.native.kind === 'component-property'
+    && (input.native.owner === 'release' || input.native.owner === 'realization') ? input.native.component : null;
+  if (input.sourceOccurrence !== null) return coordinateInvalid();
+  if (input.occurrence !== component) return supportChanged('native-target');
   const plan = await retainedFieldPlan(evidence.request);
   const candidates = plan.fields.filter(candidate => candidate.evidence.some(item =>
     item.path === field.pointer && item.ordinal === field.ordinal
@@ -91,10 +94,14 @@ export async function verifyRetainedField(input: RetainedSupportRequest,
     return supportChanged('evidence-binding');
   }
   const predicate = input.native.kind === 'statement' ? input.native.predicate : input.native.property.predicate;
-  const candidate = candidates.find(item => item.native?.predicate === predicate);
+  const candidate = candidates.find(item => item.native?.predicate === predicate && item.native.owner === input.native.owner)
+    ?? candidates.find(item => item.native?.predicate === predicate);
   if (!candidate) return candidates.some(item => item.native) ? supportChanged('evidence-binding') : mappingUnverified();
   if (!candidate.native || candidate.disposition !== 'candidate') return mappingUnverified();
   if (candidate.native.owner === 'work-metadata') return mappingUnverified();
+  if ((candidate.native.owner === 'release' || candidate.native.owner === 'realization')
+    && candidate.native.owner !== input.native.owner) return mappingUnverified();
+  if (component && (evidence.record.native !== 'release' || evidence.record.kind !== 'release')) return mappingUnverified();
   if (candidate.native.owner === 'work-editorial') {
     if (input.native.kind !== 'component-property' || input.native.owner !== 'work-editorial') return mappingUnverified();
     if (!same(input.native.language,suppliedLanguage(candidate.evidence[0]!))) return supportChanged('native-value');

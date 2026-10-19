@@ -8,6 +8,7 @@ import { readNativeFieldReceipt, synopsisSlot } from './field-control-native.ts'
 import { hash, GRAPHS, RV, iri as graphIri } from '../work/activate.ts';
 import type { SourceRetainedFieldSupportStore } from './field-support-retained.ts';
 import { SYNOPSIS_TEXT_LIMIT } from './field-control-language.ts';
+import type { VerifiedPrincipal } from '../access/admission.ts';
 
 export class FieldWithdrawalInvalid extends Error {}
 export class FieldWithdrawalConflict extends Error {}
@@ -113,10 +114,10 @@ export class SourceFieldWithdrawalStore {
     return rows[0] ?? null;
   }
 
-  async read(principalId: string, support: string): Promise<FieldSupportResult | null> {
+  async read(principalId: string, support: string, principal?: VerifiedPrincipal): Promise<FieldSupportResult | null> {
     const supportId = id(support);
     if (!UUID.test(principalId) || !supportId) throw new FieldWithdrawalInvalid('invalid support identity');
-    const retained = await this.retained?.read(principalId,supportId);
+    const retained = await this.retained?.read(principalId,supportId,undefined,principal);
     if (retained) return retained;
     const row = (await this.pool.query<SupportRow>(readSql, [supportId, principalId])).rows[0];
     if (!row) return null;

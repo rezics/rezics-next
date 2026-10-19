@@ -19,6 +19,7 @@ import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { pendingOperation, problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
+import type { VerifiedPrincipal } from '../modules/access/admission.ts';
 import { commandError, problem } from './problems.ts';
 import { groupAgent, groupUuid, sourceRightsEvidence, titleControlBasis } from './shared.ts';
 import { requireSourceImportAuthority } from './source-runs.ts';
@@ -235,9 +236,9 @@ const anySupportResult = t.Union([fieldSupport, sourceSupportEntryResult,
   t.Object({ kind: t.Literal('author-credit'), support: authorCreditSupportResult }),
   t.Object({ kind: t.Literal('native-child'), support: nativeChildSupport })]);
 
-async function readAnySupport(work: MainWorkDependencies, principalId: string, support: string) {
+async function readAnySupport(work: MainWorkDependencies, principalId: string, support: string, principal: VerifiedPrincipal) {
   if (!work.sourceFieldWithdrawals) return null;
-  const field = await work.sourceFieldWithdrawals.read(principalId, support);
+  const field = await work.sourceFieldWithdrawals.read(principalId, support, principal);
   if (field) return field;
   const native = await work.sourceFieldWithdrawals.locateNative(principalId, support);
   if (!native) return null;
@@ -326,7 +327,8 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
               expectedWorkHead: body.expectedWorkHead, basis: body.basis, value: body.value,
               ...(body.language === undefined ? {} : { language: body.language }),
               origin: 'source' as const, source: body.source, actingSubject: body.actingSubject };
-            await work.sourceRetainedFieldSupports.admitSynopsis(principal,principalId,intent);
+            try { await work.sourceRetainedFieldSupports.admitSynopsis(principal,principalId,intent); }
+            catch (error) { return fieldError(error); }
             const receipt = await changeNativeFieldControl(work.environment,work.account,
               { register: work.access.register.bind(work.access), claim: work.access.claim.bind(work.access),
                 recordGraphOutcome: work.access.recordGraphOutcome.bind(work.access),
@@ -402,7 +404,7 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
           if (!work.sourceRetainedFieldSupports) return problem(503,'source_support_unavailable','Source field owner is unavailable');
           await requireSourceImportAuthority(work,principal);
           const attached = await work.sourceRetainedFieldSupports.attach(principal,principalId,key,body);
-          const support = await work.sourceRetainedFieldSupports.read(principalId,attached.support,attached.step);
+          const support = await work.sourceRetainedFieldSupports.read(principalId,attached.support,attached.step,principal);
           if (!support) throw new FieldWithdrawalUnavailable('field support certificate is unavailable');
           return Response.json({ support,replayed: attached.replayed },
             { status: attached.replayed ? 200 : 201,headers: { 'cache-control': 'no-store' } });
@@ -462,7 +464,7 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
         const principal = await work.account.verify(request, ['source:read']);
         const principalId = await work.access.activePrincipalId(principal);
         if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
-        const support = await readAnySupport(work, principalId, params.support);
+        const support = await readAnySupport(work, principalId, params.support, principal);
         if (!support) return problem(404, 'source_support_unavailable', 'Source support is unavailable');
         return Response.json(support, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return fieldError(error); }
@@ -476,7 +478,7 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
         const principal = await work.account.verify(request, ['source:read']);
         const principalId = await work.access.activePrincipalId(principal);
         if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
-        const support = await work.sourceFieldWithdrawals.read(principalId, params.support);
+        const support = await work.sourceFieldWithdrawals.read(principalId, params.support, principal);
         if (!support) return problem(404, 'source_support_unavailable', 'Field support is unavailable');
         return Response.json(support, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return fieldError(error); }
@@ -497,7 +499,7 @@ export function sourceSupportRoutes(fuseki: FusekiClient, work: MainWorkDependen
         const principal = await work.account.verify(request, ['source:adopt']);
         const principalId = await work.access.activePrincipalId(principal);
         if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
-        const current = await readAnySupport(work, principalId, body.support);
+        const current = await readAnySupport(work, principalId, body.support, principal);
         if (!current) return problem(404, 'source_support_unavailable', 'Source support is unavailable');
         if ('kind' in current && body.profile !== 'source-support-withdrawal-v1') {
           return problem(400, 'invalid_source_withdrawal', 'Native support requires the general withdrawal profile');

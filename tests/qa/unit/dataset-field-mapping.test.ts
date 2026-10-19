@@ -57,6 +57,34 @@ const valueAt = (plan: DatasetFieldPlan, path: string) =>
   at(plan, path)[0]?.native?.property?.value;
 
 describe('source field projection over retained shapes', () => {
+  test('genuine editions consume release-owned scalar correspondence without reducing precision or title language', () => {
+    const input = record({ key: 'vndb:release:r14',provider: 'vndb',kind: 'release',externalId: 'r14',
+      native: 'release',title: 'Exact edition',language: 'EN-us',sourceUrl: 'https://vndb.org/r14',
+      data: { released: '20049999',official: false,tables: { releases_platforms: [{ platform: 'win' }],
+        releases_titles: [{ lang: 'ja',mtl: false }],releases_vn: [{ vid: 'v11',rtype: 'complete' }] } } });
+    const plan = projectDatasetFields(input,source(input));
+    const owned = (path: string,owner: 'release' | 'realization') => at(plan,path).find(field => field.native?.owner === owner);
+    expect(owned('/title','release')).toMatchObject({ disposition: 'candidate',
+      evidence: [{ path: '/title',language: 'EN-us',valueDigest: sha256(canonical('Exact edition')) }],
+      native: { property: { value: { kind: 'language-string',lexical: 'Exact edition',language: 'en-US' } } } });
+    expect(owned('/data/released','release')?.native?.property?.value).toEqual({
+      kind: 'temporal',lexical: '2004',precision: 'year',calendar: 'gregorian' });
+    expect(owned('/data/official','release')).toMatchObject({
+      evidence: [{ valueDigest: sha256(canonical(false)) }],native: { property: {
+        predicate: 'https://rezics.com/vocab/releaseStatus',value: { kind: 'string',lexical: 'unofficial' } } } });
+    expect(owned('/data/tables/releases_platforms/0/platform','release')?.native?.property?.value)
+      .toEqual({ kind: 'string',lexical: 'win' });
+    expect(owned('/data/tables/releases_titles/0/lang','realization')?.native?.property?.value)
+      .toEqual({ kind: 'string',lexical: 'ja' });
+    expect(owned('/data/tables/releases_titles/0/mtl','realization')).toBeUndefined();
+    const exactMonth = structuredClone(input); exactMonth.data.released = '20040399';
+    expect(at(projectDatasetFields(exactMonth,source(exactMonth)),'/data/released')
+      .some(field => field.native?.owner === 'release')).toBe(false);
+    const descriptive = { ...input,native: 'work' as const,semanticTypes: ['https://schema.org/PublicationEvent'] };
+    expect(projectDatasetFields(descriptive,source(descriptive)).fields
+      .some(field => ['release','realization'].includes(field.native?.owner ?? ''))).toBe(false);
+  });
+
   test('readable Work synopsis uses its editorial owner and names use metadata', () => {
     const plan = project({
       kind: 'subject',

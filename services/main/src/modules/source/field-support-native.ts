@@ -4,11 +4,14 @@ import { readSemanticTerminal, familyReceiptIri } from '../semantic/command.ts';
 import { readCurrentComponent } from '../semantic/change.ts';
 import { readNativeFieldControl, readNativeFieldReceipt, synopsisSlot } from './field-control-native.ts';
 import { synopsisPropertyValue } from './field-control-language.ts';
+import type { VerifiedPrincipal } from '../access/admission.ts';
+import { verifyReleaseSourceNative } from '../release/source-verifier.ts';
+import { verifyRealizationSourceNative } from '../realization/source-verifier.ts';
 import { mappingUnverified, supportChanged, supportUnavailable, SourceFieldProblem,
   type RetainedSupportRequest, type VerifiedNativeAcknowledgement } from './field-support-contract.ts';
 
 export type NativeSupportVerifier = (input: RetainedSupportRequest,
-  requireCurrent: boolean) => Promise<VerifiedNativeAcknowledgement>;
+  requireCurrent: boolean, context?: { principal: VerifiedPrincipal }) => Promise<VerifiedNativeAcknowledgement>;
 export interface SourceNativeVerifiers { statement?: NativeSupportVerifier }
 const equal = (left: unknown, right: unknown) => canonicalJson(left) === canonicalJson(right);
 const RECEIPT = /^urn:rezics:receipt:[0-9a-f]{64}$/;
@@ -17,18 +20,38 @@ const RECEIPT = /^urn:rezics:receipt:[0-9a-f]{64}$/;
  * a receipt. Current-owner verification precedes the Source commit; it does not
  * provide an atomic transaction across the native graph and Source database. */
 export async function verifySourceNative(env: WorkActivationEnvironment, input: RetainedSupportRequest,
-  owners: SourceNativeVerifiers = {}, requireCurrent = true): Promise<VerifiedNativeAcknowledgement> {
-  try { return await resolveSourceNative(env,input,owners,requireCurrent); }
+  owners: SourceNativeVerifiers = {}, requireCurrent = true,
+  context?: { principal: VerifiedPrincipal }): Promise<VerifiedNativeAcknowledgement> {
+  try { return await resolveSourceNative(env,input,owners,requireCurrent,context); }
   catch (error) { if (error instanceof SourceFieldProblem) throw error; return supportUnavailable(); }
 }
 async function resolveSourceNative(env: WorkActivationEnvironment, input: RetainedSupportRequest,
-  owners: SourceNativeVerifiers, requireCurrent: boolean): Promise<VerifiedNativeAcknowledgement> {
+  owners: SourceNativeVerifiers, requireCurrent: boolean,
+  context?: { principal: VerifiedPrincipal }): Promise<VerifiedNativeAcknowledgement> {
   const native = input.native;
   if (native.target !== input.target) return supportChanged('native-target');
   if (native.revision !== input.expectedHead || !RECEIPT.test(native.receipt)) return supportChanged('native-head');
   if (native.kind === 'statement') {
     if (!owners.statement) return supportUnavailable();
-    return owners.statement(input, requireCurrent);
+    return owners.statement(input, requireCurrent, context);
+  }
+  if (native.owner === 'release' || native.owner === 'realization') {
+    if (!context) return supportUnavailable();
+    if (input.context !== 'global' || input.occurrence !== native.component
+      || input.slot !== `component-property-v1#${native.property.predicate}`) return supportChanged('native-target');
+    const selected = { value: native.property.value,
+      ...(Object.hasOwn(input.evidence.field,'language') ? { language: input.evidence.field.language } : {}) };
+    const result = native.owner === 'release'
+      ? await verifyReleaseSourceNative(env,{ principal: context.principal,actingSubject: input.actingSubject,native,selected })
+      : await verifyRealizationSourceNative(env,{ principal: context.principal,actingSubject: input.actingSubject,native,selected });
+    if (result.status === 'target-mismatch') return supportChanged('native-target');
+    if (result.status === 'value-mismatch') return supportChanged('native-value');
+    if (result.status === 'head-mismatch') return supportChanged('native-head');
+    if (result.status !== 'verified') return supportUnavailable();
+    const receipt = result.receipt;
+    return { receipt: receipt.receipt,admissionId: receipt.admissionId,dataEpoch: receipt.dataEpoch,
+      sequence: receipt.sequence,scope: receipt.scope,action: 'work.edit',component: native.component,
+      revision: result.revision,release: { currentHeads: result.currentHeads,correspondence: result.correspondence } };
   }
   if (native.owner === 'semantic') {
     if (native.component !== native.target) return supportChanged('native-target');

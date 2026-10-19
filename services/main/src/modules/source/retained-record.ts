@@ -37,7 +37,8 @@ export async function retainedFieldPlan(request: RetainedConversionRequest): Pro
   return projectDatasetFields(record, { ...identity, provider: record.provider, snapshot: snapshot.id,
     snapshotDigest: snapshot.digest, recordDigest,
     observations: intakes.map(part => part.observation),
-    intakes: intakes.map(({ index: _index, ...part }) => part) });
+    intakes: intakes.map(({ index: _index, ...part }) => part) },
+    { releaseCorrespondence: !request.mappingRevision.endsWith('-retained-map-v1') });
 }
 export async function retainedInventory(request: RetainedConversionRequest): Promise<RetainedInventory[]> {
   return (await retainedFieldPlan(request)).fields.flatMap(field => field.evidence.map(evidence => ({

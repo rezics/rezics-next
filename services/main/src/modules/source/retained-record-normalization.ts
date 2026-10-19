@@ -22,7 +22,7 @@ export const RETAINED_NAMESPACES: Readonly<Record<string, readonly string[]>> = 
 };
 export function retainedMappingRevision(provider: string, namespace: string): string {
   if (!RETAINED_NAMESPACES[provider]?.includes(namespace)) return mappingUnverified();
-  return `${provider}-${namespace}-retained-map-v1`;
+  return `${provider}-${namespace}-retained-map-v${namespace === 'release' ? 2 : 1}`;
 }
 
 function json(bytes: Buffer): unknown {
@@ -113,7 +113,8 @@ export function verifyRetainedRecord(request: RetainedConversionRequest,
   observations: readonly StagedSourceObservation[]) {
   const input = request.retained, identity = input.identity;
   if (request.profile !== 'source-retained-record-conversion-v1'
-    || request.mappingRevision !== retainedMappingRevision(identity.provider, identity.namespace)) return mappingUnverified();
+    || ![retainedMappingRevision(identity.provider, identity.namespace),
+      `${identity.provider}-${identity.namespace}-retained-map-v1`].includes(request.mappingRevision)) return mappingUnverified();
   if (!rowObject(input.record) || !rowObject(input.record.data)
     || identity.key !== `${identity.provider}:${identity.namespace}:${identity.externalId}`
     || input.record.key !== identity.key || input.record.provider !== identity.provider
