@@ -9,7 +9,8 @@ export function BrowseSearchRecovery({ read, state, locale }: {
   read: BrowseSuggestions; state: BrowseState; locale: UiLocale;
 }) {
   const t = selectionMessages[locale];
-  if (!read.ok) return <p role="status" className="text-muted-foreground text-sm">{t.suggestionsUnavailable}</p>;
+  if (!read.ok) return <p role="status" className="text-muted-foreground text-sm">{read.failure === 'unsupported'
+    || read.failure === 'invalid' ? t.suggestionsUnsupported : t.suggestionsUnavailable}</p>;
   if (!read.suggestions.length) return <p className="text-muted-foreground text-sm">{t.syntax}</p>;
   return <aside aria-label={t.suggestions} className="grid gap-2 rounded-xl bg-muted/50 p-4">
     <h3 className="font-medium">{t.suggestions}</h3>

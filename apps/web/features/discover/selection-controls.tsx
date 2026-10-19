@@ -23,6 +23,7 @@ export function BrowseSelectionControls({ state, locale }: { state: BrowseState;
   const router = useRouter();
   const t = materializeData(searchMessages[locale], { locale });
   const copy = selectionMessages[locale], browse = browseMessages[locale];
+  const exact = state.q.startsWith('"') && state.q.endsWith('"') && state.q.length > 2;
   const go = (patch: Partial<BrowseState>) => router.push(localizedPath(browseHref(changeBrowse(state, patch)), locale),
     { scroll: false });
   const name = (tag: string) => {
@@ -43,7 +44,7 @@ export function BrowseSelectionControls({ state, locale }: { state: BrowseState;
       patch: { includeTypes: state.includeTypes?.filter(value => value !== key) } })),
     ...(state.excludeTypes ?? []).map(key => ({ label: t.excludeType({ type: typeName(key) }),
       patch: { excludeTypes: state.excludeTypes?.filter(value => value !== key) } })),
-    ...(state.q.startsWith('"') && state.q.endsWith('"') && state.q.length > 2
+    ...(exact
       ? [{ label: copy.phrase, patch: { q: state.q.slice(1, -1) } }] : []),
   ];
   return <div className="grid min-w-0 gap-3">
@@ -88,8 +89,8 @@ export function BrowseSelectionControls({ state, locale }: { state: BrowseState;
           <p className="text-muted-foreground text-xs">{t.typeHelp}</p>
         </div>
         {state.q ? <div className="grid gap-2 sm:col-span-2">
-          <Button variant="outline" size="sm" className="justify-self-start"
-            onClick={() => go({ q: state.q.startsWith('"') && state.q.endsWith('"') ? state.q.slice(1, -1) : `"${state.q}"` })}>
+          <Button variant="outline" size="sm" className="justify-self-start" aria-pressed={exact}
+            onClick={() => go({ q: exact ? state.q.slice(1, -1) : `"${state.q}"` })}>
             {copy.phrase}
           </Button>
           <p className="text-muted-foreground text-xs">{copy.syntax}</p>

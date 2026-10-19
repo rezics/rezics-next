@@ -51,7 +51,7 @@ function Failure({
 }) {
   const t = browseMessages[locale];
   if (read.pending) return <p role="status" aria-busy="true">{messages[locale].preparing}</p>;
-  const copy = materializeData(messages[locale], { locale });
+  const copy = materializeData(searchMessages[locale], { locale });
   if (read.failure === 'unsupported' || read.failure === 'invalid') return <div role="alert"
     className="grid gap-2 rounded-2xl border border-border p-5">
     <p>{read.failure === 'unsupported' ? copy.unsupportedTitle : copy.invalidTitle}</p>

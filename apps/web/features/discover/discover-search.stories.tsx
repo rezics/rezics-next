@@ -1,12 +1,16 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { direction } from '@rezics/main/language';
 import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { StoryRouteContext } from '../../.storybook/next-navigation.ts';
+import { localizedPath } from '../../i18n/locale.ts';
 import { Providers } from '../shell/providers.tsx';
 import { SearchField } from '../shell/search-field.tsx';
+import type { TypeaheadItem } from '../search/suggest.ts';
 import { browseConcepts, browseResources, fixturePage, fixtureTopicLoader } from './browse-fixtures.ts';
 import { browseHref, emptyBrowse, parseBrowseState, type BrowseState } from './browse-state.ts';
 import { DiscoverView, type DiscoverPageProps } from './discover-view.tsx';
+import { workHref } from './scope.ts';
 
 const state: BrowseState = { ...emptyBrowse, q: 'night library', tab: 'works', language: 'ja',
   includeTypes: ['https://schema.org/Book'], conditions: { include: [browseConcepts[0]!.id.slice(-36)],
@@ -49,7 +53,8 @@ export const SimplifiedChinesePhone: Story = { args: { locale: 'zh-Hans' },
   },
 };
 
-export const DirectLastDestination: Story = { args: { state: { ...emptyBrowse, tab: 'topics' } },
+export const DirectLastDestination: Story = { args: { state: { ...emptyBrowse, tab: 'topics' },
+  results: { ok: true, data: fixturePage(browseResources.filter(item => item.kind === 'concept'), 0, 6) } },
   globals: { viewport: { value: 'phone' } },
   async play({ canvasElement }) {
     const nav = within(canvasElement).getByRole('navigation', { name: 'Type' });
@@ -90,14 +95,48 @@ export const UnsupportedKeepsTheTask: Story = { args: { results: { ok: false, mo
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('heading', { name: 'Found in titles and names' })).toBeVisible();
-    await expect(canvas.getByRole('alert')).toHaveTextContent('These Conditions cannot be combined here');
+    await expect(canvas.getByRole('alert')).toHaveTextContent('These Conditions cannot be combined in Search');
+    await expect(canvas.getByRole('alert')).toHaveTextContent('Remove one Condition or change how its values match.');
     await expect(canvas.getByRole('link', { name: 'Remove filter: Only Japanese text' })).toBeVisible();
     await expect(canvas.queryByText('No matches.')).toBeNull();
   },
 };
 
+const alternative: TypeaheadItem = { work: browseResources[0]!.id, mainVersion: browseResources[0]!.id,
+  title: { value: 'Pride and Prejudice', language: 'en', direction: direction('en', 'Pride and Prejudice'), basis: 'requested' },
+  cover: browseResources[0]!.icon, types: ['https://schema.org/Book'], authors: [],
+  matchedField: 'title', matchedText: 'Pride and Prejudice', matchedLanguage: 'en' };
+export const ActionableAlternatives: Story = {
+  args: { state: { ...state, q: 'prejudise' }, results: { ok: true, data: fixturePage([]) },
+    suggestions: { ok: true, suggestions: [{ kind: 'work', item: alternative },
+      { kind: 'name', name: 'Prejudice Reading Circle', language: 'en' }] } },
+  globals: { viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const recovery = within(canvas.getByRole('complementary', { name: 'Try a related title or name' }));
+    await expect(recovery.getByText('These are possible alternatives, not matches for the current conditions.')).toBeVisible();
+    await expect(recovery.getByRole('link', { name: 'Pride and Prejudice' }))
+      .toHaveAttribute('href', localizedPath(workHref(alternative.work, state.scope), 'en'));
+    const name = new URL(recovery.getByRole('link', { name: 'Prejudice Reading Circle' }).getAttribute('href')!, 'https://example.test');
+    await expect(name.searchParams.get('q')).toBe('Prejudice Reading Circle');
+    await expect(name.searchParams.get('lang')).toBe(state.language);
+    await expect(name.searchParams.get('ci')).toBe(state.conditions.include[0]);
+    await expect(name.searchParams.get('include')).toBe('https://schema.org/Book');
+  },
+};
+
+export const UnsupportedAlternatives: Story = {
+  args: { results: { ok: true, data: fixturePage([]) }, suggestions: { ok: false, failure: 'unsupported' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByText('Suggestions do not support this query. You can edit the query.')).toBeVisible();
+    await expect(canvas.queryByRole('complementary')).toBeNull();
+    await expect(canvas.getByRole('link', { name: 'Remove filter: Only Japanese text' })).toBeVisible();
+  },
+};
+
 function HistoryTask(props: DiscoverPageProps) {
-  const [history, setHistory] = useState([state]);
+  const [history, setHistory] = useState([props.state ?? state]);
   const [index, setIndex] = useState(0);
   const current = history[index]!;
   const push = (href: string) => {
@@ -130,5 +169,36 @@ export const QueryEditAndHistoryRestore: Story = { render: props => <HistoryTask
     await userEvent.click(canvas.getByRole('button', { name: 'Forward in story' }));
     await expect(canvas.getByRole('searchbox')).toHaveValue('lantern night');
     await expect(canvas.getByText('宇宙 · Space')).toBeVisible();
+  },
+};
+
+export const EditExactConditionsWithKeyboard: Story = {
+  args: { state: { ...state, q: '"night library"', excludeTypes: ['https://schema.org/Recipe'],
+    scope: { kind: 'realm', realm: '00000000-0000-4000-8000-000000000001' },
+    conditions: { ...state.conditions, match: 'any', exclude: ['00000000-0000-4000-8000-000000000002'] } } },
+  render: props => <HistoryTask {...props} />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByText('Edit filters'));
+    const exact = canvas.getByRole('button', { name: 'Exact phrase' });
+    await expect(exact).toHaveAttribute('aria-pressed', 'true');
+    exact.focus(); await userEvent.keyboard('{Enter}');
+    await expect(canvas.getByRole('searchbox')).toHaveValue('night library');
+    await expect(canvas.queryByRole('link', { name: 'Remove filter: Exact phrase' })).toBeNull();
+    const excluded = new URL(canvas.getByRole('link', { name: 'Remove filter: Exclude Recipe' }).getAttribute('href')!, 'https://example.test');
+    await expect(excluded.searchParams.get('q')).toBe('night library');
+    await expect(excluded.searchParams.get('lang')).toBe('ja');
+    await expect(excluded.searchParams.get('scope')).toBe('realm');
+    await expect(excluded.searchParams.get('cm')).toBe('any');
+    await expect(excluded.searchParams.get('ce')).toBe('00000000-0000-4000-8000-000000000002');
+    await expect(excluded.searchParams.has('exclude')).toBe(false);
+    await userEvent.click(canvas.getByRole('button', { name: 'Back in story' }));
+    await expect(canvas.getByRole('button', { name: 'Exact phrase' })).toHaveAttribute('aria-pressed', 'true');
+    const language = canvas.getByRole('textbox', { name: 'Language' });
+    await userEvent.clear(language); await userEvent.type(language, 'ko');
+    await userEvent.click(within(language.closest('form')!).getByRole('button', { name: 'Search' }));
+    await expect(canvas.getByRole('link', { name: 'Remove filter: Only Korean text' })).toBeVisible();
+    await expect(canvas.getByRole('searchbox')).toHaveValue('"night library"');
+    await expect(canvas.getByRole('link', { name: 'Remove filter: Exclude Recipe' })).toBeVisible();
   },
 };
