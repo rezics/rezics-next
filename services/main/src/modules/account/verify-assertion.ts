@@ -122,6 +122,7 @@ export class AccountAssertionVerifier {
   }
 
   async verify(request: Request, requiredScopes: readonly string[]): Promise<VerifiedAccountAssertion> {
+    request.signal.throwIfAborted();
     const input = requestToResourceInput(request);
     // The first profile accepts bearer JWTs. DPoP needs a shared, persistent
     // proof replay store across Main replicas before it can be admitted.
@@ -148,7 +149,10 @@ export class AccountAssertionVerifier {
       throw new AccountAssertionDenied('Account assertion identity or expiry is missing');
     }
 
-    const current = await this.introspect(token);
+    // A shared signing-key refresh may drain for other readers. This request
+    // must not start introspection after its caller has left.
+    request.signal.throwIfAborted();
+    const current = await this.introspect(token, request.signal);
     if (current.active !== true || current.iss !== signed.iss || current.sub !== signed.sub
       || !audienceIncludes(current.aud, this.config.audience)
       || !Number.isSafeInteger(current.exp) || (current.exp as number) <= now
@@ -196,8 +200,9 @@ export class AccountAssertionVerifier {
     return entry.pending;
   }
 
-  private introspect(token: string): Promise<Record<string, unknown>> {
+  private introspect(token: string, signal: AbortSignal): Promise<Record<string, unknown>> {
     return this.exchange(this.config.introspectUrl, { method: 'POST',
+      signal,
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ client_id: this.config.clientId,
         client_secret: this.config.clientSecret, token, token_type_hint: 'access_token' }) },
@@ -205,7 +210,8 @@ export class AccountAssertionVerifier {
   }
 
   private async exchange(url: string, init: RequestInit, unavailable: string): Promise<Record<string, unknown>> {
-    const signal = AbortSignal.timeout(this.timeoutMs);
+    const timeout = AbortSignal.timeout(this.timeoutMs);
+    const signal = init.signal ? AbortSignal.any([timeout, init.signal]) : timeout;
     try {
       const response = await fetch(url, { ...init, redirect: 'manual', signal,
         headers: { ...init.headers as Record<string, string>, accept: 'application/json' } });
