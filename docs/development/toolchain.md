@@ -714,7 +714,7 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task load` | Run the mixed host load profile. |
 | `task load:prepare` | Build a reusable command-created load baseline. |
 | `task load:clone-probe` | Probe a cloned load stack for isolation and fresh commands. |
-| `task launch:corpus` | Build the retained launch API corpus or prepare a launch browser corpus. |
+| `task launch:corpus` | Build the retained launch API corpus or prepare a launch browser corpus. `-- --book-recipes-build` adds genuine Book reading commands and retained personas before the recipe owner's single stopped backup; its private attempt receipts do not certify the audit consumer. |
 | `task release:build` | Package a content-addressed local release artifact. |
 | `task release:images` | Build local pinned OCI runtime images and record their release manifest; never push. |
 | `task ops:migrate` | Apply the release's locked, idempotent owner migrations. |

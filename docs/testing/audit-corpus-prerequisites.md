@@ -25,6 +25,41 @@ and cannot publish a ready manifest.
 
 ## Current-product sprint disposition, 2026-10-19
 
+The subsequent `06:28:43Z` and `07:03:42Z` decisions select independent current
+Book/Recipe preparation first. The eleven historical backup manifests have no
+physical volumes; do not search them again or gate this delivery on an original
+113-identity backup. Preserve the staged original ledger and 206 intake receipts
+unchanged; their topology proof remains a separate pending outcome. The earlier
+trace work and tables below record historical work, not first-delivery admission.
+
+Use the existing launch owner through `task launch:corpus -- --book-recipes-build`
+after normal host admission. It creates the pinned Open Library Book/editions,
+uses the existing Gutenberg chapter publisher with exact public-domain Content
+assessments, and separately publishes a newly authored Main introduction and
+default selection. It retains six personas, then creates all 30 pinned recipes
+before one writer quiescence and stopped-owner backup. Source startup, Book,
+personas, recipes and backup share the 600-second preparation clock. A smoke
+restore/read has its separate 600-second bound. Failed command responses remain
+in the mode-0600 `commands.jsonl` beside each isolated attempt, including failures
+before a reusable manifest exists. Execution metadata keeps the historical
+baseline separate from current product, frontend and test revisions.
+
+The Book reading helper is native command composition inside that launch
+lifetime; it creates no second producer, importer or fixture storage lifecycle.
+Private `book.json`, `personas.json`, `preparation.json` and `restore.json` under
+`.temp/launch-corpus/book-recipes/attempts/` retain results, not a ready
+`publicDomain` consumer manifest. G-2793 owns the existing consumer's admission
+of these additional current targets independently of original-identity
+conservation. None of the 30 frozen extracts supplies nutrient-value lines;
+the independently required nutrition matrix and rich-recipe correspondence
+remain pending until genuine evidence is qualified. Keep import/context/search
+projections unprepared. Never relabel the new Work identities as the original113.
+
+Conversion and manual citation follow the maintainer's current independent
+boundaries. The native Book commands do not invoke a converter; a manual source
+citation needs no conversion ID, captured bytes or mapper proof. Optional
+retained derivation evidence is stronger, separately observed evidence.
+
 The maintainer's `2026-10-19T06:11:19Z` decision admits current-product isolated
 preparation and proof after normal Task/host admission. It supersedes the
 execution holds in the historical triage above and below; it does not turn any
