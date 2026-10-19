@@ -935,5 +935,610 @@
     },
     "scope": "Documentation-only proportional gate; neither the accepted suites nor the expected-failing native diagnostic was rerun.",
     "preHandoffVerification": "All 32 frozen candidate blobs/SHA256 and snapshot bytes match the exact pin; both accepted reports retain their recorded SHA256; only this new report is staged."
+  },
+  "correctionReview": {
+    "schemaVersion": 1,
+    "reviewedAtUtc": "2026-10-19T14:06:02.047593+00:00",
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "independentImplementationInspection": true,
+      "accountFallback": false,
+      "delegation": false
+    },
+    "status": "accepted-bounded-bootstrap-native-validation-correction",
+    "conclusion": {
+      "disposition": "The exact correction addresses all four original empty-validation counterexamples at the controlled native command boundary. No new actionable counterexample identified in these eight corrected paths.",
+      "historicalFinding": "native-credit-bootstrap-empty-validations remains an accurate reproduced result for c6fe65a55551065e117e9ac81efd436e6b33341d; the original findings, four failures and reproduction sources above remain unchanged.",
+      "acceptanceBasis": "Independent authored-diff and caller/runtime inspection plus reused passing owner/native receipts whose actual source identities were independently reconstructed from the immutable corrected blobs.",
+      "productAcceptance": false,
+      "classClosure": false,
+      "installedPublicCompositionAcceptance": false,
+      "publicationOrLandingClaimed": false
+    },
+    "pins": {
+      "originalReviewedCandidate": {
+        "delivered": "c6fe65a55551065e117e9ac81efd436e6b33341d",
+        "workerBase": "d46a9ab3bfc0898b4cd410b76fdd5e0f9eb54c59",
+        "managerDecision": "6a2c630a29e5576eb90743ecaed4b520755d7416",
+        "scope": "Union of five authored parent diffs, not the whole intervening wave range.",
+        "increments": [
+          {
+            "commit": "c3a586211806c5d6f53bf944d3d6ad1703801f6d",
+            "parent": "6032598f2dc54ffe110ee5ba7dde34f98a0ddea8",
+            "subject": "feat(model): admit explicit Performer credit profiles without reinterpreting V1",
+            "paths": [
+              "generated/model/contexts/native-agent-credit-v2.jsonld",
+              "generated/model/contexts/work-author-credit-v2.jsonld",
+              "generated/model/manifest.json",
+              "generated/model/shapes/native-agent-credit-v2.ttl",
+              "generated/model/shapes/work-author-credit-v2.ttl",
+              "model/compiler/registry.ts",
+              "model/definitions/native-agent-credit-v2.ts",
+              "model/definitions/native-agent-credit-v2.ttl",
+              "model/definitions/work-author-credit-v2.ts",
+              "model/definitions/work-author-credit-v2.ttl",
+              "model/tests/credit-performer-turtle.test.ts",
+              "packages/model/src/generated/profiles.ts",
+              "packages/model/src/generated/schemas.ts",
+              "packages/model/src/generated/vocabulary.ts",
+              "services/main/src/modules/semantic/association.ts",
+              "services/main/tests/semantic-association.test.ts"
+            ],
+            "parentDiffSha256": "8332983eda9a02bc7d51fb5e6df703d3f2ecfc78ec8304a9c221a6a1e9bfa013"
+          },
+          {
+            "commit": "4f86a440c883cf68abb2f22a59f5a15439ef2583",
+            "parent": "db740a99bdb94542746499fa490156f17aae0213",
+            "subject": "test(model): type the exact V1 credit binding comparison",
+            "paths": [
+              "model/tests/credit-performer-turtle.test.ts"
+            ],
+            "parentDiffSha256": "fc84b1128327f77e5a01fdea6a02dde96402f200c65ea3ffae81a87da30e8cb2"
+          },
+          {
+            "commit": "3c2e024a840394ea8e850c15f1fb17be893f8266",
+            "parent": "1d8c01f6eb9329ed9c38082fa21c0cc37fd544ab",
+            "subject": "fix(work): bootstrap retained credit bindings with exact command metadata",
+            "paths": [
+              "services/main/src/modules/work/credit-association-origin.ts",
+              "services/main/src/modules/work/credit-association-read.ts",
+              "services/main/src/modules/work/credit-association-write.ts",
+              "services/main/tests/credit-retained-reads.test.ts"
+            ],
+            "parentDiffSha256": "448dee352b6609f58fd3c2fc3772940369c92ca1cbd37a55b867c8fd554e8fb3"
+          },
+          {
+            "commit": "56156f4728c3262cfecf29b44699293c40d51a5d",
+            "parent": "6b34ae1833028628173880738ad3be4051a73b87",
+            "subject": "fix(work): admit native Performer through exact successor profiles",
+            "paths": [
+              "infra/jena/command-module/src/main/java/com/rezics/jena/BindingPolicy.java",
+              "infra/jena/command-module/src/main/java/com/rezics/jena/CanonicalPolicy.java",
+              "infra/jena/command-module/src/main/java/com/rezics/jena/CommandService.java",
+              "infra/jena/command-module/src/test/java/com/rezics/jena/CreditBindingPolicyTest.java",
+              "services/main/src/modules/profiles/credits.ts",
+              "services/main/src/modules/work/author-credit.ts",
+              "services/main/src/modules/work/credit-verification.ts",
+              "services/main/tests/credit-native-verifiers.test.ts",
+              "services/main/tests/credit-performer-admission.test.ts",
+              "services/main/tests/credit-retained-reads.test.ts"
+            ],
+            "parentDiffSha256": "2b4238ae17f347e67cd7156e07cb157703842b990d12dd9c733ede9426668429"
+          },
+          {
+            "commit": "c6fe65a55551065e117e9ac81efd436e6b33341d",
+            "parent": "56156f4728c3262cfecf29b44699293c40d51a5d",
+            "subject": "chore: pin Fuseki image for credit successor admission",
+            "paths": [
+              "docs/development/toolchain.md",
+              "infra/dev/compose.yaml",
+              "scripts/dev/release-manifest.ts"
+            ],
+            "parentDiffSha256": "1e222e1f18ae2bbcf97c5214bc600dfeaacb589325adf3871294afecf34d683a"
+          }
+        ],
+        "allFiveCommitsAreAncestorsOfDelivered": true,
+        "authoredParentDiffUnionEqualsFrozen32Paths": true,
+        "noOtherFinalPathLastChangeOutsideTheseFiveCommits": true,
+        "all32FrozenBlobsAndSha256MatchGitObjects": true,
+        "all32OwnerCheckoutFilesMatchFrozenFinalBytes": true,
+        "all32SnapshotFilesRemainUnmodifiedAfterDiagnostics": true
+      },
+      "correctionBase": "5fee47c8e3106d8d12581a5bf1385772deef2340",
+      "correction": "5ea739493f5b98c680b156be8757ee158b232130",
+      "imagePinFollowup": "1ce01ef857207d90fd72207fe43b379c14577da7",
+      "authoredIncrements": [
+        {
+          "commit": "5ea739493f5b98c680b156be8757ee158b232130",
+          "parent": "5fee47c8e3106d8d12581a5bf1385772deef2340",
+          "subject": "fix(credits): validate retained bindings through native admission",
+          "paths": [
+            "infra/jena/command-module/src/main/java/com/rezics/jena/AuthorCreditPolicy.java",
+            "infra/jena/command-module/src/test/java/com/rezics/jena/CreditBindingPolicyTest.java",
+            "infra/jena/command-module/src/test/resources/credit-retained-binding-commands.json",
+            "services/main/src/modules/work/credit-association-write.ts",
+            "services/main/tests/credit-retained-reads.test.ts"
+          ],
+          "parentDiffSha256": "5e297c058d73f4d1ce51c39b5f4b119e7fbc1539caa72cd125865b74f95d5d1f"
+        },
+        {
+          "commit": "1ce01ef857207d90fd72207fe43b379c14577da7",
+          "parent": "5ea739493f5b98c680b156be8757ee158b232130",
+          "subject": "chore(native): pin retained credit admission image",
+          "paths": [
+            "docs/development/toolchain.md",
+            "infra/dev/compose.yaml",
+            "scripts/dev/release-manifest.ts"
+          ],
+          "parentDiffSha256": "6a0139eb561a3cfc2cf43e5098ebda24e7efa96369a6db3dd45b29f539249c27"
+        }
+      ],
+      "scope": "Exactly five correction paths and three generated image-reference paths; other wave work supplies dependency context only."
+    },
+    "exactFiles": [
+      {
+        "path": "docs/development/toolchain.md",
+        "blob": "37f260b8c61a9f0f4044c321fa90762e0f08a4f3",
+        "sha256": "23010a8c7145069d5d6d87a7fd8edddf10146a3f7cd621078af58819f7350781",
+        "matchesCurrentOwnerCheckout": true
+      },
+      {
+        "path": "infra/dev/compose.yaml",
+        "blob": "7d177d0fc8b1c7ed30f09b4efa99f20b265ceaec",
+        "sha256": "b7ad8415c098bb2ad66ee624adb8e8134558585d6415a8729f50962bcf58bb67",
+        "matchesCurrentOwnerCheckout": true
+      },
+      {
+        "path": "infra/jena/command-module/src/main/java/com/rezics/jena/AuthorCreditPolicy.java",
+        "blob": "e51d0f2c26f2cb569ac39dc7232cd07b4935ae43",
+        "sha256": "ec8316ab6502ab14f901aad717fff472d994a49a43cc4658bf5f04d327ed92ec",
+        "matchesCurrentOwnerCheckout": true
+      },
+      {
+        "path": "infra/jena/command-module/src/test/java/com/rezics/jena/CreditBindingPolicyTest.java",
+        "blob": "bbe2cddb1a37e91924abf42270ef4bdce95d5007",
+        "sha256": "5ce797378287aca0915846d78d71956bd5836a9f7c1eb1486623b32d36c44a08",
+        "matchesCurrentOwnerCheckout": true
+      },
+      {
+        "path": "infra/jena/command-module/src/test/resources/credit-retained-binding-commands.json",
+        "blob": "c485afe40b38b91129cc6f51df77709dd3c2a917",
+        "sha256": "3e89b5d631afcc08e2748987f6f5c168fb1e3fb4b9e6c288009c6353859cffa0",
+        "matchesCurrentOwnerCheckout": true
+      },
+      {
+        "path": "scripts/dev/release-manifest.ts",
+        "blob": "fda606c17e27d3e777a741d16fb664fe25bc4379",
+        "sha256": "130e63d1c1a57c6fff1d9d4281994d5e2c58dad7f9fab834cc118e971521d6e8",
+        "matchesCurrentOwnerCheckout": true
+      },
+      {
+        "path": "services/main/src/modules/work/credit-association-write.ts",
+        "blob": "fb740d4ce7a55038244578658d445511ac63fe20",
+        "sha256": "98509a4cf70f59505df2eb8e73ba289436a41b94eec8ad8c2807ad3e7c50c9c5",
+        "matchesCurrentOwnerCheckout": true
+      },
+      {
+        "path": "services/main/tests/credit-retained-reads.test.ts",
+        "blob": "9a629e062c83c3faf77da8e575949c625acb561f",
+        "sha256": "2bb1962ca79e85eeb81860f5d3ff0923dc2b0bfa466f9934609119488a09796f",
+        "matchesCurrentOwnerCheckout": true
+      }
+    ],
+    "unchangedNecessaryContext": [
+      {
+        "path": "services/main/src/modules/work/author-credit.ts",
+        "blob": "86c960a4ac5836776d51832be2970defa62f69ac",
+        "sha256": "60a765c864c71490138cc6773f0a7c20d291e3b3439280c70021a3706d843ca8",
+        "unchangedFromOriginalDeliveredPin": true
+      },
+      {
+        "path": "services/main/src/modules/work/credit-verification.ts",
+        "blob": "52db8cca7f316548d816203a7e7730e32cf88425",
+        "sha256": "60cafb450e51ce5a843add1f53d1fe48b30e5e12bcc07211623a08659326b353",
+        "unchangedFromOriginalDeliveredPin": true
+      },
+      {
+        "path": "services/main/src/modules/work/credit-attribution.ts",
+        "blob": "e73b1b4412fcec643bcebbbce7af722bd87e9fb6",
+        "sha256": "f1403de976ec0963362514c2954afd2cf5af7c6370d7676f99cf20a5c3483ba3",
+        "unchangedFromOriginalDeliveredPin": true
+      },
+      {
+        "path": "services/main/src/modules/work/credit-association-state.ts",
+        "blob": "047e82eb8ade897916eec2513dcb83dfa5af5163",
+        "sha256": "64a8714529615f0a8d2af1eae672606f65f3bdb4ae399c925973a7f4cf3f3f6a",
+        "unchangedFromOriginalDeliveredPin": true
+      },
+      {
+        "path": "services/main/src/modules/semantic/command.ts",
+        "blob": "2d671ee800a517dc652ef3cd885dc9c4df317316",
+        "sha256": "3807177a9ed9bdaf241f163e6170d935127b12c298eec127bab9d7fe519506cb",
+        "unchangedFromOriginalDeliveredPin": true
+      },
+      {
+        "path": "generated/model/manifest.json",
+        "blob": "e857699823639514b957b3e802dee16eea98e8ca",
+        "sha256": "4a9bb21ae5940dc18295b0f17d60aa8890a6094d8832e5a10aadbc2efa9281e7",
+        "unchangedFromOriginalDeliveredPin": true
+      },
+      {
+        "path": "infra/jena/command-module/src/main/java/com/rezics/jena/CommandService.java",
+        "blob": "4fd880a22b60b58c6b08773538067b040ba8ede5",
+        "sha256": "1e9b9dce3703cacf96200cd80bf92ff47cf60e8e0b8382b7197ef9d5533e837d",
+        "unchangedFromOriginalDeliveredPin": true
+      },
+      {
+        "path": "infra/jena/command-module/src/main/java/com/rezics/jena/CommandPolicy.java",
+        "blob": "9aee356d3b4ec5204dfe04a6adbbb709c5ce3ea7",
+        "sha256": "2c98daf2726b87c4008d4e351d91d852d10ba654b746cb26a7467d676b83d229",
+        "unchangedFromOriginalDeliveredPin": true
+      },
+      {
+        "path": "infra/jena/command-module/src/main/java/com/rezics/jena/CanonicalPolicy.java",
+        "blob": "8ead15ff464e6d78219d22ed0226147d73331d1d",
+        "sha256": "cdb39ad448226893f0654f6c19799d8f565a74bbfa4af8fd127f9a6bfeeff8ca",
+        "unchangedFromOriginalDeliveredPin": true
+      },
+      {
+        "path": "infra/jena/command-module/src/main/java/com/rezics/jena/BindingPolicy.java",
+        "blob": "31d327b6fafa10ea5f71de0a5cf5d73ae8b3193c",
+        "sha256": "dccb64aa27f08aa32f6b5a2300cce8a32b5b79eeb51faa013e0e40e099cfa253",
+        "unchangedFromOriginalDeliveredPin": true
+      }
+    ],
+    "historyPreservation": {
+      "originalIndependentReportCommit": "131b707cb54c7f6a305e30d4a4a38175ae544a61",
+      "originalIndependentReportSha256": "6d380399ccffa217e6624a310dd0ae8e9f1711e172ce89efc3d86461bd87bb92",
+      "method": "Append this correctionReview field only; all original top-level values and diagnostic source/assertions are preserved. The earlier query and registry reports retain their recorded SHA256.",
+      "originalCaptureSha256": "318fa527a68777e9b297adc4df93131adab91321ae97d00485be5093b756022c",
+      "originalOwnerReceipts": "The initial 149-pass/1-fixture-failure and corrected 82-pass records above are preserved and were not rerun.",
+      "priorOwnerTestBodies": "All six pre-correction Java test bodies and the complete original TypeScript test tail from closed retained selection onward remain byte-identical to the correction base. Imports, profile-health fixture support, a seed helper and new regression cases are additive."
+    },
+    "inspection": [
+      {
+        "area": "Actual stored native validation and original terminal receipt",
+        "sources": [
+          "services/main/src/modules/work/credit-association-write.ts",
+          "services/main/src/modules/work/author-credit.ts",
+          "services/main/src/modules/work/credit-verification.ts",
+          "services/main/src/modules/work/credit-attribution.ts"
+        ],
+        "checked": [
+          "Every retained binding now requires readCreditOwnerWitness and readCreditOwnerHead for the exact target, with creditRevision and Work equality. The native guard and selected optional origin guard remain independent.",
+          "After the final authority/support check, authorCreditValidations receives current.native.value and its actual original receipt, authority epoch, source intent and scope. It does not validate a fabricated copy of the compatibility revision or substitute this new command receipt.",
+          "The existing profile selector and installed profile SHA check select both actual stored credit/revision shapes. Performer uses the participant-matching physical V2 family; artist uses the unchanged V1 family. Native Agent preserves its no-binding-demand behavior; external participants carry the complete original binding tuple and four validation graphs.",
+          "Stored model/shape/current-model checks, exact native receipt qualification, credit/Work heads, retirement, protection, erasure and lineage checks are unchanged context. New validations do not grant provider identities any Account Agent authority.",
+          "A missing installed native profile refuses the write before sealing or sending product data in the added owner negative case."
+        ]
+      },
+      {
+        "area": "Narrow native metadata admission with the original product guard intact",
+        "sources": [
+          "infra/jena/command-module/src/main/java/com/rezics/jena/AuthorCreditPolicy.java",
+          "infra/jena/command-module/src/main/java/com/rezics/jena/CommandService.java"
+        ],
+        "checked": [
+          "CommandService.validateScope, its productData/empty-validation refusal, canonical selection, SHACL and bound-focus enforcement are byte-identical to the original reviewed pin. No empty-validation bypass is added.",
+          "AuthorCreditPolicy.preflight gains only the retained association metadata branch for an already admitted AuthorCredit or NativeAgentCredit. It requires one current associationHead pointer, forbids any native credit-field insertion or native history rewrite, and matches the exact predecessor to the stored association head.",
+          "The branch checks actual credit Work/revision identity, unavailable retired/protected/erased originals, a fresh immutable retained head, exact retained profile and shape, original credit revision, compatibility receipt component/revision/operation/scope/outcome, current model generation and manifest identity format.",
+          "Exactly two URI participation allocations are allowed. A successor must reuse the predecessor allocation set. The revision footprint, allowed head predicates/types, participation occurrence/type and ownership are restricted; unrelated native credit/revision fields cannot be smuggled into the metadata operation.",
+          "The old retirement branch still forbids retained revision writes or unrelated current inserts; combining retirement with association metadata does not bypass the new branch restrictions."
+        ],
+        "evidenceLimit": "Independent source inspection and matching selected native tests. No claim that every adversarial command or optional Source settlement is covered."
+      },
+      {
+        "area": "Actual caller-to-native captures and original history",
+        "sources": [
+          "services/main/tests/credit-retained-reads.test.ts",
+          "infra/jena/command-module/src/test/resources/credit-retained-binding-commands.json",
+          "infra/jena/command-module/src/test/java/com/rezics/jena/CreditBindingPolicyTest.java"
+        ],
+        "checked": [
+          "The resource identifies the SHA256 of the original independent four-command counterexample. The owner tests derive the prestate using actual native witness/triple/envelope builders and compare the currently emitted TS envelope exactly, normalizing only its random new operation.",
+          "Java loads the committed capture, parses its real validations and executes CommandService.runCommand against that prestate, including the transaction/WHERE guards, native preflight, canonical policy, binding policy and SHACL. This is stronger than only invoking the original private scope helper.",
+          "All four variants commit and replay without changing the original native revision or original receipt. Successors retain old heads/receipts and reuse exactly the same two participation allocations. Empty validations still reject with product data requires profile validation and roll back all writes.",
+          "The external compatibility receipt cannot substitute for the actual original native receipt. Negative changes to native role/revision, operation seal, participation occurrence or compatibility profile are invalid and leave the graph unchanged.",
+          "The captured Work-head change remains guard-unmatched. Retired/protected/erased original credits and missing current model generation refuse the command, without allocation or sealing."
+        ]
+      },
+      {
+        "area": "Unchanged semantics and generated image identity",
+        "checked": [
+          "No model definition, registry default, role list, V1 digest framing, native receipt history or query/registry implementation changes in the correction. Ten necessary validation/owner/manifest context files are byte-identical to c6fe65a.",
+          "The followup changes only toolchain, Compose and release-manifest references to rezics/fuseki:6.2.0-cmd0.5.43-e67e7ff13c03. Its complete build-input identity reconstructs the tag recorded by the passing selected native check.",
+          "Ordinary native APIs still perform no provider conversion. Manual citations remain independent of conversion/evidence/mapper requirements. Optional retained Source settlement and query activation/coverage retain their separate authorities."
+        ]
+      }
+    ],
+    "originalCounterexampleDisposition": [
+      {
+        "historicalIndependentCase": "historicalAgentBootstrap",
+        "participant": "Agent",
+        "role": "artist",
+        "physicalProfile": "native-agent-credit-v1",
+        "originalNativeReceipt": "urn:rezics:receipt:12a5e84d12c4407204a5bbb69f0e378e68ecb2a2fbb546599b74ddd89bfa49d7",
+        "compatibilityReceipt": "urn:rezics:receipt:6d21126e9d7856f411867585cea90b5f3e8bca067f07ea84df4c42f8662d33d9",
+        "validationShapes": [
+          "https://rezics.com/definition/native-agent-credit-v1/credit-shape",
+          "https://rezics.com/definition/native-agent-credit-v1/revision-shape"
+        ],
+        "validationFocus": [
+          [
+            "https://rezics.com/id/00000000-0000-4000-8000-000000000002"
+          ],
+          [
+            "https://rezics.com/id/00000000-0000-4000-8000-000000000005"
+          ]
+        ],
+        "externalBindingUsesOriginalReceipt": false,
+        "ownerCaptureComparison": "Exact currently emitted command and owner-produced seed; only new random operation IRIs normalized to the committed capture.",
+        "nativeResult": "Full in-memory CommandService.runCommand commits, replays at the same position and commits a successor with the original allocations/history unchanged.",
+        "evidence": "CreditBindingPolicyTest.emittedRetainedBootstrapCommitsAndReplaysThroughTheNativeRuntime and emittedRetainedSuccessorPreservesHistoryAndAllocations; matching owner QA capture tests."
+      },
+      {
+        "historicalIndependentCase": "performerAgentBootstrap",
+        "participant": "Agent",
+        "role": "performer",
+        "physicalProfile": "native-agent-credit-v2",
+        "originalNativeReceipt": "urn:rezics:receipt:12a5e84d12c4407204a5bbb69f0e378e68ecb2a2fbb546599b74ddd89bfa49d7",
+        "compatibilityReceipt": "urn:rezics:receipt:6d21126e9d7856f411867585cea90b5f3e8bca067f07ea84df4c42f8662d33d9",
+        "validationShapes": [
+          "https://rezics.com/definition/native-agent-credit-v2/credit-shape",
+          "https://rezics.com/definition/native-agent-credit-v2/revision-shape"
+        ],
+        "validationFocus": [
+          [
+            "https://rezics.com/id/00000000-0000-4000-8000-000000000002"
+          ],
+          [
+            "https://rezics.com/id/00000000-0000-4000-8000-000000000005"
+          ]
+        ],
+        "externalBindingUsesOriginalReceipt": false,
+        "ownerCaptureComparison": "Exact currently emitted command and owner-produced seed; only new random operation IRIs normalized to the committed capture.",
+        "nativeResult": "Full in-memory CommandService.runCommand commits, replays at the same position and commits a successor with the original allocations/history unchanged.",
+        "evidence": "CreditBindingPolicyTest.emittedRetainedBootstrapCommitsAndReplaysThroughTheNativeRuntime and emittedRetainedSuccessorPreservesHistoryAndAllocations; matching owner QA capture tests."
+      },
+      {
+        "historicalIndependentCase": "historicalExternalBootstrap",
+        "participant": "external",
+        "role": "artist",
+        "physicalProfile": "work-author-credit-v1",
+        "originalNativeReceipt": "urn:rezics:receipt:12a5e84d12c4407204a5bbb69f0e378e68ecb2a2fbb546599b74ddd89bfa49d7",
+        "compatibilityReceipt": "urn:rezics:receipt:6d21126e9d7856f411867585cea90b5f3e8bca067f07ea84df4c42f8662d33d9",
+        "validationShapes": [
+          "https://rezics.com/definition/work-author-credit-v1/credit-shape",
+          "https://rezics.com/definition/work-author-credit-v1/revision-shape"
+        ],
+        "validationFocus": [
+          [
+            "https://rezics.com/id/00000000-0000-4000-8000-000000000002"
+          ],
+          [
+            "https://rezics.com/id/00000000-0000-4000-8000-000000000005"
+          ]
+        ],
+        "externalBindingUsesOriginalReceipt": true,
+        "ownerCaptureComparison": "Exact currently emitted command and owner-produced seed; only new random operation IRIs normalized to the committed capture.",
+        "nativeResult": "Full in-memory CommandService.runCommand commits, replays at the same position and commits a successor with the original allocations/history unchanged.",
+        "evidence": "CreditBindingPolicyTest.emittedRetainedBootstrapCommitsAndReplaysThroughTheNativeRuntime and emittedRetainedSuccessorPreservesHistoryAndAllocations; matching owner QA capture tests."
+      },
+      {
+        "historicalIndependentCase": "performerExternalBootstrap",
+        "participant": "external",
+        "role": "performer",
+        "physicalProfile": "work-author-credit-v2",
+        "originalNativeReceipt": "urn:rezics:receipt:12a5e84d12c4407204a5bbb69f0e378e68ecb2a2fbb546599b74ddd89bfa49d7",
+        "compatibilityReceipt": "urn:rezics:receipt:6d21126e9d7856f411867585cea90b5f3e8bca067f07ea84df4c42f8662d33d9",
+        "validationShapes": [
+          "https://rezics.com/definition/work-author-credit-v2/credit-shape",
+          "https://rezics.com/definition/work-author-credit-v2/revision-shape"
+        ],
+        "validationFocus": [
+          [
+            "https://rezics.com/id/00000000-0000-4000-8000-000000000002"
+          ],
+          [
+            "https://rezics.com/id/00000000-0000-4000-8000-000000000005"
+          ]
+        ],
+        "externalBindingUsesOriginalReceipt": true,
+        "ownerCaptureComparison": "Exact currently emitted command and owner-produced seed; only new random operation IRIs normalized to the committed capture.",
+        "nativeResult": "Full in-memory CommandService.runCommand commits, replays at the same position and commits a successor with the original allocations/history unchanged.",
+        "evidence": "CreditBindingPolicyTest.emittedRetainedBootstrapCommitsAndReplaysThroughTheNativeRuntime and emittedRetainedSuccessorPreservesHistoryAndAllocations; matching owner QA capture tests."
+      }
+    ],
+    "reusedChecks": {
+      "recordedJob": "job:ad94b622-89da-446a-80d0-2f55373ffa5e",
+      "identityVerification": {
+        "qaHead": "ea0a8935387ea64f8477ad74d557c0bed119c99b",
+        "reconstructedQaFingerprint": "cb5d6b6807d79cb883bfbdcd22d63088bec8853195b767128fdf41878d5b3da9",
+        "matchesPassingOwnerQa": true,
+        "trackedPaths": [
+          "infra/jena/command-module/src/main/java/com/rezics/jena/AuthorCreditPolicy.java",
+          "infra/jena/command-module/src/test/java/com/rezics/jena/CreditBindingPolicyTest.java",
+          "services/main/src/modules/work/credit-association-write.ts",
+          "services/main/tests/credit-retained-reads.test.ts"
+        ],
+        "untrackedResourcePath": "infra/jena/command-module/src/test/resources/credit-retained-binding-commands.json",
+        "reconstructedNativeInputTag": "rezics/fuseki:6.2.0-cmd0.5.43-e67e7ff13c03",
+        "nativeBuildInputs": 474,
+        "nativeBuildInputIdentitySha256": "e67e7ff13c03a0bbddb6769c0330f5477d5d974a69d49de5783e38e08a894784"
+      },
+      "native": {
+        "command": "task jena:test -- --tests CreditBindingPolicyTest",
+        "selection": "CreditBindingPolicyTest",
+        "source": {
+          "root": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800",
+          "revision": "ea0a8935387ea64f8477ad74d557c0bed119c99b",
+          "status": "M infra/jena/command-module/src/main/java/com/rezics/jena/AuthorCreditPolicy.java\n M infra/jena/command-module/src/test/java/com/rezics/jena/CreditBindingPolicyTest.java\n M services/main/src/modules/work/credit-association-write.ts\n M services/main/tests/credit-retained-reads.test.ts\n?? infra/jena/command-module/src/test/resources/credit-retained-binding-commands.json",
+          "inputTag": "rezics/fuseki:6.2.0-cmd0.5.43-e67e7ff13c03"
+        },
+        "startedAt": "2026-10-19T13:44:35.693Z",
+        "finishedAt": "2026-10-19T13:45:46.598Z",
+        "result": {
+          "passed": 11,
+          "failures": 0,
+          "errors": 0,
+          "skipped": 0
+        },
+        "record": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/native-module-suite/5bc5ced2-7d26-47de-97b9-2ef2dcc33621.json",
+          "sha256": "c56967eec91bd641bc8f0baf5ecf5167a1f15b7314f41385a0cd15ad3e6bd84e"
+        },
+        "log": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/native-module-suite/5bc5ced2-7d26-47de-97b9-2ef2dcc33621.log",
+          "sha256": "ef2082b77e389e3d88a54c13e6acf174c560a2372cd9216ce54e602f8345b096"
+        },
+        "jobLog": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/goal/jobs/ad94b622-89da-446a-80d0-2f55373ffa5e.1.log",
+          "sha256": "2ba161a506ef1656eefc3257ff349fce7bd0f7e49c22b5385f63c58e5b112707"
+        }
+      },
+      "owner": {
+        "command": "bun scripts/goal/goalctl.ts test services/main/tests/credit-retained-reads.test.ts",
+        "qaRunId": "20261019t134551-4a347b",
+        "source": {
+          "head": "ea0a8935387ea64f8477ad74d557c0bed119c99b",
+          "fingerprint": "cb5d6b6807d79cb883bfbdcd22d63088bec8853195b767128fdf41878d5b3da9",
+          "clean": false
+        },
+        "sourceStable": true,
+        "result": {
+          "passed": 87,
+          "failures": 0,
+          "skipped": 0,
+          "assertions": 1482
+        },
+        "fullQualification": false,
+        "acceptanceCounts": {
+          "uncovered": 292,
+          "partial-pass": 0,
+          "passed": 0,
+          "failed": 0
+        },
+        "acceptance": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.artifacts/qa/20261019t134551-4a347b/acceptance.json",
+          "sha256": "ab2069c449bd682da82be33391f68f50f8a942eb90fde418f661f5b459cdfc44"
+        },
+        "junit": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.artifacts/qa/20261019t134551-4a347b/owner.xml",
+          "sha256": "42fff37fecb517833f2f9da142ed4e713ae1bde709bcedf2a20afdf6df096e36"
+        },
+        "jobLog": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/goal/jobs/ad94b622-89da-446a-80d0-2f55373ffa5e.2.log",
+          "sha256": "609a5c13171343aee62522d733d95317ec2d2a7edc458432f4525144c6da550e"
+        }
+      },
+      "guards": {
+        "command": "task goal -- check --only types,lint,guards",
+        "result": "types, inference, lint, AST and 25/45 selected guards passed",
+        "log": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/goal/jobs/ad94b622-89da-446a-80d0-2f55373ffa5e.3.log",
+          "sha256": "22906e71f13c0b2df08b6f8e73f6a329062537a2b19b11b881a99b74ee439de7"
+        },
+        "output": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/goal/check/run-yLNWdp/output.log",
+          "sha256": "a97b82b978cab088d764d1970746a91a86b3a80d16ccb65ca750f03f73b0773d"
+        }
+      },
+      "reuseLimit": "These are exact owner/native receipts, not fresh reviewer executions. The reconstructed passing dirty-tree QA fingerprint equals the committed correction bytes plus its actual untracked capture resource; the native tested input tag is independently reconstructed from all 474 build inputs. No broader tier or installed public qualification is inferred."
+    },
+    "intermediateOwnerAssertionDisposition": {
+      "recordedJob": "job:6c2ac899-9d35-4411-9ee3-1ab2c747811d",
+      "record": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/native-module-suite/d53cfb86-545a-470d-8695-dd46711d4d3a.json",
+        "sha256": "d1caf9c4d2c258485275cf08298dffc4ef965e91db9faacb9f6ed447111a7b02"
+      },
+      "log": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/native-module-suite/d53cfb86-545a-470d-8695-dd46711d4d3a.log",
+        "sha256": "41fc703479b05879d8938325aeb5a8eb23ec0ed6281ede694b9f788b7637bcad"
+      },
+      "result": {
+        "tests": 10,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0
+      },
+      "case": "CreditBindingPolicyTest.emittedRetainedBootstrapFencesHeadsRetirementErasureAndGeneration",
+      "assertionReached": true,
+      "expected": "retained credit original is unavailable",
+      "actual": "erased exact revision cannot be reactivated",
+      "classification": "Negative-test diagnostic expectation mismatch: the production runtime already refused the erased revision at a stronger earlier gate. The passing correction checks that actual refusal; neither the invalid result nor rollback assertion was relaxed. This is not a live product failure."
+    },
+    "publicationEvidence": {
+      "recordedJob": "job:4256ed53-30e3-4bde-b45e-d82aeda09b26",
+      "observedSteps": [
+        {
+          "command": "task gen",
+          "result": "completed before the following sequence step started",
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/goal/jobs/4256ed53-30e3-4bde-b45e-d82aeda09b26.1.log",
+          "sha256": "e9dd1d1fc63df52d4874f0610db9f0e8ef5664ba6df4750f4eb3538e309ff08a"
+        },
+        {
+          "command": "git diff --exit-code",
+          "result": "completed before the following sequence step started",
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/goal/jobs/4256ed53-30e3-4bde-b45e-d82aeda09b26.2.log",
+          "sha256": "c1a197431490d1971ad1fa86b39a34c9325d0b9cef996a6a7939db89ea39a66f"
+        },
+        {
+          "command": "task goal -- check --only types",
+          "result": "types: ok at the actual immutable followup pin",
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/goal/jobs/4256ed53-30e3-4bde-b45e-d82aeda09b26.3.log",
+          "sha256": "332d547ea2ef4775490612bf9a4832aa6922f97ccecf69f5ad73cbe7e7ed25e8"
+        },
+        {
+          "command": "git push . HEAD:refs/heads/wave/audit-20261019",
+          "result": "rejected: non-fast-forward",
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/goal/jobs/4256ed53-30e3-4bde-b45e-d82aeda09b26.4.log",
+          "sha256": "3ca054b0ff869def5d8dc70a70a4f01651a65fed3ffb79890b36a5d25e8e060d"
+        }
+      ],
+      "disposition": "Immutable corrected blobs are reviewable, but this publication attempt did not succeed. No fully published, landed, refreshed service or installed public result is claimed. Branch integration belongs to the manager/owner; this reviewer did not perform it."
+    },
+    "newFindings": [],
+    "remainingLimits": [
+      "This disposition accepts only the correction to the four controlled command-boundary counterexamples. No original native class finding, genuine API outcome, rendered A15/C23 acceptance or whole-wave acceptance is closed.",
+      "The original independent diagnostic and its four failed assertions remain frozen against c6fe65a with their original empty-envelope premise. They were not rewritten or rerun as if they described the corrected envelope. The matching four corrected envelopes are tested through the full native runtime by the reused owner check.",
+      "The owner TS transport remains controlled; the Java check uses an in-memory native dataset populated by owner-generated seed. No installed HTTP route, live service or corpus was exercised.",
+      "Historical missing runtime caller/Source adapter limits above are not converted into success by these tests. Optional Source/publication/field settlement and query activation/coverage remain separate authorities; there is no new conversion or corpus prerequisite.",
+      "The unchanged query and registry reviews and their tests were not reopened. No unrelated suite, generation by this reviewer, inference baseline relaxation or implementation edit was performed."
+    ],
+    "reviewerChecks": {
+      "status": "passed",
+      "recordedJob": "job:2e6822a7-e71b-416a-b137-7c2f766fe35a",
+      "runner": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job",
+      "steps": [
+        {
+          "command": "task docs:check",
+          "exit": 0,
+          "result": "13 checker tests passed; 249 Markdown files checked; no runtime behavior tested",
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2849/.temp/goal/jobs/2e6822a7-e71b-416a-b137-7c2f766fe35a.1.log",
+          "sha256": "f4a2a195b7f2d2dd08a15f6303388dd75cc22c302ece9ad0d6daf6e879d1f099"
+        },
+        {
+          "command": "task goal -- check",
+          "exit": 0,
+          "result": {
+            "types": "ok: no TypeScript workspace changed",
+            "tests": "ok: no test files named in brief",
+            "lint": "ok: no source file changed",
+            "ast": "ok",
+            "guards": "ok: 1/44 selected for claimed report paths"
+          },
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2849/.temp/goal/jobs/2e6822a7-e71b-416a-b137-7c2f766fe35a.2.log",
+          "sha256": "7481bcb3236b90210bcb6319a2eebe5fdfe9a57b19d87109519ee87b96fd8ab5"
+        }
+      ],
+      "gateOutput": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2849/.temp/goal/check/run-0Ybs6j/output.log",
+        "sha256": "48f2f2769ae552a7ecefa5a289611832cafd5a3e0ac663243aaa2e695d1bc7c8"
+      },
+      "additionalVerification": "Report JSON parsed; all historical top-level values preserved; both accepted reports keep their recorded SHA256; eight correction blobs and ten necessary unchanged context blobs match the immutable pin.",
+      "scope": "Proportional documentation gate only; no reused passing suite was rerun."
+    }
   }
 }
