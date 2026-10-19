@@ -4,12 +4,39 @@ import { settle } from '../work-page/books-edition-page.read.ts';
 import { reader, type SuppliedClient } from '../work-page/read.ts';
 import { animeRelationsReads } from '../work-page/anime-relations-recorded-page.ts';
 import type { CollectionMembers, Loaded, Names, PartsPage, RealizationPage, Realization,
-  People, RelationEntry, RelationsPage, Release, ReleasePage, WholesPage } from './types.ts';
+  CollectionMember, People, RelationEntry, RelationsPage, Release, ReleasePage, Summary, WholesPage } from './types.ts';
+
+export interface PublicCollectionPage {
+  occurrences: readonly CollectionMember[];
+  names: Names;
+  nextCursor: string | null;
+}
+
+/** Main admits public and private membership, including groups and opaque continuation. */
+export async function readPublicCollectionPage(id: string,
+  query: { after?: string; parent?: string; position?: string }, client?: SuppliedClient): Promise<Loaded<PublicCollectionPage>> {
+  const current = client ?? await reader();
+  const read = await settle(() => current.main.v1.collections({ id }).get({ query: {
+    ...query, actingSubject: current.actingSubject, limit: 20 } }), query.after);
+  if (!read.ok) return read;
+  const occurrences = read.data.occurrences as CollectionMember[];
+  const resources = [...new Set(occurrences.flatMap(item => item.target ?? []))];
+  const names = new Map<string, Summary>();
+  if (resources.length) {
+    const summaries = await settle(() => current.main.v1.resources.summaries.post({
+      profile: 'resource-summary-batch-v1', resources, actingSubject: current.actingSubject,
+      ...(query.position ? { position: query.position } : {}) }));
+    if (!summaries.ok) return summaries;
+    for (const summary of summaries.data.summaries) names.set(summary.reference, summary);
+  }
+  // The Collection owner calls its opaque cursor `next`; forward it without interpreting it.
+  const cursor = read.data.next;
+  return { ok: true, data: { occurrences, names, nextCursor: cursor } };
+}
 
 // Server reads for the Work-level pages. Each returns a `Loaded` result instead
 // of throwing, so one section's failure never takes down another. Main decides
-// disclosure for public parts, wholes and relations reads. Collection reads
-// still require an acting Agent.
+// disclosure for public parts, wholes, relations and Collection reads.
 
 export async function readParts(id: string, query: { parent?: string; after?: string; limit?: number }, client?: SuppliedClient):
   Promise<Loaded<PartsPage>> {
