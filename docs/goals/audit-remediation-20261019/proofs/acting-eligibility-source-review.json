@@ -1,0 +1,251 @@
+{
+  "schemaVersion": 1,
+  "goal": "audit-remediation-20261019",
+  "task": "G-2856",
+  "title": "Independent source review of saved-session Agent eligibility hunk",
+  "reviewedAt": "2026-10-19T11:17:59.548565+00:00",
+  "reviewer": {
+    "identity": "G-2856",
+    "engine": "codex-1",
+    "model": "gpt-6.1-sol",
+    "effort": "xhigh",
+    "identityBasis": "This worker session, dispatched as codex-1 / gpt-6.1-sol / xhigh.",
+    "independentSourceInspection": true,
+    "nestedAgents": false,
+    "fallbackReviewer": false,
+    "accountFallback": false,
+    "method": "Direct git object inspection of the original before/after implementation, caller and existing test blobs; verdict derived from source control flow rather than another reviewer or test execution."
+  },
+  "scope": {
+    "implementationPath": "apps/web/features/auth/acting-identity.ts",
+    "symbol": "resolveSessionAgent",
+    "changedLinesAfter": [
+      74,
+      75
+    ],
+    "claim": "Only the optional eligible=true parameter and chosen-and-ineligible early return, read with the existing caller and recovery assertions.",
+    "reportBranch": "goal/g-2856",
+    "reportBase": "6430441893f5c3609efd97b3921a21a85eab0707",
+    "assembledCandidate": "41229b6f19f3db8e209400b69d9085ded88f376e",
+    "assembledBase": "ca43d9b8f19e4ba57c0d1460761d36b8c510bf68",
+    "productChanges": false,
+    "additionalProductContractOrAcceptanceRequirement": false,
+    "auditFindingClosed": false
+  },
+  "sourceManifest": [
+    {
+      "path": "apps/web/features/auth/acting-identity.ts",
+      "beforeBlob": "243debcac540b29fe683518ac71646cb3d42d6bb",
+      "afterBlob": "9251b2dcfde8da781b6b78a664cf87cae248298f",
+      "beforeSha256": "359452b1c394d5693012d29bf120819148c76275a747b883187a834cb446d582",
+      "afterSha256": "fdd590a5435d69e0fa9e07f21ef59166b6d7a2201a4a72164ce1e93cf8c63604",
+      "inspection": "Before and after resolver implementation and its SessionAgent result type."
+    },
+    {
+      "path": "apps/web/features/auth/session.ts",
+      "beforeBlob": "957fab7cafd37ae81c67d08e294411a8aeb3ded4",
+      "afterBlob": "07a2100944c05da93f6f44e729aadb03c082b39f",
+      "afterSha256": "cdcf8408d77f2803b1fb6910a1a2af7ccfa536f4f7ea497b7372edb7925bbaaf",
+      "inspection": "Existing caller context only: MainSessionAgentState, sessionReadSubject, readMainSessionAgentResult and readSession; no renewed verdict on the caller delta."
+    },
+    {
+      "path": "apps/web/features/auth/session-recovery.test.ts",
+      "beforeBlob": null,
+      "afterBlob": "711c89bfa00fef5fd5004db3628a18c0f2fda6d1",
+      "afterSha256": "00bc5bb30f85ef81a8ddb9b3957ec7c7ec5f758edeaf0b8cb4774b702e5dbc1d",
+      "inspection": "Existing recovery assertions, especially lines 17-24; no new test execution."
+    }
+  ],
+  "verifiedBlobPins": {
+    "f4d0226f39526147eaeb86f99a4e0502b9ca8379": {
+      "apps/web/features/auth/acting-identity.ts": "9251b2dcfde8da781b6b78a664cf87cae248298f",
+      "apps/web/features/auth/session.ts": "07a2100944c05da93f6f44e729aadb03c082b39f",
+      "apps/web/features/auth/session-recovery.test.ts": "711c89bfa00fef5fd5004db3628a18c0f2fda6d1"
+    },
+    "de8fac2935cb59e61adfc18e98b55b9900751cb4": {
+      "apps/web/features/auth/acting-identity.ts": "9251b2dcfde8da781b6b78a664cf87cae248298f",
+      "apps/web/features/auth/session.ts": "07a2100944c05da93f6f44e729aadb03c082b39f",
+      "apps/web/features/auth/session-recovery.test.ts": "711c89bfa00fef5fd5004db3628a18c0f2fda6d1"
+    },
+    "500c85e728312b8e8a49f02b898b6e62fe0f22e9": {
+      "apps/web/features/auth/acting-identity.ts": "9251b2dcfde8da781b6b78a664cf87cae248298f",
+      "apps/web/features/auth/session.ts": "07a2100944c05da93f6f44e729aadb03c082b39f",
+      "apps/web/features/auth/session-recovery.test.ts": "711c89bfa00fef5fd5004db3628a18c0f2fda6d1"
+    },
+    "41229b6f19f3db8e209400b69d9085ded88f376e": {
+      "apps/web/features/auth/acting-identity.ts": "9251b2dcfde8da781b6b78a664cf87cae248298f",
+      "apps/web/features/auth/session.ts": "07a2100944c05da93f6f44e729aadb03c082b39f",
+      "apps/web/features/auth/session-recovery.test.ts": "711c89bfa00fef5fd5004db3628a18c0f2fda6d1"
+    }
+  },
+  "exactInspectedHunk": {
+    "sourceCommit": "f4d0226f39526147eaeb86f99a4e0502b9ca8379",
+    "beforeBlob": "243debcac540b29fe683518ac71646cb3d42d6bb",
+    "afterBlob": "9251b2dcfde8da781b6b78a664cf87cae248298f",
+    "diffSha256": "b0c4f6c4123ca84212d0578b96ae7a790753014f888faa3df9b5d475972b9e25",
+    "diff": "diff --git a/apps/web/features/auth/acting-identity.ts b/apps/web/features/auth/acting-identity.ts\nindex 243debcac5..9251b2dcfd 100644\n--- a/apps/web/features/auth/acting-identity.ts\n+++ b/apps/web/features/auth/acting-identity.ts\n@@ -71,7 +71,8 @@ export function identityOptions(discovery: AgentDiscovery,\n }\n \n export function resolveSessionAgent(options: readonly AgentOption[] | null,\n-  chosen: string | null): SessionAgent {\n+  chosen: string | null, eligible = true): SessionAgent {\n+  if (chosen && !eligible) return { status: 'ineligible', previous: chosen };\n   if (!options) return { status: 'unverified', previous: chosen };\n   if (chosen) {\n     const agent = options.find(option => option.iri === chosen);\n",
+    "beforeResolver": {
+      "blob": "243debcac540b29fe683518ac71646cb3d42d6bb",
+      "lines": [
+        73,
+        81
+      ],
+      "source": "export function resolveSessionAgent(options: readonly AgentOption[] | null,\n  chosen: string | null): SessionAgent {\n  if (!options) return { status: 'unverified', previous: chosen };\n  if (chosen) {\n    const agent = options.find(option => option.iri === chosen);\n    return agent ? { status: 'selected', agent } : { status: 'ineligible', previous: chosen };\n  }\n  return options.length ? { status: 'unselected' } : { status: 'none' };\n}\n"
+    },
+    "afterResolver": {
+      "blob": "9251b2dcfde8da781b6b78a664cf87cae248298f",
+      "lines": [
+        73,
+        82
+      ],
+      "source": "export function resolveSessionAgent(options: readonly AgentOption[] | null,\n  chosen: string | null, eligible = true): SessionAgent {\n  if (chosen && !eligible) return { status: 'ineligible', previous: chosen };\n  if (!options) return { status: 'unverified', previous: chosen };\n  if (chosen) {\n    const agent = options.find(option => option.iri === chosen);\n    return agent ? { status: 'selected', agent } : { status: 'ineligible', previous: chosen };\n  }\n  return options.length ? { status: 'unselected' } : { status: 'none' };\n}\n"
+    },
+    "caller": {
+      "blob": "07a2100944c05da93f6f44e729aadb03c082b39f",
+      "lines": [
+        117,
+        122
+      ],
+      "source": "  const [discovery, listed, state] = await Promise.all([\n    sessionDiscovery(), sessionAgents(), sessionAgentState()]);\n  const agents = discovery ? agentOptions(discovery) : null;\n  const identities = listed ? identityOptions(listed, agents ?? []) : null;\n  const agent = state ? resolveSessionAgent(identities, state.sessionAgent.actingSubject, state.sessionAgent.eligible)\n    : { status: 'unverified', previous: null } as const;\n"
+    },
+    "knownSavedChoiceAssertions": {
+      "blob": "711c89bfa00fef5fd5004db3628a18c0f2fda6d1",
+      "lines": [
+        17,
+        25
+      ],
+      "source": "  test('a known saved choice stays unverified on failure and ineligible when Main withdraws it', () => {\n    const option: AgentOption = { iri: chosen, label: 'Known Agent', handle: null, kind: 'person', path: null };\n    expect(resolveSessionAgent(null, chosen)).toEqual({ status: 'unverified', previous: chosen });\n    expect(resolveSessionAgent([option], chosen, false)).toEqual({ status: 'ineligible', previous: chosen });\n    expect(resolveSessionAgent(null, chosen, false)).toEqual({ status: 'ineligible', previous: chosen });\n    expect(resolveSessionAgent([], null)).toEqual({ status: 'none' });\n    expect(resolveSessionAgent([option], null)).toEqual({ status: 'unselected' });\n    expect(resolveSessionAgent([option], chosen, true)).toEqual({ status: 'selected', agent: option });\n  });\n"
+    }
+  },
+  "sourceReasoning": [
+    {
+      "case": "two-argument compatibility",
+      "result": "PASS",
+      "reason": "Omitting the optional third argument sets eligible to true, so the added guard is false. The old branches remain identical: null options yield unverified with the supplied previous value; a chosen match yields selected; a chosen miss yields ineligible; no choice yields unselected for a nonempty list and none for an empty list.",
+      "sourceLines": {
+        "before": [
+          73,
+          80
+        ],
+        "after": [
+          73,
+          81
+        ]
+      },
+      "existingAssertionLines": [
+        19,
+        22,
+        23,
+        24
+      ],
+      "coverageLimit": "The retained test explicitly exercises the two-argument null/empty/unselected cases and explicit true selection; full default compatibility follows from the unchanged branches and default value."
+    },
+    {
+      "case": "ineligible saved choice with discovered options",
+      "result": "PASS",
+      "reason": "For a supplied saved Agent IRI and eligible=false, line 75 returns ineligible before option lookup. A matching discovered option cannot restore selection; an empty list, a list without that IRI or a list with another Agent cannot substitute a selection. previous is the exact chosen input.",
+      "sourceLines": [
+        75,
+        79
+      ],
+      "existingAssertionLines": [
+        18,
+        20
+      ]
+    },
+    {
+      "case": "ineligible saved choice without discovery",
+      "result": "PASS",
+      "reason": "The chosen-and-ineligible guard precedes the null-options branch, so null options plus a saved choice and eligible=false yields ineligible with the original IRI, rather than downgrading known ineligibility to unverified. Without an explicit false eligibility, discovery failure retains the old unverified result.",
+      "sourceLines": [
+        74,
+        75,
+        76
+      ],
+      "existingAssertionLines": [
+        19,
+        21
+      ]
+    },
+    {
+      "case": "retain the supplied saved Agent",
+      "result": "PASS",
+      "reason": "readSession passes state.sessionAgent.actingSubject and state.sessionAgent.eligible directly. It does not pass mainAgent or initialActingSubject. The early return copies chosen into previous; the eligible branch selects only options.find(option => option.iri === chosen), returning that matching option. No branch infers or selects a different Agent; with no saved choice, eligible=false also leaves the existing null/empty/nonempty discovery branches intact.",
+      "sourceLines": [
+        75,
+        76,
+        77,
+        78,
+        79,
+        81
+      ],
+      "callerLines": [
+        13,
+        17,
+        117,
+        122
+      ],
+      "existingAssertionLines": [
+        20,
+        21,
+        22,
+        23,
+        24
+      ]
+    }
+  ],
+  "verdict": "APPROVE",
+  "verdictStatement": "Approve exactly the omitted two-line resolveSessionAgent eligibility implementation at blob 9251b2dcfde8da781b6b78a664cf87cae248298f with caller 07a2100944c05da93f6f44e729aadb03c082b39f and tests 711c89bfa00fef5fd5004db3628a18c0f2fda6d1. The default preserves existing callers, explicit ineligibility takes precedence over discovery, and the saved Agent is retained without substitution.",
+  "actionableFindings": [],
+  "actualCounterexamples": [],
+  "validation": {
+    "sourceInspection": "Completed in this worker against the immutable git blobs and exact original producer diff.",
+    "newRuntimeTestsExecuted": false,
+    "reusedExistingTests": {
+      "pin": "500c85e728312b8e8a49f02b898b6e62fe0f22e9",
+      "job": "7ed0226f-c914-4a7f-a7f9-6654e06620db",
+      "passed": 132,
+      "assertions": 1302,
+      "provenance": "Retained evidence identified by the task brief and staged coverage reference; not rerun or independently re-executed by G-2856.",
+      "blobIdentityChecked": true,
+      "doesNotSubstituteForSourceInspection": true
+    },
+    "reportChecks": {
+      "job": "294b802d-9875-4f76-b889-8824e21a80a6",
+      "result": "PASS",
+      "commands": [
+        {
+          "command": "task docs:check",
+          "exit": 0,
+          "result": "13 documentation-check tests passed; 253 Markdown files checked.",
+          "log": ".temp/goal/jobs/294b802d-9875-4f76-b889-8824e21a80a6.1.log"
+        },
+        {
+          "command": "task goal -- check",
+          "exit": 0,
+          "result": "Types, tests and lint had no selected source work or brief tests; ast passed; selected repository guard passed (2 tests, 6 assertions).",
+          "guard": "scripts/static/one-language-parser-debt.test.ts",
+          "log": ".temp/goal/jobs/294b802d-9875-4f76-b889-8824e21a80a6.2.log",
+          "fullOutput": ".temp/goal/check/run-PS75ko/output.log"
+        }
+      ],
+      "scope": "Report-only documentation and worker checks; no product suite rerun or runtime/assistive-technology acceptance."
+    }
+  },
+  "preservation": {
+    "existingTypedSourceApproval": "fa6e2e5be7f82faf7cbc0c0b4480d0d0fdab8d48 retained unchanged; not reissued by this proof.",
+    "existingRuntimeAndAssistiveTechnologyOwner": "G-2847 remains responsible for its genuine running checks and report.",
+    "integrationAndClassAcceptance": "Existing manager and acceptance owners retain integration, runtime acceptance and class closure; this proof closes no audit finding.",
+    "untouched": [
+      "other 27 product paths",
+      "G-2847 report and private artifacts",
+      "existing live jobs",
+      "main and root index",
+      "ledger",
+      "data and corpus",
+      "reset/import state",
+      "accounts"
+    ],
+    "delivery": "Only the newly claimed proof is published on this main-based report branch. The current task brief supersedes the staged request’s older instruction to append to the G-2847 report."
+  }
+}

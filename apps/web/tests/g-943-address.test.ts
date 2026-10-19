@@ -245,6 +245,87 @@ test('G-943 proxy returns a non-indexable unavailable response rather than rende
   expect(response.status).toBe(503);
   expect(response.headers.get('x-robots-tag')).toBe('noindex');
 });
+
+test('resource admission follows a lawful Site canonical redirect without asking for an unsupported entity page', async () => {
+  const paths: string[] = [];
+  globalThis.fetch = (async input => {
+    const target = new URL(String(input));
+    paths.push(target.pathname);
+    expect(target.pathname).toBe('/v1/addresses/resolve');
+    return Response.json(full(answer('resource', '/z/', 'public-site')));
+  }) as typeof fetch;
+  const response = await proxy(new NextRequest(`https://rezics.test/en/e/${uuid}?language=ja&tag=a&tag=b`));
+  expect(response.status).toBe(301);
+  expect(response.headers.get('location')).toBe('https://rezics.test/en/z/public-site?language=ja&tag=a&tag=b');
+  expect(paths).toEqual(['/v1/addresses/resolve']);
+});
+
+test('a canonical Collection admits through its members capability and preserves the requested continuation', async () => {
+  const paths: string[] = [];
+  globalThis.fetch = (async input => {
+    const target = new URL(String(input));
+    paths.push(target.pathname);
+    if (target.pathname === '/v1/addresses/resolve') return Response.json(full(answer('resource', '/e/', sid, 'List')));
+    if (target.pathname === `/v1/resources/${uuid}`) return Response.json({ status: 'available', type: 'collection' });
+    expect(target.pathname).toBe(`/v1/collections/${uuid}`);
+    expect(target.searchParams.get('after')).toBe('opaque-page-2');
+    expect(target.searchParams.get('parent')).toBe(holder);
+    return Response.json({ occurrences: [], next: null });
+  }) as typeof fetch;
+  const response = await proxy(new NextRequest(`https://rezics.test/en/e/${sid}-list?after=opaque-page-2&parent=${encodeURIComponent(holder)}`));
+  expect(response.status).toBe(200);
+  expect(paths).toEqual(['/v1/addresses/resolve', `/v1/resources/${uuid}`, `/v1/collections/${uuid}`]);
+});
+
+test('Collection admission retains invalid, moved, budget and rate-limit responses with a usable contextual restart', async () => {
+  for (const status of [400, 409, 422, 429, 503]) {
+    let recovered = false;
+    globalThis.fetch = (async input => {
+      const target = new URL(String(input));
+      if (target.pathname === '/v1/addresses/resolve') return Response.json(full(answer('resource', '/e/', sid, 'List')));
+      if (target.pathname === `/v1/resources/${uuid}`) return Response.json({ status: 'available', type: 'collection' });
+      expect(target.pathname).toBe(`/v1/collections/${uuid}`);
+      if (!target.searchParams.has('after')) { recovered = true; return Response.json({ occurrences: [], next: null }); }
+      return Response.json({ code: status === 409 ? 'collection_changed' : 'cursor_invalid' },
+        { status, headers: { 'retry-after': '13' } });
+    }) as typeof fetch;
+    const task = `/ja/e/${sid}-list?after=not-a-valid-cursor&parent=${encodeURIComponent(holder)}&language=sv&tag=a&tag=b`;
+    const response = await proxy(new NextRequest(`https://rezics.test${task}`));
+    expect(response.status).toBe(status);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    const body = await response.text();
+    expect(body).toContain('<html lang="ja">');
+    expect(body).toContain('role="alert"');
+    if (status === 400 || status === 409) {
+      const restart = task.replace('after=not-a-valid-cursor&', '');
+      expect(body).toContain(`href="${restart.replaceAll('&', '&amp;')}"`);
+      expect((await proxy(new NextRequest(`https://rezics.test${restart}`))).status).toBe(200);
+      expect(recovered).toBe(true);
+    } else {
+      expect(response.headers.get('retry-after')).toBe('13');
+      expect(body).toContain(`href="${task.replaceAll('&', '&amp;')}"`);
+    }
+  }
+});
+
+test('pre-shell failures retain their status, locale and complete recovery task at both normalization boundaries', async () => {
+  globalThis.fetch = (async () => new Response(null, { status: 503, headers: { 'retry-after': '9' } })) as unknown as typeof fetch;
+  for (const trailing of ['', '/']) {
+    const task = `/ja/e/${sid}${trailing}?type=lists&after=opaque%2Bcursor&language=sv&tag=a&tag=b`;
+    const response = trailing
+      ? await beforePathNormalization(new Request(`https://rezics.test${task}`), 'https://main.test')
+      : await proxy(new NextRequest(`https://rezics.test${task}`));
+    expect(response?.status).toBe(503);
+    expect(response?.headers.get('retry-after')).toBe('9');
+    const body = await response!.text();
+    expect(body).toContain('<html lang="ja">');
+    expect(body).toContain('role="alert"');
+    expect(body).toContain('<h1');
+    expect(body).toContain(`href="${task.replaceAll('&', '&amp;')}"`);
+    expect(body).toContain('href="/ja/discover?type=lists"');
+    expect(body).toContain('href="/ja"');
+  }
+});
 test('G-943 Worker resolves a slash, locale and alias together before vinext can redirect', async () => {
   globalThis.fetch = (async (input: string | URL | Request) => {
     expect(String(input)).toStartWith('https://main.test/v1/addresses/resolve?');
