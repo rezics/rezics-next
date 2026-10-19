@@ -12,6 +12,147 @@ import org.apache.jena.sparql.exec.QueryExecResult;
 
 /** Native reads use the same request-local work owner as commands. */
 final class QueryWorkService extends SPARQL_QueryDataset {
+    static final String READ_BUDGET_HEADER = "X-Rezics-Read-Budget-Ms";
+    /** A transport cancellation and the caller's remaining wall allocation
+     * cover parse, readiness, engine execution and lazy response consumption. */
+    static final class ReadBoundary implements AutoCloseable {
+        private static final ThreadLocal<ReadBoundary> CURRENT = new ThreadLocal<>();
+        private static final java.util.concurrent.ScheduledThreadPoolExecutor TIMER = timer();
+        private static java.util.concurrent.ScheduledThreadPoolExecutor timer() {
+            var timer = new java.util.concurrent.ScheduledThreadPoolExecutor(1, work -> {
+                Thread thread = new Thread(work, "native-read-deadline"); thread.setDaemon(true); return thread;
+            });
+            timer.setRemoveOnCancelPolicy(true);
+            return timer;
+        }
+        private final Thread worker = Thread.currentThread();
+        private final boolean wasInterrupted = worker.isInterrupted();
+        private final long deadline;
+        private final java.util.concurrent.ScheduledFuture<?> expiry;
+        private org.eclipse.jetty.server.internal.HttpConnection connection;
+        private java.util.concurrent.ScheduledFuture<?> disconnect;
+        private final java.nio.ByteBuffer transportInput = java.nio.ByteBuffer.allocate(1).limit(0);
+        private Runnable execution;
+        private boolean closed;
+        private String reason;
+
+        ReadBoundary(int milliseconds) {
+            deadline = System.nanoTime() + java.util.concurrent.TimeUnit.MILLISECONDS.toNanos(milliseconds);
+            expiry = TIMER.schedule(() -> cancel("deadline"), milliseconds, java.util.concurrent.TimeUnit.MILLISECONDS);
+        }
+        synchronized void cancel(String why) {
+            if (closed || reason != null) return;
+            reason = why;
+            if (disconnect != null) disconnect.cancel(false);
+            worker.interrupt();
+            if (execution != null) execution.run();
+        }
+        private synchronized void monitorTransport() {
+            if (connection == null || disconnect != null || closed || reason != null) return;
+            // A synchronous HTTP/1 handler has no socket read pending after its
+            // body is consumed. Jetty's failure listener alone cannot observe a
+            // disconnect while that handler waits for publication or an engine.
+            disconnect = TIMER.scheduleWithFixedDelay(this::probeTransport, 0, 10,
+                java.util.concurrent.TimeUnit.MILLISECONDS);
+        }
+        private synchronized void probeTransport() {
+            if (closed || reason != null) return;
+            // Only the operation's body-complete execution/capture path arms
+            // this probe. Leave any bytes already owned by Jetty untouched.
+            if (!connection.getParser().isComplete() || !connection.isRequestBufferEmpty()) return;
+            try {
+                int filled = connection.getEndPoint().fill(transportInput);
+                if (filled < 0) cancel("client-cancelled");
+                else if (filled > 0) {
+                    // A pipelined request is not a cancellation. Return its
+                    // byte to Jetty's existing input buffer before completion.
+                    connection.onUpgradeTo(transportInput);
+                    disconnect.cancel(false);
+                }
+            } catch (java.io.IOException failure) { cancel("client-cancelled"); }
+        }
+        private synchronized void watch(Runnable abort) {
+            check(); execution = abort; monitorTransport();
+        }
+        static void watch(QueryExec execution) {
+            ReadBoundary current = CURRENT.get();
+            if (current != null) current.watch(execution::abort);
+        }
+        static void watch(org.apache.jena.query.QueryExecution execution) {
+            ReadBoundary current = CURRENT.get();
+            if (current != null) current.watch(execution::abort);
+        }
+        static long deadline(long fallback) {
+            ReadBoundary current = CURRENT.get();
+            checkCurrent();
+            return current == null ? fallback : Math.min(fallback, current.deadline);
+        }
+        private synchronized void check() {
+            if (reason == null && System.nanoTime() >= deadline) cancel("deadline");
+            if (reason != null) throw new org.apache.jena.query.QueryCancelledException(
+                new java.util.concurrent.CancellationException("Native read " + reason));
+        }
+        static void checkCurrent() {
+            ReadBoundary current = CURRENT.get();
+            if (current != null) current.check();
+        }
+        /** A capture can wait before an engine exists to watch. Use the same
+         * deadline and interrupt that cancel that engine, including while a
+         * publisher is still inside its atomic RDF/Lucene fence. */
+        static void lockForRead(java.util.concurrent.locks.ReentrantLock lock) {
+            ReadBoundary current = CURRENT.get();
+            checkCurrent();
+            if (current != null) current.monitorTransport();
+            try {
+                if (current == null) lock.lockInterruptibly();
+                else if (!lock.tryLock(Math.max(0, current.deadline - System.nanoTime()),
+                        java.util.concurrent.TimeUnit.NANOSECONDS)) {
+                    current.cancel("deadline");
+                    current.check();
+                }
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                checkCurrent();
+                throw new org.apache.jena.query.QueryCancelledException(interrupted);
+            }
+            try { checkCurrent(); }
+            catch (RuntimeException cancelled) { lock.unlock(); throw cancelled; }
+        }
+        @Override public synchronized void close() {
+            closed = true; execution = null; expiry.cancel(false);
+            if (disconnect != null) disconnect.cancel(false);
+            // The servlet executor reuses this thread for unrelated requests.
+            if (reason != null && !wasInterrupted) Thread.interrupted();
+        }
+    }
+
+    static final class ReadBoundaryFilter implements jakarta.servlet.Filter {
+        @Override public void doFilter(jakarta.servlet.ServletRequest request, jakarta.servlet.ServletResponse response,
+                jakarta.servlet.FilterChain chain) throws java.io.IOException, jakarta.servlet.ServletException {
+            var http = (jakarta.servlet.http.HttpServletRequest) request;
+            String header = http.getHeader(READ_BUDGET_HEADER);
+            if (header == null) { chain.doFilter(request, response); return; }
+            if (!header.matches("[1-9][0-9]{0,4}") || Integer.parseInt(header) > 10_000) {
+                ((jakarta.servlet.http.HttpServletResponse) response).sendError(400, "Invalid native read allocation"); return;
+            }
+            ReadBoundary previous = ReadBoundary.CURRENT.get();
+            try (var boundary = new ReadBoundary(Integer.parseInt(header))) {
+                ReadBoundary.CURRENT.set(boundary);
+                var transport = org.eclipse.jetty.ee11.servlet.ServletContextRequest.getServletContextRequest(request);
+                if (transport.getConnectionMetaData().getConnection()
+                        instanceof org.eclipse.jetty.server.internal.HttpConnection connection)
+                    boundary.connection = connection;
+                transport.addFailureListener(failure -> boundary.cancel("client-cancelled"));
+                try { boundary.check(); chain.doFilter(request, response); }
+                finally {
+                    if (boundary.reason != null && !response.isCommitted())
+                        ((jakarta.servlet.http.HttpServletResponse) response).setHeader("X-Rezics-Read-Reason", boundary.reason);
+                }
+            } finally {
+                if (previous == null) ReadBoundary.CURRENT.remove(); else ReadBoundary.CURRENT.set(previous);
+            }
+        }
+    }
     static final String READ_CUT_HEADER = "X-Rezics-Read-Cut";
     static final String GRAPH_VERSION_HEADER = "X-Rezics-Graph-Version";
     static final String REQUIRE_QUALIFIED_HEADER = "X-Rezics-Require-Qualified-Read";
@@ -58,6 +199,7 @@ final class QueryWorkService extends SPARQL_QueryDataset {
 
     @Override protected void execute(String queryString, HttpAction action) {
         try (CommandWork work = new CommandWork()) {
+            ReadBoundary.checkCurrent();
             String require = action.getRequest().getHeader(REQUIRE_QUALIFIED_HEADER);
             if (require != null && !require.equalsIgnoreCase("true") && !require.equalsIgnoreCase("false")) {
                 ServletOps.errorBadRequest("Qualified read header must be true or false"); return;
@@ -85,8 +227,10 @@ final class QueryWorkService extends SPARQL_QueryDataset {
             // through sendResults (which may consume lazy SELECT rows).
             boolean[] began = {false};
             try (var capture = SearchDeltaJournal.captureRead(data, () -> {
+                ReadBoundary.checkCurrent();
                 action.beginRead(); began[0] = true;
             })) {
+                ReadBoundary.checkCurrent();
                 String graphVersion = TemplateIndexService.graphReadVersion(data);
                 if (graphVersion != null) action.getResponse().setHeader(GRAPH_VERSION_HEADER, graphVersion);
                 var evidence = readCutHeader(capture.evidence());
@@ -101,7 +245,7 @@ final class QueryWorkService extends SPARQL_QueryDataset {
                     sendResults(action, result, query.getPrologue());
                 }
             } catch (java.io.IOException unavailable) {
-                SearchDeltaJournal.invalidate(data, "committed reader unavailable", "query");
+                SearchDeltaJournal.invalidateRead(data, "committed reader unavailable", "query");
                 if (requireQualified && !action.getResponse().isCommitted()) {
                     action.getResponse().setHeader(READ_CUT_HEADER, org.apache.jena.atlas.json.JSON.toStringFlat(
                         unavailableHeader("committed-reader-unavailable", SearchDeltaJournal.textIndexUncertain(data))));
@@ -122,8 +266,17 @@ final class QueryWorkService extends SPARQL_QueryDataset {
         }
     }
 
+    @Override protected QueryExec createQueryExec(HttpAction action, Query query,
+            org.apache.jena.sparql.core.DatasetGraph dataset) {
+        ReadBoundary.checkCurrent();
+        QueryExec execution = super.createQueryExec(action, query, dataset);
+        try { ReadBoundary.watch(execution); return execution; }
+        catch (RuntimeException failure) { execution.close(); throw failure; }
+    }
+
     @Override protected QueryExecResult executeQuery(HttpAction action, QueryExec queryExec,
             Query requestQuery, String queryStringLog) {
+        ReadBoundary.checkCurrent();
         QueryExecResult result = super.executeQuery(action, queryExec, requestQuery, queryStringLog);
         // Jena forces the first SELECT row here. Native reads return one complete
         // page/recipe envelope, so its visits are known before sendResults writes.

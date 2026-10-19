@@ -85,6 +85,7 @@ final class CommandService extends ActionService {
             operation.equals(Operation.Query) || operation.getId().getURI().equals("https://rezics.com/fuseki/command"));
     }
     @Override public void execGet(HttpAction action) {
+        QueryWorkService.ReadBoundary.checkCurrent();
         long epoch = publicSearchWriteEpoch.get();
         boolean deltaExclusive = deltaExclusive(action.getDataService());
         boolean textIndexUncertain = SearchDeltaJournal.textIndexUncertain(action.getDataService().getDataset());
@@ -99,7 +100,7 @@ final class CommandService extends ActionService {
                 respond(action, 200, proof);
             } catch (IOException | IllegalStateException ex) {
                 var data = action.getDataService().getDataset();
-                SearchDeltaJournal.invalidate(data, "committed reader unavailable", "deltaProof");
+                SearchDeltaJournal.invalidateRead(data, "committed reader unavailable", "deltaProof");
                 respond(action, 200, SearchDeltaJournal.unavailable(data,
                     SearchDeltaJournal.UnavailableReason.COMMITTED_READER_UNAVAILABLE));
             } catch (IllegalArgumentException ex) {
@@ -123,8 +124,12 @@ final class CommandService extends ActionService {
             Map.entry("profiles", profiles.digests())));
     }
     private static boolean prefixWalkAvailable(DatasetGraph data) {
+        QueryWorkService.ReadBoundary.checkCurrent();
         data.begin(ReadWrite.READ);
-        try { return prefixIndex(data) != null && PublicNameProjection.prefixWalkAvailable(data); }
+        try {
+            QueryWorkService.ReadBoundary.checkCurrent();
+            return prefixIndex(data) != null && PublicNameProjection.prefixWalkAvailable(data);
+        }
         finally { data.end(); }
     }
     @Override public void execPost(HttpAction action) {
@@ -137,6 +142,7 @@ final class CommandService extends ActionService {
             String requestJSON = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
             TitleControlPolicy.commandJSONDepth(requestJSON);
             JsonObject body = JSON.parse(requestJSON);
+            QueryWorkService.ReadBoundary.checkCurrent();
             if (body.get("alsoEnjoyedCandidates") != null) {
                 if (!authorized(action, admittedCapability)) {
                     respond(action, 403, Map.of("status", "forbidden")); return;
@@ -1168,7 +1174,7 @@ final class CommandService extends ActionService {
      * long command monitor remains outside; a captured query executes outside both. */
     void commitPublished(DatasetGraph dataset, boolean tracksIndex, boolean touchesPublicIndex,
                          boolean rebuild, boolean qualifyGeneration) {
-        synchronized (SearchDeltaJournal.publicationMonitor()) {
+        try (var publication = SearchDeltaJournal.publicationFence()) {
             CommitHalt.commit(dataset);
             dataset.end();
             CommandWork.enter("qualification");

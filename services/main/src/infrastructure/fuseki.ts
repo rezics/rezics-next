@@ -33,7 +33,7 @@ export interface FusekiReadDiagnostics {
   closed: boolean;
 }
 
-/** One public-search route shares a wall deadline and Fuseki call/response budget. */
+/** One operation shares a wall deadline and Fuseki call/response budget. */
 export interface FusekiReadBudget {
   signal: AbortSignal;
   callsLeft: number;
@@ -43,8 +43,163 @@ export interface FusekiReadBudget {
   attempt?: number;
   phase?: FusekiReadPhase;
   diagnostics?: FusekiReadDiagnostics;
+  readPhase?: string;
 }
-export const fusekiReadBudget = new AsyncLocalStorage<FusekiReadBudget>();
+
+interface ReadScope {
+  parent?: FusekiReadBudget;
+  controller: AbortController;
+  deadlineTimer?: ReturnType<typeof setTimeout>;
+  request?: { root: FusekiReadBudget; limits: ReadLimits; claimed: boolean };
+}
+interface ReadLimits { calls: number; bytes: number; deadlineMs: number }
+const readScopes = new WeakMap<FusekiReadBudget, ReadScope>();
+
+/** Existing owners may supply plain counters or setters which already debit
+ * their parent. Preserve both APIs, including their mutable diagnostics. */
+class FusekiReadBudgets extends AsyncLocalStorage<FusekiReadBudget> {
+  override run<R, Args extends unknown[]>(store: FusekiReadBudget, callback: (...args: Args) => R, ...args: Args): R {
+    const parent = this.getStore();
+    if (parent === store) return super.run(store, callback, ...args);
+    const request = readScopes.get(parent!)?.request ?? readScopes.get(store)?.request;
+    if (parent && request && !request.claimed) {
+      // The first declared owner selects the allocation once. Preflight has
+      // already spent from it; sibling owners and retries cannot replenish it.
+      const calls = store.callsLeft, bytes = store.bytesLeft;
+      request.root.callsLeft = calls - (Number.MAX_SAFE_INTEGER - request.root.callsLeft);
+      request.root.bytesLeft = bytes - (Number.MAX_SAFE_INTEGER - request.root.bytesLeft);
+      request.claimed = true;
+    }
+    const controller = new AbortController();
+    const signal = AbortSignal.any([store.signal, controller.signal, ...(parent ? [parent.signal] : [])]);
+    const scope = new Proxy(store, {
+      get(target, key) {
+        if (key === 'signal') return signal;
+        if (key === 'deadline') return target.deadline === undefined && parent?.deadline === undefined ? undefined
+          : Math.min(target.deadline ?? Infinity, parent?.deadline ?? Infinity);
+        if (key === 'diagnostics') return target.diagnostics ?? parent?.diagnostics;
+        if (key === 'readPhase') return target.readPhase ?? parent?.readPhase;
+        return Reflect.get(target, key, target) as unknown;
+      },
+      set: (target, key, value) => Reflect.set(target, key, value, target),
+    });
+    readScopes.set(scope, { parent, controller, request });
+    return super.run(scope, callback, ...args);
+  }
+}
+export const fusekiReadBudget = new FusekiReadBudgets();
+
+function shortenReadDeadline(budget: FusekiReadBudget, deadline: number): void {
+  budget.deadline = Math.min(budget.deadline ?? Infinity, deadline);
+  const scope = readScopes.get(budget)!;
+  clearTimeout(scope.deadlineTimer);
+  scope.deadlineTimer = setTimeout(
+    () => scope.controller.abort(new FusekiReadDeadlineExceeded('Fuseki request deadline exceeded')),
+    Math.max(0, budget.deadline - performance.now()));
+}
+
+/** Enter before admission/readiness. Owners keep their published allocations;
+ * an operation without an explicit owner uses the bounded fallback. */
+export async function withFusekiReadRequest<T>(request: Request, limits: ReadLimits,
+  read: () => T | Promise<T>): Promise<T> {
+  // Web forwards a positive safe-integer Unix timestamp. Convert its remaining
+  // duration once; later reads and retries stay on the monotonic clock.
+  const forwarded = Number(request.headers.get('x-rezics-server-deadline'));
+  const validDeadline = Number.isSafeInteger(forwarded) && forwarded > 0;
+  const deadline = performance.now() + Math.min(limits.deadlineMs,
+    validDeadline ? forwarded - Date.now() : Infinity);
+  const parent = fusekiReadBudget.getStore();
+  if (parent) {
+    assertFusekiReadActive();
+    if (validDeadline) {
+      // Shorten the existing operation, including already running transports;
+      // a nested owner cannot restart the duration or allocation.
+      shortenReadDeadline(readScopes.get(parent)?.request?.root ?? parent,
+        Math.min(deadline, parent.deadline ?? Infinity));
+      assertFusekiReadActive();
+    }
+    return read();
+  }
+  const controller = new AbortController();
+  const budget: FusekiReadBudget = {
+    signal: AbortSignal.any([request.signal, controller.signal]),
+    deadline,
+    callsLeft: Number.MAX_SAFE_INTEGER, bytesLeft: Number.MAX_SAFE_INTEGER,
+    diagnostics: createFusekiReadDiagnostics(), readPhase: 'preflight',
+  };
+  readScopes.set(budget, { controller, request: { root: budget, limits, claimed: false } });
+  shortenReadDeadline(budget, deadline);
+  try {
+    return await fusekiReadBudget.run(budget, async () => {
+      assertFusekiReadActive();
+      const result = await read();
+      assertFusekiReadActive();
+      return result;
+    });
+  } finally {
+    clearTimeout(readScopes.get(budget)!.deadlineTimer);
+    // Close escaped async continuations too; returning HTTP must not give them
+    // a fresh allocation or leave a transport running under an idle request.
+    controller.abort();
+  }
+}
+
+/** Join external work with the existing operation boundary. Shared work may
+ * retain its own lifetime; this waiter and any caller-owned transport cannot. */
+export async function withFusekiReadWait<T>(caller: AbortSignal,
+  read: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  assertFusekiReadActive();
+  const budget = fusekiReadBudget.getStore();
+  if (budget?.deadline !== undefined && Number.isFinite(budget.deadline)) {
+    // Plain/nested owners also publish monotonic deadlines. Arm the existing
+    // operation controller, rather than allowing a remote default to renew it.
+    shortenReadDeadline(readScopes.get(budget)?.request?.root ?? budget, budget.deadline);
+  }
+  const signal = budget ? AbortSignal.any([caller, budget.signal]) : caller;
+  signal.throwIfAborted();
+  let abort!: () => void;
+  const stopped = new Promise<never>((_, reject) => {
+    abort = () => reject(signal.reason);
+    signal.addEventListener('abort', abort, { once: true });
+  });
+  try {
+    const result = await Promise.race([stopped, Promise.resolve().then(() => {
+      assertFusekiReadActive();
+      signal.throwIfAborted();
+      return read(signal);
+    })]);
+    assertFusekiReadActive();
+    signal.throwIfAborted();
+    return result;
+  } finally {
+    signal.removeEventListener('abort', abort);
+  }
+}
+
+function budgetChain(): FusekiReadBudget[] {
+  const chain: FusekiReadBudget[] = [];
+  for (let budget = fusekiReadBudget.getStore(); budget; budget = readScopes.get(budget)?.parent) chain.push(budget);
+  return chain;
+}
+
+export class FusekiReadDeadlineExceeded extends Error {}
+
+export function assertFusekiReadActive(): void {
+  const chain = budgetChain();
+  for (const budget of chain) {
+    budget.signal.throwIfAborted();
+    if (budget.deadline !== undefined && performance.now() >= budget.deadline) {
+      const error = new FusekiReadDeadlineExceeded('Fuseki request deadline exceeded');
+      readScopes.get(budget)?.controller.abort(error);
+      throw error;
+    }
+    if (budget.callsLeft < 0 || budget.bytesLeft < 0) {
+      const error = new FusekiReadBudgetExceeded('Fuseki preflight exceeded the selected read allocation');
+      for (const owner of chain) readScopes.get(owner)?.controller.abort(error);
+      throw error;
+    }
+  }
+}
 
 const MAX_FUSEKI_DIAGNOSTIC_HISTORY = 8;
 const MAX_FUSEKI_DIAGNOSTIC_ACTIVE = 8;
@@ -111,11 +266,14 @@ function finishReadCall(id: number | undefined, status: Exclude<FusekiReadCallSt
   });
 }
 
-function searchDiagnosticHeaders(): Record<string, string> {
+function readBudgetHeaders(): Record<string, string> {
+  assertFusekiReadActive();
   const budget = fusekiReadBudget.getStore();
-  if (!budget?.diagnostics || budget.deadline === undefined || budget.diagnostics.closed) return {};
-  const remainingMs = Math.min(1_500, Math.max(1, Math.ceil(budget.deadline - performance.now())));
-  return { 'x-rezics-search-budget-ms': String(remainingMs) };
+  if (!budget) return {};
+  const remainingMs = Math.min(10_000, Math.max(1, Math.ceil((budget.deadline ?? performance.now() + 10_000) - performance.now())));
+  return { 'x-rezics-read-budget-ms': String(remainingMs),
+    ...(budget.diagnostics && !budget.diagnostics.closed
+      ? { 'x-rezics-search-budget-ms': String(Math.min(1_500, remainingMs)) } : {}) };
 }
 
 export class FusekiReadBudgetExceeded extends Error {}
@@ -123,20 +281,39 @@ export class FusekiPrefixWalkUnavailable extends Error {}
 export class FusekiPrefixWalkRestart extends Error {}
 
 function takeReadCall(): void {
-  const budget = fusekiReadBudget.getStore();
-  if (!budget) return;
-  if (budget.callsLeft <= 0) throw new FusekiReadBudgetExceeded('Fuseki read call budget exceeded');
-  budget.callsLeft--;
+  takeReadCost('callsLeft', 1);
 }
 
 function takeReadBytes(bytes: number): void {
-  const budget = fusekiReadBudget.getStore();
-  if (!budget) return;
-  if (bytes > budget.bytesLeft) throw new FusekiReadBudgetExceeded('Fuseki read byte budget exceeded');
-  budget.bytesLeft -= bytes;
+  takeReadCost('bytesLeft', bytes);
+}
+
+function takeReadCost(key: 'callsLeft' | 'bytesLeft', amount: number): void {
+  assertFusekiReadActive();
+  const chain = budgetChain();
+  const before = chain.map(budget => budget[key]);
+  for (const budget of chain) {
+    const request = readScopes.get(budget)?.request;
+    const left = request && !request.claimed
+      ? (key === 'callsLeft' ? request.limits.calls : request.limits.bytes)
+        - (Number.MAX_SAFE_INTEGER - request.root[key]) : budget[key];
+    if (left < amount) {
+      const error = new FusekiReadBudgetExceeded(`Fuseki read ${key === 'callsLeft' ? 'call' : 'byte'} budget exceeded`);
+      for (const owner of chain) readScopes.get(owner)?.controller.abort(error);
+      throw error;
+    }
+  }
+  // An accessor owner may have debited its parent already. Fill only the
+  // missing debit, so plain scopes cannot reset a budget and linked ones do
+  // not pay twice. This is synchronous, including under parallel readers.
+  chain.forEach((budget, index) => {
+    const missing = amount - (before[index]! - budget[key]);
+    if (missing > 0) budget[key] -= missing;
+  });
 }
 
 function readSignal(preparationSignal?: AbortSignal): AbortSignal {
+  assertFusekiReadActive();
   const request = fusekiReadBudget.getStore()?.signal;
   // Offline preparation shares one caller-owned finite deadline across all reads.
   // A configured client inside HTTP still obeys the tighter interactive budget.
@@ -320,6 +497,7 @@ async function boundedJson<T>(response: Response, maxResponseBytes?: number, sig
   const reader = response.body.getReader();
   const abort = () => { void reader.cancel(signal?.reason).catch(() => {}); };
   signal?.addEventListener('abort', abort, { once: true });
+  if (signal?.aborted) abort();
   const chunks: Uint8Array[] = [];
   let bytes = 0;
   try {
@@ -333,11 +511,13 @@ async function boundedJson<T>(response: Response, maxResponseBytes?: number, sig
       chunks.push(next.value);
     }
   } catch (error) {
-    await reader.cancel();
+    await reader.cancel(error).catch(() => {});
     throw error;
   } finally {
     signal?.removeEventListener('abort', abort);
   }
+  signal?.throwIfAborted();
+  assertFusekiReadActive();
   return JSON.parse(Buffer.concat(chunks).toString('utf8')) as T;
 }
 export class CommandRejected extends Error {
@@ -403,7 +583,7 @@ export class FusekiClient {
     let examined: number | undefined;
     try {
       const response = await fetch(new URL('command', this.baseUrl), {
-        method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${this.commandCapability}` },
+        method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${this.commandCapability}`, ...readBudgetHeaders() },
         body: JSON.stringify({ alsoEnjoyedCandidates: input }), signal,
       });
       if (!response.ok) throw new Error(`Candidate directory returned ${response.status}`);
@@ -433,7 +613,7 @@ export class FusekiClient {
     try {
       const response = await fetch(new URL('command', this.baseUrl), {
         method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json',
-          authorization: `Bearer ${this.commandCapability}`, ...searchDiagnosticHeaders() },
+          authorization: `Bearer ${this.commandCapability}`, ...readBudgetHeaders() },
         body: JSON.stringify({ prefixWalk: input }), signal,
       });
       if (response.status === 409) throw new FusekiPrefixWalkRestart('Prefix directory generation changed');
@@ -531,7 +711,7 @@ export class FusekiClient {
         headers: {
           'content-type': 'application/sparql-query',
           accept: 'application/sparql-results+json',
-          ...searchDiagnosticHeaders(),
+          ...readBudgetHeaders(),
           ...(nativePhase === 'occurrence-discovery'
             ? { 'x-rezics-native-phase': 'occurrence-discovery' } : {}),
         },
@@ -575,7 +755,7 @@ export class FusekiClient {
       const response = await fetch(new URL('command', this.baseUrl), {
         method: 'POST', headers: { 'content-type': 'application/json',
           accept: 'application/sparql-results+json', authorization: `Bearer ${this.commandCapability}`,
-          ...searchDiagnosticHeaders() },
+          ...readBudgetHeaders() },
         body, signal,
       });
       if (response.status === 403) throw new CommandForbidden('Fuseki template query capability rejected');
@@ -600,7 +780,7 @@ export class FusekiClient {
     signal.throwIfAborted();
     takeReadCall();
     const response = await fetch(new URL('command',this.baseUrl), {
-      method: 'POST', headers: { 'content-type':'application/json', authorization:`Bearer ${this.commandCapability}` },
+      method: 'POST', headers: { 'content-type':'application/json', authorization:`Bearer ${this.commandCapability}`, ...readBudgetHeaders() },
       body: JSON.stringify({ templateIndex: input }), signal,
     });
     if (!response.ok) throw new Error(`Template index returned ${response.status}`);
@@ -613,7 +793,7 @@ export class FusekiClient {
     signal.throwIfAborted();
     takeReadCall();
     const response = await fetch(new URL('command', this.baseUrl), {
-      method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${this.commandCapability}` },
+      method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${this.commandCapability}`, ...readBudgetHeaders() },
       body: JSON.stringify({ templateIndex: { operation: 'membership-status' } }), signal,
     });
     if (response.status === 403) throw new CommandForbidden('Membership preparation capability rejected');
@@ -796,7 +976,7 @@ export class FusekiClient {
     let status: Exclude<FusekiReadCallStatus, 'active'> = 'failed';
     try {
       const response = await fetch(new URL('command', this.baseUrl), {
-        headers: { accept: 'application/json', ...searchDiagnosticHeaders() }, signal,
+        headers: { accept: 'application/json', ...readBudgetHeaders() }, signal,
       });
       if (!response.ok) throw new Error(`Fuseki command health returned ${response.status}`);
       const value = await boundedJson<CommandHealth>(response, 65_536, signal);
@@ -833,7 +1013,7 @@ export class FusekiClient {
       const url = new URL('command', this.baseUrl);
       url.searchParams.set('deltaSince', ordinal);
       const response = await fetch(url, {
-        headers: { accept: 'application/json', ...searchDiagnosticHeaders() }, signal,
+        headers: { accept: 'application/json', ...readBudgetHeaders() }, signal,
       });
       if (!response.ok) throw new Error(`Fuseki search delta returned ${response.status}`);
       const proof = await boundedJson<SearchDeltaProof>(response, 65_536, signal);
