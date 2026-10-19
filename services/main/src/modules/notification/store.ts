@@ -752,7 +752,8 @@ export class NotificationStore {
     });
     const items: StreamItem[] = [];
     const resolutions: SubjectResolution[] = [];
-    const pendingActors: { display: NonNullable<StreamItem['display']>; agent: string }[] = [];
+    const pendingActors: string[] = [];
+    const newWorkDisplays = new Map<number, NonNullable<Awaited<ReturnType<typeof notificationNewWorkDisplay>>>>();
     const recipients = result.items.map(({ raw }) => ({ principal: principalId!, actor: raw.actor_agent,
       realm: raw.realm, resource: raw.group_key }));
     const allowed = await notificationRecipientsAllowed(this.pool, recipients);
@@ -788,36 +789,21 @@ export class NotificationStore {
           resolutions[resolutions.length - 1] = { status: 'undisclosed' };
           items.push(base); continue;
         }
+        newWorkDisplays.set(index, newWork);
       }
-      const sanction = sanctionFromFields(fields);
-      const display: StreamItem['display'] = raw.kind || newWork ? { kind: newWork ? 'new_work' : raw.kind!,
-        actor: null as NotificationAgentSummary | null, realm: fields.realm ?? null,
-        realmName: fields.realmName ?? null, realmRouteSegment: fields.realmRouteSegment ?? null,
-        roleName: fields.roleName ?? null,
-        roleChange: fields.roleChange === 'given' || fields.roleChange === 'taken' ? fields.roleChange : null,
-        ...sanction,
-        groupKey: raw.group_key, target: {
-          title: fields.title ?? null, excerpt: fields.excerpt ?? null,
-          language: fields.language ?? null, linkTarget: fields.linkTarget ?? null,
-          reviewId: fields.reviewId ?? null,
-          ...(fields.href ? { href: fields.href } : {}),
-          ...(newWork ?? {}),
-        } } : null;
       // A stored actor from an older ban row is not rendered once the receipt is a sanction.
-      if (display && raw.actor_agent && !sanction.membershipAction) pendingActors.push({ display, agent: raw.actor_agent });
+      if ((raw.kind || newWork) && raw.actor_agent && !sanctionFromFields(fields).membershipAction) {
+        pendingActors.push(raw.actor_agent);
+      }
       items.push({ ...base,
         reason: raw.reason,
         proposal: raw.proposal ? { id: raw.proposal, revision: raw.proposal_revision! } : null,
-        subject: { owner: raw.subject_owner, ref: raw.subject_ref, revision: raw.subject_revision },
-        display });
+        subject: { owner: raw.subject_owner, ref: raw.subject_ref, revision: raw.subject_revision } });
     }
-    if (pendingActors.length) {
-      const actors = await this.notificationActors(pendingActors.map(item => item.agent),
-        disclosureViewer(principal), 'inbox').catch(() => {
+    const actors = pendingActors.length
+      ? await this.notificationActors(pendingActors, disclosureViewer(principal), 'inbox').catch(() => {
         throw new NotificationUnavailable('Agent owner is unavailable');
-      });
-      for (const item of pendingActors) item.display.actor = actors.get(item.agent) ?? null;
-    }
+      }) : new Map<string, NotificationAgentSummary>();
     const checked = await notificationReadStep(() => discloseNotifications(this.pool, items.map((item, index) => ({
       input: { principalId: principalId!, owner: result.items[index]!.raw.subject_owner,
         ref: result.items[index]!.raw.subject_ref, revision: result.items[index]!.raw.subject_revision,
@@ -828,16 +814,41 @@ export class NotificationStore {
     if (principalId && await this.transaction(client => this.reader(client, principal)) !== principalId) {
       throw new NotificationDenied('recipient is inactive');
     }
-    const disclosed = items.map((item, index) => currentRecipients[index] && checked[index]?.status === 'available'
-      ? item : { ...item,
-            state:
-              item.state === 'active' && result.items[index]!.raw.proposal
-                && checked[index]?.status !== 'unavailable'
-                ? ('withdrawn' as const)
-                : item.state,
-            subject: null, display: null,
-            reason: null,
-            proposal: null });
+    const disclosed = items.map((item, index): StreamItem => {
+      const current = checked[index];
+      const raw = result.items[index]!.raw;
+      if (!currentRecipients[index] || current?.status !== 'available') return { ...item,
+        state: item.state === 'active' && raw.proposal && current?.status !== 'unavailable'
+          ? 'withdrawn' : item.state,
+        subject: null, display: null, reason: null, proposal: null };
+      // A process notice can stay available after its optional target fields
+      // were stripped. Only the final subject supplies presentation fields.
+      const fields = current.subject.fields;
+      const before = resolutions[index]!;
+      const summary = newWorkDisplays.get(index);
+      const newWork = summary && fields.linkTarget === summary.linkTarget ? summary : null;
+      const sanction = sanctionFromFields(fields);
+      // A grouping key must not repeat a stripped Realm or Work identity.
+      const groupedTargetHidden = raw.group_key !== null
+        && (raw.group_key === raw.realm && fields.realm !== raw.realm
+          || before.status === 'available' && raw.group_key === before.subject.fields.linkTarget
+            && fields.linkTarget !== raw.group_key);
+      const display: StreamItem['display'] = raw.kind || newWork ? { kind: newWork ? 'new_work' : raw.kind!,
+        actor: raw.actor_agent && !sanction.membershipAction ? actors.get(raw.actor_agent) ?? null : null,
+        realm: fields.realm ?? null,
+        realmName: fields.realmName ?? null, realmRouteSegment: fields.realmRouteSegment ?? null,
+        roleName: fields.roleName ?? null,
+        roleChange: fields.roleChange === 'given' || fields.roleChange === 'taken' ? fields.roleChange : null,
+        ...sanction,
+        groupKey: groupedTargetHidden ? null : raw.group_key, target: {
+          title: fields.title ?? null, excerpt: fields.excerpt ?? null,
+          language: fields.language ?? null, linkTarget: fields.linkTarget ?? null,
+          reviewId: fields.reviewId ?? null,
+          ...(fields.href ? { href: fields.href } : {}),
+          ...(newWork ?? {}),
+        } } : null;
+      return { ...item, display };
+    });
     return { ...result, items: disclosed, groups: groupNotifications(disclosed) };
   }
 
