@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 // sql-relations-allow: public.refresh_probe_uncalled -- Uncalled sequence fixture in an isolated PostgreSQL container.
 import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { Client } from 'pg';
 import { acquireHeavy, withRecovery } from '../../goal/goalctl.ts';
@@ -37,7 +37,7 @@ import { officialTheme } from '../seed/official-plan.ts';
 import { parseOptions } from '../seed/cli.ts';
 import { stableId } from '../seed/state.ts';
 import { sqlMigration } from '../../lib/concurrent-index.ts';
-import { snapshotRefreshDatabase } from '../refresh-rehearsal.ts';
+import { rehearsalDiagnostic, snapshotRefreshDatabase } from '../refresh-rehearsal.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const current: RefreshInputs = { revision: 'committed-main', previousRevision: 'committed-main',
@@ -1362,6 +1362,22 @@ WHERE note <> 'CONCURRENTLY;';`;
   });
 });
 
+describe('rehearsal diagnostics', () => {
+  test('only fixed process and phase classifications survive arbitrary sensitive output', () => {
+    const secret = 'postgres://owner:password@private:5432/business';
+    const row = 'private-person@example.invalid confidential business text';
+    for (const line of [secret, row, `DETAIL: failing row contains (${row})`,
+      `CONTEXT: COPY private_table, line 1: ${row}`, `REHEARSAL dump exit 1 ${secret}`])
+      expect(rehearsalDiagnostic(line)).toBeUndefined();
+    expect(rehearsalDiagnostic(`pg_restore: error: COPY failed: ${row} ${secret}`))
+      .toBe('restore: error (details suppressed)');
+    expect(rehearsalDiagnostic(`pg_dump: error: query failed: ERROR: canceling statement due to statement timeout ${secret}`))
+      .toBe('dump: lock-timeout');
+    expect(rehearsalDiagnostic(`pg_restore: creating INDEX "${row}"`)).toBe('restore: index');
+    expect(rehearsalDiagnostic('REHEARSAL dump exit 124')).toBe('REHEARSAL dump exit 124');
+  });
+});
+
 describe('isolated PostgreSQL migration rehearsal', () => {
   let container: string;
   let source: Client;
@@ -1622,8 +1638,8 @@ throw new Error('Pending migration completed before cancellation');
         } finally { clearTimeout(wall); }
         expect(forced).toBe(false);
         expect(Date.now() - started).toBeLessThan(12_000);
-        expect((await source.query('SELECT datname FROM pg_database WHERE datname=$1', [pending!.datname])).rows)
-          .toEqual([]);
+        expect({ databases: (await source.query('SELECT datname FROM pg_database WHERE datname=$1', [pending!.datname])).rows,
+          stderr: await stderr }).toEqual({ databases: [], stderr: '' });
         expect((await source.query('SELECT pid FROM pg_stat_activity WHERE pid=ANY($1::int[])',
           [[pending!.pid, copyPid]])).rows).toEqual([]);
         expect((await source.query(preservedSql)).rows).toEqual(preserved);
@@ -1640,6 +1656,100 @@ throw new Error('Pending migration completed before cancellation');
         rmSync(dir, { recursive: true, force: true });
       }
     }, 45_000);
+  }
+
+  for (const failure of ['dump', 'restore', 'timeout', 'SIGINT', 'SIGTERM'] as const) {
+    test(`copy-stage ${failure} preserves the checkpoint, writers and sibling database and removes its own artifacts`, async () => {
+      const { dir, first, env } = migrations();
+      const sibling = await snapshotRefreshDatabase(container, sourceUrl);
+      const siblingDatabase = new URL(sibling.url).pathname.slice(1);
+      const checkpoint = join(dir, 'refresh.json');
+      writeFileSync(checkpoint, 'retained-checkpoint');
+      writeFileSync(join(dir, first), 'SELECT 1;');
+      const executable = join(dir, 'docker');
+      const script = join(dir, 'copy.ts');
+      const realDocker = spawnSync('which', ['docker'], { encoding: 'utf8' }).stdout.trim();
+      // Substitute only the external Docker boundary. Real create/drop and
+      // cancellation execute against this isolated PostgreSQL container.
+      writeFileSync(executable, `#!/usr/bin/env bun
+const args = process.argv.slice(2);
+const index = args.findIndex(arg => arg.includes("echo 'REHEARSAL dump start'"));
+if (index >= 0) {
+  if (${JSON.stringify(failure)}.startsWith('SIG')) {
+    args[index] = "echo 'REHEARSAL dump start' >&2; exec sleep 300";
+  } else {
+    console.error('REHEARSAL dump start');
+    console.error('pg_dump: dumping contents of table "private-row@example.invalid"');
+    console.error('pg_${failure === 'dump' ? 'dump' : 'restore'}: error: private-row@example.invalid postgres://owner:password@secret/db');
+    console.error('DETAIL: business row with secret');
+    process.exit(${failure === 'timeout' ? 124 : 1});
+  }
+}
+const child = Bun.spawn([${JSON.stringify(realDocker)}, ...args], {stdin:'inherit', stdout:'inherit', stderr:'inherit'});
+process.exit(await child.exited);
+`);
+      chmodSync(executable, 0o700);
+      writeFileSync(script, `
+import { rehearseRefreshMigrations } from '${join(root, 'scripts/dev/refresh-stack.ts')}';
+import { snapshotRefreshDatabase } from '${join(root, 'scripts/dev/refresh-rehearsal.ts')}';
+import { executeRefresh, refreshPlan } from '${join(root, 'scripts/dev/refresh.ts')}';
+import { appendFileSync, writeFileSync } from 'node:fs';
+const action = name => async () => appendFileSync(${JSON.stringify(join(dir, 'actions'))}, name+'\\n');
+const actions = Object.fromEntries(['buildImage','stopWriters','switchBackend','restartPrevious','prepareStorage',
+  'alignModel','restartResources','waitReady','approveZones','stopAppHost'].map(name=>[name,action(name)]));
+actions.beforeMutation=action('beforeMutation');
+actions.recordSuccess=async()=>writeFileSync(${JSON.stringify(checkpoint)},'replaced');
+actions.rehearseMigrations=()=>rehearseRefreshMigrations(${JSON.stringify(dir)},${JSON.stringify(env)},[${JSON.stringify(first)}],
+  ()=>{throw new Error('SQL must not run after a copy failure')},url=>snapshotRefreshDatabase(${JSON.stringify(container)},url));
+try { await executeRefresh(refreshPlan(${JSON.stringify({ ...current, pendingMigrations: [first] })}),actions); }
+catch(error) { console.error(error.message); process.exitCode=1; }
+`);
+      const child = Bun.spawn([process.execPath, script], { cwd: root,
+        env: { ...process.env, PATH: `${dir}:${process.env.PATH}` }, stdout: 'pipe', stderr: 'pipe' });
+      let output = '';
+      let signalSent = false;
+      const stdout = (async () => {
+        for await (const chunk of child.stdout) {
+          output += new TextDecoder().decode(chunk);
+          if (!signalSent && failure.startsWith('SIG') && output.includes('REHEARSAL dump start')) {
+            signalSent = true;
+            child.kill(failure as 'SIGINT' | 'SIGTERM');
+          }
+        }
+      })();
+      const stderr = new Response(child.stderr).text();
+      const deadline = setTimeout(() => child.kill('SIGKILL'), 15_000);
+      try {
+        const status = await child.exited;
+        await stdout;
+        const diagnostic = output + await stderr;
+        expect({ status, diagnostic }).toMatchObject({ status: failure === 'SIGINT' ? 130 : failure === 'SIGTERM' ? 143 : 1 });
+        expect(diagnostic).not.toContain('private-row@example.invalid');
+        expect(diagnostic).not.toContain('postgres://');
+        expect(diagnostic).not.toContain('password');
+        expect(diagnostic).not.toContain('business row');
+        if (!failure.startsWith('SIG')) {
+          expect(diagnostic).toContain('access database copy (before SQL)');
+          expect(diagnostic).toContain(failure === 'timeout' ? 'exit 124' : 'details suppressed');
+        }
+        expect(readFileSync(checkpoint, 'utf8')).toBe('retained-checkpoint');
+        expect(existsSync(join(dir, 'actions'))).toBe(false);
+        expect((await source.query('SELECT value FROM access.principal')).rows).toEqual([{ value: 1 }]);
+        expect({ databases: (await source.query("SELECT datname FROM pg_database WHERE datname LIKE 'rezics_rehearsal_%'")).rows,
+          cleanupFailed: diagnostic.includes('cleanup failed'), diagnostic: failure.startsWith('SIG') ? diagnostic : '' })
+          .toMatchObject({ databases: [{ datname: siblingDatabase }], cleanupFailed: false });
+        // The successful sibling has no copy artifacts either. A cancelled copy
+        // must leave neither its archive nor its in-container sleep process.
+        expect(docker(['exec', container, 'sh', '-c', 'ls /tmp/rezics_rehearsal_* 2>/dev/null || true'])).toBe('');
+        expect(docker(['top', container, '-eo', 'pid,args']).split('\n').filter(line => /^\s*\d+\s+sleep 300$/.test(line))).toEqual([]);
+      } finally {
+        clearTimeout(deadline);
+        child.kill('SIGKILL');
+        await child.exited;
+        await sibling.dispose();
+        rmSync(dir, { recursive: true, force: true });
+      }
+    }, 30_000);
   }
 
   test('a conflicting source DDL lock bounds snapshot failure, cleans up and leaves writers running', async () => {

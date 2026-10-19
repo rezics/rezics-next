@@ -232,9 +232,10 @@ export async function rehearseRefreshMigrations(root: string, env: Record<string
     let database: RehearsalDatabase | undefined;
     let client: RehearsalClient | undefined;
     const errors: unknown[] = [];
-    let migration = files[0]!.name;
+    let migration = `${owner} database copy (before SQL)`;
     try {
       database = await prepareDatabase(databases[owner]);
+      migration = `${owner} rehearsal connection (before SQL)`;
       client = createClient(database.url);
       await client.connect();
       await client.query('BEGIN');
