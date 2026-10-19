@@ -813,7 +813,11 @@ async function buildRecipesApiBackup(withBook = false) {
       if (selected.length !== 1) throw new Error('Missing exact pinned Artusi delivery source');
       const remaining = Math.floor(budgetMs - (performance.now() - preparationStartedAt));
       if (remaining <= 0) throw new Error('Book/Recipe preparation exhausted its budget before Recipe creation');
-      const signal = AbortSignal.timeout(remaining), sliceId = `${id}-book-pg1342-artusi-passatelli`;
+      const signal = AbortSignal.timeout(remaining);
+      const sliceId = `launch-book-recipe-${createHash('sha256').update(JSON.stringify({
+        recipes: id, book: '6f7ec2a018dd7b7ddaed1e6117e299c25945faa082880fe63fb0b51a722b7ccb',
+        selected: selected.map(row => [row.pinId, row.recipeId, row.sourceSha256]),
+      })).digest('hex').slice(0, 20)}`;
       const built = await buildRecipes(api, actor, sliceId, authorize, importFile, signal, selected);
       const backup = await driver.backup(sliceId, signal);
       signal.throwIfAborted();
