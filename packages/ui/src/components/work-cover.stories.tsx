@@ -91,6 +91,24 @@ export const Sizes: Story = {
   },
 };
 
+/** Browse previews have one budget, including a single result in a wide owner. */
+export const BrowsePreviews: Story = {
+  render: args => <div className="flex flex-wrap items-start gap-6">
+    {kinds.map(item => <div key={item.kind} className="grid w-64 max-w-full gap-2">
+      <WorkCover {...args} {...item} size="preview" />
+      <span>{item.title}</span>
+    </div>)}
+  </div>,
+  async play({ canvasElement }) {
+    for (const cover of canvasElement.querySelectorAll<HTMLElement>('[data-slot="work-cover"]')) {
+      const box = cover.getBoundingClientRect();
+      await expect(box.width).toBeCloseTo(128, 1);
+      await expect(box.height).toBeLessThanOrEqual(192.1);
+      await expect(box.width / box.height).toBeCloseTo(workCoverRatio[cover.dataset.kind as WorkCoverKind], 2);
+    }
+  },
+};
+
 /** Ten uncovered classics: the id varies cloth, layout and rule, so a shelf is not a wall of one design. */
 export const GeneratedShelf: Story = {
   render: args => <ul className="grid grid-cols-3 gap-x-4 gap-y-6 sm:grid-cols-5">
