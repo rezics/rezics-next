@@ -11,6 +11,18 @@
     "reviewCount": 1,
     "implementationChanges": false
   },
+  "latestContinuationVerdict": {
+    "result": "requested-rsc-interruption-assertion-executed-and-failed",
+    "sourceHead": "c3c84ef50757a2d5b5915dac7312175f7b61adc8",
+    "scope": "Only the missing actual-browser RSC interruption criterion; accepted focus/source proof is retained.",
+    "finding": "FEED-RSC-01",
+    "acceptanceDisposition": "AUD-005 actual-RSC-interruption/no-whole-page-refresh criterion is not satisfied by this exact runtime.",
+    "landingDisposition": "The accepted two-file focus correction verdict remains scoped to its prior proof. This new reached failure prevents claiming complete original AUD-005 acceptance; it does not request undoing the manager-selected landing.",
+    "summary": "An actual router RSC fetch was held and aborted during one feed Refresh after one injected cursor 409. The browser requested a second document, violating the unchanged no-reload outcome assertion. Both controlled faults and genuine API evidence are labeled separately.",
+    "auditFindingsClosed": [],
+    "next": "Manager routes FEED-RSC-01 to G-2749/web router owner for the original no-whole-page-refresh criterion. Preserve the accepted focus correction and all prior valid proof; do not close AUD-005 or broaden the task into another review/matrix run."
+  },
+  "continuationSemantics": "Pre-existing fields, including currentScopedVerdict and focusCorrectionConfirmation, describe accepted historical proof and retain their original values. latestContinuationVerdict and rscInterruptionFollowUp report only the newly requested actual-router-interruption check; original failed traces and remaining persona/generation/preview/locale-theme gaps stay intact.",
   "reportSemantics": {
     "originalReview": "All pre-existing fields are retained verbatim in value as historical evidence for 18e1308c6371936b629ae921490483ef486aae5c -> 79a8d1b1c7c55a05525942200939200ac75c2d6b, including original failed assertions, request-changes outcome, missing criteria, proposed repairs and old next step.",
     "currentConfirmation": "currentScopedVerdict and focusCorrectionConfirmation supersede only the landing disposition of the two-file c3c84ef correction. They do not rewrite the old failures or claim a full repeat review or audit-finding closure."
@@ -1437,5 +1449,451 @@
     ],
     "ownerChanges": [],
     "next": "Manager may consider landing exactly c3c84ef50757a2d5b5915dac7312175f7b61adc8 over 79a8d1b1c7c55a05525942200939200ac75c2d6b, subject to normal integration. This worker imports nothing into main and does not close D3-001, AUD-005 or D4-016."
+  },
+  "rscInterruptionFollowUp": {
+    "managerInstruction": "SAME claims/outcome/authority/original AUD-005 acceptance. Run only the missing actual-browser RSC request interruption assertion; preserve accepted source and prior focus/genuine-response proof. No full review, product changes or matrix expansion.",
+    "recordedAt": "2026-10-19T10:28:03.071920+00:00",
+    "source": {
+      "head": "c3c84ef50757a2d5b5915dac7312175f7b61adc8",
+      "tree": "1dbf924b1e57e7e42c6471efbecb4d5e12993e61",
+      "clean": true,
+      "snapshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-focus-candidate",
+      "harness": "f7d93eb57a6c26d5b0748a9bc3d345eb7d758581",
+      "backend": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "beforeAndAfterSourcePins": {
+        "before": {
+          "head": "c3c84ef50757a2d5b5915dac7312175f7b61adc8",
+          "tree": "1dbf924b1e57e7e42c6471efbecb4d5e12993e61",
+          "clean": true,
+          "snapshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-focus-candidate",
+          "harness": "f7d93eb57a6c26d5b0748a9bc3d345eb7d758581",
+          "backend": "75409ac3c379a9f84212e48a8abdc6540c5c44a2"
+        },
+        "after": {
+          "head": "c3c84ef50757a2d5b5915dac7312175f7b61adc8",
+          "tree": "1dbf924b1e57e7e42c6471efbecb4d5e12993e61",
+          "clean": true
+        }
+      },
+      "reportHeadBeforeWork": "f7d93eb57a6c26d5b0748a9bc3d345eb7d758581",
+      "acceptedFocusReportCommit": "59404fe48fb6ce34f99bd90474de8c610eea8b81",
+      "managerSelectedLandingReference": "ae73 (manager-reported selected 21-path landing; not independently reviewed or rerun here)",
+      "originalImmutableCheckout": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-feed-candidate",
+        "head": "79a8d1b1c7c55a05525942200939200ac75c2d6b",
+        "tree": "4bd41e1b8d639cf14ebb3d93e7ff0ccd852fbc5d",
+        "porcelain": ""
+      },
+      "compatibleBackend": "Existing shared Main proxy http://localhost:3001. Backend revision pointer 75409ac3c379a9f84212e48a8abdc6540c5c44a2 was read only. Genuine fresh response status 200, current projection; no backend startup, refresh, reset, seed or writes.",
+      "installedRouterVersion": "vinext 1.0.0-beta.13",
+      "sourceReviewScope": "No second product source review. Only installed router request/catch provenance was inspected after the probe to diagnose the request/header premise and correlate the observed document fallback.",
+      "exactCandidateFinalVerification": {
+        "head": "c3c84ef50757a2d5b5915dac7312175f7b61adc8",
+        "tree": "1dbf924b1e57e7e42c6471efbecb4d5e12993e61",
+        "porcelain": "",
+        "exit": 0,
+        "recordedAt": "2026-10-19T10:29:09.844323+00:00"
+      },
+      "originalImmutableFinalVerification": {
+        "head": "79a8d1b1c7c55a05525942200939200ac75c2d6b",
+        "tree": "4bd41e1b8d639cf14ebb3d93e7ff0ccd852fbc5d",
+        "porcelain": "",
+        "exit": 0,
+        "recordedAt": "2026-10-19T10:29:09.885231+00:00"
+      }
+    },
+    "retainedAcceptedEvidence": {
+      "reference": "All pre-existing report fields, including the original failures and complete focusCorrectionConfirmation, are preserved without changing their values.",
+      "queryAndGeneration": "The accepted original query/sequence-held, reviewSequence=8 and personal-membership mode story evidence is reused unchanged. This new anonymous transport probe does not claim a new live same-projection review/personal-condition transition.",
+      "publicRecovery": "The prior accepted controlled single-409 run followed by three genuine 200 responses with six unique rows, retained URL/language, pending state, fresh cursor chain and focus passes remains valid for its original no-concurrent-RSC-fault scope.",
+      "sourceAndChecks": "Source c3c84ef and accepted focus report 59404fe remain accepted. No affected unit, story, static, persona, locale/theme, preview or corpus suite was rerun.",
+      "noAuditClosure": [
+        "D3-001",
+        "AUD-005",
+        "D4-016"
+      ]
+    },
+    "checks": [
+      {
+        "job": "b3e138c2-b18b-4701-854a-07eeb3fdf50a",
+        "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test ./.temp/feed-rsc-interruption.test.ts",
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/feed-rsc-interruption.test.ts",
+        "exit": 1,
+        "case": "one Refresh recovers genuine cursor pages when an actual Next router RSC request is held and aborted",
+        "passed": 0,
+        "failed": 1,
+        "expectCalls": 3,
+        "seconds": 58.37,
+        "caseSeconds": 13.31258,
+        "classification": "test-provenance-setup-premise-failure",
+        "outcomeAssertionReached": false,
+        "failure": "Expected next-router-state-tree to be truthy; actual vinext request omits that Next-specific header. The genuine RSC request was already proven by RSC: 1, Accept: text/x-component, _rsc URL and navigateRsc initiator. Feed Refresh was not exercised before this premise failure; the RSC request was aborted only by cleanup.",
+        "log": ".temp/goal/jobs/b3e138c2-b18b-4701-854a-07eeb3fdf50a.log",
+        "retainedTest": ".temp/feed-rsc-evidence/setup-attempt/test.ts",
+        "retainedObservations": ".temp/feed-rsc-evidence/setup-attempt/observations.json"
+      },
+      {
+        "job": "1a1afa6e-3d1e-4b37-ad7c-7148be1fd14a",
+        "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test ./.temp/feed-rsc-interruption.test.ts",
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/feed-rsc-interruption.test.ts",
+        "exit": 1,
+        "case": "one Refresh recovers genuine cursor pages when an actual Next router RSC request is held and aborted",
+        "passed": 0,
+        "failed": 1,
+        "expectCalls": 12,
+        "seconds": 74.19,
+        "caseSeconds": 9.61914,
+        "classification": "reached-original-acceptance-outcome-failure",
+        "outcomeAssertionReached": true,
+        "failure": "expect(documents).toHaveLength(1) received 2 at .temp/feed-rsc-interruption.test.ts:174.",
+        "log": ".temp/goal/jobs/1a1afa6e-3d1e-4b37-ad7c-7148be1fd14a.log",
+        "assertionsReachedBeforeFailure": [
+          "Actual intercepted RSC exists, rsc=1, accept=text/x-component, /en and lang=en, CDP navigateRsc initiator, non-document fetch.",
+          "Feed pending focus is DIV/group/Posts/busy=true in the original document.",
+          "Actual RSC requestfailed event observed.",
+          "Exactly one injected cursor 409 and one feed Refresh."
+        ],
+        "assertionsAfterFailure": "Same-document token, URL/language retention, >=6 unique rows, no alert, request credentials, three genuine responses, and final focus assertions remain in the test but were not reached after the document-count failure. Do not count them as passing in this run."
+      }
+    ],
+    "singleSetupCorrection": {
+      "change": "Replace only the invalid Next-specific state-tree-header premise with vinext provenance: exact RSC accept header, original pathname/language and CDP navigateRsc stack frame. All pending/no-reload/document/URL/language/cursor/row/identity/focus outcome assertions remain unchanged.",
+      "instruction": {
+        "path": "docs/goals/worker.md",
+        "quote": "The reviewer gets one setup correction, with the failure evidence.",
+        "application": "The first run failed before the recovery outcome. One provenance correction was used, followed by one run reaching the no-reload outcome. No product fix round or further test rerun was used."
+      }
+    },
+    "routerProvenance": {
+      "entryPoint": "Actual runtime window.next.router.refresh(), once, invoked explicitly by browser evaluation; not a stand-in.",
+      "request": {
+        "url": "http://127.0.0.1:62839/en?lang=en&_rsc=2tNzm4N15ZYtRVjY",
+        "method": "GET",
+        "resourceType": "fetch",
+        "isNavigationRequest": false,
+        "headers": {
+          "accept": "text/x-component",
+          "rsc": "1"
+        }
+      },
+      "cdpInitiator": [
+        {
+          "url": "http://127.0.0.1:62839/en?lang=en&_rsc=2tNzm4N15ZYtRVjY",
+          "type": "Fetch",
+          "initiator": {
+            "type": "script",
+            "stack": {
+              "callFrames": [
+                {
+                  "functionName": "window.fetch.Object.assign.preconnect",
+                  "scriptId": "4",
+                  "url": "",
+                  "lineNumber": 9,
+                  "columnNumber": 13
+                },
+                {
+                  "functionName": "navigateRsc",
+                  "scriptId": "19",
+                  "url": "http://127.0.0.1:62839/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-focus-candidate/node_modules/vinext/dist/server/app-browser-entry.js?v=7603ef73",
+                  "lineNumber": 1286,
+                  "columnNumber": 26
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "fault": "Playwright holds the actual RSC request before delivery and calls route.abort(failed). No RSC response was fabricated and no RSC stream response was received. This establishes a controlled request interruption, not a naturally interrupted live server stream.",
+      "holdBoundMs": 30000,
+      "observedHoldMs": 416.047
+    },
+    "observations": {
+      "before": {
+        "url": "http://127.0.0.1:62839/en?lang=en",
+        "language": "en",
+        "token": "df2f6415-1c2d-4d82-834c-bd60c3604ef1"
+      },
+      "pending": {
+        "tag": "DIV",
+        "role": "group",
+        "name": "Posts",
+        "busy": "true",
+        "token": "df2f6415-1c2d-4d82-834c-bd60c3604ef1"
+      },
+      "after": {
+        "url": "http://127.0.0.1:62839/en?lang=en",
+        "language": "en",
+        "token": "566704ac-5909-4912-b47c-e0d7c787826b",
+        "requests": [],
+        "focus": {
+          "same": false,
+          "tag": "BODY",
+          "role": null,
+          "name": null,
+          "busy": null
+        },
+        "ids": []
+      },
+      "documents": [
+        {
+          "url": "http://127.0.0.1:62839/en?lang=en",
+          "type": "document",
+          "elapsed": 63900.744761
+        },
+        {
+          "url": "http://127.0.0.1:62839/en?lang=en",
+          "type": "document",
+          "elapsed": 71794.981511
+        }
+      ],
+      "events": [
+        {
+          "event": "one-cursor-409-injected",
+          "elapsed": 71030.735179
+        },
+        {
+          "event": "actual-rsc-held",
+          "elapsed": 71354.141859
+        },
+        {
+          "event": "one-refresh-pending",
+          "elapsed": 71652.819493,
+          "refreshCount": 1
+        },
+        {
+          "event": "rsc-abort-issued",
+          "elapsed": 71770.188886,
+          "errorCode": "failed",
+          "controlledNetworkFault": true
+        },
+        {
+          "event": "rsc-abort-completed",
+          "elapsed": 71772.356055
+        },
+        {
+          "event": "rsc-requestfailed",
+          "elapsed": 71774.62218,
+          "url": "http://127.0.0.1:62839/en?lang=en&_rsc=2tNzm4N15ZYtRVjY",
+          "error": "net::ERR_FAILED"
+        },
+        {
+          "event": "browser-console",
+          "elapsed": 71775.169473,
+          "text": "[vinext] RSC navigation error: TypeError: Failed to fetch\n    at window.fetch.Object.assign.preconnect (<anonymous>:10:14)\n    at navigateRsc (http://127.0.0.1:62839/@fs/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2836/.temp/feed-focus-candidate/node_modules/vinext/dist/server/app-browser-entry.js?v=7603ef73:1287:27)"
+        },
+        {
+          "event": "release-genuine-recovery-after-rsc-abort",
+          "elapsed": 71820.463917
+        },
+        {
+          "event": "pageerror",
+          "elapsed": 72862.559107,
+          "message": "Failed to fetch dynamically imported module: http://127.0.0.1:62839/@id/__x00__virtual:vinext-app-browser-entry"
+        },
+        {
+          "event": "genuine-first-page-held",
+          "elapsed": 74002.937141,
+          "status": 200
+        }
+      ],
+      "injectedCursor409": 1,
+      "feedRefreshCount": 1,
+      "genuineFeed200ResponsesRetained": 1,
+      "genuineFirstPage": {
+        "path": ".temp/feed-rsc-evidence/genuine-page-1.json",
+        "status": 200,
+        "projection": {
+          "sequence": "11934",
+          "reviewSequence": "67",
+          "status": "current"
+        },
+        "nextCursorPresent": true
+      },
+      "genuineSuccessorObserved": false,
+      "responseDeliveryBoundary": "A genuine fresh response was retained after the fault; the main frame had already requested a new document. There is no claim that three responses or six rows recovered in the original document in this run.",
+      "afterCaptureBoundary": "The no-alert count is explained by document replacement, not successful feed recovery. after.ids is empty and focus BODY at the bounded capture; the later dev-module import error is recorded separately from the earlier no-reload assertion evidence.",
+      "sameUrlDoesNotMeanSameDocument": true,
+      "controlledFaultsOnly": [
+        "Exactly one browser cursor 409 fulfillment.",
+        "Exactly one actual concurrent RSC request held and aborted.",
+        "Delivery of the genuine recovery first-page response gated for pending-state inspection."
+      ],
+      "naturalBackendConflictClaimed": false,
+      "dataMutation": false,
+      "fabricatedSuccessfulApiResponse": false
+    },
+    "finding": {
+      "id": "FEED-RSC-01",
+      "acceptance": "AUD-005: actual interrupted RSC recovery keeps the original document without a whole-page refresh",
+      "severity": "P2",
+      "classification": "reproduced-public-browser-failure-under-controlled-network-fault",
+      "status": "reached-outcome-assertion-failed",
+      "title": "Aborting an actual concurrent router RSC refresh replaces the document during feed recovery",
+      "sourceHead": "c3c84ef50757a2d5b5915dac7312175f7b61adc8",
+      "summary": "One injected cursor 409 and one feed Refresh reached the genuine pending focus state. A held actual RSC request from the mounted vinext router was then aborted. The router requested the same URL as a second document; the document token changed and focus was BODY in the replacement document. The required no-whole-page-refresh assertion failed. This is controlled request failure evidence, not a naturally occurring cursor conflict or RSC interruption.",
+      "locations": [
+        {
+          "path": ".temp/feed-rsc-interruption.test.ts",
+          "line": 174,
+          "role": "Reached assertion expect(documents).toHaveLength(1); received 2."
+        },
+        {
+          "path": ".temp/feed-focus-candidate/node_modules/vinext/dist/server/app-browser-entry.js",
+          "line": 1287,
+          "role": "Actual browser initiator navigateRsc calls fetch(rscUrl, ...). CDP captured this frame."
+        },
+        {
+          "path": ".temp/feed-focus-candidate/node_modules/vinext/dist/server/app-browser-entry.js",
+          "line": 1454,
+          "role": "Runtime catch calls performHardNavigationForScrollIntent after the RSC fetch fails; matches observed second document request."
+        },
+        {
+          "path": "apps/web/package.json",
+          "line": 33,
+          "role": "Candidate pins vinext 1.0.0-beta.13; no dependency or product code was edited."
+        },
+        {
+          "path": "apps/web/features/feed/feed-list.tsx",
+          "line": 258,
+          "role": "Existing accepted direct-read restart is the concurrent client recovery. It does not invoke router.refresh; the router refresh was explicitly invoked by this controlled probe."
+        }
+      ],
+      "smallestReproduction": [
+        "Use the exact clean c3c84ef candidate frontend against the compatible genuine shared Main backend. Start task --dir .temp/feed-focus-candidate web:dev -- --port 62839.",
+        "Open /en?lang=en. Fulfill exactly the first browser feed successor request with cursor_conflict/409. Leave all later feed reads as genuine route.fetch responses, with a controlled gate only on delivery of the fresh first-page response.",
+        "Invoke the actual mounted window.next.router.refresh() once. Intercept its GET /en?lang=en&_rsc=... carrying RSC: 1 and Accept: text/x-component. Hold that actual request before upstream delivery; no router stub or fabricated RSC response is used.",
+        "Focus the real feed Refresh control and press native Enter once. Verify and capture Refreshing posts, the unchanged document token, and the named Posts focus group with aria-busy=true.",
+        "Abort the held RSC request with Playwright route.abort(failed), then release the genuine feed first-page gate. Do not intercept, suppress or relabel document navigations.",
+        "Observe RSC requestfailed net::ERR_FAILED, then the same URL requested as a second document. expect(documents).toHaveLength(1) fails with actual length 2. The URL/lang stay en, but the document token changes; the bounded capture shows BODY focus and skeleton rows in the replacement document."
+      ],
+      "executable": {
+        "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test ./.temp/feed-rsc-interruption.test.ts",
+        "privateTestPath": ".temp/feed-rsc-interruption.test.ts",
+        "case": "one Refresh recovers genuine cursor pages when an actual Next router RSC request is held and aborted",
+        "outcomeAssertionLine": 174,
+        "outcomeAssertionReached": true,
+        "expectedDocuments": 1,
+        "actualDocuments": 2,
+        "testSource": "import { afterAll, beforeAll, expect, test } from 'bun:test';\nimport { chromium, type Browser, type Page, type Route } from 'playwright';\nimport { execFileSync, spawn, type ChildProcess } from 'node:child_process';\nimport { mkdirSync, openSync, writeFileSync } from 'node:fs';\nimport { resolve } from 'node:path';\n\nconst snapshot = resolve('.temp/feed-focus-candidate');\nconst evidence = resolve('.temp/feed-rsc-evidence');\nconst origin = 'http://127.0.0.1:62839';\nconst pin = 'c3c84ef50757a2d5b5915dac7312175f7b61adc8';\nlet server: ChildProcess;\nlet browser: Browser;\nlet page: Page;\nlet rscRoute: Route | undefined;\nlet releaseRsc = () => {};\nlet releaseFresh = () => {};\nlet delayFresh = false;\nlet injectCount = 0;\nlet refreshCount = 0;\nconst events: any[] = [];\nconst feed: any[] = [];\nconst documents: any[] = [];\nconst initiators: any[] = [];\nconst result: any = { events, feed, documents, initiators };\nmkdirSync(evidence, { recursive: true });\nconst mark = (event: string, data: any = {}) => { events.push({ event, elapsed: performance.now(), ...data }); save(); };\nconst save = () => writeFileSync(`${evidence}/observations.json`, JSON.stringify(result, null, 2));\nconst git = (...args: string[]) => execFileSync('git', ['-C', snapshot, ...args], { encoding: 'utf8' }).trim();\n\nbeforeAll(async () => {\n  if (git('rev-parse', 'HEAD') !== pin || git('status', '--porcelain=v1')) throw new Error('Exact clean candidate required');\n  result.source = { head: pin, tree: git('rev-parse', 'HEAD^{tree}'), clean: true, snapshot, harness: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), backend: execFileSync('git', ['-C', '/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend', 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim() };\n  server = spawn('task', ['--dir', snapshot, 'web:dev', '--', '--port', '62839'], {\n    detached: true, stdio: ['ignore', openSync(`${evidence}/web-server.log`, 'a'), openSync(`${evidence}/web-server.log`, 'a')],\n    env: { ...process.env, WRANGLER_SEND_METRICS: 'false' },\n  });\n  let ready = false;\n  for (let attempt = 0; attempt < 150; attempt++) {\n    try { const response = await fetch(`${origin}/favicon.ico`, { signal: AbortSignal.timeout(2000) }); if (response.status !== 503) { ready = true; break; } } catch {}\n    await Bun.sleep(1000);\n  }\n  if (!ready) throw new Error('Pinned web frontend did not become ready');\n  browser = await chromium.launch({ headless: true });\n  page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' });\n  page.setDefaultTimeout(60000);\n  await page.addInitScript(() => {\n    (window as any).feedRscDocumentToken = crypto.randomUUID();\n    (window as any).feedRscRequests = [];\n    const send = window.fetch;\n    window.fetch = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {\n      const url = input instanceof Request ? input.url : String(input);\n      if (url.includes('/api/main/v1/feed')) (window as any).feedRscRequests.push({ url, credentials: init?.credentials, method: init?.method ?? 'GET' });\n      return send(input, init);\n    }, { preconnect: send.preconnect });\n  });\n  const cdp = await page.context().newCDPSession(page);\n  await cdp.send('Network.enable');\n  cdp.on('Network.requestWillBeSent', event => {\n    if (new URL(event.request.url).searchParams.has('_rsc')) {\n      initiators.push({ url: event.request.url, type: event.type, initiator: event.initiator }); save();\n    }\n  });\n  page.on('request', request => {\n    if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {\n      documents.push({ url: request.url(), type: request.resourceType(), elapsed: performance.now() }); save();\n    }\n  });\n  page.on('requestfailed', request => {\n    if (new URL(request.url()).searchParams.has('_rsc')) mark('rsc-requestfailed', { url: request.url(), error: request.failure()?.errorText });\n  });\n  page.on('console', message => {\n    if (message.type() === 'error' && /RSC|Failed to fetch|navigation/i.test(message.text())) mark('browser-console', { text: message.text().slice(0, 1200) });\n  });\n  page.on('pageerror', error => mark('pageerror', { message: error.message }));\n  await page.route('**/api/main/v1/feed?**', async route => {\n    const url = new URL(route.request().url());\n    if (url.searchParams.has('cursor') && injectCount === 0) {\n      injectCount++;\n      feed.push({ cursor: true, url: url.href, status: 409, injected: true });\n      await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ code: 'cursor_conflict' }) });\n      mark('one-cursor-409-injected'); return;\n    }\n    const held = delayFresh && !url.searchParams.has('cursor');\n    let gate = Promise.resolve();\n    if (held) { delayFresh = false; gate = new Promise<void>(resolve => { releaseFresh = resolve; }); }\n    const response = await route.fetch({ timeout: 60000 });\n    const body = await response.body();\n    const entry: any = { cursor: url.searchParams.has('cursor'), requestCursor: url.searchParams.get('cursor'), url: url.href, status: response.status(), retainedResponse: true };\n    if (response.ok()) {\n      const data = JSON.parse(body.toString());\n      entry.nextCursor = data.nextCursor; entry.projection = data.projection;\n      writeFileSync(`${evidence}/genuine-page-${feed.length}.json`, body);\n    }\n    if (held) { mark('genuine-first-page-held', { status: response.status() }); await gate; }\n    feed.push(entry); save(); await route.fulfill({ response, body });\n  });\n  await page.route('**/*', async route => {\n    const request = route.request();\n    const headers = await request.allHeaders();\n    const requestUrl = new URL(request.url());\n    if (headers.rsc !== '1' || headers['next-router-prefetch'] || requestUrl.pathname !== '/en' || requestUrl.searchParams.get('lang') !== 'en' || !result.routerInvokedAt || rscRoute) return route.fallback();\n    rscRoute = route;\n    const boundedGate = new Promise<void>(resolve => { releaseRsc = resolve; });\n    result.rsc = { url: request.url(), method: request.method(), resourceType: request.resourceType(), isNavigationRequest: request.isNavigationRequest(), headers: Object.fromEntries(Object.entries(headers).filter(([key]) => ['rsc', 'next-router-state-tree', 'next-url', 'next-router-prefetch', 'next-router-segment-prefetch', 'accept'].includes(key))) };\n    mark('actual-rsc-held');\n    const timer = setTimeout(releaseRsc, 30000);\n    await boundedGate;\n    clearTimeout(timer);\n    mark('rsc-abort-issued', { errorCode: 'failed', controlledNetworkFault: true });\n    await route.abort('failed');\n    mark('rsc-abort-completed');\n  });\n}, 180000);\n\nafterAll(async () => {\n  releaseFresh(); releaseRsc(); save();\n  await page?.unrouteAll({ behavior: 'wait' });\n  await browser?.close();\n  if (server?.pid) { try { process.kill(-server.pid, 'SIGTERM'); } catch {} }\n  result.finalSource = { head: git('rev-parse', 'HEAD'), tree: git('rev-parse', 'HEAD^{tree}'), clean: !git('status', '--porcelain=v1') }; save();\n});\n\ntest('one Refresh recovers genuine cursor pages when an actual Next router RSC request is held and aborted', async () => {\n  await page.goto(`${origin}/en?lang=en`, { waitUntil: 'domcontentloaded', timeout: 120000 });\n  const alert = page.getByRole('alert').filter({ hasText: 'The feed changed while you were reading' });\n  await alert.waitFor();\n  const before = await page.evaluate(() => ({ url: location.href, language: document.documentElement.lang, token: (window as any).feedRscDocumentToken }));\n  result.before = before;\n  result.routerInvokedAt = performance.now();\n  await page.evaluate(() => {\n    if (typeof (window as any).next?.router?.refresh !== 'function') throw new Error('Mounted Next router refresh is unavailable');\n    (window as any).next.router.refresh();\n  });\n  for (let i = 0; i < 100 && !rscRoute; i++) await Bun.sleep(100);\n  expect(!!rscRoute).toBe(true);\n  expect(result.rsc.headers.rsc).toBe('1');\n  expect(result.rsc.headers.accept).toBe('text/x-component');\n  expect(new URL(result.rsc.url).pathname).toBe('/en');\n  expect(new URL(result.rsc.url).searchParams.get('lang')).toBe('en');\n  expect(initiators.some(entry => entry.url === result.rsc.url && entry.initiator.stack?.callFrames.some((frame: any) => frame.functionName === 'navigateRsc' && frame.url.includes('/vinext/dist/server/app-browser-entry.js')))).toBe(true);\n  expect(result.rsc.isNavigationRequest).toBe(false);\n  const refresh = alert.getByRole('button', { name: 'Refresh', exact: true });\n  await refresh.focus(); delayFresh = true; refreshCount++;\n  await page.keyboard.press('Enter');\n  await page.getByText('Refreshing posts…', { exact: true }).waitFor();\n  result.pending = await page.evaluate(() => {\n    (window as any).feedRscPendingFocus = document.activeElement;\n    return { tag: document.activeElement?.tagName, role: document.activeElement?.getAttribute('role'), name: document.activeElement?.getAttribute('aria-label'), busy: document.activeElement?.getAttribute('aria-busy'), token: (window as any).feedRscDocumentToken };\n  });\n  mark('one-refresh-pending', { refreshCount });\n  await page.screenshot({ path: `${evidence}/pending-rsc-held-1440.png` });\n  expect(result.pending).toEqual({ tag: 'DIV', role: 'group', name: 'Posts', busy: 'true', token: before.token });\n  releaseRsc();\n  for (let i = 0; i < 100 && !events.some(event => event.event === 'rsc-requestfailed'); i++) await Bun.sleep(50);\n  expect(events.some(event => event.event === 'rsc-requestfailed')).toBe(true);\n  mark('release-genuine-recovery-after-rsc-abort'); releaseFresh();\n  // Keep observing the original outcome after the fault; a reload is a failure, never hidden or intercepted.\n  for (let i = 0; i < 200; i++) {\n    if (documents.length > 1) break;\n    const rows = await page.locator('[data-feed-item]').count();\n    if (rows >= 6 && feed.filter(entry => !entry.injected).length >= 3) break;\n    await page.waitForTimeout(100);\n  }\n  await page.waitForTimeout(1500);\n  const after = await page.evaluate(() => ({ url: location.href, language: document.documentElement.lang, token: (window as any).feedRscDocumentToken, requests: (window as any).feedRscRequests,\n    focus: { same: document.activeElement === (window as any).feedRscPendingFocus, tag: document.activeElement?.tagName, role: document.activeElement?.getAttribute('role'), name: document.activeElement?.getAttribute('aria-label'), busy: document.activeElement?.getAttribute('aria-busy') },\n    ids: Array.from(document.querySelectorAll('[data-feed-item]')).map(el => el.getAttribute('data-feed-item')) }));\n  result.after = after; result.refreshCount = refreshCount; result.injectCount = injectCount;\n  result.remainingAlerts = await alert.count();\n  result.clientRecovered = after.ids.length >= 6 && new Set(after.ids).size === after.ids.length && result.remainingAlerts === 0;\n  await page.screenshot({ path: `${evidence}/after-rsc-abort-1440.png` }); save();\n  expect(injectCount).toBe(1);\n  expect(refreshCount).toBe(1);\n  expect(documents).toHaveLength(1);\n  expect(after.token).toBe(before.token);\n  expect(after.url).toBe(before.url);\n  expect(after.language).toBe(before.language);\n  expect(after.ids.length).toBeGreaterThanOrEqual(6);\n  expect(new Set(after.ids).size).toBe(after.ids.length);\n  expect(result.remainingAlerts).toBe(0);\n  expect(after.requests.every((request: any) => request.credentials === 'omit' && !new URL(request.url, origin).searchParams.has('actingSubject'))).toBe(true);\n  expect(feed.filter(entry => !entry.injected).every(entry => entry.status === 200)).toBe(true);\n  expect(feed.filter(entry => !entry.injected).length).toBeGreaterThanOrEqual(3);\n  expect(after.focus).toEqual({ same: true, tag: 'DIV', role: 'group', name: 'Posts', busy: 'false' });\n}, 180000);\n"
+      },
+      "notClaimed": [
+        "The feed UI itself does not issue the extra router refresh in this source; the concurrent RSC refresh and network abort are deliberate test actions explicitly requested for the missing acceptance.",
+        "This does not regress or undo the accepted c3c84ef stable-focus proof when no concurrent router request is interrupted.",
+        "This run did not reproduce the old three genuine 200 responses or six unique recovered rows: only one genuine no-cursor first-page response was retained after the fault, and no fresh successor was observed before the assertion failed.",
+        "The later development-module import error and skeleton capture do not prove a permanent blank page. They follow the already observed document replacement and are not needed to establish the failing assertion."
+      ],
+      "ownerAction": "Route this exact controlled-abort counterexample to G-2749 and the web router integration owner. A correction must preserve the original document through the required fault, then pass this unchanged no-document-reload assertion and the retained recovery assertions. Do not edit node_modules as a product fix, weaken the assertion, reset data, or describe the controlled fault as natural evidence."
+    },
+    "screenshotsActuallyViewed": [
+      {
+        "path": ".temp/feed-rsc-evidence/pending-rsc-held-1440.png",
+        "sha256": "63fd7d0519a0e13ac2d13358ec268da56ec8a58959151e60558d5f4ce6b57f04",
+        "bytes": 203959,
+        "actuallyViewed": true,
+        "width": 1440,
+        "height": 1000,
+        "locale": "en",
+        "theme": "light",
+        "observation": "Before the RSC abort, retained real rows and Refreshing posts are enclosed by the visible focus ring. Original header, filters and adjacent column remain rendered."
+      },
+      {
+        "path": ".temp/feed-rsc-evidence/after-rsc-abort-1440.png",
+        "sha256": "0e411e4ab6c9ed46972fbd82561fc6af04f928ac3bf38373c687076d2c1dd429",
+        "bytes": 145751,
+        "actuallyViewed": true,
+        "width": 1440,
+        "height": 1000,
+        "locale": "en",
+        "theme": "light",
+        "observation": "After a second document request, the same URL shows a replacement skeleton layout and no feed focus ring. This is the bounded post-reload capture, not proof of a permanently stalled frontend."
+      }
+    ],
+    "privateEvidence": [
+      {
+        "path": ".temp/feed-rsc-interruption.test.ts",
+        "sha256": "1f059d9254711f79370c7a601877be60efb7668ca044db9561910b940104f979",
+        "bytes": 11799
+      },
+      {
+        "path": ".temp/feed-rsc-evidence/observations.json",
+        "sha256": "2851d30b8b810e8bfa629a5ec6e03783e14567ae83b3826e07a96cf7590b38c8",
+        "bytes": 6312
+      },
+      {
+        "path": ".temp/feed-rsc-evidence/genuine-page-1.json",
+        "sha256": "28d62cbfcb396535ca0c8cb28ee22ee034a38279701b63bfed04d25dfd74943b",
+        "bytes": 5919
+      },
+      {
+        "path": ".temp/feed-rsc-evidence/setup-attempt/test.ts",
+        "sha256": "d93178d028b58750829e6e2559df769346b58a42080fedf118379db9de5378fb",
+        "bytes": 11440
+      },
+      {
+        "path": ".temp/feed-rsc-evidence/setup-attempt/observations.json",
+        "sha256": "6916f3ff5e96727cdbb7268480dadd7c089efbef71e991a0c9f97dccb7a58e10",
+        "bytes": 3966
+      },
+      {
+        "path": ".temp/feed-rsc-evidence/setup-attempt/web-server.log",
+        "sha256": "ba1601b778e6aa73cc00f924c2ba40efb57ecb82806ba124af982a49b031f93e",
+        "bytes": 7890
+      },
+      {
+        "path": ".temp/feed-rsc-evidence/web-server.log",
+        "sha256": "eed94b5f4ee74090f2265d055de246304c8db4f071d0a1bf5fd3fbe35441d42d",
+        "bytes": 14283
+      },
+      {
+        "path": ".temp/feed-rsc-evidence/accepted-report-at-f7d93eb.json",
+        "sha256": "fdf63040da04ec0ce4dd07103a888239adc40cac71fff686d86238beae7e95e2",
+        "bytes": 85320
+      },
+      {
+        "path": ".temp/feed-focus-candidate/node_modules/vinext/package.json",
+        "sha256": "0c2a580d880166b94bbad71bdee9e35b418c8804152ca7c0cc28355a509b7082",
+        "bytes": 8657
+      },
+      {
+        "path": ".temp/feed-focus-candidate/node_modules/vinext/dist/server/app-browser-entry.js",
+        "sha256": "6eec8f68017d6ec7165be65c9422f0db88e72ed14899875a2de6acf2e7e8ef6a",
+        "bytes": 78465
+      },
+      {
+        "path": ".temp/goal/jobs/b3e138c2-b18b-4701-854a-07eeb3fdf50a.log",
+        "sha256": "604cf9a2359a50f075de6c6978853e6dd304a72cb379f03bb7b2e66b9b956677",
+        "bytes": 992
+      },
+      {
+        "path": ".temp/goal/jobs/1a1afa6e-3d1e-4b37-ad7c-7148be1fd14a.log",
+        "sha256": "c11bd6df7f41ca16b9959e491f147cbafa986baaee108fdedca19de104af5567",
+        "bytes": 1084
+      }
+    ],
+    "administrativeReportChecks": {
+      "status": "passed",
+      "scope": "Claimed report on worker harness f7d93eb57a6c26d5b0748a9bc3d345eb7d758581; no product test rerun.",
+      "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "job": "f5f043b4-d754-4b90-8cc5-13ebef110456",
+      "exit": 0,
+      "steps": [
+        {
+          "command": "task docs:check",
+          "exit": 0,
+          "result": "13 checker tests passed; 250 Markdown files checked for local links, fragments and design navigation. External URLs and runtime behavior not tested.",
+          "log": ".temp/goal/jobs/f5f043b4-d754-4b90-8cc5-13ebef110456.1.log"
+        },
+        {
+          "command": "task goal -- check",
+          "exit": 0,
+          "result": "types ok (no TypeScript workspace changed); tests ok (none named in brief); lint ok (no source changed); ast ok; repository guards ok (1/45 selected). Worker head was not changed.",
+          "checkId": "run-6h1qqO",
+          "log": ".temp/goal/jobs/f5f043b4-d754-4b90-8cc5-13ebef110456.2.log",
+          "fullLog": ".temp/goal/check/run-6h1qqO/output.log"
+        }
+      ]
+    },
+    "ownerChanges": [],
+    "next": "Manager routes FEED-RSC-01 to G-2749/web router owner for the original no-whole-page-refresh criterion. Preserve the accepted focus correction and all prior valid proof; do not close AUD-005 or broaden the task into another review/matrix run."
   }
 }
