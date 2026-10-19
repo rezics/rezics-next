@@ -24,19 +24,22 @@ function InstructionDocument({ document }: { document: DocumentSnapshot }) {
 }
 
 /** Each occurrence stays visible in Structure order; selected sources and transformations have separate credit. */
-export function InstructionReading({ instructions, messages: t, recordingFetch }: {
+export function InstructionReading({ instructions, messages: t, recordingFetch, stepText = false }: {
   instructions: readonly Instruction[]; messages: WorkPageMessages; recordingFetch?: typeof fetch;
+  /** Recipe readers identify the displayed method separately from its attribution and evidence. */
+  stepText?: boolean;
 }) {
   return <ol className="grid min-w-0 gap-6">{instructions.map(item => {
     const document = instructionDocument(item);
     const recording = item.details?.recording;
-    return <li key={item.occurrence} data-instruction-occurrence={item.occurrence} className="grid min-w-0 gap-3 break-words">
-      {item.status !== 'available' ? <p role="status">{t.contentsUnavailable}</p>
+    const body = item.status !== 'available' ? <p role="status">{t.contentsUnavailable}</p>
         : document && checkDocument(document) ? <InstructionDocument document={document} />
           : item.text !== undefined ? <p className="whitespace-pre-wrap">{item.text}</p>
             : recording ? <InstructionRecording key={JSON.stringify([recording, item.details?.actingSubject])}
               instruction={item} messages={t} fetcher={recordingFetch} />
-              : <p role="status">{t.contentsUnavailable}</p>}
+              : <p role="status">{t.contentsUnavailable}</p>;
+    return <li key={item.occurrence} data-instruction-occurrence={item.occurrence} className="grid min-w-0 gap-3 break-words">
+      {stepText ? <div data-step-text={item.occurrence} className="min-w-0">{body}</div> : body}
       {item.details?.author ? <p className="text-xs text-muted-foreground">{t.author}: {item.details.creditNames?.[item.details.author] ?? t.creditsUnavailable}</p> : null}
       {item.details?.derivations?.items.map(record => <div key={record.derivation} className="grid gap-1 text-xs text-muted-foreground">
         <p>{t.instructionTransformation}: {typeof record.responsibleAgent === 'string'

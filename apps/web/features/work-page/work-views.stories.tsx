@@ -243,7 +243,7 @@ export const RecipeCooking: Story = {
     const locale = context.globals.locale as UiLocale;
     return (
       <Framed work={typedWork('https://schema.org/Recipe', 'Weekend pancakes')} locale={locale}>
-        <RecipeExperience
+        <RecipeExperience resource={fixture.work.id}
           initial={recipeStory}
           href={`/v1/recipes/works/${fixture.workRef}`}
           actingSubject={null}
@@ -260,13 +260,33 @@ export const RecipeCooking: Story = {
     await expect(canvas.getByText(/Recipe · English/)).toBeVisible();
     await expect(canvas.getByText('2 cups flour')).toBeVisible();
     // One primary action per view: the header's.
-    await expect(canvas.getAllByRole('button', { name: 'Cook this' })).toHaveLength(1);
-    await userEvent.click(canvas.getByRole('button', { name: 'Cook this' }));
-    const dialog = screen.getByRole('dialog', { name: 'Cooking mode' });
+    await expect(canvas.getAllByRole('button', { name: 'Cook' })).toHaveLength(1);
+    await userEvent.click(canvas.getByRole('button', { name: 'Cook' }));
+    const dialog = screen.getByRole('dialog', { name: 'Cook' });
+    await expect(dialog).toHaveAttribute('data-resource', fixture.work.id);
+    await expect(dialog).toHaveAttribute('data-revision', recipeStory.revision);
+    await expect(within(dialog).getByText('Step 1 of 1')).toBeVisible();
     await expect(within(dialog).getByText('Cook for 5 minutes until golden.')).toBeVisible();
     await expect(within(dialog).getByRole('timer')).toHaveTextContent('5:00');
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Close cooking mode' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Finish cooking' }));
+    await expect(within(dialog).getByRole('status')).toHaveTextContent('Cooking complete');
+    await userEvent.tab();
+    await expect(within(dialog).getByRole('button', { name: 'Close' })).toHaveFocus();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
     await expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await expect(canvas.getByRole('button', { name: 'Cook' })).toHaveFocus();
+  },
+};
+
+export const RecipeCookingTimer: Story = {
+  ...RecipeCooking,
+  async play({ canvasElement }) {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: 'Cook' }));
+    const dialog = screen.getByRole('dialog', { name: 'Cook' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Start timer' }));
+    await expect(within(dialog).getByRole('button', { name: 'Pause timer' })).toBeVisible();
+    await expect(within(dialog).getByText('Step 1 of 1')).toBeVisible();
+    await expect(within(dialog).getByRole('timer')).toBeVisible();
   },
 };
 
@@ -312,11 +332,11 @@ export const RecipeCookingFromLink: Story = {
     try {
       window.history.replaceState(window.history.state, '', `${window.location.pathname}${window.location.search}#cook`);
       window.dispatchEvent(new HashChangeEvent('hashchange'));
-      const dialog = await screen.findByRole('dialog', { name: 'Cooking mode' });
-      await expect(within(dialog).getByRole('button', { name: 'Close cooking mode' })).toHaveFocus();
+      const dialog = await screen.findByRole('dialog', { name: 'Cook' });
+      await expect(within(dialog).getByRole('button', { name: 'Close' })).toHaveFocus();
       await userEvent.keyboard('{Escape}');
       await expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
-      await expect(within(canvasElement).getByRole('button', { name: 'Cook this' })).toHaveFocus();
+      await expect(within(canvasElement).getByRole('button', { name: 'Cook' })).toHaveFocus();
       await expect(window.location.hash).toBe('');
     } finally { window.history.replaceState(window.history.state, '', prior); }
   },
@@ -326,7 +346,7 @@ export const ScaledIngredients: Story = {
   parameters: at('overview'),
   render: () => (
     <Framed work={typedWork('https://schema.org/Recipe', 'Weekend pancakes')}>
-      <RecipeExperience
+      <RecipeExperience resource={fixture.work.id}
         initial={scaledRecipe}
         href={`/v1/recipes/works/${fixture.workRef}`}
         actingSubject={null}
@@ -384,7 +404,7 @@ export const UnstructuredRecipeCanBeEdited: Story = {
   parameters: at('overview'),
   render: () => (
     <Framed work={typedWork('https://schema.org/Recipe', 'New recipe')}>
-      <RecipeExperience initial={null} href={`/v1/recipes/works/${fixture.workRef}`} actingSubject={null}
+      <RecipeExperience resource={fixture.work.id} initial={null} href={`/v1/recipes/works/${fixture.workRef}`} actingSubject={null}
         text="Notes from the text editor." locale="en" messages={messages.en}
         edit={{ href: recipeEditHref(fixture.workRef), label: 'Edit recipe' }} />
     </Framed>
@@ -403,7 +423,7 @@ export const UnitsAsWritten: Story = {
   parameters: at('overview'),
   render: () => (
     <Framed work={typedWork('https://schema.org/Recipe', 'Weekend pancakes')}>
-      <RecipeExperience initial={metricRecipe} href={`/v1/recipes/works/${fixture.workRef}`} actingSubject={null}
+      <RecipeExperience resource={fixture.work.id} initial={metricRecipe} href={`/v1/recipes/works/${fixture.workRef}`} actingSubject={null}
         text={null} locale="en" messages={messages.en} />
     </Framed>
   ),
@@ -482,7 +502,7 @@ export const RecipeContinues: Story = {
   parameters: at('overview'),
   render: () => (
     <Framed work={typedWork('https://schema.org/Recipe', 'Sunday sauce')}>
-      <RecipeExperience initial={continuedRecipe} href={`/v1/recipes/works/${fixture.workRef}`} actingSubject={null}
+      <RecipeExperience resource={fixture.work.id} initial={continuedRecipe} href={`/v1/recipes/works/${fixture.workRef}`} actingSubject={null}
         text={null} locale="en" messages={messages.en}
         readPage={async query => query.cursor === laterPage
           ? { data: continuedRest, error: null }

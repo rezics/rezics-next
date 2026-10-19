@@ -156,13 +156,13 @@ function readAdoptions(host: RecipeWorkHost, id: string): Promise<BooksRead<Adop
 }
 
 /** The production recipe region. The editor preview and the Work page render this same content. */
-export function RecipeRegionView({ recipe, href, actingSubject, text, edit, locale, messages, readPage, exportApi, saveExport }: {
+export function RecipeRegionView({ resource, recipe, href, actingSubject, text, edit, locale, messages, readPage, exportApi, saveExport }: {
   exportApi?: RecipeExportApi; saveExport?: (value: RecipeExport) => void;
-  recipe: Loaded<RecipeWorkPage | null>; href: string; actingSubject: string | null; text: string | null;
+  resource: string; recipe: Loaded<RecipeWorkPage | null>; href: string; actingSubject: string | null; text: string | null;
   edit?: { href: string; label: string } | null; locale: UiLocale; messages: WorkPageMessages; readPage?: RecipePageRead;
 }) {
   if (!recipe.ok) return <RecipeReadFailure failure={recipe.failure} messages={messages} />;
-  return <RecipeExperience initial={recipe.data} href={href} actingSubject={actingSubject} text={text}
+  return <RecipeExperience resource={resource} initial={recipe.data} href={href} actingSubject={actingSubject} text={text}
     edit={edit} locale={locale} messages={messages} readPage={readPage} exportApi={exportApi} saveExport={saveExport} />;
 }
 
@@ -181,7 +181,7 @@ export async function recipeRegion({ host, id, work, href, locale, messages }: {
   const allowed = authority?.ok ? allowedActionsOf(authority.data) : [];
   // Only data crosses this server/client boundary. RecipeExperience creates its continuation
   // reader in the browser; a reader closure here cannot be serialized by React Server Components.
-  return <RecipeExperience initial={recipe.data} href={href} actingSubject={host.actingSubject}
+  return <RecipeExperience resource={work.id} initial={recipe.data} href={href} actingSubject={host.actingSubject}
     recordingFetch={host.recordingFetch}
     edit={mayEdit(allowed) ? { href: recipeEditHref(id), label: recipeEditorCopy(locale).editRecipe } : null}
     text={text.ok ? text.data.body : null}

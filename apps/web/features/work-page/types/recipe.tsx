@@ -4,6 +4,7 @@ import { Button, buttonVariants } from '@rezics/ui/button';
 import { Input } from '@rezics/ui/input';
 import { cn } from '@rezics/ui/utils';
 import { Clock3Icon, PencilIcon, XIcon } from 'lucide-react';
+import { materializeData } from 'native-i18n';
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import type { UiLocale } from '../../../i18n/define.ts';
 import { browserMainApi } from '../../api/browser.ts';
@@ -152,7 +153,8 @@ function IngredientList({ page, units, messages: t }: {
         : item.reason === 'unparsed' ? t.scaleUnparsed
           : item.reason ? t.scaleHeld : null;
       return <li key={item.occurrence} className="border-border/60 flex flex-col gap-0.5 border-b py-2 last:border-0">
-        <span lang={language} dir={language ? directionOf(language) : undefined} className="font-medium text-pretty">{text}</span>
+        <span data-ingredient={item.occurrence} lang={language} dir={language ? directionOf(language) : undefined}
+          className="font-medium text-pretty">{text}</span>
         {quiet ? <span lang={language} dir={language ? directionOf(language) : undefined} className="text-muted-foreground text-sm">{quiet}</span> : null}
         {note ? <span className="text-muted-foreground text-xs">{note}</span> : null}
       </li>;
@@ -181,29 +183,39 @@ function linkedLines(step: ReadableOccurrence, page: ReadableRecipe, units: Unit
   });
 }
 
-function Steps({ page, units, messages: t, recordingFetch }: {
+/** Structure order is also cooking order; an adopted instruction retains its exact occurrence. */
+function methodOccurrences(page: ReadableRecipe) {
+  const adopted = new Set(page.instructions?.map(item => item.occurrence));
+  return page.occurrences.filter(item => adopted.has(item.occurrence)
+    || item.role === 'step' && item.qualifier?.type === 'recipe-step');
+}
+
+function Steps({ page, units, messages: t, recordingFetch, activeIndex }: {
   page: ReadableRecipe; units: Units; messages: WorkPageMessages; recordingFetch?: typeof fetch;
+  activeIndex?: number;
 }) {
   const adopted = new Map(page.instructions?.map(item => [item.occurrence, item]));
-  const steps = page.occurrences.filter(item => adopted.has(item.occurrence)
-    || item.role === 'step' && item.qualifier?.type === 'recipe-step');
+  const steps = methodOccurrences(page);
   const groups = new Map(page.occurrences.filter(item => item.role === 'group').map(item => [item.occurrence, item.labels[0]]));
   return <ol className="grid gap-5">{steps.map((step, index) => {
     const selected = adopted.get(step.occurrence);
-    if (selected) return <li key={step.occurrence}>
-      <InstructionReading instructions={[selected]} messages={t} recordingFetch={recordingFetch} />
+    if (selected) return <li key={step.occurrence} data-step-occurrence={step.occurrence}
+      hidden={activeIndex !== undefined && activeIndex !== index}>
+      <InstructionReading instructions={[selected]} messages={t} recordingFetch={recordingFetch} stepText />
     </li>;
     const instruction = step.qualifier?.type === 'recipe-step' ? step.qualifier.instructionText?.value ?? '' : '';
     const linked = linkedLines(step, page, units);
     const language = step.qualifier?.instructionText?.language;
     const seconds = stepSeconds(instruction);
     const group = index === 0 || steps[index - 1]?.parent !== step.parent ? groups.get(step.parent) : undefined;
-    return <li key={step.occurrence} className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3">
+    return <li key={step.occurrence} data-step-occurrence={step.occurrence}
+      hidden={activeIndex !== undefined && activeIndex !== index} className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3">
       {group?.value ? <h4 lang={group.language} dir={group.language ? directionOf(group.language) : undefined}
         className="col-span-2 font-medium">{group.value}</h4> : null}
       <span aria-hidden="true" className="bg-primary/10 flex size-8 items-center justify-center rounded-full font-semibold">
         {index + 1}</span>
-      <div className="grid gap-2"><p lang={language} dir={language ? directionOf(language) : undefined} className="leading-7">{instruction}</p>
+      <div className="grid gap-2"><p data-step-text={step.occurrence} lang={language}
+        dir={language ? directionOf(language) : undefined} className="leading-7">{instruction}</p>
         {linked.length ? <p className="text-muted-foreground text-sm">{linked.join(' · ')}</p> : null}
         {seconds ? <StepTimer seconds={seconds} messages={t} /> : null}</div>
     </li>;
@@ -211,12 +223,19 @@ function Steps({ page, units, messages: t, recordingFetch }: {
 }
 
 /** A focused recipe task keeps the display awake while its steps are open. */
-function CookMode({ page, messages: t, units, onClose, recordingFetch }: {
-  page: ReadableRecipe; messages: WorkPageMessages; units: Units;
+function CookMode({ resource, page, messages: t, locale, units, onClose, recordingFetch }: {
+  resource: string; page: RecipeWorkPage; messages: WorkPageMessages; locale: UiLocale; units: Units;
   onClose: () => void;
   recordingFetch?: typeof fetch;
 }) {
   const close = useRef<HTMLButtonElement>(null);
+  const dialog = useRef<HTMLDivElement>(null);
+  const completion = useRef<HTMLParagraphElement>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const count = methodOccurrences(page).length;
+  const complete = activeIndex === count;
+  const copy = materializeData(t, { locale });
+  useEffect(() => { if (complete) completion.current?.focus(); }, [complete]);
   useEffect(() => {
     const prior = document.body.style.overflow;
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -235,12 +254,15 @@ function CookMode({ page, messages: t, units, onClose, recordingFetch }: {
     const escape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose();
       if (event.key !== 'Tab') return;
-      const buttons = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button:not(:disabled)')];
-      if (!buttons.length) return;
-      if (event.shiftKey && document.activeElement === buttons[0]) {
-        event.preventDefault(); buttons.at(-1)?.focus();
-      } else if (!event.shiftKey && document.activeElement === buttons.at(-1)) {
-        event.preventDefault(); buttons[0]?.focus();
+      const controls = [...dialog.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], '
+        + 'input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, [tabindex]:not([tabindex="-1"])') ?? []]
+        .filter(control => control.getClientRects().length > 0);
+      if (!controls.length) return;
+      const active = document.activeElement;
+      if (event.shiftKey && (active === controls[0] || !controls.includes(active as HTMLElement))) {
+        event.preventDefault(); controls.at(-1)?.focus();
+      } else if (!event.shiftKey && (active === controls.at(-1) || !controls.includes(active as HTMLElement))) {
+        event.preventDefault(); controls[0]?.focus();
       }
     };
     void acquire();
@@ -257,7 +279,8 @@ function CookMode({ page, messages: t, units, onClose, recordingFetch }: {
       returnTo?.focus();
     };
   }, [onClose]);
-  return <div role="dialog" aria-modal="true" aria-label={t.cookMode}
+  return <div ref={dialog} role="dialog" aria-modal="true" aria-label={t.cookMode}
+    data-resource={resource} data-revision={page.revision} data-structure={page.structure}
     className="bg-background fixed inset-0 z-50 overflow-y-auto p-4 sm:p-8">
     <div className="mx-auto grid max-w-4xl gap-8">
       <div className="flex items-center justify-between gap-4 border-b pb-4">
@@ -265,11 +288,20 @@ function CookMode({ page, messages: t, units, onClose, recordingFetch }: {
         <Button ref={close} type="button" variant="outline" onClick={onClose}>
           <XIcon aria-hidden="true" />{t.closeCookMode}</Button>
       </div>
-      <div className="grid gap-10 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+      <div className="grid gap-10 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+        <section className="grid content-start gap-3"><h3 className="font-semibold text-xl">{t.method}</h3>
+          {complete ? <p ref={completion} role="status" tabIndex={-1}
+            className="rounded-lg bg-primary/10 p-4 font-medium outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            {t.cookComplete}</p> : <p aria-live="polite" className="text-muted-foreground text-sm">
+            {copy.cookStep({ current: String(activeIndex + 1), total: String(count) })}</p>}
+          <div hidden={complete}>
+            <Steps page={page} units={units} messages={t} recordingFetch={recordingFetch} activeIndex={activeIndex} />
+          </div>
+          {!complete ? <Button type="button" className="justify-self-start" onClick={() => setActiveIndex(index => Math.min(index + 1, count))}>
+            {activeIndex === count - 1 ? t.cookFinish : t.cookNextStep}</Button> : null}
+        </section>
         <section className="grid content-start gap-3"><h3 className="font-semibold text-xl">{t.ingredients}</h3>
           <IngredientList page={page} units={units} messages={t} /></section>
-        <section className="grid content-start gap-3"><h3 className="font-semibold text-xl">{t.method}</h3>
-          <Steps page={page} units={units} messages={t} recordingFetch={recordingFetch} /></section>
       </div>
     </div>
   </div>;
@@ -326,8 +358,10 @@ function wholeServings(page: RecipeWorkPage | null): number | null {
   return Number.isInteger(amount) && amount >= 1 && amount <= 100 ? amount : null;
 }
 
-export function RecipeExperience({ initial, href, actingSubject, text, edit, locale, messages: t, readPage, exportApi, saveExport, recordingFetch }: {
+export function RecipeExperience({ resource, initial, href, actingSubject, text, edit, locale, messages: t, readPage, exportApi, saveExport, recordingFetch }: {
   exportApi?: RecipeExportApi; saveExport?: (value: RecipeExport) => void;
+  /** The exact Work identity already admitted by the host read; the Recipe body identifies its Structure instead. */
+  resource: string;
   initial: RecipeWorkPage | null; /** The recipe section's link in the Work's page projection. */ href: string;
   actingSubject: string | null; /** The way into the recipe editor, for a viewer who may edit it. */ edit?: { href: string; label: string } | null;
   text: string | null; locale: UiLocale; messages: WorkPageMessages;
@@ -361,7 +395,7 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, loc
     setContinueFailed(false);
     setChanged(false);
     setCooking(recipeMethodReady(initial) && window.location.hash === '#cook');
-  }, [initial, href, actingSubject]);
+  }, [initial, href, actingSubject, resource]);
   const read = readPage ?? ((query: { cursor?: string; servings?: number }) => recipePageReader({ main: browserMainApi(), actingSubject }, href)(query));
   useEffect(() => {
     const open = () => { if (methodReady) setCooking(true); };
@@ -477,7 +511,8 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, loc
             {continuing ? t.loadingMoreRecipe : t.showMoreRecipe}</Button> : null}
         </div> : null}
       </div>
-      {cooking && methodReady ? <CookMode page={page} messages={t} units={units} recordingFetch={recordingFetch}
+      {cooking && methodReady ? <CookMode key={`${resource}:${page.structure}:${page.revision}`} resource={resource}
+        page={page} messages={t} locale={locale} units={units} recordingFetch={recordingFetch}
         onClose={() => {
           setCooking(false);
           if (window.location.hash === '#cook') {
