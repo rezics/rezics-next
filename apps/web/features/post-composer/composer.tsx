@@ -126,7 +126,7 @@ export function PostComposer({
     const intent = currentIntent();
     if (!operationGate.current('postV1Member-reply-drafts')) throw new Error('image-draft-unavailable');
     const pending = preparePostImageDraft(intent, draftRef.current.imageDraft ?? null, (imageDraft) => {
-      if (!sameImageDraftContext(currentIntent(), imageDraft)) throw new Error('image-draft-context-changed');
+      if (!sameImageDraftContext(imageIntent.current(), imageDraft)) throw new Error('image-draft-context-changed');
       const next = { ...draftRef.current, imageDraft, language: imageDraft.intent.language };
       try { persist(next); } catch (cause) { setStorageError(true); throw cause; }
       draftRef.current = next; setDraft(next);
