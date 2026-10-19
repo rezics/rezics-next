@@ -50,3 +50,18 @@ test('Bangumi explicit conversion shares the external pure transformation and pr
   expect(converted.inventory.find(item => item.field === 'unknown')).toMatchObject({ disposition: 'unsupported' });
   expect(() => convertBangumiSubject('other',{ id: 1014,name: 'Exact',type: 2 })).toThrow(ProviderConversionError);
 });
+
+
+test('VNDB namespaces accept only declared kinds and refuse inherited object members', () => {
+  const data = { id: 'v11',name: 'Exact',olang: 'ja' };
+  for (const [namespace,native] of [['vn','work'],['release','release'],['character','character'],
+    ['staff','person'],['producer','organization'],['tag','concept'],['trait','concept']] as const) {
+    expect(convertProviderRecord({ ...identity,namespace },data).native).toBe(native);
+  }
+  for (const namespace of [...Object.getOwnPropertyNames(Object.prototype),'not-a-kind','']) {
+    let refusal: unknown;
+    try { convertProviderRecord({ ...identity,namespace },data); } catch (error) { refusal = error; }
+    expect(refusal).toBeInstanceOf(ProviderConversionError);
+    if (refusal instanceof ProviderConversionError) expect(refusal.basis).toBe('unsupported');
+  }
+});

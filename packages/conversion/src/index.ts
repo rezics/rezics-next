@@ -9,6 +9,11 @@ export interface ProviderRecordIdentity {
 const rowObject = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
 
+const vndbNativeKinds = new Map<string, 'work' | 'release' | 'character' | 'person' | 'organization' | 'concept'>([
+  ['vn', 'work'], ['release', 'release'], ['character', 'character'], ['staff', 'person'],
+  ['producer', 'organization'], ['tag', 'concept'], ['trait', 'concept'],
+]);
+
 /** Existing bare-response normalization. No acquisition, custody, database or
  * native write runs here. Bangumi enrichment requires the retained envelope;
  * unsupported shapes are never invented by this converter. */
@@ -27,8 +32,7 @@ export function convertProviderRecord(identity: ProviderRecordIdentity, data: Re
         ? 'https://schema.org/MusicAlbum' : 'https://schema.org/MusicRecording'] } : {}) };
   }
   if (provider === 'vndb') {
-    const native = ({ vn: 'work', release: 'release', character: 'character', staff: 'person',
-      producer: 'organization', tag: 'concept', trait: 'concept' } as const)[kind as 'vn'];
+    const native = vndbNativeKinds.get(kind);
     if (!native) throw new ProviderConversionError('unsupported');
     return { key: identity.key, provider: 'vndb' as const, kind, externalId, title: String(data.name ?? externalId),
       language: String(data.olang ?? data.lang ?? 'und'), sourceUrl: `https://vndb.org/${externalId}`,
