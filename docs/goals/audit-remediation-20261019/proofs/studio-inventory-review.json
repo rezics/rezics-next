@@ -1,9 +1,9 @@
 {
   "goal": "audit-remediation-20261019",
   "worker": "G-2848",
-  "reportVersion": 1,
-  "reportedAtUtc": "2026-10-19T07:37:35.421391+00:00",
-  "result": "blocked: independent source/check/render review delivered; genuine original acceptance remains unproved",
+  "reportVersion": 2,
+  "reportedAtUtc": "2026-10-19T10:35:08.505785+00:00",
+  "result": "partial: affected 9e633ed stories and recorded navigation geometry pass; genuine browser acceptance blocked before sign-in by a missing startup dependency export",
   "reviewer": {
     "engine": "codex-1",
     "model": "GPT-6.1 Sol",
@@ -1872,5 +1872,2654 @@
       ".agents/skills/local-development/SKILL.md"
     ],
     "instructionEffect": "The task brief explicitly limits this worker to the proof report and forbids implementation/assertion/registry edits, so rendered/test failures are routed to existing owners. No permission request or extra approval gate was introduced."
+  },
+  "correctionVerification": {
+    "reportedAtUtc": "2026-10-19T10:35:08.505785+00:00",
+    "authority": "Manager same-scope resume; same original claims/outcome/acceptance. Verify only four story corrections, Curated visibility/history and changed Work focus geometry. UI-only frontend plus compatible genuine backend authorized without fresh catalogue, old baseline restore or full AMGT rerun preconditions.",
+    "historicalReadingRule": "All pre-existing report sections retain the original af37 review and its original timestamp/outcomes, including failures and setup holds. This correctionVerification is the current disposition. Historical missing integration/restore/transition/overlay premises are not imposed as new prerequisites for the authorized UI correction.",
+    "originalReport": {
+      "commit": "59030abdeb1d887ae33b29947e0c590048d2b69c",
+      "rebasedWorkerCommit": "c54d59e22f50109808d22fff96ecef12c8f30711",
+      "sha256": "6a0f828fd61bf4668197ef34a487ec9fcb51f7f7ecfe06b09d6bc7fd4d0a5675",
+      "reportedAtUtc": "2026-10-19T07:37:35.421391+00:00",
+      "result": "blocked: independent source/check/render review delivered; genuine original acceptance remains unproved",
+      "allOriginalEvidenceSectionsPreserved": true,
+      "reviewCountRemains": 1,
+      "newReviewerOrAgent": false
+    },
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "sameIndependentReviewer": true,
+      "nestedAgents": 0,
+      "fallback": false,
+      "authoredCandidate": false
+    },
+    "pins": {
+      "reviewedOriginalBase": "82067635061c20a9a3d0301a63aa652bf120d14b",
+      "reviewedOriginalHead": "af37c8991ffb8997c06f055279301fb9b173f842",
+      "frontendProduct": {
+        "base": "82df58d2ba1d9d377b591126e7f4dfa42f27f02e",
+        "head": "9e633ed68c91b9782eeef6849358bd640d5c014e",
+        "branch": "candidate/site-studio-final-20261019",
+        "externalCheckoutReadOnly": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/site-studio-final-candidate",
+        "ownedDetachedCheckCheckout": ".temp/studio-review/source",
+        "cleanExactBeforeRead": true,
+        "cleanExactAfterChecks": true,
+        "integratedMainLanding": false
+      },
+      "genuineBackendRuntime": {
+        "head": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "pointer": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "refreshReceipt": {
+          "revision": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+          "appHostHash": "e1afce481faa0c5912e120d55f9ca60a3682db085493002eef10c1c73216c9cc",
+          "appHostSession": "https://localhost:35195",
+          "refreshId": "069bf6dd9d89b2446c8f69a060b990f8"
+        },
+        "readiness": {
+          "status": 200,
+          "body": {
+            "status": "ready",
+            "horizons": {
+              "sampledAt": "2026-10-19T10:29:14.645Z",
+              "writerVisibility": "all-sessions",
+              "notification": {
+                "oldestPendingRowAgeSeconds": null,
+                "oldestWriterAgeSeconds": 0.267
+              },
+              "reviewRank": {
+                "oldestPendingRowAgeSeconds": null,
+                "oldestPendingRowAgeBasis": "none",
+                "oldestWriterAgeSeconds": 0.267
+              },
+              "editorial": {
+                "oldestPendingRowAgeSeconds": null,
+                "oldestWriterAgeSeconds": 0.267
+              }
+            }
+          }
+        },
+        "candidateMainStudioBehaviorProved": false
+      },
+      "webRuntime": {
+        "head": "9e633ed68c91b9782eeef6849358bd640d5c014e",
+        "command": "task web:dev -- --port 43149",
+        "configuration": {
+          "web": "http://127.0.0.1:43149",
+          "main": "http://127.0.0.1:3001",
+          "accounts": "http://127.0.0.1:3004",
+          "issuer": "http://127.0.0.1:3004/api/auth",
+          "resource": "https://main.rezics.test",
+          "clientId": "QiHpuGHytLRPOMsszswKmWmEbBfiCkSY"
+        },
+        "ready": false,
+        "GET_en_status": 500,
+        "signedIn": false,
+        "productionProof": false
+      },
+      "test": {
+        "head": "9e633ed68c91b9782eeef6849358bd640d5c014e",
+        "file": "apps/web/features/studio/studio-home.stories.tsx",
+        "blob": "e12fa175a1e61bffee6a918413c42e2f4734163b",
+        "assertionEditsByReviewer": false,
+        "originalAMGTOverlay": null
+      },
+      "runner": {
+        "candidateTaskAndQaSource": "9e633ed68c91b9782eeef6849358bd640d5c014e",
+        "recordedGoalctl": "/home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts",
+        "recordedGoalctlSource": "Main code as requested; not a separately frozen runner commit",
+        "originalOutcomeSeparateProductTestRunnerPinsExecuted": false
+      },
+      "nativeImage": {
+        "tag": "rezics/fuseki:6.2.0-cmd0.5.39-5bc9e305cb80",
+        "imageId": "sha256:028a5b9ceefbb15dc98b2f91085e00c4e4bcb1485ac5b197e6d29f1f020f49b2",
+        "changedByWorker": false
+      },
+      "schema": {
+        "migrationOrAdoptionExecuted": false,
+        "actualAllOwnerHistoryQualified": false,
+        "reason": "Narrow UI-only check against existing authorized backend; no restore or schema acceptance claim."
+      },
+      "backup": {
+        "restored": false,
+        "newBackupOrCorpus": false,
+        "reason": "No fresh catalogue or old-baseline restore is required for the authorized UI correction; original retained-data criteria remain separate."
+      }
+    },
+    "sourceReuse": {
+      "manifestPath": ".temp/audit-remediation-20261019/two-hour-sprint/site-studio-final/file-blob-manifest.json",
+      "manifestSha256": "98ab1d9b54040c231d422fff3d205c2392cab6d8bd8d0fc2c32ac89e6c1153cb",
+      "all35BlobsAndSha256Verified": true,
+      "original24PathReviewPreserved": true,
+      "original24UnchangedBlobCount": 21,
+      "prior24PathReuse": [
+        {
+          "path": "apps/web/app/[locale]/studio/[agent]/page.tsx",
+          "originalBlob": "75ec428a2fa2cdad6c5714810cf48ccd690558f8",
+          "correctionBlob": "75ec428a2fa2cdad6c5714810cf48ccd690558f8",
+          "unchanged": true
+        },
+        {
+          "path": "apps/web/features/studio/fixtures.ts",
+          "originalBlob": "b9d07c1df79828ba9c4268a454df23f0f1060017",
+          "correctionBlob": "b9d07c1df79828ba9c4268a454df23f0f1060017",
+          "unchanged": true
+        },
+        {
+          "path": "apps/web/features/studio/messages.ts",
+          "originalBlob": "5c8e2b5e7b1d1c1907cc7db59b1e3cef298eda6d",
+          "correctionBlob": "5c8e2b5e7b1d1c1907cc7db59b1e3cef298eda6d",
+          "unchanged": true
+        },
+        {
+          "path": "apps/web/features/studio/messages/de.ts",
+          "originalBlob": "f7cbc00bc6699111280668b1e19191cdd0bc2f3a",
+          "correctionBlob": "f7cbc00bc6699111280668b1e19191cdd0bc2f3a",
+          "unchanged": true
+        },
+        {
+          "path": "apps/web/features/studio/messages/es.ts",
+          "originalBlob": "5ebf616667fd5abb78951edeea2d7ed920a22736",
+          "correctionBlob": "5ebf616667fd5abb78951edeea2d7ed920a22736",
+          "unchanged": true
+        },
+        {
+          "path": "apps/web/features/studio/messages/fr.ts",
+          "originalBlob": "d74a4ba257a5753db86a2098c96d3e4982baa73f",
+          "correctionBlob": "d74a4ba257a5753db86a2098c96d3e4982baa73f",
+          "unchanged": true
+        },
+        {
+          "path": "apps/web/features/studio/messages/ja.ts",
+          "originalBlob": "cdba6d3cd9a8f8fca5663a66eb5c6f2b8d65fdcb",
+          "correctionBlob": "cdba6d3cd9a8f8fca5663a66eb5c6f2b8d65fdcb",
+          "unchanged": true
+        },
+        {
+          "path": "apps/web/features/studio/messages/ko.ts",
+          "originalBlob": "5d84d8907eadc6ad29af9998f39ca55acd774923",
+          "correctionBlob": "5d84d8907eadc6ad29af9998f39ca55acd774923",
+          "unchanged": true
+        },
+        {
+          "path": "apps/web/features/studio/messages/zh-Hans.ts",
+          "originalBlob": "572f8b601fdcd22e592f5b102b3bb6aefc150654",
+          "correctionBlob": "572f8b601fdcd22e592f5b102b3bb6aefc150654",
+          "unchanged": true
+        },
+        {
+          "path": "apps/web/features/studio/messages/zh-Hant.ts",
+          "originalBlob": "9236ab79c0d2dc7f4779c6cbb9753d6b2f819b8a",
+          "correctionBlob": "9236ab79c0d2dc7f4779c6cbb9753d6b2f819b8a",
+          "unchanged": true
+        },
+        {
+          "path": "apps/web/features/studio/read.ts",
+          "originalBlob": "3a726b274415c4289d8fe46f832a843c150919db",
+          "correctionBlob": "3a726b274415c4289d8fe46f832a843c150919db",
+          "unchanged": true
+        },
+        {
+          "path": "apps/web/features/studio/studio-home.stories.tsx",
+          "originalBlob": "142432ba4471263e1652ae87b45a6e248eece21c",
+          "correctionBlob": "e12fa175a1e61bffee6a918413c42e2f4734163b",
+          "unchanged": false
+        },
+        {
+          "path": "apps/web/features/studio/studio-home.tsx",
+          "originalBlob": "36ea7a2a94f3bca76ead0e8893ec6cea9740c903",
+          "correctionBlob": "c7d2187111f7a15b5dec4da69aa13cfe8110a342",
+          "unchanged": false
+        },
+        {
+          "path": "apps/web/features/studio/types.ts",
+          "originalBlob": "fad3a36758ea8a5be9c59a35211c6db54bcad542",
+          "correctionBlob": "fad3a36758ea8a5be9c59a35211c6db54bcad542",
+          "unchanged": true
+        },
+        {
+          "path": "apps/web/tests/studio-inventory.test.ts",
+          "originalBlob": "124aaaa6cce231a160036ead484b20fa3923b889",
+          "correctionBlob": "124aaaa6cce231a160036ead484b20fa3923b889",
+          "unchanged": true
+        },
+        {
+          "path": "generated/openapi/main/public.json",
+          "originalBlob": "b1e3a38746218810dfabf17ae435e124eb479106",
+          "correctionBlob": "b1e3a38746218810dfabf17ae435e124eb479106",
+          "unchanged": true
+        },
+        {
+          "path": "scripts/static/web-continuations.inventory.json",
+          "originalBlob": "d094df76ec735edb9d79bd0dcc11c91ca76e7402",
+          "correctionBlob": "6405c548981698e5250a4567a072abc5baf33ee5",
+          "unchanged": false
+        },
+        {
+          "path": "scripts/static/web-continuations.test.ts",
+          "originalBlob": "6b235b24fdb2a486a2e51c7bc25ef653444ff8d3",
+          "correctionBlob": "6b235b24fdb2a486a2e51c7bc25ef653444ff8d3",
+          "unchanged": true
+        },
+        {
+          "path": "services/main/src/modules/studio/access.ts",
+          "originalBlob": "e1a76597038a74975df36d5ec82f6166853bc6a2",
+          "correctionBlob": "e1a76597038a74975df36d5ec82f6166853bc6a2",
+          "unchanged": true
+        },
+        {
+          "path": "services/main/src/modules/studio/chapters.ts",
+          "originalBlob": "bfd0fc170069cd912842352952742344ec3c28bd",
+          "correctionBlob": "bfd0fc170069cd912842352952742344ec3c28bd",
+          "unchanged": true
+        },
+        {
+          "path": "services/main/src/modules/studio/works.ts",
+          "originalBlob": "e9bb2042c1626ddf9651068c42f2920e6a93c4d8",
+          "correctionBlob": "e9bb2042c1626ddf9651068c42f2920e6a93c4d8",
+          "unchanged": true
+        },
+        {
+          "path": "services/main/src/routes/studio.ts",
+          "originalBlob": "332c6b0ee18c92237863e9ecd8478a03ec501802",
+          "correctionBlob": "332c6b0ee18c92237863e9ecd8478a03ec501802",
+          "unchanged": true
+        },
+        {
+          "path": "services/main/tests/studio-inventory.test.ts",
+          "originalBlob": "d4189db56e06da8d535ad9bc9601fbeadca93b98",
+          "correctionBlob": "d4189db56e06da8d535ad9bc9601fbeadca93b98",
+          "unchanged": true
+        },
+        {
+          "path": "services/main/tests/studio-transfer-parity.test.ts",
+          "originalBlob": "cd7af6f33696a3ab10852bfc0a92007913bbd828",
+          "correctionBlob": "cd7af6f33696a3ab10852bfc0a92007913bbd828",
+          "unchanged": true
+        }
+      ],
+      "all11DependencyBlobsMatchG2847Review": true,
+      "dependencyReviewReuse": [
+        {
+          "path": "apps/web/features/address/client.ts",
+          "candidateBlob": "14a890bb2996661a8a19f2f2a562950d363a4c9b",
+          "reviewedBlob": "14a890bb2996661a8a19f2f2a562950d363a4c9b",
+          "reviewedBlobMatches": true
+        },
+        {
+          "path": "apps/web/features/address/edge.ts",
+          "candidateBlob": "43e3d1b7cf55c2f1dd390efbc06860b718044b8d",
+          "reviewedBlob": "43e3d1b7cf55c2f1dd390efbc06860b718044b8d",
+          "reviewedBlobMatches": true
+        },
+        {
+          "path": "apps/web/features/shell/current-page-visibility.test.ts",
+          "candidateBlob": "0786d38b74cf348725fecce81743193a7c93e1ce",
+          "reviewedBlob": "0786d38b74cf348725fecce81743193a7c93e1ce",
+          "reviewedBlobMatches": true
+        },
+        {
+          "path": "apps/web/features/shell/current-page-visibility.ts",
+          "candidateBlob": "4580530fd0e47923f4bf9de65a0baba9292b2a45",
+          "reviewedBlob": "4580530fd0e47923f4bf9de65a0baba9292b2a45",
+          "reviewedBlobMatches": true
+        },
+        {
+          "path": "apps/web/features/shell/localized-link.tsx",
+          "candidateBlob": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba",
+          "reviewedBlob": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba",
+          "reviewedBlobMatches": true
+        },
+        {
+          "path": "apps/web/features/shell/navigation-focus.test-utils.ts",
+          "candidateBlob": "73119b78128e31d9e513a30a2e8f27e1d2f3e7ef",
+          "reviewedBlob": "73119b78128e31d9e513a30a2e8f27e1d2f3e7ef",
+          "reviewedBlobMatches": true
+        },
+        {
+          "path": "apps/web/features/studio/studio-work.tsx",
+          "candidateBlob": "7fb80382695f309d4e733354415e6c417a6efd17",
+          "reviewedBlob": "7fb80382695f309d4e733354415e6c417a6efd17",
+          "reviewedBlobMatches": true
+        },
+        {
+          "path": "apps/web/proxy.ts",
+          "candidateBlob": "b799068613488076a6c405ad9cf7ac6202c0ea15",
+          "reviewedBlob": "b799068613488076a6c405ad9cf7ac6202c0ea15",
+          "reviewedBlobMatches": true
+        },
+        {
+          "path": "apps/web/tests/dependency-environments.test.ts",
+          "candidateBlob": "dec30ba944d262bdb2c78f8477dd282fe10acf12",
+          "reviewedBlob": "dec30ba944d262bdb2c78f8477dd282fe10acf12",
+          "reviewedBlobMatches": true
+        },
+        {
+          "path": "apps/web/vite.config.ts",
+          "candidateBlob": "5340e037be04b55b3499adb537984ee440edcb61",
+          "reviewedBlob": "5340e037be04b55b3499adb537984ee440edcb61",
+          "reviewedBlobMatches": true
+        },
+        {
+          "path": "apps/web/worker/index.ts",
+          "candidateBlob": "d03cd1305fc127cef9b1aa6f6be86fd7a39d8d06",
+          "reviewedBlob": "d03cd1305fc127cef9b1aa6f6be86fd7a39d8d06",
+          "reviewedBlobMatches": true
+        }
+      ],
+      "dependencyRereviewPerformed": false,
+      "actuallyReviewedAffectedDelta": [
+        {
+          "path": "apps/web/features/studio/studio-home.stories.tsx",
+          "lines": [
+            74,
+            81,
+            92,
+            93,
+            142,
+            150,
+            151,
+            152
+          ],
+          "change": "Curated explicit desktop viewport plus visible selected destination and keyboard focus; phone light/dark variants; Chinese retains 3 章 and checks 已发布 on the same Work row and 菜谱 on the recipe row."
+        },
+        {
+          "path": "apps/web/features/studio/studio-home.tsx",
+          "line": 187,
+          "change": "Existing padding changes px-1 to p-1; product inventory logic unchanged."
+        },
+        {
+          "path": "apps/web/features/studio/studio-work.tsx",
+          "line": 200,
+          "change": "Existing reviewed dependency padding changes px-1 to p-1; unchanged selection/content proof reused."
+        },
+        {
+          "path": "scripts/static/web-continuations.inventory.json",
+          "change": "Mechanical continuation inventory reconciliation independently checked; unrelated current-main rows equal and in order.",
+          "measurements": {
+            "violations": {
+              "unrelatedRowsEqualAndInOrder": true,
+              "baseRows": 736,
+              "candidateRows": 735
+            },
+            "remaining": {
+              "unrelatedRowsEqualAndInOrder": true,
+              "baseRows": 11,
+              "candidateRows": 11
+            }
+          }
+        }
+      ],
+      "missingDependencyExaminedOnlyAfterActual500": {
+        "candidateServerReadBlob": "9fd348757114e456bd30765417a349bb86d91c38",
+        "baseServerReadBlob": "9fd348757114e456bd30765417a349bb86d91c38",
+        "reviewedA27ServerReadBlob": "62613d97061c5411192c5ea121d1ac7bde596814",
+        "previous196ServerReadBlob": "62613d97061c5411192c5ea121d1ac7bde596814",
+        "candidateMissingExport": true,
+        "reviewedAndPreviousRuntimeExportPresent": true,
+        "explanation": "All eleven selected dependency blobs match their reviewed manifest, but that selection omits the existing server-read request-boundary dependency. This is an observed composition gap, not a second review of unchanged dependency behavior."
+      },
+      "details": ".temp/studio-review/correction/source-verification.json"
+    },
+    "checks": [
+      {
+        "job": "0a1d39b3-77b1-4bad-a1c7-9452914340b0",
+        "step": 1,
+        "exit": 0,
+        "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts slot -- task --dir .temp/studio-review/source goal -- test apps/web/features/studio/studio-home.stories.tsx -t 'Curated|Chinese'",
+        "qaId": "20261019t102208-f4b9b1",
+        "source": "9e633ed68c91b9782eeef6849358bd640d5c014e",
+        "result": "4 passed, 19 skipped, 23 discovered",
+        "casesReached": [
+          "Curated",
+          "CuratedPhone",
+          "CuratedPhoneDark",
+          "Chinese"
+        ],
+        "assertionReach": "Selected original play bodies passed: selected marker and revelation before keyboard focus; two curated rows/authored-vs-curated actions; full focus helper; Chinese heading, 3 章, same Work 已发布, recipe 菜谱.",
+        "log": ".temp/goal/jobs/0a1d39b3-77b1-4bad-a1c7-9452914340b0.1.log"
+      },
+      {
+        "job": "0a1d39b3-77b1-4bad-a1c7-9452914340b0",
+        "step": 2,
+        "exit": 0,
+        "command": "task goal -- slot -- bun .temp/studio-review/correction.ts",
+        "source": "9e633ed68c91b9782eeef6849358bd640d5c014e",
+        "result": "20 diagnostic scenarios passed; 0 page errors; owned Storybook stopped",
+        "testBodies": "Supplemental temporary DOM geometry/history probes; no original assertion edits.",
+        "log": ".temp/goal/jobs/0a1d39b3-77b1-4bad-a1c7-9452914340b0.2.log"
+      },
+      {
+        "job": "7a15c284-84e4-4a54-a49c-52ecde639934",
+        "exit": 201,
+        "command": "task goal -- slot -- bun .temp/studio-review/runtime.ts",
+        "result": "Setup failure: Web readiness deadline exceeded; repeated actual GET /en 500 from missing withServerRequest export.",
+        "assertionReach": "No sign-in, Studio navigation, inventory API or original acceptance body reached.",
+        "log": ".temp/goal/jobs/7a15c284-84e4-4a54-a49c-52ecde639934.log"
+      },
+      {
+        "command": "task docs:check",
+        "result": "passed: 13 checks; 250 Markdown files; local links, fragments and design navigation",
+        "job": "712adccc-d3f7-4bfc-81a9-2a882c4ec060",
+        "exit": 0,
+        "log": ".temp/goal/jobs/712adccc-d3f7-4bfc-81a9-2a882c4ec060.log",
+        "limitation": "Documentation validation only; no runtime or external URL proof."
+      }
+    ],
+    "producerAndUnchangedCheckReuse": {
+      "originalAf37Checks": "Original checks section preserved. Units/types/inference/lint/AST/localization/generation/selected guards were actually run at af37; not relabelled as full-tree 9e633ed passes.",
+      "producerJob": "9cef5ecc-bb63-4465-a52b-9bfad2bda4af",
+      "producerQa": "20261019t093540-b9707a",
+      "producerOriginal23Stories": "23/23 passed; retained producer proof, not a second independent run at 9e633ed.",
+      "producerStoryRevision": "ce0ecb7eac3ec81468f5d3d0c6b4efbeeb1fe91b",
+      "selectedStoryAndPrimarySupportBytesMatch": true,
+      "supportDifferencesInspected": ".temp/audit-remediation-20261019/two-hour-sprint/site-studio-final/producer-support-source-differences.json",
+      "limitation": "Provider changes concern unused optional refresh/editor/cover paths for these Home stories; not whole-source equivalence.",
+      "broadUnchangedSuitesRepeated": false
+    },
+    "renderedEvidence": {
+      "source": "9e633ed68c91b9782eeef6849358bd640d5c014e",
+      "evidenceClass": "recorded Storybook inputs and actual DOM/screenshot observations; no genuine API authority claim",
+      "actualDiscoveredHomeStoryIds": [
+        "studio-home--works",
+        "studio-home--in-review",
+        "studio-home--curated",
+        "studio-home--curated-phone",
+        "studio-home--curated-phone-dark",
+        "studio-home--drafts-empty",
+        "studio-home--empty",
+        "studio-home--denied",
+        "studio-home--unavailable",
+        "studio-home--pen-name",
+        "studio-home--chinese",
+        "studio-home--dark",
+        "studio-home--phone",
+        "studio-home--large-inventory",
+        "studio-home--large-inventory-phone",
+        "studio-home--located-work",
+        "studio-home--no-matches",
+        "studio-home--search-continuation",
+        "studio-home--incomplete-counts",
+        "studio-home--lifecycle-states",
+        "studio-home--lifecycle-states-phone",
+        "studio-home--loading",
+        "studio-home--not-your-identity"
+      ],
+      "scenarios": [
+        {
+          "kind": "Work focus geometry",
+          "story": "studio-work--introduction",
+          "width": 1440,
+          "journey": "Wait existing story play; focus Chapters then Tab to Introduction; document top; inspect full outline and clipping ancestors",
+          "assertionReached": true,
+          "passed": true,
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/correction/work-introduction-1440-focus.png",
+          "focusCrop": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/correction/work-introduction-1440-focus-crop.png",
+          "nav": {
+            "x": 180,
+            "y": 349,
+            "right": 1260,
+            "bottom": 395,
+            "width": 1080,
+            "height": 46
+          },
+          "scrollLeft": 0,
+          "selected": {
+            "text": "Introduction",
+            "current": "page",
+            "focused": true,
+            "focusVisible": true,
+            "rect": {
+              "x": 272,
+              "y": 353,
+              "right": 375,
+              "bottom": 391,
+              "width": 103,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 1px",
+            "outlineOffset": "1px",
+            "boxShadow": "none",
+            "outset": 2,
+            "painted": {
+              "left": 270,
+              "right": 377,
+              "top": 351,
+              "bottom": 393
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "hidden",
+                "bounds": {
+                  "left": 180,
+                  "right": 1260,
+                  "top": 349,
+                  "bottom": 395
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          },
+          "focused": {
+            "text": "Introduction",
+            "current": "page",
+            "focused": true,
+            "focusVisible": true,
+            "rect": {
+              "x": 272,
+              "y": 353,
+              "right": 375,
+              "bottom": 391,
+              "width": 103,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 1px",
+            "outlineOffset": "1px",
+            "boxShadow": "none",
+            "outset": 2,
+            "painted": {
+              "left": 270,
+              "right": 377,
+              "top": 351,
+              "bottom": 393
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "hidden",
+                "bounds": {
+                  "left": 180,
+                  "right": 1260,
+                  "top": 349,
+                  "bottom": 395
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          }
+        },
+        {
+          "kind": "Work focus geometry",
+          "story": "studio-work--details",
+          "width": 1440,
+          "journey": "Wait existing story play; focus Chapters then Tab to Introduction; document top; inspect full outline and clipping ancestors",
+          "assertionReached": true,
+          "passed": true,
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/correction/work-details-1440-focus.png",
+          "focusCrop": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/correction/work-details-1440-focus-crop.png",
+          "nav": {
+            "x": 180,
+            "y": 349,
+            "right": 1260,
+            "bottom": 395,
+            "width": 1080,
+            "height": 46
+          },
+          "scrollLeft": 0,
+          "selected": {
+            "text": "Details",
+            "current": "page",
+            "focused": false,
+            "focusVisible": false,
+            "rect": {
+              "x": 379,
+              "y": 353,
+              "right": 448,
+              "bottom": 391,
+              "width": 69,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) none 3px",
+            "outlineOffset": "0px",
+            "boxShadow": "none",
+            "outset": 0,
+            "painted": {
+              "left": 379,
+              "right": 448,
+              "top": 353,
+              "bottom": 391
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "hidden",
+                "bounds": {
+                  "left": 180,
+                  "right": 1260,
+                  "top": 349,
+                  "bottom": 395
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          },
+          "focused": {
+            "text": "Introduction",
+            "current": null,
+            "focused": true,
+            "focusVisible": true,
+            "rect": {
+              "x": 272,
+              "y": 353,
+              "right": 375,
+              "bottom": 391,
+              "width": 103,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 1px",
+            "outlineOffset": "1px",
+            "boxShadow": "none",
+            "outset": 2,
+            "painted": {
+              "left": 270,
+              "right": 377,
+              "top": 351,
+              "bottom": 393
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "hidden",
+                "bounds": {
+                  "left": 180,
+                  "right": 1260,
+                  "top": 349,
+                  "bottom": 395
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          }
+        },
+        {
+          "kind": "Work focus geometry",
+          "story": "studio-work--realms",
+          "width": 1440,
+          "journey": "Wait existing story play; focus Chapters then Tab to Introduction; document top; inspect full outline and clipping ancestors",
+          "assertionReached": true,
+          "passed": true,
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/correction/work-realms-1440-focus.png",
+          "focusCrop": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/correction/work-realms-1440-focus-crop.png",
+          "nav": {
+            "x": 180,
+            "y": 349,
+            "right": 1260,
+            "bottom": 395,
+            "width": 1080,
+            "height": 46
+          },
+          "scrollLeft": 0,
+          "selected": {
+            "text": "Realms",
+            "current": "page",
+            "focused": false,
+            "focusVisible": false,
+            "rect": {
+              "x": 452,
+              "y": 353,
+              "right": 523,
+              "bottom": 391,
+              "width": 71,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) none 3px",
+            "outlineOffset": "0px",
+            "boxShadow": "none",
+            "outset": 0,
+            "painted": {
+              "left": 452,
+              "right": 523,
+              "top": 353,
+              "bottom": 391
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "hidden",
+                "bounds": {
+                  "left": 180,
+                  "right": 1260,
+                  "top": 349,
+                  "bottom": 395
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          },
+          "focused": {
+            "text": "Introduction",
+            "current": null,
+            "focused": true,
+            "focusVisible": true,
+            "rect": {
+              "x": 272,
+              "y": 353,
+              "right": 375,
+              "bottom": 391,
+              "width": 103,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 1px",
+            "outlineOffset": "1px",
+            "boxShadow": "none",
+            "outset": 2,
+            "painted": {
+              "left": 270,
+              "right": 377,
+              "top": 351,
+              "bottom": 393
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "hidden",
+                "bounds": {
+                  "left": 180,
+                  "right": 1260,
+                  "top": 349,
+                  "bottom": 395
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          }
+        },
+        {
+          "kind": "Work focus geometry",
+          "story": "studio-work--chapters",
+          "width": 1440,
+          "journey": "Wait existing story play; focus Chapters then Tab to Introduction; document top; inspect full outline and clipping ancestors",
+          "assertionReached": true,
+          "passed": true,
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/correction/work-chapters-1440-focus.png",
+          "focusCrop": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/correction/work-chapters-1440-focus-crop.png",
+          "nav": {
+            "x": 180,
+            "y": 349,
+            "right": 1260,
+            "bottom": 395,
+            "width": 1080,
+            "height": 46
+          },
+          "scrollLeft": 0,
+          "selected": {
+            "text": "Chapters",
+            "current": "page",
+            "focused": false,
+            "focusVisible": false,
+            "rect": {
+              "x": 184,
+              "y": 353,
+              "right": 268,
+              "bottom": 391,
+              "width": 84,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) none 3px",
+            "outlineOffset": "0px",
+            "boxShadow": "none",
+            "outset": 0,
+            "painted": {
+              "left": 184,
+              "right": 268,
+              "top": 353,
+              "bottom": 391
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "hidden",
+                "bounds": {
+                  "left": 180,
+                  "right": 1260,
+                  "top": 349,
+                  "bottom": 395
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          },
+          "focused": {
+            "text": "Introduction",
+            "current": null,
+            "focused": true,
+            "focusVisible": true,
+            "rect": {
+              "x": 272,
+              "y": 353,
+              "right": 375,
+              "bottom": 391,
+              "width": 103,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 1px",
+            "outlineOffset": "1px",
+            "boxShadow": "none",
+            "outset": 2,
+            "painted": {
+              "left": 270,
+              "right": 377,
+              "top": 351,
+              "bottom": 393
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "hidden",
+                "bounds": {
+                  "left": 180,
+                  "right": 1260,
+                  "top": 349,
+                  "bottom": 395
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          }
+        },
+        {
+          "kind": "Studio selected view",
+          "width": 1440,
+          "journey": "Story iframe URL direct",
+          "assertionReached": true,
+          "passed": true,
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/correction/home-history-direct-1440.png",
+          "url": "http://127.0.0.1:43148/iframe.html?id=studio-home--curated&viewMode=story",
+          "nav": {
+            "x": 180,
+            "y": 193,
+            "right": 1260,
+            "bottom": 239,
+            "width": 1080,
+            "height": 46
+          },
+          "scrollLeft": 0,
+          "selected": {
+            "text": "Imported & curated",
+            "current": "page",
+            "focused": true,
+            "focusVisible": true,
+            "rect": {
+              "x": 511,
+              "y": 197,
+              "right": 659,
+              "bottom": 235,
+              "width": 148,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 1px",
+            "outlineOffset": "1px",
+            "boxShadow": "none",
+            "outset": 2,
+            "painted": {
+              "left": 509,
+              "right": 661,
+              "top": 195,
+              "bottom": 237
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "auto",
+                "bounds": {
+                  "left": 180,
+                  "right": 1260,
+                  "top": 193,
+                  "bottom": 238
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          },
+          "focused": {
+            "text": "Imported & curated",
+            "current": "page",
+            "focused": true,
+            "focusVisible": true,
+            "rect": {
+              "x": 511,
+              "y": 197,
+              "right": 659,
+              "bottom": 235,
+              "width": 148,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 1px",
+            "outlineOffset": "1px",
+            "boxShadow": "none",
+            "outset": 2,
+            "painted": {
+              "left": 509,
+              "right": 661,
+              "top": 195,
+              "bottom": 237
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "auto",
+                "bounds": {
+                  "left": 180,
+                  "right": 1260,
+                  "top": 193,
+                  "bottom": 238
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          }
+        },
+        {
+          "kind": "Studio selected view",
+          "width": 1440,
+          "journey": "Story iframe URL refresh",
+          "assertionReached": true,
+          "passed": true,
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/correction/home-history-refresh-1440.png",
+          "url": "http://127.0.0.1:43148/iframe.html?id=studio-home--curated&viewMode=story",
+          "nav": {
+            "x": 180,
+            "y": 193,
+            "right": 1260,
+            "bottom": 239,
+            "width": 1080,
+            "height": 46
+          },
+          "scrollLeft": 0,
+          "selected": {
+            "text": "Imported & curated",
+            "current": "page",
+            "focused": true,
+            "focusVisible": true,
+            "rect": {
+              "x": 511,
+              "y": 197,
+              "right": 659,
+              "bottom": 235,
+              "width": 148,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 1px",
+            "outlineOffset": "1px",
+            "boxShadow": "none",
+            "outset": 2,
+            "painted": {
+              "left": 509,
+              "right": 661,
+              "top": 195,
+              "bottom": 237
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "auto",
+                "bounds": {
+                  "left": 180,
+                  "right": 1260,
+                  "top": 193,
+                  "bottom": 238
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          },
+          "focused": {
+            "text": "Imported & curated",
+            "current": "page",
+            "focused": true,
+            "focusVisible": true,
+            "rect": {
+              "x": 511,
+              "y": 197,
+              "right": 659,
+              "bottom": 235,
+              "width": 148,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 1px",
+            "outlineOffset": "1px",
+            "boxShadow": "none",
+            "outset": 2,
+            "painted": {
+              "left": 509,
+              "right": 661,
+              "top": 195,
+              "bottom": 237
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "auto",
+                "bounds": {
+                  "left": 180,
+                  "right": 1260,
+                  "top": 193,
+                  "bottom": 238
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          }
+        },
+        {
+          "kind": "Studio selected view",
+          "width": 1440,
+          "journey": "Story iframe URL back",
+          "assertionReached": true,
+          "passed": true,
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/correction/home-history-back-1440.png",
+          "url": "http://127.0.0.1:43148/iframe.html?id=studio-home--works&viewMode=story",
+          "nav": {
+            "x": 180,
+            "y": 193,
+            "right": 1260,
+            "bottom": 239,
+            "width": 1080,
+            "height": 46
+          },
+          "scrollLeft": 0,
+          "selected": {
+            "text": "All works",
+            "current": "page",
+            "focused": false,
+            "focusVisible": false,
+            "rect": {
+              "x": 184,
+              "y": 197,
+              "right": 264,
+              "bottom": 235,
+              "width": 80,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) none 3px",
+            "outlineOffset": "0px",
+            "boxShadow": "none",
+            "outset": 0,
+            "painted": {
+              "left": 184,
+              "right": 264,
+              "top": 197,
+              "bottom": 235
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "auto",
+                "bounds": {
+                  "left": 180,
+                  "right": 1260,
+                  "top": 193,
+                  "bottom": 238
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          },
+          "focused": null
+        },
+        {
+          "kind": "Studio selected view",
+          "width": 1440,
+          "journey": "Story iframe URL forward",
+          "assertionReached": true,
+          "passed": true,
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/correction/home-history-forward-1440.png",
+          "url": "http://127.0.0.1:43148/iframe.html?id=studio-home--curated&viewMode=story",
+          "nav": {
+            "x": 180,
+            "y": 193,
+            "right": 1260,
+            "bottom": 239,
+            "width": 1080,
+            "height": 46
+          },
+          "scrollLeft": 0,
+          "selected": {
+            "text": "Imported & curated",
+            "current": "page",
+            "focused": true,
+            "focusVisible": true,
+            "rect": {
+              "x": 511,
+              "y": 197,
+              "right": 659,
+              "bottom": 235,
+              "width": 148,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 1px",
+            "outlineOffset": "1px",
+            "boxShadow": "none",
+            "outset": 2,
+            "painted": {
+              "left": 509,
+              "right": 661,
+              "top": 195,
+              "bottom": 237
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "auto",
+                "bounds": {
+                  "left": 180,
+                  "right": 1260,
+                  "top": 193,
+                  "bottom": 238
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          },
+          "focused": {
+            "text": "Imported & curated",
+            "current": "page",
+            "focused": true,
+            "focusVisible": true,
+            "rect": {
+              "x": 511,
+              "y": 197,
+              "right": 659,
+              "bottom": 235,
+              "width": 148,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 1px",
+            "outlineOffset": "1px",
+            "boxShadow": "none",
+            "outset": 2,
+            "painted": {
+              "left": 509,
+              "right": 661,
+              "top": 195,
+              "bottom": 237
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "auto",
+                "bounds": {
+                  "left": 180,
+                  "right": 1260,
+                  "top": 193,
+                  "bottom": 238
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          }
+        },
+        {
+          "kind": "Chinese count/state",
+          "width": 1440,
+          "assertionReached": true,
+          "passed": true,
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/correction/chinese-1440.png",
+          "observedRow": "雨夜书店已发布公开3 章1 个领域审核中详情: 雨夜书店图书 · 简体中文上周更新章节"
+        },
+        {
+          "kind": "Work focus geometry",
+          "story": "studio-work--introduction",
+          "width": 390,
+          "journey": "Wait existing story play; focus Chapters then Tab to Introduction; document top; inspect full outline and clipping ancestors",
+          "assertionReached": true,
+          "passed": true,
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/correction/work-introduction-390-focus.png",
+          "focusCrop": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/correction/work-introduction-390-focus-crop.png",
+          "nav": {
+            "x": 12,
+            "y": 338.5,
+            "right": 378,
+            "bottom": 384.5,
+            "width": 366,
+            "height": 46
+          },
+          "scrollLeft": 0,
+          "selected": {
+            "text": "Introduction",
+            "current": "page",
+            "focused": true,
+            "focusVisible": true,
+            "rect": {
+              "x": 104,
+              "y": 342.5,
+              "right": 207,
+              "bottom": 380.5,
+              "width": 103,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 1px",
+            "outlineOffset": "1px",
+            "boxShadow": "none",
+            "outset": 2,
+            "painted": {
+              "left": 102,
+              "right": 209,
+              "top": 340.5,
+              "bottom": 382.5
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "hidden",
+                "bounds": {
+                  "left": 12,
+                  "right": 378,
+                  "top": 338.5,
+                  "bottom": 384.5
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          },
+          "focused": {
+            "text": "Introduction",
+            "current": "page",
+            "focused": true,
+            "focusVisible": true,
+            "rect": {
+              "x": 104,
+              "y": 342.5,
+              "right": 207,
+              "bottom": 380.5,
+              "width": 103,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 1px",
+            "outlineOffset": "1px",
+            "boxShadow": "none",
+            "outset": 2,
+            "painted": {
+              "left": 102,
+              "right": 209,
+              "top": 340.5,
+              "bottom": 382.5
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "hidden",
+                "bounds": {
+                  "left": 12,
+                  "right": 378,
+                  "top": 338.5,
+                  "bottom": 384.5
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          }
+        },
+        {
+          "kind": "Work focus geometry",
+          "story": "studio-work--details",
+          "width": 390,
+          "journey": "Wait existing story play; focus Chapters then Tab to Introduction; document top; inspect full outline and clipping ancestors",
+          "assertionReached": true,
+          "passed": true,
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/correction/work-details-390-focus.png",
+          "focusCrop": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/correction/work-details-390-focus-crop.png",
+          "nav": {
+            "x": 12,
+            "y": 338.5,
+            "right": 378,
+            "bottom": 384.5,
+            "width": 366,
+            "height": 46
+          },
+          "scrollLeft": 0,
+          "selected": {
+            "text": "Details",
+            "current": "page",
+            "focused": false,
+            "focusVisible": false,
+            "rect": {
+              "x": 211,
+              "y": 342.5,
+              "right": 280,
+              "bottom": 380.5,
+              "width": 69,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) none 3px",
+            "outlineOffset": "0px",
+            "boxShadow": "none",
+            "outset": 0,
+            "painted": {
+              "left": 211,
+              "right": 280,
+              "top": 342.5,
+              "bottom": 380.5
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "hidden",
+                "bounds": {
+                  "left": 12,
+                  "right": 378,
+                  "top": 338.5,
+                  "bottom": 384.5
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          },
+          "focused": {
+            "text": "Introduction",
+            "current": null,
+            "focused": true,
+            "focusVisible": true,
+            "rect": {
+              "x": 104,
+              "y": 342.5,
+              "right": 207,
+              "bottom": 380.5,
+              "width": 103,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 1px",
+            "outlineOffset": "1px",
+            "boxShadow": "none",
+            "outset": 2,
+            "painted": {
+              "left": 102,
+              "right": 209,
+              "top": 340.5,
+              "bottom": 382.5
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "hidden",
+                "bounds": {
+                  "left": 12,
+                  "right": 378,
+                  "top": 338.5,
+                  "bottom": 384.5
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          }
+        },
+        {
+          "kind": "Work focus geometry",
+          "story": "studio-work--realms",
+          "width": 390,
+          "journey": "Wait existing story play; focus Chapters then Tab to Introduction; document top; inspect full outline and clipping ancestors",
+          "assertionReached": true,
+          "passed": true,
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/correction/work-realms-390-focus.png",
+          "focusCrop": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/correction/work-realms-390-focus-crop.png",
+          "nav": {
+            "x": 12,
+            "y": 338.5,
+            "right": 378,
+            "bottom": 384.5,
+            "width": 366,
+            "height": 46
+          },
+          "scrollLeft": 0,
+          "selected": {
+            "text": "Realms",
+            "current": "page",
+            "focused": false,
+            "focusVisible": false,
+            "rect": {
+              "x": 284,
+              "y": 342.5,
+              "right": 355,
+              "bottom": 380.5,
+              "width": 71,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) none 3px",
+            "outlineOffset": "0px",
+            "boxShadow": "none",
+            "outset": 0,
+            "painted": {
+              "left": 284,
+              "right": 355,
+              "top": 342.5,
+              "bottom": 380.5
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "hidden",
+                "bounds": {
+                  "left": 12,
+                  "right": 378,
+                  "top": 338.5,
+                  "bottom": 384.5
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          },
+          "focused": {
+            "text": "Introduction",
+            "current": null,
+            "focused": true,
+            "focusVisible": true,
+            "rect": {
+              "x": 104,
+              "y": 342.5,
+              "right": 207,
+              "bottom": 380.5,
+              "width": 103,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 1px",
+            "outlineOffset": "1px",
+            "boxShadow": "none",
+            "outset": 2,
+            "painted": {
+              "left": 102,
+              "right": 209,
+              "top": 340.5,
+              "bottom": 382.5
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "hidden",
+                "bounds": {
+                  "left": 12,
+                  "right": 378,
+                  "top": 338.5,
+                  "bottom": 384.5
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          }
+        },
+        {
+          "kind": "Work focus geometry",
+          "story": "studio-work--chapters",
+          "width": 390,
+          "journey": "Wait existing story play; focus Chapters then Tab to Introduction; document top; inspect full outline and clipping ancestors",
+          "assertionReached": true,
+          "passed": true,
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/correction/work-chapters-390-focus.png",
+          "focusCrop": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/correction/work-chapters-390-focus-crop.png",
+          "nav": {
+            "x": 12,
+            "y": 338.5,
+            "right": 378,
+            "bottom": 384.5,
+            "width": 366,
+            "height": 46
+          },
+          "scrollLeft": 0,
+          "selected": {
+            "text": "Chapters",
+            "current": "page",
+            "focused": false,
+            "focusVisible": false,
+            "rect": {
+              "x": 16,
+              "y": 342.5,
+              "right": 100,
+              "bottom": 380.5,
+              "width": 84,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) none 3px",
+            "outlineOffset": "0px",
+            "boxShadow": "none",
+            "outset": 0,
+            "painted": {
+              "left": 16,
+              "right": 100,
+              "top": 342.5,
+              "bottom": 380.5
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "hidden",
+                "bounds": {
+                  "left": 12,
+                  "right": 378,
+                  "top": 338.5,
+                  "bottom": 384.5
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          },
+          "focused": {
+            "text": "Introduction",
+            "current": null,
+            "focused": true,
+            "focusVisible": true,
+            "rect": {
+              "x": 104,
+              "y": 342.5,
+              "right": 207,
+              "bottom": 380.5,
+              "width": 103,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 1px",
+            "outlineOffset": "1px",
+            "boxShadow": "none",
+            "outset": 2,
+            "painted": {
+              "left": 102,
+              "right": 209,
+              "top": 340.5,
+              "bottom": 382.5
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "hidden",
+                "bounds": {
+                  "left": 12,
+                  "right": 378,
+                  "top": 338.5,
+                  "bottom": 384.5
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          }
+        },
+        {
+          "kind": "Studio selected view",
+          "width": 390,
+          "journey": "Story iframe URL direct",
+          "assertionReached": true,
+          "passed": true,
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/correction/home-history-direct-390.png",
+          "url": "http://127.0.0.1:43148/iframe.html?id=studio-home--curated&viewMode=story",
+          "nav": {
+            "x": 12,
+            "y": 229,
+            "right": 378,
+            "bottom": 275,
+            "width": 366,
+            "height": 46
+          },
+          "scrollLeft": 117,
+          "selected": {
+            "text": "Imported & curated",
+            "current": "page",
+            "focused": true,
+            "focusVisible": true,
+            "rect": {
+              "x": 226,
+              "y": 233,
+              "right": 374,
+              "bottom": 271,
+              "width": 148,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 1px",
+            "outlineOffset": "1px",
+            "boxShadow": "none",
+            "outset": 2,
+            "painted": {
+              "left": 224,
+              "right": 376,
+              "top": 231,
+              "bottom": 273
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "auto",
+                "bounds": {
+                  "left": 12,
+                  "right": 378,
+                  "top": 229,
+                  "bottom": 274
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          },
+          "focused": {
+            "text": "Imported & curated",
+            "current": "page",
+            "focused": true,
+            "focusVisible": true,
+            "rect": {
+              "x": 226,
+              "y": 233,
+              "right": 374,
+              "bottom": 271,
+              "width": 148,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 1px",
+            "outlineOffset": "1px",
+            "boxShadow": "none",
+            "outset": 2,
+            "painted": {
+              "left": 224,
+              "right": 376,
+              "top": 231,
+              "bottom": 273
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "auto",
+                "bounds": {
+                  "left": 12,
+                  "right": 378,
+                  "top": 229,
+                  "bottom": 274
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          }
+        },
+        {
+          "kind": "Studio selected view",
+          "width": 390,
+          "journey": "Story iframe URL refresh",
+          "assertionReached": true,
+          "passed": true,
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/correction/home-history-refresh-390.png",
+          "url": "http://127.0.0.1:43148/iframe.html?id=studio-home--curated&viewMode=story",
+          "nav": {
+            "x": 12,
+            "y": 229,
+            "right": 378,
+            "bottom": 275,
+            "width": 366,
+            "height": 46
+          },
+          "scrollLeft": 117,
+          "selected": {
+            "text": "Imported & curated",
+            "current": "page",
+            "focused": true,
+            "focusVisible": true,
+            "rect": {
+              "x": 226,
+              "y": 233,
+              "right": 374,
+              "bottom": 271,
+              "width": 148,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 1px",
+            "outlineOffset": "1px",
+            "boxShadow": "none",
+            "outset": 2,
+            "painted": {
+              "left": 224,
+              "right": 376,
+              "top": 231,
+              "bottom": 273
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "auto",
+                "bounds": {
+                  "left": 12,
+                  "right": 378,
+                  "top": 229,
+                  "bottom": 274
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          },
+          "focused": {
+            "text": "Imported & curated",
+            "current": "page",
+            "focused": true,
+            "focusVisible": true,
+            "rect": {
+              "x": 226,
+              "y": 233,
+              "right": 374,
+              "bottom": 271,
+              "width": 148,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 1px",
+            "outlineOffset": "1px",
+            "boxShadow": "none",
+            "outset": 2,
+            "painted": {
+              "left": 224,
+              "right": 376,
+              "top": 231,
+              "bottom": 273
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "auto",
+                "bounds": {
+                  "left": 12,
+                  "right": 378,
+                  "top": 229,
+                  "bottom": 274
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          }
+        },
+        {
+          "kind": "Studio selected view",
+          "width": 390,
+          "journey": "Story iframe URL back",
+          "assertionReached": true,
+          "passed": true,
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/correction/home-history-back-390.png",
+          "url": "http://127.0.0.1:43148/iframe.html?id=studio-home--works&viewMode=story",
+          "nav": {
+            "x": 12,
+            "y": 229,
+            "right": 378,
+            "bottom": 275,
+            "width": 366,
+            "height": 46
+          },
+          "scrollLeft": 0,
+          "selected": {
+            "text": "All works",
+            "current": "page",
+            "focused": false,
+            "focusVisible": false,
+            "rect": {
+              "x": 16,
+              "y": 233,
+              "right": 96,
+              "bottom": 271,
+              "width": 80,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) none 3px",
+            "outlineOffset": "0px",
+            "boxShadow": "none",
+            "outset": 0,
+            "painted": {
+              "left": 16,
+              "right": 96,
+              "top": 233,
+              "bottom": 271
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "auto",
+                "bounds": {
+                  "left": 12,
+                  "right": 378,
+                  "top": 229,
+                  "bottom": 274
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          },
+          "focused": null
+        },
+        {
+          "kind": "Studio selected view",
+          "width": 390,
+          "journey": "Story iframe URL forward",
+          "assertionReached": true,
+          "passed": true,
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/correction/home-history-forward-390.png",
+          "url": "http://127.0.0.1:43148/iframe.html?id=studio-home--curated&viewMode=story",
+          "nav": {
+            "x": 12,
+            "y": 229,
+            "right": 378,
+            "bottom": 275,
+            "width": 366,
+            "height": 46
+          },
+          "scrollLeft": 117,
+          "selected": {
+            "text": "Imported & curated",
+            "current": "page",
+            "focused": true,
+            "focusVisible": true,
+            "rect": {
+              "x": 226,
+              "y": 233,
+              "right": 374,
+              "bottom": 271,
+              "width": 148,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 1px",
+            "outlineOffset": "1px",
+            "boxShadow": "none",
+            "outset": 2,
+            "painted": {
+              "left": 224,
+              "right": 376,
+              "top": 231,
+              "bottom": 273
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "auto",
+                "bounds": {
+                  "left": 12,
+                  "right": 378,
+                  "top": 229,
+                  "bottom": 274
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          },
+          "focused": {
+            "text": "Imported & curated",
+            "current": "page",
+            "focused": true,
+            "focusVisible": true,
+            "rect": {
+              "x": 226,
+              "y": 233,
+              "right": 374,
+              "bottom": 271,
+              "width": 148,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 1px",
+            "outlineOffset": "1px",
+            "boxShadow": "none",
+            "outset": 2,
+            "painted": {
+              "left": 224,
+              "right": 376,
+              "top": 231,
+              "bottom": 273
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "auto",
+                "bounds": {
+                  "left": 12,
+                  "right": 378,
+                  "top": 229,
+                  "bottom": 274
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          }
+        },
+        {
+          "kind": "Changed story",
+          "story": "studio-home--curated-phone",
+          "width": 390,
+          "assertionReached": true,
+          "passed": true,
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/correction/studio-home--curated-phone-390.png",
+          "nav": {
+            "x": 12,
+            "y": 229,
+            "right": 378,
+            "bottom": 275,
+            "width": 366,
+            "height": 46
+          },
+          "scrollLeft": 117,
+          "selected": {
+            "text": "Imported & curated",
+            "current": "page",
+            "focused": true,
+            "focusVisible": true,
+            "rect": {
+              "x": 226,
+              "y": 233,
+              "right": 374,
+              "bottom": 271,
+              "width": 148,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 1px",
+            "outlineOffset": "1px",
+            "boxShadow": "none",
+            "outset": 2,
+            "painted": {
+              "left": 224,
+              "right": 376,
+              "top": 231,
+              "bottom": 273
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "auto",
+                "bounds": {
+                  "left": 12,
+                  "right": 378,
+                  "top": 229,
+                  "bottom": 274
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          },
+          "focused": {
+            "text": "Imported & curated",
+            "current": "page",
+            "focused": true,
+            "focusVisible": true,
+            "rect": {
+              "x": 226,
+              "y": 233,
+              "right": 374,
+              "bottom": 271,
+              "width": 148,
+              "height": 38
+            },
+            "outline": "oklab(0.502945 -0.0279245 -0.127484 / 0.5) auto 1px",
+            "outlineOffset": "1px",
+            "boxShadow": "none",
+            "outset": 2,
+            "painted": {
+              "left": 224,
+              "right": 376,
+              "top": 231,
+              "bottom": 273
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "auto",
+                "bounds": {
+                  "left": 12,
+                  "right": 378,
+                  "top": 229,
+                  "bottom": 274
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          }
+        },
+        {
+          "kind": "Changed story",
+          "story": "studio-home--curated-phone-dark",
+          "width": 390,
+          "assertionReached": true,
+          "passed": true,
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/correction/studio-home--curated-phone-dark-390.png",
+          "nav": {
+            "x": 12,
+            "y": 229,
+            "right": 378,
+            "bottom": 275,
+            "width": 366,
+            "height": 46
+          },
+          "scrollLeft": 117,
+          "selected": {
+            "text": "Imported & curated",
+            "current": "page",
+            "focused": true,
+            "focusVisible": true,
+            "rect": {
+              "x": 226,
+              "y": 233,
+              "right": 374,
+              "bottom": 271,
+              "width": 148,
+              "height": 38
+            },
+            "outline": "oklab(0.743933 -0.0203648 -0.0928012 / 0.5) auto 1px",
+            "outlineOffset": "1px",
+            "boxShadow": "none",
+            "outset": 2,
+            "painted": {
+              "left": 224,
+              "right": 376,
+              "top": 231,
+              "bottom": 273
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "auto",
+                "bounds": {
+                  "left": 12,
+                  "right": 378,
+                  "top": 229,
+                  "bottom": 274
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          },
+          "focused": {
+            "text": "Imported & curated",
+            "current": "page",
+            "focused": true,
+            "focusVisible": true,
+            "rect": {
+              "x": 226,
+              "y": 233,
+              "right": 374,
+              "bottom": 271,
+              "width": 148,
+              "height": 38
+            },
+            "outline": "oklab(0.743933 -0.0203648 -0.0928012 / 0.5) auto 1px",
+            "outlineOffset": "1px",
+            "boxShadow": "none",
+            "outset": 2,
+            "painted": {
+              "left": 224,
+              "right": 376,
+              "top": 231,
+              "bottom": 273
+            },
+            "clips": [
+              {
+                "tag": "NAV",
+                "overflowX": "auto",
+                "overflowY": "auto",
+                "bounds": {
+                  "left": 12,
+                  "right": 378,
+                  "top": 229,
+                  "bottom": 274
+                },
+                "pass": true
+              }
+            ],
+            "unclipped": true
+          }
+        },
+        {
+          "kind": "Chinese count/state",
+          "width": 390,
+          "assertionReached": true,
+          "passed": true,
+          "screenshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2848/.temp/studio-review/correction/chinese-390.png",
+          "observedRow": "雨夜书店已发布公开3 章1 个领域审核中详情: 雨夜书店图书 · 简体中文上周更新章节"
+        }
+      ],
+      "passed": 20,
+      "failed": 0,
+      "pageErrors": [],
+      "screenshotsActuallyViewed": [
+        {
+          "path": ".temp/studio-review/source/.artifacts/qa/20261019t102208-f4b9b1/story-screenshots/apps-web-features-studio-studio-home.stories.tsx/Curated.png",
+          "sha256": "b5e5f98ec954cfaccef97f0dec0cea15ad677dbf14e9a7c2258338dd6d3c8488",
+          "actuallyViewedByReviewer": true
+        },
+        {
+          "path": ".temp/studio-review/source/.artifacts/qa/20261019t102208-f4b9b1/story-screenshots/apps-web-features-studio-studio-home.stories.tsx/CuratedPhone.png",
+          "sha256": "d22025d50a5607328168bcd3ba9d0dbb263d9582a338e83717154465c8d3c652",
+          "actuallyViewedByReviewer": true
+        },
+        {
+          "path": ".temp/studio-review/source/.artifacts/qa/20261019t102208-f4b9b1/story-screenshots/apps-web-features-studio-studio-home.stories.tsx/CuratedPhoneDark.png",
+          "sha256": "cf9ec3ec24e63555f9cd67ef0d33422a4213b5e86ec6c12d6b8923347f8cdc7b",
+          "actuallyViewedByReviewer": true
+        },
+        {
+          "path": ".temp/studio-review/source/.artifacts/qa/20261019t102208-f4b9b1/story-screenshots/apps-web-features-studio-studio-home.stories.tsx/Chinese.png",
+          "sha256": "6fa92d8cf4805a222d086c28e15d71e3a57382e19fbc58e0b42144e7b9d1245d",
+          "actuallyViewedByReviewer": true
+        },
+        {
+          "path": ".temp/studio-review/correction/work-introduction-1440-focus-crop.png",
+          "sha256": "540d0904a14264a4a6cd8b66d18ca54b060393031c8b78dba18a8d7ca84b0c78",
+          "actuallyViewedByReviewer": true
+        },
+        {
+          "path": ".temp/studio-review/correction/work-details-1440-focus-crop.png",
+          "sha256": "699adf5791da7e93c6c9c4396e0782d3dffe361f1637d3c8263be7f2e73bf996",
+          "actuallyViewedByReviewer": true
+        },
+        {
+          "path": ".temp/studio-review/correction/work-realms-1440-focus-crop.png",
+          "sha256": "b64d9f432e267c5e4c414fe679aa9491d04ce946ae7f3c2cf637916a3d8f1965",
+          "actuallyViewedByReviewer": true
+        },
+        {
+          "path": ".temp/studio-review/correction/work-chapters-1440-focus-crop.png",
+          "sha256": "4d90e078d22ccd8a4fb7d815f57e6ed60d0642a7412d9fd05f3877c937c9da9a",
+          "actuallyViewedByReviewer": true
+        },
+        {
+          "path": ".temp/studio-review/correction/home-history-direct-1440.png",
+          "sha256": "b5e5f98ec954cfaccef97f0dec0cea15ad677dbf14e9a7c2258338dd6d3c8488",
+          "actuallyViewedByReviewer": true
+        },
+        {
+          "path": ".temp/studio-review/correction/home-history-refresh-1440.png",
+          "sha256": "b5e5f98ec954cfaccef97f0dec0cea15ad677dbf14e9a7c2258338dd6d3c8488",
+          "actuallyViewedByReviewer": true
+        },
+        {
+          "path": ".temp/studio-review/correction/home-history-back-1440.png",
+          "sha256": "11f9e908197da31f239a4d14b4fc185dd2477d6ee27f4059dff1abdd1b555108",
+          "actuallyViewedByReviewer": true
+        },
+        {
+          "path": ".temp/studio-review/correction/home-history-forward-1440.png",
+          "sha256": "b5e5f98ec954cfaccef97f0dec0cea15ad677dbf14e9a7c2258338dd6d3c8488",
+          "actuallyViewedByReviewer": true
+        },
+        {
+          "path": ".temp/studio-review/correction/chinese-1440.png",
+          "sha256": "b63cb3eecc853b9d50885440faf0364f66f5cc9bf8d9fa8a8910c90150b1156f",
+          "actuallyViewedByReviewer": true
+        },
+        {
+          "path": ".temp/studio-review/correction/work-introduction-390-focus-crop.png",
+          "sha256": "59eb5b2f7717552c2a6957ceb54878636d98c9c7a0785c6a18f41fc2fd3e6e0e",
+          "actuallyViewedByReviewer": true
+        },
+        {
+          "path": ".temp/studio-review/correction/work-details-390-focus-crop.png",
+          "sha256": "d31fcf833677af6f6314424357d3608db8be388b46c3ca83c96f8e56b61031fd",
+          "actuallyViewedByReviewer": true
+        },
+        {
+          "path": ".temp/studio-review/correction/work-realms-390-focus-crop.png",
+          "sha256": "cb54128eb989efc56677b27f7a1f8ee477be57ef044a3e37769623ab749781d8",
+          "actuallyViewedByReviewer": true
+        },
+        {
+          "path": ".temp/studio-review/correction/work-chapters-390-focus-crop.png",
+          "sha256": "6764eb044ea91e49ad687542bb422a9d18e9c773bd0afb3379c8edb9ab9cd784",
+          "actuallyViewedByReviewer": true
+        },
+        {
+          "path": ".temp/studio-review/correction/home-history-direct-390.png",
+          "sha256": "d22025d50a5607328168bcd3ba9d0dbb263d9582a338e83717154465c8d3c652",
+          "actuallyViewedByReviewer": true
+        },
+        {
+          "path": ".temp/studio-review/correction/home-history-refresh-390.png",
+          "sha256": "d22025d50a5607328168bcd3ba9d0dbb263d9582a338e83717154465c8d3c652",
+          "actuallyViewedByReviewer": true
+        },
+        {
+          "path": ".temp/studio-review/correction/home-history-back-390.png",
+          "sha256": "6d177a67cedcc265d9f706eda06ebdfdded36026e16bb9466ce634453852a94c",
+          "actuallyViewedByReviewer": true
+        },
+        {
+          "path": ".temp/studio-review/correction/home-history-forward-390.png",
+          "sha256": "d22025d50a5607328168bcd3ba9d0dbb263d9582a338e83717154465c8d3c652",
+          "actuallyViewedByReviewer": true
+        },
+        {
+          "path": ".temp/studio-review/correction/studio-home--curated-phone-390.png",
+          "sha256": "d22025d50a5607328168bcd3ba9d0dbb263d9582a338e83717154465c8d3c652",
+          "actuallyViewedByReviewer": true
+        },
+        {
+          "path": ".temp/studio-review/correction/studio-home--curated-phone-dark-390.png",
+          "sha256": "cf9ec3ec24e63555f9cd67ef0d33422a4213b5e86ec6c12d6b8923347f8cdc7b",
+          "actuallyViewedByReviewer": true
+        },
+        {
+          "path": ".temp/studio-review/correction/chinese-390.png",
+          "sha256": "007eac9436681b611cd368fcd9790d53b99af946bb1caa6a6440c1d45394b5db",
+          "actuallyViewedByReviewer": true
+        }
+      ],
+      "visualAssessment": "Selected Curated text, marker and keyboard outline are fully visible at 390, light/dark, before manual horizontal scrolling. Search/sort/Apply and two curated rows remain readable. Chinese same-Work aggregate 3 章 and Work 已发布 are visible at 390/1440; secondary recipe type remains 菜谱. Eight Work focus crops show all actual ring edges; unchanged Work content/selection proof reused.",
+      "phoneSelectedGeometry": {
+        "nav": {
+          "x": 12,
+          "right": 378,
+          "y": 229,
+          "bottom": 275
+        },
+        "selected": {
+          "x": 226,
+          "right": 374,
+          "y": 233,
+          "bottom": 271
+        },
+        "paintedOutline": {
+          "left": 224,
+          "right": 376,
+          "top": 231,
+          "bottom": 273
+        },
+        "scrollLeft": 117
+      },
+      "workFocusGeometry": {
+        "desktopNavY": [
+          349,
+          395
+        ],
+        "desktopFocusedY": [
+          353,
+          391
+        ],
+        "desktopPaintedY": [
+          351,
+          393
+        ],
+        "phoneNavY": [
+          338.5,
+          384.5
+        ],
+        "phoneFocusedY": [
+          342.5,
+          380.5
+        ],
+        "phonePaintedY": [
+          340.5,
+          382.5
+        ],
+        "outline": "Actual computed auto 1px outline + 1px offset; inspected clipping ancestors and viewport, with no box shadow.",
+        "all8Passed": true,
+        "phoneChaptersPlayFinishedBeforeProbe": true
+      },
+      "historyBoundary": "Real page.goto/reload/goBack/goForward on Storybook iframe URLs, with recorded Works/Curated destinations. No claim of genuine product route/filter history.",
+      "rawEvidence": ".temp/studio-review/correction/evidence.json"
+    },
+    "currentFindingDispositions": [
+      {
+        "id": "studio-chinese-story-contract",
+        "priorPin": "af37c8991ffb8997c06f055279301fb9b173f842",
+        "currentPin": "9e633ed68c91b9782eeef6849358bd640d5c014e",
+        "status": "corrected original Storybook body passes; 3 章 preserved, 已发布 is Work state, 菜谱 assertion now reached",
+        "genuineApiAcceptance": "unproved"
+      },
+      {
+        "id": "studio-curated-selected-view-clipped",
+        "currentPin": "9e633ed68c91b9782eeef6849358bd640d5c014e",
+        "status": "old clipping not reproduced in changed recorded stories/history; complete selected text/marker and ring visible",
+        "genuineProductAcceptance": "unproved before startup"
+      },
+      {
+        "id": "studio-navigation-focus-ring-clipped",
+        "currentPin": "9e633ed68c91b9782eeef6849358bd640d5c014e",
+        "status": "old seven ring failures plus phone Chapters inconclusive resolved in eight current recorded geometry probes; current Home ring also fully visible",
+        "genuineProductAcceptance": "unproved before startup"
+      }
+    ],
+    "observedSetupBlocker": {
+      "id": "studio-final-startup-request-boundary-composition",
+      "classification": "reproduced frontend startup setup failure; no Studio outcome assertion reached",
+      "owner": "manager composition / existing startup-navigation owners G-2747/G-2825",
+      "source": "9e633ed68c91b9782eeef6849358bd640d5c014e",
+      "path": "apps/web/worker/index.ts",
+      "line": 8,
+      "relatedLocations": [
+        {
+          "path": "apps/web/worker/index.ts",
+          "line": 3
+        },
+        {
+          "path": "apps/web/features/address/edge.ts",
+          "line": 58
+        },
+        {
+          "path": "apps/web/features/api/server-read.ts",
+          "line": 1
+        }
+      ],
+      "minimalReproduction": "From clean exact 9e633ed with the existing supported auth configuration, run task web:dev -- --port 43149; GET http://127.0.0.1:43149/en.",
+      "expected": "A ready frontend before supported sign-in and genuine navigation acceptance.",
+      "actual": "Vite starts on the requested port, but GET /en repeatedly returns HTTP 500: (0 , __vite_ssr_import_2__.withServerRequest) is not a function. worker/index.ts imports and calls that symbol; the candidate module exports only serverDeadline and serverRead.",
+      "sourceIdentity": {
+        "candidateServerReadBlob": "9fd348757114e456bd30765417a349bb86d91c38",
+        "baseServerReadBlob": "9fd348757114e456bd30765417a349bb86d91c38",
+        "reviewedA27ServerReadBlob": "62613d97061c5411192c5ea121d1ac7bde596814",
+        "previous196ServerReadBlob": "62613d97061c5411192c5ea121d1ac7bde596814",
+        "candidateMissingExport": true,
+        "reviewedAndPreviousRuntimeExportPresent": true,
+        "explanation": "All eleven selected dependency blobs match their reviewed manifest, but that selection omits the existing server-read request-boundary dependency. This is an observed composition gap, not a second review of unchanged dependency behavior."
+      },
+      "job": "7a15c284-84e4-4a54-a49c-52ecde639934",
+      "recordedExit": 201,
+      "serverLog": ".temp/studio-review/runtime/server.log",
+      "runtimeEvidence": ".temp/studio-review/runtime/evidence.json",
+      "signInReached": false,
+      "studioAssertionReached": false,
+      "repair": "Existing owner supplies a clean compatible frontend composition retaining the reviewed request-boundary exports required by worker/edge, then resume only missing genuine UI assertions. Do not change Studio assertions or import a wave here.",
+      "boundary": "This startup failure does not reproduce an AUD-011 count defect, a D4-014 inventory defect or clipped D4-002 geometry on 9e633ed. No worker fix round used."
+    },
+    "currentOriginalCriteria": [
+      {
+        "id": "AUD-011-top-level",
+        "criterion": "Same Work real top-level chapter total",
+        "status": "unproved",
+        "evidence": [
+          "Source and stack-free count support only. Original retained four-chapter Work 01a14a2f-2a17-770f-91a6-1a90b29fb32a was not rerun."
+        ],
+        "genuineProductAcceptance": "unproved",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842"
+      },
+      {
+        "id": "AUD-011-volumes",
+        "criterion": "Same Work volume/nested-group chapter total",
+        "status": "unproved",
+        "evidence": [
+          "Nested-group occurrence unit test passed; genuine same-Work inventory not reached."
+        ],
+        "genuineProductAcceptance": "unproved",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842"
+      },
+      {
+        "id": "AUD-011-extras",
+        "criterion": "Same Work extras chapter total",
+        "status": "unproved",
+        "evidence": [
+          "Source traverses all active chapter occurrences; genuine extras journey not reached."
+        ],
+        "genuineProductAcceptance": "unproved",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842"
+      },
+      {
+        "id": "AUD-011-pagination",
+        "criterion": "Same Work paginated chapter total",
+        "status": "unproved",
+        "evidence": [
+          "Stack-free continuation/budget coverage passed; retained genuine 23-occurrence API corpus/backup not supplied or rerun. No substitute is claimed as original."
+        ],
+        "genuineProductAcceptance": "unproved",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842"
+      },
+      {
+        "id": "AUD-011-incomplete",
+        "criterion": "Incomplete scan never appears as definite zero",
+        "status": "proved",
+        "evidence": [
+          "Stack-free incomplete-count assertions passed; Incomplete Counts screenshots at 1440/390 show positive lower bound and unavailable unknown zero."
+        ],
+        "limit": "Proof is limited to source/tests/recorded rendering; genuine API acceptance remains unproved.",
+        "genuineProductAcceptance": "unproved",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842"
+      },
+      {
+        "id": "AUD-011-publication",
+        "criterion": "Publication facts remain correct and private drafts stay private",
+        "status": "unproved",
+        "evidence": [
+          "Source checks preserve acting-author fact queries and authority-first processing; genuine owner/other-persona API assertions not reached."
+        ],
+        "genuineProductAcceptance": "unproved",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842"
+      },
+      {
+        "id": "D4-014-title",
+        "criterion": "Locate a Work by title across complete authorized inventory, including CJK/normalization",
+        "status": "unproved",
+        "evidence": [
+          "227-candidate stack-free test and located/no-match stories passed; actual CJK input/form wiring measured. No large genuine inventory query reached."
+        ],
+        "genuineProductAcceptance": "unproved",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842"
+      },
+      {
+        "id": "D4-014-order",
+        "criterion": "Explicit recent/created/title order across pages, full IRI ties",
+        "status": "unproved",
+        "evidence": [
+          "Source and stack-free order tests pass. 105-Work PostgreSQL case inspected but not executed. No genuine all-order/pagination journey."
+        ],
+        "genuineProductAcceptance": "unproved",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842"
+      },
+      {
+        "id": "D4-014-large",
+        "criterion": "Sufficiently large genuine inventory (original recommendation 100 items crossing pages)",
+        "status": "unproved",
+        "evidence": [
+          "Recorded 105-Work story is not a genuine retained inventory. No replacement rich corpus prepared."
+        ],
+        "genuineProductAcceptance": "unproved",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842"
+      },
+      {
+        "id": "D4-014-return",
+        "criterion": "Conditions preserved after Work open/back return",
+        "status": "unproved",
+        "evidence": [
+          "URL/return-condition unit tests pass. Story URL refresh/back/forward measured; actual signed-in Work open/back not reached."
+        ],
+        "genuineProductAcceptance": "unproved",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842"
+      },
+      {
+        "id": "D4-014-not-three-cards",
+        "criterion": "Filtering applies before pagination, beyond three loaded cards",
+        "status": "proved",
+        "evidence": [
+          "Actual source and executed 227-candidate stack-free test filter/order the complete bounded authorized cut before slicing."
+        ],
+        "limit": "Source/test proof only; public API journey remains unproved.",
+        "genuineProductAcceptance": "unproved",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842"
+      },
+      {
+        "id": "D4-014-layout",
+        "criterion": "At 1440/390 title anchors each row; state/time/continue/chapters are repeatable and readable; secondary metadata recedes",
+        "status": "proved",
+        "evidence": [
+          "All recorded home states inspected at both widths; titles lead rows, count/state and actions stay readable, Details collapses type/language/review metadata."
+        ],
+        "limit": "Recorded-story visual evidence only; not genuine product acceptance.",
+        "genuineProductAcceptance": "unproved",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842"
+      },
+      {
+        "id": "D4-014-diversity",
+        "criterion": "Multiple states, long CJK/Latin titles and no-cover rows usable without returning to inventory start",
+        "status": "unproved",
+        "evidence": [
+          "Lifecycle, large inventory, Chinese, located Work and no-match inputs inspected at both widths and in dark/light themes; wrapping and bottom-page continuation reviewed."
+        ],
+        "limit": "Recorded layout is usable; genuine title location without returning to the inventory start remains unproved.",
+        "genuineProductAcceptance": "unproved",
+        "recordedLayoutStatus": "proved",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842"
+      },
+      {
+        "id": "D4-002-Studio-home",
+        "criterion": "Studio views: direct links, refresh, back/forward and changed filters keep current destination/marker visible",
+        "status": "unproved",
+        "evidence": [
+          "Curated direct/refresh/back/forward story iframe URL observations at 390 and 1440 all pass; current marker is fully visible without manual horizontal scrolling.",
+          "CuratedPhone and CuratedPhoneDark original selected play bodies pass."
+        ],
+        "limit": "Browser history is real, but the destination is a recorded Storybook iframe; genuine product-route assertions never execute because /en returns 500.",
+        "genuineProductAcceptance": "unproved",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842",
+        "recordedStoryResult": "proved for the assigned changed delta at 9e633ed"
+      },
+      {
+        "id": "D4-002-Studio-work",
+        "criterion": "Work tabs: selection, content and focus agree with complete actual focus-ring edges at 390/1440",
+        "status": "unproved",
+        "evidence": [
+          "All four existing Work tab states at 390/1440 have a visible actual keyboard focus outline on Introduction after focus Chapters then Tab.",
+          "Waited for unchanged Chapters play completion before focus, resolving the old phone Chapters inconclusive premise. Unchanged selected-tab/content evidence reused."
+        ],
+        "limit": "Genuine product tab navigation remains unproved. The af37 clipped geometry is historical and is not a reproduced 9e633ed failure.",
+        "genuineProductAcceptance": "unproved",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842",
+        "recordedStoryResult": "all eight changed ring geometry cases proved at 9e633ed"
+      },
+      {
+        "id": "D4-002-class-boundary",
+        "criterion": "Preserve original Discover/Site/Library evidence and avoid claiming entire navigation class closed",
+        "status": "proved",
+        "evidence": [
+          "Existing G-2747/G-2825 ownership retained; no broad unchanged navigation rerun or Discover closure claimed."
+        ],
+        "limit": "This records scope discipline, not closure of an original product finding.",
+        "genuineProductAcceptance": "no closure claimed",
+        "inheritedEvidencePin": "af37c8991ffb8997c06f055279301fb9b173f842"
+      }
+    ],
+    "originalAcceptanceReach": {
+      "services/main/tests/studio-transfer-parity.test.ts": {
+        "executed": false,
+        "outcomeAssertionReached": false
+      },
+      "tests/qa/integration/outcomes/realm/studio-inventory.test.ts": {
+        "executed": false,
+        "sixPersonas": "all unproved",
+        "fourAdditionalFailingBodies": "all unproved; pending/failing declarations unchanged",
+        "outcomeAssertionReached": false
+      },
+      "tests/qa/integration/studio-heads.test.ts": {
+        "executed": false,
+        "outcomeAssertionReached": false
+      },
+      "tests/qa/integration/search-studio-chapter-content.test.ts": {
+        "executed": false,
+        "outcomeAssertionReached": false
+      },
+      "apps/web/tests/studio.e2e.ts": {
+        "executed": false,
+        "STUDIO01WiderAuthorJourney": "separate and unproved",
+        "outcomeAssertionReached": false
+      },
+      "originalFourChapterId": {
+        "id": "01a14a2f-2a17-770f-91a6-1a90b29fb32a",
+        "rerun": false
+      },
+      "independent23OccurrenceCorpusRerun": false,
+      "genuineLarge100PlusInventory": "unproved",
+      "genuineTitleCjkAllOrdersPaginationOpenBackNestedExtrasPrivateDisclosure": "not reached; no substituted fixture claimed"
+    },
+    "apiStatusesAndAnswers": [
+      {
+        "request": "GET http://127.0.0.1:3001/health/ready",
+        "status": 200,
+        "answer": "ready",
+        "class": "runtime prerequisite only"
+      },
+      {
+        "request": "GET http://127.0.0.1:3004/api/auth/.well-known/oauth-authorization-server",
+        "status": 200,
+        "answer": "OAuth discovery reachable",
+        "class": "runtime prerequisite only"
+      },
+      {
+        "request": "GET http://127.0.0.1:43149/en",
+        "status": 500,
+        "answer": "(0 , __vite_ssr_import_2__.withServerRequest) is not a function",
+        "class": "frontend startup setup failure"
+      },
+      {
+        "request": "signed-in Studio list/exact/count/title/private APIs",
+        "status": null,
+        "answer": "never dispatched; sign-in not reached",
+        "class": "unproved"
+      }
+    ],
+    "resourceAndScope": {
+      "ownedStorybookStopped": true,
+      "ownedWebStopped": true,
+      "ownedPorts": {
+        "43148": {
+          "listeningAtHandoffCheck": false
+        },
+        "43149": {
+          "listeningAtHandoffCheck": false
+        }
+      },
+      "sharedBackendRefreshedOrStopped": false,
+      "sharedDataMutated": false,
+      "backupRestores": 0,
+      "newCatalogueOrAuthoritySeeding": false,
+      "newAuthFixturePrepared": false,
+      "existingPrivateFixtureReadOnly": true,
+      "credentialsIncludedInReport": false,
+      "authStorageStateCreated": false,
+      "implementationOrAssertionOrRegistryChanges": false,
+      "trackedChangeOnly": "docs/goals/audit-remediation-20261019/proofs/studio-inventory-review.json"
+    },
+    "completionBoundary": "Affected source/story corrections and recorded geometry pass; old af37 clipped geometry is historical, not a 9e633ed product failure. Genuine runtime navigation is blocked at /en 500 by the exact composition gap. Original genuine inventory/count/title/return/private assertions remain unproved. Existing Discover/Site/Library proof and owners retained; no finding or class closed, no automatic landing.",
+    "next": "Manager/existing startup owner supplies the minimal compatible request-boundary source pin; retain all passing original and correction evidence and resume only the missing genuine browser assertions. Keep original inventory acceptance separate. No fresh corpus/old baseline restore/full AMGT requirement for this UI-only correction."
   }
 }
