@@ -36,7 +36,7 @@ export function classicChapterIdentity(work: string, actor: string, book: string
 
 /** Each returned chapter receipt supplies the original head for the next intent, including on a partial replay. */
 export async function publishClassicChapters(input: {
-  api: Pick<SeedApi, 'post'>; target: WorkReceipt; book: string; actor: string; token: string;
+  api: Pick<SeedApi, 'post'>; target: Pick<WorkReceipt, 'work' | 'mainVersion'>; book: string; actor: string; token: string;
   chapters: readonly ClassicChapter[]; source: ClassicSource; fixtureDigest: string;
   grant: (work: string) => Promise<void>;
   /** Chapters an earlier seed already published: their creation replays, the rest of their steps don't. */
