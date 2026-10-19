@@ -482,8 +482,8 @@ export async function projectDiscoveryBatch(
   const ratingAccess = {
     readRatingAggregateInventory: (ctx: string, main: string, signal: AbortSignal) =>
       access.readRatingAggregateInventory!(ctx, main, signal),
-    checkRatingAggregateFence: (generation: string, signal: AbortSignal) =>
-      access.checkRatingAggregateFence!(generation, signal),
+    checkRatingAggregateFence: (...args: Parameters<NonNullable<typeof access.checkRatingAggregateFence>>) =>
+      access.checkRatingAggregateFence!(...args),
   };
   const ratings =
     basis.context && basis.scope !== 'mine'
