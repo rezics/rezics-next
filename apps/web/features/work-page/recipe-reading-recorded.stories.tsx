@@ -24,7 +24,7 @@ import type { RecipeWorkPage, WorkHeader } from './types.ts';
 const record = recipes as AnswerRecord;
 type Persona = AnswerPersona;
 type Locale = 'en' | 'zh-Hans' | 'ja';
-type Phase = 'published' | 'loading' | 'scale' | 'continuation' | 'null-body' | 'unavailable-body' | 'unavailable-projection';
+type Phase = 'published' | 'loading' | 'scale' | 'continuation' | 'null-body' | 'unavailable-body' | 'unavailable-projection' | 'unavailable-method';
 
 function sample(persona: Persona, label: string): AnswerSample {
   const found = record.personas[persona].find(item => item.label === label);
@@ -128,6 +128,15 @@ function RecordedRecipeReading({ persona, locale, phase }: { persona: Persona; l
         if (method === 'GET' && url.pathname.endsWith(recipePath)) {
           if (phase === 'null-body') return Response.json(null);
           if (phase === 'unavailable-body') return Response.json({ error: 'work_read_unavailable' }, { status: 503 });
+          if (phase === 'unavailable-method') {
+            const last = asRecipe(sample(persona, 'recipe-continuation').answer);
+            const step = last.occurrences.find(item => item.role === 'step');
+            if (!step) throw new Error('Recorded method has no step');
+            return Response.json({ ...last, occurrences: [step], ingredients: [], instructions: [{
+              occurrence: step.occurrence, status: 'unavailable', reference: { target: step.occurrence,
+                selector: { grain: 'representation', revision: last.revision, representation: last.revision } },
+            }] });
+          }
         }
         if (phase === 'unavailable-projection' && method === 'GET' && url.pathname.endsWith(projectionPath)) {
           return Response.json({ error: 'work_read_unavailable' }, { status: 503 });
@@ -238,7 +247,8 @@ async function expectPublished(canvasElement: HTMLElement, persona: Persona, loc
   const sauce = await canvas.findByRole('heading', { level: 4, name: 'Sauce' }, { timeout: 8000 });
   await expect(title).toBeVisible();
   await expect(title).toHaveAttribute('lang', header.title.language);
-  await expect(canvas.getByRole('button', { name: copy.cookThis })).toBeEnabled();
+  await expect(canvas.getByRole('button', { name: copy.cookUnavailableAction })).toBeDisabled();
+  await expect(canvas.getByText(copy.recipeCookNeedsMore)).toBeVisible();
   await expect(sauce).toBeVisible();
   await expect(canvas.getByText(persona)).toBeVisible();
   const acting = actingSubjectOf(sample(persona, 'work-header').path);
@@ -295,6 +305,15 @@ async function showMore(canvasElement: HTMLElement, locale: Locale) {
   await expect(canvas.getByText('Cook for five minutes.')).toBeVisible();
   await expect(canvas.queryByText('PRIVATE DRAFT')).toBeNull();
   await expect(canvas.queryByRole('alert')).toBeNull();
+  const cook = canvas.getByRole('button', { name: copy.cookThis });
+  cook.scrollIntoView();
+  await expect(cook).toBeEnabled();
+  await userEvent.click(cook);
+  const dialog = canvas.getByRole('dialog', { name: copy.cookMode });
+  await expect(dialog).toBeVisible();
+  await expect(within(dialog).getByText('Mix the sauce.')).toBeVisible();
+  await expect(within(dialog).getByText('Cook for five minutes.')).toBeVisible();
+  await userEvent.click(within(dialog).getByRole('button', { name: copy.closeCookMode }));
   await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
 }
 
@@ -336,6 +355,20 @@ export const NullBody: Story = {
 export const NullBodyPhone: Story = {
   ...NullBody,
   globals: { locale: 'en', viewport: { value: 'phone' } },
+};
+
+export const UnavailableMethod: Story = {
+  args: { phase: 'unavailable-method' },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByRole('button', { name: /^Cook$/ })).toBeDisabled();
+    const recipe = canvas.getByRole('region', { name: /^Recipe$/ });
+    await expect(within(recipe).getByText(messages.en.recipeUnavailable)).toBeVisible();
+    await expect(within(recipe).getByText(messages.en.contentsUnavailable)).toBeVisible();
+    window.dispatchEvent(new Event('rezics-cook'));
+    await expect(canvas.queryByRole('dialog', { name: messages.en.cookMode })).toBeNull();
+    await expectNoReplayMiss(canvasElement);
+  },
 };
 
 export const UnavailableBody: Story = {

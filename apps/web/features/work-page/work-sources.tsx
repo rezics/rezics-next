@@ -17,6 +17,26 @@ import { sourceHref, SubjectSources } from '../entity-page/sources.tsx';
 import { HoldsIn, Pages, StatementsView, Value } from '../entity-page/views.tsx';
 import type { Copy } from '../entity-page/messages.ts';
 import { Region } from './region.tsx';
+import { standaloneHrefFor } from '../entity-page/route.ts';
+import { idOf, workHref, type WorkAt } from './route.ts';
+import { resourceHref } from '../address/path.ts';
+
+/** Facts continue on the actual Work view, retaining the host and the reader's selections. */
+export function workFactsSelection(workRef: WorkAt, pageUrl?: string | null) {
+  const page = new URL(pageUrl ?? workHref(workRef), 'https://work.invalid');
+  const values = page.searchParams.getAll('statements');
+  const cursor = values[0] || undefined;
+  const invalid = values.length > 1 || Boolean(cursor && cursor.length > 2048);
+  const resource = standaloneHrefFor({}, workHref(workRef));
+  const hrefFor: HrefFor = link => {
+    if (link.kind !== 'continue') return resource(link);
+    const query = new URLSearchParams(page.searchParams);
+    if (link.cursor) query.set(link.section, link.cursor);
+    else query.delete(link.section);
+    return `${page.pathname}${query.size ? `?${query}` : ''}#${link.section}`;
+  };
+  return { cursor, invalid, hrefFor };
+}
 
 /** External identifiers are source records, rather than prose or domain facts. */
 export function workSourceGroups(groups: readonly StatementGroup[]) {
@@ -27,15 +47,17 @@ export function workSourceGroups(groups: readonly StatementGroup[]) {
 export { sourceHref };
 
 /** Keep the shared statement values, applicability and continuation without repeating footer attribution. */
-export function WorkFactsView({ page, labels = new Map(), ownName, names, hrefFor, locale, t, messages }: {
+export function WorkFactsView({ page, labels = new Map(), ownName, names, hrefFor, cursor, locale, t, messages }: {
   page: Loaded<StatementPage>; labels?: PredicateLabels; ownName?: string; names: Names;
-  hrefFor: HrefFor; locale: UiLocale; t: Copy; messages: WorkPageMessages;
+  hrefFor: HrefFor; cursor?: string; locale: UiLocale; t: Copy; messages: WorkPageMessages;
 }) {
-  if (!page.ok) return <StatementsView page={page} names={names} cursor={undefined} hrefFor={hrefFor}
+  if (!page.ok) return <StatementsView page={page} names={names} cursor={cursor} hrefFor={hrefFor}
     locale={locale} t={t} messages={messages} />;
   const { facts } = workSourceGroups(page.data.groups);
   const { labelled, other } = presentStatements(facts, labels, ownName);
-  if (!labelled.length && !other.length && !page.data.nextCursor) return null;
+  if (!labelled.length && !other.length && !page.data.nextCursor) return <StatementsView
+    page={{ ...page, data: { ...page.data, groups: facts } }} names={names} cursor={cursor} hrefFor={hrefFor}
+    locale={locale} t={t} messages={messages} />;
   const groups = [...labelled.map(group => ({ heading: <LocalizedText text={labels.get(group.predicate)!} />, values: withoutOwnName(group) })),
     ...other.length ? [{ heading: t.otherFacts, values: other }] : []];
   return <Region id="statements" title={t.statements}>
@@ -47,7 +69,7 @@ export function WorkFactsView({ page, labels = new Map(), ownName, names, hrefFo
         </li>)}</ul>
       </div>)}
     </div>
-    <Pages cursor={undefined} next={page.data.nextCursor} section="statements" hrefFor={hrefFor} messages={messages} />
+    <Pages cursor={cursor} next={page.data.nextCursor} section="statements" hrefFor={hrefFor} messages={messages} />
   </Region>;
 }
 
@@ -112,7 +134,27 @@ function WorkFieldEvidence({ page, labels = new Map(), messages: t }: {
           const href = sourceHref(source);
           return <li key={`${source}:${index}`}>{href ? <a href={href} rel="noreferrer noopener" className={sourceLink}>
             {t.evidence} {index + 1}</a> : <span className="[overflow-wrap:anywhere]">{source}</span>}</li>;
-        })}</ul> : <p className="text-muted-foreground">{t.fieldEvidenceUnavailable}</p>}
+        })}</ul> : !('evidence' in item && item.evidence?.length) ? <p className="text-muted-foreground">{t.fieldEvidenceUnavailable}</p> : null}
+        {'evidence' in item && item.evidence?.length ? <ul className="grid min-w-0 gap-3 border-border border-s-2 ps-3">
+          {item.evidence.map(evidence => <li key={evidence.id} data-field-evidence className="grid min-w-0 gap-2">
+            <dl className="grid min-w-0 gap-2">
+              {[[t.evidenceSource, evidence.sourceWork, 'work'],
+                [t.evidenceSubmitter, evidence.submitter, 'entity']] .map(([label, value, base]) => {
+                const id = idOf(value!);
+                const href = id ? resourceHref(base === 'work' ? '/w/' : '/e/', value!) : sourceHref(value);
+                return <div key={label} className="grid min-w-0 gap-0.5"><dt className="text-muted-foreground">{label}</dt>
+                  <dd className="[overflow-wrap:anywhere]">{href ? <a href={href} className={sourceLink}>{value}</a> : value}</dd></div>;
+              })}
+              {[[t.evidenceRepresentation, evidence.representationSha256], [t.evidenceLocation, JSON.stringify(evidence.locator)],
+                [t.evidenceMethod, JSON.stringify(evidence.method)], [t.evidenceModality, evidence.modality],
+                [t.evidenceRights, evidence.rightsBasis]].map(([label, value]) => <div key={label} className="grid min-w-0 gap-0.5">
+                <dt className="text-muted-foreground">{label}</dt><dd className="whitespace-pre-wrap [overflow-wrap:anywhere]">{value}</dd>
+              </div>)}
+            </dl>
+            {!evidence.quoteWithheld && evidence.quote !== null ? <blockquote dir="auto" className="whitespace-pre-wrap [overflow-wrap:anywhere]">{evidence.quote}</blockquote>
+              : <p className="text-muted-foreground">{t.evidenceQuoteWithheld}</p>}
+          </li>)}
+        </ul> : null}
       </li>)}</ul>
     </details>
   </div>;

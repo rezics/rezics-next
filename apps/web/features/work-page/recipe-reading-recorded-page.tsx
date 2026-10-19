@@ -1,5 +1,5 @@
 import { materializeData } from 'native-i18n';
-import type { ReactNode } from 'react';
+import { cache, type ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { browserMainApi } from '../api/browser.ts';
@@ -14,10 +14,11 @@ import { copyOf as entityCopy, inSentence } from '../entity-page/messages.ts';
 import { entityHref, standaloneHrefFor } from '../entity-page/route.ts';
 import type { EntityProjection, EntitySection } from '../entity-page/types.ts';
 import { DiscussionView } from '../entity-page/views.tsx';
-import { WorkFactsView } from './work-sources.tsx';
+import { WorkFactsView, workFactsSelection } from './work-sources.tsx';
 import type { DisplayObligations } from '../rights-mark/rights-mark.tsx';
 import type { RecipeExport, RecipeExportApi } from '../recipe-editor/export-api.ts';
 import { copyOf as recipeEditorCopy } from '../recipe-editor/messages.ts';
+import { recipeMethodReady } from '../recipe-editor/instructions.ts';
 import { recipeEditHref } from '../recipe-editor/route.ts';
 import type { RelationshipsApi } from '../relationships/types.ts';
 import type { WorkShowcase } from '../api/showcase.ts';
@@ -60,6 +61,15 @@ import { wikiZoneRead } from './wiki.ts';
 // The published recipe page. `WorkFrameView` and `WorkOverview` call these for a
 // recipe; a story calls the same functions with the replaying client. The module
 // stays free of `next/headers` so the browser bundle can load it.
+
+// React's request cache gives the frame and its streamed body the exact same owner answers.
+// Nothing is retained across requests or acting people; continuation/scaling remain fresh reads.
+const initialRecipe = cache((main: RecipeWorkHost['main'], actingSubject: string | null, href: string) =>
+  recipeReadingReads({ main, actingSubject }).readRecipe(href));
+const recipeIdentity = cache((main: RecipeWorkHost['main'], actingSubject: string | null, id: string) =>
+  loadRecipeIdentity(recipeReadingReads({ main, actingSubject }), id));
+const recipeProjection = cache((main: RecipeWorkHost['main'], actingSubject: string | null, id: string) =>
+  readResourcePage(main, actingSubject ?? undefined, id));
 
 type Answer<T> = { data: T | null; error: { status: number; value?: unknown } | null };
 
@@ -162,7 +172,7 @@ export async function recipeRegion({ host, id, work, href, locale, messages }: {
 }) {
   const reads = recipeReadingReads({ main: host.main, actingSubject: host.actingSubject });
   const [recipe, text, authority] = await Promise.all([
-    reads.readRecipe(href),
+    initialRecipe(host.main, host.actingSubject, href),
     reads.readText(work.mainVersion, work.selectedLanguage ?? undefined),
     // Signed-in readers read the page again for `work.edit`. It is the same projection.
     host.actingSubject ? reads.readProjection(id) : Promise.resolve(null),
@@ -185,10 +195,9 @@ export async function recipeWorkFrame({ host, workRef, id, work, locale, message
   factObligations?: readonly DisplayObligations[];
 }) {
   const actingSubject = actor(host);
-  const reads = recipeReadingReads({ main: host.main, actingSubject: host.actingSubject });
   const [identity, projection, ratings, seed, art] = await Promise.all([
-    loadRecipeIdentity(reads, id),
-    readResourcePage(host.main, actingSubject, id),
+    recipeIdentity(host.main, host.actingSubject, id),
+    recipeProjection(host.main, host.actingSubject, id),
     readRatings(host, id),
     readAnimeReaderState(host.main, actingSubject, id),
     readShowcase(host, work.id),
@@ -197,9 +206,11 @@ export async function recipeWorkFrame({ host, workRef, id, work, locale, message
   const experience = workExperience(projection.ok ? projection.data : null, work.types);
   const plan = hubPlan(projection.ok ? projection.data : null);
   const statements = projection.ok ? sectionOf(projection.data, 'statements') : undefined;
-  const facts = statements ? await readLinkedStatements(host.main, actingSubject, statements.href) : undefined;
-  const recipe = experience.typeSection ? await reads.readRecipe(experience.typeSection.href) : null;
-  const canCook = Boolean(recipe?.ok && recipe.data && (recipe.data.ingredients.length || recipe.data.instructions?.length));
+  const selection = workFactsSelection(workRef, host.pageUrl);
+  const facts = statements ? selection.invalid ? { ok: false as const, failure: 'invalid' as const }
+    : await readLinkedStatements(host.main, actingSubject, statements.href, { cursor: selection.cursor }) : undefined;
+  const recipe = experience.typeSection ? await initialRecipe(host.main, host.actingSubject, experience.typeSection.href) : null;
+  const canCook = identity.kind === 'ready' && Boolean(recipe?.ok && recipeMethodReady(recipe.data));
   const zone = wikiZoneRead(projection, facts);
   const t = materializeData(messages, { locale });
   // A recipe does not render the cover rail. Native authors stay on the credit read; the cover
@@ -230,7 +241,7 @@ export async function recipeWorkFrame({ host, workRef, id, work, locale, message
           {messages.fullFacts}</summary>
         <div className="grid gap-5 pb-6">
           <WorkFactsView page={facts} names={new Map()}
-            hrefFor={standaloneHrefFor({}, entityHref(id))} locale={locale} t={entityCopy(locale)} messages={messages} />
+            hrefFor={selection.hrefFor} cursor={selection.cursor} locale={locale} t={entityCopy(locale)} messages={messages} />
           <ProposeCorrectionSlot work={id} locale={locale} messages={messages} />
         </div>
       </details> : null}
@@ -238,7 +249,7 @@ export async function recipeWorkFrame({ host, workRef, id, work, locale, message
     </>}
     sections={hubLabels(messages, plan)}
     readAction={<WorkKindActions kind={experience.kind} workId={work.id} workRef={workRef} title={work.title.value} locale={locale}
-      messages={messages} words={shelfWords(experience, messages)} canCook={canCook} />}
+      messages={messages} words={shelfWords(experience, messages)} canCook={canCook} recipeHref={experience.typeSection?.href} />}
     shortcuts={<>
       <ProvisionalNotice verification={work.verification} provenance={work.fieldProvenance} locale={locale} />
       {plan.includes('wiki') ? <WikiShortcutView realm={zone.ok ? zone.data : null} locale={locale} messages={messages} /> : null}
@@ -253,9 +264,8 @@ export async function recipeWorkOverview({ host, workRef, id, work, scope, local
   messages: WorkPageMessages; lead?: readonly HubSection[];
 }) {
   const actingSubject = actor(host);
-  const reads = recipeReadingReads({ main: host.main, actingSubject: host.actingSubject });
   const [identity, projection] = await Promise.all([
-    loadRecipeIdentity(reads, id), readResourcePage(host.main, actingSubject, id),
+    recipeIdentity(host.main, host.actingSubject, id), recipeProjection(host.main, host.actingSubject, id),
   ]);
   if (identity.kind !== 'ready' || !projection.ok) {
     return <RegionFailure title={messages.recipeMethod} failure={identity.kind === 'ready' ? 'unavailable' : identity.failure}

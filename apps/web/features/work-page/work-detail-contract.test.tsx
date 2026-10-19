@@ -14,7 +14,7 @@ import { GuideExperience, guideSections } from './types/guide.tsx';
 import { RecipeFacts } from './types/recipe.tsx';
 import { WorkAbout, WorkHeader } from './work-header.tsx';
 import { workReportTargets } from './work-report-targets.ts';
-import { WorkFactsView, WorkSources, sourceHref, workRights, workSourceGroups } from './work-sources.tsx';
+import { WorkFactsView, WorkSources, sourceHref, workFactsSelection, workRights, workSourceGroups } from './work-sources.tsx';
 import * as entity from '../entity-page/fixtures.ts';
 import { copyOf as entityCopy } from '../entity-page/messages.ts';
 import type { StatementPage } from '../entity-page/types.ts';
@@ -163,6 +163,52 @@ const sourcePage = (): StatementPage => ({ ...entity.statements(), factObligatio
   ...entity.statements().groups,
 ] });
 
+test('facts continuation retains the exact Work/Zone view, scope and opaque cursor and can restart', () => {
+  for (const at of [fixture.workRef, zone]) {
+    const path = workHref(at, 'contents');
+    const selection = workFactsSelection(at, `https://rezics.com${path}?scope=global&language=ja&statements=first%2Bpage`);
+    expect(selection.cursor).toBe('first+page');
+    expect(selection.invalid).toBe(false);
+    const next = new URL(selection.hrefFor({ kind: 'continue', section: 'statements', cursor: 'opaque+/=' }), 'https://rezics.com');
+    expect(next.pathname).toBe(path);
+    expect(next.searchParams.get('statements')).toBe('opaque+/=');
+    expect(next.searchParams.get('scope')).toBe('global');
+    expect(next.searchParams.get('language')).toBe('ja');
+    expect(next.hash).toBe('#statements');
+    const restart = new URL(selection.hrefFor({ kind: 'continue', section: 'statements', cursor: null }), next);
+    expect(restart.searchParams.has('statements')).toBe(false);
+    expect(restart.pathname).toBe(path);
+  }
+  expect(workFactsSelection(fixture.workRef, '/w/test?statements=a&statements=b').invalid).toBe(true);
+  expect(workFactsSelection(fixture.workRef, `/w/test?statements=${'a'.repeat(2049)}`).invalid).toBe(true);
+});
+
+test('field evidence preserves the exact supplied selection and never exposes a withheld quote', () => {
+  const page = sourcePage();
+  const item = page.groups.flatMap(group => group.items).find(item => item.kind === 'statement')!;
+  if (item.kind !== 'statement') throw new Error('Expected a statement');
+  const evidence = { id: iriOf('00000000-0000-4000-8000-000000000020'), sourceWork: fixture.work.id,
+    representationSha256: 'a'.repeat(64), locator: { pointer: '/characters/0/name' },
+    quote: 'Kirito is the retained character name.', quoteWithheld: false, method: { kind: 'manual' },
+    modality: 'text', submitter: iriOf('00000000-0000-4000-8000-000000000021'), rightsBasis: 'quotation' };
+  item.evidence = [evidence];
+  const props = { work: fixture.work, locale: 'en' as const, messages: t, statements: { ok: true as const, data: page } };
+  const html = render(<WorkSources {...props} />);
+  expect(html).toContain('/characters/0/name');
+  expect(html).toContain(evidence.representationSha256);
+  expect(html).toContain(evidence.quote);
+  expect(html).toContain('quotation');
+  expect(html).toContain('href="/w/');
+  expect(html).toContain(item.revision);
+  item.evidence = [{ ...evidence, quoteWithheld: true }];
+  const withheld = render(<WorkSources {...props} />);
+  expect(withheld).not.toContain(evidence.quote);
+  expect(withheld).toContain(t.evidenceQuoteWithheld);
+  expect(withheld).toContain(evidence.representationSha256);
+  item.evidence = [{ ...evidence, quote: null }];
+  expect(render(<WorkSources {...props} />)).toContain(t.evidenceQuoteWithheld);
+});
+
 test('source records leave the fact list while domain facts, applicability and opaque continuation remain', () => {
   const page = sourcePage();
   expect(workSourceGroups(page.groups).sources).toHaveLength(1);
@@ -173,7 +219,7 @@ test('source records leave the fact list while domain facts, applicability and o
   expect(html).not.toContain('data-rights-mark');
   expect(html).toContain('href="/next-facts"');
   expect(render(<WorkFactsView page={{ ok: true, data: entity.noStatements }} names={new Map()}
-    hrefFor={() => '/next-facts'} locale="en" t={entityCopy('en')} messages={t} />)).toBe('');
+    hrefFor={() => '/next-facts'} locale="en" t={entityCopy('en')} messages={t} />)).toContain(entityCopy('en').noStatementsBody);
   const failed = render(<WorkFactsView page={{ ok: false, failure: 'missing' }} names={new Map()}
     hrefFor={() => '/retry-facts'} locale="en" t={entityCopy('en')} messages={t} />);
   expect(failed).toContain('role="status"');

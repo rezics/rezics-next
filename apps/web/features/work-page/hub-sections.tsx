@@ -2,6 +2,7 @@ import { buttonVariants } from '@rezics/ui/button';
 import { ChevronDownIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import { cache, Suspense } from 'react';
+import { headers } from 'next/headers';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { signInPath } from '../auth/paths.ts';
@@ -13,7 +14,7 @@ import { entityHref, standaloneHrefFor } from '../entity-page/route.ts';
 import { copyOf as entityCopy } from '../entity-page/messages.ts';
 import { DiscussionSection } from '../entity-page/sections.tsx';
 import { withoutOwnName } from '../entity-page/statement-groups.ts';
-import { WorkFactsView } from './work-sources.tsx';
+import { WorkFactsView, workFactsSelection } from './work-sources.tsx';
 import Link from '../shell/localized-link.tsx';
 import { SeriesProgressPanel } from '../tracking/series-progress-panel.tsx';
 import { copyOf as levelsCopy } from '../work-levels/messages.ts';
@@ -72,9 +73,11 @@ export async function Status({ id, locale, messages, client }: Common & { id: st
 
 /** Facts and their source records share the same read on every Work view. */
 export const readWorkFacts = cache(async (id: string, locale: UiLocale, client?: WorkPageClient) => {
+  const selection = workFactsSelection(id, client ? client.pageUrl : (await headers()).get('x-rezics-page-url'));
   const projection = await readEntityProjection(id, undefined, client);
   const section = projection.ok ? sectionOf(projection.data, 'statements') : undefined;
-  const page = section ? await readStatements(section, undefined, undefined, undefined, client) : undefined;
+  const page = section ? selection.invalid ? { ok: false as const, failure: 'invalid' as const }
+    : await readStatements(section, selection.cursor, undefined, undefined, client) : undefined;
   const [labels, names] = page?.ok ? await Promise.all([
     readPredicateLabels(page.data, locale, client),
     namesOf(page.data.groups.flatMap(group => withoutOwnName(group).flatMap(item => [
@@ -83,12 +86,12 @@ export const readWorkFacts = cache(async (id: string, locale: UiLocale, client?:
       ...item.qualifiers.applicability,
     ])), undefined, client),
   ]) : [new Map(), new Map()];
-  return { projection, page, labels, names };
+  return { projection, page, labels, names, selection };
 });
 
 /** Accepted facts on expansion; source records and attribution belong to the enclosing page-end section. */
 export async function AboutFacts({ id, locale, messages, client }: Common & { id: string }) {
-  const { projection, page, labels, names } = await readWorkFacts(id, locale, client);
+  const { projection, page, labels, names, selection } = await readWorkFacts(id, locale, client);
   if (!projection.ok) return <RegionFailure title={messages.fullFacts} failure={projection.failure} messages={messages} />;
   if (!page) return null;
   const t = entityCopy(locale);
@@ -100,7 +103,7 @@ export async function AboutFacts({ id, locale, messages, client }: Common & { id
     </summary>
     <div className="grid gap-5 pb-6">
       <WorkFactsView page={page} labels={labels} names={names}
-        hrefFor={standaloneHrefFor({}, entityHref(id))} locale={locale} t={t} messages={messages} />
+        hrefFor={selection.hrefFor} cursor={selection.cursor} locale={locale} t={t} messages={messages} />
       <ProposeCorrectionSlot work={id} locale={locale} messages={messages} />
     </div>
   </details>;

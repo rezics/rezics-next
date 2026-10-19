@@ -20,7 +20,7 @@ import type { WorkPageMessages } from '../messages.ts';
 import { Region } from '../region.tsx';
 import type { RecipeWorkPage } from '../types.ts';
 import { InstructionReading } from '../../recipe-editor/instruction-reading.tsx';
-import type { Instruction } from '../../recipe-editor/instructions.ts';
+import { recipeMethodReady, RECIPE_METHOD_STATE, type Instruction } from '../../recipe-editor/instructions.ts';
 
 /** What the published page and the editor's preview both render. The editor fills it from its own state. */
 export interface ReadableRecipe {
@@ -337,6 +337,7 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, loc
   const [continueFailed, setContinueFailed] = useState(false);
   const [changed, setChanged] = useState(false);
   const [cooking, setCooking] = useState(false);
+  const methodReady = recipeMethodReady(page) && !busy && !continuing;
   const applied = useRef(wholeServings(initial));
   /** A newer scale or reload ignores a continuation that was already on its way. */
   const generation = useRef(0);
@@ -351,16 +352,20 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, loc
     setError(false);
     setContinueFailed(false);
     setChanged(false);
-    setCooking(window.location.hash === '#cook');
+    setCooking(recipeMethodReady(initial) && window.location.hash === '#cook');
   }, [initial, href, actingSubject]);
   const read = readPage ?? ((query: { cursor?: string; servings?: number }) => recipePageReader({ main: browserMainApi(), actingSubject }, href)(query));
   useEffect(() => {
-    const open = () => setCooking(true);
+    const open = () => { if (methodReady) setCooking(true); };
     const followLink = () => { if (window.location.hash === '#cook') open(); };
     window.addEventListener('rezics-cook', open);
     window.addEventListener('hashchange', followLink);
     return () => { window.removeEventListener('rezics-cook', open); window.removeEventListener('hashchange', followLink); };
-  }, []);
+  }, [methodReady]);
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent(RECIPE_METHOD_STATE, { detail: { href, ready: methodReady } }));
+    if (!methodReady) setCooking(false);
+  }, [href, methodReady]);
   const convertible = page?.ingredients.some(item => item.alternateLine) ?? false;
   const base = initial?.measures.find(item => item.kind === 'servings');
   const editorLink = edit ? <Link href={edit.href} className={buttonVariants({ variant: 'outline' })}>
@@ -453,6 +458,8 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, loc
       <div aria-busy={busy || continuing || undefined} className="grid gap-4">
         <RecipeContent page={page} units={units} messages={t} notes={text} recordingFetch={recordingFetch} controls={<>
           {controls}
+          {!recipeMethodReady(page) ? <p className="text-muted-foreground text-sm">
+            {page.next ? t.recipeCookNeedsMore : t.recipeUnavailable}</p> : null}
           {error ? <p role="alert" className="text-destructive text-sm">{t.scaleFailed}</p> : null}
         </>} />
         {page.next || changed || continueFailed ? <div className="grid justify-items-start gap-2">
@@ -462,7 +469,7 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, loc
             {continuing ? t.loadingMoreRecipe : t.showMoreRecipe}</Button> : null}
         </div> : null}
       </div>
-      {cooking ? <CookMode page={page} messages={t} units={units} recordingFetch={recordingFetch}
+      {cooking && methodReady ? <CookMode page={page} messages={t} units={units} recordingFetch={recordingFetch}
         onClose={() => {
           setCooking(false);
           if (window.location.hash === '#cook') {

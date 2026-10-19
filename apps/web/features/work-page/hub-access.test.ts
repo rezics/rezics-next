@@ -30,6 +30,7 @@ let access: PlatformAccess = { groups: [], operations: [], generation: 'anonymou
 let reads = 0;
 let kind: 'prompt' | 'skill' = 'prompt';
 let projectionMode: 'ready' | 'unavailable' | 'missing-section' = 'ready';
+const statementCursors: (string | undefined)[] = [];
 seedServedTypes();
 const typesFor = (kind: 'prompt' | 'skill') => [servedTypes.types.find(type => type.presentation === kind)!.type];
 let answer: { data: HubWorkPage | null; error: { status: number; value?: unknown } | null };
@@ -40,6 +41,7 @@ const restoreMain = replaceModule(import.meta.resolve('../api/main.ts'), origina
 });
 const restoreHeaders = replaceModule(import.meta.resolve('next/headers'), originalHeaders, {
   cookies: async () => ({ get: () => signedIn ? { value: 'session-token' } : undefined }),
+  headers: async () => new Headers(),
 });
 const restoreNavigation = replaceModule(import.meta.resolve('next/navigation'), originalNavigation, {
   usePathname: () => localizedPath(workHref(id), 'en'),
@@ -49,7 +51,10 @@ const restoreNavigation = replaceModule(import.meta.resolve('next/navigation'), 
 const restoreSession = replaceModule(import.meta.resolve('../auth/session.ts'), originalSession, { sessionAgentState: async () => null });
 const restoreProjection = replaceModule(import.meta.resolve('../entity-page/read.ts'), originalProjection, {
   // The current frame reads its fact/source collection before streaming Hub content.
-  readStatements: async () => ({ ok: true, data: { ...noStatements, resource: work.id } }),
+  readStatements: async (_section: unknown, cursor: string | undefined) => {
+    statementCursors.push(cursor);
+    return { ok: true, data: { ...noStatements, resource: work.id } };
+  },
   readEntityProjection: async () => {
     if (projectionMode === 'unavailable') return { ok: false, failure: 'unavailable' };
     const data = projectionFor({ id, base: 'work', types: typesFor(kind), name: work.title.value });
@@ -68,6 +73,23 @@ afterAll(() => {
 });
 const { readHubWorkPage } = await import('./read.ts');
 const { TypeExperience, WorkOverview, WorkFrameView } = await import('./work-views.tsx');
+const { readWorkFacts } = await import('./hub-sections.tsx');
+
+test('the Work facts owner receives the URL cursor, while repeated cursors are refused before its read', async () => {
+  projectionMode = 'ready';
+  statementCursors.length = 0;
+  const main = originalMain.mainApiWithToken(undefined);
+  const client = { main, anonymous: main, signedIn: false,
+    pageUrl: `https://rezics.com/en/s/readers/library/${id}/contents?scope=global&statements=opaque%2Bnext` };
+  const facts = await readWorkFacts(id, 'en', client);
+  expect(statementCursors).toEqual(['opaque+next']);
+  expect(facts.selection.cursor).toBe('opaque+next');
+  expect(facts.selection.hrefFor({ kind: 'continue', section: 'statements', cursor: 'page-3' }))
+    .toContain(`/en/s/readers/library/${id}/contents?scope=global&statements=page-3#statements`);
+  const refused = await readWorkFacts(id, 'en', { ...client, pageUrl: `${client.pageUrl}&statements=second` });
+  expect(refused.page).toEqual({ ok: false, failure: 'invalid' });
+  expect(statementCursors).toEqual(['opaque+next']);
+});
 
 // Resolve the production Hub slots. Other independently streamed regions do not participate in
 // this acceptance; leave them empty instead of replacing the page/header with a test-made shell.

@@ -250,6 +250,18 @@ function SourcedWork() {
       sources: ['https://openlibrary.org/works/OL123W?revision=7'] }] },
     ...entity.statements().groups,
   ] };
+  const accepted = page.groups.flatMap(group => group.items).find(item => item.kind === 'statement');
+  if (accepted?.kind === 'statement') accepted.evidence = [{
+    id: 'https://rezics.com/id/00000000-0000-4000-8000-000000000020', sourceWork: fixture.work.id,
+    representationSha256: 'a'.repeat(64), locator: { pointer: '/characters/0/name' },
+    quote: 'Kirito is the retained character name.', quoteWithheld: false, method: { kind: 'manual' },
+    modality: 'text', submitter: 'https://rezics.com/id/00000000-0000-4000-8000-000000000021', rightsBasis: 'quotation',
+  }, {
+    id: 'https://rezics.com/id/00000000-0000-4000-8000-000000000022', sourceWork: fixture.work.id,
+    representationSha256: 'b'.repeat(64), locator: { pointer: '/characters/1/name' },
+    quote: 'WITHHELD SOURCE QUOTE', quoteWithheld: true, method: { kind: 'manual' }, modality: 'text',
+    submitter: 'https://rezics.com/id/00000000-0000-4000-8000-000000000021', rightsBasis: 'quotation',
+  }];
   const work = { ...fixture.work, factObligations: attributed, descriptionObligations: attributed };
   return <WorkFrame workRef={fixture.workRef} work={work} credits={null} locale="en" messages={t}
     statementSources={{ ok: true, data: page }} sourceLabels={entity.predicateLabels} factObligations={[attributed]}>
@@ -274,6 +286,11 @@ export const SourcesAndEvidence: Story = {
       await keyboard.keyboard('{Enter}');
     } else await userEvent.keyboard('{Enter}');
     await expect(details.closest('details')).toHaveAttribute('open');
+    await expect(within(sources).getByText('Kirito is the retained character name.')).toBeVisible();
+    await expect(within(sources).getByText('a'.repeat(64))).toBeVisible();
+    await expect(within(sources).getByText('{"pointer":"/characters/0/name"}')).toBeVisible();
+    await expect(within(sources).queryByText('WITHHELD SOURCE QUOTE')).toBeNull();
+    await expect(within(sources).getByText(messages.en.evidenceQuoteWithheld)).toBeVisible();
     const evidence = within(sources).getByRole('link', { name: 'Evidence 1' });
     await expect(evidence).toHaveAttribute('href', 'https://openlibrary.org/works/OL123W?revision=7');
     await expect(within(sources).getAllByText(messages.en.fieldEvidenceUnavailable).length).toBeGreaterThan(0);
