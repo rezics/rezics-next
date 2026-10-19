@@ -3445,5 +3445,225 @@
       "scope": "Report-only documentation and worker checks; retained receipt records the result after execution."
     },
     "manager_next": "Use this bounded recorded-component result to supply the originally missing Site peer inspection after listed Main equivalence. G-2825 remains closed. Audit manager owns D4-002 acceptance/class closure; no new task, product change or unrelated acceptance gate is requested."
+  },
+  "site_recovery_six_path_first_source_review": {
+    "atUTC": "2026-10-19T14:57:43.823662+00:00",
+    "worker": "G-2847",
+    "reviewer": "Existing independent codex-1 / GPT-6.1 Sol / xhigh; no fallback or nested agents",
+    "scope": "ONE first authored-source review of exactly four initial Site paths plus two final Worker-entry paths under the recorded same-scope continuation. Earlier approval/approvedSiteCommit author labels are not covering verdicts for these six paths.",
+    "verdict": "No actionable findings for this six-path source delta. Source integration is supported at the exact verified blobs; root owns integration and original-class acceptance.",
+    "actionable_findings": [],
+    "minimal_next_counterexample_assertion": null,
+    "source": {
+      "initial_four_path_pin": "bbe98b1fd962cb37fbf3a4095421e50cca5d7628",
+      "initial_delta": "142 additions / 13 deletions",
+      "final_two_path_pin": "119320e69f6179c3da9d381e371e8924e86fab0b",
+      "final_delta": "124 additions / 2 deletions",
+      "frozen_main_base": "a8e44a3372a7ed61a0d0124b5d5667bf7ddf9502",
+      "tested_frontend": "4044533df70be9bc1141ce8b1752743a5398f05c",
+      "tested_frontend_base": "f10714d6052baf3b745bb535b2e12795d458d557",
+      "composition_verified": "All six Main predecessors equal their respective authored parent blobs; all six authored after blobs equal tested FE4044533. No source composed/landed here and no unrelated whole-wave equivalence claimed.",
+      "unchanged_dependency_blobs": {
+        "server-read.ts": "4486ceb5072fbd9be6d455c95ad83cd6b629d2f4",
+        "zones/csp.ts": "44b5801b542fcdc50ce82d2359258c67e544581e"
+      },
+      "dependency_limit": "Read only the existing response-owner/classifier/cached-read context needed for integration, not a new seventh-path approval or broad boundary review.",
+      "per_file": [
+        {
+          "path": "apps/web/features/address/edge.ts",
+          "source_lines": "16,44-79",
+          "verdict": "No actionable findings",
+          "reason": "Fresh existing zoneNonce binds script and style to the emitted CSP. Localized text and native task href remain escaped; no inline event attributes or preventDefault. Only unmodified primary click (including native Enter activation) exposes aria-busy and the status node. Modifiers/default-prevented events remain native; pageshow clears busy/pending for a returned document. Missing404/410 has no retry script; no-store/noindex/no-referrer/status/retry-after behavior is retained.",
+          "authored_pin": "bbe98b1fd962cb37fbf3a4095421e50cca5d7628",
+          "parent_pin": "833cf52ffc4dddb307f7eae8337e7ed4cc189d16",
+          "parent_blob": "9465ea4d555f13bb5a818ad83c077255b366ee3a",
+          "reviewed_blob": "f59fc6dff03c3d986ec23b51edb6039dabb59d2f",
+          "reviewed_sha256": "00e565c99972144af26f18c0c5e00ed7f803f89d04e1b409ab29c6dc19271423"
+        },
+        {
+          "path": "apps/web/features/zones/site-route.tsx",
+          "source_lines": "87-123,206-219,234-275,597-602",
+          "verdict": "No actionable findings",
+          "reason": "Root metadata selects request-cached resolveSite/readCompletePresentation rather than the unused generic root route. Existing join/missing/discovery gates and non-root/mounted metadata remain intact. The server recovery wrapper marks only selected whole-page unavailable/offline as503 and retains the existing client recovery plus localized browse link. Standalone published-home failure uses the same marker. Framed region failures keep their successful outer frame; no global mark on optional metadata/reads, authority relaxation, session workaround or new API owner.",
+          "authored_pin": "bbe98b1fd962cb37fbf3a4095421e50cca5d7628",
+          "parent_pin": "833cf52ffc4dddb307f7eae8337e7ed4cc189d16",
+          "parent_blob": "08e54514ccabf3afa913dea82ed75ae0cf4b3f62",
+          "reviewed_blob": "5823d918afd530372047d39127a9ea923aa822b8",
+          "reviewed_sha256": "8965291819cbb74d08eba0d674f2db4f703071dbe3ffe54dde0fe2cf92e9d15e"
+        },
+        {
+          "path": "apps/web/features/zones/site-publication-read.test.ts",
+          "source_lines": "31-79,98-157",
+          "verdict": "No actionable findings",
+          "reason": "Meaningful owner-level assertions distinguish unused route A from selected complete publication B in Realm and standalone roots, verify root metadata/body agreement and zero generic-root reads, execute the selected server wrapper for503/no-store/retry-after, retain framed-region200 and missing404 controls. Dependency replacements make these owner tests rather than genuine backend/SSR acceptance. Existing complete51st-link and publication tests remain.",
+          "authored_pin": "bbe98b1fd962cb37fbf3a4095421e50cca5d7628",
+          "parent_pin": "833cf52ffc4dddb307f7eae8337e7ed4cc189d16",
+          "parent_blob": "10246c68fe06aeaa948847c54a62dd76e54d6e32",
+          "reviewed_blob": "163b155177fca3b18f27e965dc91199eedeb2bd0",
+          "reviewed_sha256": "64ff0bb339af7847403ef6f2bb6f585b78fded41695611bd0f7a73742b5cd4ce"
+        },
+        {
+          "path": "apps/web/tests/server-client-boundary.test.ts",
+          "source_lines": "187-218",
+          "verdict": "No actionable findings",
+          "reason": "Existing localized/status/exact-task matrix retained; added real response HTML assertions require a nonce-bound retry script, hidden live status, matching CSP and no inline event attributes, with script absence for missing responses. Script behavior is additionally evidenced by retained native keyboard/pointer/pending runs; string assertions alone are not presented as runtime proof.",
+          "authored_pin": "bbe98b1fd962cb37fbf3a4095421e50cca5d7628",
+          "parent_pin": "833cf52ffc4dddb307f7eae8337e7ed4cc189d16",
+          "parent_blob": "fae398fa3bfc00ee3c1e71f91dd87458508410d2",
+          "reviewed_blob": "4dbf2bd8fb46003405baa40d062ef5da3d5e7d27",
+          "reviewed_sha256": "c124cc0fd7785d92b14748e38c096a361ab1d40c77b1e180570926a20948191f"
+        },
+        {
+          "path": "apps/web/worker/index.ts",
+          "source_lines": "4,11-20",
+          "verdict": "No actionable findings",
+          "reason": "The finite import/predicate extends existing resource document handling to the unchanged localized Site classifier. It enters no new boundary and retains before-normalization/admission, original request signal/deadline, response/cookie ownership and localized fallback. Existing serverDocumentResponse continues to bypass non-GET/non-HTML/RSC and unrelated paths, and to hold selected HTML until late status is known.",
+          "authored_pin": "119320e69f6179c3da9d381e371e8924e86fab0b",
+          "parent_pin": "365f5d7225a2ee749de722f0172766ec4b751b30",
+          "parent_blob": "fc345d1f85383b1fb16866d8cddc82c634f140c5",
+          "reviewed_blob": "b25911c7d3fef939486223eb0f19b183c0b04f49",
+          "reviewed_sha256": "e8a43922e4f380f8f817557ccf95fd509c40186e834172cb5fbbcad3fad1a97f"
+        },
+        {
+          "path": "apps/web/tests/g-1028-server-reads.test.ts",
+          "source_lines": "1-22,56-172",
+          "verdict": "No actionable findings",
+          "reason": "Three regressions run the actual Worker entry with only the external vinext virtual-renderer seam substituted. They assert late root/nested status before headers, retained set-cookie/no-store/retry-after/body, optional503 leaving document200, non-HTML/non-GET/unrelated/unlocalized streaming identity, and actual abort/original15s absolute-deadline cancellation with exact localized recovery task. Real internal request owners stay external/shared so ALS state is exercised. Other original tests are unchanged.",
+          "authored_pin": "119320e69f6179c3da9d381e371e8924e86fab0b",
+          "parent_pin": "365f5d7225a2ee749de722f0172766ec4b751b30",
+          "parent_blob": "3c54cae6340a6c3d684cc7fd9313b040527e91f0",
+          "reviewed_blob": "47c09fd14013ccbaa5b91376e827636197b38eb6",
+          "reviewed_sha256": "8f6b58bdc7dfb9eecd51badd79ec3d3cc21120400fa28c387d1e58729ab08f08"
+        }
+      ],
+      "verification": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-six-path-source-review/verification.json",
+      "four_path_patch_sha256": "c401fdb656b01e1a11bd7853acda2bcb03e00c4f1cebee962f3fa35737d06c0b",
+      "combined_six_path_patch_sha256": "a637fa652eb0b3a8616e9381fc5202e1c26fc9371b5f487e449ceb7b846a1971"
+    },
+    "reused_checks": {
+      "initial_units": {
+        "job": "5014408a-8e54-466e-97b8-3879c52da08f",
+        "tests": 12,
+        "assertions": 562,
+        "result": "passed",
+        "pin_limit": "Recorded precommit implementation before only widening the helper type to include the already possible sign-in case; no subsequent runtime/test-body change. Final four checked/published/tested blobs verified separately."
+      },
+      "initial_static": {
+        "job": "da9e6e42-484b-4d6f-a63b-7d701a42f2c7",
+        "pin": "da985be574510ecb645ef16745db6373bb73cb37",
+        "run": "run-wOlTwt",
+        "result": "Types/inference/lint/AST and10/45 selected guards passed, including retained automatic accepted-command timeout retry"
+      },
+      "initial_typecheck": {
+        "job": "e32cb6d8-0ed5-4014-a2b4-01862f9a353e",
+        "pin": "bbe98b1fd962cb37fbf3a4095421e50cca5d7628",
+        "checked_files": 4042,
+        "result": "passed"
+      },
+      "final_entry_units": {
+        "job": "d22fe9ee-04aa-4775-bf2e-7736aed68eea",
+        "step": 1,
+        "checked_pin": "3aa5d9021b4c696942c9b9a27c368c41a2dc12ff",
+        "published_pin": "119320e69f6179c3da9d381e371e8924e86fab0b",
+        "tests": 3,
+        "assertions": 43,
+        "result": "passed; final selected blobs verified identical"
+      },
+      "final_static": {
+        "job": "d22fe9ee-04aa-4775-bf2e-7736aed68eea",
+        "step": 2,
+        "pin": "119320e69f6179c3da9d381e371e8924e86fab0b",
+        "run": "run-l8I76D",
+        "result": "Types/task-delta inference/lint/AST and8/45 guards passed",
+        "inherited_limit": "Base Main inference count exceeds recorded baseline; task delta passed unchanged margins, not a claim that the integration baseline concern is fixed."
+      },
+      "final_typechecks": {
+        "job": "d22fe9ee-04aa-4775-bf2e-7736aed68eea",
+        "steps": [
+          4,
+          6
+        ],
+        "checked_files": [
+          4049,
+          3971
+        ],
+        "pins": [
+          "119320e69f6179c3da9d381e371e8924e86fab0b",
+          "4044533df70be9bc1141ce8b1752743a5398f05c"
+        ],
+        "result": "passed"
+      },
+      "independent_execution": "No duplicate passing source/runtime tiers run. No new source counterexample found requiring a selected assertion."
+    },
+    "retained_runtime_evidence": {
+      "backend": "4a616b079a364b8f5ac7fe4d4ff56bc99849e766",
+      "backend_origin": "http://127.0.0.1:46775",
+      "backend_binding": "Retained genuine Main read-only receipts and nine route/authority blobs independently verified equal to FE4044533; not a new current-readiness/runtime observation.",
+      "target": "Existing supplemental Recipes Site /zh-Hans/z/launch-recipes; q=rice&type=lists&language=en&language=ja. No new catalogue/account/data operation.",
+      "initial_source_tier": "bbe98 four-path source represented by exact a554611e9fafd7c649536cb988b6ff46782b8786 frontend. Actual1440/390 native retry exposes busy/status during300ms hold; keyboard Enter first remains a controlled503, second pointer retry forwards genuine Main200 with exact task. Root metadata desktop/recovered phone title/body agree; separate fresh phone failures retained.",
+      "final_source_tier": "Exact FE4044533: controlled gateway publication503 on a genuine selected Site yields initial503/no-store/retry-after5/localized SSR alert/heading/back/exact task at1440/390. Client refresh forwards actual retained Main publication200 and recovers same task; desktop genuine200 control passed.",
+      "controlled_fault_limit": "The injected publication503 is controlled gateway-fault evidence, not a naturally occurring backend refusal or a new genuine backend-success claim. All retained success/recovery200 responses are forwarded actual Main reads.",
+      "combined_run_failure": "d22fe9ee step7 remains failed on final390 genuine control dynamic import ERR_NETWORK_CHANGED, after both503/recovery and desktop control passed.",
+      "separate_phone_control": {
+        "job": "410605c4-9074-42d8-bd83-fb6b94a62ec9",
+        "pin": "4044533df70be9bc1141ce8b1752743a5398f05c",
+        "result": "passed: actual200 Recipes title/body, no browser errors; does not erase failed combined run"
+      },
+      "screenshots": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-six-path-source-review/visual-inspection.json",
+      "screenshots_viewed": "11 unique retained PNGs represent16 hash-identical listed capture entries across both handoffs, including every listed failed overlay; no recapture.",
+      "markup": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-six-path-source-review/markup-inspection.json",
+      "rows": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-six-path-source-review/runtime-row-summary.json",
+      "hash_verification": [
+        {
+          "name": "site-recovery-correction",
+          "manifestSha256": "443fe6226fd0785ea18fce1d7673843c70d5d186459d1db29ced588b70c064a7",
+          "verifiedFiles": 65,
+          "handoffSha256": "7796cde6b2afab712b8fb7781aaad6aa1fbf4ab6b07597a796ddf63b7df01275"
+        },
+        {
+          "name": "site-document-entry",
+          "manifestSha256": "900ebfc5ee99d260eaff7fc6006227860222a2dd530796bca2bc98a6d0276486",
+          "verifiedFiles": 53,
+          "handoffSha256": "c56009c3f287d3a2ef15ed27a8e2d78cf3295765f91b3c50e0416e8dbac7223c"
+        }
+      ]
+    },
+    "product_audit": {
+      "in_scope_class_surfaces": [
+        "Pre-shell native recovery across localized/status variants",
+        "Realm and standalone selected Site root publication",
+        "Whole-page Realm resolution/publication failures versus retained framed regions",
+        "Localized Site root/nested HTML entry and non-GET/non-HTML/RSC/unrelated controls"
+      ],
+      "evidence_limits": "Owner-level replacements and renderer seam are source regressions; retained actual document/native retry receipts provide their separate UI/HTTP tier. No new whole-Site/disclosure journey matrix or untouched-source approval.",
+      "preserved_history": "All35 previous cumulative fields unchanged, including original27/196a/startup/navigation/private/common/guard/shell/AT dispositions, missing historical targets, publication503-to-document200, preimplementation reds, phone import failures, original AT/card setup failures and prior borrower release/cleanup due G2831.",
+      "no_product_edits_or_landing": true,
+      "no_fixture_borrow_or_writes_or_processes_in_this_source_review": true,
+      "closure": "No original audit-class closure by worker; root judges unchanged original criteria and integrates exact source."
+    },
+    "report_validation": {
+      "status": "passed recorded report-only validation",
+      "job": "7ee41ca8-e299-490f-8ae7-effd89cc690e",
+      "commands": [
+        "task docs:check",
+        "task goal -- check"
+      ],
+      "docs": "13 tests passed; 259 Markdown files checked",
+      "goal_check_run": "run-iBaaig",
+      "goal": "AST and selected guard passed (1/45); no source workspace changed or brief-named tests",
+      "logs": [
+        ".temp/goal/jobs/7ee41ca8-e299-490f-8ae7-effd89cc690e.1.log",
+        ".temp/goal/jobs/7ee41ca8-e299-490f-8ae7-effd89cc690e.2.log"
+      ],
+      "limit": "Report-only checks; reused owner source/runtime results retain their original exact pins and failures."
+    },
+    "artifacts": {
+      "directory": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-six-path-source-review",
+      "source_review": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-six-path-source-review/source-review.json",
+      "source_review_sha256": "2a681c75042d3a4a2ef002699335befa43133b699f3b74edc071689d00116d80",
+      "manifest": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/site-six-path-source-review/artifact-manifest.json",
+      "manifest_sha256": "36e7dd6e6ddaefb46b4d0648093cef3246f791e97034ddfce326a5c323508282",
+      "count": 143
+    }
   }
 }

@@ -56,6 +56,7 @@ export function WikiSectionView({ wiki, locale, messages }: {
           {characters.map(character => <li key={character.reference}
             className="rounded-full border border-border/70 px-3 py-1 text-sm">
             <SummaryLink summary={character} unavailable={levels.unavailable} unnamed={levels.unnamed}
+              undisclosed={levels.nameNotShown}
               hrefFor={summary => entityHref(summary.reference)} /></li>)}
         </ul> : <p data-wiki-withheld className="text-muted-foreground text-sm">{t.wikiWithheld}</p>}
         <p className="text-muted-foreground text-xs">{t.wikiPosition}</p>

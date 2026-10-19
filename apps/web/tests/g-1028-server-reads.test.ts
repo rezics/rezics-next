@@ -1,5 +1,7 @@
 import { afterEach, expect, spyOn, test } from 'bun:test';
 import { createServer, type Server, type ServerResponse } from 'node:http';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   workAsyncStorage,
   type WorkStore,
@@ -16,7 +18,8 @@ import {
 import { mainApiWithToken } from '../features/api/main.ts';
 import { forwardToMain } from '../features/api/bff.ts';
 import { readAddress, type ResolvedAddress } from '../features/address/client.ts';
-import { resourceHref } from '../features/address/path.ts';
+import { resourceHref, spaceHref } from '../features/address/path.ts';
+import { localizedPath } from '../i18n/locale.ts';
 import { refreshTokens } from '../features/auth/account.ts';
 import { forgetServedTypes, readTypes } from '../features/catalogue/types-read.ts';
 import { servedTypes } from '../features/catalogue/type-fixtures.ts';
@@ -48,6 +51,124 @@ afterEach(() => {
   if (mainOrigin === undefined) delete process.env.MAIN_ORIGIN;
   else process.env.MAIN_ORIGIN = mainOrigin;
   forgetServedTypes();
+});
+
+async function workerEntry() {
+  // Vinext's virtual renderer exists only inside Vite. Substitute that external
+  // framework seam in this bundle; run the real entry and shared request owners.
+  const built = await Bun.build({
+    entrypoints: [fileURLToPath(new URL('../worker/index.ts', import.meta.url))], target: 'bun',
+    plugins: [{ name: 'worker-renderer-fixture', setup(build) {
+      build.onResolve({ filter: /^vinext\/server\/fetch-handler$/ }, () => ({
+        path: 'renderer', namespace: 'worker-renderer-fixture',
+      }));
+      build.onLoad({ filter: /.*/, namespace: 'worker-renderer-fixture' }, () => ({ loader: 'js',
+        contents: 'export default { fetch(request, env, context) { return context.render(request); } };',
+      }));
+      build.onResolve({ filter: /^\.\.?\// }, args => ({
+        path: resolve(args.resolveDir, args.path), external: true,
+      }));
+    } }],
+  });
+  if (!built.success) throw new Error(built.logs.join('\n'));
+  const module = await import(`data:text/javascript;base64,${Buffer.from(await built.outputs[0]!.text()).toString('base64')}`) as {
+    default: { fetch(request: Request, env: object, context: {
+      render(request: Request): Response | Promise<Response>;
+    }): Promise<Response> };
+  };
+  return module.default;
+}
+
+test('Worker Site documents wait for their late whole-page status at localized root and nested paths', async () => {
+  const worker = await workerEntry();
+  for (const [locale, tail] of [['zh-Hans', []], ['ja', ['contents']]] as const) {
+    const path = localizedPath(spaceHref('recipes', 'site', tail), locale);
+    const request = new Request(new URL(path + '?q=rice&language=en&language=ja', 'https://web.test'));
+    let release!: () => void;
+    const held = new Promise<void>(resolve => { release = resolve; });
+    let completed = false;
+    const pending = worker.fetch(request, {}, { render(incoming) {
+      expect(incoming).toBe(request);
+      expect(serverSignal()).toBe(request.signal);
+      return new Response(new ReadableStream<Uint8Array>({
+        start(controller) { controller.enqueue(new TextEncoder().encode('<html><body>Loading…')); },
+        async pull(controller) {
+          await held;
+          setServerDocumentStatus(503);
+          controller.enqueue(new TextEncoder().encode('<div role="alert">Retry</div></body></html>'));
+          controller.close();
+        },
+      }), { headers: { 'content-type': 'text/html', 'cache-control': 'public', 'set-cookie': 'session=renewed; HttpOnly' } });
+    } }).then(response => { completed = true; return response; });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const headersSentEarly = completed;
+    release();
+    const response = await pending;
+    expect(headersSentEarly).toBe(false);
+    expect(response.status).toBe(503);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('retry-after')).toBe('5');
+    expect(response.headers.get('set-cookie')).toBe('session=renewed; HttpOnly');
+    expect(await response.text()).toContain('role="alert"');
+  }
+});
+
+test('Worker Site status handling keeps healthy and optional reads successful and other responses streaming', async () => {
+  const worker = await workerEntry();
+  const site = localizedPath(spaceHref('recipes', 'site'), 'en');
+  globalThis.fetch = (async () => Response.json({ code: 'optional_metadata_unavailable' }, { status: 503 })) as unknown as typeof fetch;
+  const healthy = await worker.fetch(new Request(new URL(site, 'https://web.test')), {}, { async render() {
+    // An optional owner's refusal is not a whole-page status decision.
+    expect((await serverRead('https://main.test/v1/optional-metadata')).status).toBe(503);
+    return new Response('<h1>Recipes</h1>', { headers: { 'content-type': 'text/html', 'cache-control': 'private' } });
+  } });
+  expect(healthy.status).toBe(200);
+  expect(healthy.headers.get('cache-control')).toBe('private');
+  expect(healthy.headers.has('retry-after')).toBe(false);
+  expect(await healthy.text()).toBe('<h1>Recipes</h1>');
+  for (const [path, method, contentType] of [
+    [site, 'GET', 'text/x-component'], [site, 'POST', 'text/html'],
+    ['/en/discover', 'GET', 'text/html'], [spaceHref('recipes', 'site'), 'GET', 'text/html'],
+  ] as const) {
+    const response = new Response(new ReadableStream(), { headers: { 'content-type': contentType } });
+    const result = await worker.fetch(new Request(new URL(path, 'https://web.test'), { method }), {}, { render() {
+      setServerDocumentStatus(503);
+      return response;
+    } });
+    expect(result).toBe(response);
+    expect(result.status).toBe(200);
+    await result.body!.cancel();
+  }
+});
+
+test('Worker Site document holding preserves cancellation and the original deadline with localized recovery', async () => {
+  const worker = await workerEntry();
+  for (const reason of ['abort', 'deadline']) {
+    const controller = new AbortController();
+    const path = localizedPath(spaceHref('recipes', 'site'), 'zh-Hans') + '?q=rice&language=en&language=ja';
+    const request = new Request(new URL(path, 'https://web.test'), { signal: controller.signal });
+    let cancelled = false;
+    const initial = Date.now();
+    const clock = reason === 'deadline' ? spyOn(Date, 'now').mockReturnValue(initial) : undefined;
+    try {
+      const pending = worker.fetch(request, {}, { render() {
+        expect(serverSignal()).toBe(request.signal);
+        if (reason === 'deadline') clock!.mockReturnValue(initial + 15_001);
+        return new Response(new ReadableStream({ cancel() { cancelled = true; } }),
+          { headers: { 'content-type': 'text/html' } });
+      } });
+      if (reason === 'abort') controller.abort();
+      const response = await pending;
+      if (response.status !== 503) await response.body?.cancel();
+      expect(response.status).toBe(503);
+      expect(cancelled).toBe(true);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      const body = await response.text();
+      expect(body).toContain('lang="zh-Hans"');
+      expect(body).toContain('role="alert"');
+      expect(body).toContain(path.replaceAll('&', '&amp;'));
+    } finally { clock?.mockRestore(); }
+  }
 });
 
 test('request cancellation reaches sequential server reads and stops later work under one absolute deadline', async () => {

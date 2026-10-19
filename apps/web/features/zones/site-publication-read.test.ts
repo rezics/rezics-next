@@ -8,9 +8,13 @@ import type { RealmView } from '../realm/realm-page.tsx';
 import type { ZonePresentationRead } from '../realm/types.ts';
 import { fictionZone, zoneMessagesFor } from './fixtures.ts';
 import { messages } from '../realm/messages.ts';
-import { addressKey } from '../address/path.ts';
+import { addressKey, spaceHref } from '../address/path.ts';
+import { localizedPath } from '../../i18n/locale.ts';
 import { ZoneHomeContent } from '../zone-editor/home-content.tsx';
 import { ZoneFrame } from './zone-frame.tsx';
+import { serverDocumentResponse, withServerRequest } from '../api/server-read.ts';
+import { RealmUnavailable } from '../realm/states.tsx';
+import LocalizedLink from '../shell/localized-link.tsx';
 
 const zone = '00000000-0000-4000-8000-000000000701';
 const canonical = { prefix: '/z/' as const, key: zone, suffixSource: 'Publication B' };
@@ -27,6 +31,8 @@ const presentation = {
 } as unknown as ZonePresentationRead;
 let attached = true;
 let refused = false;
+let missing = false;
+let routeRefused = false;
 let routeReads = 0;
 const view = () => ({ kind: 'view', publication: presentation, presentation: presentation.presentation,
   slideMedia: presentation.slideMedia, mounts: presentation.navigation, context,
@@ -45,20 +51,24 @@ const restoreOriginalHeaders = replaceModule(import.meta.resolve('next/headers')
 
 const restoreReads = replaceModule(import.meta.resolve('../realm/read.ts'), reads, {
   resolveSite: async () => ({ kind: 'site', zone, realm: attached ? zone : null, address: { canonical } }),
+  resolveRealm: async () => view().realm,
   readZoneRoute: async () => {
     routeReads += 1;
+    if (routeRefused) return { ok: false, failure: 'unavailable' };
     return { ok: true, data: { kind: 'home', page: { document: fromPlainText('Publication A prose', 'blocks') } } };
   },
-  readCompletePresentation: async () => refused ? { ok: false, failure: 'unavailable' }
+  readCompletePresentation: async () => missing ? { ok: false, failure: 'missing' }
+    : refused ? { ok: false, failure: 'unavailable' }
     : { ok: true, data: presentation },
 });
 const restoreI18n = replaceModule(import.meta.resolve('../../i18n/server.ts'), i18n, {
   getMessages: async (namespace: string) => namespace === 'realm' ? messages : zoneMessagesFor('en'),
-  getTranslation: async () => ({ t: {} }),
+  getTranslation: async () => ({ t: messages }),
 });
 const frames = { ...(await import('../realm/realm-page.tsx')) };
 const restoreFrames = replaceModule(import.meta.resolve('../realm/realm-page.tsx'), frames, {
-  loadRealmView: async () => refused ? { kind: 'unavailable', failure: 'unavailable' } : view(),
+  loadRealmView: async () => missing ? { kind: 'missing' }
+    : refused ? { kind: 'unavailable', failure: 'unavailable' } : view(),
 });
 afterAll(async () => {
   restoreFrames();
@@ -66,7 +76,7 @@ afterAll(async () => {
   restoreReads();
   restoreOriginalHeaders();
 });
-const { ZoneSiteRoute, StandaloneZoneSiteFrame } = await import('./site-route.tsx');
+const { ZoneSiteRoute, StandaloneZoneSiteFrame, zoneSiteMetadata } = await import('./site-route.tsx');
 
 function find(node: ReactNode, type: unknown): ReactElement<Record<string, unknown>> | null {
   if (Array.isArray(node)) return node.map(child => find(child, type)).find(Boolean) ?? null;
@@ -85,7 +95,66 @@ test('both public frame boundaries retain the 51st link from the complete respon
     expect(site.links.at(-1)?.href).toContain('/b-50');
   }
 });
-beforeEach(() => { routeReads = 0; refused = false; });
+beforeEach(() => { routeReads = 0; refused = false; missing = false; routeRefused = false; });
+
+test('root metadata selects the same complete publication as the home, without an unused route prerequisite', async () => {
+  for (const realm of [true, false]) {
+    attached = realm;
+    routeRefused = true;
+    const props = { params: Promise.resolve({ locale: 'en', space: zone }), searchParams: Promise.resolve({}) };
+    const metadata = await zoneSiteMetadata(props);
+    const result = await ZoneSiteRoute(props);
+    expect(metadata.title).toBe('Publication B');
+    expect(find(result, ZoneHomeContent)?.props.page).toBe(presentation.home);
+    expect(routeReads).toBe(0);
+    refused = true;
+    expect((await zoneSiteMetadata(props)).title).toBe(messages.unavailableTitle);
+    refused = false;
+  }
+});
+
+test('whole-home publication failure determines the document status, while a failed framed region stays local', async () => {
+  const request = () => new Request(new URL(`${localizedPath(spaceHref(context.ref, 'site'), 'en')}?q=rice&language=en&language=ja`, 'https://web.test'));
+  const props = (path?: string[]) => ({ params: Promise.resolve({ locale: 'en', space: zone, path }),
+    searchParams: Promise.resolve({ q: 'rice', language: ['en', 'ja'] }) });
+  for (const realm of [true, false]) {
+    attached = realm;
+    refused = true;
+    await withServerRequest(request(), async () => {
+      const selected = await ZoneSiteRoute(props());
+      // Finish the selected server recovery view without invoking its client child.
+      const result = realm && isValidElement(selected)
+        ? (selected.type as (props: unknown) => ReactNode)(selected.props) : selected;
+      expect(find(result, ZoneHomeContent)).toBeNull();
+      const response = await serverDocumentResponse(request(), new Response('render completed', {
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }));
+      expect(response.status).toBe(503);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      expect(response.headers.get('retry-after')).toBe('5');
+      if (realm) {
+        expect(find(result, RealmUnavailable)).not.toBeNull();
+        expect(find(result, LocalizedLink)?.props.href).toBe('/discover');
+      }
+    });
+  }
+  attached = true;
+  refused = false;
+  routeRefused = true;
+  await withServerRequest(request(), async () => {
+    const result = await ZoneSiteRoute(props(['mount']));
+    expect(find(result, RealmUnavailable)).toBeNull();
+    const response = await serverDocumentResponse(request(), new Response('frame and failed region', {
+      headers: { 'content-type': 'text/html' },
+    }));
+    expect(response.status).toBe(200);
+    expect(response.headers.has('retry-after')).toBe(false);
+  });
+  missing = true;
+  await withServerRequest(request(), async () => {
+    await expect(ZoneSiteRoute(props())).rejects.toThrow('NEXT_HTTP_ERROR_FALLBACK;404');
+  });
+});
 
 for (const realm of [true, false]) {
   test(`the ${realm ? 'Realm' : 'standalone'} home retains one complete presentation selection`, async () => {

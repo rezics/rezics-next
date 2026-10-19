@@ -8864,5 +8864,758 @@
       ],
       "limits": "Report-only checks; no product types, product tests, browser stories or native assertions were executed by this checkpoint."
     }
+  },
+  "boundedIdentityNameConsumerFirstReview": {
+    "observedAt": "2026-10-19T14:59:35.028670+00:00",
+    "reviewer": {
+      "account": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independent": true,
+      "delegation": false,
+      "fallback": false
+    },
+    "authority": "One first source review of exactly seven originally deferred G-2785 consumer/test paths on the immutable reviewed context. No second review of the approved 72 sources, StoryRoute seam, metadata paths, auth producers, other navigation/loading files, or earlier Work/header/footer source. Normal integration and original runtime acceptance remain manager-owned.",
+    "priorReport": {
+      "commit": "65edd5a09daf80db26bba3df321318f89acc0d92",
+      "bytes": 615018,
+      "sha256": "a414fc520829412e8d861837080dbb2d74d5531908a1ef6b981d242199c02d66",
+      "preservedTopLevelFields": [
+        "format",
+        "goal",
+        "worker",
+        "observedAt",
+        "reviewer",
+        "disposition",
+        "acceptance",
+        "pins",
+        "scope",
+        "acceptanceReference",
+        "findings",
+        "sourceReviewObservations",
+        "checksActuallyExecuted",
+        "proofReuse",
+        "limitations",
+        "managerNext",
+        "originalReviewCheckpoint",
+        "finalCandidateCheckpoint",
+        "finalCandidateResolutionCheckpoint",
+        "boundedActionGroupCheckpoint",
+        "boundedSourceFooterCheckpoint",
+        "boundedCreditsCookCheckpoint",
+        "boundedBookCoverCheckpoint",
+        "boundedBookRetryCorrectionCheckpoint",
+        "boundedD1003NavigationCorrectionCheckpoint",
+        "boundedD1003BackQueryAssertionCheckpoint",
+        "boundedNonWorkReleaseFirstSourceCheckpoint",
+        "storyRefreshSeamFirstReview",
+        "readerMetadataFirstReview"
+      ]
+    },
+    "manifest": {
+      "originalPath": ".temp/audit-remediation-20261019/two-hour-sprint/site-G2785-seven-source-first-review/manifest.json",
+      "path": ".temp/goal/identity-name-consumer-first-review/manifest.json",
+      "bytes": 72318,
+      "sha256": "b8d1c0effec6bbc973170917ea8112a1dac99ebb988789e7162a7807dd519a3c",
+      "stagingNote": "Read the explicitly selected retained manager artifact. The staged .temp/ref/manifest.json remains the earlier non-Work manifest and was not overwritten."
+    },
+    "pins": {
+      "observedMain": "a8e44a3372a7ed61a0d0124b5d5667bf7ddf9502",
+      "context": "9db32b094a743aaa02167c90c5c55214486638aa",
+      "contextTree": "022f574eeaecae436a099fac51f99400a4cb02b1",
+      "reviewInput": "fb2f86b4119e8edee1f0c7bdcccac70aa871105e",
+      "reviewInputTree": "20f57a9c7817b87368ecf2fd99e9914560df6cd4",
+      "contextSource72Candidate": "65c4e998ed85c98da89785fbc91be03884802475",
+      "contextSource72Base": "7ca18eef390b8dbd4f0d65e78a11c64aa2e4a835",
+      "source72IndependentReport": "1ccfd0c2ac25fdf567465b5ed9081645045097ae",
+      "approvedSeamReport": "d2c64515f7cbdcbfcea47fd8de8db9f89569028a",
+      "latestFourPathReport": "65edd5a09daf80db26bba3df321318f89acc0d92",
+      "authoredSource": "f4d0226f39526147eaeb86f99a4e0502b9ca8379",
+      "authoredParent": "8505eef729f0014da62651fc041894f14c0af4a9",
+      "oldComposedCandidate": "22ff8d9442c103e08c412cdba5b24ced10c4a3c6"
+    },
+    "sourceDatabase": {
+      "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/site-G2785-seven-source-first-review/candidate.git",
+      "access": "Read-only git show/diff/rev-parse/cat-file; no ref, index, config or source writes"
+    },
+    "scope": {
+      "changedPaths": 7,
+      "addedLines": 81,
+      "removedLines": 5,
+      "wholeAuthoredTargets": 6,
+      "currentMainConnectionsLineReplacements": 5,
+      "sourceRows": [
+        {
+          "path": "apps/web/features/entity-page/identity-views.tsx",
+          "before": {
+            "blob": "7af30c189fb890a8c03eafb1daaf3031367796a8",
+            "sha256": "1967d9d5c47049a88d47d7b391a1b02b093f00f0f0e663cbe177a92c58e6cb94",
+            "bytes": 8510
+          },
+          "target": {
+            "blob": "338fc7f4de8f00c3ed5538723fa01380cb75f1c6",
+            "sha256": "42336a3df6fe1dd8904161bb592b6ad93d8f46755c7548401358d772aeeb122a",
+            "bytes": 8639
+          },
+          "authoredF4": {
+            "blob": "338fc7f4de8f00c3ed5538723fa01380cb75f1c6",
+            "sha256": "42336a3df6fe1dd8904161bb592b6ad93d8f46755c7548401358d772aeeb122a",
+            "bytes": 8639
+          },
+          "old22ff": {
+            "blob": "338fc7f4de8f00c3ed5538723fa01380cb75f1c6",
+            "sha256": "42336a3df6fe1dd8904161bb592b6ad93d8f46755c7548401358d772aeeb122a",
+            "bytes": 8639
+          },
+          "exactAuthoredWholeBlob": true,
+          "composition": "Exact authored f4d target, also byte-identical to old22ff target."
+        },
+        {
+          "path": "apps/web/features/work-levels/connections.tsx",
+          "before": {
+            "blob": "7a6254719250e53ba93893e76d272d71476ec1ea",
+            "sha256": "ec5e5ab950da93863620ec1a0a32f841a42c238eafc758e9b0f1314da81eb082",
+            "bytes": 19485
+          },
+          "target": {
+            "blob": "d3224a1144ebaf9d77ed01001ddbbc27ea35c848",
+            "sha256": "db3b4860738d7d543190515855c874934106da91295be2d330e6e9137faa209b",
+            "bytes": 19598
+          },
+          "authoredF4": {
+            "blob": "9d75414d7c2e40ab7494dc0ac2509f7c8bb11b76",
+            "sha256": "25932eb6b6521ad1bfd53430de77a79beacf03580179c32acbd0255e8951703b",
+            "bytes": 19529
+          },
+          "old22ff": {
+            "blob": "0ae27b5f36275eea770bf776af0ac32266759790",
+            "sha256": "6eb91636d94ef4796deab6dc4945d5295ec4e6b0b41dce67f0952ef5d7fbd7a3",
+            "bytes": 16670
+          },
+          "exactAuthoredWholeBlob": false,
+          "composition": "Five exact original f4d label lines applied to unchanged current Main source; full current Collection page and all refusal/retry/cursor handling retained."
+        },
+        {
+          "path": "apps/web/features/work-levels/name-recovery.test.ts",
+          "before": {
+            "blob": null,
+            "sha256": null,
+            "bytes": null
+          },
+          "target": {
+            "blob": "afe5d470580e789c3e46dcc88999a7b1f760498d",
+            "sha256": "b8f73533ba4d058a283aa71e6a882c98a7a1ca3832436f98edc9f5e5a864d940",
+            "bytes": 2545
+          },
+          "authoredF4": {
+            "blob": "afe5d470580e789c3e46dcc88999a7b1f760498d",
+            "sha256": "b8f73533ba4d058a283aa71e6a882c98a7a1ca3832436f98edc9f5e5a864d940",
+            "bytes": 2545
+          },
+          "old22ff": {
+            "blob": "afe5d470580e789c3e46dcc88999a7b1f760498d",
+            "sha256": "b8f73533ba4d058a283aa71e6a882c98a7a1ca3832436f98edc9f5e5a864d940",
+            "bytes": 2545
+          },
+          "exactAuthoredWholeBlob": true,
+          "composition": "Exact authored f4d target, also byte-identical to old22ff target."
+        },
+        {
+          "path": "apps/web/features/work-levels/name-states.test.tsx",
+          "before": {
+            "blob": null,
+            "sha256": null,
+            "bytes": null
+          },
+          "target": {
+            "blob": "c688409343ff4507f933de57ec208ce5e922f003",
+            "sha256": "336f18691a565489bbe81c567036634580ea90018d6b8ec89f8c7c65d771ba63",
+            "bytes": 1754
+          },
+          "authoredF4": {
+            "blob": "c688409343ff4507f933de57ec208ce5e922f003",
+            "sha256": "336f18691a565489bbe81c567036634580ea90018d6b8ec89f8c7c65d771ba63",
+            "bytes": 1754
+          },
+          "old22ff": {
+            "blob": "c688409343ff4507f933de57ec208ce5e922f003",
+            "sha256": "336f18691a565489bbe81c567036634580ea90018d6b8ec89f8c7c65d771ba63",
+            "bytes": 1754
+          },
+          "exactAuthoredWholeBlob": true,
+          "composition": "Exact authored f4d target, also byte-identical to old22ff target."
+        },
+        {
+          "path": "apps/web/features/work-levels/parts.tsx",
+          "before": {
+            "blob": "7518ade5126cc7067dd0dd6ed5fbfc4840a14eac",
+            "sha256": "f71862c2cbc0cb856f6c3d4da1673a30518a911d69a4513196894fab379ac5d8",
+            "bytes": 8680
+          },
+          "target": {
+            "blob": "bfa135c8f4c7e97b6ec0b67736f261e47125d6a2",
+            "sha256": "5af267fc7ee919f5888cb44aa37ee4ec20ef1cc7f06a201947439b3b5bf52858",
+            "bytes": 8764
+          },
+          "authoredF4": {
+            "blob": "bfa135c8f4c7e97b6ec0b67736f261e47125d6a2",
+            "sha256": "5af267fc7ee919f5888cb44aa37ee4ec20ef1cc7f06a201947439b3b5bf52858",
+            "bytes": 8764
+          },
+          "old22ff": {
+            "blob": "bfa135c8f4c7e97b6ec0b67736f261e47125d6a2",
+            "sha256": "5af267fc7ee919f5888cb44aa37ee4ec20ef1cc7f06a201947439b3b5bf52858",
+            "bytes": 8764
+          },
+          "exactAuthoredWholeBlob": true,
+          "composition": "Exact authored f4d target, also byte-identical to old22ff target."
+        },
+        {
+          "path": "apps/web/features/work-levels/previews.tsx",
+          "before": {
+            "blob": "eaa403ff51d5ff2e41a414f7719ab5c749d38a17",
+            "sha256": "895f14435c004c6a1d5da6f66a2be75d7068245ae74c1c8e707d20919aa52a60",
+            "bytes": 8090
+          },
+          "target": {
+            "blob": "aeb11e78c774a6d4cf6c4ade3c177888a5cad1fd",
+            "sha256": "d5de5a427f34e4f582bef42aae65cb882537f508995bff6b4f23e931993d53b0",
+            "bytes": 8137
+          },
+          "authoredF4": {
+            "blob": "aeb11e78c774a6d4cf6c4ade3c177888a5cad1fd",
+            "sha256": "d5de5a427f34e4f582bef42aae65cb882537f508995bff6b4f23e931993d53b0",
+            "bytes": 8137
+          },
+          "old22ff": {
+            "blob": "aeb11e78c774a6d4cf6c4ade3c177888a5cad1fd",
+            "sha256": "d5de5a427f34e4f582bef42aae65cb882537f508995bff6b4f23e931993d53b0",
+            "bytes": 8137
+          },
+          "exactAuthoredWholeBlob": true,
+          "composition": "Exact authored f4d target, also byte-identical to old22ff target."
+        },
+        {
+          "path": "apps/web/features/work-page/wiki.tsx",
+          "before": {
+            "blob": "3216389282d8a605a18acb953ed9db6fbda7c0f2",
+            "sha256": "5cbcaf3bfe95eddc2803ee970c007c84fd04bf2e045ece3a4ed6d06a3a6716ce",
+            "bytes": 4167
+          },
+          "target": {
+            "blob": "c2e03cb1f613f328907d71f79f8b2636a1e065d7",
+            "sha256": "7d1d20780501930e89ba21e0ab331f7b7c7fbbf5347ecfb29b65c08cd4edb9fe",
+            "bytes": 4215
+          },
+          "authoredF4": {
+            "blob": "c2e03cb1f613f328907d71f79f8b2636a1e065d7",
+            "sha256": "7d1d20780501930e89ba21e0ab331f7b7c7fbbf5347ecfb29b65c08cd4edb9fe",
+            "bytes": 4215
+          },
+          "old22ff": {
+            "blob": "c2e03cb1f613f328907d71f79f8b2636a1e065d7",
+            "sha256": "7d1d20780501930e89ba21e0ab331f7b7c7fbbf5347ecfb29b65c08cd4edb9fe",
+            "bytes": 4215
+          },
+          "exactAuthoredWholeBlob": true,
+          "composition": "Exact authored f4d target, also byte-identical to old22ff target."
+        }
+      ],
+      "allRowsIndependentlyHashVerified": true
+    },
+    "patches": [
+      {
+        "path": ".temp/goal/identity-name-consumer-first-review/seven-source-on-reviewed-context.patch",
+        "bytes": 12480,
+        "sha256": "fe92aa4e8c115b52d0e772b8fbe2cfc47e65c8f695deeaf8a42db58347c89cac"
+      },
+      {
+        "path": ".temp/goal/identity-name-consumer-first-review/original-five-connections-hunks.patch",
+        "bytes": 2739,
+        "sha256": "f6f0d648a2780f28aa0c814797c21dc93de318b1a9dd5f4fc7c6212a3747f3ef"
+      }
+    ],
+    "acceptanceReference": {
+      "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-G2785-seven-source-first-review/original-acceptance.json",
+      "sha256": "fea772849edc36ddaeb2dc49cb6cc1a19f871ffaee1fa5d387b78beef60bf2ba",
+      "bytes": 4687,
+      "selected": [
+        "A08/assertion-1 name-state distinctions",
+        "A08/assertion-2 known identity and useful sibling/link preservation"
+      ],
+      "originalBytesUnchanged": true,
+      "limits": "The retained original record also includes D4-007/D4-008 and broader A08 runtime criteria. This seven-source review neither changes those assertions nor claims those additional journeys."
+    },
+    "inspectedDependencies": [
+      {
+        "path": "apps/web/features/work-levels/names.tsx",
+        "pin": "fb2f86b4119e8edee1f0c7bdcccac70aa871105e",
+        "blob": "7ded5465d2976547628ae4ac7dd9c9ebcb423eb1",
+        "sha256": "8945a38c10eb1bef3dad0e6ffb07ea6791f0db6783cd6e357c79f94df7a76615",
+        "inspection": "Read the approved SummaryLink and NameLink interfaces/branches: missing or unavailable-read is a nonlink unavailable span; supplied unavailable summary is a nonlink undisclosed span; only an available summary can use a supplied native destination, with LocalizedText or genuinely unnamed fallback.",
+        "originalDeltaRereviewed": false
+      },
+      {
+        "path": "apps/web/features/work-levels/types.ts",
+        "pin": "fb2f86b4119e8edee1f0c7bdcccac70aa871105e",
+        "blob": "22a62804c79bb7c90bcfeea2f58c3d3f65b9f4f2",
+        "sha256": "be954940d68962ccf2bcd1a4f8f053ce31df10945095f782431055b6be80c0e8",
+        "inspection": "Read Summary, NameSummary and Names. The existing unavailable-read sentinel distinguishes a read failure or omitted response from a supplied unavailable/undisclosed summary.",
+        "originalDeltaRereviewed": false
+      },
+      {
+        "path": "apps/web/features/work-levels/messages.ts",
+        "pin": "fb2f86b4119e8edee1f0c7bdcccac70aa871105e",
+        "blob": "41dfdc012f544ff38bc63ecff63ef41e52f5ccc1",
+        "sha256": "4684552b006192413145c69e5c9a28239b620999ee0e0b1d4178cf1905a4bda9",
+        "inspection": "Read existing unavailable, unnamed and nameNotShown message keys; consumers use the established distinct labels.",
+        "originalDeltaRereviewed": false
+      },
+      {
+        "path": "apps/web/features/work-page/anime-relations-recorded-page.ts",
+        "pin": "fb2f86b4119e8edee1f0c7bdcccac70aa871105e",
+        "blob": "ebdee2f8f39ae131af58cfebe86285d5d214e3e6",
+        "sha256": "e8a07cf6291c4af76aeb319b06739f81fa59138f0ad1b168d3608165759c1dbc",
+        "inspection": "Read namesOf/readNames only as the approved producer contract. Unique sorted resources are batched at 64 with the supplied position and actingSubject; each requested resource starts unavailable-read, successful matching response rows replace it, and successful sibling batches survive a failed batch. A fresh call retries the same inputs.",
+        "originalDeltaRereviewed": false
+      },
+      {
+        "path": "apps/web/features/work-levels/relation-rows.ts",
+        "pin": "fb2f86b4119e8edee1f0c7bdcccac70aa871105e",
+        "blob": "bf23c121a263035f726786aaeb5c0d4c59db27d9",
+        "sha256": "91c210fce603439c7363d0b3743cbeb84c8f73d10c7dbd253d5b5823c175453a",
+        "inspection": "Read RelationTarget and participantTarget: actual resource references retain their supplied summary or null; externally supplied authors retain the external target; withheld targets remain distinct from missing resource-summary reads.",
+        "originalDeltaRereviewed": false
+      },
+      {
+        "path": "apps/web/features/entity-page/views.tsx",
+        "pin": "fb2f86b4119e8edee1f0c7bdcccac70aa871105e",
+        "blob": "c8b3084dd8c531bc9f9a710d4ddfe87266cff902",
+        "sha256": "5d91d3f55484112f4f77d9f7552c200e847332fb1f4e8d0b2cf20a62f9ea7ebc",
+        "inspection": "Read summaryHref material interface: only an available summary with a supplied base/native address gets the existing owner hrefFor destination. No label change fabricates a destination.",
+        "originalDeltaRereviewed": false
+      },
+      {
+        "path": "apps/web/features/entity-page/messages.ts",
+        "pin": "fb2f86b4119e8edee1f0c7bdcccac70aa871105e",
+        "blob": "20a6f5b669c3883624c8e608f569f4d86150369e",
+        "sha256": "69aca46f7d87db73c68a1f23618f47d2dc3b68adec412b2b01929d581fe8a32c",
+        "inspection": "Read established entity labels, including nameNotShown, unnamed and unavailable, used by the three identity-view integrations.",
+        "originalDeltaRereviewed": false
+      },
+      {
+        "path": "apps/web/features/work-levels/fixtures.ts",
+        "pin": "fb2f86b4119e8edee1f0c7bdcccac70aa871105e",
+        "blob": "ce787e0dfd24f603c9dd1b93015271f48e310710",
+        "sha256": "77333337aeaaf3da24dc165f6a4cdc16478abeeb19df02e2ea0f2e623b8cb0cc",
+        "inspection": "Read the existing iri and summary fixtures needed to assess the new controlled tests, including stable padded resource IDs and native summary shape.",
+        "originalDeltaRereviewed": false
+      },
+      {
+        "path": "packages/ui/src/components/localized-text.tsx",
+        "pin": "fb2f86b4119e8edee1f0c7bdcccac70aa871105e",
+        "blob": "69fdb0bbe59639e14ee1903afc7d3349c114731d",
+        "sha256": "28a608e6bfa06d58417f2deff20e50020f5a764df5ef3a3309dcfc897eb16d15",
+        "inspection": "Read LocalizedText: supplied text.language, text.direction and text.value are retained using the existing element/default bdi; the changed label props do not replace known content with UI-locale text.",
+        "originalDeltaRereviewed": false
+      }
+    ],
+    "sourceDispositions": [
+      {
+        "path": "apps/web/features/entity-page/identity-views.tsx",
+        "verdict": "APPROVE",
+        "changedSurfaces": [
+          "member summary at line 100",
+          "applicability summary at line 125",
+          "identity hub at line 184"
+        ],
+        "reason": "All three SummaryLink callers pass the existing nameNotShown label explicitly. Existing summary/base/query/href ownership, avatars, ratings, context, continuation and known localized name rendering remain byte-identical outside these props."
+      },
+      {
+        "path": "apps/web/features/work-levels/connections.tsx",
+        "verdict": "APPROVE",
+        "changedSurfaces": [
+          "PublicCollection SummaryLink at line 52",
+          "withheld Participant at line 77",
+          "resource Participant SummaryLink at line 88",
+          "Members NameLink at line 239",
+          "Members parts NameLink at line 246"
+        ],
+        "reason": "The Collection genuinely unnamed label is corrected to unnamed and the undisclosed label to nameNotShown. The withheld participant now says nameNotShown; a known resource whose summary is omitted/failed still reaches SummaryLink unavailable instead. Participant/Members resource consumers pass the distinct undisclosed label. Existing external author links, native resource destinations, relation/credit data, current URL/query, restartHref={restart}, first/restart and next cursor behavior are preserved."
+      },
+      {
+        "path": "apps/web/features/work-levels/parts.tsx",
+        "verdict": "APPROVE",
+        "changedSurfaces": [
+          "WholesLines NameLink at line 58",
+          "PartRow NameLink at line 144"
+        ],
+        "reason": "Both callers pass nameNotShown for supplied undisclosed summaries while retaining unavailable for failed reads and unnamed for actual available empty names. Supplied identity, language/direction, order, grouping, inclusion/evidence, restart/cursor behavior and RegionFailure remain unchanged."
+      },
+      {
+        "path": "apps/web/features/work-levels/previews.tsx",
+        "verdict": "APPROVE",
+        "changedSurfaces": [
+          "PartsPreview NameLink at line 96",
+          "existing shared WholesLines caller"
+        ],
+        "reason": "The direct preview caller now supplies nameNotShown; the unchanged wholes preview consumes the corrected shared WholesLines. Existing typed errors, native hrefs and all-parts navigation remain intact."
+      },
+      {
+        "path": "apps/web/features/work-page/wiki.tsx",
+        "verdict": "APPROVE",
+        "changedSurfaces": [
+          "character SummaryLink at line 59"
+        ],
+        "reason": "The existing character summary integration now passes levels.nameNotShown. Current typed read/refusal behavior, Zone/character destinations, context and known localized content remain unchanged. The pre-existing sample limit is not selected or rewritten."
+      },
+      {
+        "path": "apps/web/features/work-levels/name-recovery.test.ts",
+        "verdict": "APPROVE",
+        "changedSurfaces": [
+          "130-resource partial-batch retry case",
+          "known/undisclosed/omitted resource case"
+        ],
+        "reason": "Both authored tests were read in full. The first exercises a middle-batch 503 with usable first/last batches, then a fresh same-input retry, and checks exact resource batches, selected-occurrence position and actingSubject. The second preserves the supplied known and unavailable/undisclosed objects while marking an omitted row unavailable-read. These are controlled Main-client tests, not real router, backend or acting-authority acceptance."
+      },
+      {
+        "path": "apps/web/features/work-levels/name-states.test.tsx",
+        "verdict": "APPROVE",
+        "changedSurfaces": [
+          "SSR state/nonlink and successful sibling case"
+        ],
+        "reason": "The complete authored test distinguishes omitted/unavailable-read, supplied unavailable/undisclosed and available empty-name states. It checks no fabricated href for failed/undisclosed names and retains a known sibling name/link. The genuine unnamed case may use its supplied native destination. SSR/provider fixtures do not establish native navigation or visible in-place retry."
+      }
+    ],
+    "crossSurfacePrinciple": {
+      "inventory": "All 11 SummaryLink/NameLink calls across the five changed consumer files were inspected, together with the changed withheld Participant span. Every selected caller now supplies the distinct undisclosed label; known names continue through the existing localized content and owner destination interfaces.",
+      "unavailableRead": "Missing/omitted summary and explicit unavailable-read are nonlink unavailable states; they are not converted into a genuine unnamed resource.",
+      "undisclosed": "A supplied unavailable summary or withheld participant says nameNotShown and exposes no fabricated summary destination. Existing ancillary relation/navigation links retain their own unchanged owners.",
+      "genuinelyUnnamed": "Only an available summary with no name uses the unnamed label, retaining a real supplied native destination when the existing owner can form one.",
+      "partialBatch": "The approved producer and the new authored tests preserve successful siblings and the exact supplied resource/position/actingSubject tuple. The integration changes only label props, not producer policy, auth selection or retry callbacks."
+    },
+    "connectionsComposition": {
+      "old22ffSelected": "Four Participant/Members label lines only. Its historical source base had no PublicCollectionPage.",
+      "currentMain": "PublicCollectionPage exists, including current restartHref={restart}, navigation/cursor behavior and reader refusal handling.",
+      "selectedHere": "The four old22ff label lines plus the fifth original f4d PublicCollection SummaryLink label line, now applicable to the existing current Main page.",
+      "fifthExactOriginalLine": {
+        "before": "unnamed={t.unavailable}",
+        "after": "unnamed={t.unnamed} undisclosed={t.nameNotShown}"
+      },
+      "allOtherCurrentMainBytesUnchanged": true,
+      "newAuthoredBehavior": false,
+      "noWholeOldBlobRestore": true,
+      "allFiveLinesRequireFirstReview": true,
+      "independentlyVerified": true,
+      "contextAndFrozenMainBlob": "7a6254719250e53ba93893e76d272d71476ec1ea",
+      "targetBlob": "d3224a1144ebaf9d77ed01001ddbbc27ea35c848",
+      "verification": "Compared the complete current Main/context file to target: exactly five old/new lines differ, and each pair is present in the original f4d parent diff. The PublicCollection line is the fifth original authored line absent from old22ff, whose base lacked this page. No old whole connections blob is selected."
+    },
+    "reusedSourceDispositions": {
+      "approved72": {
+        "candidate": "65c4e998ed85c98da89785fbc91be03884802475",
+        "report": "1ccfd0c2ac25fdf567465b5ed9081645045097ae",
+        "paths": 72,
+        "allContextAndTargetBlobsEqualSelectedApprovedBlobs": true,
+        "newDeltaReview": false,
+        "scope": "Reuse the completed 58-source review and 14 exact earlier-source reuses; no blanket approval beyond those exact dispositions."
+      },
+      "seam": {
+        "report": "d2c64515f7cbdcbfcea47fd8de8db9f89569028a",
+        "path": "apps/web/.storybook/next-navigation.ts",
+        "blob": "f2d56ad4c2d45b12782c1b281a4a87f674bd5e03",
+        "contextAndTargetEqual": true,
+        "newDeltaReview": false
+      },
+      "authProducers": [
+        {
+          "path": "apps/web/features/auth/session.ts",
+          "report": "fa6e2e5be7f82faf7cbc0c0b4480d0d0fdab8d48",
+          "approvedBlob": "07a2100944c05da93f6f44e729aadb03c082b39f",
+          "candidateBlob": "07a2100944c05da93f6f44e729aadb03c082b39f",
+          "scope": "Exact producer/source bytes only; not approval of the full composed slice.",
+          "main": {
+            "blob": "07a2100944c05da93f6f44e729aadb03c082b39f",
+            "sha256": "cdcf8408d77f2803b1fb6910a1a2af7ccfa536f4f7ea497b7372edb7925bbaaf",
+            "bytes": 6478
+          },
+          "mainEqualsApproved": true,
+          "mainAtAssembly": {
+            "blob": "07a2100944c05da93f6f44e729aadb03c082b39f",
+            "sha256": "cdcf8408d77f2803b1fb6910a1a2af7ccfa536f4f7ea497b7372edb7925bbaaf",
+            "bytes": 6478
+          },
+          "targetAtAssembly": {
+            "blob": "07a2100944c05da93f6f44e729aadb03c082b39f",
+            "sha256": "cdcf8408d77f2803b1fb6910a1a2af7ccfa536f4f7ea497b7372edb7925bbaaf",
+            "bytes": 6478
+          }
+        },
+        {
+          "path": "apps/web/features/auth/session-recovery.test.ts",
+          "report": "fa6e2e5be7f82faf7cbc0c0b4480d0d0fdab8d48",
+          "approvedBlob": "711c89bfa00fef5fd5004db3628a18c0f2fda6d1",
+          "candidateBlob": "711c89bfa00fef5fd5004db3628a18c0f2fda6d1",
+          "scope": "Exact producer/source bytes only; not approval of the full composed slice.",
+          "main": {
+            "blob": "711c89bfa00fef5fd5004db3628a18c0f2fda6d1",
+            "sha256": "00bc5bb30f85ef81a8ddb9b3957ec7c7ec5f758edeaf0b8cb4774b702e5dbc1d",
+            "bytes": 3496
+          },
+          "mainEqualsApproved": true,
+          "mainAtAssembly": {
+            "blob": "711c89bfa00fef5fd5004db3628a18c0f2fda6d1",
+            "sha256": "00bc5bb30f85ef81a8ddb9b3957ec7c7ec5f758edeaf0b8cb4774b702e5dbc1d",
+            "bytes": 3496
+          },
+          "targetAtAssembly": {
+            "blob": "711c89bfa00fef5fd5004db3628a18c0f2fda6d1",
+            "sha256": "00bc5bb30f85ef81a8ddb9b3957ec7c7ec5f758edeaf0b8cb4774b702e5dbc1d",
+            "bytes": 3496
+          }
+        },
+        {
+          "path": "apps/web/features/auth/acting-identity.ts",
+          "report": "e49771d0c1e7daac604cf4d158fd508116198eea",
+          "approvedBlob": "9251b2dcfde8da781b6b78a664cf87cae248298f",
+          "candidateBlob": "9251b2dcfde8da781b6b78a664cf87cae248298f",
+          "scope": "Exact producer/source bytes only; not approval of the full composed slice.",
+          "main": {
+            "blob": "9251b2dcfde8da781b6b78a664cf87cae248298f",
+            "sha256": "fdd590a5435d69e0fa9e07f21ef59166b6d7a2201a4a72164ce1e93cf8c63604",
+            "bytes": 4800
+          },
+          "mainEqualsApproved": true,
+          "mainAtAssembly": {
+            "blob": "9251b2dcfde8da781b6b78a664cf87cae248298f",
+            "sha256": "fdd590a5435d69e0fa9e07f21ef59166b6d7a2201a4a72164ce1e93cf8c63604",
+            "bytes": 4800
+          },
+          "targetAtAssembly": {
+            "blob": "9251b2dcfde8da781b6b78a664cf87cae248298f",
+            "sha256": "fdd590a5435d69e0fa9e07f21ef59166b6d7a2201a4a72164ce1e93cf8c63604",
+            "bytes": 4800
+          }
+        }
+      ],
+      "experience": [
+        {
+          "path": "apps/web/features/entity-page/experience.ts",
+          "main": {
+            "blob": "22ef2165b46470fd54d3cadef98c3f2eb321ece1",
+            "sha256": "5aa0fe7208563c015a9c1aff1d5b4742e0f315390b596c0a555fc727881d06c9",
+            "bytes": 2540
+          },
+          "target": {
+            "blob": "22ef2165b46470fd54d3cadef98c3f2eb321ece1",
+            "sha256": "5aa0fe7208563c015a9c1aff1d5b4742e0f315390b596c0a555fc727881d06c9",
+            "bytes": 2540
+          },
+          "selection": "Unchanged current Main; no f4d historical replacement."
+        },
+        {
+          "path": "apps/web/features/entity-page/experience.test.ts",
+          "main": {
+            "blob": "a6e38569102cc3eb49459c6dba19937885a6e863",
+            "sha256": "599ffac9f9e8e3530fce1aaa19d825c307bd0cff660408f313fb9dd6a3148bea",
+            "bytes": 1350
+          },
+          "target": {
+            "blob": "a6e38569102cc3eb49459c6dba19937885a6e863",
+            "sha256": "599ffac9f9e8e3530fce1aaa19d825c307bd0cff660408f313fb9dd6a3148bea",
+            "bytes": 1350
+          },
+          "selection": "Unchanged current Main; no f4d historical replacement."
+        }
+      ],
+      "inventories": [
+        {
+          "path": "scripts/static/web-continuations.inventory.json",
+          "context": {
+            "blob": "90d3da00d3547408f9914eff87ba5d50b5c89814",
+            "sha256": "f519319be0471c9cad8eba0f7221d739464e2c7f564afb12598163b45b89147d",
+            "bytes": 344749
+          },
+          "reviewInput": {
+            "blob": "90d3da00d3547408f9914eff87ba5d50b5c89814",
+            "sha256": "f519319be0471c9cad8eba0f7221d739464e2c7f564afb12598163b45b89147d",
+            "bytes": 344749
+          },
+          "allRowsAndPeerContentUnchangedBySeven": true
+        },
+        {
+          "path": "scripts/static/web-page-filtering.inventory.json",
+          "context": {
+            "blob": "8b6578bdd0b77cb197210e5e52367a247333aa64",
+            "sha256": "946ed73bea5ef0351f9ec2844a9d89dc667222aa9ececc78901b0c1044c67652",
+            "bytes": 67732
+          },
+          "reviewInput": {
+            "blob": "8b6578bdd0b77cb197210e5e52367a247333aa64",
+            "sha256": "946ed73bea5ef0351f9ec2844a9d89dc667222aa9ececc78901b0c1044c67652",
+            "bytes": 67732
+          },
+          "allRowsAndPeerContentUnchangedBySeven": true
+        }
+      ],
+      "independentVerification": "Verified context/target equality for both complete inventories, all three current-Main auth producer blobs and both current-Main Experience blobs. No new peer inventory row, waiver, auth dependency or historical Experience implementation is selected."
+    },
+    "disposition": {
+      "verdict": "APPROVE",
+      "kind": "bounded SOURCE approval of exactly seven paths / 81 added and 5 removed lines",
+      "newActionableFindings": [],
+      "canonicalClosure": false,
+      "integration": "Only the exact seven-source delta is approved on the pinned reviewed context. Preserve current Main peer bytes and use the normal affected landing gate; this verdict does not approve a full worker file restore or certify unexecuted composition checks."
+    },
+    "evidenceClassification": {
+      "sourceInference": "Independent exact-diff, complete changed-file/test and material interface/call-chain inspection. The verdict is based on the state/destination/context behavior described above, not on the historical counts.",
+      "reproducedAssertionFailureThisCheckpoint": null,
+      "historicalSetupFailure": {
+        "job": "947173a9-7eff-4cad-a21c-120cecdc40a3",
+        "assertionsReached": false,
+        "reason": "The historical assembly invocation named absent source-baseline test files; the retained log says the test file is outside the checkout. No tests ran, and no product assertion is inferred."
+      },
+      "historicalDependencyFailures": [
+        {
+          "source": "22ff8d9442c103e08c412cdba5b24ced10c4a3c6",
+          "job": "577ba9ab-d468-4072-8716-d8a190a5d264",
+          "result": "TS2551 at release-recovery.stories.tsx(45,50): noCoverage does not exist; 1 error / 3311 checked files / 788 selected root files",
+          "classification": "Historical missing catalogue/source-baseline dependency; not a new composition type pass or a reproduced name-state product assertion."
+        },
+        {
+          "receipt": ".temp/goal-orchestration/manager-commits/manager-da3ec04b-2849-4f60-986f-bfb27f0ac512.json",
+          "result": "Normal72 capture TS2353: onRefresh does not exist in StoryRoute",
+          "classification": "Preserved historical capture dependency failure, separately source-addressed by the approved optional seam. No successful new-composition compiler result is inferred."
+        }
+      ],
+      "sourceInspectionLimit": "The old22ff commit object is not available in the supplied or worker object databases. An initial read-only integrity lookup stopped there; verification then used the explicit retained historical blob objects. Six selected targets equal those recorded blobs and the directly readable original f4d tree. The original22ff receipt-to-tree binding remains historical, not independently reconstructed in this checkpoint. Context, target, observed Main and authored source needed for this verdict are directly readable."
+    },
+    "reusedEvidence": {
+      "retainedFiles": [
+        {
+          "original": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.temp/identity-reader-compose-00173a35/candidate/.artifacts/qa/20261019t123424-731383/unit.xml",
+          "retainedCopy": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-G2785-seven-source-first-review/retained-evidence/unit.xml",
+            "sha256": "73cc86ee99474b7b7b5f5598f21b3eb651a8e72d514311f206a783aff386ba18",
+            "bytes": 3848
+          }
+        },
+        {
+          "original": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.temp/identity-reader-compose-00173a35/candidate/.artifacts/qa/20261019t123424-731383/owner.xml",
+          "retainedCopy": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-G2785-seven-source-first-review/retained-evidence/owner.xml",
+            "sha256": "3fbbc8cb2cfc98176ced76f3d477a790e3bb3fbe75426d5971edbc89b3b9f1ee",
+            "bytes": 15643
+          }
+        },
+        {
+          "original": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.temp/goal/jobs/947173a9-7eff-4cad-a21c-120cecdc40a3.1.log",
+          "retainedCopy": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-G2785-seven-source-first-review/retained-evidence/947173a9-7eff-4cad-a21c-120cecdc40a3.1.log",
+            "sha256": "980f10cda67763a870f0d805b665d6414583f212f1972bbe034ef06e45257bdd",
+            "bytes": 161
+          }
+        },
+        {
+          "original": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.temp/goal/jobs/577ba9ab-d468-4072-8716-d8a190a5d264.1.log",
+          "retainedCopy": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-G2785-seven-source-first-review/retained-evidence/577ba9ab-d468-4072-8716-d8a190a5d264.1.log",
+            "sha256": "093c485453d83d1d3cf14b9d98bf6a9f5cac104fa2e5466e9c24ad1aedd0b34d",
+            "bytes": 1209
+          }
+        },
+        {
+          "original": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.temp/goal/jobs/577ba9ab-d468-4072-8716-d8a190a5d264.2.log",
+          "retainedCopy": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-G2785-seven-source-first-review/retained-evidence/577ba9ab-d468-4072-8716-d8a190a5d264.2.log",
+            "sha256": "1ce17aedc5001bce5c02c1705f8c9c3bd769660469737ca0160730e90d1bad2d",
+            "bytes": 39838
+          }
+        },
+        {
+          "original": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.temp/goal/jobs/9573e4e5-2b9d-45e2-91a8-891fb3d57771.1.log",
+          "retainedCopy": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-G2785-seven-source-first-review/retained-evidence/9573e4e5-2b9d-45e2-91a8-891fb3d57771.1.log",
+            "sha256": "7b4f2bc397fb49f60b37da789815eca85374e9eec47208939c5a29752608789f",
+            "bytes": 126
+          }
+        },
+        {
+          "original": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2785/.temp/goal/jobs/9573e4e5-2b9d-45e2-91a8-891fb3d57771.2.log",
+          "retainedCopy": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-G2785-seven-source-first-review/retained-evidence/9573e4e5-2b9d-45e2-91a8-891fb3d57771.2.log",
+            "sha256": "0a4e8356a241b95c8c1d38b6675ab3450ff27b9b84685c54f2d85112227c2858",
+            "bytes": 1942
+          }
+        },
+        {
+          "original": "65edd5a09daf80db26bba3df321318f89acc0d92:docs/goals/audit-remediation-20261019/proofs/catalogue-work-detail-review.json",
+          "retainedCopy": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-G2785-seven-source-first-review/retained-evidence/prior-catalogue-review.json",
+            "sha256": "a414fc520829412e8d861837080dbb2d74d5531908a1ef6b981d242199c02d66",
+            "bytes": 615018
+          }
+        }
+      ],
+      "allEightFilesSha256Verified": true,
+      "recordedSource": "22ff8d9442c103e08c412cdba5b24ced10c4a3c6",
+      "recordedCheckpoint": "00173a35ca891faf6490f48392fed01cade01b43",
+      "qa": "20261019t123424-731383",
+      "results": {
+        "unit": "10 tests / 47 assertions / 0 failures: existing names 7/23, new name-recovery 2/10 and name-states 1/14",
+        "owner": "45 tests / 57 assertions / 0 failures in scripts/static/web-continuations.test.ts",
+        "locale": "Historical task i18n:check PASS",
+        "ast": "Historical AST scan of 40 TS/TSX sources PASS"
+      },
+      "executedByThisCheckpoint": false,
+      "newCompositionPassClaimed": false,
+      "scope": "Read and rehashed historical XML/logs, retaining original source pins, setup correction and compiler failure. No historical result is relabeled as a test of fb2f86b."
+    },
+    "checksActuallyExecuted": [
+      "Read and SHA256-verified the selected manifest, both patches, original acceptance and all eight retained evidence files, including the prior cumulative report.",
+      "Verified exact seven-path context-to-target diff, all before/target blobs, byte sizes and SHA256 values; directly compared six targets with original f4d and explicit recorded old22ff blob objects.",
+      "Verified complete connections context/current-Main equality and exactly five original authored line replacements, including PublicCollection; all other current file bytes remain unchanged.",
+      "Verified all 72 approved source blobs and optional seam remain exact in context and target; verified unchanged inventories, current-Main auth producer and Experience blobs.",
+      "git --git-dir=<retained candidate.git> diff --check 9db32b094a743aaa02167c90c5c55214486638aa fb2f86b4119e8edee1f0c7bdcccac70aa871105e: exit 0.",
+      "Read all seven complete changed source/test files and relevant existing name/summary/participant/localized-text interfaces. No concrete unresolved source counterexample required a product test."
+    ],
+    "integrityReceipt": {
+      "path": ".temp/goal/identity-name-consumer-first-review/source-integrity-verification.json",
+      "bytes": 361,
+      "sha256": "2dd4431d4c571bda834d046fc0a754a473e263fd0952e3aedf5d84e926305dc7"
+    },
+    "limitations": [
+      "No TypeScript, Storybook, native, browser, unit, owner or other product project check was run on this new composed tree. Static relative-import resolution in the preparation manifest is only source inventory, not a type/runtime pass. Required report-only checks are recorded separately below.",
+      "The exact historical unit/continuation receipts support their recorded pins and inspected fixture behavior. They do not cover current Collection composition execution, actual installed-router recovery, public backend availability, keyboard/focus behavior, local retry geometry or real acting-subject authority.",
+      "Original A08 name-state/sibling/link assertions and other original D4-007/D4-008/catalogue runtime requirements remain unchanged and independently due. No class or canonical acceptance is closed by this source verdict.",
+      "The unavailable original22ff commit tree limits independent historical receipt binding; readable immutable new context/target/authored objects and explicit historical blob equality are recorded without treating that inspection gap as a product failure.",
+      "All 29 prior report fields remain unchanged, including storyRefreshSeamFirstReview, readerMetadataFirstReview, boundedNonWorkReleaseFirstSourceCheckpoint, WORK-REVIEW-09 unconfirmed setup failures, every earlier finding/disposition and original Back/query evidence."
+    ],
+    "reportValidation": {
+      "status": "PASS",
+      "job": "job:1b29ec98-a898-4885-b3f1-f398d904df27",
+      "commands": [
+        {
+          "command": "task docs:check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/1b29ec98-a898-4885-b3f1-f398d904df27.1.log",
+          "sha256": "ed7f87da6e8ae8ae530e97c87916f35586be2b80af758ca9b32688a58cf887b1"
+        },
+        {
+          "command": "task goal -- check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/1b29ec98-a898-4885-b3f1-f398d904df27.2.log",
+          "sha256": "1b49a514a927759e5d806e9033dde237227f4adefdbf7dae87d73162149af65d"
+        }
+      ],
+      "limits": "Report-only checks. Docs check passed 13 checker tests and 249 Markdown link/fragment/navigation checks. Goal check ran AST and 1/44 guards selected for the JSON documentation path; product types, lint and tests were skipped because no TypeScript/source/test claim changed. These checks do not qualify the seven-source product composition."
+    },
+    "resources": {
+      "started": [],
+      "stopped": [],
+      "productWrites": [],
+      "peerChanges": []
+    },
+    "managerNext": "Select only this exact seven-source delta into the approved current-Main composition through the normal affected gate, preserving peer inventories/auth/Experience and other current source. Retain original runtime gaps and separately owned acceptance; no whole historical blob restoration or new prerequisites."
   }
 }
