@@ -5,6 +5,8 @@ import { ObjectIntegrityError, ObjectNotFound, type ImmutableObjects } from '../
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { configureDisclosure } from '../src/modules/disclosure/read.ts';
 import { importRecipe } from '../src/modules/recipe/importer.ts';
+import { checkedComponentState } from '../src/modules/semantic/change.ts';
+import { PROFILES } from '../src/modules/semantic/schema.ts';
 import { compositionReceiptIri, orderTree, recordTree, type CompositionTerminal } from '../src/modules/structure/change.ts';
 import { STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT, STRUCTURE_PROFILE,
   type OccurrenceRecord, type OrderEntry, type StructureManifest } from '../src/modules/structure/format.ts';
@@ -13,7 +15,7 @@ import { readAcknowledgedStructureOccurrence, StructureNativeBasisProblem,
   type AcknowledgedStructureOccurrence } from '../src/modules/structure/native-basis.ts';
 import { structureProfileFor } from '../src/modules/structure/profiles.ts';
 import { newCost } from '../src/modules/structure/tree.ts';
-import { RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { prepareWorkComponent, RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { WorkReadMoved, WorkReadSession } from '../src/modules/work/read-session.ts';
 
 type Row = NonNullable<SparqlResult['results']>['bindings'][number];
@@ -31,12 +33,15 @@ interface Revision {
 async function fixture(profile = 'recipe-composition') {
   const owner = derivedId('ack-owner'), component = derivedId('ack-main'), structure = derivedId('ack-structure');
   const group = derivedId('ack-group'), first = derivedId('ack-first'), second = derivedId('ack-second');
+  const episode = derivedId('ack-episode');
   const bytes = new Map<string, Uint8Array>(), receipts = new Map<string, CompositionTerminal>();
   const operations = new Map<string, string>(), revisions = new Map<string, Revision>(), queries: string[] = [];
   let header: CompositionHeader;
   let writes = 0, active = true, readable = true, disclosed = true, terminalAvailable = true, sequence = 0;
   let ownerReads = 0, withdrawOwnerOnRead = Infinity;
   let objectRead: (() => void) | undefined;
+  let targetTypes = ['https://schema.org/TVEpisode'], targetManifest = '', targetChecks = 0;
+  let targetCheck: ((count: number) => void) | undefined, targetUnavailable = false;
   const objects: ImmutableObjects = {
     async put(body) { writes++; const digest = sha256(body); bytes.set(digest, new Uint8Array(body)); return digest; },
     async get(digest) {
@@ -50,11 +55,23 @@ async function fixture(profile = 'recipe-composition') {
   const query = async (body: string): Promise<SparqlResult> => {
     queries.push(body);
     let rows: Row[];
-    if (body.includes('SELECT ?main ?public ?structuredDecision')) {
+    if (body.includes('SELECT ?target WHERE')) {
+      targetChecks++;
+      targetCheck?.(targetChecks);
+      if (targetUnavailable) throw new Error('Native target owner unavailable');
+      rows = targetTypes.includes('https://schema.org/TVEpisode')
+        && !targetTypes.includes('https://schema.org/CreativeWork') ? [] : [row({ target: episode })];
+    } else if (body.includes('SELECT ?epoch ?sequence ?hold ?r ?type')) {
+      rows = [row({ epoch: 'structure-epoch', sequence: String(sequence), r: episode,
+        type: 'resource', public: 'false', erased: 'false' })];
+    } else if (body.includes('SELECT ?resource ?manifest')) {
+      rows = [row({ resource: episode, manifest: targetManifest })];
+    } else if (body.includes('SELECT ?main ?public ?structuredDecision')) {
       rows = body.includes(`<${owner}>`) ? [row({ main: component, public: 'false' })] : [];
     } else if (body.includes('SELECT ?work ?head ?owningWork ?owningHead')) {
-      rows = [row({ work: owner, head: derivedId('ack-work-head'), owningWork: owner,
-        owningHead: derivedId('ack-work-head') })];
+      rows = body.includes(`<${episode}>`) ? [row({ work: episode })]
+        : [row({ work: owner, head: derivedId('ack-work-head'), owningWork: owner,
+          owningHead: derivedId('ack-work-head') })];
     } else if (body.includes('SELECT ?component ?profile ?head ?generation ?count ?manifest')) {
       rows = body.includes(`<${structure}>`) ? [row({ component: header.component,
         profile: structureProfileFor(header.profile).graphProfile, head: header.head,
@@ -87,13 +104,15 @@ async function fixture(profile = 'recipe-composition') {
     return { results: { bindings: rows } };
   };
   const environment = { fuseki: { query, update: async () => { throw new Error('A read cannot mutate native state'); } },
-    lineage: { dataEpoch: 'structure-epoch', routingEpoch: '1' }, structureObjects: objects } as unknown as WorkActivationEnvironment;
+    lineage: { dataEpoch: 'structure-epoch', routingEpoch: '1' }, structureObjects: objects,
+    workObjects: objects } as unknown as WorkActivationEnvironment;
   configureDisclosure(environment, { read: async targets => targets.map(target =>
     target.component === 'structure' && !disclosed ? 'hidden' : 'visible') });
   const dependencies = { environment, access: {
     activePrincipalId: async () => active ? 'principal-1' : null,
     assertRecoveryOpen: async () => {},
     canReadWork: async () => { ownerReads++; return readable && ownerReads < withdrawOwnerOnRead; },
+    canReadSemanticResource: async (_principal: unknown, _actor: string, resource: string) => resource === episode,
   } } as unknown as MainWorkDependencies;
   const session = () => {
     const result = new WorkReadSession(dependencies, new Request('https://main.test/private-owner-read'),
@@ -133,6 +152,15 @@ async function fixture(profile = 'recipe-composition') {
       profile, revision, receipt, occurrence: first };
   };
   const introducedBy = derivedId('ack-original-revision');
+  const setTargetTypes = async (types: string[]) => {
+    targetTypes = [...types];
+    const state = checkedComponentState({ component: 'resource', types, lifecycle: 'active',
+      properties: [{ predicate: 'https://schema.org/name',
+        value: { kind: 'language-string', lexical: 'Retained episode', language: 'en' } }] });
+    const digest = await prepareWorkComponent(objects, episode, state, PROFILES.resource);
+    targetManifest = `urn:rezics:sha256:${digest}`;
+  };
+  if (profile === 'episode-list-v1') await setTargetTypes(targetTypes);
   const records: OccurrenceRecord[] = profile === 'recipe-composition' ? [
     { occurrence: group, state: 'active', parent: structure, segmentKey: 'a', orderKey: 'a', role: 'group',
       labels: [{ value: 'Dough', language: 'en' }], sourceKey: '/recipeIngredient/group', introducedBy },
@@ -140,12 +168,23 @@ async function fixture(profile = 'recipe-composition') {
       segmentKey: 'a', orderKey: ordinal ? 'b' : 'a', role: 'ingredient', labels: [],
       sourceKey: `/recipeIngredient/${ordinal}`, introducedBy,
       qualifier: importRecipe({ recipeIngredient: ['1/3 cup flour'] }, 'exact-source').ingredients[0]!.qualifier })),
+  ] : profile === 'episode-list-v1' ? [
+    { occurrence: group, state: 'active', parent: structure, segmentKey: 'a', orderKey: 'a', role: 'group',
+      labels: [], introducedBy },
+    ...[first, second].map((occurrence, ordinal): OccurrenceRecord => ({ occurrence, state: 'active', parent: group,
+      segmentKey: 'a', orderKey: ordinal ? 'b' : 'a', role: 'episode', target: episode, labels: [], introducedBy,
+      qualifier: { type: 'fields', id: 'episode-order-v1', values: {
+        position: { numerator: 1, denominator: ordinal ? 1 : 2 }, label: ordinal ? '1' : '0.5',
+      } } })),
   ] : [first, second].map((occurrence, ordinal) => ({ occurrence, state: 'active', parent: structure,
     segmentKey: 'a', orderKey: ordinal ? 'b' : 'a', role: 'group', labels: [], introducedBy,
     qualifier: { type: 'book-group', division: 'volume' } }));
   const basis = await install(records);
   return { basis, records, first, second, group, bytes, receipts, revisions, operations, queries, install, session,
-    header: () => header, writes: () => writes,
+    header: () => header, writes: () => writes, episode, setTargetTypes,
+    targetChecks: () => targetChecks, onTargetCheck: (fn: (count: number) => void) => { targetCheck = fn; },
+    targetTypes: (types: string[]) => { targetTypes = [...types]; },
+    targetUnavailable: (value: boolean) => { targetUnavailable = value; },
     active: (value: boolean) => { active = value; }, readable: (value: boolean) => { readable = value; },
     disclosed: (value: boolean) => { disclosed = value; },
     terminalAvailable: (value: boolean) => { terminalAvailable = value; },
@@ -191,6 +230,61 @@ test('the same native acknowledgement reader uses the registered Book owner with
   expect(result.record).toEqual(f.records[0]!);
   expect(result.path).toEqual([]);
   expect(result.commandReceipt.receipt).toBe(compositionReceiptIri(result.commandReceipt.admissionId, 'work.edit'));
+});
+
+test('an acknowledged episode retains repeated uses but a later target type change cannot borrow its historical command', async () => {
+  const f = await fixture('episode-list-v1');
+  const original = await readAcknowledgedStructureOccurrence(f.session(), f.basis);
+  const repeated = await readAcknowledgedStructureOccurrence(f.session(), { ...f.basis, occurrence: f.second });
+  expect(original.record).toEqual(f.records[1]!);
+  expect(repeated.record).toEqual(f.records[2]!);
+  expect(original.path).toEqual([f.records[0]!]);
+  expect(original.record.target).toBe(f.episode);
+  expect(repeated.record.target).toBe(original.record.target);
+  expect(repeated.record.occurrence).not.toBe(original.record.occurrence);
+  await f.setTargetTypes(['https://schema.org/Movie']);
+  const writes = f.writes();
+  await refused(readAcknowledgedStructureOccurrence(f.session(), f.basis), 'structure_target_mismatch', 422);
+  expect(f.header().head).toBe(f.basis.revision);
+  expect(f.receipts.get(f.basis.receipt)).toEqual(original.commandReceipt);
+  expect(f.writes()).toBe(writes);
+  const probes = f.queries.filter(query => query.includes('SELECT ?target WHERE'));
+  expect(probes.length).toBeGreaterThan(0);
+  expect(probes.every(query => query.includes(`<${f.episode}>`) && query.endsWith('LIMIT 1'))).toBe(true);
+});
+
+test('a target grain change during acknowledgement refuses the current use without replacing a child', async () => {
+  const f = await fixture('episode-list-v1'), writes = f.writes();
+  f.onTargetCheck(count => {
+    if (count === 2) f.targetTypes(['https://schema.org/TVEpisode', 'https://schema.org/CreativeWork']);
+  });
+  await refused(readAcknowledgedStructureOccurrence(f.session(), f.basis), 'structure_target_mismatch', 422);
+  expect(f.targetChecks()).toBe(2);
+  expect(f.receipts.size).toBe(1);
+  expect(f.writes()).toBe(writes);
+});
+
+test('the caller final fence rechecks the native target profile after returning an acknowledged child', async () => {
+  const f = await fixture('episode-list-v1'), session = f.session();
+  const original = await readAcknowledgedStructureOccurrence(session, f.basis);
+  await session.fenceDependencies();
+  const checks = f.targetChecks();
+  f.targetTypes(['https://schema.org/Movie']);
+  await expect(session.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
+  expect(f.targetChecks()).toBeGreaterThan(checks);
+  expect(f.receipts.get(f.basis.receipt)).toEqual(original.commandReceipt);
+});
+
+test('a missing current target owner remains unavailable and an undisclosed revision is refused before target probing', async () => {
+  const f = await fixture('episode-list-v1'), writes = f.writes();
+  f.targetUnavailable(true);
+  await refused(readAcknowledgedStructureOccurrence(f.session(), f.basis), 'structure_basis_unavailable', 503);
+  const checks = f.targetChecks();
+  f.disclosed(false);
+  await refused(readAcknowledgedStructureOccurrence(f.session(), f.basis), 'structure_basis_denied', 403);
+  expect(f.targetChecks()).toBe(checks);
+  expect(f.receipts.size).toBe(1);
+  expect(f.writes()).toBe(writes);
 });
 
 test('a command receipt cannot be replaced by the Structure, revision, child or an uncommitted new intent', async () => {

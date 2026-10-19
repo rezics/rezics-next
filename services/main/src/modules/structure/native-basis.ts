@@ -7,7 +7,7 @@ import { compositionReceiptIri, orderTree, readCompositionReceipt, recordTree,
   type CompositionTerminal } from './change.ts';
 import { checkOccurrenceRecord, STRUCTURE_LIMITS, type OccurrenceRecord } from './format.ts';
 import { COMPOSITION_PROFILE, NATIVE_ID, orderTreeKey, readCompositionHeader } from './graph.ts';
-import { isContainerRole, structureProfileFor } from './profiles.ts';
+import { isCatalogTarget, isContainerRole, structureProfileFor } from './profiles.ts';
 import { readCompositionSnapshot } from './read.ts';
 
 /** An acknowledged command selects one exact use, never every use of its target. */
@@ -168,16 +168,26 @@ async function readAcknowledgedOccurrence(session: WorkReadSession,
     const readable = await readTargets(targets);
     return targets.every(target => readable.has(target));
   };
+  const nativeTargets = targets.filter(target => !isCatalogTarget(profile, target));
+  // A historical command proves its admitted revision, not that independently
+  // editable targets still satisfy this owner's grain and topology invariants.
+  const targetsValid = async () => {
+    session.checkDeadline();
+    return !(await profile.targetGuard?.(env, header.owner, nativeTargets))?.invalid;
+  };
   if (!await targetsReadable()) return refuse('structure_basis_denied', 'The exact occurrence target is unavailable to this principal');
+  if (!await targetsValid()) return refuse('structure_target_mismatch', 'The exact occurrence target no longer satisfies its native profile');
   const current = await readHead();
   if (!isDeepStrictEqual(header, current)) return refuse('structure_head_mismatch', 'The native Structure changed during acknowledgement verification');
   if (!await canReadOwner() || !await disclosed() || !await targetsReadable()
     || !await session.deps.access.activePrincipalId(principal)) {
     return refuse('structure_basis_denied', 'Native owner or target authority changed during verification');
   }
+  if (!await targetsValid()) return refuse('structure_target_mismatch', 'The native target profile changed during verification');
   session.observeDependency(`structure-acknowledgement:${basis.structure}`, header, readHead);
   session.observeDependency(`structure-acknowledgement-owner:${basis.target}`, true, canReadOwner);
   session.observeDependency(`structure-acknowledgement-targets:${basis.structure}:${basis.occurrence}`, true, targetsReadable);
+  session.observeDependency(`structure-acknowledgement-target-profile:${basis.structure}:${basis.occurrence}`, true, targetsValid);
   session.checkDeadline();
   return structuredClone({ native: basis, record, path,
     commandReceipt: receipt as VerifiedStructureOccurrence['commandReceipt'], operation, manifest: header.manifest,
