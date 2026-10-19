@@ -11903,6 +11903,38 @@ __metadata:
   languageName: node
   linkType: hard
 
+"vinext@patch:vinext@npm%3A1.0.0-beta.13#./.yarn/patches/vinext-refresh-retain-document.patch::locator=rezics%40workspace%3A.":
+  version: 1.0.0-beta.13
+  resolution: "vinext@patch:vinext@npm%3A1.0.0-beta.13#./.yarn/patches/vinext-refresh-retain-document.patch::version=1.0.0-beta.13&hash=db61fd&locator=rezics%40workspace%3A."
+  dependencies:
+    "@unpic/react": "npm:^1.0.2"
+    "@vercel/og": "npm:1.0.3"
+    "@vinext/types": "npm:^1.0.0-beta.2"
+    ipaddr.js: "npm:^2.1.0"
+    magic-string: "npm:^0.30.21"
+    vite-plugin-commonjs: "npm:^0.10.4"
+    web-vitals: "npm:^4.2.4"
+  peerDependencies:
+    "@mdx-js/rollup": ^3.0.0
+    "@vitejs/plugin-react": ^5.1.4 || ^6.0.0
+    "@vitejs/plugin-rsc": ^0.5.34
+    react: ^19.2.6
+    react-dom: ^19.2.6
+    react-server-dom-webpack: ^19.2.6
+    vite: ^8.0.0
+  peerDependenciesMeta:
+    "@mdx-js/rollup":
+      optional: true
+    "@vitejs/plugin-rsc":
+      optional: true
+    react-server-dom-webpack:
+      optional: true
+  bin:
+    vinext: dist/cli.js
+  checksum: 10c0/94911dc97a48c1b49a743cc2553a85962296e35effcc168bce2150070b499682d008e3c238a875b25e28aa12c89a28664c3586400f4925fb270f3d1a8fa38afa
+  languageName: node
+  linkType: hard
+
 "vite-plugin-commonjs@npm:^0.10.4":
   version: 0.10.4
   resolution: "vite-plugin-commonjs@npm:0.10.4"
