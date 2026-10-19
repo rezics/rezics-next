@@ -1,18 +1,22 @@
 'use client';
 
 import Link from 'next/link';
-import { type ComponentProps, useEffect, useState } from 'react';
+import { type ComponentProps, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { isPublicPagePath, localizedPath, withoutLocale } from '../../i18n/locale.ts';
 import { useOptionalShell } from './shell-provider.tsx';
+import { observeCurrentPageLink } from './current-page-visibility.ts';
 
 /** Keeps page links in the current UI locale. Non-page routes stay at the origin root. */
 export default function LocalizedLink({
   href,
   onClick,
+  ref,
   documentNavigation = false,
   ...props
 }: ComponentProps<typeof Link> & { documentNavigation?: boolean }) {
   const [enhanced, setEnhanced] = useState(false);
+  const anchor = useRef<HTMLAnchorElement>(null);
+  useImperativeHandle(ref, () => anchor.current!, []);
   useEffect(() => setEnhanced(true), []);
   const locale = useOptionalShell()?.locale ?? 'en';
   const page =
@@ -21,6 +25,9 @@ export default function LocalizedLink({
     !href.startsWith('//') &&
     isPublicPagePath(href.split(/[?#]/, 1)[0]!);
   const destination = page ? localizedPath(href, locale) : href;
+  useEffect(() => {
+    if (props['aria-current'] === 'page' && anchor.current) return observeCurrentPageLink(anchor.current);
+  }, [props['aria-current'], destination]);
   // Tabs, continuations and section links share one navigation owner. A later
   // click starts the replacement document request synchronously; a router
   // transition settling from the old page cannot swallow that choice.
@@ -35,6 +42,7 @@ export default function LocalizedLink({
   // hydration clicks out of a router that may still be loading.
   return (
     <Link
+      ref={anchor}
       href={destination}
       {...props}
       // A visible Work link can render a full live owner read. Keep speculative

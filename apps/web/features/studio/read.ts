@@ -11,7 +11,6 @@ import { type ChapterFacts, chapterFacts, type RawFact } from './outline.ts';
 import {
   canonicalLanguage,
   type ClassificationPage,
-  type ContentsPage,
   directionOf,
   failureOf,
   type ChapterPage,
@@ -19,6 +18,7 @@ import {
   iri,
   type InventoryPage,
   type InventoryState,
+  type InventoryQuery,
   type InventoryWork,
   type Loaded,
   type MainClient,
@@ -26,7 +26,6 @@ import {
   type NativeVariants,
   type RealmChoice,
   type ReviewMode,
-  workKind,
   type Submission,
   type TextDraft,
   type TextHead,
@@ -115,17 +114,8 @@ const mySubmissions =
 export const validCursor = (cursor: unknown) =>
   typeof cursor === 'string' && cursor.length > 0 && cursor.length <= 2048 ? cursor : undefined;
 
-/** A Book's chapters as its card counts them: the first page of its contents. */
-export interface BookChapters {
-  count: number;
-  more: boolean;
-  published: number;
-}
-
 export interface InventoryView {
   page: InventoryPage;
-  /** Chapter counts per Book on the page. */
-  books: Record<string, BookChapters>;
 }
 
 /**
@@ -137,58 +127,13 @@ const ownLanguageOf = (work: { title: { language: string } }) =>
   canonicalLanguage(work.title.language);
 
 /**
- * One page of a Book's contents as the Studio Agent reads them. Without a
- * language Main reads them in the Main Version's language, which is the
- * language the Book's text is published in; `language` names another.
- */
-function contentsPage(
-  main: MainClient,
-  actingSubject: string,
-  book: string,
-  cursor?: string,
-  language?: string,
-) {
-  return settle(() =>
-    main.v1
-      .works({ id: idOf(book) })
-      .contents.get({
-        query: {
-          actingSubject,
-          limit: 20,
-          ...(language ? { language } : {}),
-          ...(cursor ? { cursor } : {}),
-        },
-      }),
-  );
-}
-
-/**
- * A Book's first contents page in the language its chapters are written in:
- * the Main Version's, or `fallback` (the Book's own language) while none of
- * the Book's text is published, since chapters can be published before the
- * Book's introduction is.
- */
-async function bookContents(
-  main: MainClient,
-  actingSubject: string,
-  book: string,
-  fallback: string,
-): Promise<Loaded<ContentsPage>> {
-  const first = await contentsPage(main, actingSubject, book);
-  return first.ok && first.data.language === null
-    ? contentsPage(main, actingSubject, book, undefined, fallback)
-    : first;
-}
-
-/**
  * One page of the Studio Agent's Works: those it wrote (its author credit
  * names it), in one state or all, or those it imported or curates. Main lists
- * a Book, never its chapters; each Book's chapters are counted from its
- * contents (one bounded read per Book on the page).
+ * a Book, never its chapters, with the owner's explicit count completeness.
  */
 export async function readInventory(
   actingSubject: string,
-  filter: { state?: InventoryState; view?: InventoryWork['relationship'] },
+  filter: { state?: InventoryState; view?: InventoryWork['relationship'] } & Partial<InventoryQuery>,
   cursor: string | undefined,
   client?: MainClient,
 ): Promise<Loaded<InventoryView>> {
@@ -201,6 +146,8 @@ export async function readInventory(
           limit: 20,
           view: filter.view ?? 'authored',
           ...(filter.state ? { state: filter.state } : {}),
+          ...(filter.q ? { q: filter.q } : {}),
+          ...(filter.sort ? { sort: filter.sort } : {}),
           ...(cursor ? { cursor } : {}),
         },
       }),
@@ -212,32 +159,7 @@ export async function readInventory(
     updatedAt: iso(item.updatedAt),
     submissions: item.submissions.map(submissionTimes),
   }));
-  const books = items.filter((item) => workKind(item.types) === 'book');
-  const contents = await Promise.all(
-    books.map(
-      async (book) =>
-        [
-          book.id,
-          await bookContents(
-            main,
-            actingSubject,
-            book.id,
-            book.texts[0]?.language ?? ownLanguageOf(book),
-          ),
-        ] as const,
-    ),
-  );
-  const view: InventoryView = { page: { ...page.data, items }, books: {} };
-  for (const [book, loaded] of contents) {
-    if (!loaded.ok) continue;
-    const chapters = loaded.data.items.filter((item) => item.role === 'chapter');
-    view.books[book] = {
-      count: chapters.length,
-      more: Boolean(loaded.data.nextCursor),
-      published: chapters.filter((item) => item.availability === 'available').length,
-    };
-  }
-  return { ok: true, data: view };
+  return { ok: true, data: { page: { ...page.data, items } } };
 }
 
 export interface RealmInfo {
