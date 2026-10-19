@@ -1,7 +1,9 @@
 import { OPEN_LIBRARY_RATE } from '../modules/source/open-library.ts';
 import { transportResponses } from '../transport-responses.ts';
 import { Elysia, t } from 'elysia';
-import { SourceIntakeConflict, SourceIntakeInvalid } from '../modules/source/intake.ts';
+import { SourceIntakeConflict, SourceIntakeInvalid, MAX_RETAINED_SOURCE_BYTES } from '../modules/source/intake.ts';
+import { SOURCE_ARCHIVE_LIMITS, SourceArchiveInvalid, SourceArchiveConflict, SourceArchiveUnavailable }
+  from '../modules/source/archive-evidence.ts';
 import { authorNameProvenance } from '../modules/source/author-name.ts';
 import { checkedOpenLibraryWorkId, fetchOpenLibraryWork } from '../modules/source/open-library.ts';
 import { compareSourceChildren } from '../modules/source/child-correspondence.ts';
@@ -28,6 +30,8 @@ export const openApiOperations = {
   '/v1/sources/statistics/{statistic}': { get: { exposure: 'platform:catalogue-import', rateLimitFamily: 'read', bearer: true } },
   '/v1/sources/observations/{observation}': { get: { exposure: 'platform:catalogue-import', rateLimitFamily: 'read' } },
   '/v1/sources/intakes': { post: { exposure: 'platform:catalogue-import', rateLimitFamily: 'write' } },
+  '/v1/sources/archives': { post: { exposure: 'platform:catalogue-import', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
+  '/v1/sources/archives/{archive}/image-witness': { post: { exposure: 'platform:catalogue-import', rateLimitFamily: 'read', bearer: true } },
   '/v1/sources/acquisitions/open-library/works': { post: { exposure: 'platform:catalogue-import', rateLimitFamily: 'write' } },
   '/v1/sources/proposals/{proposal}/adoption/native-work': { get: { exposure: 'platform:catalogue-import', rateLimitFamily: 'read' }, post: { exposure: 'platform:catalogue-import', rateLimitFamily: 'write' } },
   '/v1/sources/proposals/{proposal}': { get: { exposure: 'platform:catalogue-import', rateLimitFamily: 'read' } },
@@ -83,10 +87,44 @@ const sourceIntakeBody = t.Object({ profile: t.Literal('source-manual-intake-v1'
   sourceRevision: t.Nullable(t.String({ minLength: 1, maxLength: 200 })),
   mediaType: t.String({ minLength: 1, maxLength: 100 }),
   retention: t.Union([t.Literal('retained'), t.Literal('not-retained')]),
-  rawBytesBase64: t.Optional(t.String({ maxLength: 87384 })),
+  rawBytesBase64: t.Optional(t.String({ maxLength: Math.ceil(MAX_RETAINED_SOURCE_BYTES / 3) * 4 })),
   coverage: sourceCoverage, rightsEvidence: sourceRightsEvidence,
 }, { additionalProperties: false });
 const SOURCE_INTAKE_MAX_BYTES = 65_536;
+const binaryArchiveMediaTypes = ['application/octet-stream','application/x-tar','application/zstd'];
+const archiveDigest = t.String({ pattern: '^[0-9a-f]{64}$' });
+const archiveReference = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
+const archiveManifest = {
+  profile: t.Literal('source-retained-archive-v1'), record: archiveReference, observation: archiveReference,
+  observationDigest: archiveDigest, archiveDigest, byteLength: t.Integer({ minimum: 1,maximum: SOURCE_ARCHIVE_LIMITS.bytes }),
+  mediaType: t.Union([t.Literal('application/x-tar'),t.Literal('application/zstd')]),
+  parts: t.Array(t.Object({ index: t.Integer({ minimum: 0,maximum: SOURCE_ARCHIVE_LIMITS.parts-1 }),
+    record: archiveReference,observation: archiveReference,byteDigest: archiveDigest },{ additionalProperties: false }),
+    { minItems: 1,maxItems: SOURCE_ARCHIVE_LIMITS.parts }),
+};
+const archiveAdmission = t.Object({ ...archiveManifest,admission: archiveReference,receipt: archiveReference },{ additionalProperties: false });
+const archiveCoordinate = {
+  table: t.Union((['vn','chars','vn_screenshots','releases_images','vn_image_votes'] as const).map(value => t.Literal(value))),
+  rowOrdinal: t.Integer({ minimum: 0,maximum: SOURCE_ARCHIVE_LIMITS.rows-1 }),rowDigest: archiveDigest,
+  fieldLocator: t.String({ minLength: 1,maxLength: 100 }),imageId: t.String({ pattern: '^(cv|ch|sf)[0-9]+$' }),
+  namespace: t.Union([t.Literal('vn'),t.Literal('character'),t.Literal('release')]),
+  externalId: t.String({ pattern: '^[vcr][0-9]+$' }),
+  role: t.Union([t.Literal('cover'),t.Literal('portrait'),t.Literal('screenshot')]),
+};
+const archiveWitness = t.Object({ profile: t.Literal('source-archive-image-witness-v1'),archive: archiveAdmission,
+  source: t.Object({ record: archiveReference,observation: archiveReference,observationDigest: archiveDigest,
+    provider: t.String(),namespace: t.String(),externalId: t.String(),sourceRevision: t.Nullable(t.String()),
+    captureUrl: t.Nullable(t.String()) },{ additionalProperties: false }),
+  row: t.Object({ ...archiveCoordinate,profile: t.Literal('source-vndb-copy-row-v1'),
+    decodedRow: t.Record(t.String(),t.Nullable(t.String())),decodedBytesBase64: t.String(),imageUrl: t.String() },{ additionalProperties: false }),
+},{ additionalProperties: false });
+
+function archiveError(error: unknown): Response {
+  if (error instanceof SourceArchiveInvalid) return problem(422,'source_archive_invalid','Source archive coordinate or manifest is invalid');
+  if (error instanceof SourceArchiveConflict) return problem(409,'source_archive_changed','Source archive evidence changed');
+  if (error instanceof SourceArchiveUnavailable) return problem(503,'source_archive_unavailable','Source archive evidence is unavailable');
+  return commandError(error);
+}
 
 const sourceObservationResult = t.Object({ profile: t.Union([
   t.Literal('source-manual-intake-v1'), t.Literal('source-acquisition-v1') ]),
@@ -673,7 +711,7 @@ export function sourceRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/sources/intakes', {
       body: sourceIntakeBody,
-      detail: { description: 'Retained manual sources are limited to 65,536 decoded bytes.' },
+      detail: { description: 'Retained binary archive parts accept up to 262,144 decoded bytes; other manual sources accept up to 65,536 decoded bytes.' },
       response: transportResponses(openApiOperations["/v1/sources/intakes"].post, { 200: sourceIntakeResult, 201: sourceIntakeResult, ...writeProblems }, 'POST'),
     }, async ({ request, body }) => {
       try {
@@ -687,8 +725,9 @@ export function sourceRoutes(work: MainWorkDependencies) {
         if (!principalId) return problem(403, 'authority_denied', 'Source intake principal is inactive');
         await requireSourceImportAuthority(work, principal);
         if (body.retention === 'retained' && body.rawBytesBase64
-          && Buffer.from(body.rawBytesBase64, 'base64').byteLength > SOURCE_INTAKE_MAX_BYTES) {
-          throw new SourceIntakeInvalid('manual source exceeds 64 KiB');
+          && Buffer.from(body.rawBytesBase64, 'base64').byteLength > (binaryArchiveMediaTypes.includes(body.mediaType)
+            ? MAX_RETAINED_SOURCE_BYTES : SOURCE_INTAKE_MAX_BYTES)) {
+          throw new SourceIntakeInvalid('manual source exceeds its media byte limit');
         }
         const result = await work.sourceIntake.submit(principalId, key, {
           provider: body.provider, namespace: body.namespace, externalId: body.externalId,
@@ -699,6 +738,37 @@ export function sourceRoutes(work: MainWorkDependencies) {
         return Response.json(result, { status: result.replayed ? 200 : 201,
           headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
+    })
+    .post('/v1/sources/archives', {
+      body: t.Object({ ...archiveManifest,actingSubject: archiveReference },{ additionalProperties: false }),
+      response: transportResponses(openApiOperations['/v1/sources/archives'].post,
+        { 200: t.Object({ admission: archiveAdmission,replayed: t.Boolean() }),
+          201: t.Object({ admission: archiveAdmission,replayed: t.Boolean() }),422: problemResult(422),...writeProblems },'POST'),
+    },async ({ request,body }) => {
+      try {
+        if (!work.sourceArchives) return problem(503,'source_archive_unavailable','Source archive owner is unavailable');
+        const key = request.headers.get('idempotency-key');
+        if (!key) return problem(400,'invalid_idempotency_key','Idempotency-Key is required');
+        const principal = await work.account.verify(request,['source:intake']);
+        await requireSourceImportAuthority(work,principal);
+        const { actingSubject,...manifest } = body;
+        const result = await work.sourceArchives.admit(principal,actingSubject,key,manifest);
+        return Response.json(result,{ status: result.replayed ? 200 : 201,headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return archiveError(error); }
+    })
+    .post('/v1/sources/archives/:archive/image-witness', {
+      params: t.Object({ archive: groupUuid }),body: t.Object(archiveCoordinate,{ additionalProperties: false }),
+      response: transportResponses(openApiOperations['/v1/sources/archives/{archive}/image-witness'].post,
+        { 200: archiveWitness,409: problemResult(409),422: problemResult(422),...authorizedReadProblems },'POST'),
+    },async ({ request,params,body }) => {
+      try {
+        if (!work.sourceArchives) return problem(503,'source_archive_unavailable','Source archive owner is unavailable');
+        const principal = await work.account.verify(request,['source:read']);
+        const witness = await work.sourceArchives.verify(principal,`https://rezics.com/id/${params.archive}`,body);
+        const { decodedBytes,...row } = witness.row;
+        return Response.json({ ...witness,row: { ...row,decodedBytesBase64: Buffer.from(decodedBytes).toString('base64') } },
+          { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return archiveError(error); }
     })
     .get('/v1/sources/observations/:observation', {
       params: t.Object({ observation: groupUuid }),

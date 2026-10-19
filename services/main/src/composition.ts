@@ -152,6 +152,7 @@ import { SourceFieldAttachmentStore } from './modules/source/support-attach.ts';
 import { SourceFieldApplicationStore } from './modules/source/field-application.ts';
 import { SourceRetainedFieldSupportStore, retainedFieldEvidenceOwners, type RetainedFieldOwners } from './modules/source/field-support-retained.ts';
 import { SourceRetainedRecordEvidenceOwner } from './modules/source/retained-evidence.ts';
+import { SourceArchiveEvidenceOwner } from './modules/source/archive-evidence.ts';
 import { SourceNativeChildStore } from './modules/source/child-native-support.ts';
 import { ProviderIdentityStore } from './modules/source/provider-identity.ts';
 import { SourceScoreStore } from './modules/source/score.ts';
@@ -569,6 +570,7 @@ export async function composeMain(input: ComposeMainInput) {
     roles: accessOwners.roles,
     accessPolicy: new AccessPolicyOwner(pool),
     sourceIntake,
+    sourceArchives: new SourceArchiveEvidenceOwner(contentPool,sourceIntake,access,rightsStore,mediaObjects),
     sourceAuthorNames,
     openLibraryFetch,
     recipeSourceConversions: new RecipeSourceConversionStore(contentPool, sourceIntake),
