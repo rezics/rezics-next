@@ -9,6 +9,8 @@ import {
   readStandingRatingReconstructionBatch,
   recordStandingRatingValues,
   checkRatingAggregateFence,
+  STANDING_RATING_INVENTORY_SQL,
+  STANDING_RATING_FENCE_SQL,
 } from '../../../services/main/src/modules/rating/aggregate-inventory.ts';
 import { fenceStandingRatingTransition, refreshStandingRatingProjections } from '../../../services/main/src/modules/rating/standing-publication.ts';
 import { itemCommandKey } from '../../../services/main/src/modules/identity-merge/contract.ts';
@@ -90,6 +92,19 @@ test('standing components retain exact effective slots through 100/101/large, me
     expect((await pool.query('SELECT access.rating_standing_slot($1,$2,$3) AS slot',
       [people[0], context, originMain])).rows[0].slot).toBe(items[0]!.slot);
     let previous = 0;
+    const currentTargets = [id(),id()].sort();
+    const workMeasurements: Record<string,unknown>[] = [];
+    const measure = async (sql: string, parameters: unknown[]) => {
+      const plan = (await pool.query(`EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) ${sql}`,parameters)).rows[0]['QUERY PLAN'][0];
+      let examined = 0;
+      const visit = (node: Record<string,unknown>) => {
+        examined += (Number(node['Actual Rows'] ?? 0)+Number(node['Rows Removed by Filter'] ?? 0)
+          +Number(node['Rows Removed by Join Filter'] ?? 0))*Number(node['Actual Loops'] ?? 0);
+        for (const child of node.Plans as Record<string,unknown>[] ?? []) visit(child);
+      };
+      visit(plan.Plan);
+      return { examined, milliseconds: plan['Execution Time'], plan };
+    };
     for (const population of [100, 101, 102, 512, 2048]) {
       await heads(items.slice(previous, population), originMain, originWork);
       previous = population;
@@ -98,7 +113,44 @@ test('standing components retain exact effective slots through 100/101/large, me
       expect(inventory.heads).toHaveLength(Math.min(population, 101));
       expect(inventory.standing).toMatchObject({ slots: population, unvalued: 0, histogram: { '5': population } });
       expect(!!inventory.standing!.witness).toBe(population > 100);
+
+      // Every native principal now has a matching pending origin job, although
+      // its native component and first retained delivery are fully current.
+      // EXPLAIN the actual inventory and final synthesis SQL, not a LIMIT-only
+      // surrogate. The native readiness path must not compare N sealed heads.
+      for (const target of currentTargets) await pool.query(`INSERT INTO access.rating_merge_selection
+        (context,work,main_version,principal_id,origin_main_version,origin_slot,task_key)
+        SELECT $2,$3,$4,x.principal::uuid,$5,x.slot,$6
+        FROM jsonb_to_recordset($1::jsonb) x(principal text,slot text)`,
+      [JSON.stringify(items.slice(0,population)),context,work,target,originMain,task]);
+      const replacements = items.slice(0,population).map(item => ({ ...item, admission: randomUUID() }));
+      await admissions(replacements);
+      await pool.query(`UPDATE access.rating_aggregate_head h SET admission_id=x.admission::uuid
+        FROM jsonb_to_recordset($1::jsonb) x(principal text,admission text)
+        WHERE h.context=$2 AND h.main_version=$3 AND h.principal_id=x.principal::uuid`,
+      [JSON.stringify(replacements),context,originMain]);
+      expect(Number((await pool.query('SELECT count(*) FROM access.rating_standing_refresh WHERE context=$1', [context])).rows[0].count)).toBe(population);
+      const nativeCurrent = await readRatingAggregateInventory(pool,context,originMain);
+      const delivered = await readRatingAggregateInventory(pool,context,currentTargets[0]!);
+      expect(nativeCurrent.standing!.slots).toBe(population);
+      expect(delivered.standing!.slots).toBe(population);
+      await expect(readRatingAggregateInventory(pool,context,currentTargets[1]!)).rejects.toThrow('publication is incomplete');
+      const cuts = [originMain,currentTargets[0]!].map((mainVersion,index) => ({ context,main_version:mainVersion,
+        generation: [nativeCurrent,delivered][index]!.standingGeneration! }));
+      const readiness = await measure('SELECT * FROM access.rating_standing_publication($1,$2)',[context,originMain]);
+      const read = await measure(STANDING_RATING_INVENTORY_SQL,[context,originMain]);
+      const fence = await measure(STANDING_RATING_FENCE_SQL,[JSON.stringify(cuts)]);
+      expect(readiness.examined).toBeLessThan(64);
+      expect(read.examined).toBeLessThan(2000);
+      expect(fence.examined).toBeLessThan(128);
+      workMeasurements.push({ population, readiness, read, fence });
+      await pool.query('DELETE FROM access.rating_merge_selection WHERE context=$1 AND main_version=ANY($2::text[])',[context,currentTargets]);
+      while (!(await refreshStandingRatingProjections(pool,{ context,limit:100 })).complete) { /* one bounded origin page */ }
     }
+    console.log('standing native readiness work', JSON.stringify(workMeasurements.map(row => ({ population:row.population,
+      readiness:(row.readiness as {examined:number}).examined, read:(row.read as {examined:number}).examined,
+      fence:(row.fence as {examined:number}).examined }))));
+    await Bun.write(`${import.meta.dir}/../../../.temp/goal/standing-native-work.json`,JSON.stringify(workMeasurements));
     await pool.query(`INSERT INTO access.rating_merge_selection
       (context,work,main_version,principal_id,origin_main_version,origin_slot,task_key)
       SELECT $2,$3,$4,x.principal::uuid,$5,x.slot,$6

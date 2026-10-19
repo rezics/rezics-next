@@ -21,7 +21,7 @@ export interface StandingTransitionCut {
  * journal's final completion settles this durable, conservative fence. A settled
  * fence may verify a replayed receipt, but cannot authorize a new graph effect. */
 export async function fenceStandingRatingTransition(pool: Pool, taskKey: string, cut: StandingTransitionCut,
-  signal = AbortSignal.timeout(STANDING_PUBLICATION_COST.deadlineMs)): Promise<'pending' | 'finished'> {
+  signal = AbortSignal.timeout(STANDING_PUBLICATION_COST.deadlineMs)): Promise<'preparing' | 'pending' | 'finished'> {
   const taskId = /^editorial:[0-9a-f-]{36}:[1-9][0-9]*$/;
   if (!taskId.test(taskKey) || ![cut.sourceWork,cut.sourceMainVersion,cut.survivorWork,cut.survivorMainVersion].every(value => nativeId.test(value))
     || cut.sourceWork === cut.survivorWork || cut.sourceMainVersion === cut.survivorMainVersion
@@ -45,10 +45,15 @@ export async function fenceStandingRatingTransition(pool: Pool, taskKey: string,
         AND rating_standing_transition.original_key IS NOT DISTINCT FROM EXCLUDED.original_key
       RETURNING task_key,finished`, [taskKey,cut.sourceWork,cut.sourceMainVersion,cut.survivorWork,cut.survivorMainVersion,cut.originalKey]);
     if (bound.rows.length !== 1) throw new RatingInventoryConflict('Merge publication cut changed');
+    // Discovery has the same page bound as delivery. Commit its cursor even
+    // when another page is needed; graph effects are admitted only afterwards.
+    const progress = (await client.query('SELECT steps,prepared FROM access.advance_rating_standing_transition($1,$2)',
+      [taskKey,STANDING_PUBLICATION_COST.projections])).rows[0];
+    if (!progress || typeof progress.prepared !== 'boolean') throw new RatingInventoryConflict('Merge publication preparation is unavailable');
     signal.throwIfAborted();
     await client.query('COMMIT');
     signal.throwIfAborted();
-    return bound.rows[0].finished === true ? 'finished' : 'pending';
+    return bound.rows[0].finished === true ? 'finished' : progress.prepared ? 'pending' : 'preparing';
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* preserve failure */ }
     throw error;
@@ -121,8 +126,7 @@ export async function refreshStandingRatingProjections(pool: Pool,
     // Report continuation exhaustion, not a global availability policy. Reads
     // independently recheck their own component, identity cut and revocation.
     const state = (await client.query(`SELECT f.generation AS recovery_generation,
-      NOT EXISTS (SELECT 1 FROM access.rating_standing_refresh ${input.context === undefined ? '' : 'WHERE context=$1'}
-        LIMIT 1) AND NOT EXISTS (SELECT 1 FROM access.rating_standing_revoked_selections($1) LIMIT 1) AS complete
+      access.rating_standing_continuation_complete($1) AS complete
       FROM access.recovery_fence f WHERE f.id AND f.open`, [input.context ?? null])).rows[0];
     if (!state || state.recovery_generation !== fence.generation) throw new RatingInventoryConflict('Standing publication fence is unavailable');
     signal.throwIfAborted();

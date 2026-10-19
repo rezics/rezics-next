@@ -41,13 +41,16 @@ export async function commandWorkMerge(env: WorkActivationEnvironment, pool: Poo
   signal.throwIfAborted();
   const existing = await readMergeIdentityReceipt(env,task);
   if (existing) {
-    await fenceStandingRatingTransition(publicationPool,task.key,cut,signal);
+    if (await fenceStandingRatingTransition(publicationPool,task.key,cut,signal) === 'preparing') {
+      throw new MergeUnavailable('Identity publication preparation is incomplete');
+    }
     return existing;
   }
   return controlTransaction(pool,async client => {
     const publicWorks = await checkMergeAuthority(client,task,env.fuseki,'identity-merge');
     const publication = await fenceStandingRatingTransition(publicationPool,task.key,cut,signal);
     if (publication === 'finished') throw new MergeUnavailable('Completed identity receipt is unavailable');
+    if (publication === 'preparing') throw new MergeUnavailable('Identity publication preparation is incomplete');
     const { source,survivor,operation } = task.plan, receipt = mergeIdentityReceiptIri(task), digest = mergeDigest(task);
     const batch = `urn:rezics:outbox:${hash(receipt)}`,event = `urn:rezics:event:${hash(receipt)}`;
     const validations = await profileValidations(env.fuseki,'work-metadata-v1',[

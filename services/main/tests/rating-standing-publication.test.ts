@@ -20,7 +20,7 @@ const cut = { sourceWork: id(5), sourceMainVersion: origin, survivorWork: id(6),
 function transport(population: number) {
   const selections = Array.from({ length: population }, (_, index) => ({ main_version: id(100 + index), principal_id: principal }));
   const state = { after: selections[0]?.main_version ?? '', job: population > 1, transition: false,
-    generation: 1, open: true, finished: false, unsettled: false, loseCommit: false, checkouts: 0, refreshed: [] as string[], calls: [] as string[],
+    generation: 1, open: true, finished: false, preparation: 0, unsettled: false, loseCommit: false, checkouts: 0, refreshed: [] as string[], calls: [] as string[],
     candidateSizes: [] as number[], abortAfter: 0, cancellation: new AbortController(), releases: [] as boolean[] };
   let before: { after: string; job: boolean; transition: boolean; generation: number; refreshed: string[] } | null = null;
   const client = { release(destroy = false) { state.releases.push(destroy); }, async query(sql: string, values: unknown[] = []) {
@@ -36,6 +36,10 @@ function transport(population: number) {
     else if (sql.includes('AS complete')) rows = [{ recovery_generation: '7', complete: !state.job }];
     else if (sql.includes('FROM access.recovery_fence')) rows = [{ open: state.open, generation: '7' }];
     else if (sql.startsWith('INSERT INTO access.rating_standing_transition')) { state.transition = true; state.generation++; rows = [{ task_key: task, finished: state.finished }]; }
+    else if (sql.includes('access.advance_rating_standing_transition')) {
+      const steps = Math.min(state.preparation,Number(values[1]));
+      state.preparation -= steps; rows = [{ steps, prepared: state.preparation === 0 }];
+    }
     else if (sql.includes('FROM access.rating_standing_refresh') && sql.includes('ORDER BY context')) {
       rows = state.job ? [{ context, origin_main_version: origin, origin_slot: 'urn:rezics:rating-slot:origin' }] : [];
     } else if (sql.includes('FROM access.scope_gate') || sql.includes('access.rating_observation_gate')) { /* gates */ }
@@ -114,6 +118,23 @@ test('a settled fence distinguishes receipt replay from permission to deliver a 
   f.state.finished = true;
   expect(await fenceStandingRatingTransition(f.pool, task, cut)).toBe('finished');
   expect(f.state.calls.at(-1)).toBe('COMMIT');
+});
+
+test('identity preparation commits discovery progress before permitting graph effects and never widens a page', async () => {
+  const f = transport(0);
+  f.state.preparation = 201;
+  expect(await fenceStandingRatingTransition(f.pool,task,cut)).toBe('preparing');
+  expect(f.state.preparation).toBe(101);
+  expect(f.state.calls.at(-1)).toBe('COMMIT');
+  f.state.loseCommit = true;
+  await expect(fenceStandingRatingTransition(f.pool,task,cut)).rejects.toThrow('lost response');
+  expect(f.state.preparation).toBe(1);
+  expect(await fenceStandingRatingTransition(f.pool,task,cut)).toBe('pending');
+  expect(f.state.preparation).toBe(0);
+  const aborted = new AbortController(); aborted.abort();
+  const checkouts = f.state.checkouts;
+  await expect(fenceStandingRatingTransition(f.pool,task,cut,aborted.signal)).rejects.toThrow();
+  expect(f.state.checkouts).toBe(checkouts);
 });
 
 test('publication fencing reserves existing capacity, keeps the real nesting guard and closes with Access', async () => {
@@ -202,10 +223,11 @@ test('invalid, held and cancelled pages cannot advance publication or dispatch l
 });
 
 test('all standing relations declare custody and reconstruction while unknown relations remain conservative and fail the catalog guard', () => {
-  const sources = ['2045_standing_rating_components.sql', '2077_standing_rating_publication.sql', '2606_standing_rating_affected_cuts.sql']
+  const sources = ['2045_standing_rating_components.sql', '2077_standing_rating_publication.sql', '2606_standing_rating_affected_cuts.sql',
+    '2607_standing_rating_bounded_progress.sql']
     .map(name => readFileSync(new URL(`../migrations/access/${name}`, import.meta.url), 'utf8'));
   const names = sources.flatMap(sql => [...sql.matchAll(/CREATE TABLE (access\.rating_standing_\w+)/g)].map(match => match[1]!));
-  expect(names).toHaveLength(8);
+  expect(names).toHaveLength(15);
   const tables: OwnerTable[] = names.map(name => ({ name, schema: 'access', table: name.slice(7), key: [], keyTypes: [], columns: [] }));
   assertAccessRecoveryClassification({ tables, excluded: {}, digest: 'fixture' });
   for (const table of tables) {

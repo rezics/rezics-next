@@ -709,6 +709,12 @@ async function readInventory(pool: Pool, context: string, target: string,
 
 export interface StandingRatingCut { context: string; mainVersion: string; generation: string }
 
+export const STANDING_RATING_FENCE_SQL = `SELECT f.open,f.generation,NOT EXISTS (
+      SELECT 1 FROM jsonb_to_recordset($1::jsonb) cut(context text,main_version text,generation text)
+      CROSS JOIN LATERAL access.rating_standing_publication(cut.context,cut.main_version) p
+      WHERE p.pending<>0 OR p.generation<>cut.generation) AS standing_current
+      FROM access.recovery_fence f WHERE f.id`;
+
 export async function checkRatingAggregateFence(pool: Pool, generation: string,
   signal = AbortSignal.timeout(10_000), cuts: readonly StandingRatingCut[] = []): Promise<boolean> {
   if (cuts.length > MAX_RATING_AGGREGATE_SLOTS || cuts.some(cut => !nativeId.test(cut.context)
@@ -717,11 +723,7 @@ export async function checkRatingAggregateFence(pool: Pool, generation: string,
     // All selected cuts share this one fresh snapshot and statement. Two
     // components retain 2*(BEGIN,SET,SELECT,COMMIT)+one fence = nine statements.
     const result = cuts.length === 0 ? await client.query('SELECT open,generation FROM access.recovery_fence WHERE id')
-      : await client.query(`SELECT f.open,f.generation,NOT EXISTS (
-      SELECT 1 FROM jsonb_to_recordset($1::jsonb) cut(context text,main_version text,generation text)
-      CROSS JOIN LATERAL access.rating_standing_publication(cut.context,cut.main_version) p
-      WHERE p.pending<>0 OR p.generation<>cut.generation) AS standing_current
-      FROM access.recovery_fence f WHERE f.id`,
+      : await client.query(STANDING_RATING_FENCE_SQL,
     [JSON.stringify(cuts.map(cut => ({ context: cut.context,main_version: cut.mainVersion,generation: cut.generation })))]);
     const row = result.rows[0];
     signal.throwIfAborted();
