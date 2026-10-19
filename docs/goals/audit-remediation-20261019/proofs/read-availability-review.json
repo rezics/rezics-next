@@ -3474,5 +3474,343 @@
       "harnessNotice": "Reported 3 commits behind main; no harness failure, rebase or fallback occurred in these report checks.",
       "receiptFinalization": "Only report receipt metadata finalized after checks; no product/assertion/decision change."
     }
+  },
+  "discoveryNativeCoreOverlapSelectorCorrection": {
+    "reviewedAt": "2026-10-19T11:51:24.789745+00:00",
+    "authority": "Continuation of existing G-2846 review; manager metadata-only selection correction. No new Task, product review, source repair, fixture producer or broader acceptance gate.",
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "authoredCandidateChanges": false,
+      "independentReviewsPerformed": 1,
+      "nestedAgentsUsed": false,
+      "accountFallbackUsed": false,
+      "unchangedControlReviewReplayed": false
+    },
+    "decision": {
+      "selectorSourceVerdict": "APPROVE exact 4bafbee0d2b949ba8c2e9c5a44011c984525b372 title-only delta. Entire file equals 3e1181ca after reversing the one literal D5004C01: prefix.",
+      "additiveTestVerdict": "Prior one-path overlap/cleanup/assertion source review remains approved; no assertion/body/threshold change.",
+      "originalTenPathSourceVerdict": "APPROVE retained 50f11211795621e95941719d745bfd3b3f381591 / report 39df91b7e4192b0cdccd23faabf8fbd6a267b09b. No unchanged source replay.",
+      "runtimeVerdict": "BLOCKED: selector admitted one intended case, then background Realm directory budget exit raised TypeError before overlapping Work assertions. This is an actual runtime integration prerequisite failure, not a reached D5-004 faulty-refresh outcome assertion.",
+      "originalMissingParallelAssertionClosed": false,
+      "D5004Closed": false,
+      "wholeCandidateCertified": false,
+      "automaticLanding": false,
+      "productFixRoundConsumed": false
+    },
+    "immutablePins": {
+      "productPin": "ff5a214f7de0f66b888f728ab48e50863f338374",
+      "testParent": "3e1181ca29016dfe8cd8e3331c5afaf75f3bb2a7",
+      "candidate": "4bafbee0d2b949ba8c2e9c5a44011c984525b372",
+      "tree": "f689f1404da4fcef0557e784986be511a29cf29d",
+      "peerHeadVerified": "4bafbee0d2b949ba8c2e9c5a44011c984525b372",
+      "peerClean": true,
+      "path": "tests/qa/integration/discovery-refresh.test.ts",
+      "beforeBlob": "73c6ef9c09e22b39ddb317026deb03f0e43a68d5",
+      "afterBlob": "23267ab34e9d97353b0e49464560b0eca22a279d",
+      "beforeSha256": "898372c89f33f2e9fed9430651c561a435dae5afb8e11496886ac863ef879e2f",
+      "afterSha256": "69ed4a47981d37677b49af9b04b5d37aea3561c0f4ba8bba35c2c9ad52a24b96",
+      "entireFileIdenticalAfterPrefixReversal": true
+    },
+    "selectorReceipt": {
+      "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-refresh-selector-candidate.json",
+      "sha256": "02bbe33460dbbda9eb19576d1f4ddfa9ed08dc6667d0dcbc041fcf8351a87a5c",
+      "independentlyVerified": true,
+      "supportedSelector": "D5004C01",
+      "matchingSelectedCases": 1
+    },
+    "execution": {
+      "job": "be0ca7e2-1bc8-477e-a1ba-8281953bb833",
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts slot -- task --dir .temp/read-availability-native-overlap-execution goal -- test tests/qa/integration/discovery-refresh.test.ts -t D5004C01",
+      "exitCode": 201,
+      "innerTaskExitCode": 1,
+      "qaRun": "20261019t114738-6bf98f",
+      "source": {
+        "head": "4bafbee0d2b949ba8c2e9c5a44011c984525b372",
+        "fingerprint": "27ae7dff3fa7a95645ab72738fdd939aa5c4906adf63ac6add97a11ccfa2a0a4",
+        "clean": true
+      },
+      "sourceStable": true,
+      "counts": {
+        "selectedExecuted": 1,
+        "pass": 0,
+        "fail": 1,
+        "runnerErrorElements": 0,
+        "filteredSkipped": 1,
+        "expectCalls": 1,
+        "overlapAssertionsReached": 0,
+        "caseFailureType": "TypeError",
+        "phaseClassification": "runtime fixture/integration setup blocker, before requested overlap proof"
+      },
+      "tiers": [
+        {
+          "name": "integration",
+          "status": "failed",
+          "elapsedMs": 8686,
+          "shards": [
+            {
+              "project": "20261019t114738-6bf98f-1",
+              "files": [
+                "tests/qa/integration/discovery-refresh.test.ts"
+              ],
+              "status": "failed",
+              "stage": "test",
+              "budgetMs": 480000,
+              "resourceClass": "ordinary",
+              "startupMs": 15206,
+              "bootstrapMs": 3119,
+              "fileFailures": {
+                "tests/qa/integration/discovery-refresh.test.ts": "assertion"
+              },
+              "failureClass": "assertion",
+              "elapsedMs": 8686,
+              "missingFiles": [],
+              "cleanupMs": 5713
+            }
+          ],
+          "failureClass": "assertion"
+        }
+      ],
+      "tests": [
+        {
+          "name": "Discovery scheduled refresh: native source proof, automatic enrollment, restart, leases, Mine isolation and bounded work",
+          "file": "tests/qa/integration/discovery-refresh.test.ts",
+          "tier": "integration",
+          "failed": false,
+          "skipped": true,
+          "durationMs": 0,
+          "ids": [],
+          "status": "skipped"
+        },
+        {
+          "name": "D5004C01: refresh owners quarantine malformed source once, bound fleet probes, recover transient work and rearm repaired input",
+          "file": "tests/qa/integration/discovery-refresh.test.ts",
+          "tier": "integration",
+          "failed": true,
+          "skipped": false,
+          "durationMs": 6552,
+          "detail": "undefined is not an object (evaluating 'store.signal')",
+          "stack": "TypeError: undefined is not an object (evaluating 'store.signal')\n      at run (services/main/src/infrastructure/fuseki.ts:74:37)\n      at services/main/src/modules/realm-directory/worker.ts:46:24",
+          "ids": [
+            "D5004C01"
+          ],
+          "failureClass": "assertion",
+          "status": "failed"
+        }
+      ],
+      "acceptanceIdCounts": {
+        "uncovered": 292,
+        "partial-pass": 0,
+        "passed": 0,
+        "failed": 0
+      },
+      "artifactExists": false,
+      "nativeImages": {
+        "rezics/fuseki:6.2.0-cmd0.5.43-57fb53d598b7": "sha256:04504ec386b5285d376224e4e3af83924e41faef40fdb3d9c6a35246c284da95",
+        "rezics/fuseki:6.2.0-cmd0.5.43-6699b42ecd5d": "sha256:1f130a1afc35d1e286f7b30a12d2afd56b4e623f7ceef3501939f6e79db010bc"
+      },
+      "containersRemaining": [],
+      "sourcePins": [
+        {
+          "path": "services/main/src/infrastructure/fuseki.ts",
+          "blob": "2c24b3c6ee648792ef1bd1618605a3c96c8feb3e",
+          "sha256": "ef6d7fd83cf80c8e2e65af8d06b08a2d26a5b8a3e8c32e6e161f255f105cb4b5"
+        },
+        {
+          "path": "services/main/src/modules/realm-directory/worker.ts",
+          "blob": "d3c51cf71d3cbc1bcf329c913350f97d297815f0",
+          "sha256": "63c68d0c7d79dad3032e63b50a853d60ec57c86656cc82fbee0b6bc153ef8555"
+        },
+        {
+          "path": "infra/dev/compose.yaml",
+          "blob": "f0c9d6ae17d570c57d92fe96454094dcf02a6f1f",
+          "sha256": "b45b3537365bcd9ab2745c3d8b4853196180f3a3f78dc33e3906d43585d00320"
+        },
+        {
+          "path": "scripts/qa/bootstrap.ts",
+          "blob": "4404aa1c2c2087f44c0cba8eb4f000982c6ca96e",
+          "sha256": "a1ae68baba2446c09b573c981a0c7c75cf17e12d1f2376fe8d498513b8306d48"
+        },
+        {
+          "path": "scripts/qa/cli.ts",
+          "blob": "e6770de45d4e8511693c48fa20b7e0738d41dcf0",
+          "sha256": "8ba1141697413c310ff3fc6b80654e5fe7310591d9fb7c9ab57f869557d952a9"
+        },
+        {
+          "path": "services/main/migrations/access/2605_discovery_refresh_disposition.sql",
+          "blob": "43b36a41e6d3d3ea6ad540f8153098494cd59317",
+          "sha256": "ef134594fd78c03871e1fd18e7e9364b29deaa13c96df71f39ccf01e6414d90f"
+        }
+      ]
+    },
+    "assertionReach": {
+      "runnerFailureClass": "assertion",
+      "reviewClassification": "runtime fixture/integration setup failure",
+      "firstCase": "filtered; not executed or rerun",
+      "selectedCase": "executed and failed with TypeError, 6552.14 ms",
+      "totalIntegrationMs": 8686,
+      "expectCalls": 1,
+      "expectCallMeaning": "Runner reports one expect() call; it does not identify that call as an overlap assertion.",
+      "newOverlapArtifactPresent": false,
+      "newOverlapAssertionsReached": false,
+      "observedPublicWorkStatus": null,
+      "observedPublicWorkId": null,
+      "observedPrivateWorkStatus": null,
+      "observedPrivateBodyIsolation": null,
+      "nativePopulationReturnedAt": null,
+      "deliveryHeldAtCoreAnswers": null,
+      "refreshUnsettledAtCoreAnswers": null,
+      "coreDurationMs": null,
+      "quarantineAssertionsPassedInThisRun": false,
+      "interpretation": "No 200/404, held native response, concurrency, quarantine, retry or recovery proof is credited from this run. The original 32-assertion pass remains separate."
+    },
+    "actionableRuntimePrerequisite": {
+      "id": "SETUP-D5-004-READ-BUDGET-EXIT",
+      "severity": "P1 integration blocker; requested D5-004 outcome assertion unreached",
+      "owner": "Manager routes to existing shared native read-budget implementation owner for df1a88d9de3d9d25d13b3ad3ac3b6c407f1e206d; not a demonstrated G-2766 ten-path quarantine defect. Preserve G-2763/G-2766 source decisions pending this separate compatibility prerequisite.",
+      "path": "services/main/src/infrastructure/fuseki.ts",
+      "line": 74,
+      "callerPath": "services/main/src/modules/realm-directory/worker.ts",
+      "callerLine": 46,
+      "introducedRunOverride": "df1a88d9de3d9d25d13b3ad3ac3b6c407f1e206d",
+      "retainedCallerCommit": "4db8a06252",
+      "observedError": "TypeError: undefined is not an object (evaluating 'store.signal')",
+      "smallestDemonstratedReproduction": {
+        "source": "4bafbee0d2b949ba8c2e9c5a44011c984525b372",
+        "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts slot -- task --dir .temp/read-availability-native-overlap-execution goal -- test tests/qa/integration/discovery-refresh.test.ts -t D5004C01",
+        "evidence": "run/logs/integration-1.log and run/integration.xml",
+        "assertionReached": false
+      },
+      "sourceReasoning": "RealmDirectoryWorker invokes inherited AsyncLocalStorage.exit at line 46. The new run override assumes a defined store and dereferences store.signal at line 74; the observed exit path enters run with no store. This explains the traceback; no separate synthetic counterexample or repair was run.",
+      "requiredNextAction": "Existing shared-budget owner must resolve/pin supported AsyncLocalStorage.exit compatibility, then manager supplies an immutable compatible execution dependency before this unchanged one-case proof is attempted again. Do not edit D5004C01 assertions or disable Realm owner to obtain a pass.",
+      "repairPerformed": false,
+      "runtimeRerun": false
+    },
+    "migrationNativeBackupAndLifecycle": {
+      "supportedFreshBootstrap": {
+        "stageReached": "test",
+        "bootstrapMs": 3119,
+        "result": "passed before selected test; runner records failed bootstrap output only",
+        "path": "scripts/qa/bootstrap.ts",
+        "trackedAccessMigration": "services/main/migrations/access/2605_discovery_refresh_disposition.sql",
+        "migrationSha256": "ef134594fd78c03871e1fd18e7e9364b29deaa13c96df71f39ccf01e6414d90f",
+        "receiptLimit": "Fresh bootstrap invokes migrateTracked for all Access migrations and completes before test. Per-file SQL receipt was not exported by this runner; destroyed isolated databases were not reopened. No independent durable applied-2605 row receipt or reached quarantine schema assertion is invented."
+      },
+      "requestedHistoricalNativeImage": "rezics/fuseki:6.2.0-cmd0.5.43-57fb53d598b7",
+      "requestedHistoricalImageId": "sha256:04504ec386b5285d376224e4e3af83924e41faef40fdb3d9c6a35246c284da95",
+      "actualCandidateComposeImage": "rezics/fuseki:6.2.0-cmd0.5.43-6699b42ecd5d",
+      "configuredImageId": "sha256:1f130a1afc35d1e286f7b30a12d2afd56b4e623f7ceef3501939f6e79db010bc",
+      "composePath": "infra/dev/compose.yaml",
+      "composeLine": 41,
+      "nativeReceiptLimit": "Exact candidate Compose selects 6699b42ecd5d, and bootstrap compares command module health with that Compose pin. No per-container image inspection receipt survived cleanup. Presence of 57fb53d598b7 on host does not establish its use. This run does not satisfy the original brief 57fb native-image premise. Manager must explicitly settle this dependency pin; reviewer did not alter it or build an image.",
+      "backup": {
+        "retainedCorpusRestored": false,
+        "retainedBackupSha256Used": null,
+        "newCorpusProducer": false,
+        "mode": "Existing native fixture clones fresh per-run Access/content/relay templates via supported cloneQaOwnerDatabases; no catalogue, old baseline or six-persona Realm corpus required.",
+        "existingBackupManifestsChanged": false
+      },
+      "admission": {
+        "normalGoalSlot": true,
+        "nativeDockerEngine": true,
+        "memoryAdmitted": true,
+        "cpuPressureAvg10Percent": 5.75,
+        "startupMs": 15206,
+        "resourceClass": "ordinary",
+        "budgetMs": 480000,
+        "forceUsage": false,
+        "alternateAccount": false
+      },
+      "cleanup": {
+        "runnerCleanupMs": 5713,
+        "remainingProjectContainers": 0,
+        "ownedProject": "rezics-qa-20261019t114738-6bf98f-1",
+        "manualIntervention": false,
+        "innerOverlapFinallyReached": null,
+        "fixtureCleanupLimit": "No overlap artifact or pending-refresh observation exists. Only supported runner cleanup and absence of remaining project containers are credited; no resource-drain/pending-to-zero claim."
+      }
+    },
+    "perPersona": {
+      "newNativeCase": "personaJourney=false; anonymous public/private Work overlap assertions not reached",
+      "sixPersona652": "Visitor, stranger, member, owner, moderator and operator remain unexecuted as recorded in 08d20f4ae; not made a prerequisite for this narrow native case.",
+      "observedCoreHttpResults": []
+    },
+    "originalCriteria": [
+      {
+        "criterion": "持续非法输入终止/隔离且原因可诊断，无source变化不重做同一完整工作。",
+        "disposition": "proved for actual malformed-source owner path; original class partial",
+        "evidence": "Retained 32-assertion real-owner pass: one full claim/read, no unchanged population rereads, diagnosed basis-invalid and repair rearm. Not replayed to a pass in this run.",
+        "limits": "Actual contradictory revision source, not obsolete media hydration. SRC-D5-004-001 remains an unconfirmed P2 source inference."
+      },
+      {
+        "criterion": "暂态故障退避并在恢复后推进checkpoint，维护总工作和scope公平性有预算。",
+        "disposition": "partial; retained bounded fixture proof unchanged",
+        "evidence": "Retained real-owner 30/60-second transient backoff, checkpoint/generation preservation, activation, 21 parked populations and one shared fleet probe allowance.",
+        "limits": "No new fleet/transient assertion passed here; injected clock and transport seam limits remain. No extra benchmark or concurrency matrix added."
+      },
+      {
+        "criterion": "隔离fixture验证invalid media重试上界、修复后恢复及与核心读取并行可用。",
+        "disposition": "partial; original parallel core availability assertion still unreached",
+        "evidence": "Retry/quarantine/repair proof remains retained. Corrected title selected exactly one real-native case, but budget-exit TypeError stopped the run before additive core overlap assertions.",
+        "limits": "No claimed response-delivery overlap, Jena CPU saturation, mixed 1/2/4/8 workload, six-persona journey or cancellation proof."
+      }
+    ],
+    "historicalPreservation": {
+      "allPriorReportValuesUnchanged": true,
+      "priorReportSha256": "ddf4e0013c66148d92ee0d79e34fb5608fc84feb923c18aa7f7b164a955db1ba",
+      "previousSelectorRejection": "704903c72156318d6996bb2eaa65a2007ff6a2c3 / job 0ff45b9e-e1db-4594-a6bd-c6b4b03d1877 remains preserved; title-only correction fixes that selection premise, not this later runtime compatibility failure.",
+      "retainedNative": "20261019t070623-ce62e2 2 cases: 1 pass/1 fail, 53 assertions; malformed owner 32 assertions passed, personaJourney=false.",
+      "inheritedCreditFailure": "Scheduled-refresh line 121 namespace author mismatch retained; later lease/Mine assertions unreached. Not selected or replayed here.",
+      "notificationAndMigration": "Notification repair review and all original public setup failures, broader 652 six-persona evidence, and b0b3 transition review unchanged.",
+      "productOrIndependentAssertionEdits": false,
+      "mainOrLedgerMutation": false,
+      "otherWorkerInterference": false
+    },
+    "evidence": {
+      "privateBundle": ".temp/read-availability-review/native-core-overlap-4baf",
+      "rawRun": "run/",
+      "pins": "source-and-runner-pins.json",
+      "result": "recorded-selection-result.json",
+      "sourceContext": "setup-source/",
+      "originalReport": "report-before-selector-correction.json",
+      "inventory": "inventory.json",
+      "privateEnvCopiesRetained": false
+    },
+    "ownedReportChecks": {
+      "job": "113869e5-f7fe-4ed2-b286-a2e31aff50e7",
+      "status": "pass",
+      "docs": {
+        "command": "task docs:check",
+        "exitCode": 0,
+        "executed": 13,
+        "pass": 13,
+        "fail": 0,
+        "error": 0,
+        "skip": 0,
+        "markdownFiles": 249
+      },
+      "worker": {
+        "command": "task goal -- check",
+        "exitCode": 0,
+        "types": "not applicable; no TypeScript workspace changed",
+        "tests": "none named in brief; no unchanged product replay",
+        "lint": "not applicable; no source changed",
+        "ast": "pass (0.2s)",
+        "guards": {
+          "selectedFiles": 1,
+          "availableFiles": 44,
+          "executed": 2,
+          "pass": 2,
+          "fail": 0,
+          "error": 0,
+          "skip": 0,
+          "assertions": 6,
+          "elapsedSeconds": 3.3
+        }
+      },
+      "harnessNotice": "Report check printed 4 commits behind main; all selected checks passed. No rebase, fallback, unrecorded check or repeated product test.",
+      "receiptFinalization": "Only this report check receipt finalized after successful checks; decisions, assertions, source and historical fields unchanged."
+    }
   }
 }
