@@ -2963,7 +2963,7 @@
       "next": "Manager can use this reviewed and checked minimal Settings slice for its bounded landing decision, copy the current retained sibling bundle under its own authority, and retain all three findings open until the exact authenticated/announcement premises are verified. No land:auto or whole-wave confirmation."
     }
   ],
-  "latestEvidenceRun": "original-acceptance-e96e4846d049",
+  "latestEvidenceRun": "focus-correction-d9ebbd3b0f8a",
   "genuineJourneyRuns": [
     {
       "id": "authenticated-e96e4846d049",
@@ -4640,6 +4640,477 @@
         "sharedControlReport": "docs/goals/audit-remediation-20261019/proofs/shared-controls.json",
         "historicalIntegrityEvidence": "prior-evidence-integrity.json"
       }
+    }
+  ],
+  "focusCorrectionRuns": [
+    {
+      "id": "focus-correction-d9ebbd3b0f8a",
+      "recordedAt": "2026-10-19T10:29:57.383741+00:00",
+      "authorization": "Latest G-2829 manager continuation: confirm only G2751 published d9ebbd3 focus correction in genuine languages-390-409-refresh503, with recovery-owned focus and person-moved focus; reuse valid unchanged evidence.",
+      "result": "Both affected genuine phone focus assertions passed. Refresh success focuses current visible Try saving again when recovery owned focus; it preserves Text size when the person moved there. Unsaved language order, search, pending privacy value and truthful conflict receipt survive both paths.",
+      "regressionConfirmed": false,
+      "source": {
+        "frontendProductPin": "d9ebbd3b0f8ae06010a7ee183641f11ed79e5192",
+        "frontendParent": "0ec51a648571cdffdff667ca9b2ca86b6ffa69a6",
+        "frontendCheckout": ".temp/settings-focus-product/",
+        "frontendProcesses": [
+          {
+            "pid": "1047028",
+            "sourceDirectory": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2829/.temp/settings-focus-product",
+            "commandName": "task",
+            "checkoutHead": "d9ebbd3b0f8ae06010a7ee183641f11ed79e5192"
+          },
+          {
+            "pid": "1047080",
+            "sourceDirectory": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2829/.temp/settings-focus-product/apps/web",
+            "commandName": "node",
+            "checkoutHead": "d9ebbd3b0f8ae06010a7ee183641f11ed79e5192"
+          }
+        ],
+        "sourceCleanBeforeAndAfter": true,
+        "sourceRevisionSeparateFromReportCommit": true,
+        "backend": {
+          "origin": "http://127.0.0.1:3001",
+          "health": {
+            "status": 200,
+            "body": {
+              "status": "ready",
+              "horizons": {
+                "sampledAt": "2026-10-19T10:23:13.423Z",
+                "writerVisibility": "all-sessions",
+                "notification": {
+                  "oldestPendingRowAgeSeconds": null,
+                  "oldestWriterAgeSeconds": null
+                },
+                "reviewRank": {
+                  "oldestPendingRowAgeSeconds": null,
+                  "oldestPendingRowAgeBasis": "none",
+                  "oldestWriterAgeSeconds": null
+                },
+                "editorial": {
+                  "oldestPendingRowAgeSeconds": null,
+                  "oldestWriterAgeSeconds": null
+                }
+              }
+            }
+          },
+          "processes": [
+            {
+              "pid": "1372265",
+              "sourceDirectory": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+              "checkoutHead": "75409ac3c379a9f84212e48a8abdc6540c5c44a2"
+            }
+          ],
+          "provenanceLimit": "Process source-directory pin recorded separately; health response does not attest an immutable build revision."
+        },
+        "productOrOriginalAssertionsEdited": false,
+        "dependencyAndHarnessIdentity": "source-confirmation.json: seven dependency/configuration/fixture/browser-provider files have identical SHA-256 at e96 and d9.",
+        "integrationLimit": "Published d9 tree contains other already-owned main integration beyond e96; this is not a review or regression confirmation of those unrelated paths."
+      },
+      "changedSourceConfirmation": {
+        "evidence": [
+          "changed-source.patch",
+          "source-confirmation.json"
+        ],
+        "observations": [
+          "useRecoveryFocus.remember records whether current recovery button owns activeElement before busy disables/replaces it.",
+          "Layout effect restores the current target only after busy ends and activeElement is BODY. Pending focusin on another meaningful element cancels ownership.",
+          "PersonControls attaches the ref to its current active-section recovery action; reviewLatest calls remember before busy. Pending language/other preference data logic and API payload are unchanged.",
+          "Notification consumer is the same shared-hook integration; G2751 supplied affected original notification story. It is outside this bounded genuine PersonControls rerun.",
+          "Existing ConflictRefreshFailure gains focus assertion; other delta stories cover repeat refresh failure, focus moved away and unowned focus. No original assertion removed."
+        ],
+        "sourceDefectsFound": [],
+        "reviewReuse": "Single original authored-patch review,520185 correction and e96 material integration review remain valid and unchanged. Only the published focus delta was confirmed here; no new reviewer or repeated unchanged review.",
+        "ownerChecks": {
+          "provenance": "Latest manager continuation reports G2751 five affected original stories passed, inspected PNGs and types/lint/guards passed at d9ebbd3. Exact QA ID was not supplied to this worker; this is owner-provided evidence, not a new G2829 QA run.",
+          "notificationConsumer": "Shared hook also applies to notification recovery; affected owner story coverage reused. No unchanged notification journey replay."
+        }
+      },
+      "method": {
+        "browser": "Repository Playwright provider, supported local-development isolated task web:dev plus genuine OAuth PKCE; existing authorized fixture71473997-6e2e-4e59-9044-01627a79e839, eligible Main session200.",
+        "viewport": {
+          "width": 390,
+          "height": 844
+        },
+        "faultAndReceiptBoundary": "Only one explicitly injected refresh503 per focus variant; actual409 via competing expectedVersion write, successful refresh and restoration use genuine API responses. GET delays preserve real response bodies.",
+        "keyboard": "Natural reverse Tab reaches Load latest choices; Enter starts the real refresh. In the moved-focus variant one natural Tab reaches Text size while refresh is gated. No focus() used to manufacture the recovery outcome.",
+        "runtime": {
+          "started": "2026-10-19T10:23:12.333Z",
+          "finished": "2026-10-19T10:25:54.631Z",
+          "ready200": true,
+          "actualApiResponsesRetained": 27
+        },
+        "scope": "Only existing languages-390-409-refresh503 recovery; two focus ownership variants, no notification/contrast/full persistence replay.",
+        "limits": [
+          "Only affected phone recovery was replayed; original22 genuine persistence cases and32 story assertions are reused at their separately named earlier pins.",
+          "The first refresh503 per variant is a declared browser fault, not a real backend503 receipt. Conflicts, successful refreshes, competing writes and restoration are actual API receipts.",
+          "No new save or reload persistence assertion was run after this unsaved refresh delta; original genuine save/reload receipts remain the persistence evidence.",
+          "Backend process source-directory identity and health200 do not attest an immutable served build.",
+          "DOM status semantics are preserved; heard speech or physical-device use is neither claimed nor introduced as new original acceptance.",
+          "One unattributed SSR fallback pageerror was observed; focused assertions passed and no all-runtime-errors-cleared claim is made."
+        ]
+      },
+      "checks": [
+        {
+          "job": "fa835a4d-e079-4710-aa2d-f49a2b363774",
+          "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'bun .temp/settings-focus-d9ebbd3b0f8a/live-proof.ts' -- sh -c 'cd .temp/settings-focus-product && task install'",
+          "exit": 0,
+          "classification": "passed",
+          "steps": [
+            {
+              "command": "sh -c cd .temp/settings-focus-product && task install",
+              "exit": 0,
+              "result": "Task dependency installation through Yarn passed at exact clean d9 pin.",
+              "evidence": "jobs/fa835a4d-e079-4710-aa2d-f49a2b363774.1.log"
+            },
+            {
+              "command": "bun .temp/settings-focus-d9ebbd3b0f8a/live-proof.ts",
+              "exit": 0,
+              "result": "Both affected focus variants passed; genuine eligible session200, real409/refresh200, explicit synthetic refresh503, exact fixture functional restoration and owned server stop verified. One SSR fallback pageerror retained separately.",
+              "evidence": [
+                "jobs/fa835a4d-e079-4710-aa2d-f49a2b363774.2.log",
+                "live-focus-recovery.json"
+              ]
+            }
+          ]
+        }
+      ],
+      "affectedAssertions": [
+        {
+          "originalCase": "languages-390-409-refresh503",
+          "focusVariant": "recovery-owns-focus",
+          "result": "passed",
+          "beforeRefreshFocus": {
+            "tag": "BUTTON",
+            "role": null,
+            "id": "",
+            "name": "Load latest choices",
+            "disabled": false,
+            "rect": {
+              "x": 37,
+              "y": 262,
+              "width": 167,
+              "height": 36,
+              "inViewport": true,
+              "centerUnoccluded": true
+            },
+            "width": 390,
+            "documentWidth": 390,
+            "scrollY": 2181
+          },
+          "afterRefreshFocus": {
+            "tag": "BUTTON",
+            "role": null,
+            "id": "",
+            "name": "Try saving again",
+            "disabled": false,
+            "rect": {
+              "x": 37,
+              "y": 262,
+              "width": 144,
+              "height": 36,
+              "inViewport": true,
+              "centerUnoccluded": true
+            },
+            "width": 390,
+            "documentWidth": 390,
+            "scrollY": 2181
+          },
+          "focusedRecoveryTargetRestored": true,
+          "personMovedFocusPreserved": null,
+          "naturalKeyboard": [
+            {
+              "key": "Shift+Tab",
+              "active": {
+                "tag": "BUTTON",
+                "role": null,
+                "id": "",
+                "name": "Load latest choices",
+                "disabled": false,
+                "rect": {
+                  "x": 37,
+                  "y": 262,
+                  "width": 167,
+                  "height": 36,
+                  "inViewport": true,
+                  "centerUnoccluded": true
+                },
+                "width": 390,
+                "documentWidth": 390,
+                "scrollY": 2181
+              }
+            }
+          ],
+          "unsavedLanguageOrder": [
+            "1English",
+            "2한국어Korean",
+            "3françaisFrench"
+          ],
+          "searchRetained": "de",
+          "pendingPrivacyValue": true,
+          "unsavedDraftAndReceiptPreserved": true,
+          "statusAfterRefresh": [
+            "Your preferences changed elsewhere. Your unsaved choices are still here. Review them, then save again.",
+            "Use 3–30 letters, numbers or underscores."
+          ],
+          "documentWidth": 390,
+          "restorationVerified": true,
+          "imagesPersonallyViewed": [
+            "images/live-focus-recovery-recovery-owns-focus-load-latest-focus.png",
+            "images/live-focus-recovery-recovery-owns-focus-refresh-complete-focus.png"
+          ],
+          "evidence": "live-focus-recovery.json#cases[focusVariant=recovery-owns-focus]"
+        },
+        {
+          "originalCase": "languages-390-409-refresh503",
+          "focusVariant": "person-moved-focus",
+          "result": "passed",
+          "beforeRefreshFocus": {
+            "tag": "BUTTON",
+            "role": null,
+            "id": "",
+            "name": "Load latest choices",
+            "disabled": false,
+            "rect": {
+              "x": 37,
+              "y": 262,
+              "width": 167,
+              "height": 36,
+              "inViewport": true,
+              "centerUnoccluded": true
+            },
+            "width": 390,
+            "documentWidth": 390,
+            "scrollY": 2181
+          },
+          "afterRefreshFocus": {
+            "tag": "BUTTON",
+            "role": "combobox",
+            "id": "select:_r_2r_:trigger",
+            "name": "Text size",
+            "disabled": false,
+            "rect": {
+              "x": 37,
+              "y": 364,
+              "width": 316,
+              "height": 36,
+              "inViewport": true,
+              "centerUnoccluded": true
+            },
+            "width": 390,
+            "documentWidth": 390,
+            "scrollY": 2759
+          },
+          "focusedRecoveryTargetRestored": null,
+          "personMovedFocusPreserved": true,
+          "naturalKeyboard": [
+            {
+              "key": "Shift+Tab",
+              "active": {
+                "tag": "BUTTON",
+                "role": null,
+                "id": "",
+                "name": "Load latest choices",
+                "disabled": false,
+                "rect": {
+                  "x": 37,
+                  "y": 262,
+                  "width": 167,
+                  "height": 36,
+                  "inViewport": true,
+                  "centerUnoccluded": true
+                },
+                "width": 390,
+                "documentWidth": 390,
+                "scrollY": 2181
+              }
+            },
+            {
+              "key": "Tab",
+              "stage": "person moves focus during real refresh",
+              "active": {
+                "tag": "BUTTON",
+                "role": "combobox",
+                "id": "select:_r_2r_:trigger",
+                "name": "Text size",
+                "disabled": false,
+                "rect": {
+                  "x": 37,
+                  "y": 364,
+                  "width": 316,
+                  "height": 36,
+                  "inViewport": true,
+                  "centerUnoccluded": true
+                },
+                "width": 390,
+                "documentWidth": 390,
+                "scrollY": 2719
+              }
+            }
+          ],
+          "unsavedLanguageOrder": [
+            "1English",
+            "2한국어Korean",
+            "3françaisFrench"
+          ],
+          "searchRetained": "de",
+          "pendingPrivacyValue": true,
+          "unsavedDraftAndReceiptPreserved": true,
+          "statusAfterRefresh": [
+            "Your preferences changed elsewhere. Your unsaved choices are still here. Review them, then save again.",
+            "Use 3–30 letters, numbers or underscores."
+          ],
+          "documentWidth": 390,
+          "restorationVerified": true,
+          "imagesPersonallyViewed": [
+            "images/live-focus-recovery-person-moved-focus-load-latest-focus.png",
+            "images/live-focus-recovery-person-moved-focus-elsewhere-pending.png",
+            "images/live-focus-recovery-person-moved-focus-refresh-complete-focus.png"
+          ],
+          "evidence": "live-focus-recovery.json#cases[focusVariant=person-moved-focus]"
+        }
+      ],
+      "fixtureRestoration": {
+        "initialValues": {
+          "profile": "person-preferences-v1",
+          "profileVisibility": "public",
+          "followPolicy": "everyone",
+          "hideReadingActivity": false,
+          "contentLanguages": [],
+          "spoilerPolicy": "hide-unread",
+          "version": 17,
+          "blockedPeople": []
+        },
+        "finalValues": {
+          "profile": "person-preferences-v1",
+          "profileVisibility": "public",
+          "followPolicy": "everyone",
+          "hideReadingActivity": false,
+          "contentLanguages": [],
+          "spoilerPolicy": "hide-unread",
+          "version": 21,
+          "blockedPeople": []
+        },
+        "functionalValuesRestoredWithFreshExpectedVersionAndGetReadback": true,
+        "versions": "17 initial;18 competing write;19 restored;20 competing write;21 restored.",
+        "accountDisplayAndNotificationPreferencesUnchanged": true,
+        "ownedServer42833StoppedAndPortClosed": true,
+        "privateCredentialsAndStateExcluded": true
+      },
+      "runtimeObservations": {
+        "assertionFailures": [],
+        "pageErrors": [
+          {
+            "kind": "pageerror",
+            "message": "Switched to client rendering because the server rendering errored:\n\nundefined"
+          }
+        ],
+        "assessment": "Selected focus assertions reached and passed. A pageerror reports an SSR failure with client-render fallback and undefined detail. The listener did not record route, timestamp or stack, so its precise origin/cause is unconfirmed. No source fix or unrelated diagnostic rerun was authorized.",
+        "existingOwners": [
+          "G2747",
+          "G2847"
+        ]
+      },
+      "originalAcceptanceMapping": [
+        {
+          "finding": "D2-005",
+          "status": "Remaining affected focus assertion confirmed in genuine current-source phone flow; original scoped acceptance evidence is complete when combined with preserved genuine draft/save/persistence and story receipts.",
+          "priorCriteria": "Reuse originalAcceptanceRuns[id=original-acceptance-e96e4846d049].originalAcceptanceMapping[finding=D2-005] for busy language actions, slow-save/503/409, stale receipts and true save/reload order. Prior focus-to-BODY failure remains historical evidence.",
+          "affectedDelta": "After failed conflict refresh, keyboard Load latest choices followed by genuine refresh200 restores meaningful visible current Try saving again focus. If the person naturally tabs elsewhere while pending, that exact Text size element keeps focus. Draft en/ko/fr, search de, pending privacy and unsaved status remain intact.",
+          "evidence": [
+            "source-confirmation.json",
+            "live-focus-recovery.json#cases",
+            "viewed-images.json"
+          ],
+          "acceptanceLimit": "This is original bounded product evidence across explicit pins, not whole-wave regression confirmation or closure from fixtures alone."
+        },
+        {
+          "finding": "D4-004",
+          "status": "Previously accepted original class unchanged.",
+          "evidence": "Reuse originalAcceptanceRuns[id=original-acceptance-e96e4846d049]: all45 native Tab targets, channel/topic/state names and actual first/middle/last captures."
+        },
+        {
+          "finding": "D4-005",
+          "status": "Previously accepted original class unchanged.",
+          "evidence": "Reuse18 genuine notification combinations within the preserved22 cases, status semantics and keyboard recovery; recorded speech is not an additional original gate."
+        },
+        {
+          "finding": "D4-001",
+          "status": "Previously accepted authenticated Settings contrast surface unchanged.",
+          "evidence": "Reuse original-acceptance-e96e4846d049 light/dark1440/390 switch and empty InputGroup composite/PNG measurements plus existing shared-control review."
+        }
+      ],
+      "screenshots": {
+        "newPersonallyViewed": 5,
+        "actuallyViewed": [
+          "images/live-focus-recovery-recovery-owns-focus-load-latest-focus.png",
+          "images/live-focus-recovery-recovery-owns-focus-refresh-complete-focus.png",
+          "images/live-focus-recovery-person-moved-focus-load-latest-focus.png",
+          "images/live-focus-recovery-person-moved-focus-elsewhere-pending.png",
+          "images/live-focus-recovery-person-moved-focus-refresh-complete-focus.png"
+        ],
+        "viewedManifest": "viewed-images.json",
+        "notViewed": "Readiness PNG retained but not claimed as viewed."
+      },
+      "reusedEvidence": {
+        "historicalOriginalPin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+        "candidatePin": "61df4790bcc13e40d1ccce6358edb1d632089db8",
+        "candidateQA": "20261019t063638-162050;32/32 original stories and15 units/109 assertions; affected types/lint/guards. Not rerun.",
+        "genuinePin": "e96e4846d049d3958695e30ff7e67dacc1af93e9",
+        "genuine22Cases": "genuineJourneyRuns[id=authenticated-e96e4846d049]; prior47 viewed PNGs, original language/document/receipt and failure evidence unchanged.",
+        "originalAcceptance": "originalAcceptanceRuns[id=original-acceptance-e96e4846d049];45switch traversal and Settings light/dark contrast receipts unchanged.",
+        "integrity": "prior-evidence-integrity.json verifies every entry of159/159/211/59-artifact historical bundles and all existing report objects."
+      },
+      "retainedEvidence": {
+        "privateBundle": ".temp/settings-focus-d9ebbd3b0f8a/",
+        "handoffBundle": ".temp/audit-remediation-20261019/proofs/settings-feedback-G-2829-focus-d9ebbd3b0f8a/",
+        "manifest": "manifest.json",
+        "mainCopyCompleted": false,
+        "managerRequestedMainDestination": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/proofs/settings-feedback-G-2829-focus-d9ebbd3b0f8a/",
+        "excluded": "Private credentials, browser cookies/storage and raw OAuth server logs remain outside retained bundle."
+      },
+      "administrativeReportChecks": {
+        "scope": "Report branch administrative checks only; pinned product focus proof and reused original stories/persistence have separate receipts.",
+        "job": "cb60f392-17e8-4aee-bc20-b09d1c689c19",
+        "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+        "exit": 0,
+        "steps": [
+          {
+            "command": "task docs:check",
+            "exit": 0,
+            "result": "13 documentation checker tests passed;249 Markdown files checked for local links, fragments and design navigation. No external-link or runtime claim.",
+            "evidence": "jobs/cb60f392-17e8-4aee-bc20-b09d1c689c19.1.log"
+          },
+          {
+            "command": "task goal -- check",
+            "exit": 0,
+            "checkId": "run-HBELIX",
+            "result": "types ok(no TypeScript workspace changed); tests ok(none named in brief); lint ok(no source changed); AST ok; guards ok(1/44 selected for report path).",
+            "evidence": [
+              "jobs/cb60f392-17e8-4aee-bc20-b09d1c689c19.2.log",
+              "administrative-check/run-HBELIX/output.log"
+            ]
+          }
+        ],
+        "harnessNotice": "Harness reports3 commits behind main; selected checks all passed. No rebase, source update or repeated passing product test was performed."
+      },
+      "instructionEffects": [
+        {
+          "file": "docs/goals/worker.md",
+          "quote": "Translate a main-checkout path into your worktree before editing it.",
+          "effect": "New retained bundle is staged only in worker-translated destination. Manager must copy it to main; no main source, other worktree or wave writes."
+        }
+      ],
+      "ownerChanges": [],
+      "proposedTasks": [
+        {
+          "owner": "G2747/G2847 via manager",
+          "reason": "Triage retained unattributed SSR fallback pageerror from genuine d9 run; selected focus assertions passed, cause not established.",
+          "evidence": "live-focus-recovery.json#errors"
+        }
+      ],
+      "blockers": [],
+      "next": "Manager can accept the affected D2-005 focus delta with prior original evidence, copy the verified focused bundle to main, and route incidental SSR fallback observation to existing startup owners. No full regression or unchanged review required."
     }
   ]
 }
