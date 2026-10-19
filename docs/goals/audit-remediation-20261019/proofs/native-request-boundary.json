@@ -1554,5 +1554,202 @@
       "integratedFe9Run": false,
       "reuseLimit": "These are producer933 component/source checks; their labels and actual source are preserved. Changed Main integration is independently reviewed atfe9 and the affected deadline/Account39 cases execute there; no integrated whole-tier or persona qualification is inferred."
     }
+  },
+  "storageExitCorrection": {
+    "id": "G2822-STORAGE-EXIT-01",
+    "status": "bounded_correction_verified",
+    "preservedReport": {
+      "commit": "24769cfc427ebf29a1b3686b4488d1312a1f429d",
+      "sha256": "875a058767a4392c20d7dd68d1f4f4517382130c63563bb11f5819f076ca8b0b",
+      "allExistingFieldsUnchanged": true,
+      "detail": "Historical 92b failed571, c5 passing566, fe9 review/39 tests181 assertions, original six/affected47 native cases and producer53 readiness cases retain their original pins, failures, approvals and artifacts. None was rerun or relabelled."
+    },
+    "source": {
+      "head": "b8ec0159dfd3b4f38d210bead790757222f8871f",
+      "parent": "410fc3e1ca88f26feb8406345c0c93a477df07e3",
+      "mainAtReview": "8a40424aa15eb5387183a1fa15fa3f24758b45c9",
+      "reportParent": "24769cfc427ebf29a1b3686b4488d1312a1f429d",
+      "paths": [
+        "services/main/src/infrastructure/fuseki.ts",
+        "services/main/tests/request-read-budget.test.ts"
+      ],
+      "files": [
+        {
+          "path": "services/main/src/infrastructure/fuseki.ts",
+          "parentBlob": "2c24b3c6ee648792ef1bd1618605a3c96c8feb3e",
+          "sourceBlob": "7aa4919f57f878348ecf1ba2a737dabbae456d72",
+          "mainBlob": "2c24b3c6ee648792ef1bd1618605a3c96c8feb3e",
+          "sha256": "913bd1d766a215932a0efd88e0362b083b2e0a0843d0f2f19b7ad47c9171de13"
+        },
+        {
+          "path": "services/main/tests/request-read-budget.test.ts",
+          "parentBlob": "36255b6f437328ed057b8241df085fa47eaaf30f",
+          "sourceBlob": "52def96aaa632897d106e05f117c951b7c507733",
+          "mainBlob": "36255b6f437328ed057b8241df085fa47eaaf30f",
+          "sha256": "4b7038acc0d5fb00609b90b6505311da54d2dab6e5d6d22eb588bdaa7efcfdf1"
+        }
+      ],
+      "sourceReceipt": ".temp/native-request-boundary/exit/source.json",
+      "snapshot": ".temp/native-request-boundary/exit/candidate",
+      "trackedFiles": 10088,
+      "sourceStable": true,
+      "runnerPins": "source.json records exact candidate Task/guard/worker/lock blobs and SHA-256s, outer Task/goalctl/QA admission source, main-code recorded-job runner and Bun/Task versions. Snapshot-local workspace links use read-only installed external dependencies."
+    },
+    "review": {
+      "status": "approved",
+      "reviewer": "G-2822 codex-1 / GPT-6.1 Sol / xhigh; same independent reviewer, no nested agents or fallback",
+      "scope": "Only b8ec versus 410fc3e: undefined-store exit delegation, detached worker ownership, caller restoration and cancellation/finite allowances; exact two-path composition onto inspected Main owner.",
+      "findings": [],
+      "observations": [
+        "Undefined store returns through super.run before ambient request lookup, allocation claim, signal composition, proxy creation or readScopes inspection. Base AsyncLocalStorage preserves callback arguments/value, synchronous throws, async rejection and caller restoration.",
+        "Every non-undefined budget path is byte unchanged apart from the widened run parameter type. The correction does not reset counters, relax deadline checks, disable an owner or hide exceptions.",
+        "All original test bytes are unchanged after removing only the new import and contiguous three-case addition. New cases use the real exported storage, request boundary, local HTTP fixture and runWorkerTick.",
+        "Preflight and declared callers restore identity across sync callbacks, microtasks, await/timers, throws and rejection. After caller abort, detached work enters a fresh bounded owner, spends one call and its bytes, refuses the next read, and preserves the caller abort reason and spent counters.",
+        "Worker case observes exactly three positive-budget transports: preflight, caller and worker. Neither later caller attempt starts transport. Worker budget ends at zero calls/bytes; root and caller allocations remain spent.",
+        "Main at the recorded composition pin has both exact parent blobs. Taskfile.yml, repository-guards.ts and worker-tick.ts are byte exact between that Main and the independently tested b8ec snapshot. Landing requires only this two-file delta, without a historical whole-file or whole-wave replacement."
+      ]
+    },
+    "independentExecution": {
+      "worker": "G-2822",
+      "source": "b8ec0159dfd3b4f38d210bead790757222f8871f",
+      "job": "7b2f66f1-8f5a-48d3-8101-91519734936e",
+      "command": [
+        "task",
+        "goal",
+        "--",
+        "test",
+        "--result-file",
+        ".temp/native-request-boundary/exit/qa-result.json",
+        "./.temp/native-request-boundary/exit/exit-regressions.test.ts",
+        "--reporter=junit",
+        "--reporter-outfile",
+        ".temp/native-request-boundary/exit/wrapper.xml"
+      ],
+      "fixtureCommand": [
+        "task",
+        "--dir",
+        "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2822/.temp/native-request-boundary/exit/candidate",
+        "goal:unit-files",
+        "--",
+        "services/main/tests/request-read-budget.test.ts",
+        "--test-name-pattern",
+        "^(budget exit clears callback and descendant context and restores the (preflight|declared) caller|a detached worker selects its own bounded allocation without renewing a cancelled caller)$",
+        "--reporter=junit",
+        "--reporter-outfile",
+        "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2822/.temp/native-request-boundary/exit/regressions.xml"
+      ],
+      "admission": "Recorded main-code goalctl job invokes Task goal test. Its explicit private one-test Bun wrapper is QA-admitted and calls supported Task goal:unit-files name filtering on the unchanged owner fixture at b8ec. This loose wrapper has no hosted owner-tier QA run ID.",
+      "qaResult": ".temp/native-request-boundary/exit/qa-result.json",
+      "junit": ".temp/native-request-boundary/exit/regressions.xml",
+      "log": ".temp/native-request-boundary/exit/regressions.log",
+      "counts": {
+        "listed": 15,
+        "executed": 3,
+        "passed": 3,
+        "failures": 0,
+        "errors": 0,
+        "filteredOut": 12,
+        "selectedSkipped": 0,
+        "assertions": 56,
+        "files": 1
+      },
+      "cases": [
+        {
+          "name": "budget exit clears callback and descendant context and restores the preflight caller",
+          "assertions": 17
+        },
+        {
+          "name": "budget exit clears callback and descendant context and restores the declared caller",
+          "assertions": 17
+        },
+        {
+          "name": "a detached worker selects its own bounded allocation without renewing a cancelled caller",
+          "assertions": 22
+        }
+      ],
+      "countMeaning": "JUnit lists fifteen cases with twelve filter skips. Exactly the three new named cases executed once. The separate one-test/one-assertion admission wrapper is not added to product counts.",
+      "failureEvidence": []
+    },
+    "producerChecksReused": {
+      "worker": "G-2762",
+      "initialTestedSource": "95ca486e0795d8707f3db3581f0d51c23f116e79",
+      "publishedSource": "b8ec0159dfd3b4f38d210bead790757222f8871f",
+      "twoAuthoredBlobsByteExact": true,
+      "unitJob": "e5a8adf6-2c92-4c1d-9e59-dcdcb32d5bba",
+      "unitStep": 1,
+      "qa": "20261019t103700-5f9500",
+      "counts": {
+        "executed": 48,
+        "passed": 48,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "assertions": 1070,
+        "files": 4
+      },
+      "scopedChecksStep": 5,
+      "scopedChecks": "types, inference, lint, AST and 24 selected repository guards passed; selection listing at step6 is not test execution.",
+      "sequenceFailure": "Step7 wave push was refused after concurrent wave advancement. The unit and scoped-check steps passed; the whole sequence is not labelled passed.",
+      "postRebaseJob": "ceaf7647-aa47-4f17-9de7-b3856541b648",
+      "postRebaseChecks": "All three sequence steps passed, including Main typecheck of 2808 files. Original two source/test blobs remained exact; unchanged four-file/native tiers were not repeated by G-2822."
+    },
+    "formerPreparation": {
+      "source": "4a616b079a364b8f5ac7fe4d4ff56bc99849e766",
+      "fusekiBlob": "2c24b3c6ee648792ef1bd1618605a3c96c8feb3e",
+      "classification": "preparation harness TypeError before worker promise/catch; no product acceptance assertion",
+      "outcomeAssertionReached": false,
+      "evidence": "producer/handoff.md retains the G-2762 receipt and manager disposition reference. The former runtime Fuseki blob equals this correction parent and inspected Main owner. This classifies the actual preparation failure; the three independent regressions above reached their own assertions."
+    },
+    "landingDisposition": "Approve this exact two-path correction onto inspected Main after the affected report checks. No source findings or new approval hold. Manager handles landing; no whole-wave source, stale whole-file replacement or second review of the accepted batch.",
+    "scopeAndLimitations": [
+      "Independent execution is at immutable b8ec, with exact two-parent-blob and Task/worker composition checked against immutable Main 8a404. It is not a newly executed full Main/native/public integration campaign.",
+      "The manager records original29-path df1a88d9de and genuine271b proof already on Main. This correction preserves that disposition and does not reland, reopen or repeat those unchanged proofs. Earlier D5/persona notes remain historical statements at their original pins; current remaining public-boundary/workload outcomes stay with their existing owners.",
+      "No new public acceptance cell, corpus outcome or global D5 closure is claimed by these three local owner-fixture cases. No new stack, corpus, restore/import, shared lifecycle, competing image or product/assertion edits occurred."
+    ],
+    "checks": {
+      "status": "passed",
+      "job": "9f810c67-d786-47ee-8265-7dd99ff3c083",
+      "commands": [
+        [
+          "task",
+          "-t",
+          ".temp/native-request-boundary/exit/Taskfile.yml",
+          "report:validate"
+        ],
+        [
+          "/bin/sh",
+          "-c",
+          "env GOAL_CHECK_PREPARED_TREE=/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2822 task goal -- check"
+        ],
+        [
+          "/bin/sh",
+          "-c",
+          "task docs:check"
+        ]
+      ],
+      "logs": [
+        ".temp/native-request-boundary/exit/9f810c67-d786-47ee-8265-7dd99ff3c083.1.log",
+        ".temp/native-request-boundary/exit/9f810c67-d786-47ee-8265-7dd99ff3c083.2.log",
+        ".temp/native-request-boundary/exit/9f810c67-d786-47ee-8265-7dd99ff3c083.3.log"
+      ],
+      "detail": "Report/artifact/count validation, prepared-tree worker check and Task documentation check passed. No product source or unchanged native/old owner suite was rerun."
+    },
+    "retention": {
+      "base": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2822",
+      "manifest": ".temp/native-request-boundary/exit/artifacts.json",
+      "manifestSha256": "117e2efe142bc97a1d425fef15072eb4f04b7a6211cd9ea2e7bc7d76cf88cb7b",
+      "artifactCount": 41,
+      "historicalLocationsPreserved": true
+    },
+    "cleanup": {
+      "ownedHttpFixtureStopped": true,
+      "sharedResourcesChanged": false,
+      "productOrAssertionsChanged": false,
+      "oldHeavySuitesRepeated": false,
+      "ownedContainersStarted": 0,
+      "authoredPaths": [
+        "docs/goals/audit-remediation-20261019/proofs/native-request-boundary.json"
+      ]
+    }
   }
 }
