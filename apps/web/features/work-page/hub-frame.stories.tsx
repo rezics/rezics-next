@@ -18,7 +18,6 @@ import { WorkAbout } from './work-header.tsx';
 import { YourEdition } from './your-edition.tsx';
 import { chooseOption } from '../stories/choose-option.ts';
 import { showsEditionStatus, workExperience } from '../entity-page/experience.ts';
-import { messages as relationshipMessages } from '../relationships/messages.ts';
 
 const noOverflow = () => expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
 
@@ -77,7 +76,7 @@ export const PhoneFirstScreen: Story = {
     // The one subject menu belongs to the light reactions at the top, and owns reporting.
     await expect(canvas.queryByRole('link', { name: 'Report this work' })).toBeNull();
     const reactions = canvasElement.querySelector<HTMLElement>('[data-work-reactions]')!;
-    const more = within(reactions).getByRole('button', { name: `${relationshipMessages.en.options} · ${fixture.work.title.value}` });
+    const more = within(reactions).getByRole('button', { name: `More actions for ${fixture.work.title.value}` });
     await expect(more.getBoundingClientRect().top).toBeLessThan(heading.getBoundingClientRect().top);
     await userEvent.click(more);
     const report = await within(document.body).findByRole('menuitem', { name: 'Report this work' });

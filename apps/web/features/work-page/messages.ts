@@ -9,6 +9,8 @@ import zhHans from './messages/zh-Hans.ts';
 import zhHant from './messages/zh-Hant.ts';
 
 const en = {
+  primaryActions: 'Primary actions', reactions: 'Reactions',
+  moreActions: insert('More actions for {{title}}', { title: String }),
   editionsView: 'Editions',
   connectionsView: 'Connections',
   sourcesAndEvidence: 'Sources, licences and evidence',

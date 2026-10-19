@@ -105,6 +105,7 @@ function RelationshipControlState({
   followingLabel,
   followAccessibleLabel,
   reports = [],
+  moreAccessibleLabel,
 }: {
   target: string;
   kind: string;
@@ -124,6 +125,7 @@ function RelationshipControlState({
   followingLabel?: string;
   followAccessibleLabel?: string;
   reports?: readonly ReportMenuTarget[];
+  moreAccessibleLabel?: string;
 }) {
   const t = messages[locale];
   const api = useMemo(
@@ -279,13 +281,13 @@ function RelationshipControlState({
           {' '}
           · {name} · {t.signIn}
         </span>
-      </a><ReportMenu targets={reports} name={name} locale={locale} /></div>
+      </a><ReportMenu targets={reports} name={name} locale={locale} moreAccessibleLabel={moreAccessibleLabel} /></div>
     );
   if (!api)
     return (
       <div className="flex min-w-0 flex-wrap items-center gap-1.5"><p role="status" className="text-muted-foreground text-sm">
         {t.unknown}
-      </p><ReportMenu targets={reports} name={name} locale={locale} /></div>
+      </p><ReportMenu targets={reports} name={name} locale={locale} moreAccessibleLabel={moreAccessibleLabel} /></div>
     );
   return (
     <div
@@ -344,7 +346,7 @@ function RelationshipControlState({
             type="button"
             variant="ghost"
             size="icon-sm"
-            aria-label={`${t.options} · ${name}`}
+            aria-label={moreAccessibleLabel ?? `${t.options} · ${name}`}
           >
             <EllipsisIcon aria-hidden="true" />
           </Button>

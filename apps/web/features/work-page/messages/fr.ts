@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkPageMessages } from '../messages.ts';
 
 export default {
+  primaryActions: 'Actions principales', reactions: 'Réactions',
+  moreActions: insert('Autres actions pour {{title}}', { title: String }),
   editionsView: 'Éditions',
   connectionsView: 'Liens',
   sourcesAndEvidence: 'Sources, licences et preuves',

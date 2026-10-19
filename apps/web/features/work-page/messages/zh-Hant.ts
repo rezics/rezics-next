@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkPageMessages } from '../messages.ts';
 
 export default {
+  primaryActions: '主要操作', reactions: '互動',
+  moreActions: insert('「{{title}}」的更多操作', { title: String }),
   editionsView: '版本與發行',
   connectionsView: '關聯',
   sourcesAndEvidence: '來源、授權與證據',
