@@ -11,10 +11,10 @@ import { creditAttributionOwner, creditOwnerGuard } from './credit-attribution.t
 import { canonicalCreditValue, checkedRetainedCreditAssociationState, creditNativeId,
   retainedCreditAssociationDigest, RETAINED_CREDIT_ASSOCIATIONS, RETAINED_CREDIT_ASSOCIATIONS_PROFILE,
   type RetainedCreditAssociationState, type RetainedCreditParticipation } from './credit-association-state.ts';
-import { fenceRetainedCreditAssociationRead, openRetainedCreditAssociationRead,
+import { fenceRetainedCreditIdentityRead, openRetainedCreditIdentityRead,
   readRetainedCreditAssociationHead, readSealedRetainedCreditAssociation,
   verifyRetainedCreditAssociationState, RetainedCreditReadUnavailable, RetainedCreditReadMoved,
-  type RetainedCreditAssociationReadDependencies, type RetainedCreditAssociationReadBasis } from './credit-association-read.ts';
+  type RetainedCreditAssociationReadDependencies, type RetainedCreditIdentityBasis } from './credit-association-read.ts';
 import { readCreditOwnerHead, readCreditOwnerWitness } from './credit-verification.ts';
 
 export interface RetainedCreditBindingInput {
@@ -41,7 +41,7 @@ export interface RetainedCreditBindingDependencies extends RetainedCreditAssocia
   /** Source/selected-publication owner guards its precise retained origin and
    * current rights/support in the same graph command. Never request data. */
   originGuard?(input: { principal: VerifiedPrincipal; state: RetainedCreditAssociationState;
-    basis: RetainedCreditAssociationReadBasis }): Promise<string | null>;
+    basis: RetainedCreditIdentityBasis }): Promise<string | null>;
 }
 export interface RetainedCreditBindingIntent {
   principal: VerifiedPrincipal;
@@ -49,12 +49,14 @@ export interface RetainedCreditBindingIntent {
   admission: SemanticAdmission;
   input: RetainedCreditBindingInput;
   /** Relation owns covered Statements, adoption and publication settlement. */
-  beforeCommit: RelationPublication;
+  beforeCommit?: RelationPublication;
 }
 export interface RetainedCreditBindingResult {
   profile: typeof RETAINED_CREDIT_ASSOCIATIONS;
   occurrence: string;
   associationHead: string;
+  operation: string;
+  modelGeneration: string;
   predecessor: string | null;
   compatibilityReceipt: string;
   manifest: string;
@@ -106,7 +108,7 @@ function mappingGuard(state: RetainedCreditAssociationState) {
 async function verifyBinding(deps: RetainedCreditBindingDependencies, intent: RetainedCreditBindingIntent,
   prepared: PreparedRetainedCreditBinding) {
   const { state } = prepared;
-  const basis = await openRetainedCreditAssociationRead(deps, intent.principal);
+  const basis = await openRetainedCreditIdentityRead(deps, intent.principal);
   const principal = basis.principal;
   if (!await deps.canReadWork(principal, state.work)
     || !await deps.canReadReference(principal, state.mapping.definition)
@@ -131,13 +133,13 @@ async function verifyBinding(deps: RetainedCreditBindingDependencies, intent: Re
   const canonical = canonicalRelation(definition, { profile: 'relation-change-v2', definition: definition.revision,
     participations: state.participations.map(({ id: _id, role, ...item }) => ({ ...item, role: definition.roleKeys[role]! })) });
   let nativeGuard = '';
+  let requiresOriginGuard = state.origin.kind !== 'stored-credit' || state.retainedProfile === 'source-reported-credit-v1';
   if (state.retainedProfile !== 'source-reported-credit-v1' && state.origin.kind !== 'selected-publication') {
     const native = await readCreditOwnerWitness(deps.environment, state.credit);
     const head = native && await readCreditOwnerHead(deps.environment, native);
     if (!native || !head || native.value.revision !== state.creditRevision)
       throw new RetainedCreditReadUnavailable('original credit owner unavailable');
-    if (state.origin.kind === 'stored-credit' && native.receipt.sourceIntent !== state.credit)
-      throw new RetainedCreditOriginConflict('source-derived credit requires its exact retained binding origin');
+    requiresOriginGuard ||= native.receipt.sourceIntent !== state.credit;
     nativeGuard = creditOwnerGuard(native, head);
   }
   const supported = await verifyRetainedCreditAssociationState(deps, basis, state);
@@ -147,15 +149,16 @@ async function verifyBinding(deps: RetainedCreditBindingDependencies, intent: Re
     principal, intent.actingSubject)(definition, canonical.participations.map(({ iri: _iri, node: _node, ...part }) =>
       ({ ...part, attributionSupports: part.attributionSupports ?? [] })));
   let originGuard = '';
-  if (state.origin.kind !== 'stored-credit' || state.retainedProfile === 'source-reported-credit-v1') {
+  if (requiresOriginGuard) {
     originGuard = await deps.originGuard?.({ principal, state: structuredClone(state), basis }) ?? '';
     if (!originGuard.trim()) throw new PendingActivation('retained origin owner commit guard unavailable');
   }
-  if (!intent.beforeCommit.guard?.trim()) throw new PendingActivation('retained credit publication guard unavailable');
-  await fenceRetainedCreditAssociationRead(deps, basis);
+  if (intent.beforeCommit && !intent.beforeCommit.guard?.trim())
+    throw new PendingActivation('retained credit publication guard unavailable');
+  await fenceRetainedCreditIdentityRead(deps, basis);
   return { basis, supported, guard: `${modelGenerationHeadGuard(basis.generation.generation)}
     ${mappingGuard(state)} ${nativeGuard} ${originGuard} ${attribution.guard}
-    FILTER EXISTS ${intent.beforeCommit.guard}` };
+    ${intent.beforeCommit ? `FILTER EXISTS ${intent.beforeCommit.guard}` : ''}` };
 }
 
 async function result(env: WorkActivationEnvironment, prepared: PreparedRetainedCreditBinding,
@@ -170,12 +173,13 @@ async function result(env: WorkActivationEnvironment, prepared: PreparedRetained
     throw new PendingActivation('retained credit receipt differs from immutable view');
   return { profile: RETAINED_CREDIT_ASSOCIATIONS, occurrence: terminal.component,
     associationHead: terminal.revision, predecessor: sealed.predecessor, compatibilityReceipt: terminal.receipt,
+    operation: sealed.operation, modelGeneration: sealed.modelGeneration,
     manifest: sealed.manifest, participations: structuredClone(sealed.state.participations),
     sourcePosition: sealed.sourcePosition, replayed };
 }
 
 /** Called by the existing admitted relation-change-v2 route. The registered
- * work:edit admission and trusted publication/Source owners are prerequisites;
+ * work:edit admission and applicable Source owners are prerequisites;
  * request-supplied receipts, guards and witnesses are never accepted. */
 async function bind(deps: RetainedCreditBindingDependencies,
   intent: RetainedCreditBindingIntent): Promise<RetainedCreditBindingResult> {
@@ -188,7 +192,7 @@ async function bind(deps: RetainedCreditBindingDependencies,
   const verified = await verifyBinding(deps, intent, prepared);
   if (existing) {
     const committed = await result(deps.environment, prepared, intent, existing, true);
-    await intent.beforeCommit.complete?.(state.credit, receipt);
+    await intent.beforeCommit?.complete?.(state.credit, receipt);
     return committed;
   }
   const stale = async (): Promise<never> => {
@@ -201,7 +205,7 @@ async function bind(deps: RetainedCreditBindingDependencies,
     if (refused) {
       // The same admission may have won while this dispatch observed its new
       // head. Never abandon the winner's already sealed publication.
-      if (refused.outcome === 'cancelled') await intent.beforeCommit.abandon?.(receipt);
+      if (refused.outcome === 'cancelled') await intent.beforeCommit?.abandon?.(receipt);
       checkedSemanticTerminal(refused, intent.admission, digest);
     }
     throw new StaleSemanticHead('expected retained credit head is stale', observed ?? undefined);
@@ -210,8 +214,9 @@ async function bind(deps: RetainedCreditBindingDependencies,
   // An admission has one immutable revision identity even across concurrent
   // dispatch and a lost response. Different admissions still compete on head.
   const revision = allocation(`${ID}${intent.admission.id}`, 'subject');
+  const operation = `${ID}${Bun.randomUUIDv7()}`;
   const manifest = await sealComponentState(deps.environment, state.credit, RETAINED_CREDIT_ASSOCIATIONS_PROFILE, state);
-  await intent.beforeCommit(state.credit, receipt);
+  await intent.beforeCommit?.(state.credit, receipt);
   const current = await verifyBinding(deps, intent, prepared);
   if (!equal(current.supported, verified.supported) || !equal(current.basis.generation, verified.basis.generation))
     throw new RetainedCreditReadUnavailable('retained credit authority or support changed before commit');
@@ -224,7 +229,7 @@ async function bind(deps: RetainedCreditBindingDependencies,
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:RetainedCreditAssociationRevision, rv:RevisionAnchor ;
         rv:component ${iri(state.credit)} ; rv:work ${iri(state.work)} ; rv:creditRevision ${iri(state.creditRevision)} ;
         ${expectedAssociationHead ? `rv:predecessor ${iri(expectedAssociationHead)} ;` : ''}
-        rv:manifest ${iri(manifest)} ; rv:modelGeneration ${iri(current.basis.generation.generation)} ;
+        rv:operation ${iri(operation)} ; rv:manifest ${iri(manifest)} ; rv:modelGeneration ${iri(current.basis.generation.generation)} ;
         rv:modelRevision ${iri(RETAINED_CREDIT_ASSOCIATIONS_PROFILE)} ; rv:shapeRevision ${iri(RETAINED_CREDIT_ASSOCIATIONS_PROFILE)} ;
         rv:participation ${iri(state.workParticipation)}, ${iri(state.subjectParticipation)} ;
         rv:datasetId <urn:rezics:dataset:product> ; rv:dataEpoch ${lit(deps.environment.lineage.dataEpoch)} ; rv:sequence ?next .
@@ -235,13 +240,13 @@ async function bind(deps: RetainedCreditBindingDependencies,
         : `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(state.credit)} rv:associationHead ?existingAssociationHead } }`}
       ${state.participations.map(part => `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(part.id)} rv:occurrence ?otherOccurrence . FILTER(?otherOccurrence != ${iri(state.credit)}) } }`).join('\n')}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?revisionP ?revisionO } }`,
-    receiptFields: `rv:component ${iri(state.credit)} ; rv:revision ${iri(revision)} ;
+    receiptFields: `rv:operation ${iri(operation)} ; rv:component ${iri(state.credit)} ; rv:revision ${iri(revision)} ;
       rv:compatibilityProfile ${iri(RETAINED_CREDIT_ASSOCIATIONS_PROFILE)} ;
       ${expectedAssociationHead ? `rv:expectedHead ${iri(expectedAssociationHead)} ;` : ''}` });
   const terminal = await readSemanticTerminal(deps.environment, receipt);
   if (terminal) {
     const committed = await result(deps.environment, prepared, intent, terminal, false);
-    await intent.beforeCommit.complete?.(state.credit, receipt);
+    await intent.beforeCommit?.complete?.(state.credit, receipt);
     return committed;
   }
   if (await readRetainedCreditAssociationHead(deps.environment, state.credit, state.work) !== expectedAssociationHead) return stale();
@@ -265,7 +270,7 @@ export async function bindRetainedCreditAssociation(deps: RetainedCreditBindingD
     checkedSemanticTerminal(terminal, intent.admission, prepared.digest);
     await verifyBinding(deps, intent, prepared);
     const committed = await result(deps.environment, prepared, intent, terminal, true);
-    await intent.beforeCommit.complete?.(prepared.state.credit, receipt);
+    await intent.beforeCommit?.complete?.(prepared.state.credit, receipt);
     return committed;
   }
 }

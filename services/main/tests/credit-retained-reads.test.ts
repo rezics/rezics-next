@@ -35,17 +35,23 @@ import {
 } from '../src/modules/work/credit-association-state.ts';
 import {
   openRetainedCreditAssociationRead,
+  openRetainedCreditIdentityRead,
+  fenceRetainedCreditIdentityRead,
+  RetainedCreditOriginUnavailable,
   fenceRetainedCreditAssociationRead,
   readRetainedCreditAssociationCandidates,
   readRetainedCreditAssociationView,
+  readSealedRetainedCreditAssociation,
   resolveRetainedCreditAssociationIdentity,
   RetainedCreditReadMoved,
   RetainedCreditReadUnavailable,
   type RetainedCreditAssociationReadDependencies,
   type RetainedCreditSourceValidation,
 } from '../src/modules/work/credit-association-read.ts';
-import { bindRetainedCreditAssociation, prepareRetainedCreditBinding, RetainedCreditOriginConflict,
+import { bindRetainedCreditAssociation, prepareRetainedCreditBinding,
   type RetainedCreditBindingDependencies, type RetainedCreditBindingInput } from '../src/modules/work/credit-association-write.ts';
+import { loadRetainedCreditBinding, type RetainedCreditBindingRequest, type RetainedCreditOriginDependencies,
+  type RetainedCreditSelection } from '../src/modules/work/credit-association-origin.ts';
 import { creditAttributionOwner, retainedCreditAttributionReader } from '../src/modules/work/credit-attribution.ts';
 import type { RelationAttributionOwner } from '../src/modules/relation/attribution.ts';
 import type { RelationPublication } from '../src/modules/relation/change.ts';
@@ -264,6 +270,9 @@ function fixture(
       predecessor: string | null;
       admission: string;
       sequence?: string;
+      operation?: string;
+      receiptOperation?: string;
+      modelGeneration?: string;
     }
   >();
   const commands: CommandEnvelope[] = [];
@@ -277,11 +286,15 @@ function fixture(
   ) => {
     const snapshot = checkedRetainedCreditAssociationState(stored);
     const manifest = `urn:rezics:sha256:${prepareComponent(directory, state.credit, snapshot, RETAINED_CREDIT_ASSOCIATIONS_PROFILE)}`;
+    const operation = `https://rezics.com/id/${randomUUID()}`;
     sealed.set(head, {
       state: snapshot,
       manifest,
       predecessor,
       admission: head.split('/').at(-1)!,
+      operation,
+      receiptOperation: operation,
+      modelGeneration: generation(),
     });
     mappings.set(snapshot.mapping.revision, structuredClone(snapshot.mapping));
     return head;
@@ -364,6 +377,9 @@ function fixture(
           epoch: live.epoch,
           sequence: entry.sequence ?? '80',
           scope: `work:edit:${entry.state.work}`,
+          ...(entry.operation === undefined ? {} : { operation: entry.operation }),
+          ...(entry.receiptOperation === undefined ? {} : { receiptOperation: entry.receiptOperation }),
+          ...(entry.modelGeneration === undefined ? {} : { modelGeneration: entry.modelGeneration }),
         })),
       );
     }
@@ -468,8 +484,14 @@ function fixture(
         live.sequence = next;
         if (success) {
           const head = terminal.revision!, manifest = prop(head, 'manifest')!;
+          const operation = prop(head, 'operation'), receiptOperation = prop(command.receipt, 'operation');
+          const modelGeneration = prop(head, 'modelGeneration');
+          expect(operation).toMatch(/^https:\/\/rezics.com\/id\/[0-9a-f-]{36}$/);
+          expect(receiptOperation).toBe(operation);
+          expect(modelGeneration).toBe(generation());
           const snapshot = checkedRetainedCreditAssociationState(await readComponent(deps.environment, manifest, state.credit, RETAINED_CREDIT_ASSOCIATIONS_PROFILE));
-          sealed.set(head, { state: snapshot, manifest, predecessor: expected, admission: terminal.admissionId!, sequence: next });
+          sealed.set(head, { state: snapshot, manifest, predecessor: expected, admission: terminal.admissionId!, sequence: next,
+            operation, receiptOperation, modelGeneration });
           live.head = head; live.headAvailable = true;
         }
         if (live.lostReply) { live.lostReply = false; throw new Error('committed credit reply lost'); }
@@ -637,6 +659,183 @@ function fixture(
   };
 }
 
+for (const agent of [true, false]) test(`closed retained selection derives the actual ${agent ? 'Agent' : 'external'} first binding without adoption`, async () => {
+  const f = fixture(agent);
+  try {
+    const w = f.enableBinding();
+    f.live.activation = false; f.live.coverage = false;
+    // Neither first binding nor an exact internal identity read can depend on
+    // a public activation whose Statements need the not-yet-created head.
+    delete f.deps.owners.activation;
+    const selection: RetainedCreditBindingRequest = { retained: {
+      profile: agent ? 'native-agent-credit-v1' : 'work-author-credit-v1', credit: f.value.credit,
+      origin: { kind: 'stored-credit', revision: f.value.revision } },
+      mappingRevision: f.state.mapping.revision, attributionSupports: [], expectedAssociationHead: null };
+    const loaded = await loadRetainedCreditBinding(w.deps, principal, selection);
+    expect(loaded.input).toEqual(w.input());
+    expect(loaded.originalReceipt).toBe(workEditReceiptIri(uuid(5)));
+    expect(loaded.workHead).toBe(f.value.expectedHead);
+    expect('activation' in loaded.basis).toBe(false);
+    const created = await bindRetainedCreditAssociation(w.deps, { principal,
+      actingSubject: f.value.actingSubject, input: loaded.input, admission: await w.admission(loaded.input) });
+    expect(created.occurrence).toBe(f.value.credit);
+    expect(f.sealed.size).toBe(1);
+    const identity = await resolveRetainedCreditAssociationIdentity(w.deps, {
+      basis: await openRetainedCreditIdentityRead(w.deps, principal),
+      credit: created.occurrence, associationHead: created.associationHead });
+    expect(identity.receipt).toBe(created.compatibilityReceipt);
+    await expect(f.open()).rejects.toThrow('activation owner unavailable');
+    expect(f.commands[0]!.update).not.toContain('rv:GlobalAdoption');
+  } finally { f.clean(); }
+});
+
+test('unadopted identity reads retain live Account callbacks, expiry and source/model fences', async () => {
+  const account = await accountReader();
+  const f = fixture(true, 'artist', 'vndb', 'staff', account.reader);
+  try {
+    delete f.deps.owners.activation;
+    const basis = await openRetainedCreditIdentityRead(f.deps, account.reader);
+    expect(basis.principal.currentAssertion).toBe(account.reader.currentAssertion);
+    expect('activation' in basis).toBe(false);
+    await fenceRetainedCreditIdentityRead(f.deps, basis);
+    f.live.sequence = '101';
+    await expect(fenceRetainedCreditIdentityRead(f.deps, basis)).rejects.toBeInstanceOf(RetainedCreditReadMoved);
+    f.live.sequence = basis.sourcePosition.sequence;
+    f.live.generation = 'c'.repeat(64);
+    await expect(fenceRetainedCreditIdentityRead(f.deps, basis)).rejects.toBeInstanceOf(RetainedCreditReadMoved);
+    f.live.generation = 'b'.repeat(64);
+    account.state.active = false;
+    await expect(fenceRetainedCreditIdentityRead(f.deps, basis)).rejects.toBeInstanceOf(AccountAssertionDenied);
+    await expect(openRetainedCreditIdentityRead(f.deps, account.reader)).rejects.toBeInstanceOf(AccountAssertionDenied);
+  } finally { f.clean(); account.close(); }
+});
+
+test('first binding without publication still refuses denied references, stale origin revisions and generation changes', async () => {
+  const f = fixture();
+  try {
+    const w = f.enableBinding(); delete f.deps.owners.activation;
+    const input = w.input(), admission = await w.admission(input);
+    f.live.readable = false;
+    await expect(bindRetainedCreditAssociation(w.deps, { principal, actingSubject: f.value.actingSubject,
+      input, admission })).rejects.toBeInstanceOf(RetainedCreditReadUnavailable);
+    f.live.readable = true;
+    await expect(loadRetainedCreditBinding(w.deps, principal, { retained: {
+      profile: 'native-agent-credit-v1', credit: input.credit, origin: { kind: 'stored-credit', revision: id(999) } },
+      mappingRevision: input.mapping.revision, attributionSupports: [], expectedAssociationHead: null }))
+      .rejects.toThrow('exact stored credit origin unavailable');
+    await expect(bindRetainedCreditAssociation(w.deps, { principal, actingSubject: f.value.actingSubject,
+      input, admission: { ...admission, scope: `work:edit:${id(999)}` } })).rejects.toThrow('scope differs');
+    let changed = false;
+    f.live.afterRead = () => { if (!changed) { changed = true; f.live.generation = 'c'.repeat(64); } };
+    await expect(bindRetainedCreditAssociation(w.deps, { principal, actingSubject: f.value.actingSubject,
+      input, admission })).rejects.toBeInstanceOf(RetainedCreditReadMoved);
+    expect(f.commands).toHaveLength(0); expect(f.sealed.size).toBe(0);
+  } finally { f.clean(); }
+});
+
+test('optional real publication prepares and completes an actual seal, abandons only a sealed stale refusal', async () => {
+  const f = fixture();
+  try {
+    const w = f.enableBinding(); let prepared = 0, completed = 0, abandoned = 0;
+    const publication: RelationPublication = Object.assign(async () => { prepared++; }, {
+      guard: `{ GRAPH <urn:rezics:graph:current> { <${id(80)}> <${RV}publicationHead> <${id(81)}> } }`,
+      complete: async (credit: string, commandReceipt: string) => {
+        expect(credit).toBe(f.value.credit); expect(f.terminals.has(commandReceipt)).toBe(true);
+        expect(f.sealed.size).toBe(1); completed++;
+      }, abandon: async (commandReceipt: string) => {
+        expect(f.terminals.get(commandReceipt)?.outcome).toBe(RV + 'Cancelled'); abandoned++;
+      },
+    });
+    const input = w.input();
+    const intent = { principal, actingSubject: f.value.actingSubject, input, admission: await w.admission(input), beforeCommit: publication };
+    const created = await bindRetainedCreditAssociation(w.deps, intent);
+    expect(f.commands[0]!.update).toContain(publication.guard!);
+    const replay = await bindRetainedCreditAssociation(w.deps, intent);
+    expect(replay.associationHead).toBe(created.associationHead);
+    expect([prepared, completed, abandoned]).toEqual([1, 2, 0]);
+    await expect(bindRetainedCreditAssociation(w.deps, { ...intent, admission: await w.admission(input, 201) }))
+      .rejects.toBeInstanceOf(StaleSemanticHead);
+    expect([prepared, completed, abandoned]).toEqual([1, 2, 1]);
+    expect(f.sealed.size).toBe(1);
+  } finally { f.clean(); }
+});
+
+test('a source-derived stored credit keeps its public stored tuple and requires its internally resolved Source receipt', async () => {
+  const f = fixture(false);
+  try {
+    const w = f.enableBinding(); f.live.native = false; f.live.sourceIntent = id(60);
+    delete f.deps.owners.activation;
+    const request: RetainedCreditBindingRequest = { retained: { profile: 'work-author-credit-v1', credit: f.value.credit,
+      origin: { kind: 'stored-credit', revision: f.value.revision } }, mappingRevision: f.state.mapping.revision,
+      attributionSupports: [], expectedAssociationHead: null };
+    await expect(loadRetainedCreditBinding(w.deps, principal, request)).rejects.toMatchObject({
+      code: 'retained_credit_origin_unavailable', owner: 'source-credit', reference: id(60) });
+    let withdrawn = false, wrongReceipt = false;
+    f.deps.owners.origin = async ({ view, nativeCredit, basis }) => {
+      expect(nativeCredit?.receipt.sourceIntent).toBe(id(60));
+      expect(nativeCredit?.receipt.credit).toBe(f.value.credit);
+      expect('activation' in basis).toBe(false);
+      return { ...view, receipt: wrongReceipt ? receipt(60) : workEditReceiptIri(uuid(5)),
+        validation: [{ basis: { kind: 'source-credit', support: id(60) }, state: withdrawn ? 'withdrawn' : 'current',
+          receipt: receipt(60), validationToken: hash(String(withdrawn)), fields: {}, evidence: [] }] };
+    };
+    w.deps.originGuard = async ({ state, basis }) => {
+      expect(state.origin).toEqual(request.retained.origin); expect('activation' in basis).toBe(false);
+      return `GRAPH <urn:rezics:graph:current> { <${id(60)}> <${RV}supportHead> <${id(61)}> }`;
+    };
+    wrongReceipt = true;
+    await expect(loadRetainedCreditBinding(w.deps, principal, request)).rejects.toThrow('source binding differs');
+    wrongReceipt = false;
+    const loaded = await loadRetainedCreditBinding(w.deps, principal, request);
+    const created = await bindRetainedCreditAssociation(w.deps, { principal, actingSubject: f.value.actingSubject,
+      input: loaded.input, admission: await w.admission(loaded.input) });
+    expect(f.sealed.get(created.associationHead)?.state.origin).toEqual(request.retained.origin);
+    expect(f.commands[0]!.update).toContain(`<${id(60)}> <${RV}supportHead> <${id(61)}>`);
+    withdrawn = true;
+    await expect(w.bind({ ...loaded.input, expectedAssociationHead: created.associationHead }, 201)).rejects.toThrow('withdrawn');
+    expect(f.sealed.size).toBe(1);
+  } finally { f.clean(); }
+});
+
+for (const kind of ['source-binding', 'selected-publication'] as const)
+  test(`closed ${kind} preparation derives the exact Source-owned original and reports its missing owner`, async () => {
+    const f = fixture(false);
+    try {
+      const w = f.enableBinding();
+      f.state.retainedProfile = 'source-reported-credit-v1'; f.state.mapping.originProfile = f.state.retainedProfile;
+      f.defineMapping();
+      const retained: RetainedCreditSelection = { profile: 'source-reported-credit-v1', credit: f.value.credit,
+        origin: kind === 'source-binding' ? { kind, binding: id(60), proposal: id(61), conversion: id(62),
+          record: id(63), observation: id(64), sourceOccurrence: `urn:rezics:source-occurrence:${'a'.repeat(64)}`, sourceOrdinal: 2 }
+          : { kind, decision: f.value.credit, source: id(61), record: id(63), observation: id(64) } };
+      const request: RetainedCreditBindingRequest = { retained, mappingRevision: f.state.mapping.revision,
+        attributionSupports: [], expectedAssociationHead: null };
+      const deps: RetainedCreditOriginDependencies = w.deps;
+      await expect(loadRetainedCreditBinding(deps, principal, request)).rejects.toMatchObject({
+        code: 'retained_credit_origin_unavailable', owner: kind });
+      deps.originLoaders = { [kind === 'source-binding' ? 'sourceBinding' : 'selectedPublication']: async (selected: {
+        retained: RetainedCreditSelection; attributionSupports: RetainedCreditBindingRequest['attributionSupports'] }) => {
+        expect(selected.retained).toEqual(retained);
+        return { retained, work: f.value.work, workRevision: f.value.expectedHead, workHead: f.value.expectedHead,
+          creditRevision: f.value.revision, role: 'artist', receipt: receipt(60),
+          subject: { participant: f.state.participations[1]!.participant, position: f.value.nativeOrdinal,
+            attributionSupports: selected.attributionSupports } };
+      } };
+      deps.owners.origin = async ({ view }) => ({ ...view, receipt: receipt(60), validation: [{
+        basis: kind === 'source-binding' ? { kind, binding: id(60) } : { kind, decision: f.value.credit },
+        state: 'current', receipt: receipt(60), validationToken: hash(kind), fields: {}, evidence: [] }] });
+      deps.originGuard = async () => `{ GRAPH <urn:rezics:graph:current> { <${id(60)}> <${RV}supportHead> <${id(61)}> } }`;
+      const loaded = await loadRetainedCreditBinding(deps, principal, request);
+      expect(loaded.input.work).toBe(f.value.work);
+      expect(loaded.input.origin).toEqual(retained.origin);
+      const created = await bindRetainedCreditAssociation(deps, { principal, actingSubject: f.value.actingSubject,
+        input: loaded.input, admission: await w.admission(loaded.input) });
+      expect(created.occurrence).toBe(retained.credit);
+      expect(f.sealed.get(created.associationHead)?.state.origin).toEqual(retained.origin);
+      expect(f.sealed.size).toBe(1);
+    } finally { f.clean(); }
+  });
+
 for (const agent of [true, false]) test(`retained binding seals the actual ${agent ? 'Agent' : 'qualified external'} credit without another occurrence`, async () => {
   const f = fixture(agent);
   try {
@@ -644,17 +843,24 @@ for (const agent of [true, false]) test(`retained binding seals the actual ${age
     expect(created.occurrence).toBe(f.value.credit);
     expect(created.compatibilityReceipt).toBe(familyReceiptIri(uuid(200), RETAINED_CREDIT_ASSOCIATIONS));
     expect(created.associationHead).not.toBe(f.value.credit);
+    expect(created.operation).toMatch(/^https:\/\/rezics.com\/id\/[0-9a-f-]{36}$/);
+    expect([created.associationHead, created.occurrence, id(200)]).not.toContain(created.operation);
+    expect(created.modelGeneration).toBe(`urn:rezics:model-generation:${f.live.generation}`);
     expect(created.participations).toHaveLength(2);
     const view = await f.read();
     expect(view?.state.creditRevision).toBe(f.value.revision);
     expect(view?.state.workRevision).toBe(f.value.expectedHead);
     expect(view?.state.participations).toEqual(created.participations);
+    expect(view?.operation).toBe(created.operation);
+    expect(view?.modelGeneration).toBe(created.modelGeneration);
     const identity = await resolveRetainedCreditAssociationIdentity(f.deps, {
       basis: await f.open(), credit: f.value.credit, associationHead: created.associationHead,
     });
     expect(identity.occurrence).toBe(f.value.credit);
     expect(identity.receipt).toBe(created.compatibilityReceipt);
     expect(identity.manifest).toBe(created.manifest);
+    expect(identity.operation).toBe(created.operation);
+    expect(identity.modelGeneration).toBe(created.modelGeneration);
     const command = f.commands[0]!;
     expect(command.update).toContain(`rv:creditRevision <${f.value.revision}>`);
     expect(command.update).toContain(`rv:head <${f.value.expectedHead}>`);
@@ -673,6 +879,8 @@ test('concurrent retained binding and lost response reconcile one receipt, view 
     const results = await Promise.all([w.bind(), w.bind()]);
     expect(results[0]!.associationHead).toBe(results[1]!.associationHead);
     expect(results[0]!.compatibilityReceipt).toBe(results[1]!.compatibilityReceipt);
+    expect(results[0]!.operation).toBe(results[1]!.operation);
+    expect(results[0]!.modelGeneration).toBe(results[1]!.modelGeneration);
     expect(results[0]!.participations).toEqual(results[1]!.participations);
     expect(f.sealed.size).toBe(1);
     expect(f.terminals.size).toBe(1);
@@ -680,9 +888,58 @@ test('concurrent retained binding and lost response reconcile one receipt, view 
     const replay = await w.bind();
     expect(replay.replayed).toBe(true);
     expect(replay.participations).toEqual(results[0]!.participations);
+    expect(replay.operation).toBe(results[0]!.operation);
+    expect(replay.modelGeneration).toBe(results[0]!.modelGeneration);
     expect(f.sealed.size).toBe(1);
   } finally { f.clean(); }
 });
+
+test('replay returns the actual sealed operation and generation after the active model advances', async () => {
+  const f = fixture();
+  try {
+    const w = f.enableBinding(), first = await w.bind();
+    const history = canonicalCreditValue(f.sealed.get(first.associationHead));
+    f.live.generation = 'c'.repeat(64);
+    const replay = await w.bind();
+    expect(replay.replayed).toBe(true);
+    expect(replay.operation).toBe(first.operation);
+    expect(replay.modelGeneration).toBe(first.modelGeneration);
+    expect(replay.modelGeneration).not.toBe(`urn:rezics:model-generation:${f.live.generation}`);
+    const seal = await readSealedRetainedCreditAssociation(f.deps.environment, f.value.credit, first.associationHead);
+    expect(seal.operation).toBe(first.operation);
+    expect(seal.modelGeneration).toBe(first.modelGeneration);
+    const view = await f.read();
+    expect(view?.operation).toBe(first.operation);
+    expect(view?.modelGeneration).toBe(first.modelGeneration);
+    expect(view?.position.generation.generation).toBe(`urn:rezics:model-generation:${f.live.generation}`);
+    expect(f.commands).toHaveLength(1);
+    expect(canonicalCreditValue(f.sealed.get(first.associationHead))).toBe(history);
+  } finally { f.clean(); }
+});
+
+for (const failure of ['operation', 'receiptOperation', 'modelGeneration', 'different-operation', 'revision-as-operation', 'admission-as-operation'] as const)
+  test(`historical compatibility metadata ${failure} remains unavailable without replay repair`, async () => {
+    const f = fixture();
+    try {
+      const w = f.enableBinding(), created = await w.bind();
+      const stored = f.sealed.get(created.associationHead)!;
+      if (failure === 'different-operation') stored.receiptOperation = id(901);
+      else if (failure === 'revision-as-operation') stored.operation = stored.receiptOperation = created.associationHead;
+      else if (failure === 'admission-as-operation') stored.operation = stored.receiptOperation = id(200);
+      else delete stored[failure];
+      const history = canonicalCreditValue(stored);
+      await expect(readSealedRetainedCreditAssociation(f.deps.environment, f.value.credit, created.associationHead))
+        .rejects.toThrow('compatibility command metadata unavailable');
+      await expect(resolveRetainedCreditAssociationIdentity(f.deps, { basis: await f.open(),
+        credit: f.value.credit, associationHead: created.associationHead }))
+        .rejects.toBeInstanceOf(RetainedCreditReadUnavailable);
+      await expect(f.read()).rejects.toBeInstanceOf(RetainedCreditReadUnavailable);
+      await expect(w.bind()).rejects.toBeInstanceOf(RetainedCreditReadUnavailable);
+      expect(f.commands).toHaveLength(1);
+      expect(f.sealed.size).toBe(1);
+      expect(canonicalCreditValue(f.sealed.get(created.associationHead))).toBe(history);
+    } finally { f.clean(); }
+  });
 
 test('a retained head race cannot abandon publication sealed by the same admission', async () => {
   const f = fixture();
@@ -736,12 +993,15 @@ test('a new exact mapping preserves participation IDs, original identity and imm
     const second = await w.bind(command, 201);
     expect(second.predecessor).toBe(first.associationHead);
     expect(second.associationHead).not.toBe(first.associationHead);
+    expect(second.operation).not.toBe(first.operation);
     expect(second.participations.map(part => part.id)).toEqual(first.participations.map(part => part.id));
     expect(canonicalCreditValue(f.sealed.get(first.associationHead))).toBe(prior);
     const old = await resolveRetainedCreditAssociationIdentity(f.deps, { basis: await f.open(),
       credit: f.value.credit, associationHead: first.associationHead });
     expect(old.state.mapping.revision).toBe(id(32));
     expect(old.currentAssociationHead).toBe(second.associationHead);
+    expect(old.operation).toBe(first.operation);
+    expect(old.modelGeneration).toBe(first.modelGeneration);
     expect((await f.read())?.state.mapping.revision).toBe(id(33));
     expect((await w.bind(command, 201)).associationHead).toBe(second.associationHead);
   } finally { f.clean(); }
@@ -768,11 +1028,11 @@ for (const unavailable of ['nativeRetired', 'nativeProtected', 'nativeErased'] a
     } finally { f.clean(); }
   });
 
-test('retained binding refuses ambiguous legacy Source origin and a changed exact participant', async () => {
+test('retained binding distinguishes a missing stored Source owner from a changed exact participant', async () => {
   const f = fixture(false);
   try {
     const w = f.enableBinding(); f.live.native = false; f.live.sourceIntent = id(60);
-    await expect(w.bind()).rejects.toBeInstanceOf(RetainedCreditOriginConflict);
+    await expect(w.bind()).rejects.toBeInstanceOf(RetainedCreditOriginUnavailable);
     expect(f.sealed.size).toBe(0);
     f.live.native = true; f.live.sourceIntent = f.value.credit;
     const command = w.input();
