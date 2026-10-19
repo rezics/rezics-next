@@ -60,7 +60,7 @@ export function SideNav({ variant, onNavigate, communities }: {
                 collapsed && 'justify-center px-0')}>
               <span className="relative shrink-0"><item.icon aria-hidden="true" className="size-5" />
                 {count && collapsed ? <UnreadBadge label={count} className="-top-1.5 -end-2.5" /> : null}</span>
-              <span className={collapsed ? 'sr-only' : 'min-w-0 flex-1 truncate'}>{item.label[locale]}</span>
+              <span className={collapsed ? 'sr-only' : 'min-w-0 flex-1 truncate'}>{item.label[locale]}</span>{' '}
               {count && !collapsed ? <span className={cn(badge, 'shrink-0')}>{t.unreadCount({ count })}</span> : null}
               {item.planned && !collapsed
                 ? <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 font-medium text-[11px] text-muted-foreground">
