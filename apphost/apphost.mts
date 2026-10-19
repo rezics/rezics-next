@@ -43,9 +43,22 @@ const secretName = /SECRET|TOKEN|KEY|PASSWORD|_DATABASE_URL$|^OTEL_EXPORTER_OTLP
 // Bun rejects Aspire's self-signed leaf certificate even with an explicit CA
 // (microsoft/aspire#17455). Keep OTLP on an authenticated loopback HTTP endpoint;
 // port 0 is allocated by Aspire. The dashboard and resource service retain HTTPS.
+// Aspire 13.6.1 forwards ASPIRE_DASHBOARD_* configuration to its built-in
+// Dashboard. Keep cardinality and payload retention small; the launch profile
+// also bounds the managed heap. Neither setting disables authenticated OTLP.
+export const dashboardTelemetryLimits = {
+  MaxLogCount: 5_000, MaxTraceCount: 2_000, MaxMetricsCount: 120,
+  MaxAttributeCount: 32, MaxAttributeLength: 2_048, MaxSpanEventCount: 16,
+  MaxResourceCount: 32,
+} as const;
+const dashboardConfig = resolve(envFile, '..', 'dashboard-config.json');
+writeFileSync(dashboardConfig, JSON.stringify({ Dashboard: {
+  TelemetryLimits: dashboardTelemetryLimits, Frontend: { MaxConsoleLogCount: 2_000 },
+} }));
 const builder = await createBuilder({
   allowUnsecuredTransport: true,
-  args: [...process.argv.slice(2), '--ASPIRE_DASHBOARD_OTLP_HTTP_ENDPOINT_URL=http://127.0.0.1:0'],
+  args: [...process.argv.slice(2), '--ASPIRE_DASHBOARD_OTLP_HTTP_ENDPOINT_URL=http://127.0.0.1:0',
+    `--ASPIRE_DASHBOARD_CONFIG_FILE_PATH=${dashboardConfig}`],
 });
 const parameters = new Map<string, ReturnType<typeof builder.addParameter>>();
 function secret(name: string) {
