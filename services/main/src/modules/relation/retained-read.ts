@@ -4,12 +4,24 @@ import { systemDisclosure } from '../target/disclosed-references.ts';
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { canonicalCreditValue, creditNativeId, RETAINED_CREDIT_ASSOCIATIONS_PROFILE } from '../work/credit-association-state.ts';
 import { openRetainedCreditIdentityRead, openRetainedCreditAssociationRead, readRetainedCreditAssociationView, resolveRetainedCreditAssociationIdentity,
-  RetainedCreditReadUnavailable } from '../work/credit-association-read.ts';
-import { readExactDefinition } from './change.ts';
+  readSealedRetainedCreditAssociation, RetainedCreditReadUnavailable,
+  type RetainedCreditAssociationView, type RetainedCreditSourcePosition } from '../work/credit-association-read.ts';
+import { readExactDefinition, type ExactDefinition } from './change.ts';
 import { retainedRelationDependencies, type RetainedRelationReadDependencies } from './retained-change.ts';
 
 const unavailable = (message: string): never => { throw new RetainedCreditReadUnavailable(message); };
 const equal = (a: unknown, b: unknown) => canonicalCreditValue(a) === canonicalCreditValue(b);
+type RetainedRelationIdentity = Awaited<ReturnType<typeof resolveRetainedCreditAssociationIdentity>>;
+interface RetainedRelationSelection {
+  exact: RetainedRelationIdentity;
+  currentPosition: RetainedCreditSourcePosition;
+  publicView: RetainedCreditAssociationView | null;
+}
+export interface RetainedRelationOwner extends RetainedRelationIdentity {
+  definition: ExactDefinition;
+  currentPosition: RetainedCreditSourcePosition;
+  publicView: RetainedCreditAssociationView | null;
+}
 
 /** Indexed dispatch only. A bare original credit revision never selects its
  * newer compatibility head, and an absent seal never falls back to legacy rows. */
@@ -47,10 +59,27 @@ export async function retainedRelationOwnerMetadata(env: WorkActivationEnvironme
  * Current selection additionally requires exact public coverage; an exact
  * authenticated revision read grants no adoption to its sealed values. */
 export async function readRetainedRelationOwner(work: RetainedRelationReadDependencies, principal: VerifiedPrincipal,
-  actingSubject: string, credit: string, associationHead: string, current = false) {
+  actingSubject: string, credit: string, associationHead: string, current = false): Promise<RetainedRelationOwner | null> {
   const deps = retainedRelationDependencies(work, actingSubject);
-  const basis = await openRetainedCreditIdentityRead(deps, principal);
-  const exact = await resolveRetainedCreditAssociationIdentity(deps, { basis, credit, associationHead });
+  const read = async (): Promise<RetainedRelationSelection | null> => {
+    if (!current) {
+      const basis = await openRetainedCreditIdentityRead(deps, principal);
+      return { exact: await resolveRetainedCreditAssociationIdentity(deps, { basis, credit, associationHead }),
+        currentPosition: { ...basis.sourcePosition }, publicView: null };
+    }
+    const basis = await openRetainedCreditAssociationRead(deps, principal);
+    const sealed = await readSealedRetainedCreditAssociation(work.environment, credit, associationHead);
+    // The public owner already resolves the original credit and current field
+    // supports. Do not repeat its draft identity read in the same page budget.
+    const publicView = await readRetainedCreditAssociationView(deps, { basis, work: sealed.state.work, credit, associationHead });
+    if (!publicView) return null;
+    return { exact: { occurrence: credit, associationHead, currentAssociationHead: publicView.currentAssociationHead,
+      ...sealed, sourceValidation: publicView.sourceValidation, attribution: publicView.attribution,
+      headGuarantee: publicView.headGuarantee }, currentPosition: { ...basis.sourcePosition }, publicView };
+  };
+  const selected = await read();
+  if (!selected) return null;
+  const { exact, currentPosition, publicView } = selected;
   if (exact.sourceValidation.some(value => value.state !== 'current')
     || exact.attribution.some(value => value.unsupportedFields.length))
     return unavailable('retained credit original or field support withdrawn');
@@ -65,14 +94,9 @@ export async function readRetainedRelationOwner(work: RetainedRelationReadDepend
     || mapping.origin !== exact.state.retainedProfile || mapping.storedRole !== exact.state.role
     || !equal(mapping.externalNamespace ?? null, exact.state.mapping.externalNamespace))
     return unavailable('retained credit exact authored mapping unavailable');
-  if (current) {
-    if (exact.currentAssociationHead !== associationHead) return unavailable('retained credit current association head changed');
-    const publicBasis = await openRetainedCreditAssociationRead(deps, principal);
-    const view = await readRetainedCreditAssociationView(deps, { basis: publicBasis, work: exact.state.work, credit, associationHead });
-    if (!view) return null;
-  }
+  if (current && exact.currentAssociationHead !== associationHead) return unavailable('retained credit current association head changed');
   const metadata = await retainedRelationOwnerMetadata(work.environment, credit, associationHead, exact.receipt);
   if (metadata.operation !== exact.operation || metadata.modelGeneration !== exact.modelGeneration)
     return unavailable('retained credit exact owner command metadata changed');
-  return { ...exact, ...metadata, definition, currentPosition: { ...basis.sourcePosition } };
+  return { ...exact, ...metadata, definition, currentPosition, publicView };
 }

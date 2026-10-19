@@ -5,7 +5,6 @@ import type { VerifiedAccountAssertion } from '../account/verify-assertion.ts';
 import { namePolicyPrincipal } from '../disclosure/viewer.ts';
 import { problemDefinition } from '../problem.ts';
 import { readActiveModelGeneration } from '../semantic/generation-guard.ts';
-import { associationCitation } from '../query/association-contract.ts';
 import { PROFILES } from '../semantic/schema.ts';
 import { readAdoptedOccurrenceV2, readAdoptedStatementV2 } from '../statement/v2-read.ts';
 import { StatementNotFound } from '../statement/read.ts';
@@ -23,9 +22,12 @@ import { associationEvidenceQuery, ASSOCIATION_EVIDENCE_COST, ASSOCIATION_EVIDEN
 import { AssociationEvidenceChanged, AssociationEvidenceCursorInvalid,
   assertAssociationEvidenceCursorBinding, issueAssociationEvidenceCursor,
   readAssociationEvidenceCursor, type AssociationEvidenceBasis } from './evidence-cursor.ts';
+import { isAssociationEvidenceCitation } from './evidence-citation.ts';
+import { readRetainedAssociationEvidenceOccurrence, type RetainedAssociationEvidenceOccurrence } from './evidence-retained.ts';
 
 export interface AssociationEvidenceClaim {
-  occurrence: Awaited<ReturnType<typeof readAttributedOccurrence>>;
+  occurrence: (Awaited<ReturnType<typeof readAttributedOccurrence>> & { kind: 'native-relation' })
+    | RetainedAssociationEvidenceOccurrence;
   definition: ExactDefinition;
   assertion: Awaited<ReturnType<typeof readAdoptedOccurrenceV2>>;
   statement: Awaited<ReturnType<typeof readAdoptedStatementV2>> | null;
@@ -65,24 +67,38 @@ export async function readAssociationEvidenceClaim(session: WorkReadSession,
   selection: AssociationEvidenceSelection): Promise<AssociationEvidenceClaim> {
   if (selection.context !== 'global') await session.realm(selection.context);
   const { occurrence, revision } = selection, env = session.deps.environment;
-  const readHead = () => session.query(`SELECT ?head WHERE { GRAPH ${iri(GRAPHS.current)} {
-    ${iri(occurrence)} a rv:RelationOccurrence ; rv:occurrenceHead ?head .
-  } } LIMIT 2`, 2);
-  const heads = await readHead();
-  if (heads.length !== 1 || heads[0]?.head?.value !== revision) throw new WorkReadMissing('Association is unavailable');
-  const owned = await readAttributedOccurrence(env, occurrence, revision);
-  if (owned.state.lifecycle !== 'active') throw new WorkReadMissing('Association is unavailable');
+  let owned: AssociationEvidenceClaim['occurrence'];
+  const retained = await readRetainedAssociationEvidenceOccurrence(session, occurrence, revision);
+  if (retained) owned = retained;
+  else {
+    const heads = await session.query(`SELECT ?head WHERE { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(occurrence)} a rv:RelationOccurrence ; rv:occurrenceHead ?head .
+    } } LIMIT 2`, 2);
+    if (heads.length !== 1 || heads[0]?.head?.value !== revision) {
+      if (heads.length === 1 && session.options.cursor) throw new WorkReadMoved('Association head changed');
+      throw new WorkReadMissing('Association is unavailable');
+    }
+    const native = await readAttributedOccurrence(env, occurrence, revision);
+    if (native.state.lifecycle !== 'active') throw new WorkReadMissing('Association is unavailable');
+    owned = { ...native, kind: 'native-relation' };
+  }
   const canReadPrivate = async (context: string) => !!session.principal && !!session.options.actingSubject
     && !!session.deps.contextSelections && session.deps.contextSelections.canReadPrivate(session.principal, session.options.actingSubject, context);
   const assertion = await readAdoptedOccurrenceV2(session, occurrence, revision, selection.context, selection.frame, canReadPrivate);
-  const definition = await readExactDefinition(env, owned.state.definition, systemDisclosure);
+  const definition = owned.kind === 'retained-credit' ? owned.definition
+    : await readExactDefinition(env, owned.state.definition, systemDisclosure);
   if (!definition?.association || definition.modelRevision !== PROFILES.definitionV2 || definition.lifecycle !== 'active') {
     throw new WorkReadUnavailable('Exact authored association definition is unavailable');
   }
-  const revalidate = () => validateAttributedOccurrence(env, owned, definition,
-    relationAttributionVerifier(session.deps.relationAttribution, session.principal, session.options.actingSubject));
-  const attribution = await revalidate();
-  session.observeDependency(`association-evidence-attribution:${occurrence}:${revision}`, attribution, revalidate);
+  if (owned.kind === 'native-relation') {
+    const native = owned;
+    const revalidate = () => validateAttributedOccurrence(env, native, definition,
+      relationAttributionVerifier(session.deps.relationAttribution, session.principal, session.options.actingSubject));
+    const attribution = await revalidate();
+    session.observeDependency(`association-evidence-attribution:${occurrence}:${revision}`, attribution, revalidate);
+  }
+  const participations = owned.kind === 'retained-credit'
+    ? owned.state.participations.map(({ id: iri, ...part }) => ({ ...part, iri })) : owned.state.participations;
   let statement: AssociationEvidenceClaim['statement'] = null;
   if (selection.claim === occurrence) {
     if (selection.claimRevision !== revision) throw new WorkReadMissing('Association claim is unavailable');
@@ -92,12 +108,12 @@ export async function readAssociationEvidenceClaim(session: WorkReadSession,
     const coverage = statement.coverage;
     if (coverage.kind === 'subject-global') {
       const subjectRoles = definition.association.subjectRoles.map(key => `${definition.definition}/role/${key}`);
-      if (!owned.state.participations.some(part => subjectRoles.includes(part.role)
+      if (!participations.some(part => subjectRoles.includes(part.role)
         && canonicalAttribution(part.participant) === canonicalAttribution(statement!.subject))) {
         throw new WorkReadMissing('Association claim is unavailable');
       }
     } else if (coverage.occurrence !== occurrence || coverage.occurrenceRevision !== revision
-      || coverage.kind === 'participation' && !owned.state.participations.some(part => part.iri === coverage.participation)) {
+      || coverage.kind === 'participation' && !participations.some(part => part.iri === coverage.participation)) {
       throw new WorkReadMissing('Association claim is unavailable');
     }
   }
@@ -112,7 +128,7 @@ function checkedWindow(window: AssociationEvidenceWindow, after: string | null, 
     throw new WorkReadUnavailable('Association evidence owner frontier is unavailable');
   }
   const ids = window.items.map(item => item.id);
-  if (window.items.some(item => !Value.Check(associationCitation, item)) || new Set(ids).size !== ids.length
+  if (window.items.some(item => !isAssociationEvidenceCitation(item)) || new Set(ids).size !== ids.length
     || ids.some((id, index) => index === 0 ? lastEvidence !== null && id <= lastEvidence : id <= ids[index - 1]!)) {
     throw new WorkReadUnavailable('Association evidence owner order is unavailable');
   }
@@ -139,7 +155,9 @@ export async function readAssociationEvidencePage(session: WorkReadSession, sele
     () => owner.basis(session, selection, claim));
   const basis: AssociationEvidenceBasis = { sourcePosition: { ...session.position }, modelGeneration: model.generation,
     reader: evidenceReader(session),
-    dependencies: { support, model, occurrence: { receipt: claim.occurrence.receipt, manifest: claim.occurrence.manifest },
+    dependencies: { support, model, occurrence: { receipt: claim.occurrence.receipt, manifest: claim.occurrence.manifest,
+      ...(claim.occurrence.kind === 'retained-credit' ? { retained: { publicView: claim.occurrence.publicView,
+        sourceValidation: claim.occurrence.sourceValidation, attribution: claim.occurrence.attribution } } : {}) },
       assertion: claim.assertion, statement: claim.statement } };
   const { after, lastEvidence, expiresAt } = readAssociationEvidenceCursor(cursor, selection, basis);
   const read = async () => checkedWindow(await owner.window(session, selection, claim, after, selection.limit),
