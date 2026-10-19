@@ -38,7 +38,7 @@ afterEach(() => { for (const directory of directories.splice(0)) rmSync(director
  * adapter, WorkReadSession dependency fence and continuation owner. Graph,
  * disclosure, Relation/Statement and Source transports are controlled inputs;
  * this establishes no installed adoption, native runtime or persona proof. */
-function fixture(count = 6) {
+function fixture(count = 6, nativeModel: 'native-agent-credit-v1' | 'native-agent-credit-v2' = 'native-agent-credit-v1') {
   const directory = join(import.meta.dir, '../../../.temp/query-credit-composition', randomUUID());
   mkdirSync(directory, { recursive: true }); directories.push(directory);
   const live = { epoch: 'credit-epoch', sequence: '100', generation: 'b'.repeat(64),
@@ -65,9 +65,13 @@ function fixture(count = 6) {
             fields: ['creditedName', 'provider', 'namespace', 'key', 'alias', 'eid', 'note'], evidence: [id(7000 + n)] }] },
       ], context: 'global', applicability: [], qualification: 'asserted',
     };
-    const head = id(2000 + n), admission = uuid(2000 + n);
+    const head = id(2000 + n), admission = uuid(2000 + n), operation = id(12000 + n);
+    const nativeModelRevision = `https://rezics.com/definition/${nativeModel}`;
+    const nativePins = { model: nativeModelRevision, shape: nativeModelRevision,
+      ...(nativeModel === 'native-agent-credit-v2' ? { currentModel: nativeModelRevision } : {}) };
     const manifest = `urn:rezics:sha256:${prepareComponent(directory, state.credit, state, RETAINED_CREDIT_ASSOCIATIONS_PROFILE)}`;
-    return { state, head, admission, manifest, n };
+    return { state, head, admission, manifest, n, operation, receiptOperation: operation,
+      modelGeneration: `urn:rezics:model-generation:${live.generation}`, nativePins };
   });
   const generation = () => `urn:rezics:model-generation:${live.generation}`;
   const query = async (sparql: string): Promise<SparqlResult> => {
@@ -96,15 +100,16 @@ function fixture(count = 6) {
       manifest: entry.manifest, receipt: familyReceiptIri(entry.admission, RETAINED_CREDIT_ASSOCIATIONS),
       admission: entry.admission, digest: retainedCreditAssociationDigest(state, null), work: state.work,
       creditRevision: state.creditRevision, epoch: live.epoch, sequence: '90', scope: `work:edit:${state.work}`,
+      operation: entry.operation, receiptOperation: entry.receiptOperation, modelGeneration: entry.modelGeneration,
     }) : rows();
     if (sparql.includes('SELECT ?revision ?kind')) return rows({ revision: state.creditRevision, kind: `${RV}NativeAgentCredit` });
     if (sparql.includes('SELECT ?work ?head ?agent')) return rows({ work: state.work, head: state.workRevision, agent: id(50),
-      role: state.role, actor: id(4), epoch: 'credit-epoch', sequence: '12' });
+      role: state.role, actor: id(4), epoch: 'credit-epoch', sequence: '12', ...entry.nativePins });
     if (sparql.includes('SELECT DISTINCT ?receipt ?admission')) return rows({ receipt: workEditReceiptIri(uuid(1000 + n)),
       admission: uuid(1000 + n), nativeCommand: 'true' });
     if (sparql.includes('SELECT ?outcome ?reason')) return rows({ outcome: `${RV}Succeeded`,
       digest: nativeCreditDigest({ work: state.work, credit: state.credit, role: 'artist', expectedWorkHead: state.workRevision,
-        actingSubject: id(4), agent: id(50) }), admissionId: uuid(1000 + n), authorityEpoch: '7',
+        actingSubject: id(4), agent: id(50) }, entry.nativePins.model), admissionId: uuid(1000 + n), authorityEpoch: '7',
       scope: `work:edit:${state.work}`, epoch: 'credit-epoch', sequence: '12', work: state.work,
       revision: state.workRevision, predecessor: state.workRevision });
     if (sparql.includes('SELECT DISTINCT ?credit ?revision ?intent')) return rows({ credit: state.credit,
@@ -454,3 +459,18 @@ test('live Account authority stays with the retained reader while projections an
   expect(validations).toBeGreaterThan(0);
   expect(projections).toBeGreaterThan(1);
 });
+
+for (const nativeModel of ['native-agent-credit-v1', 'native-agent-credit-v2'] as const) {
+  test(`sealed credits with stored ${nativeModel} pins compose through both witness surfaces`, async () => {
+    const f = fixture(1, nativeModel), original = f.entries[0]!;
+    const generic = await f.page();
+    const dedicated = await f.page(f.selection(), undefined, 'work-credits');
+    expect(generic.complete).toBe(true);
+    expect(generic.items).toHaveLength(1);
+    expect(dedicated.items).toEqual(generic.items);
+    expect(dedicated.complete).toBe(true);
+    expect(generic.items[0]).toMatchObject({ occurrence: original.state.credit, revision: original.head,
+      workParticipation: original.state.workParticipation, subjectParticipation: original.state.subjectParticipation,
+      subject: { kind: 'resource', ref: id(50) } });
+  });
+}
