@@ -122,6 +122,43 @@ public class ContentSearchQualificationTest {
         put(data, RECEIPTS, receipt, "requestDigest", text(hash(json + "}")));
         return decision;
     }
+    private static Node withdraw(DatasetGraph data, Node variant, Node resource, Node publication,
+                                  Node previous, int sequence) {
+        String admission = UUID.randomUUID().toString();
+        Node decision = uri("https://rezics.com/id/" + admission);
+        Node receipt = uri("urn:rezics:receipt:" + hash(admission + "\0content-search-eligibility"));
+        data.add(REVISIONS, decision, TYPE, p("ContentSearchEligibilityWithdrawalDecision"));
+        data.add(REVISIONS, decision, TYPE, p("RevisionAnchor"));
+        data.add(RECEIPTS, receipt, TYPE, p("OperationReceipt"));
+        put(data, CURRENT, variant, "publicSearchEligibilityHead", decision);
+        put(data, REVISIONS, decision, "component", variant);
+        put(data, REVISIONS, decision, "variant", variant);
+        put(data, REVISIONS, decision, "resource", resource);
+        put(data, REVISIONS, decision, "publicationDecision", publication);
+        put(data, REVISIONS, decision, "withdrawnEligibilityHead", previous);
+        put(data, REVISIONS, decision, "modelRevision", uri(DEFINITION + "content-search-eligibility-withdrawal-v1"));
+        put(data, REVISIONS, decision, "shapeRevision", uri(DEFINITION + "content-search-eligibility-withdrawal-v1"));
+        put(data, REVISIONS, decision, "admissionId", text(admission));
+        put(data, REVISIONS, decision, "authorityEpoch", text("0"));
+        put(data, REVISIONS, decision, "admittedScope", text("content:search-eligibility:" + variant.getURI()));
+        Node actor = data.find(REVISIONS, previous, p("actingSubject"), Node.ANY).next().getObject();
+        put(data, REVISIONS, decision, "actingSubject", actor);
+        put(data, REVISIONS, decision, "datasetId", PRODUCT);
+        put(data, REVISIONS, decision, "dataEpoch", text("epoch"));
+        put(data, REVISIONS, decision, "sequence", text(Integer.toString(sequence)));
+        put(data, RECEIPTS, receipt, "eligibilityDecision", decision);
+        put(data, RECEIPTS, receipt, "outcome", p("Succeeded"));
+        put(data, RECEIPTS, receipt, "expectedHead", previous);
+        for (String field : List.of("variant", "resource", "publicationDecision", "withdrawnEligibilityHead", "admissionId",
+            "authorityEpoch", "admittedScope", "actingSubject", "datasetId", "dataEpoch", "sequence"))
+            put(data, RECEIPTS, receipt, field, data.find(REVISIONS, decision, p(field), Node.ANY).next().getObject());
+        String json = "{\"family\":\"content-search-eligibility-withdrawal-v1\",\"resourceId\":\"" + resource.getURI()
+            + "\",\"variantId\":\"" + variant.getURI() + "\",\"publicationDecision\":\"" + publication.getURI()
+            + "\",\"expectedEligibilityHead\":\"" + previous.getURI() + "\",\"actingSubject\":\"" + actor.getURI() + "\"}";
+        put(data, RECEIPTS, receipt, "requestDigest", text(hash(json)));
+        return decision;
+    }
+
     private static final class Fixture implements AutoCloseable {
         final DatasetGraph data = DatasetGraphFactory.createTxnMem();
         final Node variant = uri("https://rezics.com/id/11111111-1111-4111-8111-111111111111");
@@ -164,6 +201,36 @@ public class ContentSearchQualificationTest {
             assertEquals(BigInteger.valueOf(263), f.audit().ownerSequence());
         }
     }
+    @Test public void withdrawalClosesOnlyQualificationAndRetainsPublicationAndPriorProof() {
+        try (Fixture f = new Fixture()) {
+            Node publication = publication(f.data, f.variant, f.resource, 1);
+            Node approved = approve(f.data, f.variant, f.resource, publication, 2, false, 0);
+            Node withdrawn = withdraw(f.data, f.variant, f.resource, publication, approved, 3);
+            assertEquals(0, f.audit().population());
+            assertTrue(f.data.contains(CURRENT, f.variant, p("contentPublicationHead"), publication));
+            assertTrue(f.data.contains(REVISIONS, approved, TYPE, p("ContentSearchEligibilityDecision")));
+            assertTrue(ContentSearchQualification.changed(f.data,
+                Quad.create(REVISIONS, withdrawn, p("withdrawnEligibilityHead"), approved)));
+            f.project(publication, approved);
+            assertThrows(ContentSearchQualification.Refusal.class, f::audit);
+        }
+    }
+    @Test public void withdrawalRequiresItsPublisherAndExactDurableReceipt() {
+        for (String damage : List.of("publisher", "expected-head", "digest", "rights")) try (Fixture f = new Fixture()) {
+            Node publication = publication(f.data, f.variant, f.resource, 1);
+            Node approved = approve(f.data, f.variant, f.resource, publication, 2, false, 0);
+            Node withdrawn = withdraw(f.data, f.variant, f.resource, publication, approved, 3);
+            Node receipt = f.data.find(RECEIPTS, Node.ANY, p("eligibilityDecision"), withdrawn).next().getSubject();
+            switch (damage) {
+                case "publisher" -> put(f.data, REVISIONS, withdrawn, "actingSubject", uri("urn:foreign:actor"));
+                case "expected-head" -> put(f.data, RECEIPTS, receipt, "expectedHead", uri("urn:foreign:head"));
+                case "digest" -> put(f.data, RECEIPTS, receipt, "requestDigest", text("d".repeat(64)));
+                case "rights" -> put(f.data, REVISIONS, withdrawn, "rightsBasis", p("OriginalContribution"));
+            }
+            assertThrows(damage, ContentSearchQualification.Refusal.class, f::audit);
+        }
+    }
+
     @Test public void damagedReceiptsAmbiguousHeadsAndStaleUnitsNeverIssueWitnesses() {
         for (String damage : List.of("receipt", "digest", "head", "missing-publication", "stale-unit", "duplicate-unit", "owner")) {
             try (Fixture f = new Fixture()) {

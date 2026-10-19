@@ -96,7 +96,7 @@ export function DiscussionListContent({ page, path, query, locale, feed, message
       <LocalizedLink href={hrefs.sorts.new} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>{t.new}</LocalizedLink>
     </EmptyState>
     : <EmptyState icon={MessagesSquareIcon} headingLevel={3} title={t.emptyDiscussions} description={t.emptyDiscussionsBody} className="m-3 sm:m-4" />;
-  return <DiscussionList items={page.data.items} realmPath={path} sort={query.sort} window={query.window} hrefs={hrefs}
+  return <DiscussionList items={page.data.items} realmPath={path} realmId={page.data.realm} sort={query.sort} window={query.window} hrefs={hrefs}
     next={page.data.nextCursor ? discussionListHref(path, { ...query, cursor: page.data.nextCursor }) : null}
     first={query.cursor ? top : null} empty={empty} />;
 }

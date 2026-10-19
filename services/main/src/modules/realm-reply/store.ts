@@ -6,10 +6,10 @@ import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry, type R
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { RealmReplyDenied, RealmReplyInvalid, RealmReplyStale, RealmReplyUnavailable, type PlacementInput,
-  type ReplyIdentityInput, type ReviewInput, RealmReplyContentStore } from './content-store.ts';
+  type ReplyIdentityInput, type ReviewInput, type PlacementWithdrawalInput, type PlacementWithdrawalResult, RealmReplyContentStore } from './content-store.ts';
 import { acknowledgeContentDecision, cancelPlacement, placeReply,
   readPlacementHead, readRootPlacementHeads, replySlotIri,
-  readReplyGraphReceipt, type RealmReplyDispatchBasis, type ReplyGraphReceipt } from './graph.ts';
+  readReplyGraphReceipt, assertPlacementWithdrawalOwner, withdrawReplyPlacement, type RealmReplyDispatchBasis, type ReplyGraphReceipt } from './graph.ts';
 import { boundReplyRoot, readableReplyRoot } from './root.ts';
 import { TargetUnavailable, targetRead } from '../target/resolve.ts';
 import { WorkReadMissing, WorkReadUnavailable } from '../work/read-session.ts';
@@ -134,7 +134,7 @@ export class RealmReplyStore {
     private readonly contentCore: Pick<ContentCore, 'settlePublication'>,
     private readonly access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>
       & Partial<Pick<AccessAdmissionRegistry, 'fenceClaim' | 'hasRealmMemberAdmission' | 'withRealmPolicy' | 'realmReadProof'
-        | 'canReadWork' | 'canReadSemanticResource' | 'realmHistoryFloor'>>,
+        | 'canReadWork' | 'canReadSemanticResource' | 'realmHistoryFloor' | 'withOwnerAuthority'>>,
     private readonly env: WorkActivationEnvironment,
     /** Read-only adapters omit this owner; commands require its exact index. */
     private readonly rankingAccess?: Pool) {}
@@ -334,6 +334,72 @@ export class RealmReplyStore {
     }
   }
 
+  async withdraw(principal: VerifiedPrincipal, actingSubject: string, input: PlacementWithdrawalInput,
+    key: string, digest: string): Promise<PlacementWithdrawalResult> {
+    await assertGraphAdmissionOpen(this.env.fuseki, this.env.lineage);
+    const registered = await this.access.register({ principal, actingSubject, action: 'reply.place',
+      scope: `reply:place:${input.realm}`, idempotencyKey: key, requestDigest: digest });
+    if (!this.access.withOwnerAuthority) throw new RealmReplyUnavailable('live author authority is unavailable');
+    const result = await this.access.withOwnerAuthority({ principal, actingSubject,
+      action: 'agent.control', scope: `agent:control:${actingSubject}` }, async () => {
+      await assertPlacementWithdrawalOwner(this.env, actingSubject, input);
+      const prior = await readReplyGraphReceipt(this.env, registered);
+      if (prior) return prior;
+      const admission = await this.fence(registered, principal);
+      if (!this.rankingAccess) throw new RealmReplyUnavailable('Realm ranking owner is unavailable');
+      await fenceRealmThreadRemoval(this.rankingAccess, this.env.lineage.dataEpoch,
+        input.realm, input.reply, admission.id);
+      return withdrawReplyPlacement(this.env, admission, input);
+    });
+    await this.seal(registered, result);
+    if (result.outcome === 'cancelled') {
+      if (this.rankingAccess) await finishRealmThreadRemoval(this.rankingAccess, this.env.lineage.dataEpoch,
+        input.realm, input.reply, registered.id);
+      throw new RealmReplyStale('Realm reply placement head or exact revision moved');
+    }
+    if (!result.placement || result.realm !== input.realm || result.reply !== input.reply
+      || result.revisionId !== input.expectedRevisionId || result.predecessor !== input.expectedHead) {
+      throw new RealmReplyUnavailable('withdrawal receipt differs from exact intent');
+    }
+    if (this.rankingAccess) await finishRealmThreadRemoval(this.rankingAccess, this.env.lineage.dataEpoch,
+      input.realm, input.reply, registered.id);
+    return { profile: 'realm-reply-placement-withdrawal-v1', realm: input.realm, reply: input.reply,
+      revisionId: input.expectedRevisionId, withdrawnPlacement: input.expectedHead,
+      withdrawal: result.placement, replayed: registered.replayed };
+  }
+
+  /** Exact history uses retained Content authorship, live Agent control and the
+   * same current placement/Realm visibility owner as ordinary reply reads. */
+  async hasRevision(reply: string, revisionId: string): Promise<boolean> {
+    return await this.content.revisionAuthor(reply, revisionId) !== null;
+  }
+
+  async canReadRevision(reply: string, revisionId: string, principal?: VerifiedPrincipal, actor?: string): Promise<boolean> {
+    const retained = await this.content.revisionAuthor(reply, revisionId);
+    if (!retained) return false;
+    if (principal && actor === retained.author && this.access.withOwnerAuthority) {
+      try {
+        return await this.access.withOwnerAuthority({ principal, actingSubject: actor,
+          action: 'agent.control', scope: `agent:control:${actor}` }, () => Promise.resolve(true));
+      } catch (error) { if (!(error instanceof AdmissionDenied || error instanceof AdmissionExpired)) throw error; }
+    }
+    if ((await this.readPublic(reply, principal, actor))?.revisionId === revisionId) return true;
+    if (!await readableReplyRoot(this.env, retained.rootTarget, retained.rootRevision,
+      this.access, principal ?? null, actor)) return false;
+    const rows = (await this.env.fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?realm WHERE {
+      GRAPH ${iri(GRAPHS.current)} { ?slot rv:reply ${iri(reply)} ; rv:realm ?realm ; rv:replyPlacementHead ?head . }
+      GRAPH ${iri(GRAPHS.revisions)} { ?head a rv:RealmReplyPlacement ; rv:placementOutcome rv:Accepted ;
+        rv:reply ${iri(reply)} ; rv:contentRevision ${iri(`urn:rezics:content:revision:${revisionId}`)} . }
+    } LIMIT 65`)).results?.bindings ?? [];
+    if (rows.length > 64) throw new RealmReplyUnavailable('exact reply placement inventory exceeds its bound');
+    for (const row of rows) {
+      if (!row.realm) throw new RealmReplyUnavailable('exact reply Realm is unavailable');
+      const visible = await this.visible(row.realm.value, reply, principal, actor);
+      if (visible?.revisionId === revisionId) return true;
+    }
+    return false;
+  }
+
   async place(principal: VerifiedPrincipal, actingSubject: string, input: PlacementInput,
     key: string, digest: string, basis?: RealmReplyDispatchBasis) {
     replyBoards(input);
@@ -509,12 +575,14 @@ export class RealmReplyStore {
 
   private async assemblePublic(reply: string, principal?: VerifiedPrincipal, actor?: string) {
     await assertGraphAdmissionOpen(this.env.fuseki, this.env.lineage);
-    const result = await this.content.readCurrent(reply);
+    let result = await this.content.readCurrent(reply);
     if (!result || !await readableReplyRoot(this.env, result.rootTarget, result.rootRevision,
       this.access, principal ?? null, actor)) return null;
     if (result.originRealm) {
       const visible = await this.visible(result.originRealm, reply, principal, actor);
-      if (visible?.revisionId !== result.revisionId) return null;
+      if (!visible) return null;
+      if (visible.revisionId !== result.revisionId) result = await this.content.readCurrent(reply, visible.revisionId);
+      if (!result || (await this.visible(result.originRealm!, reply, principal, actor))?.revisionId !== result.revisionId) return null;
     }
     return result;
   }
@@ -548,9 +616,15 @@ export class RealmReplyStore {
     if (!before) return null;
     const page = await this.content.listCurrent(rootTarget, rootRevision, after, realm ?? null);
     if (realm) {
-      const visible = await Promise.all(page.items.map(async item =>
-        (await this.visible(realm, item.reply as string, principal, actor))?.revisionId === item.revisionId));
-      page.items = page.items.filter((_item, index) => visible[index]);
+      const selected = await Promise.all(page.items.map(async item => {
+        const visible = await this.visible(realm, item.reply as string, principal, actor);
+        if (!visible) return null;
+        if (visible.revisionId === item.revisionId) return item;
+        const exact = await this.content.readCurrent(item.reply as string, visible.revisionId);
+        if (!exact || (await this.visible(realm, item.reply as string, principal, actor))?.revisionId !== exact.revisionId) return null;
+        return { ...item, ...exact };
+      }));
+      page.items = selected.filter(item => item !== null);
     }
     if (!await readableReplyRoot(this.env, rootTarget, rootRevision, this.access, principal ?? null, actor)) return null;
     const decisions = await discloseInventory(this.env, page.items.map(item => ({ owner: 'content' as const,

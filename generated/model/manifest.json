@@ -214,6 +214,11 @@
       "file": "shapes/content-search-eligibility-v2.ttl"
     },
     {
+      "id": "content-search-eligibility-withdrawal-v1",
+      "sha256": "139d2ba84457b6559c2222e11c8f201b80cfc091eec5e8688171eff8939a40de",
+      "file": "shapes/content-search-eligibility-withdrawal-v1.ttl"
+    },
+    {
       "id": "content-withdrawal-v1",
       "sha256": "5512f68e6636782780c085788880c97ce88821c358af49530f31ba7199ad5113",
       "file": "shapes/content-withdrawal-v1.ttl"
@@ -2480,6 +2485,21 @@
       ]
     },
     {
+      "type": "https://rezics.com/vocab/ContentSearchEligibilityWithdrawalDecision",
+      "routes": [
+        {
+          "profile": "content-search-eligibility-withdrawal-v1",
+          "shape": "https://rezics.com/definition/content-search-eligibility-withdrawal-v1/decision-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/modelRevision",
+              "value": "https://rezics.com/definition/content-search-eligibility-withdrawal-v1"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "type": "https://rezics.com/vocab/ContextDefinitionEquivalence",
       "routes": [
         {
@@ -4579,8 +4599,10 @@
     "shapes/zone-capability-v1.ttl": "a7296e09f052999c0578caa2894ebdbd272cedd04357e4f291e2506e73eed611",
     "shapes/zone-presentation-v1.ttl": "6aecbd83013a8a9f9e2dc712d26b6450df29554f2f2c7d6174c2897b418bece7",
     "shapes/zone-presentation-v2.ttl": "e331efea63e2bfb3ce883fb4d005ab63d7dd976973e43fd1599f655eef3ea730",
-    "packages/model/src/generated/profiles.ts": "86dd80ed1fdc87b0d11ccb2c1ae49f4199ab9d0597466bdac74f8336792c8d02",
-    "packages/model/src/generated/schemas.ts": "67674536b404a15bfdc6d8616a872d5785e417aa1f5a2f24cfd1231063ae6f0a",
-    "packages/model/src/generated/vocabulary.ts": "c81346b7964ab255ed9312849c771072e9210157d4139a7852a639a7871513b4"
+    "packages/model/src/generated/profiles.ts": "68ca50775d77f8805e4bc3e71860f4bc043b355a93f606267e43b1de55418619",
+    "packages/model/src/generated/schemas.ts": "abf8d86794c14b6ef8a4e75a3d9a19b8fa7933f605c938d8f90c979f66122b05",
+    "packages/model/src/generated/vocabulary.ts": "97b3818840272e0c9028bff09e502f5f38771b50bbac4d2992466f83daa8e6c3",
+    "contexts/content-search-eligibility-withdrawal-v1.jsonld": "0ad559b4a841e33d3d612f3433dddbe94e5dd5d7ede6c6076ac7101aec14a568",
+    "shapes/content-search-eligibility-withdrawal-v1.ttl": "139d2ba84457b6559c2222e11c8f201b80cfc091eec5e8688171eff8939a40de"
   }
 }

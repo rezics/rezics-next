@@ -38,6 +38,13 @@ export interface PlacementInput {
   reviewDecisionId: string | null; expectedHead: string | null;
   concepts?: string[]; primaryConcept?: string | null;
 }
+export interface PlacementWithdrawalInput {
+  realm: string; reply: string; expectedHead: string; expectedRevisionId: string;
+}
+export interface PlacementWithdrawalResult {
+  profile: 'realm-reply-placement-withdrawal-v1'; realm: string; reply: string;
+  revisionId: string; withdrawnPlacement: string; withdrawal: string; replayed: boolean;
+}
 export interface CurrentPlacementEvidenceInput {
   realm: string; reply: string; revisionId: string; reviewDecisionId: string; preparationId: string;
 }
@@ -111,6 +118,19 @@ export class RealmReplyContentStore {
     const row = (await this.pool.query<{ origin_realm: string | null }>(
       'SELECT origin_realm FROM content.reply_author WHERE reply = $1', [reply])).rows[0];
     return row ? { realm: row.origin_realm } : null;
+  }
+
+  async revisionAuthor(reply: string, revisionId: string): Promise<{
+    author: string; variantId: string; rootTarget: string; rootRevision: string;
+  } | null> {
+    if (!native.test(reply) || !uuid.test(revisionId)) throw new RealmReplyInvalid('invalid reply revision');
+    const row = (await this.pool.query<{ author: string; variantId: string; rootTarget: string; rootRevision: string }>(`
+      SELECT a.author, a.variant_id AS "variantId", a.root_target AS "rootTarget", a.root_revision AS "rootRevision"
+      FROM content.reply_author a JOIN content.revision r ON r.variant_id = a.variant_id
+      JOIN content.variant v ON v.id = a.variant_id AND v.resource_id = a.reply
+      WHERE a.reply = $1 AND r.id = $2 AND r.model = 'member-reply-v1'
+        AND r.provenance->>'author' = a.author`, [reply, revisionId])).rows[0];
+    return row ?? null;
   }
 
   async hasReceipt(operationId: string, action: string, requestDigest: string): Promise<boolean> {
@@ -441,9 +461,12 @@ export class RealmReplyContentStore {
       p.parent_reply AS "parentReply", p.parent_revision AS "parentRevision",
       p.variant_id AS "variantId", r.id AS "revisionId", r.body->>'body' AS body,
       r.byte_digest AS "revisionDigest", r.body->'document' AS document, r.body->'spoiler' AS spoiler,
-      (r.availability = 'available' AND r.body->>'deleted' = 'false') AS visible
-      FROM candidates p JOIN content.variant v ON v.id = p.variant_id
-      JOIN content.revision r ON r.id = v.draft_head
+      (r.availability = 'available' AND r.body->>'deleted' = 'false'
+        AND live.availability = 'available' AND live.body->>'deleted' = 'false') AS visible
+      FROM candidates p JOIN content.receipt published ON published.operation_id = p.operation_id
+      JOIN content.variant v ON v.id = p.variant_id
+      JOIN content.revision live ON live.id = v.draft_head
+      JOIN content.revision r ON r.id = published.revision_id AND r.variant_id = p.variant_id
       ORDER BY p.id`, [rootTarget, rootRevision, after ?? '', realm]);
     const candidates = rows.rows.slice(0, 32);
     const items = candidates.filter(row => row.visible === true).map(({ visible: _visible, document, spoiler, ...row }) => {
@@ -457,17 +480,26 @@ export class RealmReplyContentStore {
     return { items, next: rows.rows.length > 32 ? candidates.at(-1)!.reply as string : null };
   }
 
-  async readCurrent(reply: string) {
-    if (!native.test(reply)) throw new RealmReplyInvalid('invalid reply');
+  /** Unplaced replies retain the identity's exact published bytes. A Realm
+   * caller may supply its independently selected placement revision. */
+  async readCurrent(reply: string, revisionId?: string) {
+    if (!native.test(reply) || revisionId !== undefined && !uuid.test(revisionId)) {
+      throw new RealmReplyInvalid('invalid reply revision');
+    }
     const row = (await this.pool.query<{ reply: string; author: string; rootTarget: string;
       rootRevision: string; variantId: string; revisionId: string; body: string; document: DocumentSnapshot | null; spoiler: unknown;
       revisionDigest: string; originRealm: string | null }>(`
       SELECT p.id AS reply,p.author,p.origin_realm AS "originRealm",p.root_target AS "rootTarget",p.root_revision AS "rootRevision",
         p.variant_id AS "variantId",r.id AS "revisionId",r.body->>'body' AS body,
         r.body->'document' AS document,r.body->'spoiler' AS spoiler,r.byte_digest AS "revisionDigest"
-      FROM content.discovery_reply($1) p CROSS JOIN LATERAL content.discovery_variant(p.variant_id) v
-      CROSS JOIN LATERAL content.discovery_revision(v.draft_head) r
-      WHERE r.availability='available' AND r.body->>'deleted'='false'`, [reply])).rows[0];
+      FROM content.discovery_reply($1) p
+      CROSS JOIN LATERAL content.discovery_variant(p.variant_id) v
+      CROSS JOIN LATERAL content.discovery_revision(v.draft_head) live
+      CROSS JOIN LATERAL content.discovery_receipt(p.operation_id) published
+      CROSS JOIN LATERAL content.discovery_revision(COALESCE($2::uuid,published.revision_id)) r
+      WHERE r.variant_id=p.variant_id AND r.availability='available'
+        AND r.body->>'deleted'='false' AND live.availability='available'
+        AND live.body->>'deleted'='false'`, [reply, revisionId ?? null])).rows[0];
     if (!row) return null;
     const { document, spoiler, ...result } = row;
     try {

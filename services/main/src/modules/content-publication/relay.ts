@@ -366,7 +366,8 @@ async function projectEvent(env: WorkActivationEnvironment, content: ContentCore
     }
     // Absence and a proved approval of an older publication are terminal owner
     // evaluations. A later approval has its own durable Content source event.
-    if (graph.eligibilityState?.kind === 'closed-absent'
+    if (graph.eligibilityState?.kind === 'closed-withdrawn'
+      || graph.eligibilityState?.kind === 'closed-absent'
       || graph.eligibilityState?.kind === 'closed-superseded-approval') return 'ignored';
     if (event.eventType === 'content.publication.active' && graph.eligibilityState?.kind === 'public-current') {
       if (!graph.eligibility || !graph.decision || graph.eligibleDecision !== graph.decision) {
