@@ -1447,7 +1447,20 @@ describe('isolated PostgreSQL migration rehearsal', () => {
   afterAll(async () => {
     try { await source?.end(); }
     // Container/volume removal can outlast SQL; it has its own cleanup budget.
-    finally { docker(['rm', '--force', '--volumes', fixtureName], 45_000); }
+    finally {
+      const logs = spawnSync('docker', ['logs', '--tail', '100', fixtureName], { encoding: 'utf8', timeout: 1_000, maxBuffer: 65_536 });
+      const health = (logs.stdout + logs.stderr).split('\n').flatMap(line => {
+        const signal = line.match(/server process .* was terminated by signal (\d+)/);
+        if (signal) return [`backend-signal-${signal[1]}`];
+        if (line.includes('terminating any other active server processes')) return ['server-crash-recovery'];
+        if (line.includes('database system is ready to accept connections')) return ['ready'];
+        return [];
+      });
+      const memory = spawnSync('docker', ['exec', fixtureName, 'cat', '/sys/fs/cgroup/memory.events'], { encoding: 'utf8', timeout: 1_000 });
+      console.log(`Isolated PostgreSQL health: ${JSON.stringify({ events: health,
+        memory: (memory.stdout ?? '').split('\n').filter(line => /^(low|high|max|oom|oom_kill|oom_group_kill|sock_throttled) \d+$/.test(line)) })}`);
+      docker(['rm', '--force', '--volumes', fixtureName], 45_000);
+    }
   }, 50_000);
 
   function migrations() {
