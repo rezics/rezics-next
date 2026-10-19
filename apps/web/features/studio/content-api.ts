@@ -171,7 +171,7 @@ export async function withdrawChapterQualification(
     }, { headers: { 'idempotency-key': intent.key } });
     if (!answer.data) return { kind: authorFailure(answer.error) };
     const result = answer.data;
-    if (result.profile !== 'content-search-eligibility-withdrawal-v1' || result.outcome !== 'succeeded'
+    if (!('profile' in result) || result.profile !== 'content-search-eligibility-withdrawal-v1' || result.outcome !== 'succeeded'
       || result.resourceId !== target.chapter || result.variantId !== target.variant
       || result.publicationDecision !== current.publication || result.withdrawnEligibilityHead !== current.eligibility)
       return { kind: 'failed' };
