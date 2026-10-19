@@ -11,8 +11,9 @@ import { loadCompatibility } from '../../load/compatibility.ts';
 import { readSnapshot, verifySnapshot } from '../../datasets/snapshot.ts';
 import { blobPath, verifiedBlob } from '../../datasets/store.ts';
 import { datasetMediaMapper } from '../../datasets/native/media.ts';
+import { datasetIntakeReceipt } from '../../datasets/native/context.ts';
 import { selectDatasetRoots, type DatasetSelectionResult } from '../../datasets/selection.ts';
-import type { DatasetNativeMapper, DatasetSnapshot } from '../../datasets/types.ts';
+import type { DatasetIntakeCommand, DatasetIntakeCoordinate, DatasetNativeMapper, DatasetSnapshot } from '../../datasets/types.ts';
 import { reconstructIntake } from '../../datasets/import.ts';
 import { RetainedSources, sourceFileDigests, sourceKey, type RetainedSourceAdapter,
   type RetainedSourceManifest, type SourceContext, type SourceInputs } from '../retained-source.ts';
@@ -22,7 +23,7 @@ import { informationMatrix } from '../../../tests/qa/fixtures/catalogue-informat
 import { publicDomainBaseline } from '../../../tests/qa/fixtures/catalogue-public-domain.ts';
 import { auditBaseline, auditConsumerForFile, auditConsumers, auditOwnerPrerequisites,
   auditPreparationBudgetMs, type AuditCommand, type AuditCommandReceipt, type AuditConsumer,
-  type AuditFilePin, type AuditGrantReceipt, type AuditManifests, type AuditOriginals, type AuditPreparationMetadata,
+  type AuditFilePin, type AuditGrantReceipt, type AuditImport, type AuditManifests, type AuditOriginals, type AuditPreparationMetadata,
   type AuditReadPredicate, type AuditRecipe, type AuditValue } from '../../../tests/qa/fixtures/audit-corpus-contract.ts';
 import type { PersonaName, RetainedPersonaRealm } from '../../../tests/qa/support/personas.ts';
 import { tryAcquireDirectoryLease } from '../process/lease.ts';
@@ -64,6 +65,29 @@ export function auditBaselineBlockers(pins: Readonly<Record<string, string>> = {
   return Object.entries(pins).filter(([, revision]) => revision !== auditBaseline)
     .map(([consumer, revision]) => ({ owner: 'audit-baseline-contract', stage: consumer,
       detail: `consumer pins ${revision}; original product baseline is ${auditBaseline}; an owner must establish a compatible fixture/test overlay without advancing that baseline` }));
+}
+
+export function auditProductBlockers(productRevision: string | undefined, current: string): AuditInspection['blockers'] {
+  if (productRevision === undefined) return auditBaselineBlockers();
+  return productRevision === current ? [] : [{ owner: 'audit-product-revision', stage: 'product-pin',
+    detail: `recipe pins ${productRevision}; current executable product is ${current}; do not relabel either revision` }];
+}
+
+/** Check the retained owner's declared mode before restore/startup can write. */
+export function assertAuditStorage(compose: Readonly<Record<string, string>>): void {
+  if (compose.REZICS_STACK_STORAGE !== 'persistent' || compose.REZICS_STACK_RAW_UPDATE !== '0')
+    throw new AuditCorpusBlocked('catalogue-backup', 'before-restore-storage',
+      'retained source must declare persistent storage and REZICS_STACK_RAW_UPDATE=0 before any writer starts');
+}
+
+export function auditSelectionBlockers(input: AuditImport, selection: DatasetSelectionResult): AuditInspection['blockers'] {
+  // The importer retains missing-media dispositions. Intake-only execution can
+  // preserve that truthful incompleteness without claiming catalogue readiness.
+  if (selection.status === 'complete' || input.native === false && selection.status === 'incomplete'
+    && selection.manifest.coverage.knowledge === 'complete'
+    && selection.manifest.limitations.every(item => item.affects === 'media')) return [];
+  return [{ owner: 'dataset-selection', stage: input.snapshot,
+    detail: `bounded closure ${selection.status}; ${selection.manifest.limitations.map(item => item.code).join(', ')}` }];
 }
 
 /** Resolve existing files through realpath before reading; even read-only inputs
@@ -121,6 +145,24 @@ export function resolveAuditValue(value: AuditValue, bindings: ReadonlyMap<strin
       requireFact(typeof id === 'string' && native.test(id), 'short ID requires an observed native IRI');
       return id.slice(-36);
     }
+    if (value.$audit === 'intakes') {
+      requireFact(Object.keys(value).sort().join(',') === '$audit,from,pointer'
+        && typeof value.from === 'string' && value.from.startsWith('import:')
+        && typeof value.pointer === 'string' && bindings.has(value.from), 'unobserved importer intake projection');
+      const parts = auditPointer(bindings.get(value.from), value.pointer);
+      requireFact(Array.isArray(parts) && parts.length > 0, 'importer intake projection has no actual parts');
+      return parts.map((part: unknown, index: number) => {
+        requireFact(object(part) && object(part.command), 'importer intake projection lacks command custody');
+        const command = part.command as unknown as DatasetIntakeCommand;
+        requireFact(command.coordinate?.purpose === 'record' && command.coordinate.index === index && command.coordinate.count === parts.length
+          && command.responses.some(reply => [200, 201].includes(reply.status ?? 0) && hash(reply.body) === hash(command.result)),
+        'importer intake projection lacks an ordered successful response');
+        const receipt = datasetIntakeReceipt(command, command.request);
+        requireFact(['index', 'record', 'observation', 'byteDigest', 'byteLength'].every(key => part[key] === receipt[key as keyof typeof receipt]),
+          'importer intake projection differs from its actual acknowledgement');
+        return { index, record: receipt.record, observation: receipt.observation, byteDigest: receipt.byteDigest };
+      });
+    }
     throw new Error('Audit preparation: unknown template operation');
   }
   return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, resolveAuditValue(item, bindings)]));
@@ -133,6 +175,8 @@ export function assertAuditRecipe(value: unknown): asserts value is AuditRecipe 
   requireFact(typeof value.sourceRoot === 'string' && object(value.originals) && object(value.manifests), 'recipe source/bindings/projections are missing');
   requireFact(Object.keys(value.manifests).sort().join() === Object.keys(auditConsumers).sort().join(), 'provide exactly one projection for each existing consumer');
   const recipe = value as unknown as AuditRecipe;
+  requireFact(recipe.productRevision === undefined || /^[a-f0-9]{40}$/u.test(recipe.productRevision), 'invalid current product pin');
+  for (const input of recipe.imports) requireFact(input.native === undefined || typeof input.native === 'boolean', 'invalid native import mode');
   requireFact(recipe.unknownControls === undefined || Array.isArray(recipe.unknownControls)
     && recipe.unknownControls.every(name => /^[a-z][a-z0-9-]*$/u.test(name))
     && new Set(recipe.unknownControls).size === recipe.unknownControls.length, 'invalid unknown control names');
@@ -274,18 +318,14 @@ export function inspectAuditRecipe(checkout: string, path: string, availableMapp
       // consumer and mapper; a digest alone is never a publication permission.
     }
   }
-  const blockers = auditBaselineBlockers(), selections = new Map<string, DatasetSelectionResult>();
+  const current = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: checkout, encoding: 'utf8' }).trim();
+  const blockers = auditProductBlockers(recipe.productRevision, current), selections = new Map<string, DatasetSelectionResult>();
   for (const input of recipe.imports) {
     const snapshot = snapshots.get(input.snapshot);
     requireFact(snapshot, `import does not name an independently frozen snapshot: ${input.snapshot}`);
     const selection = selectDatasetRoots(snapshot, input.selection);
     selections.set(input.snapshot, selection);
-    if (selection.status !== 'complete') blockers.push({ owner: 'dataset-selection', stage: input.snapshot,
-      detail: `bounded closure ${selection.status}; ${selection.manifest.limitations.map(item => item.code).join(', ')}` });
-    // The existing importer has maxRecords, not a selected-view input. Importing
-    // the parent or rewriting its digest would falsify the elected closure.
-    if (selection.selection && !auditSelectionIsWholeSnapshot(snapshot, selection)) blockers.push({ owner: 'dataset-import-selection', stage: input.snapshot,
-      detail: auditOwnerPrerequisites[0].contract + '; current DatasetImportOptions exposes only maxRecords' });
+    blockers.push(...auditSelectionBlockers(input, selection));
     for (const mapper of input.mappers) if (!mappers.some(available => available.id === mapper.id && available.revision === mapper.revision))
       blockers.push({ owner: 'dataset-native-mappers', stage: input.snapshot, detail: `missing registered mapper ${mapper.id}@${mapper.revision}` });
   }
@@ -625,18 +665,43 @@ export function auditImportRecordInputs(snapshots: ReadonlyMap<string, DatasetSn
  * joins use the existing recorder; an unrelated observed UUID is insufficient. */
 function assertAuditImportSources(value: Record<string, unknown>, inputs: AuditImportInputs): void {
   requireFact(object(value.sources), 'import source receipts are missing');
-  const receipts = [...inputs.bindings].filter(([key, receipt]) => key.startsWith('command:') && object(receipt)
+  const receipts: Array<Pick<AuditCommandReceipt, 'method' | 'path' | 'key' | 'body' | 'status' | 'answer'> & { coordinate?: DatasetIntakeCoordinate }> = [...inputs.bindings].filter(([key, receipt]) => key.startsWith('command:') && object(receipt)
     && [200, 201].includes(Number(receipt.status)) && !receipt.error)
     .map(([, receipt]) => receipt as unknown as AuditCommandReceipt);
+  // The importer owns these requests and replies. Keep their actual custody;
+  // do not manufacture command timestamps, callers or an absent HTTP status.
+  for (const [name, imported] of inputs.bindings) {
+    if (!name.startsWith('import:') || !object(imported) || !object(imported.intakeCustody)) continue;
+    const custody = imported.intakeCustody;
+    requireFact(custody.format === 'rezics-dataset-intake-receipts-v1' && Array.isArray(custody.commands), 'invalid importer intake custody');
+    for (const value of custody.commands) {
+      if (!object(value) || !object(value.result) || !Array.isArray(value.responses)) continue;
+      const command = value as unknown as DatasetIntakeCommand;
+      if (command.coordinate?.purpose !== 'record') continue;
+      const frozen = inputs.records.get(command.coordinate.identity.key);
+      if (!frozen) continue;
+      requireFact(hash(custody.snapshot) === hash(frozen.snapshot)
+        && hash(command.coordinate.snapshot) === hash(frozen.snapshot)
+        && hash(command.coordinate.identity) === hash(frozen.identity)
+        && command.coordinate.recordDigest === frozen.recordDigest, 'importer intake coordinate differs from the frozen record');
+      const reply = command.responses.find(response => [200, 201].includes(response.status ?? 0)
+        && hash(response.body) === hash(command.result));
+      if (!reply) continue;
+      const part = datasetIntakeReceipt(command, command.request);
+      receipts.push({ method: command.method, path: command.path, key: command.key, body: json(command.request),
+        status: reply.status!, answer: json(part.command.result), coordinate: command.coordinate });
+    }
+  }
   const equal = (actual: unknown, expected: unknown) => actual !== undefined && hash(actual) === hash(expected);
-  const result = (receipt: AuditCommandReceipt, key: string) => object(receipt.answer) ? receipt.answer[key] : undefined;
+  const result = (receipt: typeof receipts[number], key: string) => object(receipt.answer) ? receipt.answer[key] : undefined;
   for (const key of retainedAdmissionCases) requireFact(object(value.sources[key]), `missing retained admission source: ${key}`);
   for (const [key, entry] of Object.entries(value.sources)) {
     const frozen = inputs.records.get(key);
     if (!frozen) throw new AuditCorpusBlocked('retained-source', 'import-retained-inputs', `missing exact frozen record: ${key}`);
     requireFact(object(entry) && native.test(String(entry.record)) && native.test(String(entry.observation))
       && Array.isArray(entry.parts) && entry.parts.length > 0, `invalid import intake inputs: ${key}`);
-    const parts = entry.parts.map((part: unknown) => {
+    const sourceParts = entry.parts;
+    const parts = sourceParts.map((part: unknown, index: number) => {
       requireFact(object(part) && native.test(String(part.record)) && native.test(String(part.observation))
         && typeof part.rawBytesBase64 === 'string' && hex.test(String(part.rawDigest)), `invalid actual intake part: ${key}`);
       const bytes = Buffer.from(part.rawBytesBase64, 'base64');
@@ -645,6 +710,7 @@ function assertAuditImportSources(value: Record<string, unknown>, inputs: AuditI
       const intake = receipts.find(receipt => {
         const observation = result(receipt, 'observation'), body = receipt.body;
         return receipt.method === 'POST' && receipt.path === '/v1/sources/intakes' && typeof receipt.key === 'string'
+          && (!receipt.coordinate || receipt.coordinate.index === index && receipt.coordinate.count === sourceParts.length)
           && object(body) && body.profile === 'source-manual-intake-v1' && body.provider === frozen.identity.provider
           && body.sourceRevision === frozen.snapshot.digest && body.retention === 'retained' && object(body.rightsEvidence)
           && body.rawBytesBase64 === part.rawBytesBase64 && object(observation)
@@ -654,7 +720,7 @@ function assertAuditImportSources(value: Record<string, unknown>, inputs: AuditI
           && observation.namespace === body.namespace && observation.externalId === body.externalId;
       });
       if (!intake) throw new AuditCorpusBlocked('dataset-importer', 'import-intake-receipts',
-        `${key}: retain the successful POST /v1/sources/intakes request and matching part record/observation/byte receipt in command:<id>`);
+        `${key}: retain the successful POST /v1/sources/intakes request and matching part record/observation/byte receipt in command:<id> or import:<snapshot>.intakeCustody`);
       return { part, bytes };
     });
     requireFact(parts.some(({ part }) => part.record === entry.record && part.observation === entry.observation),
@@ -888,7 +954,7 @@ export function projectAuditManifest(consumer: AuditConsumer, fragment: Retained
     const localBackup = relative(checkout, backup);
     requireFact(localBackup.startsWith(`.temp${sep}`), 'public-domain backup must stay inside this worktree .temp');
     Object.assign(base, { profile: 'catalogue-public-domain-corpus-v1',
-      productRevision: auditBaseline, backup: localBackup, preparationMs: metadata.buildMs,
+      productRevision, backup: localBackup, preparationMs: metadata.buildMs,
       preparationQaRun: metadata.sourceRunId, importedWorks: metadata.originals.map(binding => binding.resource) });
   }
   else if (consumer === 'identity') Object.assign(base, { format: 'identity-reader-corpus-v1',
@@ -944,6 +1010,7 @@ export async function liveAuditRuntime(checkout = root, mappers: readonly Datase
   const personas = await import('../../../tests/qa/support/personas.ts');
   const { prepareEmptyIdentity } = await import('../../../tests/qa/support/identity-reader-fixture.ts');
   const { importDataset } = await import('../../datasets/import.ts');
+  const { readEnv } = await import('../../dev/config.ts');
   const namespace = sha256(checkout), docker = stack.dockerEnvironment();
   const identity = (key: string) => `audit-${hash([namespace, key]).slice(0, 54)}`;
   const revision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: checkout, encoding: 'utf8' }).trim();
@@ -954,6 +1021,7 @@ export async function liveAuditRuntime(checkout = root, mappers: readonly Datase
     observe: (event: RetainedJson) => void = () => {}, originalPersonas?: RetainedPersonaRealm): Promise<AuditSession> => {
     const started = Date.now();
     const signal = AbortSignal.timeout(budget.remaining());
+    assertAuditStorage(readEnv(resolve(backup, '../compose.env')));
     const copy = await restoreCatalogueBackup(backup, runId, { signal, resourceClass: 'ordinary' });
     budget.excludeAdmissionWait(copy.admissionWaitMs);
     const environment = { ...copy.apps, REZICS_QA_RUN_ID: runId, REZICS_QA_STACK_TIER: 'integration' };
@@ -1025,9 +1093,8 @@ export async function liveAuditRuntime(checkout = root, mappers: readonly Datase
           finally { for (const [key, value] of before) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } }
         },
         async import(input, snapshot, selection) {
-          requireFact(selection.status === 'complete', 'refused/incomplete source view cannot be imported');
-          requireFact(auditSelectionIsWholeSnapshot(snapshot, selection),
-            'importDataset selected-view owner seam is unavailable; do not use maxRecords');
+          const blockers = auditSelectionBlockers(input, selection);
+          if (blockers.length) throw new AuditCorpusBlocked(blockers[0]!.owner, blockers[0]!.stage, blockers[0]!.detail);
           const operator = sessions[0]!.operator;
           requireFact(operator.actingSubject, 'catalogue import requires a retained operator identity');
           // The importer owns journals and may retain media. Give it an isolated
@@ -1044,7 +1111,8 @@ export async function liveAuditRuntime(checkout = root, mappers: readonly Datase
             if (!existsSync(destination)) copyFileSync(auditLocalFile(checkout, blobPath(sourceRoot, capture.digest)), destination, constants.COPYFILE_FICLONE);
           }
           const result = await importDataset(inputRoot, snapshot, {
-            native: true, relationships: true, actingSubject: operator.actingSubject,
+            native: input.native ?? true, relationships: input.native ?? true, selection: input.selection,
+            actingSubject: operator.actingSubject,
             mainOrigin: `http://127.0.0.1:${copy.apps.MAIN_PORT}`, webOrigin: `http://127.0.0.1:${copy.apps.MAIN_PORT}`,
             nativeMappers: input.mappers.map(mapper => mappers.find(item => item.id === mapper.id && item.revision === mapper.revision)!),
             api: { async request(method, path, body, key) {
@@ -1053,7 +1121,8 @@ export async function liveAuditRuntime(checkout = root, mappers: readonly Datase
             } },
           });
           requireFact(result.completed, 'dataset import did not complete; retained journal is failure evidence');
-          return json(result);
+          const intakeCustody = JSON.parse(readFileSync(auditLocalFile(checkout, result.intakeReceiptsFile), 'utf8')) as unknown;
+          return json({ ...result, intakeCustody });
         },
         quiesce,
         async stop() { try { await quiesce(); } finally { await copy.stop(); } },
@@ -1065,6 +1134,8 @@ export async function liveAuditRuntime(checkout = root, mappers: readonly Datase
   return {
     revision, mappers,
     async open(inspection, budget, observe) {
+      const productBlockers = auditProductBlockers(inspection.recipe.productRevision, revision);
+      if (productBlockers.length) throw new AuditCorpusBlocked(productBlockers[0]!.owner, productBlockers[0]!.stage, productBlockers[0]!.detail);
       const session = await open(auditLocalFile(checkout, inspection.originals.backup.file), inspection.recipe.realms, budget, undefined, observe,
         inspection.originals.personas);
       inspectionSourceRoots.set(session.runId, inspection.recipe.sourceRoot);

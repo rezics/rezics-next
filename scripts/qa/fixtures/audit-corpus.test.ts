@@ -7,8 +7,9 @@ import { sha256 } from '../../fixture/corpus.ts';
 import type { RetainedJson } from '../../fixture/manifest.ts';
 import { canonicalJson } from '../../lib/canonical-json.ts';
 import { intakeChunks } from '../../datasets/import.ts';
+import { datasetIntakeReceipt } from '../../datasets/native/context.ts';
 import { selectDatasetRoots, type DatasetSelectionBudget } from '../../datasets/selection.ts';
-import type { DatasetRecord, DatasetSnapshot } from '../../datasets/types.ts';
+import type { DatasetIntakeCommand, DatasetIntakeJournal, DatasetRecord, DatasetSnapshot } from '../../datasets/types.ts';
 import { retainedAdmissionCases, type RetainedRecordBinding, type RetainedRecordInput } from '../../../tests/qa/fixtures/catalogue/import-admission-contract.ts';
 import type { ImportCorpus } from '../../../tests/qa/support/import-outcomes.ts';
 import { auditBaseline, auditConsumers, auditProofFiles, type AuditCommand, type AuditOriginals,
@@ -18,8 +19,8 @@ import { commandOnlyIntegrationFiles, isolatedIntegrationFileList } from '../iso
 import { retainedRequirementKinds, retainedRequirements } from '../retained-requirements.ts';
 import { sourceKey, type SourceContext } from '../retained-source.ts';
 import { assertAuditGenerationProvenance, assertAuditManifest, assertAuditNativeProvenance, assertAuditOriginals, assertAuditRecipe,
-  AuditCorpusBlocked, auditBaselineBlockers, auditCorpusAdapter, auditLocalFile, auditPointer, AuditRecorder, auditRestorePlan,
-  auditSelectionIsWholeSnapshot, projectAuditManifest, resolveAuditValue,
+  assertAuditStorage, AuditCorpusBlocked, auditBaselineBlockers, auditProductBlockers, auditCorpusAdapter, auditLocalFile, auditPointer, AuditRecorder, auditRestorePlan,
+  auditSelectionBlockers, auditSelectionIsWholeSnapshot, projectAuditManifest, resolveAuditValue,
   type AuditImportInputs, type AuditInspection, type AuditRuntime, type AuditSession } from './audit-corpus.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -66,6 +67,27 @@ test('later fixture pins block preparation without substituting the original pro
     expect.objectContaining({ owner: 'audit-baseline-contract', stage: 'publicDomain',
       detail: expect.stringContaining(auditBaseline) }),
   ]);
+});
+
+test('explicit current-product admission keeps the historical baseline distinct and refuses another executable head', () => {
+  const current = '1234567890abcdef1234567890abcdef12345678';
+  const candidate = { ...recipe(), productRevision: current };
+  expect(() => assertAuditRecipe(candidate)).not.toThrow();
+  expect(auditProductBlockers(current, current)).toEqual([]);
+  expect(auditProductBlockers(current, auditBaseline)).toEqual([
+    expect.objectContaining({ owner: 'audit-product-revision', stage: 'product-pin' }),
+  ]);
+  expect(auditProductBlockers(undefined, current)).toEqual(auditBaselineBlockers());
+  expect(() => assertAuditRecipe({ ...candidate, productRevision: 'latest' })).toThrow('invalid current product pin');
+});
+
+test('restore rejects raw-update, ephemeral and unobserved storage modes before starting writers', () => {
+  expect(() => assertAuditStorage({ REZICS_STACK_STORAGE: 'persistent', REZICS_STACK_RAW_UPDATE: '0' })).not.toThrow();
+  const invalid: Record<string, string>[] = [{}, { REZICS_STACK_STORAGE: 'persistent' },
+    { REZICS_STACK_STORAGE: 'persistent', REZICS_STACK_RAW_UPDATE: '1' },
+    { REZICS_STACK_STORAGE: 'tmpfs', REZICS_STACK_RAW_UPDATE: '0' }];
+  for (const mode of invalid)
+    expect(() => assertAuditStorage(mode)).toThrow('before-restore-storage');
 });
 
 test('receipt references distinguish absent, null, escaped names and owner native IDs', () => {
@@ -180,6 +202,18 @@ test('a bounded view cannot silently fall back to parent, alter roles or borrow 
   if (changed.selection) changed.selection.sources[0]!.scope = { originalRole: 'lost' };
   expect(auditSelectionIsWholeSnapshot(snapshot, changed)).toBe(false);
   expect(JSON.stringify(snapshot)).toBe(before);
+  const missingMedia = structuredClone(snapshot);
+  missingMedia.sources[0]!.images.push({ record: 'vndb:vn:v11', url: 'https://example.invalid/retained-cover.jpg', role: 'cover' });
+  const incomplete = selectDatasetRoots(missingMedia, { roots: ['vndb:vn:v11'], budget });
+  expect(incomplete.status).toBe('incomplete');
+  expect(incomplete.manifest.coverage).toEqual({ knowledge: 'complete', media: 'incomplete' });
+  const intake = { snapshot: snapshot.id, selection: { roots: ['vndb:vn:v11'], budget }, native: false, mappers: [] };
+  expect(auditSelectionBlockers(intake, incomplete)).toEqual([]);
+  expect(auditSelectionBlockers({ ...intake, native: true }, incomplete)).toHaveLength(1);
+  expect(auditSelectionBlockers(intake, selectDatasetRoots(missingMedia, { ...intake.selection, roots: ['vndb:vn:absent'] }))).toHaveLength(1);
+  const unknownKnowledge = structuredClone(incomplete);
+  unknownKnowledge.manifest.coverage.knowledge = 'incomplete';
+  expect(auditSelectionBlockers(intake, unknownKnowledge)).toHaveLength(1);
 });
 
 test('every actual consumer has isolated closed-writer QA and a read-only retained preflight', () => {
@@ -271,7 +305,8 @@ async function importInputs() {
         rightsEvidence: { basis: 'unknown', note: 'Sanitized unit input, not a publication rights claim.' } };
       await retain(name, '/v1/sources/intakes', body,
         { observation: { ...body, state: 'staged', record: id(1_000 + sourceIndex * 100 + index),
-          observation: id(2_000 + sourceIndex * 100 + index), byteDigest: sha256(bytes), byteLength: bytes.length } });
+          observation: id(2_000 + sourceIndex * 100 + index), byteDigest: sha256(bytes), byteLength: bytes.length,
+          submittedAt: '2026-10-19T00:00:00.000Z' }, replayed: false });
       const ref = (pointer: string) => ({ $audit: 'ref', from: `command:${name}`, pointer });
       parts.push(resolveAuditValue({ record: ref('/answer/observation/record'), observation: ref('/answer/observation/observation'),
         rawDigest: ref('/answer/observation/byteDigest'), rawBytesBase64: ref('/body/rawBytesBase64') }, recorder.bindings) as typeof parts[number]);
@@ -302,6 +337,80 @@ async function importInputs() {
       oldGeneration: 'unit-observed-old', newGeneration: 'unit-observed-new' } };
   return { corpus, recorder, retain, inputs: { records, bindings: recorder.bindings } satisfies AuditImportInputs };
 }
+
+function routeImporterIntakes(fixture: Awaited<ReturnType<typeof importInputs>>): DatasetIntakeJournal[] {
+  const journals: DatasetIntakeJournal[] = [];
+  for (const [sourceIndex, key] of retainedAdmissionCases.entries()) {
+    const frozen = fixture.inputs.records.get(key)!;
+    const request = fixture.corpus.sources[key]!.retainedRequest!;
+    const commands: DatasetIntakeCommand[] = [];
+    for (let index = 0; index < request.retained.intakes.length; index++) {
+      const name = `command:intake-${sourceIndex}-${index}`;
+      const receipt = fixture.recorder.bindings.get(name)! as Record<string, RetainedJson>;
+      commands.push({ label: name, method: 'POST', path: '/v1/sources/intakes', key: receipt.key as string,
+        request: receipt.body as unknown as DatasetIntakeCommand['request'],
+        coordinate: { snapshot: frozen.snapshot, identity: { ...frozen.identity, provider: frozen.record.provider }, recordDigest: frozen.recordDigest,
+          purpose: 'record', index, count: request.retained.intakes.length, payload: request.retained.payload },
+        result: receipt.answer as Record<string, unknown>,
+        responses: [{ status: receipt.status as number, body: receipt.answer as Record<string, unknown> }] });
+      fixture.recorder.bindings.delete(name);
+    }
+    const journal: DatasetIntakeJournal = { format: 'rezics-dataset-intake-receipts-v1', snapshot: frozen.snapshot,
+      commands, records: {}, unboundCommands: [] };
+    journals.push(journal);
+    fixture.recorder.bindings.set(`import:${key}`, JSON.parse(JSON.stringify({ intakeCustody: journal })) as RetainedJson);
+  }
+  return journals;
+}
+
+test('importer custody supplies actual single and multipart intake receipts without synthetic recorder commands', async () => {
+  const fixture = await importInputs();
+  const journals = routeImporterIntakes(fixture);
+  expect(journals.some(journal => journal.commands.length > 1)).toBe(true);
+  expect([...fixture.inputs.bindings.keys()].some(key => key.startsWith('command:intake-'))).toBe(false);
+  expect(() => assertAuditManifest('imports', fixture.corpus, [], fixture.inputs)).not.toThrow();
+});
+
+test('conversion request projection uses only the ordered actual importer acknowledgements', async () => {
+  const fixture = await importInputs();
+  const journal = routeImporterIntakes(fixture).find(journal => journal.commands.length > 1)!;
+  const parts = journal.commands.map(command => datasetIntakeReceipt(command, command.request));
+  const bindings = new Map<string, RetainedJson>([['import:unit', JSON.parse(JSON.stringify({ parts })) as RetainedJson]]);
+  const projection = { $audit: 'intakes', from: 'import:unit', pointer: '/parts' };
+  expect(resolveAuditValue(projection, bindings)).toEqual(parts.map(({ index, record, observation, byteDigest }) =>
+    ({ index, record, observation, byteDigest })));
+  for (const corrupt of [
+    (copy: typeof parts) => { copy.reverse(); },
+    (copy: typeof parts) => { copy[0]!.observation = id(9999); },
+    (copy: typeof parts) => { Reflect.deleteProperty(copy[0]!.command.responses[0]!, 'status'); },
+    (copy: typeof parts) => { copy[0]!.command.responses[0]!.status = 403; },
+  ]) {
+    const copy = structuredClone(parts); corrupt(copy);
+    bindings.set('import:unit', JSON.parse(JSON.stringify({ parts: copy })) as RetainedJson);
+    expect(() => resolveAuditValue(projection, bindings)).toThrow();
+  }
+  expect(() => resolveAuditValue({ ...projection, from: 'unexecuted' }, bindings)).toThrow('unobserved importer');
+});
+
+test('importer custody keeps unobserved, refused, corrupted and differently pinned receipts out of readiness', async () => {
+  const original = await importInputs();
+  routeImporterIntakes(original);
+  const name = `import:${retainedAdmissionCases[0]}`;
+  for (const corrupt of [
+    (journal: DatasetIntakeJournal) => { Reflect.deleteProperty(journal.commands[0]!.responses[0]!, 'status'); },
+    (journal: DatasetIntakeJournal) => { journal.commands[0]!.responses[0]!.status = 403; },
+    (journal: DatasetIntakeJournal) => { journal.commands[0]!.responses[0]!.body = { code: 'not_observed' }; },
+    (journal: DatasetIntakeJournal) => { journal.commands[0]!.coordinate.index++; },
+    (journal: DatasetIntakeJournal) => { journal.commands[0]!.coordinate.recordDigest = sha256('another record'); },
+    (journal: DatasetIntakeJournal) => { journal.snapshot.digest = sha256('another snapshot'); },
+  ]) {
+    const bindings = new Map(original.inputs.bindings);
+    const imported = structuredClone(bindings.get(name)!) as unknown as { intakeCustody: DatasetIntakeJournal };
+    corrupt(imported.intakeCustody);
+    bindings.set(name, JSON.parse(JSON.stringify(imported)) as RetainedJson);
+    expect(() => assertAuditManifest('imports', original.corpus, [], { ...original.inputs, bindings })).toThrow();
+  }
+});
 
 test('import inputs permit absent proposed results but keep real Bangumi editorial and authority conversions', async () => {
   const { corpus, inputs } = await importInputs();
@@ -425,6 +534,10 @@ test('public-domain backup projections retain the same cut using the relative pa
   expect(projected.backup).toStartWith('.temp/');
   expect(auditLocalFile(root, projected.backup)).toBe(backup);
   expect(projected.importedWorks).toEqual(originals.map(binding => binding.resource));
+  const current = '1234567890abcdef1234567890abcdef12345678';
+  const fixedSource = { ...source, provenance: { ...source.provenance, producerRevision: current } };
+  const fixed = projectAuditManifest('publicDomain', {}, fixedSource, undefined, root, current) as { productRevision: string };
+  expect(fixed.productRevision).toBe(current);
   const outside = { ...source, readBackup: backup, provenance: { ...source.provenance, backupPath: '/tmp/outside-audit' } };
   expect(() => projectAuditManifest('publicDomain', {}, outside, undefined, root, auditBaseline)).toThrow('inside this worktree .temp');
 });

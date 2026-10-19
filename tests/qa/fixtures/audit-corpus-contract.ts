@@ -115,6 +115,8 @@ export type AuditEvidence = AuditFilePin & { id: string } & (
  * expectations remain separate from these native identity/revision references. */
 export type AuditValue = null | boolean | number | string | AuditValue[] | { [key: string]: AuditValue };
 export type AuditReference = { $audit: 'ref'; from: string; pointer: string };
+/** Project ordered importer acknowledgements into the Source conversion input. */
+export type AuditIntakeReferences = { $audit: 'intakes'; from: string; pointer: string };
 export type AuditConcat = { $audit: 'concat'; values: AuditValue[] };
 export type AuditTail = { $audit: 'tail'; value: AuditValue };
 
@@ -134,11 +136,16 @@ export interface AuditStage {
 }
 export interface AuditImport {
   snapshot: string; selection: DatasetSelectionOptions;
+  /** Intake-only tracing must not recreate the original catalogue Works. */
+  native?: boolean;
   /** Mapper IDs/revisions must be supplied by the native mapper owner. */
   mappers: Array<{ id: string; revision: string }>;
 }
 export interface AuditRecipe {
   format: 'audit-corpus-recipe-v1'; sourceRoot: string; originals: AuditFilePin;
+  /** An explicit current-product preparation pin, separate from historical
+   * consumer baseline expectations. Absence preserves the baseline workflow. */
+  productRevision?: string;
   /** Pins from the independent import matrix are checked even if imports=[]:
    * supporting source evidence must not silently substitute a later snapshot. */
   imports: AuditImport[]; evidence: AuditEvidence[];
