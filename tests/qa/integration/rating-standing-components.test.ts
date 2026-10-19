@@ -18,13 +18,27 @@ import { standingRatingSlotIri } from '../../../services/main/src/modules/rating
 import { cloneQaOwnerDatabases } from '../support/databases.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
+interface NativePlan {
+  Plan: PlanNode;
+  'Execution Time'?: number;
+  'Query Text'?: string;
+}
+interface PlanNode {
+  'Relation Name'?: string;
+  'Actual Rows'?: number;
+  'Actual Loops'?: number;
+  'Rows Removed by Filter'?: number;
+  'Rows Removed by Join Filter'?: number;
+  Plans?: PlanNode[];
+}
+const planNodes = (node: PlanNode): PlanNode[] => [node, ...(node.Plans ?? []).flatMap(planNodes)];
 
 /** Exercises the real migrated Access owner and its additive state. Public
  * graph/receipt/manifest composition is independently covered by the D5-006
  * public assertions and rating-global-synthesis, rather than simulated here. */
 test('standing components retain exact effective slots through 100/101/large, merge changes and bounded legacy reconstruction', async () => {
-  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access'], 'owner');
-  const pool = new Pool({ connectionString: databases.urls.access });
+  const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID!, ['access'], 'privileged');
+  const pool = new Pool({ connectionString: databases.urls.access, options: '-c role=access' });
   const context = id(), work = id(), main = id(), originWork = id(), originMain = id(), legacyMain = id(), actor = id();
   const people = Array.from({ length: 2048 }, () => randomUUID()).sort();
   const scope = `rating:observe:${context}`;
@@ -95,15 +109,34 @@ test('standing components retain exact effective slots through 100/101/large, me
     const currentTargets = [{main:id(),work:id()},{main:id(),work:id()}].sort((a,b) => a.main.localeCompare(b.main));
     const workMeasurements: Record<string,unknown>[] = [];
     const measure = async (sql: string, parameters: unknown[]) => {
-      const plan = (await pool.query(`EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) ${sql}`,parameters)).rows[0]['QUERY PLAN'][0];
-      let examined = 0;
-      const visit = (node: Record<string,unknown>) => {
-        examined += (Number(node['Actual Rows'] ?? 0)+Number(node['Rows Removed by Filter'] ?? 0)
-          +Number(node['Rows Removed by Join Filter'] ?? 0))*Number(node['Actual Loops'] ?? 0);
-        for (const child of node.Plans as Record<string,unknown>[] ?? []) visit(child);
+      const client = await pool.connect(), plans: NativePlan[] = [];
+      const capture = (notice: { message?: string }) => {
+        const message = notice.message ?? '', start = message.indexOf('{');
+        if (start >= 0) {
+          const value = JSON.parse(message.slice(start)) as NativePlan;
+          if (value.Plan) plans.push(value);
+        }
       };
-      visit(plan.Plan);
-      return { examined, milliseconds: plan['Execution Time'], plan };
+      try {
+        await client.query(`RESET ROLE; LOAD 'auto_explain';
+          SET auto_explain.log_analyze=on; SET auto_explain.log_timing=off;
+          SET auto_explain.log_buffers=on; SET auto_explain.log_nested_statements=on;
+          SET auto_explain.log_format=json; SET auto_explain.log_level=notice;
+          SET auto_explain.log_min_duration=0; SET ROLE access`);
+        client.on('notice',capture);
+        await client.query(sql,parameters);
+        // A Function Scan's output count omits work inside the SQL function.
+        // Include every nested plan under the same row-work measurement.
+        expect(plans.some(plan => planNodes(plan.Plan).some(node => node['Relation Name'] === 'rating_standing_component'))).toBe(true);
+        const examined = plans.flatMap(plan => planNodes(plan.Plan)).reduce((sum,node) => sum
+          + ((node['Actual Rows'] ?? 0)+(node['Rows Removed by Filter'] ?? 0)+(node['Rows Removed by Join Filter'] ?? 0))
+            * (node['Actual Loops'] ?? 0),0);
+        return { examined, milliseconds: plans.reduce((sum,plan) => sum+(plan['Execution Time'] ?? 0),0), plans };
+      } finally {
+        client.removeListener('notice',capture);
+        await client.query('RESET ROLE; SET auto_explain.log_min_duration=-1; SET ROLE access');
+        client.release();
+      }
     };
     for (const population of [100, 101, 102, 512, 2048]) {
       await heads(items.slice(previous, population), originMain, originWork);

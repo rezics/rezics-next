@@ -314,8 +314,8 @@ function inventorySql(release: boolean | 'target', reconstruction = false): stri
       : `SELECT * FROM access.${release === 'target' ? 'target_rating_head' : 'rating_aggregate_head'}
     WHERE context=c.context AND ${release === 'target' ? 'target=$2' : 'target_release=$2'} ${reconstruction ? 'AND NOT value_known AND slot > $3' : ''} ORDER BY slot LIMIT ${reconstruction ? '$4' : '101'}`
   }) h ON true
-  LEFT JOIN LATERAL (SELECT * FROM access.admission WHERE id = h.admission_id LIMIT 1) a ON true
-  LEFT JOIN LATERAL (SELECT * FROM access.admission WHERE id = h.original_admission_id LIMIT 1) original ON true
+  LEFT JOIN access.admission a ON a.id = h.admission_id
+  LEFT JOIN access.admission original ON original.id = h.original_admission_id
   WHERE c.context = $1 AND f.id = true`; }
 export const RATING_INVENTORY_SQL = inventorySql(false);
 export const RELEASE_RATING_INVENTORY_SQL = inventorySql(true);
