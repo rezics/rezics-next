@@ -16,6 +16,7 @@ import { parseEntityCursors, parseEntityRef } from '../../../../features/entity-
 import { pageUrl, representationPath } from '../../../../features/seo/address.ts';
 import { parseContinuity } from '../../../../features/wiki/continuity.ts';
 import { mainPosition, parsePosition } from '../../../../features/wiki/position.ts';
+import { setServerDocumentStatus } from '../../../../features/api/server-read.ts';
 
 type Props = { params: Promise<{ ref: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> };
 
@@ -49,6 +50,7 @@ export default async function EntityRoute({ params, searchParams }: Props) {
   const position = mainPosition(parsePosition(query));
   const entry = await readEntityEntry(id, position);
   if (!entry.ok) {
+    setServerDocumentStatus(entry.status ?? 503);
     if (entry.failure === 'missing') notFound();
     const messages = await getMessages('workPage', locale), t = copyOf(locale);
     return <PageContainer>
@@ -63,6 +65,7 @@ export default async function EntityRoute({ params, searchParams }: Props) {
     const [page, messages, url] = await Promise.all([
       readPublicCollectionPage(id, { after, parent, position }), getMessages('workPage', locale), pageUrl(),
     ]);
+    if (!page.ok) setServerDocumentStatus(page.status ?? 503);
     if (!page.ok && page.failure === 'missing') notFound();
     const fallback = new URL(localizedPath(resourceHref('/e/', entry.data.address as AddressTarget), locale), 'https://rezics.com');
     for (const [key, value] of Object.entries(query)) {

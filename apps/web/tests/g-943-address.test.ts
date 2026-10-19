@@ -277,6 +277,37 @@ test('a canonical Collection admits through its members capability and preserves
   expect(paths).toEqual(['/v1/addresses/resolve', `/v1/resources/${uuid}`, `/v1/collections/${uuid}`]);
 });
 
+test('Collection admission retains invalid, moved, budget and rate-limit responses with a usable contextual restart', async () => {
+  for (const status of [400, 409, 422, 429, 503]) {
+    let recovered = false;
+    globalThis.fetch = (async input => {
+      const target = new URL(String(input));
+      if (target.pathname === '/v1/addresses/resolve') return Response.json(full(answer('resource', '/e/', sid, 'List')));
+      if (target.pathname === `/v1/resources/${uuid}`) return Response.json({ status: 'available', type: 'collection' });
+      expect(target.pathname).toBe(`/v1/collections/${uuid}`);
+      if (!target.searchParams.has('after')) { recovered = true; return Response.json({ occurrences: [], next: null }); }
+      return Response.json({ code: status === 409 ? 'collection_changed' : 'cursor_invalid' },
+        { status, headers: { 'retry-after': '13' } });
+    }) as typeof fetch;
+    const task = `/ja/e/${sid}-list?after=not-a-valid-cursor&parent=${encodeURIComponent(holder)}&language=sv&tag=a&tag=b`;
+    const response = await proxy(new NextRequest(`https://rezics.test${task}`));
+    expect(response.status).toBe(status);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    const body = await response.text();
+    expect(body).toContain('<html lang="ja">');
+    expect(body).toContain('role="alert"');
+    if (status === 400 || status === 409) {
+      const restart = task.replace('after=not-a-valid-cursor&', '');
+      expect(body).toContain(`href="${restart.replaceAll('&', '&amp;')}"`);
+      expect((await proxy(new NextRequest(`https://rezics.test${restart}`))).status).toBe(200);
+      expect(recovered).toBe(true);
+    } else {
+      expect(response.headers.get('retry-after')).toBe('13');
+      expect(body).toContain(`href="${task.replaceAll('&', '&amp;')}"`);
+    }
+  }
+});
+
 test('pre-shell failures retain their status, locale and complete recovery task at both normalization boundaries', async () => {
   globalThis.fetch = (async () => new Response(null, { status: 503, headers: { 'retry-after': '9' } })) as unknown as typeof fetch;
   for (const trailing of ['', '/']) {

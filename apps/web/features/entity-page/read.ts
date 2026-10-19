@@ -14,7 +14,10 @@ import type { AvailableSummary } from '../work-levels/types.ts';
  * Collections own their members read, not the generic discussion target page. */
 export const readEntityEntry = cache(async (id: string, position?: string, client?: SuppliedClient):
   Promise<Loaded<AvailableSummary>> => {
-  const { main, actingSubject } = client ?? await reader();
+  const current = client ?? await reader();
+  if ('identityUnavailable' in current && current.identityUnavailable)
+    return { ok: false, failure: 'identity', status: 503 };
+  const { main, actingSubject } = current;
   const reference = id.startsWith('https://rezics.com/id/') ? id : `https://rezics.com/id/${id}`;
   const read = await settle(() => main.v1.resources.summaries.post({ profile: 'resource-summary-batch-v1',
     resources: [reference],

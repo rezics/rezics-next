@@ -125,7 +125,7 @@ async function proxyRequest(request: NextRequest): Promise<NextResponse> {
     for (const cookie of cookies) response.cookies.set(cookie.name, cookie.value, cookie.options);
     return response;
   };
-  const fail = async (status: 404 | 410 | 429 | 503, retryAfter?: string) => {
+  const fail = async (status: 400 | 404 | 409 | 410 | 422 | 429 | 503, retryAfter?: string) => {
     const response = await addressFailureResponse(new URL(request.url), locale, status, retryAfter);
     return finish(new NextResponse(response.body, { status: response.status, headers: response.headers }));
   };
@@ -253,6 +253,13 @@ async function proxyRequest(request: NextRequest): Promise<NextResponse> {
             : current.kind === 'retired'
               ? { kind: 'error', status: 410 }
               : { kind: 'error', status: 404 };
+      } else if (collection && (response.status === 400 || response.status === 409 ||
+        response.status === 422 || response.status === 429)) {
+        // Continuation and admission refusals have an owner status. In particular,
+        // retrying the same moved cursor cannot recover this task.
+        const status = response.status;
+        await response.body?.cancel();
+        return fail(status, response.headers.get('retry-after') ?? undefined);
       } else if (!response.ok) addressed = { kind: 'error', status: 503,
         ...(response.headers.get('retry-after') ? { retryAfter: response.headers.get('retry-after')! } : {}) };
       else if (!collection) {

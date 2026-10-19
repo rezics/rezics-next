@@ -76,7 +76,8 @@ class PrereadError extends Error {
 
 async function refusedPreread(phase: BffPhase, response: Response): Promise<never> {
   throw new PrereadError(phase, { status: response.status,
-    problem: await response.json().catch(() => null), retryAfter: response.headers.get('retry-after') });
+    problem: await response.json().catch(() => null), retryAfter: response.headers.get('retry-after'),
+    authenticate: response.headers.get('www-authenticate') });
 }
 
 export function mainRequestHeaders(
@@ -343,6 +344,27 @@ export async function forwardToMain(
   } catch (error) {
     const failure = error instanceof PrereadError ? error.problem : error;
     const failedPhase = error instanceof PrereadError ? error.phase : phase;
+    // A prerequisite's received refusal still belongs to its identity/permission/
+    // rate-limit owner. The requested operation has not been sent in this phase.
+    if (!signal.aborted && error instanceof PrereadError && failure && typeof failure === 'object' &&
+      'status' in failure && typeof failure.status === 'number' && failure.status >= 400 && failure.status < 500) {
+      const status = failure.status;
+      const problem = 'problem' in failure && failure.problem && typeof failure.problem === 'object'
+        ? failure.problem : {};
+      const safe: Record<string, string> = {};
+      for (const field of ['error', 'code', 'type', 'title', 'detail', 'message']) {
+        const value = Reflect.get(problem, field);
+        if (typeof value === 'string') safe[field] = value;
+      }
+      const code = safe.code ?? (status === 401 ? 'web_unauthorized' : status === 403 ? 'web_forbidden'
+        : status === 429 ? 'web_rate_limited' : 'web_preread_refused');
+      const headers = new Headers({ 'cache-control': 'no-store' });
+      if ('retryAfter' in failure && typeof failure.retryAfter === 'string') headers.set('retry-after', failure.retryAfter);
+      if ('authenticate' in failure && typeof failure.authenticate === 'string') headers.set('www-authenticate', failure.authenticate);
+      return Response.json({ ...safe, code, phase: failedPhase, attempts: 0,
+        retry: status === 429 ? 'safe' : 'none',
+        receipt: request.method !== 'GET' && !bodyRead ? 'not-sent' : 'not-applicable' }, { status, headers });
+    }
     const reason = signal.aborted ? 'cancelled' : failure instanceof ServerTransportError ? failure.reason :
       Date.now() >= deadlineAt ? 'deadline' : 'unavailable';
     const write = request.method !== 'GET' && !bodyRead;
