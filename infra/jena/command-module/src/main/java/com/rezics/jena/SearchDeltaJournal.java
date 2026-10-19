@@ -344,7 +344,7 @@ final class SearchDeltaJournal {
                 recovery.attempts++;
             }
             try {
-                AuditResult audit = qualifyResult(data);
+                AuditResult audit = qualifyResult(data, true);
                 ready = audit.baseline() != null;
                 if (audit.inconsistent() && repairable(data)) {
                     synchronized (recovering) { recovery.rebuilds++; }
@@ -522,16 +522,25 @@ final class SearchDeltaJournal {
         return qualifyResult(data).baseline() != null;
     }
     private static AuditResult qualifyResult(DatasetGraph data) {
+        return qualifyResult(data, false);
+    }
+    private static AuditResult qualifyResult(DatasetGraph data, boolean maintainContent) {
         try (var phase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.QUALIFICATION)) {
-            try { return qualifyBody(data); }
+            try { return qualifyBody(data, maintainContent); }
             catch (RuntimeException failure) {
                 invalidate(data, "qualification failed", "qualify");
                 throw failure;
             }
         }
     }
-    private static AuditResult qualifyBody(DatasetGraph data) {
-        try (var fence = publicationFence()) { qualified.remove(data); }
+    private static AuditResult qualifyBody(DatasetGraph data, boolean maintainContent) {
+        try (var fence = publicationFence()) {
+            Qualification existing = qualified.get(data);
+            // A verified delivery already withdrew Content completeness. Its
+            // physical proof remains valid while maintenance seeks that extra
+            // witness; an invalidated generation still has no baseline to keep.
+            if (!maintainContent || existing == null || existing.content() != null) qualified.remove(data);
+        }
         TextIndexLucene index = lucene(data);
         AuditResult audit = auditGeneration(data, index);
         Qualification baseline = audit.baseline();
@@ -550,6 +559,17 @@ final class SearchDeltaJournal {
             }
         }
         try (var fence = publicationFence()) {
+            // The audit used a committed snapshot outside this short fence.
+            // Never install its witness over an intervening publication.
+            Map<String, Object> current = proof(data, -1, 0);
+            if (!Boolean.TRUE.equals(current.get("available")))
+                return refuse("committed cut unavailable after qualification", null);
+            if (!baseline.epoch().equals(current.get("dataEpoch"))
+                || !baseline.generation().equals(current.get("generation"))
+                || !baseline.sequence().equals(current.get("sequence"))
+                || !Long.toString(baseline.ordinal()).equals(current.get("ordinal"))
+                || !Long.toString(baseline.luceneGeneration()).equals(current.get("luceneGeneration")))
+                return refuse("committed cut moved during qualification", null);
             if (textIndexUncertain(data)) {
                 if (!exclusiveStartupProved(data)) {
                     invalidate(data, "crash fence requires exclusive startup", "qualify");
