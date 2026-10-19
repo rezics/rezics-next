@@ -2,14 +2,32 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Acquisition, MissingRemote, RemoteUnavailable, type Capture } from './network.ts';
 import { atomicJson, blobPath, canonical, sha256, verifiedBlob } from './store.ts';
-import type { DatasetImage, DatasetSnapshot, DatasetSource, StoredImage } from './types.ts';
+import { bangumiImageCandidate } from './bangumi.ts';
+import { retainedVndbImageEvidenceReader, VndbDump } from './vndb.ts';
+import type {
+  DatasetCaptureRole,
+  DatasetImage,
+  DatasetSnapshot,
+  DatasetSource,
+  StoredImage,
+} from './types.ts';
 
 export type ImageMode = 'none' | 'covers' | 'all';
-function normalizedCaptureRole(image: DatasetImage): 'cover' | 'other' {
-  if (image.sourceEvidence) return image.role === 'cover' ? 'cover' : 'other';
+export function normalizedCaptureRole(image: DatasetImage): DatasetCaptureRole {
   const role = image.role.trim().toLowerCase();
-  if (['cover', 'front', 'pkgfront', 'cover:release:pkgfront'].includes(role)) return 'cover';
+  if (
+    [
+      'cover',
+      'selected-cover',
+      'candidate-cover',
+      'front',
+      'pkgfront',
+      'cover:release:pkgfront',
+    ].includes(role)
+  )
+    return 'cover';
   if (role.split(',').some((part) => part.trim() === 'front')) return 'cover';
+  if (role === 'portrait' || role === 'screenshot') return role;
   return 'other';
 }
 
@@ -69,13 +87,17 @@ export function checkSources(sources: readonly DatasetSource[]): void {
       if (!keys.has(edge.from) || !keys.has(edge.to))
         throw new Error(`Dangling dataset edge: ${edge.from} -> ${edge.to}`);
     for (const image of source.images) {
-      if (!keys.has(image.record) || !image.url.startsWith('https://'))
+      if (
+        !keys.has(image.record) ||
+        !image.url.startsWith('https://') ||
+        typeof image.role !== 'string' ||
+        !image.role.trim()
+      )
         throw new Error(`Invalid dataset image: ${image.url}`);
       if (!image.sourceEvidence) continue;
       const evidence = image.sourceEvidence,
         record = records.get(image.record);
       if (
-        image.role !== 'cover' ||
         !record ||
         evidence.provider !== source.provider ||
         evidence.namespace !== record.kind ||
@@ -88,7 +110,8 @@ export function checkSources(sources: readonly DatasetSource[]): void {
         typeof evidence.recordDigest !== 'string' ||
         !/^[a-f0-9]{64}$/.test(evidence.recordDigest) ||
         typeof evidence.field !== 'string' ||
-        !evidence.field.trim() ||
+        !evidence.field.startsWith('/') ||
+        /~(?![01])/.test(evidence.field) ||
         (evidence.revision !== null &&
           (typeof evidence.revision !== 'string' || !evidence.revision.trim())) ||
         (evidence.holder !== null &&
@@ -96,9 +119,18 @@ export function checkSources(sources: readonly DatasetSource[]): void {
             typeof evidence.holder.name !== 'string' ||
             !evidence.holder.name.trim() ||
             typeof evidence.holder.field !== 'string' ||
-            !evidence.holder.field.trim()))
+            !evidence.holder.field.startsWith('/') ||
+            /~(?![01])/.test(evidence.holder.field))) ||
+        (evidence.derivation !== undefined &&
+          (source.provider !== 'vndb' ||
+            evidence.derivation.format !== 'vndb-copy-image-v1' ||
+            !/^[a-f0-9]{64}$/.test(evidence.derivation.archiveDigest) ||
+            !['vn', 'chars', 'vn_screenshots', 'releases_images', 'vn_image_votes'].includes(
+              evidence.derivation.table,
+            ) ||
+            !/^(cv|ch|sf)\d+$/.test(evidence.derivation.imageId)))
       )
-        throw new Error(`Invalid cover source evidence: ${image.record}`);
+        throw new Error(`Invalid media source evidence: ${image.record}`);
     }
   }
 }
@@ -117,34 +149,102 @@ function jsonPointerValue(value: unknown, pointer: string): unknown {
   return current;
 }
 
+function sourceCaptureVerifier(
+  root: string,
+  captures: readonly Capture[],
+  images: readonly DatasetImage[],
+) {
+  const archives = new Map<string, ReturnType<typeof retainedVndbImageEvidenceReader>>();
+  const records = new Map<string, unknown>();
+  const recoverVndb = (image: DatasetImage, capture: Capture) => {
+    let reader = archives.get(capture.digest);
+    if (!reader) {
+      const bytes = verifiedBlob(root, capture.digest);
+      if (bytes.length !== capture.bytes) throw new Error('Media archive capture length differs');
+      reader = retainedVndbImageEvidenceReader(
+        new VndbDump(Bun.zstdDecompressSync(bytes)),
+        images,
+        capture,
+      );
+      archives.set(capture.digest, reader);
+    }
+    return reader(image);
+  };
+  const verify = (image: DatasetImage): void => {
+    const evidence = image.sourceEvidence;
+    if (!evidence) return;
+    const digest = evidence.derivation?.archiveDigest ?? evidence.recordDigest;
+    const capture = captures.find(
+      (candidate) => candidate.url === evidence.captureUrl && candidate.digest === digest,
+    );
+    if (!capture)
+      throw new Error(`Cover source capture is absent from the snapshot: ${evidence.captureUrl}`);
+    if (evidence.derivation) {
+      if (evidence.provider !== 'vndb' || evidence.derivation.format !== 'vndb-copy-image-v1')
+        throw new Error('Invalid media source derivation');
+      const witnessed = recoverVndb(image, capture);
+      if (!witnessed || canonical(witnessed) !== canonical(evidence))
+        throw new Error('Media source derivation does not identify its image field');
+      return;
+    }
+    let row = records.get(capture.digest);
+    if (!records.has(capture.digest)) {
+      const bytes = verifiedBlob(root, capture.digest);
+      if (bytes.length !== capture.bytes)
+        throw new Error(`Cover source capture length differs: ${evidence.captureUrl}`);
+      try {
+        row = JSON.parse(bytes.toString('utf8')) as unknown;
+      } catch {
+        throw new Error(`Cover source capture is not JSON: ${evidence.captureUrl}`);
+      }
+      records.set(capture.digest, row);
+    }
+    if (jsonPointerValue(row, evidence.field) !== image.url)
+      throw new Error(`Cover field locator does not identify its image URL: ${evidence.field}`);
+    if (evidence.provider === 'bangumi') {
+      if (
+        !row ||
+        typeof row !== 'object' ||
+        Array.isArray(row) ||
+        (evidence.namespace !== 'subject' && evidence.namespace !== 'character')
+      )
+        throw new Error('Invalid Bangumi media source record or namespace');
+      // Present evidence and legacy recovery follow the same provider rules.
+      // A merged subject may have a different canonical response ID from the
+      // requested endpoint; its namespace, role and large-image field still bind.
+      const expected = bangumiImageCandidate(
+        row as Record<string, unknown>,
+        evidence.namespace,
+        capture.url,
+        capture.digest,
+      );
+      if (!expected) throw new Error('Bangumi media evidence has no supported image field');
+      const expectedEvidence = expected.sourceEvidence!;
+      if (expectedEvidence.externalId !== evidence.externalId)
+        throw new Error('Media source capture identifies a different record');
+      if (
+        image.role !== expected.role ||
+        image.url !== expected.url ||
+        evidence.field !== expectedEvidence.field ||
+        evidence.sourceUrl !== expectedEvidence.sourceUrl
+      )
+        throw new Error('Bangumi media evidence differs from its endpoint role or image field');
+    }
+    if (evidence.holder && jsonPointerValue(row, evidence.holder.field) !== evidence.holder.name)
+      throw new Error(
+        `Cover holder locator does not identify its holder: ${evidence.holder.field}`,
+      );
+  };
+  return { verify, recoverVndb };
+}
+
+/** Compatibility entry point; verification now also supports portraits and screenshots. */
 export function verifyCoverSourceCapture(
   root: string,
   captures: readonly Capture[],
   image: DatasetImage,
 ): void {
-  const evidence = image.sourceEvidence;
-  if (!evidence) return;
-  const capture = captures.find(
-    (candidate) =>
-      candidate.url === evidence.captureUrl && candidate.digest === evidence.recordDigest,
-  );
-  if (!capture)
-    throw new Error(`Cover source capture is absent from the snapshot: ${evidence.captureUrl}`);
-  const bytes = verifiedBlob(root, capture.digest);
-  if (bytes.length !== capture.bytes)
-    throw new Error(`Cover source capture length differs: ${evidence.captureUrl}`);
-  let row: unknown;
-  try {
-    row = JSON.parse(bytes.toString('utf8')) as unknown;
-  } catch {
-    throw new Error(`Cover source capture is not JSON: ${evidence.captureUrl}`);
-  }
-  if (jsonPointerValue(row, evidence.field) !== image.url)
-    throw new Error(`Cover field locator does not identify its image URL: ${evidence.field}`);
-  if (evidence.holder && jsonPointerValue(row, evidence.holder.field) !== evidence.holder.name)
-    throw new Error(
-      `Cover holder locator does not identify its holder: ${evidence.holder.field}`,
-    );
+  sourceCaptureVerifier(root, captures, [image]).verify(image);
 }
 
 function checkCoverEvidenceCaptures(
@@ -152,19 +252,115 @@ function checkCoverEvidenceCaptures(
   sources: readonly DatasetSource[],
   captures: readonly Capture[],
 ): void {
-  for (const image of sources.flatMap((source) => source.images))
-    verifyCoverSourceCapture(root, captures, image);
+  const images = sources.flatMap((source) => source.images);
+  const verifier = sourceCaptureVerifier(root, captures, images);
+  for (const image of images) verifier.verify(image);
 }
 
 function checkStoredImages(images: readonly StoredImage[]): void {
   for (const image of images) {
-    if (image.captureRole !== undefined && image.captureRole !== normalizedCaptureRole(image))
+    // Older snapshots used "other" for every non-cover. Preserve that frozen fact;
+    // consumers may derive a richer role in a separate verified view.
+    if (
+      image.captureRole !== undefined &&
+      image.captureRole !== 'other' &&
+      image.captureRole !== normalizedCaptureRole(image)
+    )
       throw new Error(`Image capture role differs from its source role: ${image.url}`);
     if (image.capture && image.capture.url !== image.url)
       throw new Error(`Image capture URL differs from its source URL: ${image.url}`);
+    if (
+      image.unavailable &&
+      (image.capture !== null ||
+        !Number.isInteger(image.unavailable.status) ||
+        image.unavailable.status < 400 ||
+        image.unavailable.status > 599)
+    )
+      throw new Error('Image unavailability metadata differs');
     if (image.missing !== (image.capture === null && image.unavailable === undefined))
       throw new Error('Image availability metadata differs');
   }
+}
+
+/** Repair a consumption view only. The frozen snapshot, its digest and native identities stay intact. */
+export function snapshotMediaImages(root: string, snapshot: DatasetSnapshot): StoredImage[] {
+  if (identity(snapshot) !== snapshot.digest) throw new Error('Snapshot content changed');
+  checkSources(snapshot.sources);
+  checkStoredImages(snapshot.images);
+  const verifier = sourceCaptureVerifier(root, snapshot.captures, snapshot.images);
+  let bangumiCandidates: DatasetImage[] | undefined;
+  const retainedBangumi = () => {
+    if (bangumiCandidates) return bangumiCandidates;
+    bangumiCandidates = [];
+    for (const capture of snapshot.captures) {
+      const endpoint = /^https:\/\/api\.bgm\.tv\/v0\/(subjects|characters)\/[1-9]\d*$/.exec(
+        capture.url,
+      );
+      if (!endpoint) continue;
+      const bytes = verifiedBlob(root, capture.digest);
+      if (bytes.length !== capture.bytes) throw new Error('Media source capture length differs');
+      const candidate = bangumiImageCandidate(
+        JSON.parse(bytes.toString('utf8')) as Record<string, unknown>,
+        endpoint[1] === 'subjects' ? 'subject' : 'character',
+        capture.url,
+        capture.digest,
+      );
+      if (candidate) bangumiCandidates.push(candidate);
+    }
+    return bangumiCandidates;
+  };
+  return snapshot.images.map((stored) => {
+    const source = snapshot.sources.find((item) =>
+      item.records.some((record) => record.key === stored.record),
+    );
+    const originals = source?.images.filter(
+      (image) =>
+        image.record === stored.record && image.role === stored.role && image.url === stored.url,
+    );
+    const original =
+      originals?.find(
+        (image) => canonical(image.sourceEvidence) === canonical(stored.sourceEvidence),
+      ) ??
+      originals?.find((image) => !image.sourceEvidence) ??
+      (!stored.sourceEvidence ? originals?.[0] : undefined);
+    if (!original) throw new Error('Frozen image is not a retained source candidate');
+    const record = source!.records.find((item) => item.key === stored.record)!;
+    if (
+      stored.sourceEvidence &&
+      (stored.sourceEvidence.provider !== record.provider ||
+        stored.sourceEvidence.namespace !== record.kind ||
+        stored.sourceEvidence.externalId !== record.externalId ||
+        stored.sourceEvidence.sourceUrl !== record.sourceUrl)
+    )
+      throw new Error('Frozen image evidence identifies a different source record');
+    if (
+      stored.sourceEvidence &&
+      original.sourceEvidence &&
+      canonical(stored.sourceEvidence) !== canonical(original.sourceEvidence)
+    )
+      throw new Error('Frozen image evidence differs from its source candidate');
+    const image: StoredImage = { ...stored, captureRole: normalizedCaptureRole(stored) };
+    image.sourceEvidence ??= original.sourceEvidence;
+    if (!image.sourceEvidence && source?.provider === 'vndb') {
+      const capture = snapshot.captures.find(
+        (candidate) =>
+          candidate.url === source.scope.url && candidate.digest === source.scope.digest,
+      );
+      if (capture) {
+        image.sourceEvidence = verifier.recoverVndb(image, capture);
+      }
+    }
+    if (!image.sourceEvidence && source?.provider === 'bangumi') {
+      image.sourceEvidence = retainedBangumi().find(
+        (candidate) =>
+          candidate.record === image.record &&
+          candidate.role === image.role &&
+          candidate.url === image.url,
+      )?.sourceEvidence;
+    }
+    verifier.verify(image);
+    return image;
+  });
 }
 
 export async function freezeSnapshot(
