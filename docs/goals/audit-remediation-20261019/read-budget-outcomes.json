@@ -3011,7 +3011,7 @@
   "populationEnvironmentContinuation": {
     "authority": "Latest maintainer continuation: qualify only the two original frozen D5-006 populations on disposable migrated copies of the retained command-created corpora; G-2826 performs independent original-suite execution after qualification.",
     "scope": "Environment preparation and existing matrix metadata only. No baseline product rerun, catalogue build, production/helper/frozen-test edit, peer mutation, new producer, new fault mechanism or finding closure.",
-    "status": "partial: Zone original restore/history transition/owner migration reached; preservation qualification and public smoke pending. Rating standing-reconstruction command prerequisite identified source-only.",
+    "status": "partial: Zone compatible restore, history verification/adoption and owner migration completed; corrected strict source-preservation witness authored. Both candidate Task migration and standing reconstruction commands exist; actual environment qualification remains pending.",
     "originalOutcomeAssertionReached": false,
     "canonicalFindingClosed": false,
     "fixedProductPassCertified": false,
@@ -3272,27 +3272,45 @@
     "ratingsDisposition": {
       "ready": false,
       "assertionReached": false,
-      "reason": "Migration 2045 retains unverified legacy standing values as unknown, distinct from zero/withdrawn. The existing owner supports reconstruction with standing:true, but task rating:reconstruct does not expose that mode or its listing/checkpoint identity. Ordinary preparation does not invoke it.",
+      "reason": "Existing candidate Task CLI supports bounded standing listing/reconstruction and projection refresh. Qualification still requires genuine restored-copy execution; no rating copy has been restored in this continuation.",
       "ownerFunction": "services/main/src/modules/rating/legacy-reconstruction.ts:reconstructLegacyTargetRatings(input.standing=true)",
-      "missingCommandPath": "services/main/src/rating-reconstruction.ts",
-      "operationRequired": "supported standing selection, listing and checkpoint kind for the existing reconstruction owner; no raw value writes",
+      "missingCommandPath": null,
+      "operationRequired": "Execute the existing --standing reconstruction and --refresh-standing-projections on the disposable migrated retained copy, using the genuine corpus context and target.",
       "sourceInspectionOnly": true,
       "nativeExecutionAttempted": false,
       "originalOutcomeAssertionReached": false,
       "producerOrRawSeedingRequired": false,
-      "smallestMissingOperation": "Existing services/main/src/rating-reconstruction.ts Task CLI needs the already-owned standing reconstruction selection/listing/checkpoint mode, through the existing bounded owner. No shared API, new producer or direct value writes selected here.",
-      "noOwnerEditHere": true
+      "smallestMissingOperation": null,
+      "noOwnerEditHere": true,
+      "supersededSourceOnlyGap": {
+        "reason": "Migration 2045 retains unverified legacy standing values as unknown, distinct from zero/withdrawn. The existing owner supports reconstruction with standing:true, but task rating:reconstruct does not expose that mode or its listing/checkpoint identity. Ordinary preparation does not invoke it.",
+        "smallestMissingOperation": "Existing services/main/src/rating-reconstruction.ts Task CLI needs the already-owned standing reconstruction selection/listing/checkpoint mode, through the existing bounded owner. No shared API, new producer or direct value writes selected here.",
+        "operationRequired": "supported standing selection, listing and checkpoint kind for the existing reconstruction owner; no raw value writes",
+        "missingCommandPath": "services/main/src/rating-reconstruction.ts"
+      }
     },
     "nextWitness": {
       "driver": ".temp/read-budget-migration/qualify.ts",
       "syntaxCommand": "task --taskfile .temp/read-budget-migration/Taskfile.yml syntax",
       "syntaxResult": "passed; Bun compiled both temporary drivers in 8 ms",
-      "executionStatus": "authored, not yet executed; separate zones-attempt3 receipt will preserve both prior failures",
+      "executionStatus": "authored and syntax checked; separate zones-attempt3 receipt pending execution",
       "nextPreparationCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --taskfile .temp/read-budget-migration/Taskfile.yml qualify -- zones"
     },
     "qualifiedManifest": null,
     "independentOriginalSuiteCommandAuthorizedNow": false,
     "handoffAfterReady": "Supply root the actual qualified derivative/corpus digests, stopped-owner lifecycle, exact immutable source and frozen fixture/test selection for G-2826; do not execute the original suites in parallel.",
-    "peerSafety": "G-2791 peer stack46775 remained read-only; no global stack reaper invoked; cleanup only owned disposable projects; original backup/corpus bytes unchanged."
+    "peerSafety": "G-2791 peer stack46775 remained read-only; no global stack reaper invoked; cleanup only owned disposable projects; original backup/corpus bytes unchanged.",
+    "admittedAuthorCorrection": {
+      "claim": "The earlier c6bd0a113 environment metadata incorrectly said the approved candidate lacked standing CLI selection/listing/checkpoint support.",
+      "actualSource": "79aa206d48b218e0955618f425886e0cd591df87:services/main/src/rating-reconstruction.ts already parses --standing, passes it to listing/reconstruction, distinguishes the standing checkpoint family, and exposes --refresh-standing-projections.",
+      "cause": "The earlier inspection premise did not use the approved immutable fixed source. This is an author metadata correction, not a product regression or a weakened original population outcome.",
+      "commandSourceSha256": "91fa61c5bc4d780b1e5b80db18c74afe87f96ee9f4ce5109f059f404e3df799f",
+      "productionEditRequired": false,
+      "executed": false
+    },
+    "preflightAttempt3": {
+      "path": ".temp/read-budget-migration/attempt3-preflight.json",
+      "sha256": "d73106da49a87057e80b98161ce2b1250eb5f4691ace2cd9b3f0f30d9a5aa8f2"
+    }
   }
 }
