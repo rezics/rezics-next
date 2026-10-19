@@ -1540,5 +1540,922 @@
       "additionalVerification": "Report JSON parsed; all historical top-level values preserved; both accepted reports keep their recorded SHA256; eight correction blobs and ten necessary unchanged context blobs match the immutable pin.",
       "scope": "Proportional documentation gate only; no reused passing suite was rerun."
     }
+  },
+  "selectedMainCompositionReview": {
+    "reviewedAtUtc": "2026-10-19T15:10:50.229169Z",
+    "reviewer": {
+      "worker": "G-2849",
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "accountFallback": false
+    },
+    "reviewKind": "Incremental independent source/API-contract inspection of the 26 previously open paths in the frozen selected-main native-credit candidate; exact-blob reuse for the 27 already accepted paths.",
+    "status": "bounded-correction-required-for-known-SOURCE-REFUSAL-1",
+    "conclusion": "All 53 advertised files match the immutable candidate, manifest and checked working bytes. The 27 retained native34 blobs match this report's previously accepted blobs. Inspection of the 26-path gap found no additional actionable issue beyond the already disclosed SOURCE-REFUSAL-1: the candidate still has the unguarded relation attribution basis-kind record lookup. Accept the other inspected deltas within the source and exact-owner-proof limits below; do not treat this candidate as unconditionally ready until the existing Source owner's bounded correction is frozen and consumed. No installed public or original class acceptance is established.",
+    "pins": {
+      "candidate": "8206044bfb19fbaf96f15582e33ce36377306f78",
+      "parent": "f04269ebae6966fe228e75bb8e3ec8e0863047a4",
+      "tree": "f1f128e0974bb633f05ca9fd55e26f3cbbbe84ec",
+      "candidatePath": ".temp/worktrees/g-2800/.temp/native-credit-landing/candidate",
+      "frozenSource": "673f9e29b88e218046637ba45c5494dd96c2334f",
+      "inventorySha256": "599ae433ac035228480ab99f9a427b62c83f9907db3364397596e9aaeffad26d",
+      "acceptedNative34Review": "f90729f88d103abbd8fe15e1fbac6187ce8598fb",
+      "reviewerHeadBeforeAppend": "c2ffa81a98a198fb08c02caee0e7758fbe57f966",
+      "pathCount": 53,
+      "previouslyAcceptedExactBlobs": 27,
+      "newlyInspectedGapPaths": 26,
+      "exactChangedPathSetVerifiedAgainstParent": true,
+      "allManifestGitBlobsAndSha256Verified": true,
+      "allCheckedWorkingBytesMatchCommit": true
+    },
+    "frozenEvidence": [
+      {
+        "path": ".temp/worktrees/g-2800/.temp/native-credit-landing/handoff.md",
+        "sha256": "2c89ad82a008a84eb94289bbc2d4cbc99d44ac12e82fd532230d7e7bb26e7b04"
+      },
+      {
+        "path": ".temp/worktrees/g-2800/.temp/native-credit-landing/candidate-manifest.json",
+        "sha256": "a1ba842f1b7f7d5a7a7b2fa659f9ed6598d53ecb1f108becd97ba60b62194fec"
+      },
+      {
+        "path": ".temp/worktrees/g-2800/.temp/native-credit-landing/selected-inputs.json",
+        "sha256": "a519208d9768247960613b04d1f1b514f2a967dae6a2372bcbc746bb193e17ab"
+      },
+      {
+        "path": ".temp/worktrees/g-2800/.temp/native-credit-landing/additional-inputs.json",
+        "sha256": "f15b53f8ffe167bd0d1514c27e7c50e3f14bd7b73f59164f75cfe00bffbb30f5"
+      },
+      {
+        "path": ".temp/worktrees/g-2800/.temp/native-credit-landing/reused-proof-matches.json",
+        "sha256": "322665128734890fb0693589453ec207f958db9ba09b47db54c3efd3485bb6ae"
+      },
+      {
+        "path": ".temp/worktrees/g-2800/.temp/native-credit-landing/native-inputs.json",
+        "sha256": "59642431746ac5590ef8ba9c61c892adb89ec8d8ac186ae8d71f978b1d50e509"
+      },
+      {
+        "path": ".temp/worktrees/g-2800/.temp/native-credit-landing/openapi-differences.json",
+        "sha256": "e3dfb3e513391a8f52b6b3ef01e1c09b915feb639f4e73936e1452d7b9ca3f84"
+      }
+    ],
+    "historyPreservation": {
+      "previousReports": [
+        {
+          "path": "docs/goals/audit-remediation-20261019/proofs/catalogue-query-credit-privacy-review.json",
+          "sha256": "36ab0ba333c13f2aad77c8db4d9b31b8066016ed0890b5acea3627c8c8d43ee9",
+          "gitBlob": "588e302148b5640db8611f6a3750ee2224ce0d34"
+        },
+        {
+          "path": "docs/goals/audit-remediation-20261019/proofs/catalogue-supporting-registry-review.json",
+          "sha256": "9080de934c3808d1096925b7b2eacb3514bb82df858b37d64cb05e7aef6d8429",
+          "gitBlob": "e42c9961b0fb62189b7b720ecde824dd3f8d0c23"
+        },
+        {
+          "path": "docs/goals/audit-remediation-20261019/proofs/catalogue-native-credit-successor-review.json",
+          "sha256": "9261acc40dc6d2d5f37d1e92ce31d76f1a1fb0e614338898fb7f5afc04b379c7",
+          "gitBlob": "7d6af79b1abb44055daf7e3c809dacaa74428377"
+        }
+      ],
+      "allPreexistingNativeReportValuesPreserved": true,
+      "queryAndRegistryReportsUnchanged": true,
+      "scope": "This is an append. The original eight query counterexamples, accepted principal/privacy correction, supporting-registry review, original four empty-validations native failures, initial 149-pass/1-fixture-fail receipt, subsequent exact-V2 fixture correction and accepted native34 repair remain historical records with their original pins and limitations. The precise-refusal omitted-input setup failures in c2ffa81a are not overwritten or reconsidered."
+    },
+    "reviewedGapFiles": [
+      {
+        "path": "services/main/src/modules/work/credit-attribution.ts",
+        "blob": "e73b1b4412fcec643bcebbbce7af722bd87e9fb6",
+        "sha256": "f1403de976ec0963362514c2954afd2cf5af7c6370d7676f99cf20a5c3483ba3",
+        "checkedWorkingFileMatchesCommit": true,
+        "group": "support-module",
+        "provenance": {
+          "selection": "exact-frozen-source-blob",
+          "lastSourceCommit": "94039d9783d719ca8fe884c31312fbb9b9aef1b6",
+          "author": "Edge-coordinates",
+          "authorEmail": "Edgecoordinates@gmail.com",
+          "authoredAt": "2026-10-19T18:17:33+08:00",
+          "sourceSubject": "feat(credits): bind retained views to the original credit occurrence"
+        }
+      },
+      {
+        "path": "services/main/src/modules/work/credit-roles.ts",
+        "blob": "22a744cface0644845d4771af3664eafcdd7605d",
+        "sha256": "cde1f2a04b7d9ce19bf5bf0c580123cda9bc706c22b532073b8277829665bdb0",
+        "checkedWorkingFileMatchesCommit": true,
+        "group": "support-module",
+        "provenance": {
+          "selection": "exact-frozen-source-blob",
+          "lastSourceCommit": "6c8fc62a65dde46d3253d87fbd6a2b93edc3a38f",
+          "author": "Edge-coordinates",
+          "authorEmail": "Edgecoordinates@gmail.com",
+          "authoredAt": "2026-10-19T18:26:37+08:00",
+          "sourceSubject": "feat(credits): append native Performer admission and seek rank seven"
+        }
+      },
+      {
+        "path": "services/main/src/modules/relation/attribution.ts",
+        "blob": "2b4de4c90b4f5f2e967b554b6f71b794791746b4",
+        "sha256": "668b50b219766e5ff346b1ad9af3d6bb7ad28b8a186e1b368ca1137349d0a34e",
+        "checkedWorkingFileMatchesCommit": true,
+        "group": "support-module",
+        "provenance": {
+          "selection": "exact-frozen-source-blob",
+          "lastSourceCommit": "63b515928a1c9afac7109edd46d23896496858a7",
+          "author": "Edge-coordinates",
+          "authorEmail": "Edgecoordinates@gmail.com",
+          "authoredAt": "2026-10-19T17:29:10+08:00",
+          "sourceSubject": "feat(relation): add exact association evidence continuation"
+        }
+      },
+      {
+        "path": "services/main/src/modules/relation/v2-schema.ts",
+        "blob": "7e2b276ac47cc0dedbf57ed10fad1e18e0b50c4f",
+        "sha256": "e071b56a92a88bdf212ed6bbef665a30c6b2254f9d3868dbed6c09f3ec62366f",
+        "checkedWorkingFileMatchesCommit": true,
+        "group": "support-module",
+        "provenance": {
+          "selection": "exact-frozen-source-blob",
+          "lastSourceCommit": "aac6a7a7674c55f3fee325f6181ac069e54587eb",
+          "author": "Edge-coordinates",
+          "authorEmail": "Edgecoordinates@gmail.com",
+          "authoredAt": "2026-10-19T21:13:08+08:00",
+          "sourceSubject": "feat(relation): compose retained credit owner admission and exact reads"
+        }
+      },
+      {
+        "path": "services/main/src/modules/relation/change.ts",
+        "blob": "e910a5bbba10c84c04df71d6910e0d099b1e1795",
+        "sha256": "b8fa30d89aeb0e6afa494a5225d2581e32f582c34fe247dea0d6851200d5c494",
+        "checkedWorkingFileMatchesCommit": true,
+        "group": "support-module",
+        "provenance": {
+          "selection": "exact-frozen-source-blob",
+          "lastSourceCommit": "aa2898ed9b0f2c955a99cf6ac3b4f918be3d34e3",
+          "author": "Edge-coordinates",
+          "authorEmail": "Edgecoordinates@gmail.com",
+          "authoredAt": "2026-10-19T15:34:50+08:00",
+          "sourceSubject": "feat(relation): admit exact authored participation and native receipts"
+        }
+      },
+      {
+        "path": "services/main/src/modules/semantic/change.ts",
+        "blob": "4663ce9edc55e73eb6021e3c76eb589938db2dcc",
+        "sha256": "a05a141b361e52ee1502ab4cccb5ddb822d65bd3f2538a48950f15a6c4d920cb",
+        "checkedWorkingFileMatchesCommit": true,
+        "group": "support-module",
+        "provenance": {
+          "selection": "exact-frozen-source-blob",
+          "lastSourceCommit": "c36336fd5552c1ceb64028d4c32757db9f054c07",
+          "author": "Edge-coordinates",
+          "authorEmail": "Edgecoordinates@gmail.com",
+          "authoredAt": "2026-10-19T12:59:14+08:00",
+          "sourceSubject": "feat(semantic): admit exact authored association definitions"
+        }
+      },
+      {
+        "path": "services/main/src/modules/semantic/command.ts",
+        "blob": "8f26be8803baec7a005b3e60d61e69c5e6166f7d",
+        "sha256": "d8f3a6e0944c4b0b0a8e11c66bdd9c7110287baecb5b39286449c9caadeb49cc",
+        "checkedWorkingFileMatchesCommit": true,
+        "group": "support-module",
+        "provenance": {
+          "selection": "exact-frozen-source-blob",
+          "lastSourceCommit": "c36336fd5552c1ceb64028d4c32757db9f054c07",
+          "author": "Edge-coordinates",
+          "authorEmail": "Edgecoordinates@gmail.com",
+          "authoredAt": "2026-10-19T12:59:14+08:00",
+          "sourceSubject": "feat(semantic): admit exact authored association definitions"
+        }
+      },
+      {
+        "path": "services/main/src/modules/semantic/schema.ts",
+        "blob": "c3daf0884c0f683f24832516c573c722c58bb211",
+        "sha256": "5ba27f49aade4c68984355fef4a29242255c8689e3f44b734c581f631b6f81eb",
+        "checkedWorkingFileMatchesCommit": true,
+        "group": "support-module",
+        "provenance": {
+          "selection": "exact-frozen-source-blob",
+          "lastSourceCommit": "c36336fd5552c1ceb64028d4c32757db9f054c07",
+          "author": "Edge-coordinates",
+          "authorEmail": "Edgecoordinates@gmail.com",
+          "authoredAt": "2026-10-19T12:59:14+08:00",
+          "sourceSubject": "feat(semantic): admit exact authored association definitions"
+        }
+      },
+      {
+        "path": "services/main/src/modules/work/read-contract.ts",
+        "blob": "e8ad5a2198ba4a6206fd3b2b2c7b2c73adc28fb0",
+        "sha256": "d7843981e1744e966e919157cf7d4e81e9906ffa14306c1f86887f10ac5d6b7a",
+        "checkedWorkingFileMatchesCommit": true,
+        "group": "minimal-consumer",
+        "provenance": {
+          "selection": "exact-frozen-source-blob",
+          "lastSourceCommit": "6c8fc62a65dde46d3253d87fbd6a2b93edc3a38f",
+          "author": "Edge-coordinates",
+          "authorEmail": "Edgecoordinates@gmail.com",
+          "authoredAt": "2026-10-19T18:26:37+08:00",
+          "sourceSubject": "feat(credits): append native Performer admission and seek rank seven"
+        }
+      },
+      {
+        "path": "services/main/src/routes/semantic.ts",
+        "blob": "c3893f92f61772795407e6cfa25fc2bb5f4a62f8",
+        "sha256": "047e34c4d40cc88fba9e56d89a41348d7f986cb564fb4318931b1c6300fc64a8",
+        "checkedWorkingFileMatchesCommit": true,
+        "group": "minimal-consumer",
+        "provenance": {
+          "selection": "existing-three-line-409-fragment"
+        }
+      },
+      {
+        "path": "services/main/tests/profiles.test.ts",
+        "blob": "cf62f7a463e35cfb4d2a8760a48940a1d593bfc8",
+        "sha256": "ce8083467ab6c77afe91a949b639fb1f6a6a544af1b5d3399dcb0125fa82c308",
+        "checkedWorkingFileMatchesCommit": true,
+        "group": "authored-role-rank-dependency",
+        "provenance": {
+          "selection": "exact-authored-performer-dependency",
+          "lastSourceCommit": "6c8fc62a65dde46d3253d87fbd6a2b93edc3a38f",
+          "author": "Edge-coordinates",
+          "authorEmail": "Edgecoordinates@gmail.com",
+          "authoredAt": "2026-10-19T18:26:37+08:00",
+          "sourceSubject": "feat(credits): append native Performer admission and seek rank seven"
+        }
+      },
+      {
+        "path": "services/main/tests/work-credits-roles.test.ts",
+        "blob": "d0c768eceabb12e9da9a092affdddc866a8ad7bb",
+        "sha256": "f219e8020e79be7fe45466971703a40dc9e203a0856fb9a6a9bd5d1f57cedecb",
+        "checkedWorkingFileMatchesCommit": true,
+        "group": "authored-role-rank-dependency",
+        "provenance": {
+          "selection": "exact-authored-performer-dependency",
+          "lastSourceCommit": "6c8fc62a65dde46d3253d87fbd6a2b93edc3a38f",
+          "author": "Edge-coordinates",
+          "authorEmail": "Edgecoordinates@gmail.com",
+          "authoredAt": "2026-10-19T18:26:37+08:00",
+          "sourceSubject": "feat(credits): append native Performer admission and seek rank seven"
+        }
+      },
+      {
+        "path": "services/main/src/modules/query/seek-index.ts",
+        "blob": "0841df0aab1cb5f5fa8b5bf0f756cb6d5fced80d",
+        "sha256": "0e6576a794382e812f80217a451c59cf31c078b5e8eb0d2b88370633602c71ed",
+        "checkedWorkingFileMatchesCommit": true,
+        "group": "authored-role-rank-dependency",
+        "provenance": {
+          "selection": "exact-authored-performer-dependency",
+          "lastSourceCommit": "410fc3e1ca88f26feb8406345c0c93a477df07e3",
+          "author": "Edge-coordinates",
+          "authorEmail": "Edgecoordinates@gmail.com",
+          "authoredAt": "2026-10-19T18:50:26+08:00",
+          "sourceSubject": "fix(query): append Performer without shifting credit seek ranks"
+        }
+      },
+      {
+        "path": "services/main/src/modules/query/templates/work-credits.rq",
+        "blob": "fd0dd35c98d463d8ab1eb6a0903845f70e72addf",
+        "sha256": "a62edb9a93a742eee1c2ce0be040c1dfea0f44715396cfbff12a7026befee9d9",
+        "checkedWorkingFileMatchesCommit": true,
+        "group": "authored-role-rank-dependency",
+        "provenance": {
+          "selection": "exact-authored-performer-dependency",
+          "lastSourceCommit": "410fc3e1ca88f26feb8406345c0c93a477df07e3",
+          "author": "Edge-coordinates",
+          "authorEmail": "Edgecoordinates@gmail.com",
+          "authoredAt": "2026-10-19T18:50:26+08:00",
+          "sourceSubject": "fix(query): append Performer without shifting credit seek ranks"
+        }
+      },
+      {
+        "path": "infra/jena/command-module/src/main/java/com/rezics/jena/TemplateIndexService.java",
+        "blob": "fd4fa4f67618f166b5971f148019870c732dd13f",
+        "sha256": "7c79ed3f09ef8b3f3de01de6fd498e5926ce0dedc3238f90787dda610e16dc5d",
+        "checkedWorkingFileMatchesCommit": true,
+        "group": "authored-role-rank-dependency",
+        "provenance": {
+          "selection": "exact-authored-performer-dependency",
+          "lastSourceCommit": "6c8fc62a65dde46d3253d87fbd6a2b93edc3a38f",
+          "author": "Edge-coordinates",
+          "authorEmail": "Edgecoordinates@gmail.com",
+          "authoredAt": "2026-10-19T18:26:37+08:00",
+          "sourceSubject": "feat(credits): append native Performer admission and seek rank seven"
+        }
+      },
+      {
+        "path": "infra/jena/command-module/src/test/java/com/rezics/jena/CreditSeekKeyTest.java",
+        "blob": "50e7cfeed1e316a10048e1868a0933e4ec0ce179",
+        "sha256": "6ab83965986fc977c628368f0e2006ec5d153df62207a57db89ec001ac440087",
+        "checkedWorkingFileMatchesCommit": true,
+        "group": "authored-role-rank-dependency",
+        "provenance": {
+          "selection": "exact-authored-performer-dependency",
+          "lastSourceCommit": "6c8fc62a65dde46d3253d87fbd6a2b93edc3a38f",
+          "author": "Edge-coordinates",
+          "authorEmail": "Edgecoordinates@gmail.com",
+          "authoredAt": "2026-10-19T18:26:37+08:00",
+          "sourceSubject": "feat(credits): append native Performer admission and seek rank seven"
+        }
+      },
+      {
+        "path": "services/main/tests/credit-selected-profiles.test.ts",
+        "blob": "432b853787e6df5a03c2e481286832e0512b8817",
+        "sha256": "f3fc20996cfd83f27e7aec5e42620f171c78d1039e13bf0bcb2c6bbc989bd17d",
+        "checkedWorkingFileMatchesCommit": true,
+        "group": "missing-profile-health-test"
+      },
+      {
+        "path": "docs/development/toolchain.md",
+        "blob": "00f23dfeb7070ab7886412ef2ad31b87ee52738b",
+        "sha256": "9d01ce76698ae6e84f09fb904cfa9e6c292e4d41c035e1ad48faadb4c5dcba7a",
+        "checkedWorkingFileMatchesCommit": true,
+        "group": "selectively-derived-output"
+      },
+      {
+        "path": "generated/model/manifest.json",
+        "blob": "47544ef4bf4877265b8e4eb0ff3e6abfce57d1b1",
+        "sha256": "40335328d1bacca863712d35b1f043ad3e79690e1f9548bc1dc832f79a3e539e",
+        "checkedWorkingFileMatchesCommit": true,
+        "group": "selectively-derived-output"
+      },
+      {
+        "path": "generated/openapi/main/public.json",
+        "blob": "d8245549c4e3c7ca383f95dc03cff5e46d188479",
+        "sha256": "e8ebcb1d3099eb515a4d09e091147157d96a7c61201eaf9579eea985b6d15d64",
+        "checkedWorkingFileMatchesCommit": true,
+        "group": "selectively-derived-output"
+      },
+      {
+        "path": "generated/query/templates.ts",
+        "blob": "b3621c7e4f961a637e4b276db479813e8ba9762c",
+        "sha256": "bd9ff7d259858393e66b45df0116991c45136a0f463e4a39a1c4b5d6f0103332",
+        "checkedWorkingFileMatchesCommit": true,
+        "group": "selectively-derived-output"
+      },
+      {
+        "path": "infra/dev/compose.yaml",
+        "blob": "a4f9f47503ba027b0fde4aad1dc27d96ad2c8fbd",
+        "sha256": "0ee7fcd10476b2bf95092c180967353ffb95022c77f69b84d6ab5fb574f32ef0",
+        "checkedWorkingFileMatchesCommit": true,
+        "group": "selectively-derived-output"
+      },
+      {
+        "path": "packages/model/src/generated/profiles.ts",
+        "blob": "4c5b58cb743bac7e7be4c1af43a845f75fe3aa87",
+        "sha256": "0e810331fa61fec83ad502805584963a31bfe177702888bf146f7c823b36f84c",
+        "checkedWorkingFileMatchesCommit": true,
+        "group": "selectively-derived-output"
+      },
+      {
+        "path": "packages/model/src/generated/schemas.ts",
+        "blob": "1cf4f340bb2d9c38616a48333c190d7ec0dc0e54",
+        "sha256": "ae48f43be3fe029247c5a8012b20db7fb47fa1976636dd3cdb992eaaa2156f09",
+        "checkedWorkingFileMatchesCommit": true,
+        "group": "selectively-derived-output"
+      },
+      {
+        "path": "packages/model/src/generated/vocabulary.ts",
+        "blob": "4104834306d3fd217cd4f381ad2b5266762d90d0",
+        "sha256": "121a47d81bb9c935910b84daa77ff52ef9b729dac0f2cd114e9d2a5adae31be7",
+        "checkedWorkingFileMatchesCommit": true,
+        "group": "selectively-derived-output"
+      },
+      {
+        "path": "scripts/dev/release-manifest.ts",
+        "blob": "89ad07ad10d02cd11a55ba9f8d30d532152df7fe",
+        "sha256": "9cdfcefa514be70d9c3433504285aadac692dc3a77c26454f9230218da66ebea",
+        "checkedWorkingFileMatchesCommit": true,
+        "group": "selectively-derived-output"
+      }
+    ],
+    "retained27ExactBlobs": [
+      {
+        "path": "generated/model/contexts/native-agent-credit-v2.jsonld",
+        "blob": "e1315ad6ba8efe3986422d85f640617cd8e65a40",
+        "matchesPreviouslyRecordedBlob": true
+      },
+      {
+        "path": "generated/model/contexts/work-author-credit-v2.jsonld",
+        "blob": "4111c56fccc619b5b63c5d0af4dbed921175eec2",
+        "matchesPreviouslyRecordedBlob": true
+      },
+      {
+        "path": "generated/model/shapes/native-agent-credit-v2.ttl",
+        "blob": "ce143d55bcbcdc8d2c4d6c1bb7207c8a4a169e2a",
+        "matchesPreviouslyRecordedBlob": true
+      },
+      {
+        "path": "generated/model/shapes/work-author-credit-v2.ttl",
+        "blob": "bf9f20e4c3d68fefa08a0eb6f95555ceea8895da",
+        "matchesPreviouslyRecordedBlob": true
+      },
+      {
+        "path": "infra/jena/command-module/src/main/java/com/rezics/jena/AuthorCreditPolicy.java",
+        "blob": "e51d0f2c26f2cb569ac39dc7232cd07b4935ae43",
+        "matchesPreviouslyRecordedBlob": true
+      },
+      {
+        "path": "infra/jena/command-module/src/main/java/com/rezics/jena/BindingPolicy.java",
+        "blob": "31d327b6fafa10ea5f71de0a5cf5d73ae8b3193c",
+        "matchesPreviouslyRecordedBlob": true
+      },
+      {
+        "path": "infra/jena/command-module/src/main/java/com/rezics/jena/CanonicalPolicy.java",
+        "blob": "8ead15ff464e6d78219d22ed0226147d73331d1d",
+        "matchesPreviouslyRecordedBlob": true
+      },
+      {
+        "path": "infra/jena/command-module/src/main/java/com/rezics/jena/CommandService.java",
+        "blob": "4fd880a22b60b58c6b08773538067b040ba8ede5",
+        "matchesPreviouslyRecordedBlob": true
+      },
+      {
+        "path": "infra/jena/command-module/src/test/java/com/rezics/jena/CreditBindingPolicyTest.java",
+        "blob": "bbe2cddb1a37e91924abf42270ef4bdce95d5007",
+        "matchesPreviouslyRecordedBlob": true
+      },
+      {
+        "path": "infra/jena/command-module/src/test/resources/credit-retained-binding-commands.json",
+        "blob": "c485afe40b38b91129cc6f51df77709dd3c2a917",
+        "matchesPreviouslyRecordedBlob": true
+      },
+      {
+        "path": "model/compiler/registry.ts",
+        "blob": "f2610f79b8f069e3a8ec790303f56aba6aa3dd38",
+        "matchesPreviouslyRecordedBlob": true
+      },
+      {
+        "path": "model/definitions/native-agent-credit-v2.ts",
+        "blob": "b0c0db172c4eaa21e22c876693fd023f86881378",
+        "matchesPreviouslyRecordedBlob": true
+      },
+      {
+        "path": "model/definitions/native-agent-credit-v2.ttl",
+        "blob": "ce143d55bcbcdc8d2c4d6c1bb7207c8a4a169e2a",
+        "matchesPreviouslyRecordedBlob": true
+      },
+      {
+        "path": "model/definitions/work-author-credit-v2.ts",
+        "blob": "45e1b88b6a8e210b4f20dbe78b50be2a33822baf",
+        "matchesPreviouslyRecordedBlob": true
+      },
+      {
+        "path": "model/definitions/work-author-credit-v2.ttl",
+        "blob": "bf9f20e4c3d68fefa08a0eb6f95555ceea8895da",
+        "matchesPreviouslyRecordedBlob": true
+      },
+      {
+        "path": "model/tests/credit-performer-turtle.test.ts",
+        "blob": "616dbf9a8314f8504969777a90a1f546c906f6ac",
+        "matchesPreviouslyRecordedBlob": true
+      },
+      {
+        "path": "services/main/src/modules/profiles/credits.ts",
+        "blob": "4ab31d58767e8f7f97b3c015421ca24644ee82b1",
+        "matchesPreviouslyRecordedBlob": true
+      },
+      {
+        "path": "services/main/src/modules/semantic/association.ts",
+        "blob": "6a7fd89fec64768e8c5f20159964117e971b0df7",
+        "matchesPreviouslyRecordedBlob": true
+      },
+      {
+        "path": "services/main/src/modules/work/author-credit.ts",
+        "blob": "86c960a4ac5836776d51832be2970defa62f69ac",
+        "matchesPreviouslyRecordedBlob": true
+      },
+      {
+        "path": "services/main/src/modules/work/credit-association-origin.ts",
+        "blob": "8d8118729d9a89b54a9d981ced43a9e79b761923",
+        "matchesPreviouslyRecordedBlob": true
+      },
+      {
+        "path": "services/main/src/modules/work/credit-association-read.ts",
+        "blob": "fbe556b5bd1570aa73959daf5939f9a89c3824e1",
+        "matchesPreviouslyRecordedBlob": true
+      },
+      {
+        "path": "services/main/src/modules/work/credit-association-write.ts",
+        "blob": "fb740d4ce7a55038244578658d445511ac63fe20",
+        "matchesPreviouslyRecordedBlob": true
+      },
+      {
+        "path": "services/main/src/modules/work/credit-verification.ts",
+        "blob": "52db8cca7f316548d816203a7e7730e32cf88425",
+        "matchesPreviouslyRecordedBlob": true
+      },
+      {
+        "path": "services/main/tests/credit-native-verifiers.test.ts",
+        "blob": "eec05462956fd79d32b4f0c307452b8021ce8b81",
+        "matchesPreviouslyRecordedBlob": true
+      },
+      {
+        "path": "services/main/tests/credit-performer-admission.test.ts",
+        "blob": "6296e912a5f61fc73366f089f86898780e84af21",
+        "matchesPreviouslyRecordedBlob": true
+      },
+      {
+        "path": "services/main/tests/credit-retained-reads.test.ts",
+        "blob": "9a629e062c83c3faf77da8e575949c625acb561f",
+        "matchesPreviouslyRecordedBlob": true
+      },
+      {
+        "path": "services/main/tests/semantic-association.test.ts",
+        "blob": "a4daf21d421856e54781099e7d5a69eac0c57f8c",
+        "matchesPreviouslyRecordedBlob": true
+      }
+    ],
+    "proofReuseBoundaries": {
+      "nativeArchiveMatches": "20 of 26 archived blobs match; the six differing paths are explicitly listed by reused-proof-matches.json. No older receipt is assigned wholesale on a path-name match.",
+      "principalCorrectionMatches": "Only two of four principal-correction blobs match. The reader and retained test were superseded by the exact previously accepted native34 blobs. No four-file principal receipt is inherited wholesale.",
+      "earlierOwnerCheck": "The earlier ad94b622-89da-446a-80d0-2f55373ffa5e 87-case/1,482-assertion receipt remains evidence only for its identical writer, reader, origin and test blobs, with its old model/image context. It was not rerun.",
+      "whyNoProductRerun": "The concrete questions were settled by actual parent diffs, independently checked generated artifacts, reconstructed source fingerprints and matching owner/native receipts. No unchanged query/registry/native tier or live corpus preparation was needed."
+    },
+    "implementationInspection": [
+      {
+        "paths": [
+          "services/main/src/modules/work/credit-attribution.ts",
+          "services/main/src/modules/relation/attribution.ts"
+        ],
+        "disposition": "No additional actionable issue found in this bounded inspection.",
+        "checkedBehavior": "Native attribution uses the exact credit, Work, revision and original successful receipt, current Work/credit heads, generation, stored profile and role, exact Agent or qualified external participant, ordinal, retirement/protection/erasure and lineage conditions. It does not infer Account Agent authority from provider identifiers. The trusted owner receives the actual VerifiedPrincipal separately from cloned serializable definitions/requests. Missing owner or unavailable/withdrawn evidence refuses requested support; no-demand remains empty. Guard, proof count, basis, participant, evidence, original receipt/revision and token are exact. Only requested supported fields cross the boundary. Citation-owner settlement is a separate explicit dependency; this module does not install or fabricate it."
+      },
+      {
+        "paths": [
+          "services/main/src/modules/relation/change.ts",
+          "services/main/src/modules/relation/v2-schema.ts"
+        ],
+        "disposition": "Existing fences and version selection retained; known SOURCE-REFUSAL-1 remains open in v2-schema.ts.",
+        "checkedBehavior": "V2 occurrence authoring is explicit, preserves existing role/cardinality validation, and requires exact admitted support for asserted source-identity fields. Stored model revision selects the actual sealed revision/manifest; historical reads are not upgraded by current defaults. V1 cannot mutate a V2 occurrence. The existing current-definition, head, generation, lifecycle and disclosure checks remain, with attribution guard in the same native command. A missing V2 installed profile is refused by the generated-registry guard, rather than manufacturing a V1 validation envelope. Malformed inherited basis kinds still fail with the wrong exception before that intended refusal; see SOURCE-REFUSAL-1 below."
+      },
+      {
+        "paths": [
+          "services/main/src/modules/semantic/change.ts",
+          "services/main/src/modules/semantic/schema.ts",
+          "services/main/src/modules/semantic/command.ts"
+        ],
+        "disposition": "No additional actionable issue found in this bounded inspection.",
+        "checkedBehavior": "Authored semantic V2 is explicitly selected. V1 canonical/digest behavior and legacy absent-model fallback remain distinct from actual stored V2 revision metadata. Immutable meaning and current-model compatibility are checked against exact authored association definitions. validationsFor now uses Object.hasOwn(profileRegistry, profile) before health or validation transport, refusing unsupported-model-revision when the selected registry lacks the model. For installed profiles, the unchanged profileValidations path still requires exact installed artifact SHA, registered shape/focus and nonempty graph validation. No fabricated validations or weakened production product-data guard was introduced."
+      },
+      {
+        "paths": [
+          "services/main/src/modules/work/read-contract.ts",
+          "services/main/src/routes/semantic.ts"
+        ],
+        "disposition": "Minimal consumer diffs verified.",
+        "checkedBehavior": "The read contract adds only Performer role literals. The route adds only the three-line mapping of immutable-meaning and unsupported-model-revision to machine-readable 409 errors; existing route authentication, schemas and operation composition are otherwise unchanged. This source inspection does not establish installed HTTP behavior."
+      },
+      {
+        "paths": [
+          "services/main/src/modules/work/credit-roles.ts",
+          "services/main/src/modules/query/seek-index.ts",
+          "services/main/src/modules/query/templates/work-credits.rq",
+          "infra/jena/command-module/src/main/java/com/rezics/jena/TemplateIndexService.java"
+        ],
+        "disposition": "Append-only role and physical seek changes verified.",
+        "checkedBehavior": "Performer is appended to the existing role arrays and the native read allowlist. Existing role positions 0 through 6, key widths, ordinal and posting phases are unchanged; Performer is rank 7 in TS and Java. The query keeps its existing native participant/current/lifecycle conditions. Provider qualification remains separate from native Agent identity."
+      },
+      {
+        "paths": [
+          "services/main/tests/profiles.test.ts",
+          "services/main/tests/work-credits-roles.test.ts",
+          "infra/jena/command-module/src/test/java/com/rezics/jena/CreditSeekKeyTest.java",
+          "services/main/tests/credit-selected-profiles.test.ts"
+        ],
+        "disposition": "Actual test deltas and their premises inspected; no original assertion weakening found.",
+        "checkedBehavior": "Existing profile assertions remain; the role type admits Performer. The added rank test checks exact positions 0 through 7 and ordering, native/external digest separation, exact namespace and dual-participant rejection. Java tests actual entity postings. The two new selected-profile cases check missing profile refusal before env/transport access and installed artifact SHA mismatch. Their only corrective edit was let current: string to fix a literal-inference TypeScript error; expected runtime refusals were unchanged."
+      }
+    ],
+    "derivedArtifactInspection": {
+      "modelRegistry": {
+        "before": 145,
+        "after": 147,
+        "added": [
+          "native-agent-credit-v2",
+          "work-author-credit-v2"
+        ],
+        "all145ExistingProfileEntriesAndDigestsUnchanged": true,
+        "all145ExistingManifestEntriesUnchanged": true,
+        "existingCanonicalRoutesAndDefaultsUnchangedAfterRemovingOnlyFourNewConditionalRoutes": true,
+        "newCanonicalRoutes": [
+          {
+            "type": "https://rezics.com/vocab/AuthorCredit",
+            "profile": "work-author-credit-v2",
+            "shape": "https://rezics.com/definition/work-author-credit-v2/credit-shape",
+            "when": [
+              {
+                "path": "https://rezics.com/vocab/modelRevision",
+                "value": "https://rezics.com/definition/work-author-credit-v2"
+              }
+            ]
+          },
+          {
+            "type": "https://rezics.com/vocab/AuthorCreditRevision",
+            "profile": "work-author-credit-v2",
+            "shape": "https://rezics.com/definition/work-author-credit-v2/revision-shape",
+            "when": [
+              {
+                "path": "https://rezics.com/vocab/modelRevision",
+                "value": "https://rezics.com/definition/work-author-credit-v2"
+              }
+            ]
+          },
+          {
+            "type": "https://rezics.com/vocab/NativeAgentCredit",
+            "profile": "native-agent-credit-v2",
+            "shape": "https://rezics.com/definition/native-agent-credit-v2/credit-shape",
+            "when": [
+              {
+                "path": "https://rezics.com/vocab/modelRevision",
+                "value": "https://rezics.com/definition/native-agent-credit-v2"
+              }
+            ]
+          },
+          {
+            "type": "https://rezics.com/vocab/NativeAgentCreditRevision",
+            "profile": "native-agent-credit-v2",
+            "shape": "https://rezics.com/definition/native-agent-credit-v2/revision-shape",
+            "when": [
+              {
+                "path": "https://rezics.com/vocab/modelRevision",
+                "value": "https://rezics.com/definition/native-agent-credit-v2"
+              }
+            ]
+          }
+        ],
+        "bindingDemandsUnchanged": true,
+        "otherFourV2FamiliesAbsent": [
+          "relation-occurrence-v2",
+          "semantic-definition-v2",
+          "statement-v2",
+          "work-editorial-field-v2"
+        ],
+        "all16ExcludedFamilyFilesAbsent": true,
+        "artifactDigestsMatchCommittedBytes": true,
+        "generatedSchemasAppendOnlyAndVocabularyAddsOnlyTwoCreditProfileIdentifiers": true
+      },
+      "openapi": {
+        "recursiveDifferences": 131,
+        "allDifferences": "Each difference only appends performer to the prior enum without reordering/removing an old value.",
+        "matchesFrozenOpenapiDifferencesReceipt": true,
+        "unrelatedWaveContractsCopied": false
+      },
+      "query": "generated/query/templates.ts exactly preserves the parent except the escaped form of the one authored Performer allowlist append.",
+      "nativeImage": {
+        "tag": "rezics/fuseki:6.2.0-cmd0.5.43-93b282166d46",
+        "inputDigest": "93b282166d462100dc306c1ab9199a16cb4ffc8f533d41b5b7fdd8f4ed17d4e3",
+        "inputCount": 465,
+        "allInputGitBlobsAndSha256MatchCandidate": true,
+        "toolchainComposeAndReleaseManifestChangeOnlyTheSameImagePin": true,
+        "successfulNativeRecordUsesSameTag": true
+      },
+      "preservedThenMainConsumers": "work/read-header.ts, routes/dependencies.ts and composition.ts remain byte-identical to the parent; composition-source-native-owners.test.ts is absent in both. No Source service ports, query activation/coverage or alternate composition fixture was copied into the candidate."
+    },
+    "reusedExactOwnerChecks": {
+      "recordedJob": "job:cdb2c989-0285-4ded-9106-3e641630299d",
+      "types": "Affected types passed after the single test-only annotation correction.",
+      "inference": "Inference check passed without threshold or baseline relaxation.",
+      "qaRun": "20261019t144744-e19812",
+      "focusedTestBlobs": [
+        {
+          "path": "model/tests/credit-performer-turtle.test.ts",
+          "lane": "unit",
+          "tests": 4,
+          "assertions": 120,
+          "blob": "616dbf9a8314f8504969777a90a1f546c906f6ac",
+          "sha256": "e35972617077002155ca4ccfeb6755dfc310e2f08be280b2edc748cc0c09b94a"
+        },
+        {
+          "path": "services/main/tests/credit-native-verifiers.test.ts",
+          "lane": "owner",
+          "tests": 54,
+          "assertions": 342,
+          "blob": "eec05462956fd79d32b4f0c307452b8021ce8b81",
+          "sha256": "7a80935f7e74d0371a4daf3f950088b35ff7c3d91748bb54b266ede595a740c3"
+        },
+        {
+          "path": "services/main/tests/profiles.test.ts",
+          "lane": "owner",
+          "tests": 4,
+          "assertions": 1020,
+          "blob": "cf62f7a463e35cfb4d2a8760a48940a1d593bfc8",
+          "sha256": "ce8083467ab6c77afe91a949b639fb1f6a6a544af1b5d3399dcb0125fa82c308"
+        },
+        {
+          "path": "services/main/tests/work-credits-roles.test.ts",
+          "lane": "owner",
+          "tests": 5,
+          "assertions": 53,
+          "blob": "d0c768eceabb12e9da9a092affdddc866a8ad7bb",
+          "sha256": "f219e8020e79be7fe45466971703a40dc9e203a0856fb9a6a9bd5d1f57cedecb"
+        },
+        {
+          "path": "services/main/tests/credit-performer-admission.test.ts",
+          "lane": "owner",
+          "tests": 5,
+          "assertions": 54,
+          "blob": "6296e912a5f61fc73366f089f86898780e84af21",
+          "sha256": "ec4a463fd883b965f0e93f56764cefbfbb507016f573cfebc528b80d1b3d5bac"
+        },
+        {
+          "path": "services/main/tests/semantic-association.test.ts",
+          "lane": "owner",
+          "tests": 7,
+          "assertions": 47,
+          "blob": "a4daf21d421856e54781099e7d5a69eac0c57f8c",
+          "sha256": "569c0c98c45c2707beecb7bfb1a0cd98699672b478280fe80ec1971c09547648"
+        },
+        {
+          "path": "services/main/tests/credit-selected-profiles.test.ts",
+          "lane": "owner",
+          "tests": 2,
+          "assertions": 4,
+          "blob": "432b853787e6df5a03c2e481286832e0512b8817",
+          "sha256": "f3fc20996cfd83f27e7aec5e42620f171c78d1039e13bf0bcb2c6bbc989bd17d"
+        }
+      ],
+      "focusedResult": {
+        "tests": 81,
+        "assertions": 1640,
+        "failures": 0,
+        "skipped": 0,
+        "unitTests": 4,
+        "unitAssertions": 120,
+        "ownerTests": 77,
+        "ownerAssertions": 1520
+      },
+      "sourceBinding": {
+        "recordedHead": "f04269ebae6966fe228e75bb8e3ec8e0863047a4",
+        "clean": false,
+        "sourceStable": true,
+        "recordedFingerprint": "2b3872627dde97a7ce15eb0d416a2caa4f896d8bf23d91995d136e5343442996",
+        "independentlyReconstructedFingerprint": "2b3872627dde97a7ce15eb0d416a2caa4f896d8bf23d91995d136e5343442996",
+        "matchesCommittedCandidate": true,
+        "method": "Reconstructed the recorded QA fingerprint from the actual parent HEAD, binary diff for the recorded tracked paths, and sorted recorded untracked path/NUL/committed-byte inputs. Every staged candidate blob also matches its checked working byte hash. The dirty-tree receipt is bound to this immutable candidate rather than accepted from its label."
+      },
+      "selectedJava": {
+        "classes": {
+          "CreditBindingPolicyTest": 11,
+          "CreditSeekKeyTest": 2
+        },
+        "tests": 13,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "record": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2800/.temp/native-credit-landing/candidate/.temp/native-module-suite/1618060c-e060-4087-8b4f-71beb92f1436.json",
+        "recordSha256": "7668b91248999ac636c6a736acf2186128766d8bc718b4d6498635a635008a9e",
+        "scope": "Real production CommandService and selected production manifest in an in-memory dataset, including actual emitted TS bootstrap envelopes. No live HTTP/public stack or corpus."
+      },
+      "docs": "Owner docs:check passed: 13 checker tests; 259 Markdown files.",
+      "earlierGenerationAndStaticChecks": {
+        "recordedJob": "job:9d9dad88-21e9-405f-87a1-8cd10e5ae379",
+        "generation": "passed",
+        "lint": "passed",
+        "ast": "passed",
+        "guards": "passed: 36/45 selected",
+        "preservedInitialFailure": "Affected types/inference initially reported TS2322 in credit-selected-profiles.test.ts:27 because a mutable string was inferred as the generated literal. The only subsequent source-tree change before cdb2c989 was the explicit string annotation. This was a type-only test fixture premise, not a product refusal failure.",
+        "reuseLimit": "Lint/AST/guard results precede that annotation correction; no fresh post-commit static run is claimed. Successful types/inference and the 81 focused cases are after the correction."
+      },
+      "logsAndResultDigests": [
+        {
+          "path": ".temp/worktrees/g-2800/.temp/goal/jobs/cdb2c989-0285-4ded-9106-3e641630299d.1.log",
+          "sha256": "cb70f343d170a7959a63f5a0db63802568926d3913c9c1b8e66f4f2b4238e8f4"
+        },
+        {
+          "path": ".temp/worktrees/g-2800/.temp/goal/jobs/cdb2c989-0285-4ded-9106-3e641630299d.2.log",
+          "sha256": "296331e568eaa022524073baf31f5d57d83faaeae9036c317ddf094ed76e7dcc"
+        },
+        {
+          "path": ".temp/worktrees/g-2800/.temp/goal/jobs/cdb2c989-0285-4ded-9106-3e641630299d.3.log",
+          "sha256": "4a71debb717cabe3eda9b07803a9a59b5f89213fac3548fd0549c748d4c6273b"
+        },
+        {
+          "path": ".temp/worktrees/g-2800/.temp/goal/jobs/cdb2c989-0285-4ded-9106-3e641630299d.4.log",
+          "sha256": "263f742242e79bdfc17cda619dce298975129445329f96bddb80ab83011dba06"
+        },
+        {
+          "path": ".temp/worktrees/g-2800/.temp/goal/jobs/9d9dad88-21e9-405f-87a1-8cd10e5ae379.1.log",
+          "sha256": "71c0ba419648c5b0573e4fc36fafa7bc616b3b454e33538b2807444aaccd6577"
+        },
+        {
+          "path": ".temp/worktrees/g-2800/.temp/goal/jobs/9d9dad88-21e9-405f-87a1-8cd10e5ae379.2.log",
+          "sha256": "273fa90336842906845c191d2149a70b917ff73b2205946a624449321a8fd5dc"
+        },
+        {
+          "path": ".temp/worktrees/g-2800/.temp/native-credit-landing/candidate/.artifacts/qa/20261019t144744-e19812/acceptance.json",
+          "sha256": "7ebe3116c613adc0f76e896c74d611a1e3eb938e80776801150b55aaf8a8ff34"
+        },
+        {
+          "path": ".temp/worktrees/g-2800/.temp/native-credit-landing/candidate/.artifacts/qa/20261019t144744-e19812/unit.xml",
+          "sha256": "8d2a7465ebb25416bf753d6ff438dddbde6def5539527e514e350d4afcde8770"
+        },
+        {
+          "path": ".temp/worktrees/g-2800/.temp/native-credit-landing/candidate/.artifacts/qa/20261019t144744-e19812/owner.xml",
+          "sha256": "d9031b1c8db4e204bae4231f09e0a2f4737eafbccf6fcea23b4b0ac086fdc2b7"
+        },
+        {
+          "path": ".temp/worktrees/g-2800/.temp/native-credit-landing/candidate/.temp/native-module-suite/1618060c-e060-4087-8b4f-71beb92f1436.json",
+          "sha256": "7668b91248999ac636c6a736acf2186128766d8bc718b4d6498635a635008a9e"
+        },
+        {
+          "path": ".temp/worktrees/g-2800/.temp/native-credit-landing/candidate/.temp/native-module-suite/1618060c-e060-4087-8b4f-71beb92f1436.log",
+          "sha256": "30cf5a0a5a74512e8b8352ba0babf4a5d5ff8d09d26d21a70578273096a47cad"
+        }
+      ],
+      "publicAcceptance": {
+        "passed": 0,
+        "uncovered": 292,
+        "certifiesFull": false
+      }
+    },
+    "knownCorrectionStillRequired": {
+      "id": "SOURCE-REFUSAL-1",
+      "origin": "Existing independent Source first review 8a7ca2b7bc; disclosed by the manager before this inspection. This is not a newly discovered class or duplicate broad research.",
+      "path": "services/main/src/modules/relation/v2-schema.ts",
+      "gitBlob": "7e2b276ac47cc0dedbf57ed10fad1e18e0b50c4f",
+      "sha256": "e071b56a92a88bdf212ed6bbef665a30c6b2254f9d3868dbed6c09f3ec62366f",
+      "lines": [
+        14,
+        47,
+        48,
+        49
+      ],
+      "counterexample": {
+        "basisKinds": [
+          "constructor",
+          "__proto__",
+          "toString"
+        ],
+        "expected": "InvalidRelationOccurrence: attribution basis must name its exact existing owner",
+        "actualBySourceInspection": "A truthy inherited non-array is selected from the plain object record; keys() calls required.every and throws TypeError before the intended typed refusal."
+      },
+      "whyStillApplies": "Candidate 8206044b retains the plain object lookup indexed by String(basis.kind), without an own-property membership check. The accepted native34 proof did not establish safety for this newly supplied v2-schema support path.",
+      "independentNegativeTest": {
+        "path": ".temp/worktrees/g-2859/.temp/review/retained-source/retained-attribution-refusal.test.ts",
+        "sha256": "8ee2c8dfebde633c511743c06c7ca42a61eb91fb502d6daa6e02864df837454f",
+        "inspected": true,
+        "executedByThisReviewer": false,
+        "premise": "The inspected test has exact valid controls for all four declared basis kinds and expects the typed InvalidRelationOccurrence for unknown/empty/inherited names.",
+        "importTargetMatchesCandidate820": false,
+        "mutableSourceTargetSha256AtInspection": "cdffd9c899f8760b4e3e81dc8d6397712d642d1251b63bc1b20ee9ee3966aa65",
+        "limit": "The test imports the other Source owner's mutable candidate, whose bytes already differ. Its current result cannot certify the frozen 8206044b blob or constitute review acceptance of a future Source fix."
+      },
+      "classification": "Source-confirmed retention of a previously reported unit-level malformed-input counterexample. No new reviewer execution or installed public failure is claimed.",
+      "affectedChecks": [
+        "Direct checkedAttributionSupports inherited-kind negative cases in the exact frozen candidate",
+        "Any future installed V2 relation request reaching that validator; no HTTP result established here"
+      ],
+      "requiredDisposition": "Consume the existing Source owner G2781's bounded own-property dispatch correction before landing this v2-schema support input. Freeze and inspect the exact replacement blob and matching negative/valid-control receipt in this same review. The separate provider-dispatch site remains the Source owner's responsibility; it is outside these 53 selected paths. Do not turn this into a full Source86, wave or corpus prerequisite.",
+      "currentDisposition": "Open for this frozen candidate; a mutable or future correction is not pre-approved."
+    },
+    "additionalActionableFindings": [],
+    "semanticBoundaries": [
+      "The six historical V1 native credit roles, old model/shape pins, defaults, digests and original terminal receipts remain actual historical facts. Performer selection uses its explicitly registered matching native/external credit V2 family; absence of four other V2 families is deliberate and refused when selected.",
+      "Actual Account-issued principal/current fences, native Work/credit authority and Source optional settlement remain separate authorities. Provider keys and similar labels confer neither Agent identity nor a credit role.",
+      "Ordinary native APIs perform no provider transformation. A manual citation remains independent of conversion and does not acquire a converter, evidence or mapper requirement from optional retained attribution.",
+      "No Source ports/current-map witnesses, query activation/coverage, service installation or genuine outcome were inferred from controlled owner tests or generated types."
+    ],
+    "limitations": [
+      "This disposition is limited to the frozen 26-path gap plus exact-blob reuse for 27 previously accepted paths. No accepted query/registry suite or old native34 review was repeated.",
+      "No product implementation was edited, generated, started, installed or landed by this reviewer. Peer worktrees and main were read-only; no corpus or shared lifecycle action occurred.",
+      "Owner/native tests are reused with exact hashes and source reconstruction, not fresh reviewer executions. Native tests use an in-memory dataset; public acceptance remains zero and 292 outcomes uncovered.",
+      "The known inherited-property defect remains a bounded correction requirement. No fresh public leak, original class closure, genuine native/public acceptance, rendered A15/C23 proof or whole-wave acceptance follows from this report.",
+      "The manager still composes the selected typed outputs and the independently owned Source correction against then-main and reviews the actual final receipt before normal landing. This review does not approve unrelated later dependency changes.",
+      "The separately active navigation dependency/setup issue and its previous report are preserved and are not a prerequisite to delivering this ready native-gap disposition."
+    ],
+    "reviewerChecks": {
+      "status": "passed",
+      "recordedJob": "job:2ae00648-0582-4ff4-afcf-30dc042451a2",
+      "runner": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job",
+      "steps": [
+        {
+          "command": "task docs:check",
+          "exit": 0,
+          "result": "13 checker tests passed; 249 Markdown files checked; no runtime behavior tested",
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2849/.temp/goal/jobs/2ae00648-0582-4ff4-afcf-30dc042451a2.1.log",
+          "sha256": "3852039db47a696247b96f4f49a6900963b92cf1ed3fb8866a641970aa2aef24"
+        },
+        {
+          "command": "task goal -- check",
+          "exit": 0,
+          "result": {
+            "types": "ok: no TypeScript workspace changed",
+            "tests": "ok: no test files named in brief",
+            "lint": "ok: no source file changed",
+            "ast": "ok",
+            "guards": "ok: 1/44 selected for claimed report paths"
+          },
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2849/.temp/goal/jobs/2ae00648-0582-4ff4-afcf-30dc042451a2.2.log",
+          "sha256": "80116f9fa26dda53ffae7fb8bc6c49b59240b45d6a1225438d08731cf85250b1"
+        }
+      ],
+      "gateOutput": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2849/.temp/goal/check/run-d5QFjA/output.log",
+        "sha256": "b46d5a8b1d20b5cafe02e73b73d7ee0ac468087df21cb12510e145a45fee7c33"
+      },
+      "harnessNotice": "The gate noted its harness was four commits behind main; all selected checks passed. The reviewer HEAD remained c2ffa81a98a198fb08c02caee0e7758fbe57f966 and no rebase or implementation edit occurred.",
+      "additionalVerification": "All 25 historical top-level values preserved; both other accepted reports retain their recorded SHA256; all 53 candidate committed blobs and checked working bytes verified; 27 retained blobs match the previously recorded accepted blobs.",
+      "scope": "Report-only documentation and worker gate. No product suite rerun or public outcome acceptance."
+    }
   }
 }
