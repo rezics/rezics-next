@@ -14,6 +14,7 @@ import { selectAdmittedPublicContentSearch } from '../src/modules/content-public
 import { classifyContentEligibilityState } from '../src/modules/content-publication/eligibility-state.ts';
 import { RealmReplyContentStore, RealmReplyDenied } from '../src/modules/realm-reply/content-store.ts';
 import { assertPlacementWithdrawalOwner, withdrawReplyPlacement } from '../src/modules/realm-reply/graph.ts';
+import { RealmReplyStore } from '../src/modules/realm-reply/store.ts';
 import { mapContentOutboxEvent, OutboxIncomplete, type MainOutboxBatch } from '../src/modules/outbox/relay.ts';
 import { ID, RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 
@@ -178,6 +179,65 @@ test('independent reply public bytes stay at the identity receipt while exact re
   const content = new RealmReplyContentStore(pool);
   expect((await content.readCurrent(reply))?.revisionId).toBe(publishedRevision);
   expect((await content.readCurrent(reply, selectedRevision))?.revisionId).toBe(selectedRevision);
+});
+
+test('placement withdrawal retains its exact predecessor and bytes across lost acknowledgements and a later placement', async () => {
+  const f = fixture();
+  const input = { realm: ID + randomUUID(), reply: ID + randomUUID(), expectedHead: ID + randomUUID(),
+    expectedRevisionId: randomUUID() };
+  const admission = { ...f.admission, action: 'reply.place', scope: `reply:place:${input.realm}` };
+  let saved = false, headReads = 0;
+  f.graph.query = async (query: string) => {
+    if (query.includes('?placement ?revision ?review')) {
+      headReads++;
+      return { results: { bindings: [{ placement: uri(input.expectedHead),
+        revision: uri(`urn:rezics:content:revision:${input.expectedRevisionId}`),
+        review: uri(`urn:rezics:realm-review:${randomUUID()}`), root: uri(ID + randomUUID()),
+        rootRevision: literal(ID + randomUUID()), author: uri(f.input.actingSubject), preparation: literal(randomUUID()) }] } };
+    }
+    return { results: { bindings: saved ? [{ outcome: uri(RV + 'Succeeded'), digest: literal(admission.requestDigest),
+      id: literal(admission.id), epoch: literal(admission.authorityEpoch), scope: literal(admission.scope),
+      dataEpoch: literal(f.env.lineage.dataEpoch), sequence: literal('12'), placement: uri(ID + admission.id),
+      revision: uri(`urn:rezics:content:revision:${input.expectedRevisionId}`), realm: uri(input.realm),
+      reply: uri(input.reply), predecessor: uri(input.expectedHead) }] : [] } };
+  };
+  f.graph.commandWithReceipt = async command => {
+    f.graph.commands.push(command);
+    expect(command.update).toContain('rv:placementOutcome rv:Revoked');
+    expect(command.update).toContain(`rv:previousPlacement <${input.expectedHead}>`);
+    expect(command.update).toContain('rv:author rv:parentReply rv:parentRevision');
+    expect(command.validations).toHaveLength(2);
+    saved = true;
+    throw new Error('response lost after withdrawal committed');
+  };
+  const result = await withdrawReplyPlacement(f.env, admission, input);
+  expect(result).toMatchObject({ outcome: 'succeeded', placement: ID + admission.id,
+    realm: input.realm, reply: input.reply, predecessor: input.expectedHead, revisionId: input.expectedRevisionId });
+  expect(await withdrawReplyPlacement(f.env, admission, input)).toEqual(result);
+  expect(headReads).toBe(1);
+  expect(f.graph.commands).toHaveLength(1);
+});
+
+test('retained reply author history requires current control of its immutable author', async () => {
+  const f = fixture(), reply = ID + randomUUID(), revision = randomUUID();
+  const content = { revisionAuthor: async (_reply: string, id: string) => id === revision
+    ? { author: f.input.actingSubject, rootTarget: 'urn:unsupported:root', rootRevision: 'urn:unsupported:revision' } : null,
+  } as unknown as RealmReplyContentStore;
+  let live = true, controls = 0;
+  const access = { withOwnerAuthority: async <T>(_input: unknown, action: (client: PoolClient) => Promise<T>) => {
+    controls++;
+    if (!live) throw new AdmissionDenied('Agent control revoked');
+    return action({} as PoolClient);
+  } };
+  const store = new RealmReplyStore(content, noContent, access as never, f.env);
+  store.readPublic = async () => null;
+  const principal = { id: f.admission.principalId } as never;
+  expect(await store.canReadRevision(reply, revision, principal, f.input.actingSubject)).toBe(true);
+  expect(await store.canReadRevision(reply, revision, principal, ID + randomUUID())).toBe(false);
+  expect(await store.canReadRevision(reply, randomUUID(), principal, f.input.actingSubject)).toBe(false);
+  live = false;
+  expect(await store.canReadRevision(reply, revision, principal, f.input.actingSubject)).toBe(false);
+  expect(controls).toBe(2);
 });
 
 test('withdrawal outbox events retain the exact qualification target and cannot masquerade as public approval', () => {
