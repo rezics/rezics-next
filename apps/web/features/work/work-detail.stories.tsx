@@ -9,6 +9,11 @@ const work: WorkRevisionDetail = { title: 'Notes on a City of Rivers', language:
   work: 'https://rezics.com/id/920813ee-3855-42be-84bb-88da77a5b247',
   mainVersion: 'https://rezics.com/id/ca599d45-9553-48e6-9772-bdb20f561562',
   operation: 'create', sourcePosition: { sequence: '42' } };
+const nativePost: WorkRevisionDetail = { profile: 'post-v1',
+  revision: 'https://rezics.com/id/cf7677e6-9ac4-408b-b323-84b5aa3f0f34',
+  title: 'A Post from the River Walk', language: 'en',
+  work: 'https://rezics.com/id/8cf7359b-0ffb-47f4-9c57-d1a56a3bc484',
+  operation: 'edit', sourcePosition: { sequence: '84' } };
 
 const meta = { title: 'Work/Exact revision', component: WorkDetail,
   args: { revision, work, locale: 'en', messages: messages.en },
@@ -23,6 +28,32 @@ export const Standard: Story = {
     await expect(canvas.getByRole('tab', { name: 'Main Version' })).toHaveAttribute('aria-selected', 'true');
     await expect(canvas.getByText('42')).toBeInTheDocument();
   },
+};
+
+export const NativePost: Story = {
+  args: { work: nativePost },
+  globals: { viewport: { value: 'desktop1440' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { level: 1, name: nativePost.title })).toBeVisible();
+    await expect(canvas.getByRole('heading', { name: messages.en.revisionDetails })).toBeVisible();
+    await expect(canvas.getByText(nativePost.revision)).toBeVisible();
+    await expect(canvas.getByText(nativePost.work)).toBeVisible();
+    await expect(canvas.getByText(nativePost.operation)).toBeVisible();
+    await expect(canvas.getByText(nativePost.language, { exact: true })).toBeVisible();
+    await expect(canvas.getByText(nativePost.sourcePosition.sequence)).toBeVisible();
+    await expect(canvas.queryByRole('tablist')).not.toBeInTheDocument();
+    await expect(canvas.queryByText(messages.en.mainVersion, { exact: true })).not.toBeInTheDocument();
+    await expect(canvas.queryByText(messages.en.globalPerspective, { exact: true })).not.toBeInTheDocument();
+    await expect(canvas.queryByText(messages.en.perspectiveHelp, { exact: true })).not.toBeInTheDocument();
+    await expect(canvas.queryByText(/exact metadata revision/)).not.toBeInTheDocument();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+
+export const NativePostPhone: Story = {
+  ...NativePost,
+  globals: { viewport: { value: 'phone' } },
 };
 
 export const LongMultilingualTitle: Story = {
