@@ -333,8 +333,10 @@ describe('non-Work detail hosts', () => {
       sources: [retained, retained, native], names: editions.names, locale: 'en' as const, t: editionsCopy('en'),
       sourceReads: [{ work: selected.work, id: editions.iri('r8'), revision: target,
         read: { ok: false as const, failure: 'unavailable' as const, status: 503 } }] };
-    const html = render(<AppShell locale="en" messages={shellMessages} theme="light" navCollapsed={false} account={null}
-      pageEnd={<ReleaseSources {...props} />}><ReleaseView {...props} pageEndSources /></AppShell>);
+    const html = render(<PathnameContext.Provider value="/releases/known">
+      <AppShell locale="en" messages={shellMessages} theme="light" navCollapsed={false} account={null}
+        pageEnd={<ReleaseSources {...props} />}><ReleaseView {...props} pageEndSources /></AppShell>
+    </PathnameContext.Provider>);
     const mainEnd = html.indexOf('</main>');
     const footerAt = html.indexOf('<footer role="contentinfo"');
     expect(mainEnd).toBeGreaterThan(html.indexOf('data-coverage'));
