@@ -47,10 +47,15 @@ Wave build status; accepted slices await combined proof, review and wave merge:
   report and nine-file verified manifest are under
   .temp/audit-remediation-20261019/reviews/request-budget-g2813/.
   Its P1 request-budget-native-monitor-wait is source evidence, not an executed
-  product failure or fix round. Decision 0c64d1e85b dispatched G-2817 for the
-  complete repaired slice at 316c21909d against 4c9dbf2be2, including every
-  affected capture/fence entry and template parity; its result event owns
-  disposition. Cancellation/expiry must leave native publication-fence
+  product failure or fix round. G-2817's complete codex-1/xhigh review of the
+  repaired slice at 316c21909d against 4c9dbf2be2, including every affected
+  capture/fence entry and template parity, is accepted and landed through
+  aa889bf4f4. It is closed verified, with its brief archived in 0570918b5b.
+  All 13 retained evidence files were verified; the landed report matches the
+  accepted copy. The predecessor mechanism is addressed in source with no new
+  source findings; runtime proof remains unexecuted. Landing mail 8ada009f was
+  acknowledged. Do not land or close G-2817 again.
+  Cancellation/expiry must leave native publication-fence
   acquisition within 300 ms while the holder remains, with zero later
   transaction/engine starts and an intact atomic RDF/Lucene cut. Preserve
   surviving readers and fresh retries. All nine new capture cases, the three
@@ -118,10 +123,10 @@ retain observations at 7df2e285d3 as supplementary later-revision evidence,
 separate from original baseline 69eac3ceea and all harness/test pins. Preserve
 passing controls and unresolved fault premises; no landing or proof execution
 was accepted. Existing repairs stay with G-2763/G-2765/G-2786, discovery with
-G-2764 and refresh with G-2766. Mail dd8fe948 routed the four
+G-2764 and refresh with G-2766. Acknowledged mail dd8fe948 routed the four
 query/notification/Zone/rating dispositions to G-2791's next separately decided
-readiness work, without expanding its running import-only continuation. Read
-preparationHandoff.dispositions from that exact commit for each consumer's
+readiness work, without expanding its then-running import-only continuation.
+Read preparationHandoff.dispositions from that exact commit for each consumer's
 genuine command/receipt gaps, retained corpus/backup, historical preparation/restore
 timing, assertion reach and uncertified original baseline/restore compatibility.
 The four corpora already exist; absent auditConsumers enrollment demonstrates
@@ -291,7 +296,7 @@ or support receipt. Existing Work/Structure adapters admit no arbitrary facts.
 G-2769's e7db8bc4d7 and G-2772's consumer through 20bab85f0d share the retained
 admission types, preserving independent conversion/support and readable-attribution
 assertions. Their joint additions still require Program disposition before
-separate implementation or corpus execution. G-2769's bounded design-note
+separate implementation or corpus execution. G-2769's published design-note
 reconciliation and the exact joint questions are recorded below; alignment
 supplies no approval. The handled G-2781 routing events delivered
 the exact retained question to the restored Program address and notified
@@ -376,8 +381,19 @@ retainedRequest inputs and accept retainedBinding/synopsisSupport only from
 actual command results. The dated scope cut supersedes broader readiness
 triage after the two-fix-round cap: no other consumer, Book/Recipe/author
 publication, runner enrollment, backup/restore implementation or missing owner
-API result may be added. That continuation needs its own handoff/review;
-no preparation or proof was released. Decision 6a0f0d63bf retains G-2776's consumer
+API result may be added. Its attempt-14 handoff at 92b8a78f1c is on the wave:
+optional conversion remains optional, all four exact retainedRequest inputs
+are required, and supplied retainedBinding/synopsisSupport must match actual
+command results. It reports 25 producer passes and scoped/docs/post-rebase
+checks, with no ready manifest or product assertion. Actual per-part intake
+request/response bindings remain a blocker; importer summaries supply no receipt.
+Decision db5c2fd6a2 assigned G-2819's codex-1/xhigh review of the three-path
+correction against 13b5d13eec in the complete 15-path producer context.
+It is running; its result event owns disposition. Carry forward G-2812's
+F01–F08 and owner prerequisites explicitly: its advertised report is absent,
+but generation text and final validation survive in its attempt transcripts.
+G-2791 stays partial/exited; no preparation or proof was released.
+Decision 6a0f0d63bf retains G-2776's consumer
 prerequisites in this existing triage without another worker assignment:
 23 Books, 23 root/nested chapter occurrences, original publication/qualification
 and anonymous-byte receipts, independent Recipe adoption and two-Realm replies.
@@ -414,8 +430,10 @@ notified. Program disposition remains pending; routing supplies no approval.
 G-2772's partial information-support-and-order specification is on the wave
 through 20bab85f0d, including the shared retained-admission types and exact native
 acknowledgement, attachment-certificate and readable publicEvidence additions.
-Mail 2628517c was acknowledged; Program received the joint question as
-mail:01c8825e-a80b-4b62-9cf3-905f23dcfed2. Native graphReceipt must retain the actual
+Its attempt-12 partial handoff is acknowledged; leave G-2772 exited.
+Mail 2628517c was acknowledged; Program received the aligned proposal as
+mail:5f458d2c-c97d-4ab7-b619-4d43a0389cf4, following the earlier joint question
+01c8825e. Native graphReceipt must retain the actual
 acknowledgement/headGuarantee; normalized-record coordinates and actual payload
 pointers remain distinct. These admission additions remain proposals. The
 original-baseline correction and four-file plan are retained. Its brief accepts
@@ -469,13 +487,17 @@ original-baseline correction c28708f396 and retained-record/native-support
 proposal e7db8bc4d7 are on the wave. Mail e2c501b2 was acknowledged and its exact
 proposal reached Program as mail:1e41b44b-b694-43a5-ab2e-c460f907b911. G-2772 already
 consumes those shared types; G-2781 stays adapter-only and G-2778 sole importer.
-Decisions 20fc7a39e1/475943a4b6 resumed G-2769 attempt 11 after the fix-round
-cap only for one design note, import-admission-contract.md: reconcile G-2772's
-native acknowledgement, attachment certificate, graphReceipt/headGuarantee,
-rights-filtered publicEvidence and exact remaining owner/field disagreements.
-Executable types/assertions stay unchanged pending Program; no implementation,
-preparation or execution was released. The mail turn completed this resume and
-acknowledgement before a model-capacity exit; do not repeat them.
+Decisions 20fc7a39e1/475943a4b6 cut attempt 11 after the fix-round cap to one
+design note, import-admission-contract.md. Its partial handoff at 13b5d13eec
+is acknowledged and published on the wave; docs checks passed. It reconciles
+G-2772's shared shape while leaving five owner questions unresolved: Statement
+acknowledgement exposure, editorial component/head mapping, certificate
+identity/digest/requiredness, public-evidence disclosure and refusal classification.
+Program received them as mail:e18f68b6-3299-432f-bb93-a97f074f7704. Delivery and
+alignment supply no ruling. Leave G-2769 partial/exited; executable types and
+both owners' assertions remain unchanged pending Program. No implementation,
+adapter/wiring consumption, preparation or execution was released. Do not
+repeat the completed resume or mail acknowledgement.
 The G-2769:10 event confirmed existing routing/producer work and deferred proof,
 without another assignment. Consume import-outcomes-corpus-v1 through G-2791's
 bounded import continuation. Recompute whole-matrix selectionDigest
@@ -532,8 +554,8 @@ Domain-leading research complements, never replaces, these 61 findings.
 Keep account/allowance settings, observations and scheduling notes untracked.
 
 Checkpoint measures: 0/61 proved; tokens/proved row n/a. Current status reports
-68/85 first attempts (80%), seventeen fix rounds, six capacity continuations,
-attempts/landed median one and maximum fourteen (G-2759), 540.3M input and 4.2M
+69/86 first attempts (80%), seventeen fix rounds, six capacity continuations,
+attempts/landed median one and maximum fourteen (G-2759), 546.5M input and 4.2M
 output tokens. Of 251 job wakes: 126 passed, 64 assertion, one timeout, two
 environment, 56 harness and two unclassified. Thirteen attempt causes remain
 unclassified, with six fixes inferred from unavailable handoffs; one retained-report
@@ -546,13 +568,14 @@ The last recorded 12-hour window (2026-10-18 08:36:08–20:36:08 UTC) attributes
 The prior reading at 2026-10-18T22:46:16Z covers 20:36:29Z–22:46:16Z:
 223,312,917 input tokens, 93% cached; worker/review/other input shares 91%/6%/3%.
 It does not isolate manager share or report current first-attempt/landed-attempt
-measures. Checkpoint e84152e7-823f-44d5-bd7b-e931623f4900 covers its ten
-specified handled events; all three supplied mail deliveries are already
-acknowledged. Nine measured manager attempts used 8,822,508 input
-(8,182,016 cached) and 80,000 output tokens. The tenth, mail 2628517c, completed
-its actions before a model-capacity exit and has no usage recorded. These
-event totals do not isolate manager share of a matched all-role window. The earlier
-failed G-2806 manager attempt still has no usage recorded. Status declares
+measures. Checkpoint a958a3c1-52ed-4960-97b9-4ca36576e4c4 covers task:G-2772:12,
+mail:dd8fe948, task:G-2769:11, task:G-2817:1, task:G-2791:14 and mail:8ada009f.
+Both supplied mail deliveries are already acknowledged. Six manager attempts
+used 4,866,367 input (4,482,688 cached) and 38,084 output tokens. These event
+totals do not isolate manager share of a matched all-role window. The prior
+checkpoint's mail 2628517c completed its actions before a model-capacity exit
+with no usage recorded; the earlier failed G-2806 manager attempt also still
+has no usage recorded. Status declares
 historical 68/68 rows and 408 cells separately from audit proof. The prior efficiency
 instrumentation question reached Program: identify G-2743's extra session/two
 turns and reconcile the
@@ -565,12 +588,14 @@ coordinator events. That disposition started no watcher or capacity policy.
 Next executable actions:
 
 1. Read remaining review/result dispositions, including the dispatched
-   G-2816/G-2817/G-2818, in their own events. G-2753/G-2762/G-2780 builds are
-   accepted/exited; G-2786 stays exited pending review and Program's shared
+   G-2816/G-2818 and running G-2819, in their own events.
+   G-2753/G-2762/G-2780 builds are accepted/exited; G-2786 stays exited
+   pending review and Program's shared
    availability ruling. G-2758 stays open/exited. G-2791's bounded import
-   continuation and G-2769's design-note continuation need their own handoffs.
-   G-2812/G-2815 are closed verified; duplicate neither their reviews/landings nor
-   mail acknowledgements. Preserve G-2750's deferred four-consumer handoff and
+   correction awaits G-2819; G-2769's published design note awaits Program.
+   G-2812/G-2815/G-2817 are closed verified; duplicate neither their
+   reviews/landings nor mail acknowledgements. Preserve G-2750's deferred
+   four-consumer handoff and
    completed test reconciliation. G-2782/G-2807/G-2813 are closed verified.
    Product-completion owns
    supported recovery after its finite diagnosis; do not retry the refresh or
@@ -591,8 +616,8 @@ Next executable actions:
 4. G-2783 remains unstarted after queue refusal, under its existing dependency
    and admission gates; retain the about allocation. G-2791 remains the single
    genuine preparation producer. Its completed G-2812 review covers the earlier
-   pin only; require disposition/review of the bounded import continuation and
-   genuine prerequisites before any execution release.
+   pin only; require G-2819's review and manager disposition of the bounded
+   import correction and genuine prerequisites before any execution release.
 5. After builds: generate once, pin wave, prepare once within 600 seconds,
    stop/backup and restore isolated copies; run original-baseline/fixed API
    assertions, viewed Storybook/screenshots and real journeys, codex-1 review,
