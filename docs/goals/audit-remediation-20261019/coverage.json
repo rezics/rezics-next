@@ -567,9 +567,18 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "Library以目标、统计和搬运工具占据首屏，正在读的作品最后出现",
-      "status": "build-briefed",
+      "status": "closed",
       "owner": "G-2752",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "D4-003",
+          "assessedMain": "32400992a4879132812a83d9e6a0bd1cd5d996bf",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     },
     {
       "id": "D4-004",
@@ -634,9 +643,18 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "通知把每条两枚分拣按钮放在事件与时间之间，正文对象没有稳定视觉焦点",
-      "status": "pending",
+      "status": "closed",
       "owner": null,
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "D4-015",
+          "assessedMain": "32400992a4879132812a83d9e6a0bd1cd5d996bf",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     },
     {
       "id": "D4-016",
@@ -661,9 +679,18 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "有效筛选条件不可见，编辑当前查询会隐性清空范围",
-      "status": "pending",
+      "status": "closed",
       "owner": null,
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "D6-004",
+          "assessedMain": "32400992a4879132812a83d9e6a0bd1cd5d996bf",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     }
   ]
 }

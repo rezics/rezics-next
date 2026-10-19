@@ -1,8 +1,8 @@
 {
-  "recordedAt": "2026-10-19T11:53:22.045318+00:00",
+  "recordedAt": "2026-10-19T12:40:49.777559+00:00",
   "manager": "site",
   "goal": "audit-remediation-20261019",
-  "assessedMain": "979903033fc6d32f3adf74db4dbb22d65973df4a",
+  "assessedMain": "32400992a4879132812a83d9e6a0bd1cd5d996bf",
   "basis": "Original applicable acceptance and assertions, without adding unrelated classes or full-domain journeys. Product-audit class tracing applied; unchanged exact proof reused.",
   "findings": [
     {
@@ -2738,6 +2738,2830 @@
       "bookkeepingPreparedAt": "2026-10-19T11:53:22.045318+00:00",
       "sourceRevalidatedOnMain": "979903033fc6d32f3adf74db4dbb22d65973df4a",
       "laterMainMaterialComparison": []
+    },
+    {
+      "recordedAt": "2026-10-19T12:40:49.777559+00:00",
+      "id": "D6-004",
+      "status": "closed",
+      "closureBookkeepingPending": false,
+      "managerAction": "Accepted original-class closure intent only. Parent manager owns central status/bookkeeping through normal gates; no root, ledger, jobs or existing shared receipts changed by this subagent.",
+      "main": "ef9ae2b4db4d2a37f8644de322dc06724eeb08aa",
+      "mainMayAdvanceAfterReceipt": true,
+      "originalAcceptanceVerbatim": [
+        "所有影响结果的条件都可理解、查看、编辑和清除；分享、Back/Forward 恢复同义状态；当前范围内改词保留条件。",
+        "若全局搜索有意重置，事前明确范围并提供当前条件内的改词入口；语言与类型含义用 API/UI 同一序列证明。"
+      ],
+      "originalRegressionAssertionsVerbatim": [
+        {
+          "id": "D6-004/assertion-1",
+          "assert": "Active language/type/tab/include/case or exact conditions are visible, individually editable and preserved when changing the same-task query."
+        },
+        {
+          "id": "D6-004/assertion-2",
+          "assert": "Shared URLs and Back restore query and conditions, including mobile controls and signed-in context."
+        },
+        {
+          "id": "D6-004/assertion-3",
+          "assert": "Any intentional global reset is explicit, and the existing scope retains an obvious local query-edit action."
+        }
+      ],
+      "canonicalSource": ".temp/site-audit-2026-10-18/round-3/all-findings.json",
+      "canonicalSha256": "e2721c44e74305c694b02e81e757e4476c3a19de414d25b0689617316c5ebc3f",
+      "originalAssertionsChanged": false,
+      "skillApplied": ".agents/skills/product-audit/SKILL.md",
+      "scope": "Original conditions visibility/editability, local query scope, share/history and matching API/UI language/type sequence. Original D6-004 is independent of AUD-009 section naming/default-read success, D6-003 retrieval intent and D6-005 facts.",
+      "newRuntimeOrReview": false,
+      "newSourceOrDataMutation": false,
+      "closureRecommendation": "Both original acceptance criteria satisfied by reused exact-source genuine evidence plus retained applicable original fixture/source proof; independent G-2853 recommends closure, with limits retained.",
+      "productCommits": [
+        "35f1ab1daea8a623f2f531fa6b7256d5edae599a"
+      ],
+      "capture": {
+        "manager": "manager-c4aa03d6-7456-4e6d-88f4-f941d60cafe6",
+        "record": ".temp/goal-orchestration/manager-commits/manager-c4aa03d6-7456-4e6d-88f4-f941d60cafe6.json",
+        "status": "landed",
+        "source": "80ab00d0bfab008e289f8ef1e4a7895b8b9734cd",
+        "assembledCandidate": "1651b6975433ae1b075b821c7992667462d1bd32",
+        "actualLanding": "35f1ab1daea8a623f2f531fa6b7256d5edae599a"
+      },
+      "independentReview": {
+        "task": "G-2853",
+        "engine": "codex-1/gpt-6.1-sol/xhigh",
+        "fallback": false,
+        "nestedAgents": false,
+        "reportCommit": "866f4827a11528e55ff022b7e0e8755461cef6ec",
+        "report": "docs/goals/audit-remediation-20261019/proofs/discover-correction-confirmation.json",
+        "reportBlob": "296b47d5414a5c624142b7b9d931c2326edad967",
+        "reportSha256": "4249174a7e3760f8891d69b3c83d24e8c8162924986476ba4347353dc6738166",
+        "mainReportEqualsIndependentReport": true,
+        "originalReview": {
+          "source": "f84fbee119888f0b880badfd7eeb351543615908",
+          "path": "docs/goals/audit-remediation-20261019/proofs/discover-original-source-review.json",
+          "blob": "75d96d21270a0cc04f3ead9b5f74a6e7581eb789",
+          "sha256": "0bfba902434f75dee12204eaabc3f0f796867d0cb922ce927488230b12159990"
+        },
+        "sourceVerdict": {
+          "status": "confirmed",
+          "review_id": "G-2853",
+          "reviewer": {
+            "engine": "codex-1",
+            "model": "gpt-6.1-sol",
+            "effort": "xhigh",
+            "independent": true,
+            "nested_agents": false,
+            "fallback": false
+          },
+          "scope": "Changed ten-path implementation only; no new blocking source defect found in DSR-01..04 correction. Independently ready for manager-selected normal gated landing; original-class recommendations are separately bounded below. No main integration claimed.",
+          "source": "587576832d71c3c501b962f849a5c400c9f7bd73",
+          "tree": "847c3e0f3603a569fa233a14a78e4daec2087b44",
+          "publication_base": "af1527fcffcc3a49a28cd41ea07a71a3ee3eecd2",
+          "authored_commits": [
+            "cccc3841201e557283bf0ad9af9839e86d6ee926",
+            "587576832d71c3c501b962f849a5c400c9f7bd73"
+          ],
+          "confirmed_at": "2026-10-19T10:33:32.105030+00:00"
+        }
+      },
+      "runtimeFrontend": "587576832d71c3c501b962f849a5c400c9f7bd73",
+      "runtimeFrontendTree": "847c3e0f3603a569fa233a14a78e4daec2087b44",
+      "compatibleBackend": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "consumerSourceEquivalence": {
+        "paths": 23,
+        "exactMainEqualsTested": 23,
+        "allMaterialApprovedQueryConsumerPathsMatch": true,
+        "reviewedTenPathDelta": "G-2853 per_file_manifest, plus retained G-2835 original23path review. No additional independent review requested.",
+        "manifest": [
+          {
+            "path": "apps/web/features/discover/browse-read.ts",
+            "mainBlob": "af8723487c93bad0f38ffa0ab461de258b697068",
+            "testedBlob": "af8723487c93bad0f38ffa0ab461de258b697068",
+            "candidateBlob": "af8723487c93bad0f38ffa0ab461de258b697068",
+            "capturedBlob": "af8723487c93bad0f38ffa0ab461de258b697068",
+            "landedBlob": "af8723487c93bad0f38ffa0ab461de258b697068",
+            "reviewBlob": "e5d2bdd51278286605330c57d86dab25e911bceb",
+            "mainEqualsTested": true
+          },
+          {
+            "path": "apps/web/features/discover/browse-search-state.test.ts",
+            "mainBlob": "35f7694e69d557b3e8d49812aa98f7e98a0ee8fb",
+            "testedBlob": "35f7694e69d557b3e8d49812aa98f7e98a0ee8fb",
+            "candidateBlob": "35f7694e69d557b3e8d49812aa98f7e98a0ee8fb",
+            "capturedBlob": "35f7694e69d557b3e8d49812aa98f7e98a0ee8fb",
+            "landedBlob": "35f7694e69d557b3e8d49812aa98f7e98a0ee8fb",
+            "reviewBlob": null,
+            "mainEqualsTested": true
+          },
+          {
+            "path": "apps/web/features/discover/browse-state.ts",
+            "mainBlob": "b643f91f9bd594d6421a636595d3a9325c3b5a8b",
+            "testedBlob": "b643f91f9bd594d6421a636595d3a9325c3b5a8b",
+            "candidateBlob": "b643f91f9bd594d6421a636595d3a9325c3b5a8b",
+            "capturedBlob": "b643f91f9bd594d6421a636595d3a9325c3b5a8b",
+            "landedBlob": "b643f91f9bd594d6421a636595d3a9325c3b5a8b",
+            "reviewBlob": "91140628fd5e3ed4f5a6d1ea5c14b7dfd256d59a",
+            "mainEqualsTested": true
+          },
+          {
+            "path": "apps/web/features/discover/browse-tabs.tsx",
+            "mainBlob": "ede86388b8dcb55a4c7e5db76feed7ff68316b4f",
+            "testedBlob": "ede86388b8dcb55a4c7e5db76feed7ff68316b4f",
+            "candidateBlob": "ede86388b8dcb55a4c7e5db76feed7ff68316b4f",
+            "capturedBlob": "ede86388b8dcb55a4c7e5db76feed7ff68316b4f",
+            "landedBlob": "ede86388b8dcb55a4c7e5db76feed7ff68316b4f",
+            "reviewBlob": null,
+            "mainEqualsTested": true
+          },
+          {
+            "path": "apps/web/features/discover/chapter-text-messages.ts",
+            "mainBlob": "7b4e3118d205ad9d39362e303f72843ebaa6dfda",
+            "testedBlob": "7b4e3118d205ad9d39362e303f72843ebaa6dfda",
+            "candidateBlob": "7b4e3118d205ad9d39362e303f72843ebaa6dfda",
+            "capturedBlob": "7b4e3118d205ad9d39362e303f72843ebaa6dfda",
+            "landedBlob": "7b4e3118d205ad9d39362e303f72843ebaa6dfda",
+            "reviewBlob": "d9f2269ed50fce66a562ad17f81d38c166a5258d",
+            "mainEqualsTested": true
+          },
+          {
+            "path": "apps/web/features/discover/chapter-text-read.ts",
+            "mainBlob": "d775dcec7ac7c4d7d591a1954e912186edae6ef6",
+            "testedBlob": "d775dcec7ac7c4d7d591a1954e912186edae6ef6",
+            "candidateBlob": "d775dcec7ac7c4d7d591a1954e912186edae6ef6",
+            "capturedBlob": "d775dcec7ac7c4d7d591a1954e912186edae6ef6",
+            "landedBlob": "d775dcec7ac7c4d7d591a1954e912186edae6ef6",
+            "reviewBlob": "9e5649e3857ae19710d7c9883ca1ed57d2882224",
+            "mainEqualsTested": true
+          },
+          {
+            "path": "apps/web/features/discover/chapter-text.stories.tsx",
+            "mainBlob": "d1c30d94e9ca6ed4dc103542bae1e4c05c9c1ac0",
+            "testedBlob": "d1c30d94e9ca6ed4dc103542bae1e4c05c9c1ac0",
+            "candidateBlob": "d1c30d94e9ca6ed4dc103542bae1e4c05c9c1ac0",
+            "capturedBlob": "d1c30d94e9ca6ed4dc103542bae1e4c05c9c1ac0",
+            "landedBlob": "d1c30d94e9ca6ed4dc103542bae1e4c05c9c1ac0",
+            "reviewBlob": "e44bd02a40dad51159e56e0a861b00ee9529ae2b",
+            "mainEqualsTested": true
+          },
+          {
+            "path": "apps/web/features/discover/chapter-text.tsx",
+            "mainBlob": "44f8716f86b180628dd050023d19aa13581c1061",
+            "testedBlob": "44f8716f86b180628dd050023d19aa13581c1061",
+            "candidateBlob": "44f8716f86b180628dd050023d19aa13581c1061",
+            "capturedBlob": "44f8716f86b180628dd050023d19aa13581c1061",
+            "landedBlob": "44f8716f86b180628dd050023d19aa13581c1061",
+            "reviewBlob": "63714906cc61a7125efdd8104d06492b23fce859",
+            "mainEqualsTested": true
+          },
+          {
+            "path": "apps/web/features/discover/discover-page.stories.tsx",
+            "mainBlob": "2c6c9d3592853e1eb2295bcb8e1274ac0955069b",
+            "testedBlob": "2c6c9d3592853e1eb2295bcb8e1274ac0955069b",
+            "candidateBlob": "2c6c9d3592853e1eb2295bcb8e1274ac0955069b",
+            "capturedBlob": "2c6c9d3592853e1eb2295bcb8e1274ac0955069b",
+            "landedBlob": "2c6c9d3592853e1eb2295bcb8e1274ac0955069b",
+            "reviewBlob": "343f47bad38a23a761c204bdf12fedf292a0611b",
+            "mainEqualsTested": true
+          },
+          {
+            "path": "apps/web/features/discover/discover-search.stories.tsx",
+            "mainBlob": "5cf9d24eac3541c650b33602ec511ba2db5fe6dd",
+            "testedBlob": "5cf9d24eac3541c650b33602ec511ba2db5fe6dd",
+            "candidateBlob": "5cf9d24eac3541c650b33602ec511ba2db5fe6dd",
+            "capturedBlob": "5cf9d24eac3541c650b33602ec511ba2db5fe6dd",
+            "landedBlob": "5cf9d24eac3541c650b33602ec511ba2db5fe6dd",
+            "reviewBlob": null,
+            "mainEqualsTested": true
+          },
+          {
+            "path": "apps/web/features/discover/discover-view.tsx",
+            "mainBlob": "f737dd5aad59771c328500da2c1ff02ab73e23d0",
+            "testedBlob": "f737dd5aad59771c328500da2c1ff02ab73e23d0",
+            "candidateBlob": "f737dd5aad59771c328500da2c1ff02ab73e23d0",
+            "capturedBlob": "f737dd5aad59771c328500da2c1ff02ab73e23d0",
+            "landedBlob": "f737dd5aad59771c328500da2c1ff02ab73e23d0",
+            "reviewBlob": "7cac38532f4f1a260753ec79a1dc1d5f9e8259ad",
+            "mainEqualsTested": true
+          },
+          {
+            "path": "apps/web/features/discover/load.ts",
+            "mainBlob": "701916dcabd07b402dddf4037a663a6afc7995e5",
+            "testedBlob": "701916dcabd07b402dddf4037a663a6afc7995e5",
+            "candidateBlob": "701916dcabd07b402dddf4037a663a6afc7995e5",
+            "capturedBlob": "701916dcabd07b402dddf4037a663a6afc7995e5",
+            "landedBlob": "701916dcabd07b402dddf4037a663a6afc7995e5",
+            "reviewBlob": "385c35d22db7ce9eec1e328fca59a660f0b4fe91",
+            "mainEqualsTested": true
+          },
+          {
+            "path": "apps/web/features/discover/resource-list.tsx",
+            "mainBlob": "a8d8da88ad825c879109cc5b602ed8c2f313eb19",
+            "testedBlob": "a8d8da88ad825c879109cc5b602ed8c2f313eb19",
+            "candidateBlob": "fff34a079b18c4ff8d7789c8f117b85d166b09d0",
+            "capturedBlob": "fff34a079b18c4ff8d7789c8f117b85d166b09d0",
+            "landedBlob": "a8d8da88ad825c879109cc5b602ed8c2f313eb19",
+            "reviewBlob": "3ad755fd888562e40220d0e4abb6813708391566",
+            "mainEqualsTested": true
+          },
+          {
+            "path": "apps/web/features/discover/search-recovery-read.test.ts",
+            "mainBlob": "7d2f8dbeb042da2a63fb3834f411aa4b4c913a58",
+            "testedBlob": "7d2f8dbeb042da2a63fb3834f411aa4b4c913a58",
+            "candidateBlob": "7d2f8dbeb042da2a63fb3834f411aa4b4c913a58",
+            "capturedBlob": "7d2f8dbeb042da2a63fb3834f411aa4b4c913a58",
+            "landedBlob": "7d2f8dbeb042da2a63fb3834f411aa4b4c913a58",
+            "reviewBlob": null,
+            "mainEqualsTested": true
+          },
+          {
+            "path": "apps/web/features/discover/search-recovery-read.ts",
+            "mainBlob": "c5b3eedd1a42cbff27c0bc778a11ed61825f128a",
+            "testedBlob": "c5b3eedd1a42cbff27c0bc778a11ed61825f128a",
+            "candidateBlob": "c5b3eedd1a42cbff27c0bc778a11ed61825f128a",
+            "capturedBlob": "c5b3eedd1a42cbff27c0bc778a11ed61825f128a",
+            "landedBlob": "c5b3eedd1a42cbff27c0bc778a11ed61825f128a",
+            "reviewBlob": null,
+            "mainEqualsTested": true
+          },
+          {
+            "path": "apps/web/features/discover/search-recovery.tsx",
+            "mainBlob": "8ad28bf6062e46ada0f26913f7440f419cfce752",
+            "testedBlob": "8ad28bf6062e46ada0f26913f7440f419cfce752",
+            "candidateBlob": "8ad28bf6062e46ada0f26913f7440f419cfce752",
+            "capturedBlob": "8ad28bf6062e46ada0f26913f7440f419cfce752",
+            "landedBlob": "8ad28bf6062e46ada0f26913f7440f419cfce752",
+            "reviewBlob": null,
+            "mainEqualsTested": true
+          },
+          {
+            "path": "apps/web/features/discover/selection-controls.tsx",
+            "mainBlob": "2eb6d1250aad5c864c5853919d236a53d38f4d79",
+            "testedBlob": "2eb6d1250aad5c864c5853919d236a53d38f4d79",
+            "candidateBlob": "2eb6d1250aad5c864c5853919d236a53d38f4d79",
+            "capturedBlob": "2eb6d1250aad5c864c5853919d236a53d38f4d79",
+            "landedBlob": "2eb6d1250aad5c864c5853919d236a53d38f4d79",
+            "reviewBlob": null,
+            "mainEqualsTested": true
+          },
+          {
+            "path": "apps/web/features/discover/selection-messages.ts",
+            "mainBlob": "50e622357366251ebcdd4d0bceed53fa34410cc8",
+            "testedBlob": "50e622357366251ebcdd4d0bceed53fa34410cc8",
+            "candidateBlob": "50e622357366251ebcdd4d0bceed53fa34410cc8",
+            "capturedBlob": "50e622357366251ebcdd4d0bceed53fa34410cc8",
+            "landedBlob": "50e622357366251ebcdd4d0bceed53fa34410cc8",
+            "reviewBlob": null,
+            "mainEqualsTested": true
+          },
+          {
+            "path": "apps/web/features/query/condition-bar.tsx",
+            "mainBlob": "82f8fbbc03bf4ab173dcb38d52a079dc4b34432f",
+            "testedBlob": "82f8fbbc03bf4ab173dcb38d52a079dc4b34432f",
+            "candidateBlob": "82f8fbbc03bf4ab173dcb38d52a079dc4b34432f",
+            "capturedBlob": "82f8fbbc03bf4ab173dcb38d52a079dc4b34432f",
+            "landedBlob": "82f8fbbc03bf4ab173dcb38d52a079dc4b34432f",
+            "reviewBlob": "f2cca4d2f542fa32abe02303f1b0f699e88e3d51",
+            "mainEqualsTested": true
+          },
+          {
+            "path": "apps/web/features/search/query.test.ts",
+            "mainBlob": "871dd1091f85c6c5ee6ec0489a3579350fe99efd",
+            "testedBlob": "871dd1091f85c6c5ee6ec0489a3579350fe99efd",
+            "candidateBlob": "871dd1091f85c6c5ee6ec0489a3579350fe99efd",
+            "capturedBlob": "871dd1091f85c6c5ee6ec0489a3579350fe99efd",
+            "landedBlob": "871dd1091f85c6c5ee6ec0489a3579350fe99efd",
+            "reviewBlob": null,
+            "mainEqualsTested": true
+          },
+          {
+            "path": "apps/web/features/search/query.ts",
+            "mainBlob": "a9f1255d8e5e7b5497fcd75c6949035588582575",
+            "testedBlob": "a9f1255d8e5e7b5497fcd75c6949035588582575",
+            "candidateBlob": "a9f1255d8e5e7b5497fcd75c6949035588582575",
+            "capturedBlob": "a9f1255d8e5e7b5497fcd75c6949035588582575",
+            "landedBlob": "a9f1255d8e5e7b5497fcd75c6949035588582575",
+            "reviewBlob": "364fceb453a6e2bbaeb54f05503030710e75709d",
+            "mainEqualsTested": true
+          },
+          {
+            "path": "apps/web/features/shell/search-field.stories.tsx",
+            "mainBlob": "d6f6b1433c189fd7b1f0a18f811824fdea97e657",
+            "testedBlob": "d6f6b1433c189fd7b1f0a18f811824fdea97e657",
+            "candidateBlob": "d6f6b1433c189fd7b1f0a18f811824fdea97e657",
+            "capturedBlob": "d6f6b1433c189fd7b1f0a18f811824fdea97e657",
+            "landedBlob": "d6f6b1433c189fd7b1f0a18f811824fdea97e657",
+            "reviewBlob": "34d25bcbaee08cc38aec6637a0034760e87090b3",
+            "mainEqualsTested": true
+          },
+          {
+            "path": "apps/web/features/shell/search-field.tsx",
+            "mainBlob": "8aac0484b7009644b09668872db31441d0684f93",
+            "testedBlob": "8aac0484b7009644b09668872db31441d0684f93",
+            "candidateBlob": "8aac0484b7009644b09668872db31441d0684f93",
+            "capturedBlob": "8aac0484b7009644b09668872db31441d0684f93",
+            "landedBlob": "8aac0484b7009644b09668872db31441d0684f93",
+            "reviewBlob": "50bf087d72360700b6b87b98276f491dc51ac508",
+            "mainEqualsTested": true
+          }
+        ]
+      },
+      "allDeclaredSourceAndDependencyBlobs": [
+        {
+          "path": "apps/web/features/catalogue/registry.ts",
+          "mainBlob": "07c9b83486237e42cc5317ebfd9e3032e48a2bf2",
+          "testedBlob": "07c9b83486237e42cc5317ebfd9e3032e48a2bf2",
+          "candidateBlob": "07c9b83486237e42cc5317ebfd9e3032e48a2bf2",
+          "capturedBlob": "07c9b83486237e42cc5317ebfd9e3032e48a2bf2",
+          "landedBlob": "07c9b83486237e42cc5317ebfd9e3032e48a2bf2",
+          "reviewBlob": "07c9b83486237e42cc5317ebfd9e3032e48a2bf2",
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/discover/api.ts",
+          "mainBlob": "ee0598bcf18c96942872c5ad81c681d3b3512997",
+          "testedBlob": "ee0598bcf18c96942872c5ad81c681d3b3512997",
+          "candidateBlob": "ee0598bcf18c96942872c5ad81c681d3b3512997",
+          "capturedBlob": "ee0598bcf18c96942872c5ad81c681d3b3512997",
+          "landedBlob": "ee0598bcf18c96942872c5ad81c681d3b3512997",
+          "reviewBlob": "ee0598bcf18c96942872c5ad81c681d3b3512997",
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/discover/browse-read.ts",
+          "mainBlob": "af8723487c93bad0f38ffa0ab461de258b697068",
+          "testedBlob": "af8723487c93bad0f38ffa0ab461de258b697068",
+          "candidateBlob": "af8723487c93bad0f38ffa0ab461de258b697068",
+          "capturedBlob": "af8723487c93bad0f38ffa0ab461de258b697068",
+          "landedBlob": "af8723487c93bad0f38ffa0ab461de258b697068",
+          "reviewBlob": "e5d2bdd51278286605330c57d86dab25e911bceb",
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/discover/browse-search-state.test.ts",
+          "mainBlob": "35f7694e69d557b3e8d49812aa98f7e98a0ee8fb",
+          "testedBlob": "35f7694e69d557b3e8d49812aa98f7e98a0ee8fb",
+          "candidateBlob": "35f7694e69d557b3e8d49812aa98f7e98a0ee8fb",
+          "capturedBlob": "35f7694e69d557b3e8d49812aa98f7e98a0ee8fb",
+          "landedBlob": "35f7694e69d557b3e8d49812aa98f7e98a0ee8fb",
+          "reviewBlob": null,
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/discover/browse-state.ts",
+          "mainBlob": "b643f91f9bd594d6421a636595d3a9325c3b5a8b",
+          "testedBlob": "b643f91f9bd594d6421a636595d3a9325c3b5a8b",
+          "candidateBlob": "b643f91f9bd594d6421a636595d3a9325c3b5a8b",
+          "capturedBlob": "b643f91f9bd594d6421a636595d3a9325c3b5a8b",
+          "landedBlob": "b643f91f9bd594d6421a636595d3a9325c3b5a8b",
+          "reviewBlob": "91140628fd5e3ed4f5a6d1ea5c14b7dfd256d59a",
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/discover/browse-tabs.tsx",
+          "mainBlob": "ede86388b8dcb55a4c7e5db76feed7ff68316b4f",
+          "testedBlob": "ede86388b8dcb55a4c7e5db76feed7ff68316b4f",
+          "candidateBlob": "ede86388b8dcb55a4c7e5db76feed7ff68316b4f",
+          "capturedBlob": "ede86388b8dcb55a4c7e5db76feed7ff68316b4f",
+          "landedBlob": "ede86388b8dcb55a4c7e5db76feed7ff68316b4f",
+          "reviewBlob": null,
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/discover/chapter-text-messages.ts",
+          "mainBlob": "7b4e3118d205ad9d39362e303f72843ebaa6dfda",
+          "testedBlob": "7b4e3118d205ad9d39362e303f72843ebaa6dfda",
+          "candidateBlob": "7b4e3118d205ad9d39362e303f72843ebaa6dfda",
+          "capturedBlob": "7b4e3118d205ad9d39362e303f72843ebaa6dfda",
+          "landedBlob": "7b4e3118d205ad9d39362e303f72843ebaa6dfda",
+          "reviewBlob": "d9f2269ed50fce66a562ad17f81d38c166a5258d",
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/discover/chapter-text-read.test.ts",
+          "mainBlob": "ae6ed37d6559e004b7614e6cd5ad1583ee2e411e",
+          "testedBlob": "ae6ed37d6559e004b7614e6cd5ad1583ee2e411e",
+          "candidateBlob": "ae6ed37d6559e004b7614e6cd5ad1583ee2e411e",
+          "capturedBlob": "ae6ed37d6559e004b7614e6cd5ad1583ee2e411e",
+          "landedBlob": "ae6ed37d6559e004b7614e6cd5ad1583ee2e411e",
+          "reviewBlob": "ae6ed37d6559e004b7614e6cd5ad1583ee2e411e",
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/discover/chapter-text-read.ts",
+          "mainBlob": "d775dcec7ac7c4d7d591a1954e912186edae6ef6",
+          "testedBlob": "d775dcec7ac7c4d7d591a1954e912186edae6ef6",
+          "candidateBlob": "d775dcec7ac7c4d7d591a1954e912186edae6ef6",
+          "capturedBlob": "d775dcec7ac7c4d7d591a1954e912186edae6ef6",
+          "landedBlob": "d775dcec7ac7c4d7d591a1954e912186edae6ef6",
+          "reviewBlob": "9e5649e3857ae19710d7c9883ca1ed57d2882224",
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/discover/chapter-text.stories.tsx",
+          "mainBlob": "d1c30d94e9ca6ed4dc103542bae1e4c05c9c1ac0",
+          "testedBlob": "d1c30d94e9ca6ed4dc103542bae1e4c05c9c1ac0",
+          "candidateBlob": "d1c30d94e9ca6ed4dc103542bae1e4c05c9c1ac0",
+          "capturedBlob": "d1c30d94e9ca6ed4dc103542bae1e4c05c9c1ac0",
+          "landedBlob": "d1c30d94e9ca6ed4dc103542bae1e4c05c9c1ac0",
+          "reviewBlob": "e44bd02a40dad51159e56e0a861b00ee9529ae2b",
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/discover/chapter-text.tsx",
+          "mainBlob": "44f8716f86b180628dd050023d19aa13581c1061",
+          "testedBlob": "44f8716f86b180628dd050023d19aa13581c1061",
+          "candidateBlob": "44f8716f86b180628dd050023d19aa13581c1061",
+          "capturedBlob": "44f8716f86b180628dd050023d19aa13581c1061",
+          "landedBlob": "44f8716f86b180628dd050023d19aa13581c1061",
+          "reviewBlob": "63714906cc61a7125efdd8104d06492b23fce859",
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/discover/discover-page.stories.tsx",
+          "mainBlob": "2c6c9d3592853e1eb2295bcb8e1274ac0955069b",
+          "testedBlob": "2c6c9d3592853e1eb2295bcb8e1274ac0955069b",
+          "candidateBlob": "2c6c9d3592853e1eb2295bcb8e1274ac0955069b",
+          "capturedBlob": "2c6c9d3592853e1eb2295bcb8e1274ac0955069b",
+          "landedBlob": "2c6c9d3592853e1eb2295bcb8e1274ac0955069b",
+          "reviewBlob": "343f47bad38a23a761c204bdf12fedf292a0611b",
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/discover/discover-search.stories.tsx",
+          "mainBlob": "5cf9d24eac3541c650b33602ec511ba2db5fe6dd",
+          "testedBlob": "5cf9d24eac3541c650b33602ec511ba2db5fe6dd",
+          "candidateBlob": "5cf9d24eac3541c650b33602ec511ba2db5fe6dd",
+          "capturedBlob": "5cf9d24eac3541c650b33602ec511ba2db5fe6dd",
+          "landedBlob": "5cf9d24eac3541c650b33602ec511ba2db5fe6dd",
+          "reviewBlob": null,
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/discover/discover-view.tsx",
+          "mainBlob": "f737dd5aad59771c328500da2c1ff02ab73e23d0",
+          "testedBlob": "f737dd5aad59771c328500da2c1ff02ab73e23d0",
+          "candidateBlob": "f737dd5aad59771c328500da2c1ff02ab73e23d0",
+          "capturedBlob": "f737dd5aad59771c328500da2c1ff02ab73e23d0",
+          "landedBlob": "f737dd5aad59771c328500da2c1ff02ab73e23d0",
+          "reviewBlob": "7cac38532f4f1a260753ec79a1dc1d5f9e8259ad",
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/discover/load.ts",
+          "mainBlob": "701916dcabd07b402dddf4037a663a6afc7995e5",
+          "testedBlob": "701916dcabd07b402dddf4037a663a6afc7995e5",
+          "candidateBlob": "701916dcabd07b402dddf4037a663a6afc7995e5",
+          "capturedBlob": "701916dcabd07b402dddf4037a663a6afc7995e5",
+          "landedBlob": "701916dcabd07b402dddf4037a663a6afc7995e5",
+          "reviewBlob": "385c35d22db7ce9eec1e328fca59a660f0b4fe91",
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/discover/notice.tsx",
+          "mainBlob": "251bf543a53b8a9decae954e40e849a1be83a6e6",
+          "testedBlob": "251bf543a53b8a9decae954e40e849a1be83a6e6",
+          "candidateBlob": "251bf543a53b8a9decae954e40e849a1be83a6e6",
+          "capturedBlob": "251bf543a53b8a9decae954e40e849a1be83a6e6",
+          "landedBlob": "251bf543a53b8a9decae954e40e849a1be83a6e6",
+          "reviewBlob": "251bf543a53b8a9decae954e40e849a1be83a6e6",
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/discover/resource-list.tsx",
+          "mainBlob": "a8d8da88ad825c879109cc5b602ed8c2f313eb19",
+          "testedBlob": "a8d8da88ad825c879109cc5b602ed8c2f313eb19",
+          "candidateBlob": "fff34a079b18c4ff8d7789c8f117b85d166b09d0",
+          "capturedBlob": "fff34a079b18c4ff8d7789c8f117b85d166b09d0",
+          "landedBlob": "a8d8da88ad825c879109cc5b602ed8c2f313eb19",
+          "reviewBlob": "3ad755fd888562e40220d0e4abb6813708391566",
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/discover/scope.ts",
+          "mainBlob": "5b6a54a6b11f4b605558cf357daac2dd951f57ff",
+          "testedBlob": "5b6a54a6b11f4b605558cf357daac2dd951f57ff",
+          "candidateBlob": "5b6a54a6b11f4b605558cf357daac2dd951f57ff",
+          "capturedBlob": "5b6a54a6b11f4b605558cf357daac2dd951f57ff",
+          "landedBlob": "5b6a54a6b11f4b605558cf357daac2dd951f57ff",
+          "reviewBlob": "5b6a54a6b11f4b605558cf357daac2dd951f57ff",
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/discover/search-recovery-read.test.ts",
+          "mainBlob": "7d2f8dbeb042da2a63fb3834f411aa4b4c913a58",
+          "testedBlob": "7d2f8dbeb042da2a63fb3834f411aa4b4c913a58",
+          "candidateBlob": "7d2f8dbeb042da2a63fb3834f411aa4b4c913a58",
+          "capturedBlob": "7d2f8dbeb042da2a63fb3834f411aa4b4c913a58",
+          "landedBlob": "7d2f8dbeb042da2a63fb3834f411aa4b4c913a58",
+          "reviewBlob": null,
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/discover/search-recovery-read.ts",
+          "mainBlob": "c5b3eedd1a42cbff27c0bc778a11ed61825f128a",
+          "testedBlob": "c5b3eedd1a42cbff27c0bc778a11ed61825f128a",
+          "candidateBlob": "c5b3eedd1a42cbff27c0bc778a11ed61825f128a",
+          "capturedBlob": "c5b3eedd1a42cbff27c0bc778a11ed61825f128a",
+          "landedBlob": "c5b3eedd1a42cbff27c0bc778a11ed61825f128a",
+          "reviewBlob": null,
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/discover/search-recovery.tsx",
+          "mainBlob": "8ad28bf6062e46ada0f26913f7440f419cfce752",
+          "testedBlob": "8ad28bf6062e46ada0f26913f7440f419cfce752",
+          "candidateBlob": "8ad28bf6062e46ada0f26913f7440f419cfce752",
+          "capturedBlob": "8ad28bf6062e46ada0f26913f7440f419cfce752",
+          "landedBlob": "8ad28bf6062e46ada0f26913f7440f419cfce752",
+          "reviewBlob": null,
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/discover/selection-controls.tsx",
+          "mainBlob": "2eb6d1250aad5c864c5853919d236a53d38f4d79",
+          "testedBlob": "2eb6d1250aad5c864c5853919d236a53d38f4d79",
+          "candidateBlob": "2eb6d1250aad5c864c5853919d236a53d38f4d79",
+          "capturedBlob": "2eb6d1250aad5c864c5853919d236a53d38f4d79",
+          "landedBlob": "2eb6d1250aad5c864c5853919d236a53d38f4d79",
+          "reviewBlob": null,
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/discover/selection-messages.ts",
+          "mainBlob": "50e622357366251ebcdd4d0bceed53fa34410cc8",
+          "testedBlob": "50e622357366251ebcdd4d0bceed53fa34410cc8",
+          "candidateBlob": "50e622357366251ebcdd4d0bceed53fa34410cc8",
+          "capturedBlob": "50e622357366251ebcdd4d0bceed53fa34410cc8",
+          "landedBlob": "50e622357366251ebcdd4d0bceed53fa34410cc8",
+          "reviewBlob": null,
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/discover/server.ts",
+          "mainBlob": "8b18727828ab85290961e5b0cc74eecff7dad9c6",
+          "testedBlob": "8b18727828ab85290961e5b0cc74eecff7dad9c6",
+          "candidateBlob": "8b18727828ab85290961e5b0cc74eecff7dad9c6",
+          "capturedBlob": "8b18727828ab85290961e5b0cc74eecff7dad9c6",
+          "landedBlob": "8b18727828ab85290961e5b0cc74eecff7dad9c6",
+          "reviewBlob": "8b18727828ab85290961e5b0cc74eecff7dad9c6",
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/discover/state.ts",
+          "mainBlob": "87a76d682e14ddb47e1fe6c2d8c0feebd11e88db",
+          "testedBlob": "87a76d682e14ddb47e1fe6c2d8c0feebd11e88db",
+          "candidateBlob": "87a76d682e14ddb47e1fe6c2d8c0feebd11e88db",
+          "capturedBlob": "87a76d682e14ddb47e1fe6c2d8c0feebd11e88db",
+          "landedBlob": "87a76d682e14ddb47e1fe6c2d8c0feebd11e88db",
+          "reviewBlob": "87a76d682e14ddb47e1fe6c2d8c0feebd11e88db",
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/query/condition-bar.tsx",
+          "mainBlob": "82f8fbbc03bf4ab173dcb38d52a079dc4b34432f",
+          "testedBlob": "82f8fbbc03bf4ab173dcb38d52a079dc4b34432f",
+          "candidateBlob": "82f8fbbc03bf4ab173dcb38d52a079dc4b34432f",
+          "capturedBlob": "82f8fbbc03bf4ab173dcb38d52a079dc4b34432f",
+          "landedBlob": "82f8fbbc03bf4ab173dcb38d52a079dc4b34432f",
+          "reviewBlob": "f2cca4d2f542fa32abe02303f1b0f699e88e3d51",
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/rights-mark/rights-mark.tsx",
+          "mainBlob": "77b33711e55fc0459842a1b1a214fffff462004a",
+          "testedBlob": "77b33711e55fc0459842a1b1a214fffff462004a",
+          "candidateBlob": "77b33711e55fc0459842a1b1a214fffff462004a",
+          "capturedBlob": "77b33711e55fc0459842a1b1a214fffff462004a",
+          "landedBlob": "77b33711e55fc0459842a1b1a214fffff462004a",
+          "reviewBlob": "77b33711e55fc0459842a1b1a214fffff462004a",
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/search/query.test.ts",
+          "mainBlob": "871dd1091f85c6c5ee6ec0489a3579350fe99efd",
+          "testedBlob": "871dd1091f85c6c5ee6ec0489a3579350fe99efd",
+          "candidateBlob": "871dd1091f85c6c5ee6ec0489a3579350fe99efd",
+          "capturedBlob": "871dd1091f85c6c5ee6ec0489a3579350fe99efd",
+          "landedBlob": "871dd1091f85c6c5ee6ec0489a3579350fe99efd",
+          "reviewBlob": null,
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/search/query.ts",
+          "mainBlob": "a9f1255d8e5e7b5497fcd75c6949035588582575",
+          "testedBlob": "a9f1255d8e5e7b5497fcd75c6949035588582575",
+          "candidateBlob": "a9f1255d8e5e7b5497fcd75c6949035588582575",
+          "capturedBlob": "a9f1255d8e5e7b5497fcd75c6949035588582575",
+          "landedBlob": "a9f1255d8e5e7b5497fcd75c6949035588582575",
+          "reviewBlob": "364fceb453a6e2bbaeb54f05503030710e75709d",
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/search/read.ts",
+          "mainBlob": "f780a73f9f81ba9eabaacdedcf031760d1fd685c",
+          "testedBlob": "f780a73f9f81ba9eabaacdedcf031760d1fd685c",
+          "candidateBlob": "f780a73f9f81ba9eabaacdedcf031760d1fd685c",
+          "capturedBlob": "f780a73f9f81ba9eabaacdedcf031760d1fd685c",
+          "landedBlob": "f780a73f9f81ba9eabaacdedcf031760d1fd685c",
+          "reviewBlob": "f780a73f9f81ba9eabaacdedcf031760d1fd685c",
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/search/search-results.tsx",
+          "mainBlob": "c695b58d9ea969ecbc5c2341f89ac8c248225a90",
+          "testedBlob": "c695b58d9ea969ecbc5c2341f89ac8c248225a90",
+          "candidateBlob": "c695b58d9ea969ecbc5c2341f89ac8c248225a90",
+          "capturedBlob": "c695b58d9ea969ecbc5c2341f89ac8c248225a90",
+          "landedBlob": "c695b58d9ea969ecbc5c2341f89ac8c248225a90",
+          "reviewBlob": "c695b58d9ea969ecbc5c2341f89ac8c248225a90",
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/search/state.ts",
+          "mainBlob": "0322801213b12610f7b7cf6ac94059fadb17b31a",
+          "testedBlob": "0322801213b12610f7b7cf6ac94059fadb17b31a",
+          "candidateBlob": "0322801213b12610f7b7cf6ac94059fadb17b31a",
+          "capturedBlob": "0322801213b12610f7b7cf6ac94059fadb17b31a",
+          "landedBlob": "0322801213b12610f7b7cf6ac94059fadb17b31a",
+          "reviewBlob": "0322801213b12610f7b7cf6ac94059fadb17b31a",
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/search/suggest.ts",
+          "mainBlob": "1023e9c4e584e97b5e93d3f84b272396053006c5",
+          "testedBlob": "1023e9c4e584e97b5e93d3f84b272396053006c5",
+          "candidateBlob": "1023e9c4e584e97b5e93d3f84b272396053006c5",
+          "capturedBlob": "1023e9c4e584e97b5e93d3f84b272396053006c5",
+          "landedBlob": "1023e9c4e584e97b5e93d3f84b272396053006c5",
+          "reviewBlob": "1023e9c4e584e97b5e93d3f84b272396053006c5",
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/search/types.ts",
+          "mainBlob": "685cb7bd1bcf0305eda9b5e92ca31701cf534cbb",
+          "testedBlob": "685cb7bd1bcf0305eda9b5e92ca31701cf534cbb",
+          "candidateBlob": "685cb7bd1bcf0305eda9b5e92ca31701cf534cbb",
+          "capturedBlob": "685cb7bd1bcf0305eda9b5e92ca31701cf534cbb",
+          "landedBlob": "685cb7bd1bcf0305eda9b5e92ca31701cf534cbb",
+          "reviewBlob": "685cb7bd1bcf0305eda9b5e92ca31701cf534cbb",
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/shell/current-page-visibility.ts",
+          "mainBlob": null,
+          "testedBlob": "4580530fd0e47923f4bf9de65a0baba9292b2a45",
+          "candidateBlob": null,
+          "capturedBlob": null,
+          "landedBlob": null,
+          "reviewBlob": null,
+          "mainEqualsTested": false
+        },
+        {
+          "path": "apps/web/features/shell/localized-link.tsx",
+          "mainBlob": "47c2aa66fb14afa3a84d0a187aa863998a2aba97",
+          "testedBlob": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba",
+          "candidateBlob": "47c2aa66fb14afa3a84d0a187aa863998a2aba97",
+          "capturedBlob": "47c2aa66fb14afa3a84d0a187aa863998a2aba97",
+          "landedBlob": "47c2aa66fb14afa3a84d0a187aa863998a2aba97",
+          "reviewBlob": "47c2aa66fb14afa3a84d0a187aa863998a2aba97",
+          "mainEqualsTested": false
+        },
+        {
+          "path": "apps/web/features/shell/providers.tsx",
+          "mainBlob": "dc0acd499702f3f6c524fb3ed1eb9790b717e151",
+          "testedBlob": "dc0acd499702f3f6c524fb3ed1eb9790b717e151",
+          "candidateBlob": "dc0acd499702f3f6c524fb3ed1eb9790b717e151",
+          "capturedBlob": "dc0acd499702f3f6c524fb3ed1eb9790b717e151",
+          "landedBlob": "dc0acd499702f3f6c524fb3ed1eb9790b717e151",
+          "reviewBlob": "dc0acd499702f3f6c524fb3ed1eb9790b717e151",
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/shell/search-field.stories.tsx",
+          "mainBlob": "d6f6b1433c189fd7b1f0a18f811824fdea97e657",
+          "testedBlob": "d6f6b1433c189fd7b1f0a18f811824fdea97e657",
+          "candidateBlob": "d6f6b1433c189fd7b1f0a18f811824fdea97e657",
+          "capturedBlob": "d6f6b1433c189fd7b1f0a18f811824fdea97e657",
+          "landedBlob": "d6f6b1433c189fd7b1f0a18f811824fdea97e657",
+          "reviewBlob": "34d25bcbaee08cc38aec6637a0034760e87090b3",
+          "mainEqualsTested": true
+        },
+        {
+          "path": "apps/web/features/shell/search-field.tsx",
+          "mainBlob": "8aac0484b7009644b09668872db31441d0684f93",
+          "testedBlob": "8aac0484b7009644b09668872db31441d0684f93",
+          "candidateBlob": "8aac0484b7009644b09668872db31441d0684f93",
+          "capturedBlob": "8aac0484b7009644b09668872db31441d0684f93",
+          "landedBlob": "8aac0484b7009644b09668872db31441d0684f93",
+          "reviewBlob": "50bf087d72360700b6b87b98276f491dc51ac508",
+          "mainEqualsTested": true
+        },
+        {
+          "path": "docs/goals/audit-remediation-20261019/proofs/discover-correction-confirmation.json",
+          "mainBlob": "296b47d5414a5c624142b7b9d931c2326edad967",
+          "testedBlob": null,
+          "candidateBlob": "296b47d5414a5c624142b7b9d931c2326edad967",
+          "capturedBlob": "296b47d5414a5c624142b7b9d931c2326edad967",
+          "landedBlob": "296b47d5414a5c624142b7b9d931c2326edad967",
+          "reviewBlob": "296b47d5414a5c624142b7b9d931c2326edad967",
+          "mainEqualsTested": false
+        },
+        {
+          "path": "docs/goals/audit-remediation-20261019/proofs/discover-original-source-review.json",
+          "mainBlob": "75d96d21270a0cc04f3ead9b5f74a6e7581eb789",
+          "testedBlob": null,
+          "candidateBlob": "75d96d21270a0cc04f3ead9b5f74a6e7581eb789",
+          "capturedBlob": "75d96d21270a0cc04f3ead9b5f74a6e7581eb789",
+          "landedBlob": "75d96d21270a0cc04f3ead9b5f74a6e7581eb789",
+          "reviewBlob": null,
+          "mainEqualsTested": false
+        },
+        {
+          "path": "scripts/static/web-continuations.inventory.json",
+          "mainBlob": "8ad1a6e5ede23bd986c7d95efe8a9004407522f4",
+          "testedBlob": "bd6cb65994729e2d2cfa92ebfd97e27d6dfb2283",
+          "candidateBlob": "7f3ca0a9241c3d1b4a836f3f96b15f8869e9e7a5",
+          "capturedBlob": "7f3ca0a9241c3d1b4a836f3f96b15f8869e9e7a5",
+          "landedBlob": "8ad1a6e5ede23bd986c7d95efe8a9004407522f4",
+          "reviewBlob": "43d87b5503ef6faeb17f4eed0639e82d664ad12b",
+          "mainEqualsTested": false
+        },
+        {
+          "path": "scripts/static/web-discover-continuations.test.ts",
+          "mainBlob": "e5faca37382dd578e6991fba97b4c6d8fa974ec1",
+          "testedBlob": "e5faca37382dd578e6991fba97b4c6d8fa974ec1",
+          "candidateBlob": "e5faca37382dd578e6991fba97b4c6d8fa974ec1",
+          "capturedBlob": "e5faca37382dd578e6991fba97b4c6d8fa974ec1",
+          "landedBlob": "e5faca37382dd578e6991fba97b4c6d8fa974ec1",
+          "reviewBlob": null,
+          "mainEqualsTested": true
+        },
+        {
+          "path": "services/main/src/modules/query/resource-contract.ts",
+          "mainBlob": "87da278fcda297d2717a512f66e2e4aa9153a90d",
+          "testedBlob": "213b291bd51daf1e28e71da4c64f39e9ca2d0bc5",
+          "candidateBlob": "87da278fcda297d2717a512f66e2e4aa9153a90d",
+          "capturedBlob": "87da278fcda297d2717a512f66e2e4aa9153a90d",
+          "landedBlob": "87da278fcda297d2717a512f66e2e4aa9153a90d",
+          "reviewBlob": "87da278fcda297d2717a512f66e2e4aa9153a90d",
+          "mainEqualsTested": false
+        }
+      ],
+      "dependencyLimits": [
+        {
+          "path": "apps/web/features/shell/localized-link.tsx",
+          "mainBlob": "47c2aa66fb14afa3a84d0a187aa863998a2aba97",
+          "testedBlob": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba",
+          "interpretation": "Actual main omits the tested current-page visibility observer/ref forwarding. Locale destination computation and document-navigation click logic are unchanged in this diff; no query-condition encoding/parser change. Navigation-only selected-tab/ring behavior stays with existing navigation owners and their 271b proof; no whole-tree equality claimed."
+        },
+        {
+          "path": "apps/web/features/shell/current-page-visibility.ts",
+          "mainBlob": null,
+          "testedBlob": "4580530fd0e47923f4bf9de65a0baba9292b2a45",
+          "interpretation": "Absent on main. Tested helper scrolls current/focused navigation links; it does not build query state or form fields. Not evidence of all navigation assertions on current main."
+        },
+        {
+          "path": "services/main/src/modules/query/resource-contract.ts",
+          "mainBlob": "87da278fcda297d2717a512f66e2e4aa9153a90d",
+          "testedSourceBlob": "213b291bd51daf1e28e71da4c64f39e9ca2d0bc5",
+          "interpretation": "Current-main backend source is not the runtime backend pin. Genuine checks used exact75409 and recorded request/response identities, epoch and sequence; no claim of current-main backend runtime qualification. Diff removes one resource card kind literal and changes read-budget commentary, not language/type request fields."
+        }
+      ],
+      "inventoryEquivalence": {
+        "path": "scripts/static/web-continuations.inventory.json",
+        "stats": {
+          "main": {
+            "totalRows": 739,
+            "affectedRows": 10,
+            "affectedRowsSha256": "37c48eea0c9f970fb6a534c51b938191216980fb5a601d43aa72be3403aa6478"
+          },
+          "tested": {
+            "totalRows": 741,
+            "affectedRows": 10,
+            "affectedRowsSha256": "37c48eea0c9f970fb6a534c51b938191216980fb5a601d43aa72be3403aa6478"
+          },
+          "candidate": {
+            "totalRows": 739,
+            "affectedRows": 10,
+            "affectedRowsSha256": "819e019402533ef91d22e769bcab7b550cfa913ee932fadbb701f3dc76062cf1"
+          },
+          "captured": {
+            "totalRows": 739,
+            "affectedRows": 10,
+            "affectedRowsSha256": "819e019402533ef91d22e769bcab7b550cfa913ee932fadbb701f3dc76062cf1"
+          },
+          "landed": {
+            "totalRows": 739,
+            "affectedRows": 10,
+            "affectedRowsSha256": "37c48eea0c9f970fb6a534c51b938191216980fb5a601d43aa72be3403aa6478"
+          }
+        },
+        "mainAffectedRowsExactlyEqualTested": true,
+        "preservedPeerRows": "Current-main inventory retained as landed; entire registry differs legitimately from older tested/candidate trees. All ten entries for affected consumer paths exactly match the tested587576 rows. No inventory mutations here."
+      },
+      "actualCaptureDifference": {
+        "path": "apps/web/features/discover/resource-list.tsx",
+        "testedAndMainBlob": "a8d8da88ad825c879109cc5b602ed8c2f313eb19",
+        "assembledAndCapturedBlob": "fff34a079b18c4ff8d7789c8f117b85d166b09d0",
+        "description": "Actual35f1/main uses tested CatalogueGrid version; the assembled1651/captured80ab version retained the explicit slot/grid geometry composition. ResourceList inventory context likewise matches actual tested source on main. This receipt does not claim geometry-preserving capture equality. Parent informed; existing G-2832/AUD-008 geometry handling remains separate from D6-004 query-state acceptance."
+      },
+      "originalCriterionResults": [
+        {
+          "number": 1,
+          "text": "所有影响结果的条件都可理解、查看、编辑和清除；分享、Back/Forward 恢复同义状态；当前范围内改词保留条件。",
+          "status": "confirmed for the original scoped URL/history behavior",
+          "genuine_evidence": [
+            "9344f5be-72ef-44c7-9d39-c17ae5c97786: 1440 direct Fate/Works/Japanese/Game; local edit to CLANNAD retains tab/language/type; actual Back and Forward restore corresponding URL and search input; copied URL in a fresh anonymous dark 390 context and refresh retain conditions; individual language removal preserves query/type.",
+            "7e80683e-83bb-494a-8c08-ff8f8b985d13: actual 390 realm-scoped Fate -> CLANNAD edit and Back/Forward retain q/tab/lang/include/exclude/scope/realm/ci/ce/cm; People destination retains the same complete selection.",
+            "c706fefd-ff7e-486a-9bc2-026dbafb8ac1: content-language edit ja -> en and individual Game removal execute real navigations while retaining q=Fate/tab=works; eight then twelve genuine resource results match API identities in DOM order."
+          ],
+          "retained_evidence": "Existing URL roundtrip, exact-query, match-mode, inclusion/exclusion and editable condition fixtures/source remain identified in the preserved original report and corrected ten-path proof. Those assertions were not replayed as genuine native semantics.",
+          "limits": [
+            "Genuine browser identity was anonymous; no account fallback or claim of a new signed-in/personalized journey.",
+            "The realm/topic sequence returned an empty resource list with genuine 200 responses; it proves URL/control preservation and emitted scope/filter selection, not nonempty matches or independent native topic/phrase retrieval semantics.",
+            "The raw direct-selector check failed because the probe expected Include VideoGame; the genuine visible label is Include Game. Saved rendered DOM and inspected direct1440.png independently confirm the intended type condition. The failed receipt is preserved."
+          ]
+        },
+        {
+          "number": 2,
+          "text": "若全局搜索有意重置，事前明确范围并提供当前条件内的改词入口；语言与类型含义用 API/UI 同一序列证明。",
+          "status": "confirmed for the exercised original Discover API/UI sequence",
+          "genuine_evidence": [
+            "Captured resource-list-v1 POST /v1/query requests from real UI and replayed each unchanged against the same genuine backend: Fate/ja/Game -> CLANNAD/ja/Game -> CLANNAD/Game; statuses 200, result counts 16/1/1.",
+            "Remaining same-task change: Fate/ja/Game -> Fate/en/Game -> Fate/en/Works. Genuine English Game query returns eight VideoGame items; removing only Game returns twelve CreativeWork items including TVSeries, VideoObject and DigitalDocument. Content language stays en while UI locale stays en.",
+            "All five replayed states have exactly the same ordered identities as real rendered work links after decoding the existing 22-character SID address protocol. Full request/result pins and data freshness are recorded below.",
+            "Actual Discover search form action /en/discover retains active selectors in hidden fields. The scoped browser sequence retains realm/topics. This surface performs no intentional global reset; its visible Search within these conditions action names the local edit. No reset-disclosure success is inferred for another surface."
+          ],
+          "limits": [
+            "All resource replies report stale=true at data epoch 8c483e38-59e7-4d95-b27b-de9cd6742a3e, sequence 11954. This is genuine compatible prepared data, not fresh/full-catalogue qualification.",
+            "Chapter/text query 503 and realm facet query 422 are retained separately; neither is recast as a resource-query success nor used to hold this original URL/history and language/type class on D6-003."
+          ]
+        }
+      ],
+      "regressionAssertionMapping": [
+        {
+          "id": "D6-004/assertion-1",
+          "status": "satisfied",
+          "evidence": [
+            "9344f5be-72ef-44c7-9d39-c17ae5c97786: localCLANNAD edit and language removal",
+            "7e80683e-83bb-494a-8c08-ff8f8b985d13: mobile realm/topic/People preservation",
+            "c706fefd-ff7e-486a-9bc2-026dbafb8ac1: ja→en content language and individual Game removal",
+            "G-2835 unchanged URL/exact/include/exclude fixtures plus G-2853 corrected10path proof"
+          ],
+          "limits": "Visible label is Include Game. Probe expected Include VideoGame; historical failed assertion retained and reviewer inspected actual DOM/screenshot. No false assertion pass recorded."
+        },
+        {
+          "id": "D6-004/assertion-2",
+          "status": "satisfied for original applicable conditions/history contract",
+          "evidence": [
+            "9344f5be-72ef-44c7-9d39-c17ae5c97786: actualBack/Forward/copyURL/freshanonymousdark390/refresh",
+            "7e80683e-83bb-494a-8c08-ff8f8b985d13: all selector keys after real mobileBack/Forward",
+            "G-2835 preserved original source/fixture proof; G-2853 unchanged state parser/form ownership"
+          ],
+          "limits": "Genuine new browser runs were anonymous. Signed-in context text is preserved verbatim; no fresh signed-in journey or personalized success is asserted. Original two acceptance clauses do not make unrelated persona qualification a dependency; condition parser/form has no identity-dependent reset branch in the reviewed source."
+        },
+        {
+          "id": "D6-004/assertion-3",
+          "status": "satisfied",
+          "evidence": [
+            "Actual Discover form action /en/discover retains selectors as hidden fields",
+            "Visible Search within these conditions local edit",
+            "Genuine UI request replay matches API ordered identities in five states"
+          ],
+          "limits": "No intentional global reset occurs on this Discover surface. No success inferred for another surface’s reset disclosure."
+        }
+      ],
+      "apiUiSequence": [
+        {
+          "page": "direct1440",
+          "request": {
+            "profile": "resource-list-v1",
+            "context": "global",
+            "scope": {
+              "kind": "all"
+            },
+            "sort": "relevance",
+            "limit": 20,
+            "q": "Fate",
+            "filter": {
+              "all": [
+                {
+                  "facet": "type",
+                  "any": [
+                    "https://schema.org/CreativeWork"
+                  ]
+                },
+                {
+                  "facet": "type",
+                  "any": [
+                    "https://schema.org/VideoGame"
+                  ]
+                },
+                {
+                  "facet": "language",
+                  "any": [
+                    "ja"
+                  ]
+                }
+              ]
+            }
+          },
+          "status": 200,
+          "selection": {
+            "context": "global",
+            "scope": {
+              "kind": "all"
+            },
+            "filter": {
+              "all": [
+                {
+                  "facet": "type",
+                  "any": [
+                    "https://schema.org/CreativeWork"
+                  ]
+                },
+                {
+                  "facet": "type",
+                  "any": [
+                    "https://schema.org/VideoGame"
+                  ]
+                },
+                {
+                  "facet": "language",
+                  "any": [
+                    "ja"
+                  ]
+                }
+              ]
+            },
+            "text": {
+              "phrase": "Fate"
+            },
+            "sort": "relevance",
+            "pageSize": 20,
+            "facetRefs": [
+              "https://rezics.com/definition/facet-language-v1",
+              "https://rezics.com/definition/facet-type-v1"
+            ],
+            "semanticRevisions": []
+          },
+          "source_position": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          },
+          "stale": true,
+          "complete": true,
+          "count": {
+            "value": 16,
+            "kind": "exact"
+          },
+          "same_ordered_api_and_ui_identities": true,
+          "items": [
+            {
+              "id": "https://rezics.com/id/01a0fd3c-4146-71fa-aea0-2aea16f4eb5d",
+              "name": {
+                "value": "Fate/EXTELLA",
+                "language": "ja",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a0f53d-aefd-74c8-bb8b-a2adc9770f24",
+              "name": {
+                "value": "Fate/stay night",
+                "language": "ja",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a0fd3b-dfbe-70a8-897f-7a8f19cc103f",
+              "name": {
+                "value": "Fate/stay night",
+                "language": "ja",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a0f543-2e7f-7772-be8f-a89a41a88788",
+              "name": {
+                "value": "Fate/hollow ataraxia",
+                "language": "ja",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a0fd3c-91d2-7244-9a4c-f9c900155ac9",
+              "name": {
+                "value": "Fate/hollow ataraxia",
+                "language": "ja",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a0fd3b-f606-7068-8e36-2363b039727f",
+              "name": {
+                "value": "Fate/EXTRA CCC",
+                "language": "ja",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a0fd3b-fbaa-7719-a6f1-a89cd1cd215f",
+              "name": {
+                "value": "Fate/Side Moon",
+                "language": "ja",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a0fd3c-1219-74f8-ac13-c9a49607dda4",
+              "name": {
+                "value": "Fate/Zero The Adventure",
+                "language": "ja",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a0fd3c-465c-7284-a2e4-00cb742cccb3",
+              "name": {
+                "value": "Fate/EXTELLA LINK",
+                "language": "ja",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a0fd3c-67dc-7089-8149-d22f57450807",
+              "name": {
+                "value": "Fate/Empire of Dirt",
+                "language": "ja",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a0fd3c-dd98-7136-b9c0-308c5b49c956",
+              "name": {
+                "value": "FATE/COLUMNS NIGHT",
+                "language": "ja",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a0fd3c-e039-758f-bdf7-cacc0d9d6cae",
+              "name": {
+                "value": "Fate/parallele Welt",
+                "language": "ja",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a0fd3d-13d2-71c2-a964-ebcb06e2304c",
+              "name": {
+                "value": "Fate/Dear Night",
+                "language": "ja",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a0fd3d-37ec-7732-8470-19007dd92af5",
+              "name": {
+                "value": "THE SACRED TREASURES/FATE",
+                "language": "ja",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a0fd3c-a342-7391-b81c-b0eee7a30e4c",
+              "name": {
+                "value": "Fate/IF Unlimited Card Works",
+                "language": "ja",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a0fd3c-cf41-7438-8af1-3fbe4f96067f",
+              "name": {
+                "value": "女体めくり Fate編",
+                "language": "ja",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            }
+          ]
+        },
+        {
+          "page": "edited1440",
+          "request": {
+            "profile": "resource-list-v1",
+            "context": "global",
+            "scope": {
+              "kind": "all"
+            },
+            "sort": "relevance",
+            "limit": 20,
+            "q": "CLANNAD",
+            "filter": {
+              "all": [
+                {
+                  "facet": "type",
+                  "any": [
+                    "https://schema.org/CreativeWork"
+                  ]
+                },
+                {
+                  "facet": "type",
+                  "any": [
+                    "https://schema.org/VideoGame"
+                  ]
+                },
+                {
+                  "facet": "language",
+                  "any": [
+                    "ja"
+                  ]
+                }
+              ]
+            }
+          },
+          "status": 200,
+          "selection": {
+            "context": "global",
+            "scope": {
+              "kind": "all"
+            },
+            "filter": {
+              "all": [
+                {
+                  "facet": "type",
+                  "any": [
+                    "https://schema.org/CreativeWork"
+                  ]
+                },
+                {
+                  "facet": "type",
+                  "any": [
+                    "https://schema.org/VideoGame"
+                  ]
+                },
+                {
+                  "facet": "language",
+                  "any": [
+                    "ja"
+                  ]
+                }
+              ]
+            },
+            "text": {
+              "phrase": "CLANNAD"
+            },
+            "sort": "relevance",
+            "pageSize": 20,
+            "facetRefs": [
+              "https://rezics.com/definition/facet-language-v1",
+              "https://rezics.com/definition/facet-type-v1"
+            ],
+            "semanticRevisions": []
+          },
+          "source_position": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          },
+          "stale": true,
+          "complete": true,
+          "count": {
+            "value": 1,
+            "kind": "exact"
+          },
+          "same_ordered_api_and_ui_identities": true,
+          "items": [
+            {
+              "id": "https://rezics.com/id/01a0f542-72ad-717c-a6dd-b8670f3522d9",
+              "name": {
+                "value": "CLANNAD",
+                "language": "ja",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            }
+          ]
+        },
+        {
+          "page": "removed-language1440",
+          "request": {
+            "profile": "resource-list-v1",
+            "context": "global",
+            "scope": {
+              "kind": "all"
+            },
+            "sort": "relevance",
+            "limit": 20,
+            "q": "CLANNAD",
+            "filter": {
+              "all": [
+                {
+                  "facet": "type",
+                  "any": [
+                    "https://schema.org/CreativeWork"
+                  ]
+                },
+                {
+                  "facet": "type",
+                  "any": [
+                    "https://schema.org/VideoGame"
+                  ]
+                }
+              ]
+            }
+          },
+          "status": 200,
+          "selection": {
+            "context": "global",
+            "scope": {
+              "kind": "all"
+            },
+            "filter": {
+              "all": [
+                {
+                  "facet": "type",
+                  "any": [
+                    "https://schema.org/CreativeWork"
+                  ]
+                },
+                {
+                  "facet": "type",
+                  "any": [
+                    "https://schema.org/VideoGame"
+                  ]
+                }
+              ]
+            },
+            "text": {
+              "phrase": "CLANNAD"
+            },
+            "sort": "relevance",
+            "pageSize": 20,
+            "facetRefs": [
+              "https://rezics.com/definition/facet-type-v1"
+            ],
+            "semanticRevisions": []
+          },
+          "source_position": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          },
+          "stale": true,
+          "complete": true,
+          "count": {
+            "value": 1,
+            "kind": "exact"
+          },
+          "same_ordered_api_and_ui_identities": true,
+          "items": [
+            {
+              "id": "https://rezics.com/id/01a0f542-72ad-717c-a6dd-b8670f3522d9",
+              "name": {
+                "value": "CLANNAD",
+                "language": "ja",
+                "direction": "ltr",
+                "basis": "fallback"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            }
+          ]
+        },
+        {
+          "page": "language-en390",
+          "request": {
+            "profile": "resource-list-v1",
+            "context": "global",
+            "scope": {
+              "kind": "all"
+            },
+            "sort": "relevance",
+            "limit": 20,
+            "q": "Fate",
+            "filter": {
+              "all": [
+                {
+                  "facet": "type",
+                  "any": [
+                    "https://schema.org/CreativeWork"
+                  ]
+                },
+                {
+                  "facet": "type",
+                  "any": [
+                    "https://schema.org/VideoGame"
+                  ]
+                },
+                {
+                  "facet": "language",
+                  "any": [
+                    "en"
+                  ]
+                }
+              ]
+            }
+          },
+          "status": 200,
+          "selection": {
+            "context": "global",
+            "scope": {
+              "kind": "all"
+            },
+            "filter": {
+              "all": [
+                {
+                  "facet": "type",
+                  "any": [
+                    "https://schema.org/CreativeWork"
+                  ]
+                },
+                {
+                  "facet": "type",
+                  "any": [
+                    "https://schema.org/VideoGame"
+                  ]
+                },
+                {
+                  "facet": "language",
+                  "any": [
+                    "en"
+                  ]
+                }
+              ]
+            },
+            "text": {
+              "phrase": "Fate"
+            },
+            "sort": "relevance",
+            "pageSize": 20,
+            "facetRefs": [
+              "https://rezics.com/definition/facet-language-v1",
+              "https://rezics.com/definition/facet-type-v1"
+            ],
+            "semanticRevisions": []
+          },
+          "source_position": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          },
+          "stale": true,
+          "complete": true,
+          "count": {
+            "value": 8,
+            "kind": "exact"
+          },
+          "same_ordered_api_and_ui_identities": true,
+          "items": [
+            {
+              "id": "https://rezics.com/id/01a0fd3c-01dc-7198-ae7c-c2a8675f8bf2",
+              "name": {
+                "value": "Fate/Otome",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a0fd3c-4e53-7071-a0ac-89575a6b6d1c",
+              "name": {
+                "value": "Fate/Valentine",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a0fd3c-b787-771a-8018-18d342d4394f",
+              "name": {
+                "value": "Fate/Install",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a0fd3c-43b2-71ee-bd16-49dcab882e4e",
+              "name": {
+                "value": "Fate/Grand Husbando",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a0fd3c-716d-75fb-9d30-59b20a280dc7",
+              "name": {
+                "value": "Fate/Dream Coalescence",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a1096c-642d-7006-bbf3-c4fe2b6872f0",
+              "name": {
+                "value": "Fate/stay night",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a10a63-6a84-703d-9fdd-7aa493e4019a",
+              "name": {
+                "value": "Fate/stay night",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a0fd3c-7537-7761-a32d-fc4245c46126",
+              "name": {
+                "value": "Fate/Zero the Visual Novel",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            }
+          ]
+        },
+        {
+          "page": "type-removed390",
+          "request": {
+            "profile": "resource-list-v1",
+            "context": "global",
+            "scope": {
+              "kind": "all"
+            },
+            "sort": "relevance",
+            "limit": 20,
+            "q": "Fate",
+            "filter": {
+              "all": [
+                {
+                  "facet": "type",
+                  "any": [
+                    "https://schema.org/CreativeWork"
+                  ]
+                },
+                {
+                  "facet": "language",
+                  "any": [
+                    "en"
+                  ]
+                }
+              ]
+            }
+          },
+          "status": 200,
+          "selection": {
+            "context": "global",
+            "scope": {
+              "kind": "all"
+            },
+            "filter": {
+              "all": [
+                {
+                  "facet": "type",
+                  "any": [
+                    "https://schema.org/CreativeWork"
+                  ]
+                },
+                {
+                  "facet": "language",
+                  "any": [
+                    "en"
+                  ]
+                }
+              ]
+            },
+            "text": {
+              "phrase": "Fate"
+            },
+            "sort": "relevance",
+            "pageSize": 20,
+            "facetRefs": [
+              "https://rezics.com/definition/facet-language-v1",
+              "https://rezics.com/definition/facet-type-v1"
+            ],
+            "semanticRevisions": []
+          },
+          "source_position": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          },
+          "stale": true,
+          "complete": true,
+          "count": {
+            "value": 12,
+            "kind": "exact"
+          },
+          "same_ordered_api_and_ui_identities": true,
+          "items": [
+            {
+              "id": "https://rezics.com/id/01a0fd3c-01dc-7198-ae7c-c2a8675f8bf2",
+              "name": {
+                "value": "Fate/Otome",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a0fd3c-4e53-7071-a0ac-89575a6b6d1c",
+              "name": {
+                "value": "Fate/Valentine",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a0fd3c-b787-771a-8018-18d342d4394f",
+              "name": {
+                "value": "Fate/Install",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a1096c-781e-73f1-a001-91189adcf761",
+              "name": {
+                "value": "Fate/Zero",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/TVSeries"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a10a63-83f2-70b3-b115-0178c11c2630",
+              "name": {
+                "value": "Fate/Zero",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/TVSeries"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a0fd3c-43b2-71ee-bd16-49dcab882e4e",
+              "name": {
+                "value": "Fate/Grand Husbando",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a0fd3c-716d-75fb-9d30-59b20a280dc7",
+              "name": {
+                "value": "Fate/Dream Coalescence",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a1096c-642d-7006-bbf3-c4fe2b6872f0",
+              "name": {
+                "value": "Fate/stay night",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a10a63-6a84-703d-9fdd-7aa493e4019a",
+              "name": {
+                "value": "Fate/stay night",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a0fd3c-7537-7761-a32d-fc4245c46126",
+              "name": {
+                "value": "Fate/Zero the Visual Novel",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoGame"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a10a63-96be-727d-8075-c68494d49feb",
+              "name": {
+                "value": "Fate/Zero — Episode 24",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/VideoObject"
+              ]
+            },
+            {
+              "id": "https://rezics.com/id/01a10a63-9999-7039-855d-39ac24fb6940",
+              "name": {
+                "value": "Fate/stay night — Heaven's Feel route",
+                "language": "en",
+                "direction": "ltr",
+                "basis": "requested"
+              },
+              "types": [
+                "https://schema.org/CreativeWork",
+                "https://schema.org/DigitalDocument"
+              ]
+            }
+          ]
+        }
+      ],
+      "identity": "Anonymous public reader, fresh second context for shared390 URL. No account fallback.",
+      "runtimeFrontendProvenance": {
+        "source": "587576832d71c3c501b962f849a5c400c9f7bd73",
+        "tree": "847c3e0f3603a569fa233a14a78e4daec2087b44",
+        "url": "http://127.0.0.1:31853",
+        "process_source_directory": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2853/.temp/discover-confirmation/source",
+        "start_command": "task web:dev -- --port 31853",
+        "integrity": {
+          "source": "587576832d71c3c501b962f849a5c400c9f7bd73",
+          "tree": "847c3e0f3603a569fa233a14a78e4daec2087b44",
+          "verifiedAt": "2026-10-19T10:52:18.412589+00:00",
+          "tracked_blobs_checked": 9972,
+          "bytes": 227102695,
+          "mismatches": [],
+          "method": "git ls-tree recursively; Git blob SHA-1 of every archived tracked regular file and symlink target, excluding untracked runtime/cache/dependencies"
+        },
+        "dependency_setup": "Pinned git archive in this worktree; installed dependencies copied as hardlinks into isolated source node_modules to satisfy existing Vite filesystem policy. No tracked source/config/contract change. Untracked runtime outputs remain inside this worktree."
+      },
+      "runtimeBackendProvenance": {
+        "source": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "process_source_directory": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "pid": 1372265,
+        "health_separate_from_operation_success": true,
+        "health_receipts": [
+          {
+            "run": "attempt2",
+            "health": {
+              "status": 200,
+              "body": {
+                "status": "ready",
+                "horizons": {
+                  "sampledAt": "2026-10-19T10:41:41.251Z",
+                  "writerVisibility": "all-sessions",
+                  "notification": {
+                    "oldestPendingRowAgeSeconds": null,
+                    "oldestWriterAgeSeconds": null
+                  },
+                  "reviewRank": {
+                    "oldestPendingRowAgeSeconds": null,
+                    "oldestPendingRowAgeBasis": "none",
+                    "oldestWriterAgeSeconds": null
+                  },
+                  "editorial": {
+                    "oldestPendingRowAgeSeconds": null,
+                    "oldestWriterAgeSeconds": null
+                  }
+                }
+              },
+              "at": "2026-10-19T10:41:41.420Z"
+            }
+          },
+          {
+            "run": "attempt3",
+            "health": {
+              "status": 200,
+              "body": {
+                "status": "ready",
+                "horizons": {
+                  "sampledAt": "2026-10-19T10:45:28.434Z",
+                  "writerVisibility": "all-sessions",
+                  "notification": {
+                    "oldestPendingRowAgeSeconds": null,
+                    "oldestWriterAgeSeconds": 0.011
+                  },
+                  "reviewRank": {
+                    "oldestPendingRowAgeSeconds": null,
+                    "oldestPendingRowAgeBasis": "none",
+                    "oldestWriterAgeSeconds": 0.011
+                  },
+                  "editorial": {
+                    "oldestPendingRowAgeSeconds": null,
+                    "oldestWriterAgeSeconds": 0.011
+                  }
+                }
+              },
+              "at": "2026-10-19T10:45:28.485Z"
+            }
+          },
+          {
+            "run": "final",
+            "health": {
+              "status": 200,
+              "body": {
+                "status": "ready",
+                "horizons": {
+                  "sampledAt": "2026-10-19T10:50:21.680Z",
+                  "writerVisibility": "all-sessions",
+                  "notification": {
+                    "oldestPendingRowAgeSeconds": null,
+                    "oldestWriterAgeSeconds": null
+                  },
+                  "reviewRank": {
+                    "oldestPendingRowAgeSeconds": null,
+                    "oldestPendingRowAgeBasis": "none",
+                    "oldestWriterAgeSeconds": null
+                  },
+                  "editorial": {
+                    "oldestPendingRowAgeSeconds": null,
+                    "oldestWriterAgeSeconds": null
+                  }
+                }
+              },
+              "at": "2026-10-19T10:50:21.804Z"
+            }
+          }
+        ],
+        "process_directory_rechecked": "/proc/1372265/cwd matches backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2 after browser runs. Health readiness is not a source-byte or query/index certification."
+      },
+      "historicalAndFinalJobs": [
+        {
+          "job": "4662d897-00b7-4f4b-b03e-f1c04a6cd2de",
+          "status": "fail",
+          "log": ".temp/goal/jobs/4662d897-00b7-4f4b-b03e-f1c04a6cd2de.log",
+          "log_sha256": "ae6f5883a1fb51ac47668c619ba515c0412dfce76e092b80c7913c487b07ebca",
+          "interpretation": "Bun hidden test-path premise did not discover the file; original outcomes not reached.",
+          "resolvedLog": ".temp/worktrees/g-2853/.temp/goal/jobs/4662d897-00b7-4f4b-b03e-f1c04a6cd2de.log",
+          "actualLogSha256": "ae6f5883a1fb51ac47668c619ba515c0412dfce76e092b80c7913c487b07ebca",
+          "logVerified": true
+        },
+        {
+          "job": "3db8e551-e823-4077-9865-e5e4d59796dc",
+          "status": "fail",
+          "log": ".temp/goal/jobs/3db8e551-e823-4077-9865-e5e4d59796dc.log",
+          "log_sha256": "5de5e1b000e1bac3f83a8752a297f1334cbee8160e7a8a744a746e73e43d2744",
+          "interpretation": "Exact frontend initially failed Vite external font dependency admission (500). No Main operations; original outcomes not reached. Empty-form reset probe result is vacuous and not accepted. Corrected only isolated dependency placement.",
+          "resolvedLog": ".temp/worktrees/g-2853/.temp/goal/jobs/3db8e551-e823-4077-9865-e5e4d59796dc.log",
+          "actualLogSha256": "5de5e1b000e1bac3f83a8752a297f1334cbee8160e7a8a744a746e73e43d2744",
+          "logVerified": true
+        },
+        {
+          "job": "9344f5be-72ef-44c7-9d39-c17ae5c97786",
+          "status": "fail",
+          "log": ".temp/goal/jobs/9344f5be-72ef-44c7-9d39-c17ae5c97786.log",
+          "log_sha256": "df38c80df8e6f73a403d96a3d440018175dcd5dfc8aef38802a0248e282df25a",
+          "interpretation": "Actual original scoped/history/search-layout checks ran. Direct type-label selector premise failed (Include VideoGame versus served Include Game); all six original default section-name assertions failed with genuine422. All other individual results preserved.",
+          "resolvedLog": ".temp/worktrees/g-2853/.temp/goal/jobs/9344f5be-72ef-44c7-9d39-c17ae5c97786.log",
+          "actualLogSha256": "df38c80df8e6f73a403d96a3d440018175dcd5dfc8aef38802a0248e282df25a",
+          "logVerified": true
+        },
+        {
+          "job": "7e80683e-83bb-494a-8c08-ff8f8b985d13",
+          "status": "fail",
+          "log": ".temp/goal/jobs/7e80683e-83bb-494a-8c08-ff8f8b985d13.log",
+          "log_sha256": "94af831036be1ad8b24f82d5a40c3833968ab73f5f4ef5980459f78b5a90f1d0",
+          "interpretation": "Realm/topic mobile edit/history and People checks pass. Remaining language edit stops before its outcome on ambiguous Language label (locale form/combobox/content textbox); no product failure inferred for that step.",
+          "resolvedLog": ".temp/worktrees/g-2853/.temp/goal/jobs/7e80683e-83bb-494a-8c08-ff8f8b985d13.log",
+          "actualLogSha256": "94af831036be1ad8b24f82d5a40c3833968ab73f5f4ef5980459f78b5a90f1d0",
+          "logVerified": true
+        },
+        {
+          "job": "c706fefd-ff7e-486a-9bc2-026dbafb8ac1",
+          "status": "pass",
+          "log": ".temp/goal/jobs/c706fefd-ff7e-486a-9bc2-026dbafb8ac1.log",
+          "log_sha256": "475f9c9f226c3ef3275359bccce5e56f1e3a695c4933c5ccb7fd6dd7b5c7c608",
+          "interpretation": "Only missing content-language edit/type removal rerun using the content-language textbox role. 1 Bun test,3 assertions,0 failures,67.06s. No passing scoped/hierarchy file replay.",
+          "resolvedLog": ".temp/worktrees/g-2853/.temp/goal/jobs/c706fefd-ff7e-486a-9bc2-026dbafb8ac1.log",
+          "actualLogSha256": "475f9c9f226c3ef3275359bccce5e56f1e3a695c4933c5ccb7fd6dd7b5c7c608",
+          "logVerified": true
+        }
+      ],
+      "individualResultsUnchanged": [
+        {
+          "evidence": ".temp/discover-confirmation/live-observations-attempt2.json",
+          "checks": [
+            {
+              "id": "D6-004 direct URL + visible active selectors",
+              "status": "fail",
+              "error": "Error: expect(received).toBe(expected)\n\nExpected: 1\nReceived: 0\n",
+              "phase": "genuine UI"
+            },
+            {
+              "id": "D6-004 same-task edit retains language/type/tab",
+              "status": "pass"
+            },
+            {
+              "id": "D6-004 real Back restores query and conditions",
+              "status": "pass"
+            },
+            {
+              "id": "D6-004 real Forward restores edited query and conditions",
+              "status": "pass"
+            },
+            {
+              "id": "D6-004 shared URL fresh390context and refresh",
+              "status": "pass"
+            },
+            {
+              "id": "D6-004 individually clear language and preserve type/query",
+              "status": "pass"
+            },
+            {
+              "id": "D6-004 explicit global reset check",
+              "status": "pass"
+            },
+            {
+              "id": "AUD-009 default visible named sections en/1440",
+              "status": "fail",
+              "error": "Error: expect(received).toContain(expected)\n\nExpected to contain: \"New sites\"\nReceived: [ \"Official Zones\", \"All results\" ]\n",
+              "phase": "genuine UI"
+            },
+            {
+              "id": "AUD-009 default visible named sections en/768",
+              "status": "fail",
+              "error": "Error: expect(received).toContain(expected)\n\nExpected to contain: \"New sites\"\nReceived: [ \"Official Zones\", \"All results\" ]\n",
+              "phase": "genuine UI"
+            },
+            {
+              "id": "AUD-009 default visible named sections en/390",
+              "status": "fail",
+              "error": "Error: expect(received).toContain(expected)\n\nExpected to contain: \"New sites\"\nReceived: [ \"Official Zones\", \"All results\" ]\n",
+              "phase": "genuine UI"
+            },
+            {
+              "id": "AUD-009 default visible named sections zh-Hans/1440",
+              "status": "fail",
+              "error": "Error: expect(received).toContain(expected)\n\nExpected to contain: \"新站点\"\nReceived: [ \"官方专区\", \"全部结果\" ]\n",
+              "phase": "genuine UI"
+            },
+            {
+              "id": "AUD-009 default visible named sections zh-Hans/768",
+              "status": "fail",
+              "error": "Error: expect(received).toContain(expected)\n\nExpected to contain: \"新站点\"\nReceived: [ \"官方专区\", \"全部结果\" ]\n",
+              "phase": "genuine UI"
+            },
+            {
+              "id": "AUD-009 default visible named sections zh-Hans/390",
+              "status": "fail",
+              "error": "Error: expect(received).toContain(expected)\n\nExpected to contain: \"新站点\"\nReceived: [ \"官方专区\", \"全部结果\" ]\n",
+              "phase": "genuine UI"
+            },
+            {
+              "id": "AUD-009 query scope/results before topics en/1440",
+              "status": "pass"
+            },
+            {
+              "id": "AUD-009 query scope/results before topics en/390",
+              "status": "pass"
+            },
+            {
+              "id": "AUD-009 query scope/results before topics zh-Hans/1440",
+              "status": "pass"
+            },
+            {
+              "id": "AUD-009 query scope/results before topics zh-Hans/390",
+              "status": "pass"
+            },
+            {
+              "id": "D6-004 API/UI same query language/type sequence",
+              "status": "pass"
+            }
+          ]
+        },
+        {
+          "evidence": ".temp/discover-confirmation/live-observations-attempt3.json",
+          "checks": [
+            {
+              "id": "D6-004 genuine mobile realm/topic query edit preserves all current selectors",
+              "status": "pass"
+            },
+            {
+              "id": "D6-004 genuine mobile Back and Forward restore complete realm/topic conditions",
+              "status": "pass"
+            },
+            {
+              "id": "D6-004 People destination keeps query realm and Classics condition",
+              "status": "pass"
+            },
+            {
+              "id": "D6-004 language edit and type removal use matching real API/UI sequence",
+              "status": "fail",
+              "error": "Error: fill: Error: strict mode violation: getByLabel('Language', { exact: true }) resolved to 3 elements:\n    1) <form method=\"post\" data-locale-js=\"true\" aria-label=\"Language\" action=\"/locale/select\">…</form> aka getByRole('form', { name: 'Language' })\n    2) <button dir=\"ltr\" type=\"button\" role=\"combobox\" data-state=\"closed\" data-scope=\"select\" data-part=\"trigger\" aria-invalid=\"false\" aria-expanded=\"false\" aria-required=\"false\" aria-label=\"Language\" aria-haspopup=\"listbox\" data-slot=\"select-trigger\" id=\"select:_R_4mri_:trigger\" aria-controls=\"select:_R_4mri_:content\" aria-labelledby=\"select:_R_4mri_:label\" class=\"peer min-w-0 bg-primary/5 text-foreground md:text-sm rounded-xl border border-control shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)] hover:border-mut…>…</button> aka getByRole('combobox', { name: 'Language' })\n    3) <input value=\"ja\" type=\"text\" name=\"lang\" data-size=\"md\" maxlength=\"35\" data-slot=\"input\" placeholder=\"Any language\" class=\"peer w-full min-w-0 bg-primary/5 text-foreground text-base md:text-sm rounded-xl border border-control shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)] hover:border-muted-foreground placeholder:text-muted-foreground file:inline-flex file:h-7 file:items-center file:border-0 file:font-medium file:text-foreground file:text-sm transition-[color,box-shadow] outline-none focus-visible:outlin…/> aka getByRole('textbox', { name: 'Language' })\n\nCall log:\n\u001b[2m  - waiting for getByLabel('Language', { exact: true })\u001b[22m\n",
+              "phase": "missing realm/topic conditions"
+            }
+          ]
+        },
+        {
+          "evidence": ".temp/discover-confirmation/live-observations-final.json",
+          "checks": [
+            {
+              "id": "D6-004 language edit and type removal use matching real API/UI sequence",
+              "status": "pass"
+            }
+          ]
+        }
+      ],
+      "rawEvidenceManifestVerified": [
+        {
+          "path": ".temp/worktrees/g-2853/.temp/discover-confirmation/live-attempt1.test.ts",
+          "recordedSha256": "5b4d15a050539e5e1a0973c627cc15edd54dc984a949d00a5c0f6351bb271de5",
+          "actualSha256": "5b4d15a050539e5e1a0973c627cc15edd54dc984a949d00a5c0f6351bb271de5",
+          "verified": true
+        },
+        {
+          "path": ".temp/worktrees/g-2853/.temp/discover-confirmation/live-attempt2.test.ts",
+          "recordedSha256": "5f63a1a88296db46cf853063d2ef45c38a38f0ba0e045a043cbfe59e5d1e329d",
+          "actualSha256": "5f63a1a88296db46cf853063d2ef45c38a38f0ba0e045a043cbfe59e5d1e329d",
+          "verified": true
+        },
+        {
+          "path": ".temp/worktrees/g-2853/.temp/discover-confirmation/live-attempt3.test.ts",
+          "recordedSha256": "3a74390c7ebc56231dc6afef36007807461803485bf286050a2d249a2eaa3a55",
+          "actualSha256": "3a74390c7ebc56231dc6afef36007807461803485bf286050a2d249a2eaa3a55",
+          "verified": true
+        },
+        {
+          "path": ".temp/worktrees/g-2853/.temp/discover-confirmation/live-final.test.ts",
+          "recordedSha256": "0077f9e3a6d199c3b7683904c5399e65fbeed9a0a69c6b26cfdbdd9773a3f9b2",
+          "actualSha256": "0077f9e3a6d199c3b7683904c5399e65fbeed9a0a69c6b26cfdbdd9773a3f9b2",
+          "verified": true
+        },
+        {
+          "path": ".temp/worktrees/g-2853/.temp/discover-confirmation/live-observations-attempt1.json",
+          "recordedSha256": "023acf7e148eb0f9b6c23e9d5489e8a023db70abf0ab405a1420a981d2ce3be3",
+          "actualSha256": "023acf7e148eb0f9b6c23e9d5489e8a023db70abf0ab405a1420a981d2ce3be3",
+          "verified": true
+        },
+        {
+          "path": ".temp/worktrees/g-2853/.temp/discover-confirmation/live-observations-attempt2.json",
+          "recordedSha256": "92bfeca4196c448d2a09c90951517ad9319e5298c615d45a77df328a20a943b2",
+          "actualSha256": "92bfeca4196c448d2a09c90951517ad9319e5298c615d45a77df328a20a943b2",
+          "verified": true
+        },
+        {
+          "path": ".temp/worktrees/g-2853/.temp/discover-confirmation/live-observations-attempt3.json",
+          "recordedSha256": "307be509295235b9350d3b87011ea34b0fdcbeb2f112e3b62e5d0765ecddb82a",
+          "actualSha256": "307be509295235b9350d3b87011ea34b0fdcbeb2f112e3b62e5d0765ecddb82a",
+          "verified": true
+        },
+        {
+          "path": ".temp/worktrees/g-2853/.temp/discover-confirmation/live-observations-final.json",
+          "recordedSha256": "c4e3445a14ea6c46ac005035082d03069111977c5d3cfdb2b03ac8e31d5de716",
+          "actualSha256": "c4e3445a14ea6c46ac005035082d03069111977c5d3cfdb2b03ac8e31d5de716",
+          "verified": true
+        },
+        {
+          "path": ".temp/worktrees/g-2853/.temp/discover-confirmation/api-ui-dom-comparison.json",
+          "recordedSha256": "ece62c803d65c345ef514906efd626449636b064ff84b09f1bac57c4f833b204",
+          "actualSha256": "ece62c803d65c345ef514906efd626449636b064ff84b09f1bac57c4f833b204",
+          "verified": true
+        },
+        {
+          "path": ".temp/worktrees/g-2853/.temp/discover-confirmation/api-ui-dom-comparison-uuid-premise.json",
+          "recordedSha256": "337900a8a1407c5561e04208237f2a7f5618682e78ee59283068689a1d2d4ff6",
+          "actualSha256": "337900a8a1407c5561e04208237f2a7f5618682e78ee59283068689a1d2d4ff6",
+          "verified": true
+        },
+        {
+          "path": ".temp/worktrees/g-2853/.temp/discover-confirmation/source-integrity.json",
+          "recordedSha256": "4c555a178c9faeac27b0fc8957cfed79c176c1016031a231317cdddec9fa4f2f",
+          "actualSha256": "4c555a178c9faeac27b0fc8957cfed79c176c1016031a231317cdddec9fa4f2f",
+          "verified": true
+        },
+        {
+          "path": ".temp/worktrees/g-2853/.temp/discover-confirmation/cleanup-observations.json",
+          "recordedSha256": "148307a058c71cc7de774e480713d7b38a58f55e7eb92108d813e920565f4c71",
+          "actualSha256": "148307a058c71cc7de774e480713d7b38a58f55e7eb92108d813e920565f4c71",
+          "verified": true
+        }
+      ],
+      "rawEvidenceFilesVerified": 12,
+      "reusedChecks": {
+        "final_job": "de64b5d5-67f6-4702-9eec-378bfe7c8afa",
+        "source": "587576832d71c3c501b962f849a5c400c9f7bd73",
+        "unit": {
+          "tests": 21,
+          "assertions": 81,
+          "failures": 0
+        },
+        "owner_qa": "20261019t074109-865564",
+        "stories": {
+          "qa": "20261019t074122-c93618",
+          "count": 29,
+          "files": [
+            "apps/web/features/discover/chapter-text.stories.tsx",
+            "apps/web/features/discover/discover-search.stories.tsx"
+          ],
+          "status": "pass; configured accessibility assertions included"
+        },
+        "affected_static_checks": {
+          "jobs": [
+            "8bac8d7c-91e7-436b-80c3-d2fad46971a7",
+            "d76e99a3-b12a-4c22-9156-a52ebd330f7f",
+            "5484d627-31c0-4df2-83f7-c76ae753e111"
+          ],
+          "scope": "Retained types/inference, lint, AST, selected guards and i18n with author-recorded rebase equivalence; not full native qualification."
+        },
+        "receipt": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2783/.temp/goal/jobs/de64b5d5-67f6-4702-9eec-378bfe7c8afa.log",
+        "unchanged_tiers_reexecuted": false,
+        "failed_historical_evidence_preserved": true
+      },
+      "evidenceLimits": [
+        "Resource replies stale=true at epoch8c483e38-59e7-4d95-b27b-de9cd6742a3e sequence11954; this is compatible genuine prepared data, not fresh/full-catalogue success.",
+        "All five replayed API states match DOM ordered identities using the existing22-character SID decoder, not literal UUID href equality.",
+        "Realm/topic200 empty list proves preserved URL/control/emitted selection, not nonempty native topic or phrase retrieval.",
+        "9344 and7e806 overall jobs remain fail. Only individual applicable results are reused; c706 only runs the missing content-language/type-removal sequence and passes1test3assertions.",
+        "AUD-009 default discovery422 work_read_budget_exceeded and unnamed group state remain recorded as separate original failures; chapter/text503 and Realm facet422 are not success.",
+        "No physical device, signed-in runtime, complete backend tree or other class success is newly claimed."
+      ],
+      "remainingOriginalD6004Assertions": [],
+      "nextExecutableManagerAction": "Record D6-004 original-class closure through existing normal manager bookkeeping using this accepted intent and exact main35f1/report866f. Reuse existing proof; no new runtime, source review or unrelated whole-domain gate is needed for this class.",
+      "notClosedByThisReceipt": [
+        "AUD-009",
+        "D6-003",
+        "D6-005",
+        "AUD-008",
+        "AUD-012"
+      ],
+      "managerAcceptedAt": "2026-10-19T12:00:38.379126+00:00",
+      "managerSourceRevalidatedOnMain": "ef9ae2b4db4d2a37f8644de322dc06724eeb08aa",
+      "managerAcceptance": "Original two criteria satisfied; three original regression assertions mapped with genuine API/UI sequence and applicable source/fixture evidence. Limits including anonymous/stale/emptyRealm retained, no signed-in journey claim. Product-audit scope trace applied. No new check/review required.",
+      "assessedMain": "32400992a4879132812a83d9e6a0bd1cd5d996bf",
+      "managerAcceptanceReceipt": ".temp/audit-remediation-20261019/two-hour-sprint/site-D6-004-accepted-closure.json",
+      "managerAcceptanceReceiptSHA256": "8ee8d0c271548d318e3de3fc9febb7618a384bde5ac2479a6f90ed19e3bee45e"
+    },
+    {
+      "schemaVersion": 1,
+      "recordedAtUTC": "2026-10-19T12:27:11.599201+00:00",
+      "id": "D4-015",
+      "title": "通知把每条两枚分拣按钮放在事件与时间之间，正文对象没有稳定视觉焦点",
+      "candidateOnly": false,
+      "proposedDisposition": "accepted",
+      "recommendation": "Close original D4-015. All three original acceptance criteria and applicable retained regressions are satisfied by the independently approved exact landed source and actual rendered component evidence.",
+      "canonicalClassStatusObserved": "open",
+      "canonicalClassStatusChanged": false,
+      "centralCoverageChanged": false,
+      "originalContract": {
+        "path": ".temp/site-audit-2026-10-18/round-3/all-findings.json",
+        "acceptanceVerbatim": [
+          "1440/390首屏可快速区分目标对象、事件、来源和时间，不需完整读每句才能找对象；长作品名、混合CJK与系统通知均有层级。",
+          "次要Save/Done分拣仍可发现且可键盘操作，但不在每行压过对象；打开通知与分拣目标不会互相误触。",
+          "保留明确已读/未读、保存/完成、进行/失败及就地反馈；邀请的Accept/Decline等必要业务行动仍保持突出，不能机械地全部藏入菜单。"
+        ],
+        "rootCause": {
+          "level": "row information and action hierarchy",
+          "owners": [
+            "NotificationItem",
+            "notification sentence composition"
+          ],
+          "cause": "对象/事件被展平成一段同权句子，通用triage按钮逐行常驻，时间及来源置后；没有按阅读、快速判断与分拣的任务顺序分层。"
+        },
+        "scope": "Notification row information and action hierarchy, object/event/source/time separation, subordinate keyboard triage, preserved row/invitation states.",
+        "noAdditionalPrerequisites": [
+          "Nonzero genuine signed-in notification backend journey",
+          "AUD012 bottom navigation speech/caption acceptance",
+          "Unrelated notification delivery or whole-product class acceptance"
+        ]
+      },
+      "sourcePins": {
+        "landing": "00173a35ca891faf6490f48392fed01cade01b43",
+        "actualMainCompared": "df431a1822669a9935799963e8ee7410f21e2089",
+        "approvedCandidate": "f01e7d28e45e1a11db867fcb0c88401c2a59421e",
+        "authoredUI": "1c4289e0f2068814f23621ac0b393a074fa120c9",
+        "navigationCorrection": "808734e0d8eaf3d538576e3ff77e16d8d57e8090",
+        "compatibleAffectedCaseProof": "fa5ec60bb8000a18f44de0e3a35b8e52c4284fe4",
+        "independentFinalReport": "ba3321f02b3e3aa23780e062afe7068ba13c0d22"
+      },
+      "independentReview": {
+        "reviewer": {
+          "worker": "G-2854",
+          "engine": "codex-1",
+          "model": "gpt-6.1-sol",
+          "effort": "xhigh",
+          "authoredTheUIChange": false,
+          "fallbackUsed": false,
+          "nestedAgentsUsed": false,
+          "method": "Direct independent source/diff reading, exact git-blob verification, retained raw-log inspection and personal image viewing. Product-audit is bounded to the original notification row class."
+        },
+        "fivePathVerdict": {
+          "status": "pass",
+          "summary": "Independent review of the five exact G-2838 authored blobs finds the original D4-015 hierarchy, action priority and preserved-state criteria satisfied by source plus retained component evidence. No blocking defect or missing original row assertion was found.",
+          "source": "1c4289e0f2068814f23621ac0b393a074fa120c9",
+          "authoredBase": "587576832d71c3c501b962f849a5c400c9f7bd73",
+          "renderedCapture": "153c70ff74a6b048f3bc28712aca9a06f4181963",
+          "verdictIndependentOfFutureNavCorrection": true,
+          "canonicalClassStatusChanged": false
+        },
+        "navigationVerdict": {
+          "status": "pass-exact-correction-and-affected-normal-accessibility-case",
+          "summary": "APPROVE the exact G-2747 separator delta. The unchanged Filtered Beside Shell Count passed its four original play assertions, normal addon accessibility and repository afterEach on an immutable compatible composition. Reuse the producer-owned one-story run as explicitly authorized; no duplicate or whole-tier run.",
+          "reviewedCorrectionPin": "808734e0d8eaf3d538576e3ff77e16d8d57e8090",
+          "affectedCaseExecutionOwner": "G-2747; existing producer job preserved and reused with manager authorization after independent exact-blob/harness verification."
+        }
+      },
+      "originalCriteria": [
+        {
+          "number": 1,
+          "textVerbatim": "1440/390首屏可快速区分目标对象、事件、来源和时间，不需完整读每句才能找对象；长作品名、混合CJK与系统通知均有层级。",
+          "verdict": "pass-source-and-retained-component-evidence",
+          "reason": "Target heading/event/source/time are distinct in personally viewed Ready/ReadyPhone at 1440/390 and both dark variants. ChinesePhone retains long Latin title and CJK hierarchy; MixedPhone handles proposal/system fallback; Reviews and NewWorksDark preserve target/source identity. Unavailable rows expose no stale private target. Ready assertions preserve six rows, three unread, source/time and no horizontal overflow.",
+          "candidateLocations": [
+            "notifications.stories.tsx:420-450",
+            "notifications.stories.tsx:199-221",
+            "notifications.stories.tsx:496-548",
+            "notifications.stories.tsx:673-693"
+          ],
+          "unchangedRetainedCases": [
+            "Ready",
+            "ReadyPhone",
+            "ReadyDark",
+            "ReadyPhoneDark",
+            "ChinesePhone",
+            "MixedPhone",
+            "Reviews",
+            "NewWorksDark"
+          ],
+          "evidenceKind": "Actual rendered Storybook component fixtures, original interaction assertions, retained screenshots personally viewed by independent reviewer, exact source review",
+          "independentReportPin": "ba3321f02b3e3aa23780e062afe7068ba13c0d22",
+          "actualMainSourceManifest": ".temp/audit-remediation-20261019/two-hour-sprint/site-D4-015-main-comparison.json",
+          "evidenceManifest": ".temp/audit-remediation-20261019/two-hour-sprint/site-D4-015-closure-evidence-manifest.json"
+        },
+        {
+          "number": 2,
+          "textVerbatim": "次要Save/Done分拣仍可发现且可键盘操作，但不在每行压过对象；打开通知与分拣目标不会互相误触。",
+          "verdict": "pass-source-and-retained-component-evidence",
+          "reason": "A visible small localized Actions disclosure replaces two permanent triage buttons. Save/Done stay keyboard reachable and show pressed state. KeyboardTriage asserts link-to-Actions-to-Save-to-Done order, preserved unread/no read call and neighbor focus. OpenWithoutTriage asserts read/count with disclosure closed. SavedOnly/DoneUndo assert neighbor/empty-region focus after removal. Separate title link has no stretched overlay over controls.",
+          "candidateLocations": [
+            "notifications-view.tsx:233-270",
+            "notifications-view.tsx:487-521",
+            "notifications.stories.tsx:451-494",
+            "notifications.stories.tsx:566-620"
+          ],
+          "unchangedRetainedCases": [
+            "KeyboardTriage",
+            "OpenWithoutTriage",
+            "SavedOnly",
+            "DoneUndo",
+            "EmptySaved"
+          ],
+          "evidenceKind": "Actual rendered Storybook component fixtures, original interaction assertions, retained screenshots personally viewed by independent reviewer, exact source review",
+          "independentReportPin": "ba3321f02b3e3aa23780e062afe7068ba13c0d22",
+          "actualMainSourceManifest": ".temp/audit-remediation-20261019/two-hour-sprint/site-D4-015-main-comparison.json",
+          "evidenceManifest": ".temp/audit-remediation-20261019/two-hour-sprint/site-D4-015-closure-evidence-manifest.json"
+        },
+        {
+          "number": 3,
+          "textVerbatim": "保留明确已读/未读、保存/完成、进行/失败及就地反馈；邀请的Accept/Decline等必要业务行动仍保持突出，不能机械地全部藏入菜单。",
+          "verdict": "pass-source-and-retained-component-evidence",
+          "reason": "Read/unread text/dot/weight, saved/done badges, busy/disabled status, local failure/Retry and success feedback remain explicit. TriageFailureRecovery tests busy, 503, retry, saved state and stable unread row. Phone error captures show local alert/retry. Join/Decline remain prominent outside closed Actions in phone light/dark; accept and keyboard-decline cases assert completion and focus. Existing conflict/generation behavior is preserved in source and retained traversal cases.",
+          "candidateLocations": [
+            "notifications-view.tsx:271-305",
+            "notification-traversal.stories.tsx:251-299",
+            "notification-traversal.stories.tsx:337-418",
+            "notifications.stories.tsx:235-281"
+          ],
+          "unchangedRetainedCases": [
+            "TriageBusy",
+            "TriageFailureRecovery",
+            "TriageErrorPhone",
+            "TriageErrorPhoneDark",
+            "InvitationNotificationPhone",
+            "InvitationNotificationPhoneDark",
+            "InvitationNotification",
+            "InvitationNotificationDecline"
+          ],
+          "evidenceKind": "Actual rendered Storybook component fixtures, original interaction assertions, retained screenshots personally viewed by independent reviewer, exact source review",
+          "independentReportPin": "ba3321f02b3e3aa23780e062afe7068ba13c0d22",
+          "actualMainSourceManifest": ".temp/audit-remediation-20261019/two-hour-sprint/site-D4-015-main-comparison.json",
+          "evidenceManifest": ".temp/audit-remediation-20261019/two-hour-sprint/site-D4-015-closure-evidence-manifest.json"
+        }
+      ],
+      "actualMissingOriginalAssertions": [],
+      "regressionReuse": {
+        "retainedOriginalTraversalCases": [
+          "InvalidCursorRestartsFiltered",
+          "StaleRestartKeepsTriageRevision",
+          "FailedRestartRetriesNewest",
+          "LateReadAfterReset",
+          "LateTriageAfterReset",
+          "LateInvitationAfterReset",
+          "OlderGenerationPage"
+        ],
+        "retainedOriginalStateAndFocusCases": [
+          "KeyboardTriage",
+          "OpenWithoutTriage",
+          "SavedOnly",
+          "DoneUndo",
+          "EmptySaved",
+          "TriageBusy",
+          "TriageFailureRecovery",
+          "InvitationNotification",
+          "InvitationNotificationDecline"
+        ],
+        "sourceClassAudit": {
+          "existingDisplayFamilies": [
+            "reply/mention",
+            "submission_decision (accepted/rejected/changes requested/fallback)",
+            "moderation_outcome",
+            "realm_role_change (given/taken/changed; ban/unban)",
+            "realm_invitation",
+            "follow",
+            "claim_correction",
+            "review",
+            "review_helpful",
+            "new_work",
+            "chapter",
+            "post_vote",
+            "proposal notices",
+            "inactive/missing-display fallback"
+          ],
+          "hierarchy": "notifications-view.tsx:116-145 and 192-287 select target titles from existing active display facts, use Realm for role/invitation and actor for follow, then render a 16px heading, separate 14px event, 12px source/reason/time and subordinate preview. Missing titles, proposals and inactive/missing display keep the safe existing sentence fallback; no identifier lookup, new capability or fabricated target is added.",
+          "identityPrivacy": "Target and actor remain distinct. Actor avatar/source uses supplied actor facts; content-language lang is restricted to target title/excerpt rather than applied to translated event copy. bdi isolates metadata. Inactive rows suppress display, actor, destination, invitation, reason and excerpt. Sanctions suppress actor and retain complete reason/end/permanence/appeal sentence. Existing proposal/delivery authority and redaction remain consumed as supplied; source inspection is not backend disclosure acceptance.",
+          "openVersusTriage": "The former stretched destination overlay is removed. Only the title link calls markOne; sibling Actions/Save/Done controls call triage with one patch flag and expectedRevision. Original sentence remains the destination accessible name, containing the visible target. KeyboardTriage records triage calls only; OpenWithoutTriage records read/count only.",
+          "focus": "Actions exposes native disclosure state. Save/Unsave/Done/Undo expose aria-pressed. Removing a focused row transfers focus to the next/previous Actions button or stable Notifications region; invitation response transfers focus to the local completion status when focus was in that row. Existing keyboard plays assert these paths.",
+          "recovery": "Busy row exposes aria-busy and Loading status; mutation controls disable. Failed triage leaves flags/unread intact and supplies row-local alert/Retry. 409 keeps the row and offers Reload notifications rather than replaying stale expectedRevision. Success shows local status or surviving page status when the row leaves. Traversal/generation fences and revision merging are preserved. The 409 reload presentation is statically reviewed; no new browser execution of that branch is claimed.",
+          "invitations": "Join/Decline and public-listing choice stay outside Actions. Existing Realm/subject/actingSubject payload, stable attempt idempotency key, busy/failure and onRead-on-success behavior are preserved. Phone light/dark captures show both business actions with Actions closed; accept/keyboard-decline stories assert local completion and focus.",
+          "localization": {
+            "newKeys": 18,
+            "locales": [
+              "en",
+              "zh-Hans",
+              "zh-Hant",
+              "ja",
+              "ko",
+              "de",
+              "fr",
+              "es"
+            ],
+            "review": "Read the localized event/disclosure/reload copy and preserved role placeholders across all eight catalogs. Retained i18n check passed. This is not a native-speaker certification; existing machine-draft comments on sanction copy remain."
+          },
+          "testsReviewed": "All three exact authored story files and their base-to-candidate changes were inspected. Updates scope changed actor selectors to rows/headings and preserve destination, privacy, continuation and error assertions; closure fixtures remain explicitly contract-built. FilteredBesideShellCount play is unchanged. Later run adds four phone cases and pending-invitation assertions; it is not a combined 101-case run.",
+          "rankedBlockingFindings": [],
+          "genuinelyMissingOriginalAssertions": []
+        },
+        "dependencyCompatibility": {
+          "materialDependencies": 30,
+          "exactToFinalProof": 29,
+          "explicitlyReviewedAuthoredVariant": 1,
+          "exception": "apps/web/features/feed/types.ts",
+          "freshOriginalRowCasesRequired": [],
+          "decision": "Reuse unchanged valid component proof. Neither declared dependency difference changes an original row assertion; no unchanged story tier or backend journey was rerun."
+        }
+      },
+      "executionAccounting": {
+        "firstRun": "96/97, sole sidebar label-content-name-mismatch; preserve overall failure",
+        "laterUIRun": "44/45, same sole sidebar name failure; preserve overall failure",
+        "affectedGate": {
+          "status": "passed",
+          "job": "job:a0799bf7-e6f0-424e-8182-ced4446186af",
+          "owner": "G-2747",
+          "step": 1,
+          "exitStatus": 0,
+          "run": "20261019t103657-799545",
+          "proofSource": "fa5ec60bb8000a18f44de0e3a35b8e52c4284fe4",
+          "command": [
+            "bun",
+            ".temp/notification-name/run.ts",
+            "bun",
+            "scripts/goal/goalctl.ts",
+            "test",
+            "apps/web/features/shell/notifications/notifications.stories.tsx",
+            "-t",
+            "Filtered Beside Shell Count"
+          ],
+          "actualTaskCommand": "task storybook:test -- features/shell/notifications/notifications.stories.tsx -t 'Filtered Beside Shell Count'",
+          "file": "apps/web/features/shell/notifications/notifications.stories.tsx",
+          "story": "Filtered Beside Shell Count",
+          "storyId": "shell-notifications--filtered-beside-shell-count",
+          "counts": {
+            "passed": 1,
+            "skipped": 44,
+            "failed": 0,
+            "filesPassed": 1
+          },
+          "unchangedPlayAssertions": {
+            "shellAccessibleName": "Notifications, 6 unread",
+            "visibleBadge": "6 unread",
+            "filteredPageRows": 2,
+            "pageContainsStandaloneSix": false
+          },
+          "normalAccessibility": {
+            "previewAddon": "a11y: { test: 'error' }",
+            "repositoryAfterEach": "Unchanged unconditional Vitest setup scans the completed story body in light/dark at 390x844 and 1280x860 with the existing WCAG tag set and serious/critical blocking rule. Story-local settings cannot disable it.",
+            "outcome": "passed; the prior label-content-name-mismatch did not recur"
+          },
+          "log": {
+            "path": ".temp/notification-review/navigation/qa.log",
+            "sha256": "0f056dcb77e4af368ae3e88c0240f617be8e0406eb45eae305755eb8a30e9866"
+          },
+          "scope": "Exactly one selected story. No unchanged 97-case or 45-case rerun, no backend journey and no claim that skipped cases executed again."
+        },
+        "producerNameMeasurement": {
+          "measurementSource": "fa5ec60bb8000a18f44de0e3a35b8e52c4284fe4",
+          "viewport": {
+            "width": 1280,
+            "height": 860
+          },
+          "beforeVisibleName": "Notifications6 unread",
+          "afterVisibleName": "Notifications 6 unread",
+          "afterAccessibleNameAxe": "Notifications, 6 unread",
+          "afterAccessibleNameChromium": "Notifications, 6 unread",
+          "afterAriaLabel": "Notifications, 6 unread",
+          "afterTextContent": "Notifications 6 unread",
+          "afterInnerText": "Notifications\n6 unread",
+          "afterChildNodes": [
+            {
+              "type": 1,
+              "text": ""
+            },
+            {
+              "type": 1,
+              "text": "Notifications"
+            },
+            {
+              "type": 3,
+              "text": " "
+            },
+            {
+              "type": 1,
+              "text": "6 unread"
+            }
+          ],
+          "afterFragments": [
+            {
+              "text": "Notifications",
+              "className": "min-w-0 flex-1 truncate",
+              "rect": {
+                "x": 56,
+                "y": 227,
+                "width": 104,
+                "height": 20,
+                "top": 227,
+                "right": 160,
+                "bottom": 247,
+                "left": 56
+              }
+            },
+            {
+              "text": "6 unread",
+              "className": "rounded-full bg-primary px-1.5 py-0.5 font-bold text-[11px] text-primary-foreground leading-none shrink-0",
+              "rect": {
+                "x": 172,
+                "y": 229.5,
+                "width": 59,
+                "height": 15,
+                "top": 229.5,
+                "right": 231,
+                "bottom": 244.5,
+                "left": 172
+              }
+            }
+          ],
+          "afterAriaCurrent": "page",
+          "targetedRuleViolations": [],
+          "targetedRulePasses": [
+            {
+              "id": "label-content-name-mismatch",
+              "nodes": 1
+            }
+          ],
+          "limits": "These actual producer browser measurements supplement the separately passing normal one-story gate. The measurement job job:135eb3dc-57af-4095-bfea-f9a101d5b81a exited 1 after writing its JSON/screenshot because an in-flight Storybook addon asset route was disposed during teardown. Its focused axe result is not reported as a passing job or substituted for normal accessibility. The measurement also recorded one unread-count API 404, preserved below; source keeps the seeded badge on failed polling. No backend success is claimed.",
+          "measurementJobExitStatus": 1,
+          "errors": [
+            "Failed to load resource: the server responded with a status of 404 (Not Found)"
+          ],
+          "httpErrors": [
+            {
+              "url": "http://127.0.0.1:37473/api/main/v1/me/notifications/unread-count",
+              "status": 404
+            }
+          ]
+        },
+        "notCombinedTierPass": true
+      },
+      "evidenceLimit": "All reused interaction outcomes are scripted Storybook component fixtures/API-shaped answers, including explicitly contract-built closure states. Existing execution and static source facts are distinct. No genuine signed-in notification API journey, nonzero backend delivery, production behavior, human task-success study or full backend acceptance is claimed or required for this original row class.",
+      "additionalLimits": [
+        "No new runtime execution or independent review was performed during this reconciliation.",
+        "The two historical whole runs remain failed (96/97 and 44/45); the separate corrected affected case passed 1 with 44 skipped. No reconstructed combined full-tier pass.",
+        "Supplemental producer name measurement exited 1 during teardown and recorded unread-count HTTP 404; it supplements, and does not replace, the passing normal one-story accessibility gate.",
+        "The original visual/component class does not establish production notification delivery, genuine signed-in backend success, human task-success research, native-language certification or unrelated AUD012 speech.",
+        "The assembler checked file existence, content hashes and immutable source compatibility; personal screenshot viewing is attributed to the prior independent reviewer."
+      ],
+      "mainComparison": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-D4-015-main-comparison.json",
+        "exists": true,
+        "bytes": 25651,
+        "sha256": "efa25ab18053452559d52207596d17fc3d78f189f1442a73d22e53539c2f3995"
+      },
+      "evidenceManifest": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-D4-015-closure-evidence-manifest.json",
+        "exists": true,
+        "bytes": 21341,
+        "sha256": "4379a04f0ce8e6aaaa54c380211b5b49003859155e16354bb6769a72a6ade431"
+      },
+      "safeArtifactsVerified": {
+        "count": 53,
+        "bytes": 2571530,
+        "manifestSha256": "29c580d93e13f2be75d9d8468f9545cd89f3cd7532aa0eb3ab58c29c6a53b463"
+      },
+      "performedHere": [
+        "Read canonical original finding and product-audit skill",
+        "Compared exact immutable Main/source/report/dependency blobs",
+        "Read retained original and corrected raw logs",
+        "Verified existing safe artifact existence, bytes and SHA-256",
+        "Wrote ignored candidate receipts only"
+      ],
+      "notPerformedHere": [
+        "No project checks or runtime",
+        "No new review or brief edits",
+        "No source, root index, Main, workers, jobs, data, ledger or central coverage mutation"
+      ],
+      "rootAcceptanceRequired": false,
+      "status": "closed",
+      "managerAccepted": {
+        "manager": "site",
+        "at": "2026-10-19T12:32:30.609770+00:00",
+        "main": "df431a1822669a9935799963e8ee7410f21e2089",
+        "method": "Original class acceptance and regression witnesses reviewed using product-audit; exact source/dependencies and safe evidence verified. Passing unchanged proof reused.",
+        "additionalProductAssertionsAdded": false,
+        "canonicalAssertionsChanged": false
+      },
+      "sourceRevalidation": {
+        "main": "df431a1822669a9935799963e8ee7410f21e2089",
+        "at": "2026-10-19T12:32:30.609770+00:00",
+        "exactManifestRowsVerified": 35,
+        "safeArtifactsVerified": 53,
+        "centralBookkeepingPending": true,
+        "latestLibraryProofCapturePending": false
+      },
+      "recordedAt": "2026-10-19T12:40:49.777559+00:00",
+      "assessedMain": "32400992a4879132812a83d9e6a0bd1cd5d996bf",
+      "closureBookkeepingPending": false,
+      "originalAcceptanceVerbatim": [
+        "1440/390首屏可快速区分目标对象、事件、来源和时间，不需完整读每句才能找对象；长作品名、混合CJK与系统通知均有层级。",
+        "次要Save/Done分拣仍可发现且可键盘操作，但不在每行压过对象；打开通知与分拣目标不会互相误触。",
+        "保留明确已读/未读、保存/完成、进行/失败及就地反馈；邀请的Accept/Decline等必要业务行动仍保持突出，不能机械地全部藏入菜单。"
+      ],
+      "originalRegressionAssertionsVerbatim": [
+        {
+          "id": "D4-015/assertion-1",
+          "assert": "Each event prioritizes what happened, target/source and time with clear unread state; ordinary save/done controls no longer dominate every row."
+        },
+        {
+          "id": "D4-015/assertion-2",
+          "assert": "Secondary triage has an accessible name, keyboard access, separate hit target and local pending/error recovery without activating the event link."
+        },
+        {
+          "id": "D4-015/assertion-3",
+          "assert": "Invitation accept/decline stays a primary action; preserve the existing red unread indicator and weighted unread text."
+        }
+      ],
+      "originalAssertionsChanged": false,
+      "canonicalSource": ".temp/site-audit-2026-10-18/round-3/all-findings.json",
+      "canonicalSha256": "e2721c44e74305c694b02e81e757e4476c3a19de414d25b0689617316c5ebc3f",
+      "skillApplied": ".agents/skills/product-audit/SKILL.md",
+      "managerAcceptanceReceipt": ".temp/audit-remediation-20261019/two-hour-sprint/site-D4-015-accepted-closure.json",
+      "managerAcceptanceReceiptSHA256": "7ec1252a5a56e82a7d067a49c5565485e866e916bd9e51580def4b8af0ea6165"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "D4-003",
+      "status": "closed",
+      "assessedAt": "2026-10-19T12:28:37.699854+00:00",
+      "main": "df431a1822669a9935799963e8ee7410f21e2089",
+      "productCommit": "d1d0fe7ff737bcf884e0eb9686184e865b8e0b5a",
+      "testedProductPin": "53f4ec6709f31bfb0cf7eca934e25b796644fa88",
+      "compatibleGenuineBackend": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "canonicalSource": ".temp/site-audit-2026-10-18/round-3/all-findings.json",
+      "skill": ".agents/skills/product-audit/SKILL.md",
+      "productAuditMethod": "Returning reader job: find the existing resumable Work and act from default Library; model/own-status command/read/client traced. Preserve genuine empty and unavailable fixtures as adverse states; reuse exact passing two-Work/native proof. Only original applicable class criteria are assessed. No new whole-domain or all-persona gate.",
+      "originalAcceptanceVerbatim": [
+        "在已有可继续作品的默认Library，1440×1000与390×844的应用实际可用首屏内出现至少一个正在读作品及Open/Continue行动；计算固定顶栏与底栏占用。",
+        "目标、统计、导入导出保持可达并形成次级层级，零月统计不再把主任务整体推出首屏。",
+        "录制故事和实际成功API状态都验收；空库与已填充库分别按主要任务组织。"
+      ],
+      "originalRegressionAssertionsVerbatim": [
+        {
+          "id": "D4-003/assertion-1",
+          "assert": "With two currently-reading works and real shell chrome, at least one clear Open/Continue action is in the first 390x844 and 1440x1000 viewport."
+        },
+        {
+          "id": "D4-003/assertion-2",
+          "assert": "Statistics, goals and import/export stay secondary; empty and unavailable Library states provide honest next/retry actions."
+        },
+        {
+          "id": "D4-003/assertion-3",
+          "assert": "Prove the real signed-in route after identity recovery; retain controlled populated-story coverage without presenting it as the blocked page result."
+        }
+      ],
+      "originalAssertionsChanged": false,
+      "originalCriterionWitnesses": [
+        {
+          "number": 1,
+          "originalVerbatim": "在已有可继续作品的默认Library，1440×1000与390×844的应用实际可用首屏内出现至少一个正在读作品及Open/Continue行动；计算固定顶栏与底栏占用。",
+          "status": "PASS",
+          "witness": "Genuine eligible own-member Library at exact53f/BE754 returns actual one-item reading shelf200 and Work/continuation200; actual rendered Book UUID and Continue destination match those replies. At1440x1000 action y325..357 fits shell65..1000; at390x844 action y469..501 fits105..779, scrollY0 and no document overflow. Prior two-Work fixture proves the original multi-card premise without presenting it as genuine two-Work data.",
+          "evidence": [
+            "latestVerification.liveAssessment.firstScreen",
+            "latestVerification.liveAssessment.data",
+            "latestVerification.qa[0].assertionReach",
+            "live/genuine-populated-library-1440.json",
+            "live/genuine-populated-library-390.json",
+            "live/genuine-populated-library-1440.png",
+            "live/genuine-populated-library-390.png"
+          ]
+        },
+        {
+          "number": 2,
+          "originalVerbatim": "目标、统计、导入导出保持可达并形成次级层级，零月统计不再把主任务整体推出首屏。",
+          "status": "PASS",
+          "witness": "Actual reading content and Continue precede collapsed Goals/stats/import/export in DOM and viewport. Natural Tab reaches Continue before secondary disclosure; Enter opens and Space closes it at both widths. Retained original fixtures additionally exercise Edit goal, import input and export/download reachability; zero-month statistics do not push the main task out.",
+          "evidence": [
+            "latestVerification.liveAssessment.organization",
+            "latestVerification.liveAssessment.keyboard",
+            "live/genuine-populated-tools-1440.png",
+            "live/genuine-populated-tools-390.png",
+            "verificationHistory[0].qa.unchangedIndependentRendered",
+            "verificationHistory[1].qa"
+          ]
+        },
+        {
+          "number": 3,
+          "originalVerbatim": "录制故事和实际成功API状态都验收；空库与已填充库分别按主要任务组织。",
+          "status": "PASS",
+          "witness": "Retained116stories/17units and10 independent original rendered cases cover two-Work populated, empty and unavailable states. Genuine successful empty Library1440/390 at53f/BE754 is retained in0787; new7355 actual successful populated state proves card/continuation identity, primary organization, natural keyboard and route reload at both sizes. No synthetic successful API or invented reader progress is used.",
+          "evidence": [
+            "verificationHistory[0].qa.suppliedSelection",
+            "verificationHistory[0].qa.unchangedIndependentRendered",
+            "verificationHistory[2].liveAssessment.emptyState",
+            "latestVerification.liveAssessment",
+            "latestVerification.qa[0]"
+          ]
+        }
+      ],
+      "originalRegressionAssertionWitnesses": [
+        {
+          "id": "D4-003/assertion-1",
+          "originalVerbatim": "With two currently-reading works and real shell chrome, at least one clear Open/Continue action is in the first 390x844 and 1440x1000 viewport.",
+          "status": "PASS",
+          "witness": "Retained original two-Work reading-first/recorded Books with real shell at390/1440 plus new genuine one-Work default first-screen evidence; nine native zoom states and twelve natural keyboard actions retained."
+        },
+        {
+          "id": "D4-003/assertion-2",
+          "originalVerbatim": "Statistics, goals and import/export stay secondary; empty and unavailable Library states provide honest next/retry actions.",
+          "status": "PASS",
+          "witness": "Retained empty/unavailable honest next/retry fixtures, genuine empty200 and new genuine populated reading-before-tools natural Tab/disclosure evidence."
+        },
+        {
+          "id": "D4-003/assertion-3",
+          "originalVerbatim": "Prove the real signed-in route after identity recovery; retain controlled populated-story coverage without presenting it as the blocked page result.",
+          "status": "PASS",
+          "witness": "Own fresh supported member sign-in and session-agent200, genuine default Library200, exact rendered/API Work identity and same Continue href after actual reload at both widths; recorded state remains explicitly fixture evidence."
+        }
+      ],
+      "independentReview": {
+        "owner": "G-2831",
+        "account": "codex-1",
+        "model": "gpt-6.1-sol",
+        "effort": "xhigh",
+        "fallback": false,
+        "actualReportPin": "02ea9a134d87384a7e05b565706fd9710d6cfb81",
+        "newJob": "7355b076-1905-4acb-9f41-6eef293ae931",
+        "newResult": "1PASS/0FAIL,1440/390 populated assertions,8screenshots personally viewed",
+        "administrativeJob": "ae970b79-5be0-43f5-9dae-9108f0491a6a",
+        "administrativeResult": "docs and worker checksPASS",
+        "priorSourceReviews": "df384/a84/a552 and native27665 changed-slice source review retained; no review-of-review",
+        "priorProofs": "Two-Work controlled116stories17units10independent rendered cases; native100/200/400; genuine empty0787 and positive binding8ea3 retained."
+      },
+      "sourceAndArtifacts": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-D4-003-original-closure/source-and-artifact-manifest.json",
+        "bytes": 30327,
+        "sha256": "b57d94fa1d6146730d0033328eb83e153d7e24679a7344d4f221c49a53653206"
+      },
+      "reportHistory": "All currentmain historical evidence retained exactly; currentlatest appended unchanged; original failures and missing-premise attempts stay historical. New status-only rootlease supersedes old absence-of-custody hold.",
+      "remainingOriginalAssertions": [],
+      "sourceOnMain": true,
+      "latestCumulativeProofOnMain": false,
+      "classStatusMutated": false,
+      "rootAcceptanceRequired": false,
+      "custodyAndCleanupOutstanding": false,
+      "proofLanding": {
+        "patch": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-D4-003-original-closure/reading-home-report-only.patch",
+          "bytes": 119940,
+          "sha256": "78bed591d7b13355e7d792053de1072eebc2b3ed12423e9695d7edc57d29756d"
+        },
+        "applyCheck": "PASS",
+        "captureArgv": [
+          "task",
+          "goal",
+          "--",
+          "commit",
+          "-m",
+          "proof(library): preserve genuine original populated reading acceptance",
+          "--",
+          "docs/goals/audit-remediation-20261019/proofs/reading-home.json"
+        ],
+        "env": {
+          "GOAL_ID": "audit-remediation-20261019"
+        },
+        "shellCommand": "GOAL_ID=audit-remediation-20261019 task goal -- commit -m 'proof(library): preserve genuine original populated reading acceptance' -- docs/goals/audit-remediation-20261019/proofs/reading-home.json",
+        "scope": "One report path only after normal root capture; no source rerun or new review."
+      },
+      "limits": [
+        "New genuine populated case has one existing readable Book; original two-Work and adverse-state assertions are covered by retained controlled stories.",
+        "No chapter activation/progress write, data transfer, interrupted export, fullHome replay, AUD012 voice proof, full61finding or allpersona acceptance claimed.",
+        "Temporary reading lease remains explicitly cleanup-due; class evidence does not discharge it."
+      ],
+      "candidateOnly": false,
+      "managerAccepted": {
+        "manager": "site",
+        "at": "2026-10-19T12:32:30.609770+00:00",
+        "main": "df431a1822669a9935799963e8ee7410f21e2089",
+        "method": "Original class acceptance and regression witnesses reviewed using product-audit; exact source/dependencies and safe evidence verified. Passing unchanged proof reused.",
+        "additionalProductAssertionsAdded": false,
+        "canonicalAssertionsChanged": false
+      },
+      "sourceRevalidation": {
+        "main": "df431a1822669a9935799963e8ee7410f21e2089",
+        "at": "2026-10-19T12:32:30.609770+00:00",
+        "exactManifestRowsVerified": 49,
+        "safeArtifactsVerified": 49,
+        "centralBookkeepingPending": true,
+        "latestLibraryProofCapturePending": true
+      },
+      "actualCleanup": {
+        "receipt": ".temp/audit-remediation-20261019/two-hour-sprint/site-reader-status-cleanup-observed.json",
+        "sha256": "76f3ed57ec41bb224124d84f7febea320d31e5b25f163a6432280f64c844530a",
+        "status": "actual200CASversion1to2,nullstatus/datesrestored;2readbacks invariantsunchanged",
+        "leaseReleased": true
+      },
+      "recordedAt": "2026-10-19T12:40:49.777559+00:00",
+      "assessedMain": "32400992a4879132812a83d9e6a0bd1cd5d996bf",
+      "closureBookkeepingPending": false,
+      "canonicalSha256": "e2721c44e74305c694b02e81e757e4476c3a19de414d25b0689617316c5ebc3f",
+      "skillApplied": ".agents/skills/product-audit/SKILL.md",
+      "managerAcceptanceReceipt": ".temp/audit-remediation-20261019/two-hour-sprint/site-D4-003-accepted-closure.json",
+      "managerAcceptanceReceiptSHA256": "51110cfd75bbd5cbcf064d05e118bf0337bfa4c3bc01099aadfaf83a8d6eecb5"
     }
   ]
 }
