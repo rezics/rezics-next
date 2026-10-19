@@ -38,10 +38,11 @@ function dockerArgs(container: string, args: string[], seconds: number): string[
 
 function postgresCommand(container: string, step: string, args: string[], seconds = 5): void {
   const result = spawnSync('docker', dockerArgs(container, args, seconds), {
-    encoding: 'utf8', timeout: (seconds + 4) * 1000, stdio: 'ignore',
+    encoding: 'utf8', timeout: (seconds + 4) * 1000, stdio: ['ignore', 'ignore', 'pipe'], maxBuffer: 16_384,
   });
   if (result.error || result.status !== 0) {
-    throw new Error(`Rehearsal database ${step} failed (exit ${result.status ?? 'timeout/error'}; budget ${seconds}s)`);
+    const phases = (result.stderr ?? '').split('\n').filter(line => /^REHEARSAL cleanup (terminate|drop|done)$/.test(line));
+    throw new Error(`Rehearsal database ${step} failed (exit ${result.status ?? 'timeout/error'}; budget ${seconds}s${phases.length ? `; ${phases.join('; ')}` : ''})`);
   }
 }
 
@@ -162,9 +163,13 @@ export async function snapshotRefreshDatabase(container: string, sourceUrl: stri
     // same five-second wall covers both operations and only this random copy's
     // sessions qualify, including a migration interrupted inside a transaction.
     try { postgresCommand(container, 'cleanup', ['bash', '-e', '-c', `
+      export PGAPPNAME='${scratch}_cleanup'
+      echo 'REHEARSAL cleanup terminate' >&2
       psql -XAt --host=/var/run/postgresql --username=postgres --dbname=postgres \\
         --set=ON_ERROR_STOP=1 -c "SELECT pg_terminate_backend(pid, 1000) FROM pg_stat_activity WHERE datname='$1' AND pid<>pg_backend_pid()" >/dev/null
-      exec dropdb --host=/var/run/postgresql --username=postgres --force --if-exists "$1"
+      echo 'REHEARSAL cleanup drop' >&2
+      dropdb --host=/var/run/postgresql --username=postgres --force --if-exists "$1"
+      echo 'REHEARSAL cleanup done' >&2
     `, '--', scratch]); }
     finally { postgresCommand(container, 'copy bookkeeping cleanup',
       ['rm', '-f', `/tmp/${scratch}.pid`, `/tmp/${scratch}.dump`]); }
