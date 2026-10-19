@@ -20,6 +20,7 @@ import {
   type WorkReadSession,
 } from '../work/read-session.ts';
 import { isWorkReadSourceInvalid } from '../work/read-source-fault.ts';
+import { MediaInvalid } from '../media/contract.ts';
 import { automaticDiscovery } from './automation.ts';
 import type { OwnedDiscoveryBasis } from './contract.ts';
 import {
@@ -342,10 +343,13 @@ export class DiscoveryRefreshWorker {
             }
             return { row, step: null, projected: null, position: session.position, intervening };
           } catch (error) {
-            if (!(error instanceof WorkReadInvalid || error instanceof WorkReadLimit || isWorkReadSourceInvalid(error))) throw error;
+            if (!(error instanceof WorkReadInvalid || error instanceof WorkReadLimit
+              || error instanceof MediaInvalid || isWorkReadSourceInvalid(error))) throw error;
             // A typed input refusal is evidence only if workRead can still close
             // its graph and authority fences. Exhausted budgets, timeouts and
             // moved sources instead leave this attempt on the transient path.
+            // Classified-source summaries can reject malformed stored references
+            // with MediaInvalid; MediaUnavailable still follows normal backoff.
             held.disposition = { basis: state.sourceBasis, reason: 'basis-invalid', error: error.message };
             return 'basis-invalid';
           }

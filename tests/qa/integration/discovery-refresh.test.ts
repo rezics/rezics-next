@@ -13,11 +13,13 @@ import { RelayHandoffPositions } from '../../../services/main/src/modules/outbox
 import { RecommendationStale, RecommendationUnavailable } from '../../../services/main/src/modules/recommendation/derived-generation.ts';
 import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
 import { authorCreditTriples } from '../../../services/main/src/modules/work/author-credit.ts';
-import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { GRAPHS, RV, hash, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { CLASSIFICATION_PROPOSITION_PROFILE } from '../../../services/main/src/modules/classification/proposition.ts';
+import { MediaInvalid } from '../../../services/main/src/modules/media/contract.ts';
 import { WorkReadUnavailable, workRead } from '../../../services/main/src/modules/work/read-session.ts';
 import { WORK_READ_COST } from '../../../services/main/src/modules/work/read-contract.ts';
 import { startMediaStack } from './media-support.ts';
-import { DiscoveryRefreshInputs } from '../../../services/main/src/modules/discovery/source.ts';
+import { DiscoveryRefreshInputs, projectDiscoveryBatch } from '../../../services/main/src/modules/discovery/source.ts';
 import type { OwnedDiscoveryBasis } from '../../../services/main/src/modules/discovery/contract.ts';
 import { cloneQaOwnerDatabases } from '../support/databases.ts';
 import { requireQa } from './recommendation-support.ts';
@@ -471,5 +473,162 @@ test('D5004C01: refresh owners quarantine malformed source once, bound fleet pro
       try { await restoreGraph?.(); }
       finally { await relay.end(); await f.stop(); await owners.close(); }
     }
+  }
+}, 300_000);
+
+test('D5004C02: classified-source MediaInvalid is quarantined at an unchanged basis and rearms after repair', async () => {
+  const owners = await cloneQaOwnerDatabases(requireQa(), ['access', 'content', 'relay'], 'privileged');
+  const f = await startMediaStack('discovery-refresh-media-invalid', { ownerUrls: owners.urls });
+  const relay = new Pool({ connectionString: owners.urls.relay });
+  const query = f.fuseki.query.bind(f.fuseki);
+  let restoreGraph: (() => Promise<void>) | undefined;
+  try {
+    restoreGraph = await isolateDiscoveryProbeGraph(f.env);
+    const writer = await f.member('classified refresh writer');
+    const work = await f.publicWork(writer.actor, ['en'], 'Classified refresh candidate');
+    for (const [scope, action] of [
+      ['classification:define:global', 'classification.proposition.define'],
+      ['classification:decide:global', 'statement.decide'],
+      ['context:create:root', 'context.create'],
+      [`statement:speak:${writer.actor}`, 'statement.record'],
+      ['projection:create:root', 'projection.create'],
+    ] as const) await writer.grant(scope, action);
+    const term = await json<{ sense: string; concept: string; definitionRevision: string }>(
+      await writer.send('POST', '/v1/classification-propositions', {
+        profile: 'classification-proposition-v1', label: 'Refresh classification', actingSubject: writer.actor,
+      }), 201);
+    await new AccessJudgments(f.accessPool).declareHint(writer.principal, {
+      concept: term.concept, context: { kind: 'global' }, hint: 'not-spoiler', expectedGeneration: '0',
+      actingSubject: writer.actor, idempotencyKey: randomUUID(),
+      requestDigest: hash(JSON.stringify([term.concept, 'global', 'not-spoiler'])),
+    });
+    const interpretation = await json<{ context: string; semanticRevision: string }>(
+      await writer.send('POST', '/v1/contexts', {
+        profile: 'context-v1', role: 'shared', disclosure: 'public', base: null,
+        entries: [{ target: term.concept, relation: `${RV}classifiedAs`, state: 'defined',
+          definition: term.definitionRevision, applicability: [] }], actingSubject: writer.actor,
+      }), 201);
+    const statement = await json<{ statement: string; meaningKey: string }>(
+      await writer.send('POST', '/v1/statements', {
+        profile: 'statement-v1', speaker: { kind: 'personal' }, subject: work.mainVersion,
+        predicate: `${RV}classifiedAs`, relationDefinition: CLASSIFICATION_PROPOSITION_PROFILE,
+        value: { kind: 'resource', iri: term.concept }, applicability: [], evidence: [],
+        interpretation: { kind: 'explicit', context: interpretation.context,
+          semanticRevision: interpretation.semanticRevision }, actingSubject: writer.actor,
+      }), 201);
+    await json(await writer.send('POST', '/v1/statement-decisions', {
+      profile: 'statement-decision-v1', target: { kind: 'qualified-fact',
+        meaningKey: statement.meaningKey, support: [statement.statement] }, acceptance: { kind: 'global' },
+      outcome: 'accepted', expectedDecisionHead: null, actingSubject: writer.actor,
+    }), 201);
+    const projection = await json<{ projection: { id: string } }>(await writer.send('POST', '/v1/projections', {
+      subject: term.concept, frames: [work.work], actingSubject: writer.actor,
+    }), 201);
+    const basis: OwnedDiscoveryBasis = { scope: 'global', realm: null, context: null, owner: null };
+    const key = discoveryScopeKey(basis);
+    const project = () => workRead(f.composition.dependencies, new Request('http://main.local/v1/works'),
+      { scope: 'global' }, session => projectDiscoveryBatch(session, basis, ''));
+    expect((await project()).items.find(item => item.work === work.work)?.classifications)
+      .toMatchObject([{ sense: term.sense }]);
+
+    // A current source fault, not an injected MediaInvalid or a claim about the
+    // historical asset: accepted Concept -> identity redirect -> Projection ->
+    // stored frame reference longer than the summary owner's 2048-character bound.
+    const invalidFrame = `https://rezics.com/id/${'x'.repeat(2048)}`;
+    await f.fuseki.update(`PREFIX rv: <${RV}>
+      DELETE { GRAPH ${iri(GRAPHS.current)} { ${iri(projection.projection.id)} rv:frame ${iri(work.work)} } }
+      INSERT { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(term.concept)} rv:mergedInto ${iri(projection.projection.id)} .
+        ${iri(projection.projection.id)} rv:frame ${iri(invalidFrame)} } }
+      WHERE {}`);
+    const fault: unknown = await project().then(() => null, (error: unknown) => error);
+    expect(fault).toBeInstanceOf(MediaInvalid);
+    expect(fault).toMatchObject({ message: 'resource summary request is invalid' });
+
+    const consumer = `refresh-media-invalid-${randomUUID()}`;
+    await initializeRelayCheckpoint(relay, consumer, f.env.lineage.dataEpoch);
+    for (let i = 0; i < 1000; i++) {
+      if (!await relayMainOutboxOnce(f.fuseki, relay, consumer)) break;
+      if (i === 999) throw new Error('Classified refresh relay preparation exceeded its bound');
+    }
+    const refreshProjection = new DiscoveryProjection(f.accessPool);
+    let now = Date.now() + 60_000;
+    const store = new DiscoveryRefreshStore(f.accessPool, () => new Date(now));
+    const deps = { ...f.composition.dependencies, alsoEnjoyed: undefined,
+      relayPosition: new RelayHandoffPositions(relay, consumer),
+      discoveryRefreshInputs: new DiscoveryRefreshInputs(relay, consumer) };
+    const worker = () => new DiscoveryRefreshWorker(deps, store, refreshProjection);
+    await store.enroll([basis]);
+    const state = async (): Promise<QueueState> => (await f.accessPool.query<QueueState>(`
+      SELECT j.generation_id,j.quarantine_basis,j.quarantine_reason,j.last_error,j.last_outcome,
+        j.attempts::text,j.lease_epoch::text,j.due_at,d.checkpoint
+      FROM access.discovery_refresh j LEFT JOIN access.discovery_generation d ON d.generation_id=j.generation_id
+      WHERE j.scope_key=$1`, [key])).rows[0]!;
+    let populationReads = 0, fullClaims = 0;
+    const claim = store.claim.bind(store);
+    store.claim = async background => {
+      const job = await claim(background);
+      if (job?.scope_key === key && !job.quarantine_basis) fullClaims++;
+      return job;
+    };
+    f.fuseki.query = async (...args) => {
+      if (args[0].includes('SELECT DISTINCT ?work ?head')) populationReads++;
+      return query(...args);
+    };
+    const until = async (done: (row: QueueState) => boolean) => {
+      for (let i = 0; i < 20; i++) {
+        now += DISCOVERY_REFRESH_COST.maximumRetryMs;
+        await worker().tick();
+        const row = await state();
+        if (done(row)) return row;
+      }
+      throw new Error('Classified refresh did not reach its bounded disposition');
+    };
+    // A repeatable permanent media refusal must leave the normal retry lane.
+    // Baseline reaches the real MediaInvalid above but keeps retrying here.
+    const failed = await until(row => row.quarantine_reason === 'basis-invalid');
+    expect(failed.last_error).toBe('resource summary request is invalid');
+    expect(failed.generation_id).not.toBeNull();
+    expect(failed.checkpoint).toBe('');
+    expect(failed.attempts).toBe('0');
+    expect(failed.quarantine_basis!.graphVersion).not.toBeNull();
+    expect(fullClaims).toBe(1);
+    const failedReads = populationReads;
+    for (let pass = 0; pass < 3; pass++) {
+      const before = await state();
+      const probed = await until(row => row.lease_epoch !== before.lease_epoch);
+      expect(probed).toMatchObject({ generation_id: failed.generation_id, checkpoint: failed.checkpoint,
+        quarantine_basis: failed.quarantine_basis, quarantine_reason: 'basis-invalid', attempts: '0' });
+      expect(populationReads).toBe(failedReads);
+      expect(fullClaims).toBe(1);
+    }
+    const unchangedPopulationReads = populationReads - failedReads;
+    // Repair source evidence, not queue SQL. A fresh worker and store must see
+    // the native graph stamp change and rearm the retained generation.
+    await f.fuseki.update(`PREFIX rv: <${RV}>
+      DELETE { GRAPH ${iri(GRAPHS.current)} { ${iri(projection.projection.id)} rv:frame ${iri(invalidFrame)} } }
+      INSERT { GRAPH ${iri(GRAPHS.current)} { ${iri(projection.projection.id)} rv:frame ${iri(work.work)} } }
+      WHERE {}`);
+    const resumed = new DiscoveryRefreshWorker(deps,
+      new DiscoveryRefreshStore(f.accessPool, () => new Date(now)), refreshProjection);
+    for (let i = 0; i < 20 && (await state()).last_outcome !== 'activated'; i++) {
+      now += DISCOVERY_REFRESH_COST.maximumRetryMs;
+      await resumed.tick();
+    }
+    expect(await state()).toMatchObject({ last_outcome: 'activated', generation_id: null,
+      quarantine_basis: null, quarantine_reason: null, attempts: '0' });
+    expect((await f.accessPool.query(`SELECT active_generation FROM access.derived_generation_head
+      WHERE family='discovery' AND scope_key=$1`, [key])).rows[0]!.active_generation).toBe(failed.generation_id);
+    expect(populationReads).toBeGreaterThan(failedReads);
+    f.fuseki.query = query;
+    expect((await project()).items.find(item => item.work === work.work)?.classifications)
+      .toMatchObject([{ sense: term.sense }]);
+    console.info(JSON.stringify({ capability: 'discovery-refresh-maintenance', case: 'D5004C02',
+      fault: 'MediaInvalid: resource summary request is invalid', cause: 'classified Concept redirect to Projection with invalid frame',
+      permanentFullClaims: fullClaims, unchangedPopulationReads, unchangedProbes: 3, personaJourney: false }));
+  } finally {
+    f.fuseki.query = query;
+    try { await restoreGraph?.(); }
+    finally { await relay.end(); await f.stop(); await owners.close(); }
   }
 }, 300_000);

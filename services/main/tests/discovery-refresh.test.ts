@@ -6,6 +6,7 @@ import { DISCOVERY_SOURCE_PROFILE } from '../src/modules/discovery/profile.ts';
 import type { DiscoveryProjection } from '../src/modules/discovery/store.ts';
 import { WorkReadUnavailable } from '../src/modules/work/read-session.ts';
 import { invalidWorkReadSource } from '../src/modules/work/read-source-fault.ts';
+import { MediaInvalid, MediaUnavailable } from '../src/modules/media/contract.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import type { AlsoEnjoyedStore } from '../src/modules/also-enjoyed/store.ts';
@@ -69,7 +70,7 @@ test('quarantine rearms for graph repairs, receipted changes, Access changes, re
 
 /** Real workRead and projection source path, with only owner/transport doubles.
  * The native integration regression separately exercises the durable owners. */
-function refusedSource(mode: 'invalid' | 'limit' | 'invalid-basis' | 'missing-basis' | 'inactive' | 'unavailable' | 'moved' | 'probe-unavailable') {
+function refusedSource(mode: 'invalid' | 'limit' | 'invalid-basis' | 'missing-basis' | 'inactive' | 'unavailable' | 'moved' | 'probe-unavailable' | 'media-invalid' | 'media-unavailable' | 'media-moved') {
   const work = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
   const field = (value: string) => ({ type: 'literal', value });
   const job: RefreshJob = { scope_key: 'a'.repeat(64), basis: {
@@ -79,7 +80,7 @@ function refusedSource(mode: 'invalid' | 'limit' | 'invalid-basis' | 'missing-ba
       quarantine_basis: sourceBasis, quarantine_reason: 'basis-invalid' as const,
       last_error: 'Discovery source is ambiguous' } : {}) };
   const finishes: Parameters<DiscoveryRefreshStore['finish']>[] = [];
-  let released = 0, sourceReads = 0;
+  let released = 0, sourceReads = 0, candidateReads = 0;
   const row = { generation_id: 'pending', complete: false, checkpoint: '', source_sequence: '1', population_sequence: '1' };
   const store = { purge: async () => 0, catalog: async () => null, claim: async () => job,
     inspect: async () => ({ fresh: false, row, principal: null, sourceBasis, inactive: mode === 'inactive' }),
@@ -96,11 +97,14 @@ function refusedSource(mode: 'invalid' | 'limit' | 'invalid-basis' | 'missing-ba
       if (sparql.includes('SELECT ?context WHERE')) return { results: { bindings: [] } };
       if (sparql.includes('SELECT ?epoch ?prior')) return { results: { bindings: [] } };
       if (sparql.includes('SELECT DISTINCT ?work WHERE')) {
+        candidateReads++;
         if (mode === 'unavailable') throw new WorkReadUnavailable('Transport is unavailable');
-        return { results: { bindings: [{ work: field(work) }] } };
+        return { results: { bindings: mode === 'media-moved' && candidateReads > 1 ? [] : [{ work: field(work) }] } };
       }
       if (sparql.includes('SELECT DISTINCT ?work ?head')) {
         sourceReads++;
+        if (mode === 'media-invalid' || mode === 'media-moved') throw new MediaInvalid('resource summary request is invalid');
+        if (mode === 'media-unavailable') throw new MediaUnavailable('Summary media owner is unavailable');
         return { results: { bindings: mode === 'moved' && sourceReads > 1 ? [] : (mode === 'limit' ? ['9223372036854775808'] : ['1', '2']).map(sequence => ({
           work: field(work), head: field(`${work}-head`), main: field(`${work}-main`),
           sequence: field(sequence), epochOrder: field('0'), classified: field('false'), credited: field('false'),
@@ -144,6 +148,30 @@ test('a probe outage retains the original quarantine instead of rearming full wo
   expect(await fixture.worker.tick()).toBe('retry');
   expect(fixture.finishes[0]![5]).toEqual({ basis: sourceBasis, reason: 'basis-invalid',
     error: 'Discovery source is ambiguous' });
+});
+
+test('D5004C02: a stable MediaInvalid records its diagnostic and releases the projection lease', async () => {
+  const fixture = refusedSource('media-invalid');
+  expect(await fixture.worker.tick()).toBe('basis-invalid');
+  expect(fixture.finishes[0]!.slice(1)).toEqual(['pending', 'basis-invalid', expect.any(Number),
+    DISCOVERY_REFRESH_COST.maximumRetryMs,
+    { basis: sourceBasis, reason: 'basis-invalid', error: 'resource summary request is invalid' }]);
+  expect(fixture.released()).toBe(1);
+});
+
+test('D5004C02: MediaUnavailable remains transient and keeps exponential backoff', async () => {
+  const fixture = refusedSource('media-unavailable');
+  expect(await fixture.worker.tick()).toBe('retry');
+  expect(fixture.finishes[0]!.slice(1)).toEqual(['pending', 'retry', expect.any(Number), 60_000, undefined]);
+  expect(fixture.released()).toBe(1);
+});
+
+test('D5004C02: a moved closing source fence prevents a MediaInvalid quarantine', async () => {
+  const fixture = refusedSource('media-moved');
+  expect(await fixture.worker.tick()).toBe('retry');
+  expect(fixture.finishes[0]![4]).toBe(DISCOVERY_REFRESH_COST.intervalMs);
+  expect(fixture.finishes[0]![5]).toBeUndefined();
+  expect(fixture.released()).toBe(1);
 });
 
 for (const [mode, outcome, diagnostic, released] of [
