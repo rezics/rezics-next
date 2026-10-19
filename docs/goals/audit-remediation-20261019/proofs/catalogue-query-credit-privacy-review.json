@@ -716,5 +716,243 @@
       "quote": "End that turn immediately with RESULT: parked",
       "effect": "The initial recorded diagnostic job parked; the worker ended that turn as instructed and resumed on its completion wake. The filter-selection failure was classified as setup, not an outcome or fix round."
     }
+  ],
+  "correctionDispositions": [
+    {
+      "reviewedAtUtc": "2026-10-19T09:50:58.320703+00:00",
+      "reviewer": "G-2849; same independent codex-1 / gpt-6.1-sol / xhigh worker",
+      "status": "bounded-caller-correction-accepted-public-qualification-open",
+      "scope": "Independent source inspection and fresh execution of the actual two-file caller correction together with the unchanged actual authority owner. This appends to the original review; every historical assertion, finding, pin and result above is preserved at its original source pin.",
+      "pins": {
+        "originalReviewedSource": "19f79493fe4da28ec3a39017e82e8f2041eb87d9",
+        "originalBase": "2811e7dfa99d5dd56f72e55828413f2f116d1eaa",
+        "originalReviewReportCommit": "84da8e2540b62f2d88044a2e098894c4e5bd22ef",
+        "correction": "0ec51a648571cdffdff667ca9b2ca86b6ffa69a6",
+        "correctionParent": "210dab05cceea672ea513fd7db83a814b94cb500",
+        "authorityOwnerRepair": "7b6ee9be4a5624056e9fd3f4061eef116e484682",
+        "authorityOwnerIsAncestor": true,
+        "changedPathsAgainstCorrectionParent": [
+          "services/main/src/modules/query/association-credit.ts",
+          "services/main/tests/resource-query-credit-composition.test.ts"
+        ],
+        "scopeIsTwoFileCorrectionAgainstParentNotWholeWaveAgainstOriginalBase": true
+      },
+      "exactFiles": [
+        {
+          "path": "services/main/src/modules/query/association-credit.ts",
+          "gitBlob": "89fdd5bdf7d68c75bbda7d4436d69161930fac3f",
+          "sha256": "270b59fe5f7a88cf53b9236ebdd1bbab9007f03dde1eae4431cd25ed4eac081d",
+          "snapshotMatchesPin": true,
+          "unchangedFromAuthorityOwnerRepair": null
+        },
+        {
+          "path": "services/main/tests/resource-query-credit-composition.test.ts",
+          "gitBlob": "22f940d06106d3b9002ea5ab73f64af38ded6d6c",
+          "sha256": "b6866e4d41148ca83700a18fdc073b4a041f4e564268b35f3a20123dd7ac1073",
+          "snapshotMatchesPin": true,
+          "unchangedFromAuthorityOwnerRepair": null
+        },
+        {
+          "path": "services/main/src/modules/work/credit-association-read.ts",
+          "gitBlob": "7bd929bf694c01d9358f571ce684dd8e5a470c46",
+          "sha256": "534579d2786e828e66836737d675889fb41bde7a8491e09cb0cd96272ada1038",
+          "snapshotMatchesPin": true,
+          "unchangedFromAuthorityOwnerRepair": true
+        },
+        {
+          "path": "services/main/tests/credit-retained-reads.test.ts",
+          "gitBlob": "b221d4420eebb5a679e7df9e6cf3fed89dcb23f1",
+          "sha256": "ab0f7fff1da06a1a8728a091cf65e4791dedb7369ee96add2853db86516f6424",
+          "snapshotMatchesPin": true,
+          "unchangedFromAuthorityOwnerRepair": true
+        }
+      ],
+      "assertionPreservation": {
+        "originalTestBytes": 23097,
+        "originalTestSha256": "d91ad7ed23999ceaf46f8ce6bb0dedc3693e0329f24158214196f66dd6f479cb",
+        "originalTestIsExactPrefixOfFinalTest": true,
+        "diagnosticReconstruction": "git show 19f79493fe4da28ec3a39017e82e8f2041eb87d9:services/main/tests/resource-query-credit-composition.test.ts followed by diagnosticReproducer.appendedSource from this committed original report",
+        "diagnosticBytes": 28551,
+        "diagnosticSha256": "260e5e7f6bd2f7ba8eb09a49935563542c09fcef67719609dabdc2f3a1a10a72",
+        "entireIndependentDiagnosticIsExactPrefixOfFinalTest": true,
+        "changesAfterDiagnosticPrefix": "One successful-read test for full owner metadata, callback-free serializable projection positions and continuation after expiry-only token renewal. No original fixture, identity, assertion or diagnostic was edited."
+      },
+      "implementationInspection": [
+        {
+          "location": "services/main/src/modules/query/association-credit.ts:43-52",
+          "finding": "readerFor returns the full existing session principal, or the principal held by the live public viewer. It no longer reconstructs a truncated Account identity. The unchanged disclosure viewer keeps that principal in its trusted WeakMap, including when session.principal is null."
+        },
+        {
+          "location": "services/main/src/modules/work/credit-association-read.ts:176-230,284-345",
+          "finding": "The actual unchanged authority owner snapshots data separately from currentAssertion, validates original and current token expiry, and compares the current Account identity and consent/disclosure metadata against readerIdentity. It retains the callback while omitting callback and expiry from RetainedCreditAssociationReadPosition. Identity/expiry denial propagates; metadata movement becomes AssociationStaleQuery through the caller guard."
+        },
+        {
+          "location": "services/main/src/modules/query/association-credit.ts:121-144,178-188",
+          "finding": "Only sourcePosition, generation, activation and reader cross projection.basis and form the continuation basis. The callback-bearing credit basis remains local to the retained reader. Completion revalidates that full basis and the projection token; the same fence is registered on the enclosing WorkReadSession. No callback-bearing basis is structured-cloned at the projection boundary."
+        },
+        {
+          "location": "services/main/src/modules/work/credit-association-read.ts:353-410,666-787",
+          "finding": "Actual candidate and hydration operations fence before and after reads, including an empty candidate page, withheld Work disclosure and withheld coverage. The caller now preserves the live authority those existing fences require."
+        }
+      ],
+      "freshCheck": {
+        "jobId": "873cbe6e-4e0b-43ec-9b1a-a2da54bb1da5",
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/native-query-credit-review/corrected-0ec51a6/services/main/tests/resource-query-credit-composition.test.ts",
+        "log": ".temp/goal/jobs/873cbe6e-4e0b-43ec-9b1a-a2da54bb1da5.log",
+        "exitCode": 0,
+        "passed": 16,
+        "failed": 0,
+        "assertions": 130,
+        "composition": "7 preserved original tests + 8 unchanged independent counterexamples + 1 additional successful-read regression",
+        "testPremise": "Controlled-owner composition using the actual pinned retained reader, query adapter, WorkReadSession, page, cursor and fences. Own modules are real; SPARQL and installed downstream owners are fixture-controlled. No shared stack or public outcome was run.",
+        "sourceIsolation": {
+          "snapshot": ".temp/native-query-credit-review/corrected-0ec51a6",
+          "method": "Full tracked git archive of exact correction pin; no source edits. Snapshot node_modules links to this worker dependency install.",
+          "verifiedTestAndImplementationBlobs": true,
+          "rootPackageJsonAndYarnLockUnchangedFromWorkerHead": true,
+          "dependencyLimit": "Publication also contains an added packages/conversion workspace outside the correction. It is not imported by this test slice. This check does not certify that package, whole-wave dependencies or an installed server."
+        },
+        "harnessNotes": [
+          "The harness printed that the worker report branch was two commits behind main; the check completed successfully, so no rebase or harness workaround was performed.",
+          "Expected anonymous-reader-unavailable route logs come from the preserved fail-closed composition tests; there was no setup failure."
+        ]
+      },
+      "reproducedCounterexamples": [
+        {
+          "case": "live Account revocation during projection",
+          "testLine": 313,
+          "originalResult": "assertion reached; resolved instead of rejecting",
+          "correctedResult": "pass; independent-account-revoked rejection and live validation count asserted"
+        },
+        {
+          "case": "already expired enclosing principal reaches retained reader",
+          "testLine": 331,
+          "originalResult": "assertion reached; resolved instead of rejecting",
+          "correctedResult": "pass; rejection asserted",
+          "limit": "Adapter boundary check; an already expired fresh HTTP token would normally be refused before this call."
+        },
+        {
+          "case": "global public viewer revocation with null session.principal",
+          "testLine": 337,
+          "originalResult": "assertion reached; resolved instead of rejecting",
+          "correctedResult": "pass; independent-public-account-revoked rejection asserted"
+        },
+        {
+          "case": "empty candidate page revocation",
+          "testLine": 358,
+          "originalResult": "assertion reached; resolved instead of rejecting",
+          "correctedResult": "pass; independent-account-revoked rejection asserted"
+        },
+        {
+          "case": "withheld Work disclosure revocation",
+          "testLine": 358,
+          "originalResult": "assertion reached; resolved instead of rejecting",
+          "correctedResult": "pass; independent-account-revoked rejection asserted"
+        },
+        {
+          "case": "withheld exact coverage revocation",
+          "testLine": 358,
+          "originalResult": "assertion reached; resolved instead of rejecting",
+          "correctedResult": "pass; independent-account-revoked rejection asserted"
+        },
+        {
+          "case": "changed live Account reader metadata",
+          "testLine": 388,
+          "originalResult": "assertion reached; resolved instead of rejecting",
+          "correctedResult": "pass; AssociationStaleQuery asserted",
+          "limit": "The unchanged diagnostic changes emailVerified metadata. It is not an age-policy or installed disclosure proof."
+        },
+        {
+          "case": "Account token expires during hydration",
+          "testLine": 401,
+          "originalResult": "assertion reached; resolved instead of rejecting",
+          "correctedResult": "pass; rejection asserted with the original controlled clock advance"
+        }
+      ],
+      "reusedOwnerEvidence": {
+        "runId": "20261019t093434-d22fd2",
+        "source": {
+          "head": "63b515928a1c9afac7109edd46d23896496858a7",
+          "fingerprint": "c79dbb89a923b8172cc4319c8f6fc5c7a217466b3e8b8d946847e82344ad13d5",
+          "clean": false,
+          "sourceStable": true
+        },
+        "result": "83 passed, 0 failed, 759 assertions across credit-retained-reads, resource-query-associations and resource-query-credit-composition",
+        "acceptanceIdsPassed": 0,
+        "acceptanceIdsUncovered": 292,
+        "certifiesFull": false,
+        "reuseLimit": "Independent inspection confirmed the authority implementation and its direct test are byte-identical to ancestor 7b6ee9be4a5624056e9fd3f4061eef116e484682. Owner QA ran before rebase on a dirty source and is supporting owner evidence, not a fresh exact-publication or public-acceptance run. The fresh exact-publication check above independently covers every requested caller counterexample.",
+        "ownerRecordedSequence": "7ca8cf7d-e1b6-4a43-9e62-3c39db9b1d10",
+        "ownerCheck": "types, inference, lint, AST and 24/45 selected guards passed; inspected recorded .3.log",
+        "postRebaseJob": "42b57549-d92f-4cf3-aee5-0fe22f3c4382",
+        "postRebaseCheck": "Recorded .1.log: task goal:type-files on the two published files passed; no type errors in 1,361 files. This worker did not rerun that broad owner check."
+      },
+      "findingDispositions": [
+        {
+          "findingId": "query-credit-live-authority",
+          "disposition": "Corrected at the bounded caller/actual-owner boundary. All eight original independently reproduced counterexamples now pass unchanged on the exact published source. No additional actionable defect found in this actual two-file delta.",
+          "publicOutcomeDisposition": "The historical failures established a controlled-owner caller defect, not an installed public leak. This correction review likewise establishes no installed public success and closes no acceptance ID."
+        },
+        {
+          "findingId": "association-runtime-composition",
+          "disposition": "Unchanged by the correction. At the corrected pin, subjectAssociations is still declared/consumed only in association-read.ts and is not wired in composition.ts. Real activation, mapping, coverage, origin, attribution and projection remain required for installed public operation. Anonymous retained credit and native appearance remain explicitly unavailable.",
+          "scope": "Source inference plus the preserved controlled fail-closed tests; no shared installed server probed. Existing owner-installation work is separate from acceptance of this bounded correction."
+        }
+      ],
+      "sourceRuntimeAtCorrectedPin": {
+        "classification": "source-inspection-only; no runtime installation or Source assertion executed in this correction review",
+        "historicalPinDistinction": "sourceRuntimeDependencies above describes 19f79493fe4da28ec3a39017e82e8f2041eb87d9. Its missing Source exports must not be projected onto this newer publication.",
+        "presentExports": [
+          "services/main/src/modules/source/field-support-retained.ts:86 SourceRetainedFieldSupportStore",
+          "services/main/src/modules/source/retained-evidence.ts:53 SourceRetainedRecordEvidenceOwner"
+        ],
+        "presentDependency": "services/main/src/routes/dependencies.ts:255 sourceRetainedFieldSupports",
+        "composition": "services/main/src/composition.ts:440-445 constructs both owners and the withdrawal store; :586 installs sourceRetainedFieldSupports",
+        "impact": "These Source owners are now present in source. They are not a substitute for missing subjectAssociations composition, and are not a mandatory native citation or annotation prerequisite. No Source/footer/privacy work is queued for replay by this review."
+      },
+      "boundariesPreserved": {
+        "unchangedPrivacyFiles": [
+          {
+            "path": "services/main/src/modules/wiki/evidence-read.ts",
+            "gitBlob": "87ddbdb70bf63be930c7541adf66f57745fbf3b4",
+            "unchangedFromOriginalReviewedSource": true
+          },
+          {
+            "path": "services/main/src/modules/wiki/evidence.ts",
+            "gitBlob": "d5484dfcd8c18646fa6944fb92482d4d29efa5e2",
+            "unchangedFromOriginalReviewedSource": true
+          },
+          {
+            "path": "services/main/tests/wiki-evidence-projection.test.ts",
+            "gitBlob": "7c6dce17e8025f8d4dcbe56ce37d91afd87f55a1",
+            "unchangedFromOriginalReviewedSource": true
+          }
+        ],
+        "privacyCheckDisposition": "Reuse the original exact-blob privacy review and four passing tests. No unchanged privacy slice rerun and no new installed EPUB CFI/privacy acceptance claim.",
+        "nativeCitation": "Citation and native annotation remain independent of conversion; optional retained derivation is not made mandatory by this delta.",
+        "providerTransformation": "Neither changed file adds provider transformation or ordinary native API conversion.",
+        "openapi": "The correction changes only an internal owner argument type and live-authority flow, with no authored public schema/route delta. It requires no new OpenAPI generation. The original bounded artifact disposition remains historical; use the actual landing generator for any separately changed contracts."
+      },
+      "limitations": [
+        "No whole-wave, full-tier, corpus, native load/cancellation, browser or public integration qualification was run or imposed as a prerequisite for this bounded caller review.",
+        "No source implementation, original assertion, fixture identity or data was changed. No services were started, data imported or main/wave landing performed.",
+        "Installed public assertions SA1-SA6 and the existing persona/outcome coverage retain their separate status; controlled owner tests do not close them."
+      ],
+      "recommendation": "Accept exact 0ec51a648571cdffdff667ca9b2ca86b6ffa69a6 as the bounded correction of the eight caller counterexamples, consuming 7b6ee9be4a5624056e9fd3f4061eef116e484682 unchanged. Continue existing owner installation and genuine public outcome checks separately. No whole-wave prerequisite or replay of already landed Source/footer/privacy work is requested.",
+      "reportValidation": {
+        "status": "pass",
+        "completedAtUtc": "2026-10-19T09:52:02.052612+00:00",
+        "jobId": "a5064dbb-d8a6-4b2a-a44a-6909a87d2fa9",
+        "docsCheck": "task docs:check passed: 13 tests, 249 Markdown files; local links, fragments and design navigation.",
+        "workerGate": "task goal -- check passed: proportional 1/44 repository guards and AST; no TypeScript/source changes or tests named in the report-only brief.",
+        "logs": [
+          ".temp/goal/jobs/a5064dbb-d8a6-4b2a-a44a-6909a87d2fa9.1.log",
+          ".temp/goal/jobs/a5064dbb-d8a6-4b2a-a44a-6909a87d2fa9.2.log",
+          ".temp/goal/check/run-n6yoWr/output.log"
+        ],
+        "sourcePinPreservation": "Validation ran with the report staged; HEAD stayed 84da8e2540b62f2d88044a2e098894c4e5bd22ef. No rebase, merge or source mutation was performed.",
+        "trackedChanges": "Only an appended correction disposition in the claimed JSON report; every historical JSON value remains unchanged."
+      }
+    }
   ]
 }
