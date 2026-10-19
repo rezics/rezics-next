@@ -148,7 +148,7 @@ export function StudioHome({ agent, content, moreHref, now, locale, messages }: 
     {nothing ? <EmptyState icon={FeatherIcon} title={t.emptyTitle} description={t.emptyBody}>
       <Link href={studioHref(agent, '/new')} className={buttonVariants()}><PlusIcon aria-hidden="true" />{t.startWriting}</Link>
     </EmptyState> : <>
-      <nav aria-label={t.viewsLabel} className="-mx-1 flex gap-1 overflow-x-auto border-border/60 border-b px-1">
+      <nav aria-label={t.viewsLabel} className="-mx-1 flex gap-1 overflow-x-auto border-border/60 border-b p-1">
         {views.map(({ view, label }) => <Link key={view} href={view === 'all' ? studioHref(agent) : `${studioHref(agent)}?view=${view}`}
           aria-current={content.view === view ? 'page' : undefined}
           className={cn('-mb-px shrink-0 border-transparent border-b-2 px-3 py-2 font-medium text-muted-foreground text-sm',
