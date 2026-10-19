@@ -57,6 +57,7 @@ export default {
 
   sections: '作品內容', overview: '概覽', contents: '目錄', versions: '版本',
   discussion: '討論', history: '歷史記錄',
+  postMoreActions: '貼文的更多操作', replyMoreActions: '回覆的更多操作',
 
   scope: '社群', global: '所有人', realm: '社群', mine: '你', chooseRealm: '選擇社群',
   adoptingRealms: '推薦此作品的社群', noAdoptingRealms: '尚無社群推薦此作品。',

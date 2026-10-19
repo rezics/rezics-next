@@ -103,6 +103,7 @@ export default {
 
   sections: '作品栏目', overview: '概览', contents: '目录', versions: '版本',
   discussion: '讨论', history: '历史',
+  postMoreActions: '帖子的更多操作', replyMoreActions: '回复的更多操作',
 
   scope: '社区', global: '所有人', realm: '社区', mine: '我', chooseRealm: '选择社区',
   adoptingRealms: '推荐此作品的社区', noAdoptingRealms: '尚无社区推荐此作品。',

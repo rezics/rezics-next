@@ -57,6 +57,7 @@ export default {
 
   sections: 'Bereiche des Werks', overview: 'Überblick', contents: 'Inhalt', versions: 'Versionen',
   discussion: 'Diskussion', history: 'Verlauf',
+  postMoreActions: 'Weitere Aktionen für den Beitrag', replyMoreActions: 'Weitere Aktionen für die Antwort',
 
   scope: 'Community', global: 'Alle', realm: 'Community', mine: 'Du', chooseRealm: 'Community auswählen',
   adoptingRealms: 'Communities, die dieses Werk vorstellen', noAdoptingRealms: 'Noch keine Community stellt dieses Werk vor.',

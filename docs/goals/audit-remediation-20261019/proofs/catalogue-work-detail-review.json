@@ -10431,5 +10431,996 @@
       "productWrites": [],
       "peerChanges": []
     }
+  },
+  "boundedWorkDiscussionRoleMenuFirstReview": {
+    "observedAt": "2026-10-19T15:55:43.000326+00:00",
+    "reviewer": {
+      "account": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independent": true,
+      "fallback": false,
+      "delegation": false
+    },
+    "authority": "First source review of only the selected sixteen-path Work discussion native-role/owning-object-menu composition and a separate one-context inventory renewal, within the existing cumulative report claim. No implementation, landing, service, data preparation or repeat of previously accepted Work/header/footer/author reviews.",
+    "priorReport": {
+      "commit": "4cd470a054697c37c1b8088525cc548b5b002e0f",
+      "sha256": "0cb7a2131628b4cce1f57cac9cb36e99bc5c7fea23fd0ba7d3175634ccc65e55",
+      "topLevelKeys": [
+        "format",
+        "goal",
+        "worker",
+        "observedAt",
+        "reviewer",
+        "disposition",
+        "acceptance",
+        "pins",
+        "scope",
+        "acceptanceReference",
+        "findings",
+        "sourceReviewObservations",
+        "checksActuallyExecuted",
+        "proofReuse",
+        "limitations",
+        "managerNext",
+        "originalReviewCheckpoint",
+        "finalCandidateCheckpoint",
+        "finalCandidateResolutionCheckpoint",
+        "boundedActionGroupCheckpoint",
+        "boundedSourceFooterCheckpoint",
+        "boundedCreditsCookCheckpoint",
+        "boundedBookCoverCheckpoint",
+        "boundedBookRetryCorrectionCheckpoint",
+        "boundedD1003NavigationCorrectionCheckpoint",
+        "boundedD1003BackQueryAssertionCheckpoint",
+        "boundedNonWorkReleaseFirstSourceCheckpoint",
+        "storyRefreshSeamFirstReview",
+        "readerMetadataFirstReview",
+        "boundedIdentityNameConsumerFirstReview",
+        "managerCallerCorrection",
+        "managerBookIntegration",
+        "identityAgentPickerFourPathFirstReview"
+      ],
+      "preservation": "All 33 prior field values, including the independently published four-path AgentPicker verdict, current frozen-Main manager entries and every historical finding/checkpoint/failure, are preserved exactly."
+    },
+    "pins": {
+      "frozenMainAndBase": "464ee111d0c0d9b24e726231d59096c62dcde8e7",
+      "candidate": "702059b3a43db73db4fd78ac51fb80dba7b8e739",
+      "candidateTree": "e73f64213f3bf178f0b0ada2b70fc1010653e5e6",
+      "nativeSource": "d30e5815cfa27992258674470bbd3ea916ff48ca",
+      "nativeOriginal": "d5b9a6c18f97467b136c2010f50c46e5ae90b837",
+      "rendererSource": "caf6a668468490c54f01332c4583f1b7f2a5efba",
+      "layers": [
+        {
+          "layer": "native-four",
+          "tree": "b2e5e2b689c99dac89326263ca13fde5f1ba4b28",
+          "commit": "dbc654e407ef930e2aa53661c303c6a9a57834be",
+          "author": {
+            "name": "Edge-coordinates",
+            "email": "Edgecoordinates@gmail.com",
+            "date": "2026-10-19T22:45:40+08:00"
+          },
+          "isolatedApplyCheck": "PASS",
+          "isolatedApply": "exact authored delta, no conflict or new semantic hunk"
+        },
+        {
+          "layer": "root-fixture-one",
+          "tree": "4247361633a26e2a9deac50c8646721fac67780c",
+          "commit": "73d6a53f0a8e4765ef02eea936b6d8cb9c6182c3",
+          "author": {
+            "name": "Edge-coordinates",
+            "email": "Edgecoordinates@gmail.com",
+            "date": "2026-10-19T15:39:10.255143+00:00"
+          },
+          "isolatedApplyCheck": "PASS",
+          "isolatedApply": "exact authored delta, no conflict or new semantic hunk"
+        },
+        {
+          "layer": "renderer-eleven",
+          "tree": "e73f64213f3bf178f0b0ada2b70fc1010653e5e6",
+          "commit": "702059b3a43db73db4fd78ac51fb80dba7b8e739",
+          "author": {
+            "name": "Edge-coordinates",
+            "email": "Edgecoordinates@gmail.com",
+            "date": "2026-10-19T23:26:18+08:00"
+          },
+          "isolatedApplyCheck": "PASS",
+          "isolatedApply": "exact authored delta, no conflict or new semantic hunk"
+        }
+      ],
+      "objectDatabase": ".temp/audit-remediation-20261019/two-hour-sprint/site-work-discussion-composed-current-main/candidate.git"
+    },
+    "inputs": [
+      {
+        "path": ".temp/goal/discussion-agent-first-review/manifest.json",
+        "bytes": 24014,
+        "sha256": "9a019c3eb4ee90ab1e281298e63ca75d52b3e045cb6b4d8267aabcf8c38c8979"
+      },
+      {
+        "path": ".temp/goal/discussion-agent-first-review/candidate.patch",
+        "bytes": 36453,
+        "sha256": "017857e687a2d8743ba8d84460f8d5c6db00ef8ef10e2c7034d67a8d8b1d387b"
+      },
+      {
+        "path": ".temp/goal/discussion-agent-first-review/proof-manifest.json",
+        "bytes": 3141,
+        "sha256": "8607e24924565cfbbf9fd5d68ca2895ee686020a0585f2f6ecf5bd8d3ceded08"
+      },
+      {
+        "path": ".temp/goal/discussion-agent-first-review/inventory-required-separate.patch",
+        "bytes": 1060,
+        "sha256": "0957fc90a10f6b22a9dbf0b6d096de71d3931de3c1a1baef916c4a52789437f4"
+      }
+    ],
+    "selectedSourceCount": 16,
+    "selectedSourceDispositions": [
+      {
+        "path": "generated/openapi/main/public.json",
+        "owner": "G-2839",
+        "mainPreimage": "2d0b22906b5abf8f87e7ad0457bd50ef367ce482",
+        "candidateBlob": "a7d255640e4c57981b7a677ca86cabb0bc1edae1",
+        "authoredBlob": "3987b25bdb95c46169d87fc611f8af7eab2ffacc",
+        "exactAuthoredFinalBlob": false,
+        "sha256": "59e250e5bfeab46e5299852eef9c5711f13c3438ab46517f32c538e95b45bedb",
+        "bytes": 41756222,
+        "composition": "Only exact authored hunks applied to current main; all unrelated current-main bytes retained.",
+        "sourcePin": "d30e5815cfa27992258674470bbd3ea916ff48ca",
+        "reviewDisposition": "Only required discussion items[].kind enum post/reply is added; semantic before/after comparison preserves every other operation/field, including current Main problem metadata. The 200 schema equals the native producer schema."
+      },
+      {
+        "path": "services/main/src/modules/work-activity/read-contract.ts",
+        "owner": "G-2839",
+        "mainPreimage": "032be53f8055ec3334c65c9ec33eff3ec43179cc",
+        "candidateBlob": "e50718adf7411e75da46fe284629ffb49a236101",
+        "authoredBlob": "e50718adf7411e75da46fe284629ffb49a236101",
+        "exactAuthoredFinalBlob": true,
+        "sha256": "db0c64073b9e00364900d4184dc005ed505ad8dafc3c2c0763e9aff79f1cf06e",
+        "bytes": 1289,
+        "composition": "Exact final authored blob.",
+        "sourcePin": "d30e5815cfa27992258674470bbd3ea916ff48ca",
+        "reviewDisposition": "Required native role, bounded 20-item page and updated cost description; no optional/guessed role compatibility."
+      },
+      {
+        "path": "services/main/src/modules/work-activity/read.ts",
+        "owner": "G-2839",
+        "mainPreimage": "4e58171ef09022faa0666f0ac3bbe93f581bacaf",
+        "candidateBlob": "54d84063b6ee7e13231962bc2be78cbdbfe86b7d",
+        "authoredBlob": "54d84063b6ee7e13231962bc2be78cbdbfe86b7d",
+        "exactAuthoredFinalBlob": true,
+        "sha256": "6b0055a20fad409cca2c660a15c0cc6e082dd18afe8d58787ffcc4da3abf0a46",
+        "bytes": 12510,
+        "composition": "Exact final authored blob.",
+        "sourcePin": "d30e5815cfa27992258674470bbd3ea916ff48ca",
+        "reviewDisposition": "One deduplicated selected-visible Content identity batch binds parent/root/rootRevision to exact current placement, exact body and closing visibility; ambiguous or missing identity refuses."
+      },
+      {
+        "path": "services/main/tests/work-activity-discussion.test.ts",
+        "owner": "G-2839",
+        "mainPreimage": "4d3fc767bcc0f5ccbe06b567c665a111e14de833",
+        "candidateBlob": "f1fb97f885c1d8c3a5821976f20dd316b806cf9f",
+        "authoredBlob": "f1fb97f885c1d8c3a5821976f20dd316b806cf9f",
+        "exactAuthoredFinalBlob": true,
+        "sha256": "39009097529cf84f574f6e9145fb5040aff97d299bc3e3d55eafea8ee5ce3782",
+        "bytes": 11814,
+        "composition": "Exact final authored blob.",
+        "sourcePin": "d30e5815cfa27992258674470bbd3ea916ff48ca",
+        "reviewDisposition": "Real reader/session/target/disclosure/identity SQL owner with injected bounded storage doubles; meaningful role, refusal, hidden-parent, sentinel and fence assertions; not an installed native API proof."
+      },
+      {
+        "path": "apps/web/features/work-page/fixtures.ts",
+        "owner": "Root",
+        "mainPreimage": "66624e12196518557fa86b3b34737a2278b24993",
+        "candidateBlob": "f3e1080352301dcbdeaf0964b81305a0f75cb131",
+        "authoredBlob": "f3e1080352301dcbdeaf0964b81305a0f75cb131",
+        "exactAuthoredFinalBlob": true,
+        "sha256": "3a2ee3fc25c37c47f2ddb03d0d4ca0926e3adb8563cf966a5828b90b215116a3",
+        "bytes": 29320,
+        "composition": "Exact final authored blob.",
+        "sourcePin": "0589842d41db9818263bdae2c83d4e553ca17105",
+        "reviewDisposition": "Exactly kind: reply as const is added to the shared discussion fixture factory; other fields and fixture consumers are preserved. This corrects the retained missing-kind compile premise in source without claiming a composed typecheck."
+      },
+      {
+        "path": "apps/web/features/work-page/discussion.stories.tsx",
+        "owner": "G-2757",
+        "mainPreimage": "ac60078a911dae026b6535d3b88cb7fcd0b335e0",
+        "candidateBlob": "0ab3c66b2a9ab627e1ca8db1aa300ff7b0a11fb4",
+        "authoredBlob": "0ab3c66b2a9ab627e1ca8db1aa300ff7b0a11fb4",
+        "exactAuthoredFinalBlob": true,
+        "sha256": "d5c0ae9df644d925c000ed108d0b2d751eea9c7a028f2028ddecdeddaa9bedca",
+        "bytes": 5879,
+        "composition": "Exact final authored blob.",
+        "sourcePin": "caf6a668468490c54f01332c4583f1b7f2a5efba",
+        "reviewDisposition": "Both original spoiler story exports preserved; two new desktop/Chinese-phone interactions check every owning menu, exact report URL, Escape/unmount and focus return without changing the independent visitor callback."
+      },
+      {
+        "path": "apps/web/features/work-page/discussion.test.tsx",
+        "owner": "G-2757",
+        "mainPreimage": "20814eaf663bb196038441f93b4598aa799186b5",
+        "candidateBlob": "c188520b05eafc45c2fc5179a750f8d1dea26f22",
+        "authoredBlob": "c188520b05eafc45c2fc5179a750f8d1dea26f22",
+        "exactAuthoredFinalBlob": true,
+        "sha256": "bac76211379e4455e5d550cff9e74ea78154381fd825b4a34e26e073c4ee8eb1",
+        "bytes": 3301,
+        "composition": "Exact final authored blob.",
+        "sourcePin": "caf6a668468490c54f01332c4583f1b7f2a5efba",
+        "reviewDisposition": "Original spoiler assertion prefix retained; identical text/reversed ordering demonstrate role is supplied rather than inferred; one owning trigger and localized role labels asserted."
+      },
+      {
+        "path": "apps/web/features/work-page/discussion.tsx",
+        "owner": "G-2757",
+        "mainPreimage": "d46b9ef59c5f2568d6870c7a86f69660116a20b8",
+        "candidateBlob": "62993c47ba90f666cd9b0b8e72c50243c4590687",
+        "authoredBlob": "62993c47ba90f666cd9b0b8e72c50243c4590687",
+        "exactAuthoredFinalBlob": true,
+        "sha256": "8476f15a6036cde7f43eb689c9948e56d703cb7a9cb94222f11d1cd38e4934ae",
+        "bytes": 7096,
+        "composition": "Exact final authored blob.",
+        "sourcePin": "caf6a668468490c54f01332c4583f1b7f2a5efba",
+        "reviewDisposition": "Each native owning row has exact resource/role identity and one ReportMenu selecting its own Content URI, Realm and body revision; body/spoiler/date/thread rendering and all DiscussionRegion pagination/failure branches remain."
+      },
+      {
+        "path": "apps/web/features/work-page/messages.ts",
+        "owner": "G-2757",
+        "mainPreimage": "9b44d2a1470777744624765c165d311b040914f1",
+        "candidateBlob": "0b67c64561da2af752f60d05c63efddac3e57077",
+        "authoredBlob": "3f6a7af9d5396254e5c7850a6093cd0d7e2955ba",
+        "exactAuthoredFinalBlob": false,
+        "sha256": "2dedd6884076ad6077ba87500ea17facb1f90d002ee348f60eae985bf974a079",
+        "bytes": 23980,
+        "composition": "Only exact authored hunks applied to current main; all unrelated current-main bytes retained.",
+        "sourcePin": "caf6a668468490c54f01332c4583f1b7f2a5efba",
+        "reviewDisposition": "Only localized postMoreActions/replyMoreActions labels are added to this current Main message file; unrelated existing locale entries are preserved."
+      },
+      {
+        "path": "apps/web/features/work-page/messages/de.ts",
+        "owner": "G-2757",
+        "mainPreimage": "e69c8793fd6ba3b22612445f82b80a4877a3dcb0",
+        "candidateBlob": "0efed218e2dcde205d37602e4caf526949e789a9",
+        "authoredBlob": "2d4f5e755f32c2a87b76d5c7fde23849a9bafc46",
+        "exactAuthoredFinalBlob": false,
+        "sha256": "e3cc991d3716455262a9c7381769d6d9386307f0fe1fbffec69af3dcf4c7b1fa",
+        "bytes": 26164,
+        "composition": "Only exact authored hunks applied to current main; all unrelated current-main bytes retained.",
+        "sourcePin": "caf6a668468490c54f01332c4583f1b7f2a5efba",
+        "reviewDisposition": "Only localized postMoreActions/replyMoreActions labels are added to this current Main message file; unrelated existing locale entries are preserved."
+      },
+      {
+        "path": "apps/web/features/work-page/messages/es.ts",
+        "owner": "G-2757",
+        "mainPreimage": "53df0ff1877c855be467626e07eea4476420b6dc",
+        "candidateBlob": "9a49af49aa30372c42989a469cefcc0735948f19",
+        "authoredBlob": "5421589cacc161a2fa976245a298577e946ad714",
+        "exactAuthoredFinalBlob": false,
+        "sha256": "cc57eca4b728d0b2ff3dca0541f5aa30ffc43962275c07a40318430a86e650e6",
+        "bytes": 25549,
+        "composition": "Only exact authored hunks applied to current main; all unrelated current-main bytes retained.",
+        "sourcePin": "caf6a668468490c54f01332c4583f1b7f2a5efba",
+        "reviewDisposition": "Only localized postMoreActions/replyMoreActions labels are added to this current Main message file; unrelated existing locale entries are preserved."
+      },
+      {
+        "path": "apps/web/features/work-page/messages/fr.ts",
+        "owner": "G-2757",
+        "mainPreimage": "d60a2887e9cbc3fae7221047ab725cabdb7cc1f4",
+        "candidateBlob": "7edf4743e7b2441f28daa7c10d323ddc64995923",
+        "authoredBlob": "44f75a09ffb342a3f3ab538d48f3ac889b58ccad",
+        "exactAuthoredFinalBlob": false,
+        "sha256": "fc4ea5204cb0870084229d85d1f8241cb45c1daefb8a1a247149bc8a59ed64a4",
+        "bytes": 26487,
+        "composition": "Only exact authored hunks applied to current main; all unrelated current-main bytes retained.",
+        "sourcePin": "caf6a668468490c54f01332c4583f1b7f2a5efba",
+        "reviewDisposition": "Only localized postMoreActions/replyMoreActions labels are added to this current Main message file; unrelated existing locale entries are preserved."
+      },
+      {
+        "path": "apps/web/features/work-page/messages/ja.ts",
+        "owner": "G-2757",
+        "mainPreimage": "64180b6787369e0881a4126b813e958161af464e",
+        "candidateBlob": "820cf5625c0e427282c06034c9052bbe3ea392bf",
+        "authoredBlob": "b8a647ee24e8e18e57be0d8402c620c36f6bca37",
+        "exactAuthoredFinalBlob": false,
+        "sha256": "9743a5853904c32c0ee63431044a0d4c94747ca38fe3ab83b43258df4f938c0e",
+        "bytes": 27878,
+        "composition": "Only exact authored hunks applied to current main; all unrelated current-main bytes retained.",
+        "sourcePin": "caf6a668468490c54f01332c4583f1b7f2a5efba",
+        "reviewDisposition": "Only localized postMoreActions/replyMoreActions labels are added to this current Main message file; unrelated existing locale entries are preserved."
+      },
+      {
+        "path": "apps/web/features/work-page/messages/ko.ts",
+        "owner": "G-2757",
+        "mainPreimage": "a62c5b191beefa97ce879e58c1d1ba28cd83480a",
+        "candidateBlob": "ee3b3f7178225e2e5d24c57ffb51a80e81f209a0",
+        "authoredBlob": "9be4fbc93ca8a3f2b952e54922fe81b9d186258f",
+        "exactAuthoredFinalBlob": false,
+        "sha256": "798ff29843a09b54454c3848f1340dd172032a3f1c977129ee1acc2f95db705d",
+        "bytes": 26014,
+        "composition": "Only exact authored hunks applied to current main; all unrelated current-main bytes retained.",
+        "sourcePin": "caf6a668468490c54f01332c4583f1b7f2a5efba",
+        "reviewDisposition": "Only localized postMoreActions/replyMoreActions labels are added to this current Main message file; unrelated existing locale entries are preserved."
+      },
+      {
+        "path": "apps/web/features/work-page/messages/zh-Hans.ts",
+        "owner": "G-2757",
+        "mainPreimage": "4f243febcfa7eea6cb131428d7ce7814f307752c",
+        "candidateBlob": "44e2b368fc7535c6244f2930fa8c56204b970a41",
+        "authoredBlob": "4f10797ac0798f5c66cc6206d4e40e73eb6d0e75",
+        "exactAuthoredFinalBlob": false,
+        "sha256": "416a6c21de2814a673971d2472e168c2b519509a8f787ecb76bac86100a5774d",
+        "bytes": 22142,
+        "composition": "Only exact authored hunks applied to current main; all unrelated current-main bytes retained.",
+        "sourcePin": "caf6a668468490c54f01332c4583f1b7f2a5efba",
+        "reviewDisposition": "Only localized postMoreActions/replyMoreActions labels are added to this current Main message file; unrelated existing locale entries are preserved."
+      },
+      {
+        "path": "apps/web/features/work-page/messages/zh-Hant.ts",
+        "owner": "G-2757",
+        "mainPreimage": "e848307e35596d2c8f2300c119160b7e6399cde7",
+        "candidateBlob": "cc669d955f372d005b17f037d39f0a476f9414b6",
+        "authoredBlob": "e1cd2a298e6dc401c03f7cc4dbd3e5c8ffa43414",
+        "exactAuthoredFinalBlob": false,
+        "sha256": "d5844829bd746346a285124b9e7c1f95e7de3a8132fe9c10a9c2a824f4ec4c97",
+        "bytes": 22547,
+        "composition": "Only exact authored hunks applied to current main; all unrelated current-main bytes retained.",
+        "sourcePin": "caf6a668468490c54f01332c4583f1b7f2a5efba",
+        "reviewDisposition": "Only localized postMoreActions/replyMoreActions labels are added to this current Main message file; unrelated existing locale entries are preserved."
+      }
+    ],
+    "materialCallChain": {
+      "native": "workActivityRoutes GET /v1/resources/:resource/discussion -> workRead -> readWorkDiscussion -> resolveTargets(discussion), current RealmReply placements, realmReplies.visible, Content.readExactBatch and RealmReplyThreadStore.identities -> closing placement/Work checks -> workRead dependency/authority fence.",
+      "renderer": "Typed DiscussionPage = Ok<Resource[discussion][get]>; unchanged readDiscussion retains actingSubject/Realm/cursor -> Work DiscussionRegion or shared Entity discussion caller -> DiscussionList -> unchanged ReportMenu/ReportMenuItems -> reportHref -> existing body selection contract.",
+      "additionalInspectedInterfaces": [
+        {
+          "path": "apps/web/features/entity-page/views.tsx",
+          "blob": "c8b3084dd8c531bc9f9a710d4ddfe87266cff902",
+          "scope": "Shared DiscussionList caller at the discussion section: supplied typed items/locale/messages, own failed/empty handling and Pages cursor owner remain unchanged; no alternate role producer."
+        },
+        {
+          "path": "apps/web/features/safety/report.ts",
+          "blob": "cfdf44e150c78bb77965f04dc29dd42db991c17a",
+          "scope": "reportHref encodes exact target/Realm/component/revision and omits null locator; typed public-report selection remains native-owned."
+        },
+        {
+          "path": "services/main/src/modules/public-report/contract.ts",
+          "blob": "8e6922958bc614d47e3fe7aadd629fca54c298b4",
+          "scope": "Body selection requires existing Content revision URI and null locator; no new reporting authority or write behavior."
+        },
+        {
+          "path": "services/main/src/modules/work/read-contract.ts",
+          "blob": "0df03eeb8d1a326636631642db1d69299e8175ea",
+          "scope": "Existing public page query limits 1..20 and cursor envelope; selected identity batch cannot widen it."
+        }
+      ]
+    },
+    "dependencies": {
+      "rendererDirect": [
+        {
+          "path": "apps/web/features/address/path.ts",
+          "rendererTestedBlob": "bc58a81f68e3f565b269256f72b647fe75b15357",
+          "candidateBlob": "bc58a81f68e3f565b269256f72b647fe75b15357",
+          "same": true,
+          "disposition": "Exact renderer tested dependency."
+        },
+        {
+          "path": "apps/web/features/feed/discussion-card.tsx",
+          "rendererTestedBlob": "86c432806464caf29f89896ffac9543e40bf50d5",
+          "candidateBlob": "86c432806464caf29f89896ffac9543e40bf50d5",
+          "same": true,
+          "disposition": "Exact renderer tested dependency."
+        },
+        {
+          "path": "apps/web/features/feed/discussion.ts",
+          "rendererTestedBlob": "9bb2cb925db44f8330afab4f0165365c96a36567",
+          "candidateBlob": "9bb2cb925db44f8330afab4f0165365c96a36567",
+          "same": true,
+          "disposition": "Exact renderer tested dependency."
+        },
+        {
+          "path": "apps/web/features/feed/messages.ts",
+          "rendererTestedBlob": "ff87f3a564716faa37b1b1df0d8f07c776ffd0f6",
+          "candidateBlob": "ff87f3a564716faa37b1b1df0d8f07c776ffd0f6",
+          "same": true,
+          "disposition": "Exact renderer tested dependency."
+        },
+        {
+          "path": "apps/web/features/feed/messages/zh-Hans.ts",
+          "rendererTestedBlob": "3ebc40c80c10be26251da4127be012d2e955af8b",
+          "candidateBlob": "3ebc40c80c10be26251da4127be012d2e955af8b",
+          "same": true,
+          "disposition": "Exact renderer tested dependency."
+        },
+        {
+          "path": "apps/web/features/safety/messages.ts",
+          "rendererTestedBlob": "3a009da4c7e7107a29ce6e443ad2e75e9505f122",
+          "candidateBlob": "3a009da4c7e7107a29ce6e443ad2e75e9505f122",
+          "same": true,
+          "disposition": "Exact renderer tested dependency."
+        },
+        {
+          "path": "apps/web/features/safety/report-action.tsx",
+          "rendererTestedBlob": "a6ac9b1c3d89f16a2b844fb7b2e83d1a7ce2d138",
+          "candidateBlob": "a6ac9b1c3d89f16a2b844fb7b2e83d1a7ce2d138",
+          "same": true,
+          "disposition": "Exact renderer tested dependency."
+        },
+        {
+          "path": "apps/web/features/shell/empty-state.tsx",
+          "rendererTestedBlob": "f76bf7aa77c32e52ea55b5809be9fe6a8a472756",
+          "candidateBlob": "f76bf7aa77c32e52ea55b5809be9fe6a8a472756",
+          "same": true,
+          "disposition": "Exact renderer tested dependency."
+        },
+        {
+          "path": "apps/web/features/shell/localized-link.tsx",
+          "rendererTestedBlob": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba",
+          "candidateBlob": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba",
+          "same": true,
+          "disposition": "Exact renderer tested dependency."
+        },
+        {
+          "path": "apps/web/features/work-page/fixtures.ts",
+          "rendererTestedBlob": "66624e12196518557fa86b3b34737a2278b24993",
+          "candidateBlob": "f3e1080352301dcbdeaf0964b81305a0f75cb131",
+          "same": false,
+          "disposition": "Root-authorized one-field fixture dependency; exact prior candidate blob."
+        },
+        {
+          "path": "apps/web/features/work-page/format.ts",
+          "rendererTestedBlob": "c2ce5ce4ea7c9481455734c8ab7ee65eedad27fe",
+          "candidateBlob": "c2ce5ce4ea7c9481455734c8ab7ee65eedad27fe",
+          "same": true,
+          "disposition": "Exact renderer tested dependency."
+        },
+        {
+          "path": "apps/web/features/work-page/region.tsx",
+          "rendererTestedBlob": "e91e187a1a9ddde408a399a042fda3ed6546c80b",
+          "candidateBlob": "e91e187a1a9ddde408a399a042fda3ed6546c80b",
+          "same": true,
+          "disposition": "Exact renderer tested dependency."
+        },
+        {
+          "path": "apps/web/features/work-page/route.ts",
+          "rendererTestedBlob": "2f5073aa044699ff0fac1579382cce1136755226",
+          "candidateBlob": "2f5073aa044699ff0fac1579382cce1136755226",
+          "same": true,
+          "disposition": "Exact renderer tested dependency."
+        },
+        {
+          "path": "apps/web/features/work-page/scope-bar.tsx",
+          "rendererTestedBlob": "03599c3a67723d7392d4dfc6a0f0cf771861eadc",
+          "candidateBlob": "03599c3a67723d7392d4dfc6a0f0cf771861eadc",
+          "same": true,
+          "disposition": "Exact renderer tested dependency."
+        },
+        {
+          "path": "apps/web/features/work-page/scope-labels.ts",
+          "rendererTestedBlob": "703d0719bcd69cc0007265365611c78bd2ce0a91",
+          "candidateBlob": "703d0719bcd69cc0007265365611c78bd2ce0a91",
+          "same": true,
+          "disposition": "Exact renderer tested dependency."
+        },
+        {
+          "path": "apps/web/features/work-page/types.ts",
+          "rendererTestedBlob": "d8d9e31adf25b2e899b819fec37923f3d60d1723",
+          "candidateBlob": "d8d9e31adf25b2e899b819fec37923f3d60d1723",
+          "same": true,
+          "disposition": "Exact renderer tested dependency."
+        },
+        {
+          "path": "apps/web/i18n/define.ts",
+          "rendererTestedBlob": "409e97b5683c92ff8b1c19e5ad61ab1076f0fc1f",
+          "candidateBlob": "409e97b5683c92ff8b1c19e5ad61ab1076f0fc1f",
+          "same": true,
+          "disposition": "Exact renderer tested dependency."
+        },
+        {
+          "path": "apps/web/i18n/locale.ts",
+          "rendererTestedBlob": "5f476e4102ea7b3673ae6e6d7ec2d320b920a4ce",
+          "candidateBlob": "5f476e4102ea7b3673ae6e6d7ec2d320b920a4ce",
+          "same": true,
+          "disposition": "Exact renderer tested dependency."
+        }
+      ],
+      "nativeMaterial": [
+        {
+          "path": "services/main/src/routes/work-activity.ts",
+          "nativeTestedBlob": "51cc398306e0a848621df37fc17273b3bce38fa4",
+          "candidateBlob": "51cc398306e0a848621df37fc17273b3bce38fa4",
+          "same": true,
+          "disposition": "Exact native tested dependency."
+        },
+        {
+          "path": "services/main/src/routes/dependencies.ts",
+          "nativeTestedBlob": "1709046f3f4ab4691a589fa644928156f222a2bc",
+          "candidateBlob": "020e21976f594954053ae2aded8579ea577072da",
+          "same": false,
+          "disposition": "Current-main additive optional relation/source support interfaces retained; work discussion dependency contract unchanged."
+        },
+        {
+          "path": "services/main/src/composition.ts",
+          "nativeTestedBlob": "4543b05f915f5c122f9e21e98ab542628a04ecea",
+          "candidateBlob": "4543b05f915f5c122f9e21e98ab542628a04ecea",
+          "same": true,
+          "disposition": "Exact native tested dependency."
+        },
+        {
+          "path": "services/main/src/modules/target/resolve.ts",
+          "nativeTestedBlob": "95ecab4fc79b8bf8c19a2797d67e584cc7be4f72",
+          "candidateBlob": "95ecab4fc79b8bf8c19a2797d67e584cc7be4f72",
+          "same": true,
+          "disposition": "Exact native tested dependency."
+        },
+        {
+          "path": "services/main/src/modules/work/read-session.ts",
+          "nativeTestedBlob": "85381184a0704f74645f97e0b0327a2b13d0d27d",
+          "candidateBlob": "85381184a0704f74645f97e0b0327a2b13d0d27d",
+          "same": true,
+          "disposition": "Exact native tested dependency."
+        },
+        {
+          "path": "services/main/src/modules/realm-reply/thread-store.ts",
+          "nativeTestedBlob": "dbd740b6e37a02c9cf406ad0a18ac9414b50bdf3",
+          "candidateBlob": "dbd740b6e37a02c9cf406ad0a18ac9414b50bdf3",
+          "same": true,
+          "disposition": "Exact native tested dependency."
+        },
+        {
+          "path": "services/main/src/modules/realm-reply/thread-read.ts",
+          "nativeTestedBlob": "6e9acd9d68fb533c2502c83ae70462ba94eafdeb",
+          "candidateBlob": "6e9acd9d68fb533c2502c83ae70462ba94eafdeb",
+          "same": true,
+          "disposition": "Exact native tested dependency."
+        },
+        {
+          "path": "services/main/src/modules/realm-reply/store.ts",
+          "nativeTestedBlob": "692ed7ad75fae6da401168143082d3721af8403e",
+          "candidateBlob": "692ed7ad75fae6da401168143082d3721af8403e",
+          "same": true,
+          "disposition": "Exact native tested dependency."
+        },
+        {
+          "path": "services/main/src/modules/realm-reply/graph.ts",
+          "nativeTestedBlob": "76f614c9dc97733e3e9c486243e313953ec73ee0",
+          "candidateBlob": "76f614c9dc97733e3e9c486243e313953ec73ee0",
+          "same": true,
+          "disposition": "Exact native tested dependency."
+        },
+        {
+          "path": "services/content/src/core.ts",
+          "nativeTestedBlob": "2e1c25587dcb1ec2a593d44306e3f19f0605ee77",
+          "candidateBlob": "2e1c25587dcb1ec2a593d44306e3f19f0605ee77",
+          "same": true,
+          "disposition": "Exact native tested dependency."
+        },
+        {
+          "path": "infra/jena/command-module/src/main/java/com/rezics/jena/CommandService.java",
+          "nativeTestedBlob": "7b13aa43c27e6434d8cd47210464c1d651826cc2",
+          "candidateBlob": "7b13aa43c27e6434d8cd47210464c1d651826cc2",
+          "same": true,
+          "disposition": "Exact native tested dependency."
+        },
+        {
+          "path": "infra/jena/command-module/src/main/java/com/rezics/jena/ContentSearchQualification.java",
+          "nativeTestedBlob": "6ec875e19b19282882885b62a5a8a7957a7f28b8",
+          "candidateBlob": "6ec875e19b19282882885b62a5a8a7957a7f28b8",
+          "same": true,
+          "disposition": "Exact native tested dependency."
+        },
+        {
+          "path": "infra/dev/compose.yaml",
+          "nativeTestedBlob": "70d68927952cfcab64771c887f3aba2f39c0c0c4",
+          "candidateBlob": "966a8a1cdc0e823a9498899aff32f906c52ff08d",
+          "same": false,
+          "disposition": "Current-main Fuseki image digest retained; no runtime equivalence or new runtime proof claimed."
+        },
+        {
+          "path": "generated/model/manifest.json",
+          "nativeTestedBlob": "ce71e7cf7a9ff14d76bedcf361d2f2a1a4bc88fa",
+          "candidateBlob": "0529bdcc2e4cea2d590ec2fbf05ffc44f28f221f",
+          "same": false,
+          "disposition": "Current-main additional v2 relation/semantic/statement/work-field profiles retained; existing Work discussion identity/read source preserved."
+        },
+        {
+          "path": "yarn.lock",
+          "nativeTestedBlob": "e70dcbe4159d3fcab2585962a1cf3688937eb0e5",
+          "candidateBlob": "e70dcbe4159d3fcab2585962a1cf3688937eb0e5",
+          "same": true,
+          "disposition": "Exact native tested dependency."
+        }
+      ],
+      "typedRead": {
+        "path": "apps/web/features/work-page/read.ts",
+        "rendererSourceBlob": "7b2c324d6d84ff8c1adb604741c30383ed2895ce",
+        "candidateMainBlob": "9b8211c2ba87a9c159c4686de4a9f2992a42b2a0",
+        "disposition": "Current-main change affects Book/other Work readStart helper and ReadStart unavailable union only; discussion read is unchanged; retain current-main implementation."
+      },
+      "inspection": [
+        "Verified every listed dependency candidate blob from the immutable object database. Inspected the role/identity/visibility/read/fence interfaces and shared report, spoiler, date/thread/locale and cursor consumers needed by this delta; unrelated dependency implementations were not re-reviewed.",
+        "ThreadStore.identities reads immutable parent_reply/root_target/root_revision from Content for only selected visible reply IDs. Main composition supplies this existing owner. The new code does not hydrate hidden parents, per-row thread trees, authors or ancestors.",
+        "Existing Content exact-read implementation returns results in requested distinct revision order, checks bytes and preserves denied/missing/erased/corrupt outcomes. Each available body is still checked against its exact reply resource.",
+        "Current-Main routes/dependencies.ts adds only optional unrelated relation/source owner interfaces versus native tested input; discussion wiring is retained.",
+        "Current-Main work-page/read.ts differences affect the existing readStart helper/unavailable union; the readDiscussion resource/Realm/cursor/actingSubject call remains unchanged.",
+        "Current-Main compose.yaml retains its newer Fuseki image digest and generated/model/manifest.json retains additional v2 profile/route/hash entries. Native test evidence is not promoted to runtime equivalence under these different deployment/model inputs.",
+        "Generated public API and all eight message files apply only authored hunks over frozen Main; all unselected source blobs and peer entries remain frozen Main. Three native, three renderer and the fixture target blobs exactly match their specified authored layers."
+      ]
+    },
+    "sourceObservations": [
+      {
+        "surface": "Native identity and placement",
+        "observation": "Role comes from Content immutable parent membership after equality with the selected graph parent/root target/root revision. Only an actual null parent yields post; a missing, duplicate, foreign, mismatched or invalid parent identity refuses with WorkReadUnavailable. A reply to a hidden parent remains reply without emitting the parent/root/author fields."
+      },
+      {
+        "surface": "Bounded selected reads and refusal",
+        "observation": "At most twenty selected visible reply identities are deduplicated into one batch; the cursor sentinel is not hydrated. Deadline checks enclose the added owner read. Existing exact body batching, both visibility checks, closing Work disclosure and captured graph dependency fences remain. Failed identity reads produce unavailable rather than invented post/empty success."
+      },
+      {
+        "surface": "Owning object menu",
+        "observation": "Row identity uses item.kind and full item.reply; React key remains placement. A single role-localized overflow owns one generic localized Report item. Its target is item.reply, Realm is item.realm and selection is body plus urn:rezics:content:revision:<item.revisionId>, locator null. It reuses the existing menu/report contract; text, order and current URL never infer ownership."
+      },
+      {
+        "surface": "Shared consumers and preserved content",
+        "observation": "Both Work and Entity consumers pass the same native typed items to DiscussionList. SpoilerVeil keeps marked text absent until reveal; unchanged paragraph/date/thread helpers preserve the existing content and links. DiscussionRegion remains byte-identical, including Mine/null, failed/restart, genuine empty, Realm labels and first/next cursor behavior. The shared Entity Pages owner remains unchanged."
+      },
+      {
+        "surface": "Locale and authority",
+        "observation": "The eight existing locale catalogues each receive only role-specific overflow names; generic Report uses existing safetyText.report in the supplied locale. No session, author action, auth/API dependency, reporting write or unrelated current-Main peer source is replaced."
+      }
+    ],
+    "disposition": {
+      "verdict": "SOURCE APPROVE",
+      "scope": "Exactly base 464ee111d0c0d9b24e726231d59096c62dcde8e7..702059b3a43db73db4fd78ac51fb80dba7b8e739 (16 selected source paths). No actionable defect found in this bounded source review; this is not whole-worker or canonical acceptance approval.",
+      "actionableFindings": [],
+      "sourceInference": "Authoritative role/identity refusal and owning-row report selection are supported by the inspected production call chain, not by unit counts alone.",
+      "reproducedAssertionFailure": null,
+      "setupFailure": null
+    },
+    "separateInventoryRenewal": {
+      "path": "scripts/static/web-continuations.inventory.json",
+      "mainPreimage": "90d3da00d3547408f9914eff87ba5d50b5c89814",
+      "candidateOptionalBlob": "6aed8f6f04af4096885b2f2975e66cb02da866da",
+      "patch": ".temp/audit-remediation-20261019/two-hour-sprint/site-work-discussion-composed-current-main/inventory-required-separate.patch",
+      "oldContext": "bf916ba11c0aa0f73c403f6d89258752e18190c5ed0026f7e396b10421f14461",
+      "newContext": "cb8e4fac42cb3863bbd0bf1bc65350adc847fdbf7b779b2087f4ba9728c7cb98",
+      "onlyOneHashReplacement": true,
+      "selectionDisposition": "Root must include/dispose this exact source-fingerprint renewal for normal guard readiness; not inside the authorized sixteen-source candidate.",
+      "verdict": "SOURCE APPROVE for the exact separately proposed one-context renewal only",
+      "reason": "The patch changes only DiscussionList enclosing-function context bf916... -> cb8e... after the menu/row change. Existing consumer, operation, rule and expression, every peer row and all other inventory bytes remain exact. DiscussionRegion still owns and forwards pagination; no debt deletion, new exception or rule relaxation is selected.",
+      "algorithm": {
+        "path": "scripts/static/web-continuations.ts",
+        "blob": "9a43358d96cab92b1663b41a24c9ad39e43dfd89",
+        "workerMatchesFrozenCandidate": true,
+        "scope": "Compute only this exact before/after discussion file using the existing continuationInventory parser, then compare the old/proposed single inventory row and all peer bytes."
+      },
+      "verification": {
+        "status": "PASS",
+        "job": "job:0366b6c7-7314-418c-93f4-9454b75ed713",
+        "receipt": ".temp/goal/discussion-agent-first-review/fingerprint-verification.json",
+        "sha256": "e1db419f30e5816fe99185c61f0572203d09ce0f9f48d9e15dfa42ee4e9d4ff7",
+        "actualResult": {
+          "status": "PASS",
+          "kind": "bounded source/fingerprint verification; no product or whole-guard execution",
+          "base": "464ee111d0c0d9b24e726231d59096c62dcde8e7",
+          "candidate": "702059b3a43db73db4fd78ac51fb80dba7b8e739",
+          "path": "apps/web/features/work-page/discussion.tsx",
+          "oldRow": {
+            "path": "apps/web/features/work-page/discussion.tsx",
+            "consumer": "DiscussionList",
+            "operation": "<syntax>",
+            "rule": "dropped-continuation",
+            "expression": "{items:items,realmLabel:label,realmHref:realmHref,locale:locale,messages:messages,feedMessages:{\"type\":\"AssignmentPattern\",\"decorators\":[],\"left\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"feedMessages\",\"optional\":false,\"typeAnnotation\":null},\"right\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"defaultFeedMessages\",\"optional\":false,\"typeAnnotation\":null},\"optional\":false,\"typeAnnotation\":null}}",
+            "context": "bf916ba11c0aa0f73c403f6d89258752e18190c5ed0026f7e396b10421f14461"
+          },
+          "newRow": {
+            "path": "apps/web/features/work-page/discussion.tsx",
+            "consumer": "DiscussionList",
+            "operation": "<syntax>",
+            "rule": "dropped-continuation",
+            "expression": "{items:items,realmLabel:label,realmHref:realmHref,locale:locale,messages:messages,feedMessages:{\"type\":\"AssignmentPattern\",\"decorators\":[],\"left\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"feedMessages\",\"optional\":false,\"typeAnnotation\":null},\"right\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"defaultFeedMessages\",\"optional\":false,\"typeAnnotation\":null},\"optional\":false,\"typeAnnotation\":null}}",
+            "context": "cb8e4fac42cb3863bbd0bf1bc65350adc847fdbf7b779b2087f4ba9728c7cb98"
+          },
+          "onlyOneHashReplacement": true,
+          "allPeerInventoryBytesPreserved": true,
+          "allSingleFileViolationsPreservedExceptSelectedContext": true,
+          "discussionRegionIncludingPaginationByteExact": true,
+          "inventoryBeforeSha256": "f519319be0471c9cad8eba0f7221d739464e2c7f564afb12598163b45b89147d",
+          "inventoryProposedSha256": "faa1bc71ca3a9d1ba3ba6b4c6c21b9f8b6df1b827eeac6f72a2eb57e35190756"
+        },
+        "scope": "Existing parser applied only to exact before/after DiscussionList source and the separately proposed inventory; no repository-wide guard run or debt relaxation."
+      },
+      "limits": "This metadata is outside the sixteen-source candidate and independently selectable by root. No whole continuation/accepted-command/inference guard PASS is claimed; retained timeout and prior fingerprint failure remain historical."
+    },
+    "reusedEvidence": {
+      "producerNative": {
+        "source": "d30e5815cfa27992258674470bbd3ea916ff48ca",
+        "checks": {
+          "owner": {
+            "command": "bun scripts/goal/goalctl.ts test services/main/tests/work-activity-discussion.test.ts",
+            "job": "f032eba6-12a9-4e55-851b-de35e7d484b3",
+            "qa": "20261019t144616-b86147",
+            "source": "d30e5815cfa27992258674470bbd3ea916ff48ca",
+            "passed": 16,
+            "failed": 0,
+            "assertions": 138,
+            "log": ".artifacts/qa/20261019t144616-b86147/logs/owner.log"
+          },
+          "static": {
+            "command": "task goal -- check --only types,lint",
+            "job": "f032eba6-12a9-4e55-851b-de35e7d484b3",
+            "overall": "failed",
+            "mainTypes": "PASS, 2622 files (8.19s after admission)",
+            "lint": "PASS",
+            "ast": "PASS",
+            "webTypes": "FAIL: apps/web/features/work-page/fixtures.ts:252:46 TS2345 missing required kind",
+            "inference": "FAIL at the same existing web fixture compilation; no independent inference-cost verdict",
+            "log": ".temp/goal/check/run-ShxiDe/output.log"
+          },
+          "guards": {
+            "command": "task goal -- check --only types,lint,guards",
+            "job": "078d4309-4d0c-4c8e-8f77-9a7a5b66b02c",
+            "result": "PASS after one retained timeout retry",
+            "rawTests": 265,
+            "initialTimeouts": 1,
+            "timeoutRetry": "scripts/static/web-accepted-commands.test.ts > production adapters introduce no completion of admitted commands beyond exact existing debt: passed 3.918s",
+            "log": ".temp/goal/check/run-DdRcZe/output.log",
+            "retry": ".temp/goal/check/run-DdRcZe/timeout-retries.jsonl",
+            "reuse": "Producer and contracts unchanged since this run; only SPARQL test term metadata fixed and already generated OpenAPI committed"
+          },
+          "notReached": "Standalone task web:typecheck was not run because the prior sequence step failed on the same consumer diagnostic",
+          "listing": "Optional --affected --list cancelled only its own process group while awaiting CPU admission; no additional tests ran"
+        },
+        "qualification": "Owner tests use real WorkReadSession, target/disclosure readers and RealmReplyThreadStore.identities SQL with bounded injected graph/SQL/body/visibility doubles. No real dataset/installed API/UI/visitor persona proof was executed; all292 acceptance IDs remain uncovered."
+      },
+      "renderer": {
+        "source": "caf6a668468490c54f01332c4583f1b7f2a5efba",
+        "checks": [
+          {
+            "job": "720f4314-068f-4c7b-91b5-2621861f4c20",
+            "step": 1,
+            "command": "bun scripts/goal/goalctl.ts test apps/web/features/work-page/discussion.test.tsx",
+            "result": "passed",
+            "tests": 4,
+            "assertions": 46
+          },
+          {
+            "job": "720f4314-068f-4c7b-91b5-2621861f4c20",
+            "step": 2,
+            "command": "bun scripts/goal/goalctl.ts test apps/web/features/work-page/discussion.stories.tsx",
+            "result": "passed",
+            "tests": 4,
+            "qa": "20261019t151914-2ba3a2",
+            "states": [
+              "Spoilers",
+              "SpoilerVeilPhoneChinese",
+              "OwningObjectMenus",
+              "OwningObjectMenusPhoneChinese"
+            ],
+            "behavior": [
+              "exact native identity and authoritative post/reply role",
+              "exact own target/realm/body revision href",
+              "one generic localized Report menuitem",
+              "no resting report control",
+              "Escape and own trigger refocus"
+            ]
+          },
+          {
+            "job": "720f4314-068f-4c7b-91b5-2621861f4c20",
+            "step": 3,
+            "command": "task goal -- check --only lint",
+            "result": "passed",
+            "lint": "passed",
+            "ast": "passed"
+          },
+          {
+            "job": "720f4314-068f-4c7b-91b5-2621861f4c20",
+            "step": 4,
+            "command": "task goal:type-files -- --project apps/web/tsconfig.json apps/web/features/work-page/discussion.tsx apps/web/features/work-page/discussion.test.tsx apps/web/features/work-page/discussion.stories.tsx apps/web/features/work-page/messages.ts",
+            "result": "failed",
+            "filesChecked": 1848,
+            "errors": 1,
+            "remaining": "TS2345 apps/web/features/work-page/fixtures.ts(252,46): required items[].kind missing; unclaimed shared fixture; no remaining diagnostic in this renderer cut"
+          },
+          {
+            "job": "cf3330b4-b61b-4857-bbcd-aa24b0262bf0",
+            "command": "task goal -- check --only types,lint,guards",
+            "result": "failed",
+            "guards": "DiscussionList existing dropped-continuation fingerprint no longer matches after row/menu change; the exact root-only renewal patch is supplied, not applied",
+            "otherGuardFailure": "accepted-command guard exceeded its 5000 ms wall limit in the full run; retained separate retry evidence is not a projection-guard pass",
+            "typesAtThatTime": "six own diagnostics subsequently fixed, plus the one unclaimed fixture error still reproduced in final targeted types",
+            "inference": "compile-failed on those same diagnostics; no passing inference-cost verdict claimed"
+          },
+          {
+            "job": "38b186bb-8306-4258-b1aa-bbfe505eed46",
+            "result": "failed",
+            "remainingAtThatTime": "new phone menu story queried portal unmount during closed transition; fixed only the new helper with waitFor; both original spoiler plays unchanged",
+            "qa": "20261019t150625-d36665"
+          },
+          {
+            "job": "0665ed40-124b-4b84-a8f7-14f911c62794",
+            "command": "git commit --only (11 authorized paths)",
+            "result": "passed",
+            "commit": "caf6a668468490c54f01332c4583f1b7f2a5efba"
+          }
+        ],
+        "qualification": "Four unit cases/46 assertions and four controlled browser Storybook states (QA20261019t151914-2ba3a2) reached their assertions on the exact renderer source/dependencies listed above. These are not genuine installed API/visitor proofs and were not rerun."
+      },
+      "artifactIntegrity": [
+        {
+          "path": ".temp/worktrees/g-2757/.artifacts/qa/20261019t151914-2ba3a2/story-screenshots/apps-web-features-work-page-discussion.stories.tsx/Spoilers.png",
+          "bytes": 23288,
+          "sha256": "e787f227a7cb15d27053d1c7f2aa0bab6878a21ca4aaa2a75b6d21c7adb2262f",
+          "verified": true
+        },
+        {
+          "path": ".temp/worktrees/g-2757/.artifacts/qa/20261019t151914-2ba3a2/story-screenshots/apps-web-features-work-page-discussion.stories.tsx/SpoilerVeilPhoneChinese.png",
+          "bytes": 24616,
+          "sha256": "b73342de22e1c2d4dba7871055c82626afb7791e1859ce70893e230fb914f30e",
+          "verified": true
+        },
+        {
+          "path": ".temp/worktrees/g-2757/.artifacts/qa/20261019t151914-2ba3a2/story-screenshots/apps-web-features-work-page-discussion.stories.tsx/OwningObjectMenus.png",
+          "bytes": 41939,
+          "sha256": "34b582866c752708891a17a06e0f923366576d7162e2c9c423dbd6f7e4fde738",
+          "verified": true
+        },
+        {
+          "path": ".temp/worktrees/g-2757/.artifacts/qa/20261019t151914-2ba3a2/story-screenshots/apps-web-features-work-page-discussion.stories.tsx/OwningObjectMenusPhoneChinese.png",
+          "bytes": 40000,
+          "sha256": "adca7168ef23f8ad38ea4c43b5173ab0db474e7905b327da42b011b569c43eaf",
+          "verified": true
+        },
+        {
+          "path": ".temp/worktrees/g-2757/.temp/goal/discussion-menu/handoff.md",
+          "bytes": 6411,
+          "sha256": "f6fecf6aea53f32d44ca10d3b41cffa40993ea7ac2c6114906b74c904054ce25",
+          "verified": true
+        },
+        {
+          "path": ".temp/worktrees/g-2757/.temp/goal/discussion-menu/candidate.json",
+          "bytes": 17193,
+          "sha256": "6b1634ddbf3b70cb6457d62aeec857a1649586d6a2af60719c1cbed5422bb9e0",
+          "verified": true
+        },
+        {
+          "path": ".temp/worktrees/g-2757/.temp/goal/discussion-menu/candidate.patch",
+          "bytes": 17596,
+          "sha256": "ca6919ffc9884669e7f0e326a6936bb8e7b3a4714247fb9c7f79aac66ed13dac",
+          "verified": true
+        },
+        {
+          "path": ".temp/worktrees/g-2757/.temp/goal/jobs/720f4314-068f-4c7b-91b5-2621861f4c20.log",
+          "bytes": 472,
+          "sha256": "4d6bea1e5592d85a6b40607cb30433f2d931e307142bc858e646c47e4c194759",
+          "verified": true
+        },
+        {
+          "path": ".temp/worktrees/g-2839/.temp/goal/discussion-role-candidate.json",
+          "bytes": 10678,
+          "sha256": "8fa8573344b580175a34da67f44456451efb7f0732c72ae4baebf02f68a5f822",
+          "verified": true
+        }
+      ],
+      "actualLogsRead": [
+        {
+          "path": ".temp/worktrees/g-2757/.temp/goal/jobs/720f4314-068f-4c7b-91b5-2621861f4c20.1.log",
+          "bytes": 182,
+          "sha256": "8bf5fc229ac1c829c5baef46ea22e542b8da3f3fc0b0bb5e3502257250ca8298"
+        },
+        {
+          "path": ".temp/worktrees/g-2757/.temp/goal/jobs/720f4314-068f-4c7b-91b5-2621861f4c20.2.log",
+          "bytes": 1953,
+          "sha256": "7ecdab524b57c5a472d2452f5c41bc84a10056a3e279396375a69caf1e0b3d02"
+        },
+        {
+          "path": ".temp/worktrees/g-2757/.temp/goal/jobs/720f4314-068f-4c7b-91b5-2621861f4c20.3.log",
+          "bytes": 189,
+          "sha256": "88aa3157721a37cf51c5f159eb22da89ab2462dc945d90290fa8a113b80dff07"
+        },
+        {
+          "path": ".temp/worktrees/g-2757/.temp/goal/jobs/720f4314-068f-4c7b-91b5-2621861f4c20.4.log",
+          "bytes": 3537,
+          "sha256": "8966a8ab638b3126f973e782a61086c80d7e6c5c1aab65cd1ff4177f1d29024b"
+        },
+        {
+          "path": ".temp/worktrees/g-2839/.artifacts/qa/20261019t144616-b86147/logs/owner.log",
+          "bytes": 1683,
+          "sha256": "9b4215136e1f3bcca90afded8557e54612732afa625c480981544c249d82a953"
+        }
+      ],
+      "reviewerViewedScreenshots": [
+        {
+          "path": ".temp/worktrees/g-2757/.artifacts/qa/20261019t151914-2ba3a2/story-screenshots/apps-web-features-work-page-discussion.stories.tsx/OwningObjectMenus.png",
+          "sha256": "34b582866c752708891a17a06e0f923366576d7162e2c9c423dbd6f7e4fde738",
+          "expectedSha256": "34b582866c752708891a17a06e0f923366576d7162e2c9c423dbd6f7e4fde738",
+          "bytes": 41939,
+          "expectedBytes": 41939,
+          "matches": true,
+          "viewedByOwner": true,
+          "viewedByThisReviewer": true,
+          "observation": "Desktop: three separate owning rows each retain one overflow; first body remains veiled, date/thread links remain visible, and the third-row popup contains one Report item within the viewport."
+        },
+        {
+          "path": ".temp/worktrees/g-2757/.artifacts/qa/20261019t151914-2ba3a2/story-screenshots/apps-web-features-work-page-discussion.stories.tsx/OwningObjectMenusPhoneChinese.png",
+          "sha256": "adca7168ef23f8ad38ea4c43b5173ab0db474e7905b327da42b011b569c43eaf",
+          "expectedSha256": "adca7168ef23f8ad38ea4c43b5173ab0db474e7905b327da42b011b569c43eaf",
+          "bytes": 40000,
+          "expectedBytes": 40000,
+          "matches": true,
+          "viewedByOwner": true,
+          "viewedByThisReviewer": true,
+          "observation": "390px Chinese phone: date and overflow controls fit all three rows; one localized 举报 item appears in the third-row popup within the viewport. The open popup covers part of its own body, as an overlay."
+        }
+      ],
+      "otherScreenshots": "Both original spoiler PNG hashes/lengths were independently verified; the bounded visual verdict above relies on the two clearly inspected owning-menu captures. No new screenshot or Storybook run was made."
+    },
+    "historicalFailuresPreserved": {
+      "nativeFixtureTyping": {
+        "job": "078d4309-4d0c-4c8e-8f77-9a7a5b66b02c",
+        "classification": "harness",
+        "source": "d5b9a6c18f97467b136c2010f50c46e5ae90b837",
+        "cause": "28 TS2322/TS2741 diagnostics in new storage fixture: SPARQL terms omitted required type metadata",
+        "correction": "Test-only bind() supplies uri/literal type and label uses bind(); no producer/schema change",
+        "runtimeOwnerResult": "16 passed, 138 assertions at QA20261019t144258-ee2e57",
+        "log": ".temp/goal/jobs/078d4309-4d0c-4c8e-8f77-9a7a5b66b02c.3.log"
+      },
+      "renderer": "The retained first static run found six renderer type diagnostics and missing fixture kind; own diagnostics were corrected before final renderer checks. The final 1848-file type run still failed TS2345 at fixtures.ts252:46. The root fixture layer now supplies required kind in source; this review does not infer a new composed types PASS.",
+      "storyTransition": "Job38b186bb-8306-4258-b1aa-bbfe505eed46 initially queried portal removal during the close transition. Only the new interaction helper gained waitFor; both original spoiler exports/plays and independent callback remain unchanged. Final four stories passed.",
+      "guardsAndInference": "cf3330b4 retained the exact DiscussionList source fingerprint failure and accepted-command 5000ms wall timeout; inference compile-failed on the type diagnostics. The separate metadata verdict does not erase these failures or claim whole-guard/inference success.",
+      "originalVisitor": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/two-hour-sprint/trace/a16-report-menu-original-v3/report-menu.e2e.ts",
+        "sha256": "cb24bc0e7ccbfbeb3c81fa9b49506db95cb23e3240fdf93279f03f83f00be7fa",
+        "bytes": 3402,
+        "executed": false,
+        "historicalReach": "all three native texts observed; callback failed row identity before later owning-menu assertions",
+        "diagnosisSha256": "ba25a21939792f6047f9d6921844df0e62dfd288aca9a5def86916f64f4ccd82"
+      }
+    },
+    "checksActuallyExecuted": [
+      "Read-only immutable diff and sixteen-path inventory; all preimage/target source blob IDs, lengths and SHA256 values checked against the manifest; git diff --check passed.",
+      "Every listed renderer/native dependency candidate blob resolved from the isolated object database; material differing dependency hunks inspected without selecting them.",
+      "Parsed full generated OpenAPI before/after: removing only required items[].kind enum makes it structurally identical to frozen Main; generated200 equals the native producer. Every unselected path remains frozen Main.",
+      "Exact DiscussionRegion suffix comparison, original unit/story-prefix preservation and one-field fixture/locale hunk inspection; nine retained artifact hashes and five detailed owner/renderer logs read and rehashed.",
+      "Two retained exact-source menu screenshots actually viewed; no service, browser, unit, owner, types or whole-guard product check was newly executed by this reviewer.",
+      "Recorded job:0366b6c7-7314-418c-93f4-9454b75ed713: Task bounded fingerprint verification PASS, task docs:check PASS (13 checker tests; 249 Markdown files) and task goal -- check PASS (AST and 1/44 report-selected guards). Product types/tests/lint were skipped for the report-only tracked path."
+    ],
+    "originalAcceptance": {
+      "callbackSha256": "cb24bc0e7ccbfbeb3c81fa9b49506db95cb23e3240fdf93279f03f83f00be7fa",
+      "changed": false,
+      "rerun": false,
+      "status": "Original A16/C22/C26 genuine exact-source visitor proof remains with root. The prior owning-row assertion failure is retained. No class closure, report-submission success or unrelated C28/Zone/D1-003 prerequisite is inferred."
+    },
+    "limitations": [
+      "SOURCE approval is limited to this exact sixteen-source composition and the separate exact inventory hunk. Controlled owner/storage tests and component browser fixtures do not prove a genuine installed backend/UI outcome.",
+      "Current-Main dependency/fixture composition differs in the explicitly listed places from retained tested source. No completed new composed type/inference/whole-guard receipt was selected or newly executed by this reviewer; normal manager integration checks remain due.",
+      "Screenshots are retained component states, not full-page navigation, assistive-technology, report submission or account/authority lifecycle proof. Original visitor callback must independently reach the existing owning-row/menu assertions.",
+      "Previously accepted Work/header/footer/author/navigation/reader/name surfaces were reused, not re-reviewed; every earlier report finding, runtime pin, original assertion failure and setup limitation remains intact."
+    ],
+    "reportValidation": {
+      "status": "PASS",
+      "job": "job:0366b6c7-7314-418c-93f4-9454b75ed713",
+      "commands": [
+        {
+          "command": "task -t .temp/goal/discussion-agent-first-review/Taskfile.yml verify-fingerprint",
+          "exit": 0,
+          "log": ".temp/goal/jobs/0366b6c7-7314-418c-93f4-9454b75ed713.1.log",
+          "sha256": "2b9de00489396093bdd59742def3d697b90ac7a7188074e0b21db1ae4d41913a"
+        },
+        {
+          "command": "task docs:check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/0366b6c7-7314-418c-93f4-9454b75ed713.2.log",
+          "sha256": "4903841d44a5650fdb6a448968b1d7eb89b8b455ff8a942904cfc1eaa977fbe5"
+        },
+        {
+          "command": "task goal -- check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/0366b6c7-7314-418c-93f4-9454b75ed713.3.log",
+          "sha256": "6eb3c41c9db92748970f3b03fa488dd51f8fd8190ec3ef1e9fabf20790c26012"
+        }
+      ],
+      "limits": "Report-only docs/AST/selected guard checks plus the exact single-file source fingerprint calculation. No new product types, unit, story, native or whole-guard result. Five-commit-behind harness notice was informational; no check failed and no rebase was performed."
+    },
+    "resources": {
+      "started": [],
+      "stopped": [],
+      "productSourceChanged": false,
+      "dataOrAccountWrites": false
+    }
   }
 }

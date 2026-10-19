@@ -772543,6 +772543,13 @@
                           "dataEpoch": {
                             "type": "string"
                           },
+                          "kind": {
+                            "enum": [
+                              "post",
+                              "reply"
+                            ],
+                            "type": "string"
+                          },
                           "placement": {
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
@@ -772570,6 +772577,7 @@
                           "reply",
                           "realm",
                           "placement",
+                          "kind",
                           "revisionId",
                           "body",
                           "dataEpoch",

@@ -51,7 +51,7 @@ function nextCursor(session: WorkReadSession, binding: unknown,
  * D placements of the Work, including hidden rows; LIMIT bounds output, not scan cost. */
 export async function readWorkDiscussion(session: WorkReadSession, work: string, realm?: string) {
   await resolveTargets(session, [work], 'discussion');
-  if (!session.deps.realmReplies || !session.deps.content) {
+  if (!session.deps.realmReplies || !session.deps.realmReplyThreads || !session.deps.content) {
     throw new WorkReadUnavailable('Reply or Content owner is unavailable');
   }
   if (realm) await session.realm(realm);
@@ -60,7 +60,8 @@ export async function readWorkDiscussion(session: WorkReadSession, work: string,
     session.options.language ?? null, session.options.actingSubject ?? null];
   const cursor = decodeReadCursor(session.options.cursor, binding, session.position);
   const epochs = await readEpochOrder(session);
-  const rows = await session.query(`SELECT ?id ?reply ?realm ?revision ?review ?sequence ?revisionEpoch ?epochOrder WHERE {
+  const rows = await session.query(`SELECT ?id ?reply ?realm ?revision ?review ?sequence ?revisionEpoch ?epochOrder
+    ?parent ?rootRevision WHERE {
     ${epochs}
     GRAPH ${iri(GRAPHS.current)} {
       ?slot a rv:RealmReplySlot ; rv:rootTarget ${iri(work)} ; rv:realm ?realm ;
@@ -71,7 +72,9 @@ export async function readWorkDiscussion(session: WorkReadSession, work: string,
       ?id a rv:RealmReplyPlacement ; rv:realm ?realm ; rv:reply ?reply ;
         rv:rootTarget ${iri(work)} ; rv:contentRevision ?revision ;
         rv:reviewDecision ?review ; rv:placementOutcome rv:Accepted ;
-        rv:dataEpoch ?revisionEpoch ; rv:sequence ?sequence . }
+        rv:dataEpoch ?revisionEpoch ; rv:sequence ?sequence .
+      OPTIONAL { ?id rv:parentReply ?parent }
+      OPTIONAL { ?id rv:rootRevision ?rootRevision } }
     ${realm ? `FILTER(?realm = ${iri(realm)})` : ''}
     ${afterFilter(cursor?.after ?? '', cursorOrder(cursor))}
   } ORDER BY ?epochOrder DESC(?sequence) STR(?id) LIMIT ${limit + 1}`, limit + 1);
@@ -95,6 +98,18 @@ export async function readWorkDiscussion(session: WorkReadSession, work: string,
   const uniqueRevisions = [...new Set(visiblePage.map(item => item.revisionId))];
   const exact = await session.deps.content.readExactBatch(uniqueRevisions, async ids => new Set(ids));
   const bodies = new Map(uniqueRevisions.map((id, index) => [id, exact[index]]));
+  // Content owns immutable parent membership. Read only the selected visible
+  // identities, never a hidden parent's identity or a per-row thread page.
+  const uniqueReplies = [...new Set(visiblePage.map(item => item.reply))];
+  if (uniqueReplies.length > WORK_ACTIVITY_COST.pageSize) throw new WorkReadLimit('Reply identity batch exceeds its budget');
+  session.checkDeadline();
+  const identities = uniqueReplies.length ? await session.deps.realmReplyThreads.identities(uniqueReplies)
+    .catch(cause => { throw new WorkReadUnavailable('Reply identities are unavailable', { cause }); }) : [];
+  session.checkDeadline();
+  const byReply = new Map(identities.map(identity => [identity.reply, identity]));
+  if (byReply.size !== identities.length || identities.some(identity => !uniqueReplies.includes(identity.reply))) {
+    throw new WorkReadUnavailable('Reply identity is ambiguous');
+  }
   const items = [];
   for (const { row, revisionId, realmId, reply } of visiblePage) {
     const review = field(row, 'review');
@@ -108,9 +123,16 @@ export async function readWorkDiscussion(session: WorkReadSession, work: string,
     if (body.reference.resourceId !== reply) {
       throw new WorkReadUnavailable('Reply body differs from its identity');
     }
+    const identity = byReply.get(reply);
+    const parent = row.parent?.value ?? null;
+    if (!identity || identity.rootTarget !== work || identity.rootRevision !== field(row, 'rootRevision')
+      || identity.parent !== parent || parent !== null && !native.test(parent)) {
+      throw new WorkReadUnavailable('Reply identity differs from its placement');
+    }
+    const kind: 'post' | 'reply' = parent === null ? 'post' : 'reply';
     const text = workDiscussionText(body.body);
     if (Buffer.byteLength(text.body, 'utf8') > 1_048_576) throw new WorkReadLimit('Reply body exceeds its budget');
-    items.push({ reply, realm: realmId, placement: field(row, 'id'), revisionId,
+    items.push({ reply, realm: realmId, placement: field(row, 'id'), revisionId, kind,
       ...text, dataEpoch: field(row, 'revisionEpoch'), sequence: field(row, 'sequence') });
   }
   await resolveTargets(session, [work], 'discussion');

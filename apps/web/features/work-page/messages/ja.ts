@@ -57,6 +57,7 @@ export default {
 
   sections: '作品の項目', overview: '概要', contents: '目次', versions: 'バージョン',
   discussion: 'ディスカッション', history: '履歴',
+  postMoreActions: '投稿のその他の操作', replyMoreActions: '返信のその他の操作',
 
   scope: 'コミュニティ', global: 'すべてのユーザー', realm: 'コミュニティ', mine: '自分', chooseRealm: 'コミュニティを選択',
   adoptingRealms: 'この作品を取り上げているコミュニティ', noAdoptingRealms: 'この作品を取り上げているコミュニティはまだありません。',
