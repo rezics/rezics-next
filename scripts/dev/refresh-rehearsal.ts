@@ -1,4 +1,5 @@
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn, spawnSync, type SpawnSyncReturns } from 'node:child_process';
+import { constants } from 'node:os';
 import { randomBytes } from 'node:crypto';
 
 export interface RehearsalDatabase {
@@ -31,18 +32,42 @@ export function rehearsalDiagnostic(line: string): string | undefined {
   return undefined;
 }
 
+/** A transport failure and child exit are independent: spawnSync can report
+ * status zero together with ETIMEDOUT. Never retain its message, path or SQL. */
+export function rehearsalProcessEvidence(result: Pick<SpawnSyncReturns<string>, 'status' | 'signal' | 'error' | 'stderr'>) {
+  const code = (result.error as NodeJS.ErrnoException | undefined)?.code;
+  const invocationCodes = ['ETIMEDOUT', 'ENOENT', 'EACCES', 'EPERM', 'ENOBUFS', 'ECONNREFUSED', 'ECONNRESET', 'EPIPE'];
+  const stderr = result.stderr ?? '';
+  const stderrClasses: string[] = [];
+  if (/permission denied|access is denied|operation not permitted/i.test(stderr)) stderrClasses.push('permission');
+  if (/No such (object|container|volume)\b/i.test(stderr)) stderrClasses.push('object-absent');
+  if (/Cannot connect to the Docker daemon|Is the docker daemon running|connection refused|error during connect/i.test(stderr))
+    stderrClasses.push('daemon-unavailable');
+  if (/context deadline exceeded|i\/o timeout|request canceled|Client\.Timeout/i.test(stderr)) stderrClasses.push('transport-timeout');
+  if (/connection reset|unexpected EOF|broken pipe/i.test(stderr)) stderrClasses.push('transport-disconnected');
+  const phases = [...new Set(stderr.split('\n').filter(line => /^REHEARSAL cleanup (terminate|drop|done)$/.test(line)))];
+  return {
+    status: result.status !== null && Number.isInteger(result.status) && result.status >= 0 && result.status <= 255 ? result.status : null,
+    signal: result.signal && Object.hasOwn(constants.signals, result.signal) ? result.signal : null,
+    hostInvocationError: result.error ? (code && invocationCodes.includes(code) ? code : 'other') : null,
+    stderrClasses: stderrClasses.length ? stderrClasses : stderr && !phases.length ? ['unclassified'] : [],
+    phases,
+  };
+}
+
 function dockerArgs(container: string, args: string[], seconds: number): string[] {
   return ['exec', '--user', 'postgres', container,
     'timeout', '--signal=TERM', '--kill-after=2s', `${seconds}s`, ...args];
 }
 
 function postgresCommand(container: string, step: string, args: string[], seconds = 5): void {
+  const started = Date.now();
   const result = spawnSync('docker', dockerArgs(container, args, seconds), {
     encoding: 'utf8', timeout: (seconds + 4) * 1000, stdio: ['ignore', 'ignore', 'pipe'], maxBuffer: 16_384,
   });
   if (result.error || result.status !== 0) {
-    const phases = (result.stderr ?? '').split('\n').filter(line => /^REHEARSAL cleanup (terminate|drop|done)$/.test(line));
-    throw new Error(`Rehearsal database ${step} failed (exit ${result.status ?? 'timeout/error'}; budget ${seconds}s${phases.length ? `; ${phases.join('; ')}` : ''})`);
+    const evidence = rehearsalProcessEvidence(result);
+    throw new Error(`Rehearsal database ${step} failed (exit ${evidence.status ?? 'none'}; signal ${evidence.signal ?? 'none'}; invocation ${evidence.hostInvocationError ?? 'none'}; stderr ${evidence.stderrClasses.join(',') || 'none'}; elapsed ${Date.now() - started}ms; budget ${seconds}s${evidence.phases.length ? `; ${evidence.phases.join('; ')}` : ''})`);
   }
 }
 

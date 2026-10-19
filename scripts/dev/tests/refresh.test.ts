@@ -38,7 +38,7 @@ import { officialTheme } from '../seed/official-plan.ts';
 import { parseOptions } from '../seed/cli.ts';
 import { stableId } from '../seed/state.ts';
 import { sqlMigration } from '../../lib/concurrent-index.ts';
-import { rehearsalDiagnostic, snapshotRefreshDatabase } from '../refresh-rehearsal.ts';
+import { rehearsalDiagnostic, rehearsalProcessEvidence, snapshotRefreshDatabase } from '../refresh-rehearsal.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const current: RefreshInputs = { revision: 'committed-main', previousRevision: 'committed-main',
@@ -1364,6 +1364,44 @@ WHERE note <> 'CONCURRENTLY;';`;
 });
 
 describe('rehearsal diagnostics', () => {
+  test('a host invocation timeout is retained separately from successful child status', () => {
+    const result = rehearsalProcessEvidence({ status: 0, signal: null, stderr: 'REHEARSAL cleanup terminate\nREHEARSAL cleanup drop\n',
+      error: Object.assign(new Error('sensitive postgres://owner:password@private/db'), { code: 'ETIMEDOUT' }) });
+    expect(result).toMatchObject({ status: 0, signal: null, hostInvocationError: 'ETIMEDOUT',
+      phases: ['REHEARSAL cleanup terminate', 'REHEARSAL cleanup drop'] });
+    expect(JSON.stringify(result)).not.toContain('sensitive');
+    expect(JSON.stringify(result)).not.toContain('postgres://');
+    expect(rehearsalProcessEvidence({ status: 124, signal: 'SIGTERM', stderr: '', error: undefined }))
+      .toMatchObject({ status: 124, signal: 'SIGTERM', hostInvocationError: null });
+    expect(rehearsalProcessEvidence({ status: null, signal: 'SIGKILL', stderr: '',
+      error: Object.assign(new Error('private process path'), { code: 'ETIMEDOUT' }) }))
+      .toMatchObject({ status: null, signal: 'SIGKILL', hostInvocationError: 'ETIMEDOUT' });
+  });
+
+  test('daemon absence, unavailable transport and permission failures remain distinct and redacted', () => {
+    const cases = [
+      ['Error response from daemon: No such container: private-name', 'object-absent'],
+      ['Cannot connect to the Docker daemon at unix:///private/socket. Is the docker daemon running?', 'daemon-unavailable'],
+      ['permission denied while trying to connect to private daemon', 'permission'],
+      ['Get private-endpoint: context deadline exceeded (Client.Timeout exceeded while awaiting headers)', 'transport-timeout'],
+      ['private-endpoint: connection reset by peer', 'transport-disconnected'],
+      ['arbitrary business row', 'unclassified'],
+    ];
+    for (const [stderr, expected] of cases) {
+      const result = rehearsalProcessEvidence({ status: 1, signal: null, stderr: `${stderr}\npostgres://owner:password@private/db`, error: undefined });
+      expect(result.stderrClasses).toContain(expected!);
+      expect(result.hostInvocationError).toBeNull();
+      for (const secret of ['private', 'postgres://', 'password', 'business row'])
+        expect(JSON.stringify(result)).not.toContain(secret);
+    }
+    const unknown = rehearsalProcessEvidence({ status: 0, signal: null,
+      stderr: 'REHEARSAL cleanup drop secret\nREHEARSAL cleanup done\n'.repeat(1000),
+      error: Object.assign(new Error('private message'), { code: 'private-code' }) });
+    expect(unknown).toMatchObject({ status: 0, hostInvocationError: 'other', phases: ['REHEARSAL cleanup done'] });
+    expect(JSON.stringify(unknown)).not.toContain('secret');
+    expect(JSON.stringify(unknown)).not.toContain('private');
+  });
+
   test('only fixed process and phase classifications survive arbitrary sensitive output', () => {
     const secret = 'postgres://owner:password@private:5432/business';
     const row = 'private-person@example.invalid confidential business text';
