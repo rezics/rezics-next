@@ -237,7 +237,7 @@ function PersonControls({ agent, locale, t, preview = false, previewLanguages = 
   const disabled = busy || preview || needsRefresh;
   const busyMessage = needsRefresh ? t.personRefreshing : t.personSaving;
   const feedback = (section: 'privacy' | 'content') => <div id={`${feedbackId}-${section}`}
-    className="sticky top-16 z-10 grid gap-2 bg-card text-sm">
+    className="grid gap-2 text-sm">
     <p role={activeSection === section && (busy || status) ? 'status' : undefined}
       aria-live="polite" aria-atomic="true">{activeSection === section ? (busy ? busyMessage : status) : ''}</p>
     {busy && activeSection !== section ? <p>{busyMessage}</p> : null}
@@ -287,11 +287,13 @@ function PersonControls({ agent, locale, t, preview = false, previewLanguages = 
     <div className="grid gap-1"><h3 className="font-medium">{t.contentPreferences}</h3>
       <p className="text-muted-foreground text-sm">{t.contentPreferencesHelp}</p></div>
     {current && draft ? <>
-      {feedback('content')}
-      <fieldset disabled={disabled} aria-label={t.contentPreferences} aria-describedby={`${feedbackId}-content`}
+      <div role="group" aria-label={t.contentPreferences} aria-describedby={`${feedbackId}-content`}
         className="grid min-w-0 gap-4">
+      <fieldset disabled={disabled} className="min-w-0" aria-label={languageT.yourLanguages}>
       <LanguagePicker t={languageT} locale={locale} suggested={suggested} value={languages}
         onChange={next => { setLanguages(next); if (!failed) setStatus(''); setActiveSection('content'); }} />
+      </fieldset>
+      {feedback('content')}
       {!sameLanguages(languages, current.contentLanguages) ? <p className="text-muted-foreground text-sm">{t.personUnsaved}</p> : null}
       <Button type="button" className="w-fit" disabled={disabled
         || (!failed && sameLanguages(languages, current.contentLanguages))}
@@ -302,7 +304,7 @@ function PersonControls({ agent, locale, t, preview = false, previewLanguages = 
             { value: 'show', label: t.spoilerShow }]}
           onValueChange={value => void save({ spoilerPolicy: value === 'show' ? 'show' : 'hide-unread' })} />
       </label>
-      </fieldset>
+      </div>
     </> : <p role="status" className="text-muted-foreground text-sm">{status || '…'}</p>}
   </div>;
   return <><Privacy agent={agent} t={t} preview={preview} extra={privacy} />

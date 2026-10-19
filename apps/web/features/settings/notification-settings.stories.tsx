@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { NotificationSettings, notificationChannels, settingsNotificationTopics, notificationTopicLabel } from './notification-settings.tsx';
-import { englishMessages } from './messages.ts';
+import { englishMessages, type SettingsMessages } from './messages.ts';
 import ja from './messages/ja.ts';
 import de from './messages/de.ts';
 
@@ -14,6 +14,34 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+async function expectPhoneChannels(canvasElement: HTMLElement, t: SettingsMessages) {
+  const canvas = within(canvasElement);
+  for (const topic of ['reply', 'review', 'proposal-reverted'] as const) {
+    const control = canvas.getByRole('switch', {
+      name: `${t[notificationTopicLabel[topic]]} · ${t.notificationEmailDigest}`,
+    });
+    control.scrollIntoView({ block: 'center' });
+    const row = within(control.closest('[data-slot="field"]')!.parentElement!);
+    for (const channel of [t.notificationInbox, t.notificationPush, t.notificationEmailDigest]) {
+      await expect(row.getByText(channel, { exact: true })).toBeVisible();
+    }
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  }
+}
+
+async function expectFeedbackInViewport(status: HTMLElement) {
+  // toBeVisible also passes for content below the viewport. Read geometry without scrolling
+  // so an async result must reveal its complete text and recovery itself.
+  await waitFor(async () => {
+    const bounds = status.parentElement!.getBoundingClientRect();
+    await expect(bounds.top).toBeGreaterThanOrEqual(0);
+    await expect(bounds.bottom).toBeLessThanOrEqual(window.innerHeight);
+    await expect(bounds.left).toBeGreaterThanOrEqual(0);
+    await expect(bounds.right).toBeLessThanOrEqual(window.innerWidth);
+  });
+  await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+}
+
 export const NewWorkChannels: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
@@ -25,11 +53,14 @@ export const NewWorkChannels: Story = {
         }),
       ).toBeVisible();
     }
+    if (window.innerWidth <= 390) await expectPhoneChannels(canvasElement, englishMessages);
   },
 };
 export const Phone: Story = { ...NewWorkChannels, globals: { viewport: { value: 'phone' } } };
-export const Japanese: Story = { args: { t: ja }, globals: { viewport: { value: 'phone' } } };
-export const GermanPhone: Story = { args: { t: de }, globals: { viewport: { value: 'phone' } } };
+export const Japanese: Story = { args: { t: ja }, globals: { viewport: { value: 'phone' } },
+  async play({ canvasElement }) { await expectPhoneChannels(canvasElement, ja); } };
+export const GermanPhone: Story = { args: { t: de }, globals: { viewport: { value: 'phone' } },
+  async play({ canvasElement }) { await expectPhoneChannels(canvasElement, de); } };
 
 /** The existing preference command saves each channel independently and preserves its CAS revision. */
 export const SaveEmailDigest: Story = {
@@ -131,6 +162,7 @@ function saveScenario(topic: (typeof settingsNotificationTopics)[number], firstS
       await userEvent.click(control);
       await expect(status).toHaveTextContent(englishMessages.notificationSaving);
       await expect(status).toBeVisible();
+      await expectFeedbackInViewport(status);
       for (const item of canvas.getAllByRole('switch')) await expect(item).toBeDisabled();
       await expect(control).not.toBeChecked();
       if (savingOnly) return;
@@ -142,6 +174,7 @@ function saveScenario(topic: (typeof settingsNotificationTopics)[number], firstS
       await expect(control).toBeEnabled();
       await expect(status).toBeVisible();
       await expect(status).toHaveAttribute('role', 'status');
+      await expectFeedbackInViewport(status);
       if (firstStatus === 200) await expect(control).toBeChecked();
       else await expect(control).not.toBeChecked();
       if (firstStatus === 409 && !refreshFails) {
@@ -151,10 +184,12 @@ function saveScenario(topic: (typeof settingsNotificationTopics)[number], firstS
         if (refreshFails) {
           await userEvent.click(cell.getByRole('button', { name: `${englishMessages.reviewLatest} · ${name}` }));
           await waitFor(() => expect(status).toHaveTextContent(englishMessages.notificationConflict));
+          await expectFeedbackInViewport(status);
           await expect(commands).toHaveLength(1);
         }
         await userEvent.click(cell.getByRole('button', { name: `${englishMessages.notificationEnable} · ${name}` }));
         await waitFor(() => expect(status).toHaveTextContent(englishMessages.notificationSaved));
+        await expectFeedbackInViewport(status);
         await expect(control).toBeChecked();
         await expect(commands).toHaveLength(2);
         await expect(commands[1]).toMatchObject({ topic, channel: 'email', state: 'enabled',

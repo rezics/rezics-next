@@ -13,6 +13,31 @@ const meta = { title: 'Settings/Preferences', component: SettingsSections,
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+async function expectBusyDraftReadable(content: ReturnType<typeof within>, search: HTMLElement) {
+  search.scrollIntoView({ block: 'center' });
+  const notice = content.getByText(t.personSaving);
+  const selected = within(content.getByRole('region', { name: 'Your languages, first choice first' }));
+  const rows = selected.getAllByRole('listitem');
+  await expect(rows).toHaveLength(3);
+  for (const [index, name] of ['English', '한국어', 'français'].entries()) {
+    await expect(rows[index]).toHaveTextContent(name);
+  }
+  await waitFor(async () => {
+    const message = notice.getBoundingClientRect();
+    await expect(message.top).toBeGreaterThanOrEqual(0);
+    await expect(message.bottom).toBeLessThanOrEqual(window.innerHeight);
+    for (const row of rows) {
+      const bounds = row.getBoundingClientRect();
+      await expect(bounds.top).toBeGreaterThanOrEqual(0);
+      await expect(bounds.bottom).toBeLessThanOrEqual(window.innerHeight);
+      await expect(bounds.bottom <= message.top || bounds.top >= message.bottom).toBe(true);
+    }
+  });
+  await expect(notice).toBeVisible();
+  await expect(search).toBeVisible();
+  await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+}
+
 function preferenceScenario(firstStatus: 200 | 503 | 409, phone: boolean,
   trigger: 'privacy' | 'spoiler' = 'privacy', savingOnly = false, refreshFails = false): Story {
   let release: () => void;
@@ -62,13 +87,15 @@ function preferenceScenario(firstStatus: 200 | 503 | 409, phone: boolean,
       content.getByRole('button', { name: 'Move English up' }).focus();
       await userEvent.keyboard('{Enter}');
       await userEvent.click(content.getByRole('button', { name: 'Remove Japanese' }));
-      await userEvent.click(await content.findByRole('button', { name: 'Add Korean' }));
+      await userEvent.click(await content.findByRole('button', { name: 'Add 한국어 Korean' }));
       const search = content.getByRole('searchbox', { name: 'Add another language' });
       await userEvent.type(search, 'fr');
       const other = within(content.getByRole('region', { name: 'Add another language' }));
-      await userEvent.click(other.getByRole('button', { name: 'Add French' }));
+      await userEvent.click(other.getByRole('button', { name: 'Add français French fr' }));
       // Leave search results open to cover every language interaction during the save.
       await userEvent.type(search, 'de');
+      await expect(other.getByRole('button', { name: 'Add Deutsch German de' })).toHaveTextContent('Deutsch');
+      await expect(other.getByRole('button', { name: 'Add Nederlands Dutch nl' })).toHaveTextContent('Nederlands');
       if (trigger === 'privacy') {
         await userEvent.click(canvas.getByRole('switch', { name: t.hideReadingActivity }));
       } else {
@@ -85,6 +112,7 @@ function preferenceScenario(firstStatus: 200 | 503 | 409, phone: boolean,
       await expect(commands[0]).toMatchObject({ actingSubject: agent, expectedVersion: 7,
         contentLanguages: ['en', 'ko', 'fr'],
         ...(trigger === 'privacy' ? { hideReadingActivity: true } : { spoilerPolicy: 'show' }) });
+      if (phone) await expectBusyDraftReadable(content, search);
       if (savingOnly) return;
       release();
       const expected = firstStatus === 200 ? t.personSaved : firstStatus === 503 ? t.personFailed
