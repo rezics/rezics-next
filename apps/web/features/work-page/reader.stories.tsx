@@ -70,7 +70,8 @@ export const UnidentifiedChapterReadLeavesNoTrace: Story = {
     const canvas = within(canvasElement);
     await expect(canvas.queryByRole('navigation', { name: 'Also a Work' })).toBeNull();
     await expect(canvas.queryByText(messages.en.regionUnavailable)).toBeNull();
-    await expect(canvas.queryByRole('button', { name: /^Retry$/ })).toBeNull();
+    await expect(within(canvasElement.querySelector('article header')!)
+      .queryByRole('button', { name: /^Retry$/ })).toBeNull();
     await expect(canvasElement.querySelector('[data-reader-text]')).toBeVisible();
   },
 };
@@ -135,11 +136,13 @@ export const WorkLinksRetryThenLeaveNoTrace: Story = {
     const canvas = within(canvasElement);
     await expect(await canvas.findByText(messages.en.regionUnavailable)).toBeVisible();
     await expect(canvasElement.querySelector('[data-reader-text]')).toBeVisible();
-    await userEvent.click(canvas.getByRole('button', { name: /^Retry$/ }));
+    await userEvent.click(within(canvasElement.querySelector('article header')!)
+      .getByRole('button', { name: /^Retry$/ }));
     await waitFor(() => expect(recoveredWorkLinks).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(canvas.queryByText(messages.en.regionUnavailable)).toBeNull());
     await expect(canvas.queryByRole('navigation', { name: 'Also a Work' })).toBeNull();
-    await expect(canvas.queryByRole('button', { name: /^Retry$/ })).toBeNull();
+    await expect(within(canvasElement.querySelector('article header')!)
+      .queryByRole('button', { name: /^Retry$/ })).toBeNull();
   },
 };
 

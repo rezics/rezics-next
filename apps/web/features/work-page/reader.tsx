@@ -107,6 +107,7 @@ function ProgressPanel({
           markUnread: t.markUnread,
           saving: t.saving,
           progressFailed: t.progressFailed,
+          retry: t.retry,
         }}
       />
     );

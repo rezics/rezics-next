@@ -329,10 +329,11 @@ export function ChapterKeys({ previous, next, direction }: {
 
 export interface ProgressLabels {
   progress: string; markRead: string; chapterRead: string; markUnread: string; saving: string;
-  progressFailed: string;
+  progressFailed: string; retry: string;
 }
 
 type Saved = Pick<Progress, 'completed' | 'position' | 'version'>;
+type ProgressChange = { completed?: boolean; position?: string | null };
 
 /** The paragraph at the top of the reading area, as a stored position. */
 function currentPosition(reader: Element): string | null {
@@ -371,9 +372,23 @@ function ChapterProgress({ target, actingSubject, initial, labels }: Parameters<
   const panel = useRef<HTMLDivElement>(null);
   const active = useRef(true);
   const entered = useRef(false);
+  const failedChange = useRef<ProgressChange | null>(null);
+  const positionAttempt = useRef<{ position: string; state: 'pending' | 'saved' | 'failed' } | null>(null);
   const { composition, occurrence, selectedRevision } = target;
 
-  const write = useCallback((change: { completed?: boolean; position?: string | null }) => {
+  const write = useCallback((change: ProgressChange, retrying = false) => {
+    // Only the last ordered position can be deduplicated. A failed attempt
+    // remains retryable, and returning A → B → A must retain the final A.
+    const position = change.completed === undefined && typeof change.position === 'string' ? change.position : null;
+    if (position && positionAttempt.current?.position === position && positionAttempt.current.state !== 'failed') return;
+    const attempt = position ? { position, state: 'pending' as 'pending' | 'saved' | 'failed' } : null;
+    if (attempt) positionAttempt.current = attempt;
+    if (active.current && retrying) setState('saving');
+    const fail = () => {
+      if (attempt) attempt.state = 'failed';
+      failedChange.current = change;
+      if (active.current) setState('failed');
+    };
     const key = JSON.stringify([actingSubject, composition]);
     const pending = (progressQueues.get(key) ?? Promise.resolve()).then(async () => {
       const api = browserMainApi().v1.compositions({ id: composition.slice(-36) })
@@ -392,10 +407,12 @@ function ChapterProgress({ target, actingSubject, initial, labels }: Parameters<
         }
       }
       if (response.data) {
+        if (attempt) attempt.state = 'saved';
+        failedChange.current = null;
         latest.current = response.data;
         if (active.current) { setSaved(response.data); setState('idle'); }
-      } else if (active.current) setState('failed');
-    }).catch(() => { if (active.current) setState('failed'); });
+      } else fail();
+    }).catch(fail);
     progressQueues.set(key, pending);
     void pending.then(() => { if (progressQueues.get(key) === pending) progressQueues.delete(key); });
   }, [actingSubject, composition, occurrence, selectedRevision]);
@@ -406,10 +423,9 @@ function ChapterProgress({ target, actingSubject, initial, labels }: Parameters<
     if (!reader) return () => { active.current = false; };
     let timer: ReturnType<typeof setTimeout> | undefined;
     let pending: string | null = null;
-    let queued: string | null = null;
     const flush = () => {
       clearTimeout(timer);
-      if (pending && pending !== queued) { write({ position: pending }); queued = pending; }
+      if (pending) write({ position: pending });
       pending = null;
     };
     const enter = () => {
@@ -417,7 +433,7 @@ function ChapterProgress({ target, actingSubject, initial, labels }: Parameters<
       const position = currentPosition(reader);
       // Rated or unsupported text has no readable paragraph. Wait for the
       // admitted body rather than inventing an opening position.
-      if (position) { entered.current = true; queued = position; write({ position }); }
+      if (position) { entered.current = true; write({ position }); }
     };
     enter();
     const observer = new MutationObserver(enter);
@@ -454,7 +470,11 @@ function ChapterProgress({ target, actingSubject, initial, labels }: Parameters<
           onClick={() => write({ completed: true })}>
           <CheckIcon aria-hidden="true" />{state === 'saving' ? labels.saving : labels.markRead}</Button>}
     </div>
-    <p role="status" className="text-destructive-foreground text-xs">
-      {state === 'failed' ? labels.progressFailed : null}</p>
+    <div className="flex flex-wrap items-center gap-2">
+      <p role="status" className="text-destructive-foreground text-xs">
+        {state === 'failed' ? labels.progressFailed : null}</p>
+      {state === 'failed' ? <Button type="button" size="sm" variant="outline"
+        onClick={() => { if (failedChange.current) write(failedChange.current, true); }}>{labels.retry}</Button> : null}
+    </div>
   </div>;
 }
