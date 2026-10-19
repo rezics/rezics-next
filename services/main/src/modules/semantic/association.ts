@@ -9,7 +9,7 @@ export interface AssociationBinding {
 }
 export interface RetainedCreditMapping {
   origin: 'work-author-credit-v1' | 'native-agent-credit-v1' | 'source-reported-credit-v1';
-  storedRole: 'author' | 'translator' | 'editor' | 'director' | 'artist' | 'animation-studio' | 'transcriber';
+  storedRole: 'author' | 'translator' | 'editor' | 'director' | 'artist' | 'animation-studio' | 'transcriber' | 'performer';
   subjectRole: string;
   externalNamespace?: { provider: string; namespace: string };
 }
@@ -45,7 +45,7 @@ export function checkedRetainedCredit(value: unknown, association: AssociationBi
   if (association?.kind !== 'credit' || typeof row.subjectRole !== 'string'
     || !association.subjectRoles.includes(row.subjectRole)
     || !['work-author-credit-v1', 'native-agent-credit-v1', 'source-reported-credit-v1'].includes(row.origin as string)
-    || !['author', 'translator', 'editor', 'director', 'artist', 'animation-studio', 'transcriber'].includes(row.storedRole as string)
+    || !['author', 'translator', 'editor', 'director', 'artist', 'animation-studio', 'transcriber', 'performer'].includes(row.storedRole as string)
     || row.storedRole === 'transcriber' && row.origin !== 'source-reported-credit-v1') {
     return invalid('retained credit mapping must bind an exact credit origin, stored role and association subject role');
   }

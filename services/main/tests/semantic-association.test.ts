@@ -56,6 +56,20 @@ test('retained credit mappings bind exact origins, roles and qualified namespace
   expect(() => canonical({ ...relation(), retainedCredit: mapping })).toThrow();
 });
 
+test('an authored Performer mapping preserves its exact origin and cannot reinterpret an existing role', () => {
+  const base = { ...relation(), association: { ...relation().association, kind: 'credit' } };
+  for (const origin of ['native-agent-credit-v1', 'work-author-credit-v1', 'source-reported-credit-v1'] as const) {
+    const mapping: RetainedCreditMapping = { origin, storedRole: 'performer', subjectRole: 'subject' };
+    expect(canonical({ ...base, retainedCredit: mapping }).retainedCredit).toEqual(mapping);
+    const before = canonical({ ...base, retainedCredit: { ...mapping, storedRole: 'author' } });
+    expect(() => assertAssociationMeaning(before, canonical({ ...base, retainedCredit: mapping }))).toThrow('successor');
+    expect(() => canonical({ ...base, retainedCredit: { ...mapping, storedRole: 'voice-actor' } })).toThrow();
+    const transcriber = () => canonical({ ...base, retainedCredit: { ...mapping, storedRole: 'transcriber' } });
+    if (origin === 'source-reported-credit-v1') expect(transcriber).not.toThrow();
+    else expect(transcriber).toThrow('exact credit origin');
+  }
+});
+
 test('authored bindings cannot be removed or reinterpreted in place; presentation and bounds can refine', async () => {
   const before = canonical(relation());
   expect(() => assertAssociationMeaning(before, canonical({ ...relation(), lifecycle: 'retired', successor: id(3) }))).not.toThrow();
