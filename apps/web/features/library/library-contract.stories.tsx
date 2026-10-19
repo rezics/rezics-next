@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { LibraryContractPage } from './library-contract-page.tsx';
 import { messages } from './messages.ts';
 
@@ -15,6 +15,11 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 const phone = { globals: { viewport: { value: 'phone' as const } } };
 
+async function expectDocumentFits() {
+  await document.fonts.ready;
+  await waitFor(() => expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth));
+}
+
 async function openFirstProgress(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
   await canvas.findByRole('heading', { level: 1, name: 'Library' });
@@ -22,6 +27,7 @@ async function openFirstProgress(canvasElement: HTMLElement) {
   const progress = [...summaries].find(summary => summary.textContent?.startsWith('Your progress'));
   if (!progress) throw new Error('Library has no reachable progress control');
   await userEvent.click(progress);
+  await expectDocumentFits();
   return canvas;
 }
 
@@ -33,6 +39,7 @@ export const Books: Story = {
     const titles = canvas.getAllByRole('heading', { level: 3 }).map(heading => heading.textContent);
     await expect(titles).toEqual(['Original outcome series', 'Original outcome volume']);
     await expect(canvas.getByRole('link', { name: /^Continue/ })).toBeVisible();
+    await expectDocumentFits();
   },
 };
 export const BooksPhone: Story = { ...Books, ...phone };
@@ -53,6 +60,10 @@ export const RepeatedRecipes: Story = {
     const canvas = within(canvasElement);
     await canvas.findByRole('heading', { level: 2, name: /private recipe collection/ });
     await expect(canvas.getAllByRole('heading', { level: 3, name: 'Original whole-recipe tracking fixture' })).toHaveLength(2);
+    await expectDocumentFits();
+    for (const link of canvas.getAllByRole('link', { name: /^(public|private) recipe collection$/ })) {
+      await expect(link.getBoundingClientRect().height).toBeGreaterThanOrEqual(24);
+    }
     await userEvent.click(canvas.getByRole('button', { name: 'Select' }));
     const selections = canvas.getAllByRole('checkbox', { name: 'Select “Original whole-recipe tracking fixture”' });
     await userEvent.click(selections[1]!);
@@ -62,6 +73,7 @@ export const RepeatedRecipes: Story = {
     await openFirstProgress(canvasElement);
     await userEvent.click(await canvas.findByRole('button', { name: 'Mark reading' }));
     await expect(await canvas.findByText('Reading', { exact: true })).toBeVisible();
+    await expectDocumentFits();
   },
 };
 export const RepeatedRecipesPhone: Story = { ...RepeatedRecipes, ...phone };

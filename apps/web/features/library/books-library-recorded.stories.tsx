@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import collectionRecord from '../../../../tests/qa/fixtures/outcomes/books/collection-tracking-and-progress.json';
 import importRecord from '../../../../tests/qa/fixtures/outcomes/books/library-import.json';
@@ -130,7 +130,8 @@ export const OwnerReadingFirst: Story = {
     window.scrollTo(0, 0);
     const header = canvasElement.querySelector('header')!.getBoundingClientRect();
     const fixedNav = [...canvasElement.querySelectorAll('nav')]
-      .find(nav => getComputedStyle(nav).position === 'fixed');
+      .find(nav => getComputedStyle(nav).position === 'fixed' && nav.checkVisibility()
+        && nav.getBoundingClientRect().height > 0);
     const bottom = fixedNav?.getBoundingClientRect().top ?? window.innerHeight;
     for (const item of [title, open]) {
       const box = item.getBoundingClientRect();
@@ -139,8 +140,26 @@ export const OwnerReadingFirst: Story = {
       await expect(box.left).toBeGreaterThanOrEqual(0);
       await expect(box.right).toBeLessThanOrEqual(window.innerWidth);
     }
-    await expect(canvas.queryByRole('heading', { name: 'Reading in 2026' })).toBeNull();
+    await expect(canvas.getByRole('heading', { name: 'Reading in 2026', hidden: true })).not.toBeVisible();
+    const tools = canvas.getByText(messages.libraryTools, { selector: 'summary' });
+    await expect(tools.closest('details')).not.toHaveAttribute('open');
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    const continuation = within(reading).getByRole('link', { name: /^Continue/ });
+    continuation.focus();
+    await waitFor(() => {
+      const box = continuation.getBoundingClientRect();
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(window.innerWidth);
+      expect(window.scrollX).toBe(0);
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    });
+    await userEvent.click(tools);
+    await expect(canvas.getByRole('heading', { name: 'Reading in 2026' })).toBeVisible();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    await userEvent.click(tools);
+    await expect(tools.closest('details')).not.toHaveAttribute('open');
+    reading.querySelector('ul')!.scrollLeft = 0;
+    window.scrollTo(0, 0);
   },
 };
 export const OwnerReadingFirstPhone: Story = { ...OwnerReadingFirst, ...phone };

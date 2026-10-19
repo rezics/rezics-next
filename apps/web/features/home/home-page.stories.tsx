@@ -160,7 +160,8 @@ export const ContentFirstPhone: Story = {
     await waitFor(() => {
       const headerBottom = canvasElement.querySelector('header')!.getBoundingClientRect().bottom;
       const fixedNav = [...canvasElement.querySelectorAll('nav')]
-        .find(nav => getComputedStyle(nav).position === 'fixed');
+        .find(nav => getComputedStyle(nav).position === 'fixed' && nav.checkVisibility()
+          && nav.getBoundingClientRect().height > 0);
       const bottom = fixedNav?.getBoundingClientRect().top ?? window.innerHeight;
       const titles = within(posts).getAllByRole('heading', { level: 3 }).slice(0, 2);
       expect(titles).toHaveLength(2);
@@ -377,6 +378,7 @@ export const TabMenu: Story = {
     const choose = async (item: string) => {
       await userEvent.click(canvas.getByRole('button', { name: 'Options for Fantasy' }));
       await waitFor(() => expect(screen.getByRole('menuitem', { name: item })).toBeVisible());
+      await waitFor(() => expect(screen.getByRole('menu')).toHaveFocus());
       for (let step = 0; step < 6 && !screen.getByRole('menuitem', { name: item }).hasAttribute('data-highlighted'); step++) {
         await userEvent.keyboard('{ArrowDown}');
       }
@@ -386,6 +388,7 @@ export const TabMenu: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Options for Fantasy' }));
     await waitFor(() => expect(screen.getByRole('menuitem', { name: 'Unfollow Fantasy' })).toBeVisible());
     await expect(screen.queryByRole('menuitem', { name: 'Move left' })).toBeNull();
+    await waitFor(() => expect(screen.getByRole('menu')).toHaveFocus());
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
 
