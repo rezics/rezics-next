@@ -30,6 +30,9 @@ import { resourceTypeKinds } from '../modules/query/work-drive.ts';
 import { admittedTypes } from '../modules/types/registry.ts';
 import { executeTemplate, templateRequests, templateResponses } from '../modules/query/template-read.ts';
 import type { TemplateInput } from '../modules/query/template-schema.ts';
+import { ASSOCIATION_QUERY, associationRequest, associationQueryResult, associationConflict,
+  type AssociationRequest } from '../modules/query/association-contract.ts';
+import { executeAssociationQuery, associationReadFailure } from '../modules/query/association-read.ts';
 
 const nativeId = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const closed = { additionalProperties: false } as const;
@@ -54,7 +57,7 @@ export const resourceQueryV1 = t.Object({ ...documentFields, scope: scopeV1, sor
 /** filter-document-v2 admits top-rated, Mine, and the rating Context and reader. */
 export const resourceQueryV2 = t.Object({ profile: t.Literal('filter-document-v2'), ...documentFields,
   scope, sort, ratingContext: t.Optional(nativeId), actingSubject: t.Optional(nativeId) }, closed);
-const body = t.Union([resourceQueryV1, resourceQueryV2, resourceListQuery, templateRequests]);
+const body = t.Union([resourceQueryV1, resourceQueryV2, resourceListQuery, templateRequests, associationRequest]);
 const digest = t.String({ pattern: '^[0-9a-f]{64}$' });
 const conceptSetResult = t.Object({ profile: t.Literal('public-concept-set-phrase-v1'),
   resultGrain: t.Literal('mainVersion'),
@@ -98,13 +101,17 @@ export function queryRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   const search = searchRoutes(fuseki, work);
   return new Elysia().post('/v1/query', { body, response: transportResponses(openApiOperations["/v1/query"].post, {
     304:t.Null(),
-    200: t.Object({ profile: t.Literal('query-v1'), template: t.String(), selection: querySelection,
-      result: t.Union([publicPhrasePageResult, zoneBrowsePage, conceptSetResult, conceptWorksPage, releaseWorksPage, resourceListPage,templateResponses]) }),
-    400: problemResult(400), 401: problemResult(401), 403: problemResult(403), 404: problemResult(404), 409: problemResult(409),
+    200: t.Union([t.Object({ profile: t.Literal('query-v1'), template: t.String(), selection: querySelection,
+      result: t.Union([publicPhrasePageResult, zoneBrowsePage, conceptSetResult, conceptWorksPage, releaseWorksPage, resourceListPage,templateResponses]) }), associationQueryResult]),
+    400: problemResult(400), 401: problemResult(401), 403: problemResult(403), 404: problemResult(404), 409: associationConflict,
     422: problemResult(422), 500: problemResult(500), 503: problemResult(503),
   }, 'POST') }, async ({ body: input, request }) => {
     try {
       if ('profile' in input && input.profile==='template-query-v1') {
+        if (input.query === ASSOCIATION_QUERY) {
+          try { return await executeAssociationQuery(work, request, input as AssociationRequest); }
+          catch (error) { return associationReadFailure(error) ?? workReadError(error); }
+        }
         try { return await executeTemplate(work,request,input as TemplateInput); }
         catch(error) { return workReadError(error); }
       }

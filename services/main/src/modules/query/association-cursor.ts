@@ -1,10 +1,12 @@
 import { decodeReadCursor, encodeReadCursor, readDependencyToken, WorkReadExpired,
-  WorkReadInvalid, WorkReadMoved, WorkReadUnavailable } from '../work/read-session.ts';
+  WorkReadInvalid, WorkReadUnavailable } from '../work/read-session.ts';
 import { READ_BASIS_RETENTION_MS } from '../read-basis/retention.ts';
 import { ASSOCIATION_COST, type AssociationSelection, type AssociationSnapshot } from './association-contract.ts';
 import { associationCanonical, restartAssociations } from './association-selection.ts';
 
-export interface AssociationKey { work: string; occurrence: string; subjectParticipation: string }
+/** A withheld owner view has no disclosed participation allocation. Its
+ * Work/occurrence still supplies a physical frontier, without inventing one. */
+export interface AssociationKey { work: string; occurrence: string; subjectParticipation: string | null }
 export type AssociationFrontier = { kind: 'occurrence' | 'matches'; key: AssociationKey } | { kind: 'work'; work: string };
 export interface AssociationReadBasis {
   snapshot: AssociationSnapshot;
@@ -15,7 +17,8 @@ export interface AssociationReadBasis {
 }
 export type AssociationSurface = 'query' | 'work-credits';
 export class AssociationCursorInvalid extends WorkReadInvalid {}
-export class AssociationStaleQuery extends WorkReadMoved {
+// This refusal carries an explicit restart and must not be retried by workRead.
+export class AssociationStaleQuery extends WorkReadExpired {
   readonly restart;
   constructor(selection: AssociationSelection) {
     super('Association read changed; restart the selection');
@@ -33,8 +36,11 @@ function checkedFrontier(value: unknown): AssociationFrontier {
   }
   if ((row.kind === 'occurrence' || row.kind === 'matches') && Object.keys(row).length === 2 && row.key && typeof row.key === 'object') {
     const key = row.key as Record<string, unknown>;
-    if (Object.keys(key).length === 3 && [key.work, key.occurrence, key.subjectParticipation]
-      .every(value => typeof value === 'string' && id.test(value))) return row as unknown as AssociationFrontier;
+    if (Object.keys(key).length === 3 && [key.work, key.occurrence]
+      .every(value => typeof value === 'string' && id.test(value))
+      && (key.subjectParticipation === null || typeof key.subjectParticipation === 'string' && id.test(key.subjectParticipation))) {
+      return row as unknown as AssociationFrontier;
+    }
   }
   throw new AssociationCursorInvalid('Invalid association cursor');
 }

@@ -1,9 +1,9 @@
 import { t } from 'elysia';
 import type { Static } from 'typebox';
-import { sourcePosition } from '../../api-contract.ts';
+import { problemResult, sourcePosition } from '../../api-contract.ts';
 import type { SemanticValue } from '../semantic/value.ts';
 import { EXACT_LIMITS } from '../semantic/value.ts';
-import { readLanguage } from '../work/read-contract.ts';
+import { pageQuery, readId, readLanguage } from '../work/read-contract.ts';
 import { templatePaging, templatePresentation } from './template-schema.ts';
 
 export const ASSOCIATION_QUERY = 'https://rezics.com/query/subject-associations';
@@ -94,6 +94,24 @@ export const associationResult = t.Object({ profile: t.Literal('template-result-
   items: t.Array(t.Union([associationWitness, associationWorkMatch]), { maxItems: 64 }), ...continuation,
   count: t.Object({ value: t.Integer({ minimum: 0, maximum: 64 }), kind: t.Literal('exact-page'), total: t.Null() }, closed),
 }, closed);
+const { cursor: _cursorSchema, presentation: _presentationSchema, limit: _limitSchema, ...selectionFields } = associationRequest.properties;
+export const associationSelection = t.Object({ ...selectionFields,
+  presentation: t.Object({ language: readLanguage, actingSubject: t.Optional(readId) }, closed),
+  limit: t.Integer({ minimum: 1, maximum: 64 }),
+}, closed);
+export const associationQueryResult = t.Object({ profile: t.Literal('query-v1'),
+  template: t.Literal(ASSOCIATION_QUERY), selection: associationSelection, result: associationResult }, closed);
+export const associationStaleResult = t.Object({ ...problemResult(409).properties,
+  code: t.Literal('stale_query_result'), restart: t.Object({ method: t.Literal('POST'),
+    path: t.Literal('/v1/query'), body: associationSelection }, closed) }, closed);
+export const associationConflict = t.Union([problemResult(409), associationStaleResult]);
+export const associationCreditsQuery = t.Object({ profile: t.Literal('subject-associations-v1'),
+  context: t.Optional(t.Union([t.Literal('global'), readId])),
+  frame: t.Optional(t.Array(readId, { maxItems: ASSOCIATION_COST.frames, uniqueItems: true })),
+  position: t.Optional(associationRequest.properties.parameters.properties.position),
+  ...pageQuery, limit: t.Optional(t.Numeric({ minimum: 1, maximum: 64, multipleOf: 1 })),
+}, closed);
+export type AssociationCreditsQuery = Static<typeof associationCreditsQuery>;
 export type AssociationRequest = Static<typeof associationRequest>;
 export type AssociationSelection = Omit<AssociationRequest, 'cursor' | 'limit' | 'presentation'> & {
   limit: number; presentation: { language: string; actingSubject?: string };
@@ -101,5 +119,7 @@ export type AssociationSelection = Omit<AssociationRequest, 'cursor' | 'limit' |
 export type AssociationSnapshot = Static<typeof associationSnapshot>;
 export type AssociationWitness = Static<typeof associationWitness>;
 export type AssociationStatement = Static<typeof associationStatement>;
+export type AssociationCreditProjection = Pick<AssociationWitness, 'statements' | 'citations' | 'sourceVersionStatus'
+  | 'labels' | 'snippets' | 'links'>;
 export type AssociationWorkMatch = Static<typeof associationWorkMatch>;
 export type AssociationResult = Static<typeof associationResult>;

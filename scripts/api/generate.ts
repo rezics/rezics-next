@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { openapi } from '@elysia/openapi';
+import { unwrapSchema } from '@elysia/openapi/openapi';
 import type { MainWorkDependencies } from '../../services/main/src/app.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { attachCapabilities, operationTools, type CapabilityDeclarations } from '../../services/main/src/modules/mcp/capabilities.ts';
@@ -138,6 +139,7 @@ interface Operation {
   'x-rezics-exposure'?: Exposure;
   'x-rezics-capability'?: import('../../services/main/src/modules/mcp/capabilities.ts').Capability;
   parameters?: unknown[];
+  'x-rezics-query-schema'?: unknown;
   security?: (Record<string, never> | { bearerAuth: never[] })[];
   responses?: Record<string, { description?: string; content?: Record<string, unknown> }>;
 }
@@ -194,6 +196,41 @@ export function overlayAuthoredResponses(document: Document, routes: readonly {
     const path = route.path.replace(/:([^/]+)/g, '{$1}');
     const operation = document.paths?.[path]?.[route.method.toLowerCase()];
     if (operation) operation.responses = { ...operation.responses, ...authored };
+  }
+}
+
+/** The OpenAPI plugin only extracts parameters from one object. Preserve
+ * alternative query profiles without flattening away their admission bounds.
+ * Parameters describe each field; the extension retains the exact correlated
+ * query schema (for example, a larger limit requires an explicit profile). */
+export function overlayQueryAlternatives(document: Document, routes: readonly {
+  method: string; path: string; hooks?: { query?: Parameters<typeof unwrapSchema>[0] };
+}[]): void {
+  interface Shape {
+    type?: string; properties?: Record<string, unknown>; required?: string[];
+    anyOf?: Shape[]; oneOf?: Shape[];
+  }
+  const variants = (schema: Shape): Shape[] => (schema.anyOf ?? schema.oneOf)?.flatMap(variants) ?? [schema];
+  for (const route of routes) {
+    if (!route.hooks?.query) continue;
+    const schema = unwrapSchema(route.hooks.query, undefined, 'input') as Shape | undefined;
+    if (!schema?.anyOf && !schema?.oneOf) continue;
+    const shapes = variants(schema);
+    if (!shapes.length || shapes.some(shape => shape.type !== 'object' || !shape.properties)) continue;
+    const path = route.path.replace(/:([^/]+)/g, '{$1}');
+    const operation = document.paths?.[path]?.[route.method.toLowerCase()];
+    if (!operation) continue;
+    const names = [...new Set(shapes.flatMap(shape => Object.keys(shape.properties!)))];
+    const parameters = names.map(name => {
+      const fields = new Map(shapes.flatMap(shape => name in shape.properties!
+        ? [[JSON.stringify(canonical(shape.properties![name])), shape.properties![name]] as const] : []));
+      const alternatives = [...fields.values()];
+      return { in: 'query', name, required: shapes.every(shape => shape.required?.includes(name)),
+        schema: alternatives.length === 1 ? alternatives[0] : { anyOf: alternatives } };
+    });
+    operation.parameters = [...(operation.parameters ?? []).filter(parameter => !(parameter
+      && typeof parameter === 'object' && 'in' in parameter && parameter.in === 'query')), ...parameters];
+    operation['x-rezics-query-schema'] = schema;
   }
 }
 
@@ -268,6 +305,7 @@ export async function buildMainOpenApi(): Promise<string> {
   if (response.status !== 200) throw new Error('Main OpenAPI generator did not return a document');
   const document = await response.json() as Document;
   overlayAuthoredResponses(document, app.routes);
+  overlayQueryAlternatives(document, app.routes);
   assertRouteExposures(app.routes.filter(route => !route.path.startsWith('/openapi')));
   const paths = Object.entries(document.paths ?? {});
   // HTTP conditional-read responses have no representation body.

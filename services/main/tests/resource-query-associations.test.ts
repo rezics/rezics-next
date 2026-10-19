@@ -22,7 +22,7 @@ const request = () => ({ profile: 'template-query-v1' as const, query: ASSOCIATI
 const basis = (): AssociationReadBasis => ({ snapshot: { sourcePosition: {
   datasetId: 'product', dataEpoch: 'epoch-a', sequence: '23' }, modelGeneration: 'model-a' },
   reader: { account: 'public', actor: null, languages: ['en'] }, dependencies: { disclosure: 'current', activation: 'covered' } });
-const key = (n: number, atWork = work): AssociationKey => ({ work: atWork, occurrence: id(1000 + n), subjectParticipation: id(2000 + n) });
+const key = (n: number, atWork = work): AssociationKey & { subjectParticipation: string } => ({ work: atWork, occurrence: id(1000 + n), subjectParticipation: id(2000 + n) });
 function witness(n: number, atWork = work): AssociationWitness {
   const k = key(n, atWork);
   return { ...k, kind: 'appearance', revision: id(3000 + n), definition: id(3),
@@ -262,7 +262,8 @@ describe('Subject association continuation', () => {
   test('outer Work continuations skip emitted groups and current fences run before return', async () => {
     const keys = [key(1), key(2), key(3, id(9)), key(4, id(10))];
     const map = new Map(keys.map((k, n) => [associationOrderKey(k), witness(n + 1, k.work)]));
-    const { owner } = source(keys, k => ({ ...map.get(associationOrderKey(k))!, ...k }));
+    const { owner } = source(keys, k => k.subjectParticipation === null ? null
+      : ({ ...map.get(associationOrderKey(k))!, ...k, subjectParticipation: k.subjectParticipation }));
     const selection = selectAssociations({ ...request(), limit: 1, parameters: { ...request().parameters,
       roots: [work, id(9), id(10)].map(ref => ({ kind: 'resource', ref })), projection: 'work' } });
     const first = await readAssociationPage(owner, selection, basis(), 'query');

@@ -46,7 +46,7 @@ export async function readAssociationPage(source: AssociationPageSource, selecti
   }
   let previous = cursor.frontier;
   for (const key of window.items) {
-    try { for (const value of [key.work, key.occurrence, key.subjectParticipation]) checkedNativeIri(value); }
+    try { for (const value of [key.work, key.occurrence, ...(key.subjectParticipation === null ? [] : [key.subjectParticipation])]) checkedNativeIri(value); }
     catch { throw new WorkReadUnavailable('Association candidate identity is unavailable'); }
     if (!afterFrontier(key, previous)) throw new WorkReadUnavailable('Association candidate order is unavailable');
     previous = { kind: cursor.frontier?.kind === 'matches' ? 'matches' : 'occurrence', key };
@@ -73,7 +73,7 @@ export async function readAssociationPage(source: AssociationPageSource, selecti
       group.after = key;
     }
     if (!witness) continue;
-    if (associationOrderKey(witness) !== associationOrderKey(key) || witness.kind !== selection.parameters.kind) {
+    if (key.subjectParticipation === null || associationOrderKey(witness) !== associationOrderKey(key) || witness.kind !== selection.parameters.kind) {
       throw new WorkReadUnavailable('Association witness differs from its exact candidate');
     }
     if (!matchesAssociation(selection, witness)) continue;
