@@ -1,0 +1,398 @@
+{
+  "schemaVersion": 1,
+  "goal": "audit-remediation-20261019",
+  "worker": "G-2830",
+  "engine": "codex-1 / GPT-6.1 Sol / xhigh; no fallback or nested agents",
+  "result": "partial",
+  "conclusion": "D2-002 has positive rendered failure-injection evidence, but live reload/backend durability remain unverified. D2-003 fails an unchanged original outcome assertion: snapshot failure followed by Remove images or Retry loses current text and saves the prior body. Neither finding is closed.",
+  "pins": {
+    "reportBranch": "goal/g-2830",
+    "reportBase": "8ee1db74ade97621b3a19e43d83b87482859c23b",
+    "productBranchRequested": "wave/audit-20261019",
+    "productAndOriginalTestCommit": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+    "authoredPatchReviewed": "fd4e3c6be3f80a343d5e7b9a9c8e291652878435",
+    "productQaSourceDigest": "70fdcc0c6808",
+    "recordedJobImplementation": "main checkout scripts/goal/goalctl.ts, as explicitly requested; commands run from worker root",
+    "mainHeadObservedAtReportPreparation": "2dcaf19d79ff6ace7c4b631f5416ef389f13fbb2",
+    "originalSourceUnchanged": true,
+    "supplementalTestPin": "Private harness copies with sha256 in bundle manifest; product/original tests remain at exact product pin."
+  },
+  "isolation": {
+    "productCheckout": ".temp/post-draft-product",
+    "method": "Independent shared-object clone with detached exact product commit; independent local Yarn install/cache. No main or other worktree source/state edits.",
+    "reportedChanges": [
+      "docs/goals/audit-remediation-20261019/proofs/post-draft-recovery.json"
+    ],
+    "sharedRefreshImportReset": false,
+    "newCorpus": false,
+    "backendStarted": false,
+    "ownedServersStopped": true,
+    "browser": "Repository Task storybook:test / Vitest storyBrowser Playwright Chromium provider; Browser MCP unavailable.",
+    "skillsApplied": [
+      "goal-worker",
+      "storybook-ui-review",
+      "local-development (local stack/auth prerequisites)",
+      "product-audit"
+    ],
+    "independence": "One independent source review plus unchanged original story assertions. Supplemental private matrix does not replace or alter failed original tests."
+  },
+  "commands": [
+    {
+      "job": "ac70efe9-c186-4749-865c-8343017fca24",
+      "qa": "20261019t045726-527f49",
+      "result": "harness failure; five suites/zero tests; linked node_modules setup-file dynamic import outside isolated checkout. Corrected by isolated Yarn install.",
+      "recordedCommands": [
+        [
+          "bun",
+          "--cwd",
+          ".temp/post-draft-product",
+          "scripts/goal/goalctl.ts",
+          "test",
+          "apps/web/features/post-composer/draft-recovery.stories.tsx",
+          "apps/web/features/document-editor/draft-recovery.stories.tsx",
+          "apps/web/features/post-composer/composer.stories.tsx",
+          "apps/web/features/post-composer/body-editor.stories.tsx",
+          "packages/ui/src/components/rich-text-editor.stories.tsx"
+        ]
+      ],
+      "recordingWrapper": [
+        "bun",
+        "/home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts",
+        "job",
+        "--"
+      ]
+    },
+    {
+      "job": "93288b08-ddb4-43dc-a6bd-ba6d3ec44b57",
+      "qa": "20261019t050003-d34abd",
+      "result": "Original unchanged five files: 50 cases, 43 passed, 7 failed; document recovery 5 setup failures, snapshot 1 outcome failure, SlashMenu 1 query failure.",
+      "recordedCommands": [
+        [
+          "env",
+          "YARN_GLOBAL_FOLDER=/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2830/.temp/yarn-global",
+          "YARN_CACHE_FOLDER=/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2830/.temp/yarn-cache",
+          "YARN_ENABLE_GLOBAL_CACHE=false",
+          "task",
+          "--dir",
+          ".temp/post-draft-product",
+          "install"
+        ],
+        [
+          "/bin/sh",
+          "-c",
+          "bun --cwd .temp/post-draft-product scripts/goal/goalctl.ts test apps/web/features/post-composer/draft-recovery.stories.tsx apps/web/features/document-editor/draft-recovery.stories.tsx apps/web/features/post-composer/composer.stories.tsx apps/web/features/post-composer/body-editor.stories.tsx packages/ui/src/components/rich-text-editor.stories.tsx"
+        ]
+      ],
+      "recordingWrapper": [
+        "bun",
+        "/home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts",
+        "job",
+        "--"
+      ]
+    },
+    {
+      "job": "b68eb550-8d15-4e21-9dad-803dc376aa95",
+      "qa": [
+        "20261019t050500-a9a5ea",
+        "20261019t050507-788140"
+      ],
+      "result": "Unit 61/61 across four files and owner 4/4; matrix 36 passed, 4 failed (all snapshot retention). Startup exit201 separately retained.",
+      "recordedCommands": [
+        [
+          "python3",
+          ".temp/post-web-startup.py"
+        ],
+        [
+          "/bin/sh",
+          "-c",
+          "bun --cwd .temp/post-draft-product scripts/goal/goalctl.ts test apps/web/features/post-composer/api.test.ts apps/web/features/document-editor/publication.test.ts packages/ui/src/components/rich-text-editor-snapshot.test.ts apps/web/tests/post-composer.test.ts apps/web/tests/image-uses.test.ts"
+        ],
+        [
+          "/bin/sh",
+          "-c",
+          "bun --cwd .temp/post-draft-product scripts/goal/goalctl.ts test apps/web/.temp/verification/composer-matrix.stories.tsx apps/web/.temp/verification/body-matrix.stories.tsx --config ../../.temp/verification/vitest.config.ts"
+        ]
+      ],
+      "recordingWrapper": [
+        "bun",
+        "/home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts",
+        "job",
+        "--"
+      ]
+    },
+    {
+      "job": "14ef4282-560c-4326-ba83-4721c8e4c807",
+      "qa": "20261019t050813-094f64",
+      "result": "16 cases: 4 export passed; 4 retry outcome failures; 8 supplemental setup failures. No product fix.",
+      "recordedCommands": [
+        [
+          "bun",
+          "--cwd",
+          ".temp/post-draft-product",
+          "scripts/goal/goalctl.ts",
+          "test",
+          "apps/web/.temp/verification/additional-recovery.stories.tsx",
+          "--config",
+          "../../.temp/verification/vitest.config.ts"
+        ]
+      ],
+      "recordingWrapper": [
+        "bun",
+        "/home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts",
+        "job",
+        "--"
+      ]
+    },
+    {
+      "job": "7f244ee2-7155-43f2-a2fa-51b548be28a3",
+      "qa": "20261019t051106-b888ef",
+      "result": "8 selected: 7 passed, 1 failed; 8 unselected skipped. All four lost-placement retry cases pass; en1440 editing/reopen fails one missing character.",
+      "recordedCommands": [
+        [
+          "bun",
+          "--cwd",
+          ".temp/post-draft-product",
+          "scripts/goal/goalctl.ts",
+          "test",
+          "apps/web/.temp/verification/additional-recovery.stories.tsx",
+          "--config",
+          "../../.temp/verification/vitest.config.ts",
+          "-t",
+          "Edit And Reselect|Lost Placement"
+        ]
+      ],
+      "recordingWrapper": [
+        "bun",
+        "/home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts",
+        "job",
+        "--"
+      ]
+    }
+  ],
+  "renderedMatrix": {
+    "viewports": [
+      [
+        1440,
+        1000
+      ],
+      [
+        390,
+        844
+      ]
+    ],
+    "locales": [
+      "en",
+      "zh-Hans"
+    ],
+    "composer": {
+      "UnwrittenAttemptAfterReopen": "4/4 pass: selection GET 503 before any member-reply write; title/body/language/spoiler/Work/community editable after remount.",
+      "CancelUnwrittenAttempt": "4/4 pass: attempt cleared; body retained; no storage clearing required.",
+      "UnknownWriteAfterReopen": "4/4 pass: locked uncertain draft; retry reuses draft idempotency key AND exact payload.",
+      "DeviceStorageUnavailable": "4/4 pass: no false saved status; retry-save/export offered; no write starts if pending state cannot persist.",
+      "StableImageWithoutPreview": "4/4 pass: seeded stable representation/use retained across remount while metadata GET returns 503.",
+      "SnapshotFailureKeepsCurrentText": "0/4 pass: unchanged original last assertion fails after Remove images; expected Retained current text., received Keep the text through failures."
+    },
+    "bodyEditorSupplemental": {
+      "setup": "Private copy uses compact=true matching real PostComposer. Original document-editor stories omit compact and all five cannot locate Image. Original source and assertions remain unchanged; outcome assertions are preserved in supplemental copy, with locale-specific control names.",
+      "StableImageWithoutPreview": "4/4 pass: simulated upload stable reference; unavailable metadata; localStorage/reopen retains text and one image.",
+      "RetryBindingAfterReopen": "4/4 pass: first media-use bind 503; retained document, failed state and export control; remount retries and becomes ready with image.",
+      "RemoveFailedImage": "4/4 pass: binding failure can remove image and retain text.",
+      "CancelFailedUpload": "4/4 pass: rejected upload stays failed until cancelled, then text retained and ready."
+    },
+    "additional": {
+      "ExportRetained": "4/4 pass: focused Export document + Enter; captured actual browser Blob contains Retained current text. and invalid-image.png before destructive retry/remove.",
+      "RetryRetainsCurrentText": "0/4 pass: keyboard retry reaches outcome assertion; old body saved, raw recovery removed; activeElement becomes BODY.",
+      "EditAndReselectThenReopen": "3/4 pass after setup correction: title/body/new Work/new community/spoiler and existing en language recovered; en1440 fails expected Edited current body., received Edited crrent body. Entry versus persistence loss not isolated; complete edit/reopen matrix not accepted.",
+      "LostPlacementAfterAcknowledgement": "4/4 pass after setup correction: draft+identity acknowledged; placement response lost; remount keeps pendingStep=place; same placement key and exact body retried; three unique simulated operation receipts, four requests."
+    },
+    "reloadBoundary": "Reopen draft remounts the component and reads browser localStorage; this is rendered persistence/recovery evidence within Storybook. No signed-in /submit full-page reload or identity restoration was reached.",
+    "inputBoundary": "Recorded mouse/keyboard interactions and Enter activation; viewport width does not establish physical-touch/coarse-pointer behavior."
+  },
+  "receipts": {
+    "genuinePublicationApiWrites": 0,
+    "genuinePublicationReceipts": [],
+    "genuineImageUploadApiWrites": 0,
+    "genuineImageUploadReceipts": [],
+    "genuinePersistenceBackendReceipts": [],
+    "storySimulation": "fetch mocked at browser boundary. Draft/identity/placement JSON receipts and uploaded representation/use IDs are synthetic. Lost-placement test asserts four calls and three Map entries; this does not establish durable backend deduplication.",
+    "realBrowserEffects": "Browser DOM, focus, localStorage serialization/remount and exported Blob bytes are real within isolated story contexts. Injected device quota failure is deliberate.",
+    "noWritePreflight": "Story fetch-call assertion finds no member-reply draft/identity/placement requests after selection 503; not a production API receipt."
+  },
+  "sourceReview": {
+    "status": "complete; one independent review",
+    "scope": "Entire authored 22-file patch, its tests/stories/localizations, pinned consumer state and attached findings; private authored-patch.diff retained.",
+    "positiveFindings": [
+      "writeState none/acknowledged/unknown and pendingStep preserve the stage instead of locking solely on existence of progress. Unknown is persisted synchronously before the write; persistence error stops the request.",
+      "Acknowledged revision/identity and operation key persist across retries. Edits to an unwritten attempt clear obsolete progress; explicit cancellation is available.",
+      "documentPublication sequence invalidation rejects stale asynchronous completion. Known stable uploaded image receipts avoid metadata dependence; upload failure files remain retryable in memory."
+    ],
+    "blockingFinding": {
+      "severity": "P1",
+      "finding": "D2-003",
+      "title": "Snapshot failure replaces current live text with old body; Retry/Remove commits the old body and clears retained recovery.",
+      "observed": "Original SnapshotFailureKeepsCurrentText fails; four viewport/locale copies and four keyboard Retry cases reproduce. Current text remains in raw export before retry/remove, but disappears from rendered and saved body afterward.",
+      "sourceCause": "Source-supported causal explanation: BodyEditor stores raw invalid live JSON in recoveryBody onSnapshotError. parseStoredDocument(recoveryValue) fails, so its controlled document falls back to the previously saved value. RichTextEditor reapplies that initial document through setContent. RetrySnapshot/removeImages operate on that old live document; parent onChange clears recoveryBody and saved status resumes.",
+      "locations": [
+        "apps/web/features/document-editor/body-editor.tsx:68 (recovery parse fallback)",
+        "apps/web/features/document-editor/body-editor.tsx:188 (raw recovery callback)",
+        "packages/ui/src/components/rich-text-editor.tsx:257 (retry/remove use live document)",
+        "packages/ui/src/components/rich-text-editor.tsx:295 (controlled initial document reset)",
+        "apps/web/features/post-composer/composer.tsx:555 (successful body callback clears recoveryBody)",
+        "apps/web/features/post-composer/composer.tsx:619 (saved status)"
+      ],
+      "fixApplied": false
+    },
+    "secondaryObservations": [
+      "Keyboard Retry receives focus and activates, then focus falls to BODY when its controls disappear in all four failed snapshot cases. Recorded DOM focus is retained in failed-case-browser-records.json.",
+      "The en1440 edit/reselect case reaches restoration assertion with one missing character; the test has no pre-reopen body assertion, so attribution to entry or persistence remains unresolved.",
+      "Original SlashMenu displays heading choices in PNG but role option lookup fails. No fallback to weaker assertion or unrelated source fix was made."
+    ],
+    "originalLowLevelImageException": "Unresolved. Deliberately malformed pasted image reproduces snapshot recovery text loss, not the original real-upload low-level exception. Metadata 503 is not diagnosed as that exception’s cause."
+  },
+  "acceptanceByFinding": [
+    {
+      "id": "D2-002",
+      "status": "partial; keep open",
+      "criteria": [
+        {
+          "criterion": "Read failure before first write leaves all fields editable and attempt cancellable/reselectable",
+          "result": "pass in rendered injected stories, all four width/locale combinations; zero mocked publication calls"
+        },
+        {
+          "criterion": "Acknowledged/unknown write restricts edits and safely resumes the same operation without duplicate submissions",
+          "result": "partial: rendered same key/body retry and synthetic receipt deduplication pass in all four; real durable backend outcome unverified"
+        },
+        {
+          "criterion": "Failure/reload/identity recovery supports continued editing/cancellation at 1440/390",
+          "result": "partial: component remount/localStorage recovery passes core cases; full-page signed-in journey blocked, one supplemental complete-text restoration mismatch unresolved, physical touch unverified"
+        }
+      ]
+    },
+    {
+      "id": "D2-003",
+      "status": "failed; keep open; P1 snapshot text-loss blocks acceptance",
+      "criteria": [
+        {
+          "criterion": "Saved means current complete snapshot persisted; failure names retained version",
+          "result": "failed: incomplete status initially correct, but Retry or Remove saves old body and destroys current recovery text"
+        },
+        {
+          "criterion": "Stable uploaded image nodes/text survive reload despite unavailable metadata",
+          "result": "partial: simulated stable references persist/remount in composer and compact body editor at all four combinations; genuine uploaded bytes/media-use receipts and full-page reload not reached"
+        },
+        {
+          "criterion": "Retry/remove/export keep failure recoverable without claiming old text is current",
+          "result": "failed overall: valid binding failure retry/remove and raw export pass; malformed snapshot retry/remove lose current text; focus falls to BODY"
+        },
+        {
+          "criterion": "Device storage failure does not falsely report saved",
+          "result": "pass in all four deliberately injected browser quota cases; publishing stops before API writes when pending state cannot persist"
+        }
+      ]
+    }
+  ],
+  "liveJourney": {
+    "command": [
+      "task",
+      "--dir",
+      "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2830/.temp/post-draft-product",
+      "web:dev",
+      "--",
+      "--port",
+      "60095"
+    ],
+    "productPin": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+    "isolatedFixture": false,
+    "requests": [
+      {
+        "path": "/en/submit",
+        "error": "URLError(ConnectionRefusedError(111, 'Connection refused'))"
+      },
+      {
+        "path": "/zh-Hans/submit",
+        "error": "URLError(ConnectionRefusedError(111, 'Connection refused'))"
+      }
+    ],
+    "exitStatus": 201,
+    "ownedServerStopped": true,
+    "stage": "Task web:dev -> vinext/Vite React Server Components optimizer startup, before listening on 127.0.0.1:60095",
+    "error": "Error: react-dom/server is not supported in React Server Components.",
+    "stack": [
+      "workers/runner-worker/index.js:107:3",
+      "workers/runner-worker/index.js:252:24",
+      "workers/runner-worker/index.js:356:37"
+    ],
+    "fixturePrerequisites": "No configured isolated signed-in fixture found. The existing main rezics-dev public fixture points at shared state and was not used for writes. Existing sole corpus/backup was not regenerated or restored because startup/fixture prerequisites were absent.",
+    "startupOwner": "G-2747; no startup fix attempted",
+    "decision": "Retained exact command/error; continued independent rendered checks immediately without waiting."
+  },
+  "screenshots": {
+    "viewedCount": 29,
+    "manifest": "screenshots-viewed.json",
+    "method": "Actual Task/Playwright PNG files opened using view_image; dimensions verified from PNG headers. No pixel-baseline claims.",
+    "observations": "Recovery actions, focus rings and status text readable at selected widths; phone forms scroll vertically. Shared preview/mask fallback labels remain English in image fixtures even with zh-Hans. Saved-old-body contradiction is visually confirmed."
+  },
+  "testPremises": [
+    {
+      "file": "apps/web/features/document-editor/draft-recovery.stories.tsx",
+      "cases": [
+        "StableImageWithoutPreview",
+        "RetryBindingAfterReopen",
+        "RemoveFailedImage",
+        "CancelFailedUpload",
+        "ImageRecoveryPhoneChinese"
+      ],
+      "outcomeReached": false,
+      "evidence": "All five fail finding Image/图片 button. Noncompact contextual toolbar has no image action; original PNG and log retained. Supplemental compact fixture kept separate."
+    },
+    {
+      "file": "packages/ui/src/components/rich-text-editor.stories.tsx",
+      "case": "SlashMenu",
+      "outcomeReached": false,
+      "evidence": "Fails getByRole option after slash input; actual PNG shows heading menu. Independent failure retained, not classified as repaired."
+    },
+    {
+      "file": "apps/web/features/post-composer/draft-recovery.stories.tsx",
+      "case": "SnapshotFailureKeepsCurrentText",
+      "outcomeReached": true,
+      "evidence": "Original final assertion expected Retained current text., received Keep the text through failures.; confirmed blocking defect."
+    },
+    {
+      "file": "private additional-recovery.stories.tsx",
+      "initialPremiseCorrection": "Community change clears selected Work, so reselection must occur afterward. Lost-placement selection mock originally returned different Work ID than seeded draft, preventing writes. Corrected only private setup and reran eight relevant cases; no original assertion edited.",
+      "remaining": "en1440 body restoration assertion fails one missing character; stage unisolated."
+    }
+  ],
+  "artifactDelivery": {
+    "workerBundle": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/",
+    "requestedMainBundle": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/",
+    "copiedIntoMain": false,
+    "reason": "Current user filesystem boundary makes main and other worktrees read-only, except goalctl own bookkeeping. Bundle retained under translated worker path; manager must copy it into main.",
+    "inventory": "artifact-manifest.json (sha256 and bytes)",
+    "contains": [
+      "authored patch",
+      "implementation brief/attempt-5 handoff",
+      "attached findings",
+      "QA logs/XML/PNGs",
+      "private harness/config",
+      "source fingerprints",
+      "failed-case DOM records",
+      "startup command/error",
+      "screenshots actually viewed"
+    ]
+  },
+  "administrativeChecks": {
+    "status": "pending recorded docs:check and goal check after report commit; no brief tests specified"
+  },
+  "next": [
+    "Keep D2-003 open; route snapshot rollback/current-text loss to G-2748 with original failure and matrix evidence.",
+    "Resolve original document-editor story setup and SlashMenu test premise without weakening outcome assertions.",
+    "G-2747 owns Web startup; after a genuine isolated signed-in fixture exists, run targeted /submit full reload and backend receipt proof using retained corpus/backup.",
+    "Investigate en1440 missing character and retry focus loss; do not assert durable no-duplicate publication from synthetic receipts.",
+    "Manager copies private bundle to requested main location and lands only this report. No source fixes, land:auto or regression confirmation performed."
+  ],
+  "harnessWarnings": [
+    "Failed to resolve dependency: @storybook/react-dom-shim, present in client optimizeDeps.include (persists as warning after successful local install; not itself the later assertion failure).",
+    "QA acceptance coverage remains unqualified; targeted pass is not full regression or durable backend acceptance."
+  ]
+}
