@@ -1,0 +1,765 @@
+{
+  "fivePathSourceVerdict": {
+    "status": "pass",
+    "summary": "Independent review of the five exact G-2838 authored blobs finds the original D4-015 hierarchy, action priority and preserved-state criteria satisfied by source plus retained component evidence. No blocking defect or missing original row assertion was found.",
+    "source": "1c4289e0f2068814f23621ac0b393a074fa120c9",
+    "authoredBase": "587576832d71c3c501b962f849a5c400c9f7bd73",
+    "renderedCapture": "153c70ff74a6b048f3bc28712aca9a06f4181963",
+    "verdictIndependentOfFutureNavCorrection": true,
+    "canonicalClassStatusChanged": false
+  },
+  "navigationAffectedGateVerdict": {
+    "status": "pending-exact-G-2747-correction-pin",
+    "sourceVerdictBlocked": false,
+    "reviewedCorrectionPin": null,
+    "assembledCurrentMainCandidate": null,
+    "affectedCaseExecutedByThisReviewer": false,
+    "retainedFailure": "Filtered Beside Shell Count: label-content-name-mismatch in normal accessibility afterEach/addon, after all original play outcome assertions passed.",
+    "path": "apps/web/features/shell/side-nav.tsx",
+    "reviewBaseBlob": "78da75177b25e3775d5e8ccfff7ff58fb9d8e609",
+    "originalAssertions": [
+      "Shell Notifications link accessible name is Notifications, 6 unread",
+      "Visible shell badge is 6 unread",
+      "Filtered main page has exactly two rows",
+      "Main page contains no standalone 6"
+    ],
+    "retainedNameEvidence": {
+      "accessibleNameObservedByGetByRole": "Notifications, 6 unread",
+      "sourceAriaLabel": "Notifications, 6 unread",
+      "visibleSourceFragments": [
+        "Notifications",
+        "6 unread"
+      ],
+      "actualComputedCombinedVisibleName": null,
+      "limit": "Retained screenshot shows both fragments. Neither retained JSON nor this source-only inspection measures their combined DOM/axe visible name; no invented computed measurement."
+    },
+    "requiredNextCheck": "After the exact actual compatible G-2747 delta is supplied, review only it once, verify five UI blobs and dependency/runner pins on the assembled candidate, then run only the unchanged Filtered Beside Shell Count with normal accessibility.",
+    "supportedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test apps/web/features/shell/notifications/notifications.stories.tsx -t \"Filtered Beside Shell Count\"",
+    "additionalReview": "Preserve collapsed/expanded localized navigation names and visible badge. Record actual computed visible/accessibility names, UI/nav/dependency/runner pins and the affected QA result. No speculative corrected pin or completed gate is claimed."
+  },
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-19T10:35:46.868806+00:00",
+  "goal": "audit-remediation-20261019",
+  "finding": "D4-015",
+  "reviewer": {
+    "worker": "G-2854",
+    "engine": "codex-1",
+    "model": "gpt-6.1-sol",
+    "effort": "xhigh",
+    "authoredTheUIChange": false,
+    "fallbackUsed": false,
+    "nestedAgentsUsed": false,
+    "method": "Direct independent source/diff reading, exact git-blob verification, retained raw-log inspection and personal image viewing. Product-audit is bounded to the original notification row class."
+  },
+  "originalAcceptance": [
+    {
+      "number": 1,
+      "textVerbatim": "1440/390首屏可快速区分目标对象、事件、来源和时间，不需完整读每句才能找对象；长作品名、混合CJK与系统通知均有层级。",
+      "verdict": "pass-source-and-retained-component-evidence",
+      "reason": "Target heading/event/source/time are distinct in personally viewed Ready/ReadyPhone at 1440/390 and both dark variants. ChinesePhone retains long Latin title and CJK hierarchy; MixedPhone handles proposal/system fallback; Reviews and NewWorksDark preserve target/source identity. Unavailable rows expose no stale private target. Ready assertions preserve six rows, three unread, source/time and no horizontal overflow.",
+      "candidateLocations": [
+        "notifications.stories.tsx:420-450",
+        "notifications.stories.tsx:199-221",
+        "notifications.stories.tsx:496-548",
+        "notifications.stories.tsx:673-693"
+      ]
+    },
+    {
+      "number": 2,
+      "textVerbatim": "次要Save/Done分拣仍可发现且可键盘操作，但不在每行压过对象；打开通知与分拣目标不会互相误触。",
+      "verdict": "pass-source-and-retained-component-evidence",
+      "reason": "A visible small localized Actions disclosure replaces two permanent triage buttons. Save/Done stay keyboard reachable and show pressed state. KeyboardTriage asserts link-to-Actions-to-Save-to-Done order, preserved unread/no read call and neighbor focus. OpenWithoutTriage asserts read/count with disclosure closed. SavedOnly/DoneUndo assert neighbor/empty-region focus after removal. Separate title link has no stretched overlay over controls.",
+      "candidateLocations": [
+        "notifications-view.tsx:233-270",
+        "notifications-view.tsx:487-521",
+        "notifications.stories.tsx:451-494",
+        "notifications.stories.tsx:566-620"
+      ]
+    },
+    {
+      "number": 3,
+      "textVerbatim": "保留明确已读/未读、保存/完成、进行/失败及就地反馈；邀请的Accept/Decline等必要业务行动仍保持突出，不能机械地全部藏入菜单。",
+      "verdict": "pass-source-and-retained-component-evidence",
+      "reason": "Read/unread text/dot/weight, saved/done badges, busy/disabled status, local failure/Retry and success feedback remain explicit. TriageFailureRecovery tests busy, 503, retry, saved state and stable unread row. Phone error captures show local alert/retry. Join/Decline remain prominent outside closed Actions in phone light/dark; accept and keyboard-decline cases assert completion and focus. Existing conflict/generation behavior is preserved in source and retained traversal cases.",
+      "candidateLocations": [
+        "notifications-view.tsx:271-305",
+        "notification-traversal.stories.tsx:251-299",
+        "notification-traversal.stories.tsx:337-418",
+        "notifications.stories.tsx:235-281"
+      ]
+    }
+  ],
+  "sourceVerification": {
+    "worktreeReviewBase": "ca43d9b8f19e4ba57c0d1460761d36b8c510bf68",
+    "reconciliationMain": "82df58d2ba1d9d377b591126e7f4dfa42f27f02e",
+    "allFiveMainBeforeEqualAuthoredBase": true,
+    "allFiveCandidateEqualActualLatestCapture": true,
+    "fivePathManifest": [
+      {
+        "path": "apps/web/features/shell/notifications/closure-notifications.stories.tsx",
+        "blobs": {
+          "authoredBase": "abacd4694114544bf128e731bcfa60614822f0e5",
+          "reconciliationMain": "abacd4694114544bf128e731bcfa60614822f0e5",
+          "reviewBase": "abacd4694114544bf128e731bcfa60614822f0e5",
+          "candidate": "eeed70e9a1a92ec4d5901f17dae39ee3377887f4",
+          "renderedCapture": "eeed70e9a1a92ec4d5901f17dae39ee3377887f4"
+        }
+      },
+      {
+        "path": "apps/web/features/shell/notifications/messages.ts",
+        "blobs": {
+          "authoredBase": "1f82146ede2d193011a6f22da54547e19c3610c4",
+          "reconciliationMain": "1f82146ede2d193011a6f22da54547e19c3610c4",
+          "reviewBase": "1f82146ede2d193011a6f22da54547e19c3610c4",
+          "candidate": "089700843eaf5e60fe3ab780d050f05009009f27",
+          "renderedCapture": "089700843eaf5e60fe3ab780d050f05009009f27"
+        }
+      },
+      {
+        "path": "apps/web/features/shell/notifications/notification-traversal.stories.tsx",
+        "blobs": {
+          "authoredBase": "d3ec1ecf350271392e2e9ef7bcad69f61fc85061",
+          "reconciliationMain": "d3ec1ecf350271392e2e9ef7bcad69f61fc85061",
+          "reviewBase": "d3ec1ecf350271392e2e9ef7bcad69f61fc85061",
+          "candidate": "57941281008049b993a4ad57a2a4c07746ce8978",
+          "renderedCapture": "57941281008049b993a4ad57a2a4c07746ce8978"
+        }
+      },
+      {
+        "path": "apps/web/features/shell/notifications/notifications-view.tsx",
+        "blobs": {
+          "authoredBase": "03234d00bc36a369bc98d1b4585a5b3b8237622b",
+          "reconciliationMain": "03234d00bc36a369bc98d1b4585a5b3b8237622b",
+          "reviewBase": "03234d00bc36a369bc98d1b4585a5b3b8237622b",
+          "candidate": "a1f053b0e1fbdadfe696c0ff367116f1dee0d8a8",
+          "renderedCapture": "a1f053b0e1fbdadfe696c0ff367116f1dee0d8a8"
+        }
+      },
+      {
+        "path": "apps/web/features/shell/notifications/notifications.stories.tsx",
+        "blobs": {
+          "authoredBase": "2483a34c695617f7f38c22702051d2aac648f6cd",
+          "reconciliationMain": "2483a34c695617f7f38c22702051d2aac648f6cd",
+          "reviewBase": "2483a34c695617f7f38c22702051d2aac648f6cd",
+          "candidate": "c8b7e25e68685039722fa93d34306ec050e02e80",
+          "renderedCapture": "c8b7e25e68685039722fa93d34306ec050e02e80"
+        }
+      }
+    ],
+    "scope": "Only these five authored UI paths, their existing row call paths and the two declared compatibility differences. Unrelated wave ancestry and G-2846 backend review are outside this review.",
+    "productOrTestFilesMutated": false,
+    "privateExtracts": ".temp/notification-review/",
+    "authoredDiffSha256": "c2e6a276e47d74eb192260ad07902597eb3c55419c4db706ff093eff30584b0c",
+    "unchangedNotificationSiblings": [
+      {
+        "path": "apps/web/features/shell/notifications/closure-fixtures.ts",
+        "blob": "ad586be0c24f6f3133059f3ea2faa3178526dd81"
+      },
+      {
+        "path": "apps/web/features/shell/notifications/closure-notifications.test.ts",
+        "blob": "d4537d0e0608d7aa48ea21e908eda4cbfdde635f"
+      },
+      {
+        "path": "apps/web/features/shell/notifications/delivery.tsx",
+        "blob": "5233df60c515163bbda86348c6e6a5e1de2babc6"
+      },
+      {
+        "path": "apps/web/features/shell/notifications/fixtures.test.ts",
+        "blob": "a3db1cdc763cbb58c21cbd00d29c85025c7bda0b"
+      },
+      {
+        "path": "apps/web/features/shell/notifications/fixtures.ts",
+        "blob": "89c8d938c49ea8c7e412639d777e2c4cc57b1ebb"
+      },
+      {
+        "path": "apps/web/features/shell/notifications/invitations-read.ts",
+        "blob": "9654a8a2c6d6ba2d3167a3246b210882b29f7ac7"
+      },
+      {
+        "path": "apps/web/features/shell/notifications/invitations.tsx",
+        "blob": "8c6559ff500f1e286b8f01b1cb125b5c22940b3d"
+      },
+      {
+        "path": "apps/web/features/shell/notifications/sanction.test.ts",
+        "blob": "c9c2ad260cc18c56c0cc7a4dd9283710bfdd8b01"
+      },
+      {
+        "path": "apps/web/features/shell/notifications/sanction.ts",
+        "blob": "f86c51043061cfb1b7ba3b8b79ab5c225d260d1a"
+      },
+      {
+        "path": "apps/web/features/shell/notifications/window.test.ts",
+        "blob": "cdf71c850732c50e4b0dc9ec5ddeb63d744b1a75"
+      },
+      {
+        "path": "apps/web/features/shell/notifications/window.ts",
+        "blob": "dfb30686c769efc2600ca0f1f0e6236093f3c7b8"
+      }
+    ]
+  },
+  "dependencyCompatibility": {
+    "exactMatches": 28,
+    "inspectedPaths": 30,
+    "manifest": [
+      {
+        "path": "apps/web/.storybook/preview.tsx",
+        "blobs": {
+          "candidate": "1ba5806d7f8720646dfe0a591067966745179187",
+          "reconciliationMain": "1ba5806d7f8720646dfe0a591067966745179187",
+          "reviewBase": "1ba5806d7f8720646dfe0a591067966745179187"
+        },
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/address/path.ts",
+        "blobs": {
+          "candidate": "bc58a81f68e3f565b269256f72b647fe75b15357",
+          "reconciliationMain": "bc58a81f68e3f565b269256f72b647fe75b15357",
+          "reviewBase": "bc58a81f68e3f565b269256f72b647fe75b15357"
+        },
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/api/browser.ts",
+        "blobs": {
+          "candidate": "5b8c2d862068a9152b77de410bfefb247f047112",
+          "reconciliationMain": "5b8c2d862068a9152b77de410bfefb247f047112",
+          "reviewBase": "5b8c2d862068a9152b77de410bfefb247f047112"
+        },
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/auth/paths.ts",
+        "blobs": {
+          "candidate": "8730d85d6ee9e6031595a5aa91afe352b650934f",
+          "reconciliationMain": "8730d85d6ee9e6031595a5aa91afe352b650934f",
+          "reviewBase": "8730d85d6ee9e6031595a5aa91afe352b650934f"
+        },
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/feed/time.ts",
+        "blobs": {
+          "candidate": "20521c937c4c42e94c018e2b0d1cd3b63a2b0cd6",
+          "reconciliationMain": "20521c937c4c42e94c018e2b0d1cd3b63a2b0cd6",
+          "reviewBase": "20521c937c4c42e94c018e2b0d1cd3b63a2b0cd6"
+        },
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/feed/types.ts",
+        "blobs": {
+          "candidate": "cf9bfe368463b819092c832bc1d927f14da0c82d",
+          "reconciliationMain": "30384ba864d7e6e4105fc6ec9b0e166832320932",
+          "reviewBase": "30384ba864d7e6e4105fc6ec9b0e166832320932"
+        },
+        "equal": false
+      },
+      {
+        "path": "apps/web/features/shell/app-shell.tsx",
+        "blobs": {
+          "candidate": "50cb99542b2f01bbee00810fd0114e979635b1f5",
+          "reconciliationMain": "50cb99542b2f01bbee00810fd0114e979635b1f5",
+          "reviewBase": "50cb99542b2f01bbee00810fd0114e979635b1f5"
+        },
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/shell/community-icon.tsx",
+        "blobs": {
+          "candidate": "60c9ff4c6ad0268f9c7e78291180b96906115195",
+          "reconciliationMain": "60c9ff4c6ad0268f9c7e78291180b96906115195",
+          "reviewBase": "60c9ff4c6ad0268f9c7e78291180b96906115195"
+        },
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/shell/empty-state.tsx",
+        "blobs": {
+          "candidate": "f76bf7aa77c32e52ea55b5809be9fe6a8a472756",
+          "reconciliationMain": "f76bf7aa77c32e52ea55b5809be9fe6a8a472756",
+          "reviewBase": "f76bf7aa77c32e52ea55b5809be9fe6a8a472756"
+        },
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/shell/localized-link.tsx",
+        "blobs": {
+          "candidate": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba",
+          "reconciliationMain": "47c2aa66fb14afa3a84d0a187aa863998a2aba97",
+          "reviewBase": "47c2aa66fb14afa3a84d0a187aa863998a2aba97"
+        },
+        "equal": false
+      },
+      {
+        "path": "apps/web/features/shell/messages.ts",
+        "blobs": {
+          "candidate": "145a8ff150ec721517d7a0b7f3a3cbbc36dba8c3",
+          "reconciliationMain": "145a8ff150ec721517d7a0b7f3a3cbbc36dba8c3",
+          "reviewBase": "145a8ff150ec721517d7a0b7f3a3cbbc36dba8c3"
+        },
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/shell/notifications/delivery.tsx",
+        "blobs": {
+          "candidate": "5233df60c515163bbda86348c6e6a5e1de2babc6",
+          "reconciliationMain": "5233df60c515163bbda86348c6e6a5e1de2babc6",
+          "reviewBase": "5233df60c515163bbda86348c6e6a5e1de2babc6"
+        },
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/shell/notifications/sanction.ts",
+        "blobs": {
+          "candidate": "f86c51043061cfb1b7ba3b8b79ab5c225d260d1a",
+          "reconciliationMain": "f86c51043061cfb1b7ba3b8b79ab5c225d260d1a",
+          "reviewBase": "f86c51043061cfb1b7ba3b8b79ab5c225d260d1a"
+        },
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/shell/notifications/window.ts",
+        "blobs": {
+          "candidate": "dfb30686c769efc2600ca0f1f0e6236093f3c7b8",
+          "reconciliationMain": "dfb30686c769efc2600ca0f1f0e6236093f3c7b8",
+          "reviewBase": "dfb30686c769efc2600ca0f1f0e6236093f3c7b8"
+        },
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/shell/page.tsx",
+        "blobs": {
+          "candidate": "4cc617a4321d8252bc4e5d52ddc00e486c2023a2",
+          "reconciliationMain": "4cc617a4321d8252bc4e5d52ddc00e486c2023a2",
+          "reviewBase": "4cc617a4321d8252bc4e5d52ddc00e486c2023a2"
+        },
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/shell/shell-provider.tsx",
+        "blobs": {
+          "candidate": "bc23ae0b00cfd1ff4b522776e95f6ce5cc82ec23",
+          "reconciliationMain": "bc23ae0b00cfd1ff4b522776e95f6ce5cc82ec23",
+          "reviewBase": "bc23ae0b00cfd1ff4b522776e95f6ce5cc82ec23"
+        },
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/shell/side-nav.tsx",
+        "blobs": {
+          "candidate": "78da75177b25e3775d5e8ccfff7ff58fb9d8e609",
+          "reconciliationMain": "78da75177b25e3775d5e8ccfff7ff58fb9d8e609",
+          "reviewBase": "78da75177b25e3775d5e8ccfff7ff58fb9d8e609"
+        },
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/shell/unread.ts",
+        "blobs": {
+          "candidate": "151a7a968f70dfd847c9d983b8131b028f2c1fec",
+          "reconciliationMain": "151a7a968f70dfd847c9d983b8131b028f2c1fec",
+          "reviewBase": "151a7a968f70dfd847c9d983b8131b028f2c1fec"
+        },
+        "equal": true
+      },
+      {
+        "path": "apps/web/features/work-page/route.ts",
+        "blobs": {
+          "candidate": "2f5073aa044699ff0fac1579382cce1136755226",
+          "reconciliationMain": "2f5073aa044699ff0fac1579382cce1136755226",
+          "reviewBase": "2f5073aa044699ff0fac1579382cce1136755226"
+        },
+        "equal": true
+      },
+      {
+        "path": "apps/web/i18n/define.ts",
+        "blobs": {
+          "candidate": "409e97b5683c92ff8b1c19e5ad61ab1076f0fc1f",
+          "reconciliationMain": "409e97b5683c92ff8b1c19e5ad61ab1076f0fc1f",
+          "reviewBase": "409e97b5683c92ff8b1c19e5ad61ab1076f0fc1f"
+        },
+        "equal": true
+      },
+      {
+        "path": "apps/web/i18n/locale.ts",
+        "blobs": {
+          "candidate": "5f476e4102ea7b3673ae6e6d7ec2d320b920a4ce",
+          "reconciliationMain": "5f476e4102ea7b3673ae6e6d7ec2d320b920a4ce",
+          "reviewBase": "5f476e4102ea7b3673ae6e6d7ec2d320b920a4ce"
+        },
+        "equal": true
+      },
+      {
+        "path": "apps/web/package.json",
+        "blobs": {
+          "candidate": "788bd74341217c9fb7f655e00ccd902d64210f5b",
+          "reconciliationMain": "788bd74341217c9fb7f655e00ccd902d64210f5b",
+          "reviewBase": "788bd74341217c9fb7f655e00ccd902d64210f5b"
+        },
+        "equal": true
+      },
+      {
+        "path": "package.json",
+        "blobs": {
+          "candidate": "5b83cc84bb8984bbb72f1056d2ecc9463973fde3",
+          "reconciliationMain": "5b83cc84bb8984bbb72f1056d2ecc9463973fde3",
+          "reviewBase": "5b83cc84bb8984bbb72f1056d2ecc9463973fde3"
+        },
+        "equal": true
+      },
+      {
+        "path": "packages/ui/src/components/button.tsx",
+        "blobs": {
+          "candidate": "b7045c0b4c05c46c49c31cfdcc0a473fac9c478f",
+          "reconciliationMain": "b7045c0b4c05c46c49c31cfdcc0a473fac9c478f",
+          "reviewBase": "b7045c0b4c05c46c49c31cfdcc0a473fac9c478f"
+        },
+        "equal": true
+      },
+      {
+        "path": "packages/ui/src/components/checkbox.tsx",
+        "blobs": {
+          "candidate": "6e30a7f19caa7e6ab35ea63aa120fe62de70727f",
+          "reconciliationMain": "6e30a7f19caa7e6ab35ea63aa120fe62de70727f",
+          "reviewBase": "6e30a7f19caa7e6ab35ea63aa120fe62de70727f"
+        },
+        "equal": true
+      },
+      {
+        "path": "packages/ui/src/components/collapsible.tsx",
+        "blobs": {
+          "candidate": "d79b595a6cd1b2577f6ade0180e7c0b6ef215ce3",
+          "reconciliationMain": "d79b595a6cd1b2577f6ade0180e7c0b6ef215ce3",
+          "reviewBase": "d79b595a6cd1b2577f6ade0180e7c0b6ef215ce3"
+        },
+        "equal": true
+      },
+      {
+        "path": "packages/ui/src/components/field.tsx",
+        "blobs": {
+          "candidate": "866cf238036f554f39cd344fa81a6aebd0121a7f",
+          "reconciliationMain": "866cf238036f554f39cd344fa81a6aebd0121a7f",
+          "reviewBase": "866cf238036f554f39cd344fa81a6aebd0121a7f"
+        },
+        "equal": true
+      },
+      {
+        "path": "packages/ui/src/utils.ts",
+        "blobs": {
+          "candidate": "7639ba19138d1b3aaf26be8c64f07354199021d9",
+          "reconciliationMain": "7639ba19138d1b3aaf26be8c64f07354199021d9",
+          "reviewBase": "7639ba19138d1b3aaf26be8c64f07354199021d9"
+        },
+        "equal": true
+      },
+      {
+        "path": "scripts/qa/story-accessibility.setup.ts",
+        "blobs": {
+          "candidate": "42250728a58a9ad42f3ca561a732b7315aee0780",
+          "reconciliationMain": "42250728a58a9ad42f3ca561a732b7315aee0780",
+          "reviewBase": "42250728a58a9ad42f3ca561a732b7315aee0780"
+        },
+        "equal": true
+      },
+      {
+        "path": "yarn.lock",
+        "blobs": {
+          "candidate": "239124b3f025a9beeb23d08d75adfbdbcc18c366",
+          "reconciliationMain": "239124b3f025a9beeb23d08d75adfbdbcc18c366",
+          "reviewBase": "239124b3f025a9beeb23d08d75adfbdbcc18c366"
+        },
+        "equal": true
+      }
+    ],
+    "feedTypes": {
+      "difference": "Main maps invalid (HTTP 400) to the moved notice; captured candidate maps it to server. failureOf, settle and their returned invalid category are unchanged.",
+      "callPath": "NotificationsView older() consumes invalid itself and restarts readWindow(..., null, selection) before displaying ordinary failure copy. The existing InvalidCursorRestartsFiltered and StaleRestartKeepsTriageRevision use this branch; FailedRestartRetriesNewest then displays its 503 response. Triage 409 still returns moved directly and offers Reload notifications; triage 400 still selects generic triage failure because it checks result.failure, not readFailureNotice.",
+      "boundedEffect": "A generic count/latest-read or repeated invalid read notice can use moved copy on Main. That difference is explicit; it does not alter the original row hierarchy, triage separation or existing original recovery assertions.",
+      "originalAssertionAffected": false
+    },
+    "localizedLink": {
+      "difference": "Captured candidate forwards an anchor ref and calls observeCurrentPageLink for selected links. Main lacks that observer/ref hook.",
+      "observerBlobAtCandidate": "4580530fd0e47923f4bf9de65a0baba9292b2a45",
+      "callPath": "Only the notification view/reason navigation uses LocalizedLink. Those rows flex-wrap inside max-w-full; they are not horizontal scrolling strips. The observer only reveals bounds in horizontally overflowing auto/scroll ancestors up to the nearest nav, installs resize/pageshow/focusin listeners and cleans them up. It changes neither copy/ARIA nor hrefs or request payloads. Notification destination links use next/link directly; row focus recovery queries native Actions buttons/region and does not use this ref.",
+      "boundedEffect": "No original 1440/390 row, keyboard triage, target/read/triage or count/filtered-row assertion depends on this observer in the existing wrapping navigation. No claim of byte equality or whole-navigation acceptance.",
+      "originalAssertionAffected": false
+    },
+    "freshOriginalRowCasesRequired": [],
+    "decision": "Reuse unchanged valid component proof. Neither declared dependency difference changes an original row assertion; no unchanged story tier or backend journey was rerun."
+  },
+  "classAudit": {
+    "existingDisplayFamilies": [
+      "reply/mention",
+      "submission_decision (accepted/rejected/changes requested/fallback)",
+      "moderation_outcome",
+      "realm_role_change (given/taken/changed; ban/unban)",
+      "realm_invitation",
+      "follow",
+      "claim_correction",
+      "review",
+      "review_helpful",
+      "new_work",
+      "chapter",
+      "post_vote",
+      "proposal notices",
+      "inactive/missing-display fallback"
+    ],
+    "hierarchy": "notifications-view.tsx:116-145 and 192-287 select target titles from existing active display facts, use Realm for role/invitation and actor for follow, then render a 16px heading, separate 14px event, 12px source/reason/time and subordinate preview. Missing titles, proposals and inactive/missing display keep the safe existing sentence fallback; no identifier lookup, new capability or fabricated target is added.",
+    "identityPrivacy": "Target and actor remain distinct. Actor avatar/source uses supplied actor facts; content-language lang is restricted to target title/excerpt rather than applied to translated event copy. bdi isolates metadata. Inactive rows suppress display, actor, destination, invitation, reason and excerpt. Sanctions suppress actor and retain complete reason/end/permanence/appeal sentence. Existing proposal/delivery authority and redaction remain consumed as supplied; source inspection is not backend disclosure acceptance.",
+    "openVersusTriage": "The former stretched destination overlay is removed. Only the title link calls markOne; sibling Actions/Save/Done controls call triage with one patch flag and expectedRevision. Original sentence remains the destination accessible name, containing the visible target. KeyboardTriage records triage calls only; OpenWithoutTriage records read/count only.",
+    "focus": "Actions exposes native disclosure state. Save/Unsave/Done/Undo expose aria-pressed. Removing a focused row transfers focus to the next/previous Actions button or stable Notifications region; invitation response transfers focus to the local completion status when focus was in that row. Existing keyboard plays assert these paths.",
+    "recovery": "Busy row exposes aria-busy and Loading status; mutation controls disable. Failed triage leaves flags/unread intact and supplies row-local alert/Retry. 409 keeps the row and offers Reload notifications rather than replaying stale expectedRevision. Success shows local status or surviving page status when the row leaves. Traversal/generation fences and revision merging are preserved. The 409 reload presentation is statically reviewed; no new browser execution of that branch is claimed.",
+    "invitations": "Join/Decline and public-listing choice stay outside Actions. Existing Realm/subject/actingSubject payload, stable attempt idempotency key, busy/failure and onRead-on-success behavior are preserved. Phone light/dark captures show both business actions with Actions closed; accept/keyboard-decline stories assert local completion and focus.",
+    "localization": {
+      "newKeys": 18,
+      "locales": [
+        "en",
+        "zh-Hans",
+        "zh-Hant",
+        "ja",
+        "ko",
+        "de",
+        "fr",
+        "es"
+      ],
+      "review": "Read the localized event/disclosure/reload copy and preserved role placeholders across all eight catalogs. Retained i18n check passed. This is not a native-speaker certification; existing machine-draft comments on sanction copy remain."
+    },
+    "testsReviewed": "All three exact authored story files and their base-to-candidate changes were inspected. Updates scope changed actor selectors to rows/headings and preserve destination, privacy, continuation and error assertions; closure fixtures remain explicitly contract-built. FilteredBesideShellCount play is unchanged. Later run adds four phone cases and pending-invitation assertions; it is not a combined 101-case run.",
+    "rankedBlockingFindings": [],
+    "genuinelyMissingOriginalAssertions": []
+  },
+  "retainedEvidence": {
+    "candidatePins": {
+      "path": ".temp/notification-review/candidate-pins.json",
+      "sha256": "88fc40059649a31368582df95edd14446e1ce040d29864322e4f60fd3c8030ee"
+    },
+    "priorViewedManifest": {
+      "path": ".temp/notification-review/viewed-screenshots.json",
+      "sha256": "3ba5a3b8840a1540838a9f53c4674042fd4976c9a7c973d30b9fd189f29fcaa8",
+      "priorWorkerViewed": 35,
+      "verifiedFileHashesByThisReviewer": 35
+    },
+    "personallyViewedByThisReviewer": {
+      "count": 17,
+      "originalComparisonImages": 2,
+      "finalOrResidualImages": 15,
+      "images": [
+        {
+          "path": ".temp/notification-review/screenshots/.temp/original/story-notifications-ready-1440-d4-015-extension-annotated.png",
+          "sha256": "c8a79dac60f1c8f03bd982bb28bd8601705bac8034eadf3411bba54c8650c3d5",
+          "width": 1440,
+          "height": 1000,
+          "role": "original finding comparison only"
+        },
+        {
+          "path": ".temp/notification-review/screenshots/.temp/original/story-notifications-ready-390-d4-015-extension-annotated.png",
+          "sha256": "e76cb4c32518887b1f2836accbc52216c147579a7c9fd6fe74661f1457e51f2a",
+          "width": 390,
+          "height": 844,
+          "role": "original finding comparison only"
+        },
+        {
+          "path": ".temp/notification-review/screenshots/20261019t065659-afe8aa/apps-web-features-shell-notifications-notifications.stories.tsx/FilteredBesideShellCount.png",
+          "sha256": "f98d6ea9d5880cc8865528ef15f49f9445b1047ea96bd540b8d825bad43a1715",
+          "width": 1440,
+          "height": 1000,
+          "role": "retained unresolved navigation gate"
+        },
+        {
+          "path": ".temp/notification-review/screenshots/20261019t065659-afe8aa/apps-web-features-shell-notifications-notification-traversal.stories.tsx/TriageBusy.png",
+          "sha256": "87d6dd33ff9bd37f211a9a5c3c4b950eff8ac14128a848377d89a452533f19c5",
+          "width": 1280,
+          "height": 860,
+          "role": "final component evidence"
+        },
+        {
+          "path": ".temp/notification-review/screenshots/20261019t065659-afe8aa/apps-web-features-shell-notifications-notification-traversal.stories.tsx/TriageFailureRecovery.png",
+          "sha256": "3c6d6b2553d2f9e53670a9978277c76c35b228b37cc942855e15165c91aa7274",
+          "width": 1280,
+          "height": 860,
+          "role": "final component evidence"
+        },
+        {
+          "path": ".temp/notification-review/screenshots/20261019t071757-48edbb/apps-web-features-shell-notifications-notifications.stories.tsx/InvitationNotificationPhone.png",
+          "sha256": "40c7e810c23c10dacf3053222c6472b2e02876d0b515a19de393ba8dca58609f",
+          "width": 390,
+          "height": 844,
+          "role": "final component evidence"
+        },
+        {
+          "path": ".temp/notification-review/screenshots/20261019t071757-48edbb/apps-web-features-shell-notifications-notifications.stories.tsx/InvitationNotificationPhoneDark.png",
+          "sha256": "a1d96352e1e28a2e9cfcbd960d5376a2821a19a1bf55c4058a8e7ce6ab131d0d",
+          "width": 390,
+          "height": 844,
+          "role": "final component evidence"
+        },
+        {
+          "path": ".temp/notification-review/screenshots/20261019t071757-48edbb/apps-web-features-shell-notifications-notifications.stories.tsx/TriageErrorPhone.png",
+          "sha256": "ec43e76b24301f314e2ed5249d1cf87c5d59b111c1b3e6c59ffe97c9b006e3c5",
+          "width": 390,
+          "height": 844,
+          "role": "final component evidence"
+        },
+        {
+          "path": ".temp/notification-review/screenshots/20261019t071757-48edbb/apps-web-features-shell-notifications-notifications.stories.tsx/TriageErrorPhoneDark.png",
+          "sha256": "ac8d57309c59a9d47a582773377c72b255d893f39ed365bbdaf23c7907e2e9e1",
+          "width": 390,
+          "height": 844,
+          "role": "final component evidence"
+        },
+        {
+          "path": ".temp/notification-review/screenshots/20261019t071757-48edbb/apps-web-features-shell-notifications-notifications.stories.tsx/Ready.png",
+          "sha256": "cbede7d163f905cdb1fce4f946ecb026b8613e04deb05017019c6983600d2c2a",
+          "width": 1440,
+          "height": 1000,
+          "role": "final component evidence"
+        },
+        {
+          "path": ".temp/notification-review/screenshots/20261019t071757-48edbb/apps-web-features-shell-notifications-notifications.stories.tsx/ReadyPhone.png",
+          "sha256": "5f322e1a36e01bb7d2c6cd20f358da02ec3f747585234144417683df922a426f",
+          "width": 390,
+          "height": 844,
+          "role": "final component evidence"
+        },
+        {
+          "path": ".temp/notification-review/screenshots/20261019t071757-48edbb/apps-web-features-shell-notifications-notifications.stories.tsx/ReadyDark.png",
+          "sha256": "ade42008eebd68058d0d1fe6a778b7744128e3f4e113efe2b3c6fafd56c4f63f",
+          "width": 1440,
+          "height": 1000,
+          "role": "final component evidence"
+        },
+        {
+          "path": ".temp/notification-review/screenshots/20261019t071757-48edbb/apps-web-features-shell-notifications-notifications.stories.tsx/ReadyPhoneDark.png",
+          "sha256": "162fec558fc9fd4df2319ec0085d29f5eb79160e12c543b053fd01468f620976",
+          "width": 390,
+          "height": 844,
+          "role": "final component evidence"
+        },
+        {
+          "path": ".temp/notification-review/screenshots/20261019t071757-48edbb/apps-web-features-shell-notifications-notifications.stories.tsx/ChinesePhone.png",
+          "sha256": "68720f31c3bf687ae84f789f6e4112cd92bce57c1a6e2fd0184303a931d9b92d",
+          "width": 390,
+          "height": 844,
+          "role": "final component evidence"
+        },
+        {
+          "path": ".temp/notification-review/screenshots/20261019t071757-48edbb/apps-web-features-shell-notifications-notifications.stories.tsx/MixedPhone.png",
+          "sha256": "72827e43e51940045d5609e3ef684c48496d62ca973906cb81ce84390472480a",
+          "width": 390,
+          "height": 844,
+          "role": "final component evidence"
+        },
+        {
+          "path": ".temp/notification-review/screenshots/20261019t071757-48edbb/apps-web-features-shell-notifications-notifications.stories.tsx/Reviews.png",
+          "sha256": "29c3e676384d4598c8bd7dbe0ef1e39e83636be2ba753bf3e8b6e57a0037b53a",
+          "width": 1440,
+          "height": 1000,
+          "role": "final component evidence"
+        },
+        {
+          "path": ".temp/notification-review/screenshots/20261019t071757-48edbb/apps-web-features-shell-notifications-notifications.stories.tsx/NewWorksDark.png",
+          "sha256": "6e8f504b67f8c74902bc62c1fe8c5c60d5a13f367289df06b98b3e527a07a0de",
+          "width": 1440,
+          "height": 1000,
+          "role": "final component evidence"
+        }
+      ]
+    },
+    "qaRuns": {
+      "20261019t065659-afe8aa": {
+        "sourceCommit": "f28bf4756ad778bd32db40d0852177feac9d1702",
+        "result": "96/97; sole sidebar label-content-name-mismatch",
+        "files": [
+          "notifications.stories.tsx",
+          "notification-traversal.stories.tsx",
+          "closure-notifications.stories.tsx"
+        ],
+        "blobs": {
+          "apps/web/features/shell/notifications/notifications-view.tsx": "a1f053b0e1fbdadfe696c0ff367116f1dee0d8a8",
+          "apps/web/features/shell/notifications/messages.ts": "089700843eaf5e60fe3ab780d050f05009009f27",
+          "apps/web/features/shell/notifications/notifications.stories.tsx": "c9f686324599af8999db97f97f99ed5d80e30498",
+          "apps/web/features/shell/notifications/notification-traversal.stories.tsx": "57941281008049b993a4ad57a2a4c07746ce8978",
+          "apps/web/features/shell/notifications/closure-notifications.stories.tsx": "eeed70e9a1a92ec4d5901f17dae39ee3377887f4",
+          "scripts/goal/goalctl.ts": "329c2cfe66c9ef7ed12514b380432df97296100a",
+          "scripts/qa/test.ts": "81c4fa2ae7770c68b359f86ae910069aca509c08",
+          "scripts/qa/story-screenshots.ts": "531b2bb355b48534fbbbd4b4d981fb599e8c2382",
+          "scripts/qa/story-accessibility.setup.ts": "42250728a58a9ad42f3ca561a732b7315aee0780",
+          "apps/web/.storybook/preview.tsx": "1ba5806d7f8720646dfe0a591067966745179187"
+        }
+      },
+      "20261019t071757-48edbb": {
+        "sourceCommit": "153c70ff74a6b048f3bc28712aca9a06f4181963",
+        "result": "44/45; same sole sidebar label-content-name-mismatch",
+        "files": [
+          "notifications.stories.tsx"
+        ],
+        "blobs": {
+          "apps/web/features/shell/notifications/notifications-view.tsx": "a1f053b0e1fbdadfe696c0ff367116f1dee0d8a8",
+          "apps/web/features/shell/notifications/messages.ts": "089700843eaf5e60fe3ab780d050f05009009f27",
+          "apps/web/features/shell/notifications/notifications.stories.tsx": "c8b7e25e68685039722fa93d34306ec050e02e80",
+          "apps/web/features/shell/notifications/notification-traversal.stories.tsx": "57941281008049b993a4ad57a2a4c07746ce8978",
+          "apps/web/features/shell/notifications/closure-notifications.stories.tsx": "eeed70e9a1a92ec4d5901f17dae39ee3377887f4",
+          "scripts/goal/goalctl.ts": "329c2cfe66c9ef7ed12514b380432df97296100a",
+          "scripts/qa/test.ts": "81c4fa2ae7770c68b359f86ae910069aca509c08",
+          "scripts/qa/story-screenshots.ts": "531b2bb355b48534fbbbd4b4d981fb599e8c2382",
+          "scripts/qa/story-accessibility.setup.ts": "42250728a58a9ad42f3ca561a732b7315aee0780",
+          "apps/web/.storybook/preview.tsx": "1ba5806d7f8720646dfe0a591067966745179187"
+        }
+      }
+    },
+    "runnerPinsAtReviewBase": [
+      {
+        "path": "scripts/goal/goalctl.ts",
+        "candidateAndLatestCaptureBlob": "329c2cfe66c9ef7ed12514b380432df97296100a",
+        "reviewBaseBlob": "79ae1a7484acc4d6cd793c79aae05d5a94d61273"
+      },
+      {
+        "path": "scripts/qa/test.ts",
+        "candidateAndLatestCaptureBlob": "81c4fa2ae7770c68b359f86ae910069aca509c08",
+        "reviewBaseBlob": "81c4fa2ae7770c68b359f86ae910069aca509c08"
+      },
+      {
+        "path": "scripts/qa/story-screenshots.ts",
+        "candidateAndLatestCaptureBlob": "531b2bb355b48534fbbbd4b4d981fb599e8c2382",
+        "reviewBaseBlob": "531b2bb355b48534fbbbd4b4d981fb599e8c2382"
+      },
+      {
+        "path": "scripts/qa/story-accessibility.setup.ts",
+        "candidateAndLatestCaptureBlob": "42250728a58a9ad42f3ca561a732b7315aee0780",
+        "reviewBaseBlob": "42250728a58a9ad42f3ca561a732b7315aee0780"
+      },
+      {
+        "path": "apps/web/.storybook/preview.tsx",
+        "candidateAndLatestCaptureBlob": "1ba5806d7f8720646dfe0a591067966745179187",
+        "reviewBaseBlob": "1ba5806d7f8720646dfe0a591067966745179187"
+      }
+    ],
+    "rawLogsInspected": [
+      {
+        "path": ".temp/notification-review/retained-logs/09eeb364-0858-4fae-9e69-33e61889e229.3.log",
+        "sha256": "544578f83fa48630913b8bb7a85f1960fcd9eb4f3e21d31bb59eb14c6aa2766b"
+      },
+      {
+        "path": ".temp/notification-review/retained-logs/c3d0578d-e359-4c17-9412-e3285ad639d5.3.log",
+        "sha256": "96b94f8ad9315ffcef0c4dc251ac5336e42b38f61e675d15c9e69318f5c1c846"
+      }
+    ],
+    "reuseDecision": "Both recorded QA manifests match their actual source objects. Traversal and closure blobs are unchanged between the runs; the only notification-story change adds pending invitation assertions and four phone cases, all covered by the later 44/45 run. Both raw logs confirm the sole failure is the same untouched navigation label mismatch. Keep the two results separate: 96/97 and 44/45, each failing overall.",
+    "historicalFailure": "20261019t063306-76f9bf contrast/ambiguous actor-selector failure and its screenshots are historical only. They are not used as final color or current assertion proof.",
+    "evidenceLimit": "All reused interaction outcomes are scripted Storybook component fixtures/API-shaped answers, including explicitly contract-built closure states. Existing execution and static source facts are distinct. No genuine signed-in notification API journey, nonzero backend delivery, production behavior, human task-success study or full backend acceptance is claimed or required for this original row class."
+  },
+  "ownValidation": {
+    "documentationCheck": {
+      "status": "pending"
+    },
+    "workerCheck": {
+      "status": "pending"
+    }
+  },
+  "managerNext": [
+    "Use the completed five-path source verdict immediately; canonical class disposition remains with the manager.",
+    "Supply the exact published G-2747 correction and, if assembled, immutable compatible current-main candidate. Append only that delta review, computed name evidence and the one affected normal-a11y case result.",
+    "Do not add a new capability, contract, persona matrix, nonzero backend fixture or whole-domain journey as a precondition for the original D4-015 Storybook row class."
+  ]
+}
