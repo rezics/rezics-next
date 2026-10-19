@@ -45,7 +45,7 @@ async function presentation(context: string, prior?: { component: string; revisi
 }
 async function prepare(): Promise<Source> {
   people = await personaSessions('public', { moderatorLifetimeMs: 86_400_000 });
-  privatePeople = await personaSessions('private', { moderatorLifetimeMs: 86_400_000 });
+  privatePeople = await personaSessions('public', { moderatorLifetimeMs: 86_400_000 });
   const work = await json<{ work: string; mainVersion: string }>(people.owner.main('POST', '/v1/works', {
     profile: 'metadata-only-v1', authoring: 'own-work', title: 'Original context-selection acceptance work',
     language: 'en', semanticTypes: ['https://schema.org/Book'], ...own(people.owner) }), 201);
@@ -92,6 +92,12 @@ async function prepare(): Promise<Source> {
   await grant(privatePeople.owner, `rating:context:${privatePeople.realm}`, 'rating.context.create');
   const privateContext = await json<Context>(privatePeople.owner.main('POST', '/v1/rating-contexts', {
     profile: 'realm-standing-rating-context-v1', realm: privatePeople.realm, question: 'Confidential quality?', ...own(privatePeople.owner) }), 201);
+  const settingsPath = `/v1/spaces/${short(privatePeople.space)}/settings`;
+  const basis = await json<{ generation: string }>(privatePeople.owner.main('GET', `${settingsPath}?${qs(own(privatePeople.owner))}`));
+  await json(privatePeople.owner.main('PUT', settingsPath, { ...own(privatePeople.owner), expectedGeneration: basis.generation,
+    reason: 'Make the originally public context unreadable',
+    settings: { visibility: 'private', listing: 'listed', history: 'everything', admission: 'invitation' } }), 201);
+  privatePeople.visibility = 'private';
   const incompatible = await json<Context>(people.owner.main('POST', '/v1/rating-contexts', {
     profile: 'realm-target-rating-context-v3', realm: people.realm, question: 'Character quality?', language: 'en', targetGrain: 'resource', ...own(people.owner) }), 201);
   const root = `/v1/realms/${short(privatePeople.realm)}`;
