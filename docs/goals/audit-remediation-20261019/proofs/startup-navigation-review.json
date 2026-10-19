@@ -2455,5 +2455,292 @@
       "artifact_manifest": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/typed-identity-de8fac2935cb/artifact-manifest.json"
     },
     "next": "Program may integrate this minimal typed correction using the exact verified producer. No actionable source defect remains for this delta. Complete only the still-missing genuine destination status/body/navigation acceptance on compatible frontend/backend; program decides final class closure."
+  },
+  "shell_page_end_source_review": {
+    "recorded_at_utc": "2026-10-19T13:05:32.801895+00:00",
+    "scope": "Manager-dispatched original-shell correction: one actual independent source review of five exact authored files only. Separate from prior guard-selector cut and all prior source approvals; no nested agents, product edits, AT expansion, landing or class closure.",
+    "reviewer": {
+      "worker": "G-2847",
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "source_review_count": 1,
+      "additional_reviewer": false
+    },
+    "verdict": "No actionable findings for this five-file source delta. Suitable for the manager to select these exact authored changes while retaining current Main dependencies; installed native-router Release composition remains an owner acceptance dependency, not established by the component stories.",
+    "actionable_findings": [],
+    "preserved_previous_report": {
+      "head": "6d730a327ba0ff851990a1566d5985d6d840a0c9",
+      "prior_fields_unchanged": 30,
+      "before_sha256": "1d0074f98f700b2736d3023b55c87d4860a30b54689cbdf9c55c1991a175a532",
+      "artifact": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/page-end-source-review/report-before-shell-review.json",
+      "dispositions": "All original a27/196a startup/navigation, common-Web dependencies, private401/403, D3-002/guard, original failures and genuine AT receipts remain unchanged. Retains the 22 anonymous actual Orca captions and all genuine signed-in job evidence at their original pins; no AT job started, interrupted, or expanded."
+    },
+    "pins": {
+      "reviewed": "8fedea7f12c27a7c869a37448015c2182a599752",
+      "comparison_parent": "3fb3c8e6a06fafebd81d85bc0433ef23e99406bb",
+      "frozen_main": "bfbc8a7048dc6311755a3f41fbeac3a66ca73c9a",
+      "authored_by": "G-2747",
+      "delta": {
+        "files": 5,
+        "insertions": 128,
+        "deletions": 5,
+        "binaryDiffSha256": "3036d03c399726de04a4752ed39b3f6df7db96e045080b35c710fb3f0ce028f6"
+      },
+      "all_five_main_predecessors_independently_verified_exact": true,
+      "source_manifest": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/page-end-source-review/evidence-verification.json",
+      "source_manifest_sha256": "95516cda289a29ec507f7174ca0daae9f4179fdc7ebb05c66e11558fdc7c9a6e"
+    },
+    "changed_file_dispositions": [
+      {
+        "path": "apps/web/app/layout.tsx",
+        "blob": "0c533265e146eb82aaad53ab73d71a264b0e6b5a",
+        "lines": [
+          24,
+          33
+        ],
+        "result": "No actionable findings. Optional native pageEnd ReactNode passes directly to AppShell. Existing locale, session, platform access and message reads, account composition and preferences remain unchanged; no extra fetching, auth calls or registration."
+      },
+      {
+        "path": "apps/web/features/shell/app-shell.tsx",
+        "blob": "8610db78f8408a43cb4a828b7a9055c3d3d05a13",
+        "lines": [
+          35,
+          44,
+          51,
+          74,
+          75,
+          76,
+          79
+        ],
+        "result": "No actionable findings. Neutral flex column retains one main#main-content with tabIndex=-1, unchanged skip target and body. Supplied pageEnd renders directly after main, outside it; no portal, context registration, DOM relocation, copy or source transformation. Existing phone padding including safe-area inset now follows the entire column, covering the footer. Undefined/null creates no extra node; bottom navigation remains after the column."
+      },
+      {
+        "path": "apps/web/app/@pageEnd/default.tsx",
+        "blob": "cd59e1593505cc72a7ff630872a781e877ed6179",
+        "lines": [
+          1,
+          2,
+          3
+        ],
+        "result": "No actionable findings. Missing-slot fallback is explicitly null with no data/auth work. Default alone is not evidence of soft-navigation stale-slot clearing."
+      },
+      {
+        "path": "apps/web/app/@pageEnd/[...rest]/page.tsx",
+        "blob": "bbfd11a2047a58158b8cf2ad9ac2944935432f37",
+        "lines": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "result": "No actionable findings. Explicit catchall match renders null for matched non-source paths, rather than relying solely on unmatched-slot retention. Native-router precedence, actual resolved paths and clearing during Release soft navigation remain to be executed in the exact owner composition; direct AppShell fixtures do not exercise that router."
+      },
+      {
+        "path": "apps/web/features/shell/page-end.stories.tsx",
+        "blob": "e9732491c1d9228004b4608e6660aefed8fc70d5",
+        "lines": [
+          10,
+          35,
+          48,
+          51,
+          56,
+          59,
+          60,
+          64,
+          65,
+          69,
+          71,
+          72,
+          74,
+          76,
+          78,
+          80,
+          81,
+          82,
+          85,
+          86,
+          93,
+          104
+        ],
+        "result": "No actionable findings. Real SubjectSources supplied independently from body; exactly one main and named contentinfo outside every main after the body, exact source/license hrefs, native skip activation and main focus, body/source/license Tab order, absent-slot body, no horizontal overflow and settled 390px scrolling footer clearance are meaningfully asserted. The min-height body requires scrolling, so unused viewport space cannot make the footer clearance assertion vacuous. Story-only base target change is restored; no accessibility override or weakened axe. Fixtures intentionally do not assert installed router transitions."
+      }
+    ],
+    "product_audit_bounded_to_changed_invariants": {
+      "method": ".agents/skills/product-audit/SKILL.md",
+      "classes_checked": [
+        "Landmark/body preservation and independent supplied attribution after main, both supplied and absent slot.",
+        "Empty-slot fallback versus explicit non-source match, preserving the native-router acceptance boundary.",
+        "Original skip focus, source link order/hrefs and footer clearance in desktop/phone light/dark fixtures."
+      ],
+      "new_class_counterexamples": [],
+      "extra_executed_product_checks": "None: no concrete newly found counterexample warrants a new assertion; reused exact owner checks without repeating tiers or unrelated journeys."
+    },
+    "reused_checks": {
+      "owner": "G-2747",
+      "checked_head": "8fedea7f12c27a7c869a37448015c2182a599752",
+      "recorded_job": "job:a284394c-7f27-4b14-8a3d-a179e643c0c1",
+      "stories": {
+        "command": "env PLAYWRIGHT_BROWSERS_PATH=/home/edge/.cache/ms-playwright bun scripts/goal/goalctl.ts test apps/web/features/shell/page-end.stories.tsx",
+        "exit": 0,
+        "passed": 5,
+        "qa": "20261019t122844-e57a64",
+        "log": ".temp/goal/jobs/a284394c-7f27-4b14-8a3d-a179e643c0c1.1.log",
+        "assertionReach": [
+          "Exactly one main#main-content retaining body and tabindex=-1.",
+          "Exactly one supplied Sources and licenses contentinfo outside all main ancestors and after main.",
+          "Both supplied source hrefs are preserved.",
+          "Native skip-link activation focuses main; subsequent keyboard tabs reach body and both supplied source links.",
+          "Scrollable 390px phone document has footer bottom no lower than fixed bottom-navigation top.",
+          "No horizontal document overflow.",
+          "Without pageEnd retains the normal body and has no footer.",
+          "Unchanged normal accessibility afterEach passes."
+        ],
+        "harnessAdjustment": "Story-only base target _self with cleanup for installed Storybook base target _parent; keeps native skip-link activation inside the canvas."
+      },
+      "static": {
+        "command": "env GOAL_CHECK_PREPARED_TREE=/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2747 task goal -- check --only types,lint,guards",
+        "exit": 0,
+        "log": ".temp/goal/jobs/a284394c-7f27-4b14-8a3d-a179e643c0c1.2.log",
+        "fullOutput": ".temp/goal/check/run-V7fCdF/output.log",
+        "results": {
+          "types": "passed",
+          "guards": "passed (9/45 selected)",
+          "inference": "passed",
+          "lint": "passed",
+          "ast": "passed"
+        },
+        "retainedHarnessNote": "Timeout retry passed: scripts/static/web-accepted-commands.test.ts > production adapters introduce no completion of admitted commands beyond exact existing debt (3.365s)."
+      },
+      "static_run": "run-V7fCdF",
+      "logs": "Read hash-verified retained owner summary logs and full static log tail; all source/static results retain their original pin. Owner static selection additionally included unchanged nav dependencies; those are not newly reviewed source here.",
+      "screenshots": {
+        "qa": "20261019t122844-e57a64",
+        "count": 4,
+        "viewed_by": "G-2747 owner, as recorded in its handoff. G-2847 retained and verified hashes without a new visual review in this source-only slice.",
+        "artifacts": [
+          {
+            "original": ".temp/worktrees/g-2747/.artifacts/qa/20261019t122844-e57a64/story-screenshots/apps-web-features-shell-page-end.stories.tsx/DesktopLight.png",
+            "retained": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/page-end-source-review/owner-screenshots/DesktopLight.png",
+            "sha256": "cb72de24e049bf39350febe6ca9479dacfd1833c3b447b7c98af15db9095d85a",
+            "bytes": 52312
+          },
+          {
+            "original": ".temp/worktrees/g-2747/.artifacts/qa/20261019t122844-e57a64/story-screenshots/apps-web-features-shell-page-end.stories.tsx/DesktopDark.png",
+            "retained": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/page-end-source-review/owner-screenshots/DesktopDark.png",
+            "sha256": "5fd610ffd13b0fbd50e8bd27ddd73fd7b58b2df21b230ba90c126f7ac8f2d6ab",
+            "bytes": 52631
+          },
+          {
+            "original": ".temp/worktrees/g-2747/.artifacts/qa/20261019t122844-e57a64/story-screenshots/apps-web-features-shell-page-end.stories.tsx/PhoneLight.png",
+            "retained": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/page-end-source-review/owner-screenshots/PhoneLight.png",
+            "sha256": "31aadff052ce67c6efdc1ca7526895de8927a845bac395f336f8cae071be75e8",
+            "bytes": 24788
+          },
+          {
+            "original": ".temp/worktrees/g-2747/.artifacts/qa/20261019t122844-e57a64/story-screenshots/apps-web-features-shell-page-end.stories.tsx/PhoneDark.png",
+            "retained": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/page-end-source-review/owner-screenshots/PhoneDark.png",
+            "sha256": "228b572ad1a65146c97b48b342c7d42c3e60e9a72ea4a9a0ca66a37c7a228869",
+            "bytes": 24956
+          }
+        ]
+      }
+    },
+    "historical_receipts_preserved": [
+      {
+        "job": "job:54b3cf9f-1e7b-4a8d-9dd0-cc0e31ec748b",
+        "qa": "20261019t120314-d72ac9",
+        "result": "Preimplementation red: AppShell ignored supplied pageEnd and contentinfo query failed."
+      },
+      {
+        "jobs": [
+          "job:b8164071-a57e-432b-b8b6-d7051765db0a",
+          "job:4c1a5705-e197-4cc3-8f2b-093c647147ca",
+          "job:c60684cf-fa26-466e-9a7b-253b7f1fbf46"
+        ],
+        "result": "Retained runner failures caused by Storybook's parent-target base during native skip navigation; not product assertion proof."
+      },
+      {
+        "sourcePin": "1b37d9f9b54e19ec4ed702467a0d19b357956fbd",
+        "job": "job:2690f380-0fc9-45d6-bcb9-815fc3e0ab94",
+        "qa": "20261019t121204-8b6813",
+        "result": "Page-end plays passed; unchanged normal accessibility check reached existing mobile caption/name mismatch."
+      },
+      {
+        "sourcePin": "61dcd336e0f08642da86462a12db7295ae3f14c9",
+        "job": "job:664ea9be-2fa2-4284-81fa-d493af46d99f",
+        "qa": "20261019t121447-0d00db",
+        "result": "Five stories and affected static checks passed; four captures viewed. Retained as earlier short-phone-body receipt, not relabeled as final pin."
+      }
+    ],
+    "runtime_dependency_distinction": {
+      "old_story_source_pin": "8fedea7f12c27a7c869a37448015c2182a599752",
+      "runtime": "vinext 1.0.0-beta.13",
+      "current_main_dependencies": "Retain current Main root package.json, yarn.lock and .yarn/patches/vinext-refresh-retain-document.patch; no restoration of the old story dependency graph.",
+      "current_main_patch_blob": "59e238412881bd350741a8b4528a586b77ba375a",
+      "claim_limit": "The exact8fede Storybook checks predate the already reviewed Feed refresh correction in Main. They are not represented as checks on the newer runtime. Actual owner composition must retain the compatible current runtime.",
+      "excluded_new_review_paths": [
+        "apps/web/features/shell/bottom-nav.tsx",
+        "apps/web/features/shell/side-nav.tsx"
+      ],
+      "bottom_nav_blob_reused": "01b5eb673c0fef2555727da9e634606596fb7fd3",
+      "excluded_dependency_policy": "Both nav files are unchanged Main dependencies, excluded from new source review or selection; no unrelated candidate code is imported."
+    },
+    "remaining_native_router_acceptance": {
+      "owner": "G-2758",
+      "specific_route": "apps/web/app/@pageEnd/[locale]/releases/[id]/page.tsx",
+      "body_read_owner": "G-2758; untouched, not newly reviewed",
+      "exact_compatible_composition_pin": "Owner has not supplied an executed compatible composition in the evidence reused here; no claim of installed-router success or failure.",
+      "only_affected_assertions": [
+        "Release hard reload and Release -> non-source -> Release soft navigation, including stale-slot clearing.",
+        "Exactly one main and one unchanged named Sources contentinfo outside every main, following the body; supplied source/license/evidence hrefs and creator attribution preserved.",
+        "Skip link focuses main, body/source keyboard order remains usable, no duplicate/private source disclosure, and 390px fixed-nav clearance."
+      ],
+      "execution": "Existing owner, once its exact compatible pin is published; not a prerequisite for reading the shell source and not rerun by this reviewer."
+    },
+    "canonical_information_and_oracle_boundary": {
+      "criteria": [
+        "C21: complete, correctly associated and deduplicated sources/licenses/citations/evidence at page end with retained creator attribution.",
+        "C26: sources only at page end. Neither requires contentinfo inside main."
+      ],
+      "old_G_2774_literal_helper_and_failures": "Preserved unchanged; no assertion edits.",
+      "permitted_semantic_binding": "Only the invalid main-descendant selector may become a page-level named contentinfo lookup with main/pageEnd ordering, duplicate, privacy, link and information obligations retained. No normal axe weakening.",
+      "evidence": [
+        {
+          "original": ".temp/catalogue-audit-20261018/03-acceptance-and-investigation-backlog.md",
+          "retained": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/page-end-source-review/original-contract/03-acceptance-and-investigation-backlog.md",
+          "sha256": "4298c3194e13b41db04b2a2602bd0454d7a9979eafac8b08be20957ebea7c6b3",
+          "bytes": 14016
+        },
+        {
+          "original": ".temp/catalogue-audit-20261018/04-page-information-and-reporting.md",
+          "retained": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/page-end-source-review/original-contract/04-page-information-and-reporting.md",
+          "sha256": "016d05621ebf1c2d2f80df5d5275d1fdd8b30444b1f35eeda2ad9def74012f75",
+          "bytes": 8608
+        },
+        {
+          "original": ".temp/audit-remediation-20261019/two-hour-sprint/catalogue-page-end-interface-and-oracle-note.txt",
+          "retained": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/page-end-source-review/original-contract/catalogue-page-end-interface-and-oracle-note.txt",
+          "sha256": "8cab236db06af39d18bd15a539787304423aed4fb2b79069894a1197b8ff70cf",
+          "bytes": 1244
+        }
+      ]
+    },
+    "source_verdict_returned_first": {
+      "mail": "mail:82576f9a-b75f-4945-b8dc-f769388c9fee",
+      "body": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/page-end-source-review/source-verdict-first.txt"
+    },
+    "private_artifacts": {
+      "directory": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/page-end-source-review",
+      "manager_manifest_sha256": "889fef89bc0ffc662dd57b30d38d3f57dbe6c9ee67b25d6883c9c25de0bf8139",
+      "owner_handoff_sha256": "f4010edcad2691283d3a358b3c86360bc8a73cf40113bdb645f413b608caf44f",
+      "evidence_verification": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/page-end-source-review/evidence-verification.json"
+    },
+    "report_validation": {
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "receipt": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/page-end-source-review/report-checks.json",
+      "scope": "Report-only documentation/worker checks; result recorded in the retained receipt after execution. No product test rerun."
+    },
+    "manager_next": "Use this bounded source verdict for the five exact authored shell paths only. Preserve current Main runtime dependencies and all previous dispositions; G-2758 owns affected native Release composition acceptance and Program owns final integration/class closure. No blocker or new task is introduced by this source review."
   }
 }
