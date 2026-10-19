@@ -47,7 +47,8 @@ export function ChapterTextResults(props: ChapterTextProps) {
   if (!read.ok) return <Region t={t}><FirstFailure failure={read.failure} locale={locale} /></Region>;
   // A finished search whose results all matched titles or names leaves this region out.
   if (!read.page.next && !read.page.hits.some(hit => hit.reasons.chapter)) return null;
-  return <Region t={t}><ChapterPages {...props} state={state} first={read.page} t={t} /></Region>;
+  return <Region t={t}><ChapterPages key={JSON.stringify([state, locale, props.actingSubject,
+    props.signedIn, read.page.indexGeneration, read.page.sequence])} {...props} state={state} first={read.page} t={t} /></Region>;
 }
 
 function Region({ t, children }: { t: Text; children: ReactNode }) {
@@ -107,7 +108,7 @@ function ChapterPages({ first, state, locale, actingSubject, signedIn = true, lo
       // The button stays for a further action; at the end, focus moves to what the search found out.
       if (!pages.hasNextPage) summary.current?.focus();
     }
-  }, [scan, loaded, pages.isFetching, pages.hasNextPage, failure, progress.hits.length]);
+  }, [scan, loaded, pages.isFetching, pages.hasNextPage, failure, progress.hits.length, pages.fetchNextPage]);
 
   function more() {
     if (scanning || pages.isFetching) return;

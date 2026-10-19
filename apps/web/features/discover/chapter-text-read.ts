@@ -3,6 +3,8 @@ import type { SearchHit, SearchLoaded, SearchResultPage } from '../search/types.
 import type { BrowseState } from './browse-state.ts';
 import type { MainClient } from './types.ts';
 import { phraseStatus, type SearchState } from '../search/state.ts';
+import { browseCategories } from '../catalogue/registry.ts';
+import { registryEntries } from '../catalogue/types.ts';
 
 /**
  * The phrase selection behind Discover's chapter matches. It carries the
@@ -11,6 +13,8 @@ import { phraseStatus, type SearchState } from '../search/state.ts';
  */
 export function chapterSearchState(state: BrowseState): SearchState | null {
   if (!state.q || phraseStatus(state.q) !== 'ok') return null;
+  if (state.tab !== 'all' && !browseCategories().find(category => category.id === state.tab)?.types
+    .some(type => registryEntries().some(entry => entry.type === type && entry.base === 'work'))) return null;
   return { phrase: state.q, scope: state.scope, language: state.language ?? null, term: null,
     concepts: state.conditions, includeTypes: state.includeTypes, excludeTypes: state.excludeTypes };
 }
@@ -41,6 +45,6 @@ export function chapterProgress(pages: readonly SearchResultPage[]): ChapterProg
     seen.add(hit.matchUnit);
     return true;
   });
-  return { hits, checked: pages.reduce((sum, page) => sum + page.hits.length, 0), total: pages[0]?.total ?? 0,
+  return { hits, checked: new Set(pages.flatMap(page => page.hits.map(hit => hit.matchUnit))).size, total: pages[0]?.total ?? 0,
     complete: (pages.at(-1)?.next ?? null) === null };
 }

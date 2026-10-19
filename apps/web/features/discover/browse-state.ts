@@ -1,6 +1,6 @@
 import type { FilterCondition } from '../../../../model/definitions/filter-document-v1.ts';
 import { browseCategories } from '../catalogue/registry.ts';
-import { normalizeLanguage } from '../search/state.ts';
+import { normalizeLanguage, normalizePhrase } from '../search/state.ts';
 import { workTypeIri, type WorkTypeKey } from './state.ts';
 import { browseTypeCondition, type ResourceQuery, type SectionId } from './api.ts';
 import {
@@ -67,7 +67,7 @@ export function parseBrowseState(params: SearchParams): BrowseState | null {
   const scope = parseScope(params);
   // G-943's /r redirect spells the same structural category as `type`.
   const tab = single(params.tab) ?? single(params.type) ?? 'all',
-    q = (single(params.q) ?? '').trim();
+    q = normalizePhrase(single(params.q) ?? '');
   const list = (raw: string | undefined) => (raw ? raw.split(',') : []);
   const include = list(single(params.ci)),
     exclude = list(single(params.ce));
@@ -101,7 +101,7 @@ export function parseBrowseState(params: SearchParams): BrowseState | null {
     !browseTabs().some((value) => value === tab) ||
     !includeTypes || !excludeTypes || includeTypes.some(type => excludeTypes.includes(type)) ||
     (rawLanguage && !language) ||
-    q.length > 80 ||
+    [...q].length > 80 ||
     /[\u0000-\u001f\u007f]/u.test(q) ||
     ![...include, ...exclude].every(isUuid) ||
     include.length > 8 ||
@@ -148,6 +148,11 @@ export function browseHref(state: BrowseState): string {
 /** Every change of selection starts a new traversal; continuations never cross query meaning. */
 export function changeBrowse(state: BrowseState, patch: Partial<BrowseState>): BrowseState {
   return { ...state, cursor: null, section: null, ...patch };
+}
+
+/** Editing the current query keeps even refused selectors; only traversal belongs to the old text. */
+export function browseSearchFields(params: URLSearchParams): [string, string][] {
+  return [...params].filter(([key]) => !['q', 'cursor', 'section', '_rsc'].includes(key));
 }
 export function browseQuery(state: BrowseState, limit = 20): ResourceQuery {
   const all: FilterCondition[] = [];

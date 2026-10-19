@@ -1,10 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within } from 'storybook/test';
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { uiLocales } from '../../i18n/define.ts';
 import { direction } from '@rezics/main/language';
 import { localizedPath } from '../../i18n/locale.ts';
 import { chapterHref, workHref } from '../work-page/route.ts';
-import type { SearchLoaded } from '../search/types.ts';
+import type { SearchContinuation, SearchLoaded, SearchResultPage } from '../search/types.ts';
+import type { SearchLoader } from '../search/query.ts';
 import { Providers } from '../shell/providers.tsx';
 import { chapterSearchState } from './chapter-text-read.ts';
 import { ChapterTextResults } from './chapter-text.tsx';
@@ -65,3 +66,80 @@ export const IndependentOfResourceCount: Story = { render: () => <DiscoverView s
     await expect(canvas.getByRole('status')).toHaveTextContent('0 results');
     await expect(canvas.queryByRole('link', { name: 'Show more' })).toBeNull();
   } };
+
+const token = (nextOffset: number): SearchContinuation => ({ queryDigest: 'a'.repeat(64), resultDigest: 'b'.repeat(64),
+  sourcePosition: { datasetId: 'product', dataEpoch: 'story', sequence: '1' }, indexGeneration: 'index',
+  nextOffset, expiresAt: 9999999999999 });
+const second = { ...read.page.hits[0]!, matchUnit: 'second', reasons: { ...read.page.hits[0]!.reasons,
+  chapter: { title: 'The last lantern', href: chapterHref(book, '00000000-0000-4000-8000-000000000003', 'en') } } };
+const firstPage = { ...read.page, total: 2, next: token(1) };
+const pagesLoader = (first: SearchResultPage, later: readonly SearchResultPage[]): SearchLoader => async continuation => {
+  if (!continuation) return { ok: true, page: first };
+  const index = [first, ...later].findIndex(page => JSON.stringify(page.next) === JSON.stringify(continuation));
+  const page = later[index];
+  if (!page) throw new Error('Unexpected chapter continuation');
+  return { ok: true, page };
+};
+const finalPage = { ...read.page, total: 2, hits: [read.page.hits[0]!, second] };
+const continueLoad = fn(pagesLoader(firstPage, [finalPage]));
+
+export const ContinueToTheLastChapter: Story = {
+  args: { read: { ok: true, page: firstPage }, load: continueLoad },
+  beforeEach() { continueLoad.mockClear(); },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Show more chapter matches' }));
+    await expect(await canvas.findByRole('link', { name: 'The last lantern' })).toHaveFocus();
+    await expect(continueLoad).toHaveBeenCalledWith(firstPage.next);
+    await expect(canvas.getAllByRole('link', { name: 'At the harbour' })).toHaveLength(1);
+    await expect(canvas.getByText('Showing all 2 chapter matches')).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: 'Show more chapter matches' })).toBeNull();
+  },
+};
+
+const emptyPage = (offset: number): SearchResultPage => ({ ...read.page, hits: [], total: 1, next: token(offset) });
+const sparseFirst = emptyPage(1);
+const sparseLoad = fn(pagesLoader(sparseFirst, [emptyPage(2), emptyPage(3), emptyPage(4), emptyPage(5), read.page]));
+export const BoundedSparseScan: Story = {
+  args: { read: { ok: true, page: sparseFirst }, load: sparseLoad },
+  globals: { viewport: { value: 'phone' }, theme: 'dark' },
+  beforeEach() { sparseLoad.mockClear(); },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Check more results' }));
+    await waitFor(() => expect(sparseLoad).toHaveBeenCalledTimes(4));
+    await waitFor(() => expect(canvas.getByRole('button', { name: 'Check more results' })).toBeEnabled());
+    await expect(canvas.getByText(/No chapter matches yet/)).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'Check more results' }));
+    await expect(await canvas.findByRole('link', { name: 'At the harbour' })).toBeVisible();
+    await expect(canvas.getByText('Showing the only chapter match')).toBeVisible();
+    await expect(sparseLoad).toHaveBeenCalledTimes(5);
+  },
+};
+
+const unavailableLoad = fn<SearchLoader>();
+export const RetryPreservesChapters: Story = {
+  args: { read: { ok: true, page: firstPage }, load: unavailableLoad },
+  beforeEach() { unavailableLoad.mockReset().mockResolvedValueOnce({ ok: false, failure: 'unavailable' })
+    .mockResolvedValue({ ok: true, page: finalPage }); },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Show more chapter matches' }));
+    await expect(await canvas.findByRole('alert')).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'At the harbour' })).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'Try again' }));
+    await expect(await canvas.findByRole('link', { name: 'The last lantern' })).toBeVisible();
+    await expect(unavailableLoad).toHaveBeenNthCalledWith(2, firstPage.next);
+  },
+};
+
+export const UnsupportedSelection: Story = { args: { read: { ok: false, failure: 'unsupported' } } };
+export const NoMatchesAfterTheLastPage: Story = {
+  args: { read: { ok: true, page: sparseFirst }, load: async () => ({ ok: true, page: { ...read.page, hits: [], total: 0 } }) },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Check more results' }));
+    await expect(await canvas.findByText('No chapter text matches “lanternroad”.')).toHaveFocus();
+    await expect(canvas.queryByRole('button', { name: 'Check more results' })).toBeNull();
+  },
+};
