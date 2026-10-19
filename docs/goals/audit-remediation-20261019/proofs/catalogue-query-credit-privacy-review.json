@@ -2871,5 +2871,368 @@
       "preservation": "All 25 preexisting report values unchanged; the other two reports byte-identical. All 9997 extracted tracked blobs were verified after diagnostic execution. Original accepted suites were not repeated.",
       "scope": "Report-only validation after one meaningful new negative diagnostic; exact passing owner checks reused."
     }
+  },
+  "creditPreviewQualifiedCorrectionReview": {
+    "reviewedAtUtc": "2026-10-19T16:27:29.748022+00:00",
+    "reviewer": {
+      "worker": "G-2849",
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "accountFallback": false,
+      "head": "adec425e32e4f8915c07f775a46ee5de22420cda"
+    },
+    "scope": "Correction-only independent inspection of the two changed paths addressing AUD014-CREDIT-PREVIEW-QUALIFIED-NAME-1. This does not reopen earlier principal/privacy, navigation, native successor, registry or original credit-prefix review.",
+    "disposition": "accepted-bounded-source-and-controlled-caller-correction",
+    "conclusion": "Both previously key-only sites now call the same qualified Source-author key helper. The byte-identical independent two-counterexample diagnostic passes all eight assertions on immutable b49f11330. Foreign provider/namespace credits keep their exact confirmed identities without Open Library name or nameSource. Existing omitted V1 author namespace semantics remain intact. No further issue was found in this bounded delta. This accepts only the source/caller correction; it does not establish actual public/native acceptance or original class closure.",
+    "pins": {
+      "candidate": "b49f11330ba1df812d07221b85d7a2b3a4b466b5",
+      "parentRejectedCandidate": "1dd08285a143eac3c87111fac79d9aaabab5d9c1",
+      "fullThreePathBase": "560911d443a041a7d5a288c37971529dde70ca64",
+      "tree": "6b330c6e1a70288b3c45704b0ebbcbb706197571",
+      "manifest": {
+        "path": ".temp/worktrees/g-2764/.temp/goal/credit-preview-qualified-correction/manifest.json",
+        "sha256": "252cf94d607a2da766f8c3ce35e006fdb98005f4489e5665f7286d27cd289942"
+      },
+      "handoff": {
+        "path": ".temp/credit-preview-qualified-review/handoff.txt",
+        "sha256": "9e010b53db350ad5a119b720e22745421556706344b6a5baa69940328662ffc9"
+      },
+      "sourceInputFingerprint": {
+        "sha256": "0728b06f930adbd21283454b0bc46bbe936a8c50910052e497b9f80e12d1e937",
+        "file": ".temp/goal/credit-preview-qualified-correction/source-inputs.json",
+        "algorithm": "SHA256 of UTF-8 JSON array of path/blob/sha256 objects in manifest paths then ownerInputs order, sort_keys=true, separators comma/colon, followed by newline."
+      },
+      "incrementalPaths": [
+        "services/main/src/modules/query/work-cards.ts",
+        "services/main/tests/resource-query-credit-preview.test.ts"
+      ],
+      "paths": [
+        {
+          "path": "services/main/src/modules/query/resource-contract.ts",
+          "base": {
+            "blob": "87da278fcda297d2717a512f66e2e4aa9153a90d",
+            "sha256": "1254197ead199fc42aaed3e1f070f7f599a5248a7e75222a9a33b5a36be5300c"
+          },
+          "rejectedCandidate": {
+            "blob": "2013d72bc7518d2ae4ea6d8bced22d595c584a8a",
+            "sha256": "175c57c24f7aa33bf454751fae2c6857d7509b78ff90d92ad65a4d1a43b23535"
+          },
+          "source": {
+            "blob": "2013d72bc7518d2ae4ea6d8bced22d595c584a8a",
+            "sha256": "175c57c24f7aa33bf454751fae2c6857d7509b78ff90d92ad65a4d1a43b23535"
+          },
+          "observedMain": {
+            "blob": "87da278fcda297d2717a512f66e2e4aa9153a90d",
+            "sha256": "1254197ead199fc42aaed3e1f070f7f599a5248a7e75222a9a33b5a36be5300c"
+          }
+        },
+        {
+          "path": "services/main/src/modules/query/work-cards.ts",
+          "base": {
+            "blob": "6c6e1c1fb9746a18c76a945a8e5f6e3f26aca26c",
+            "sha256": "f1f6285ae144900813994d6cb60972cb1d567abf237c158fed93a40cf5041e25"
+          },
+          "rejectedCandidate": {
+            "blob": "aed40e3ea61369749a14d04f4d9b28461469f5c8",
+            "sha256": "c25d47f05249a5b2517cf638df4cfcb7294f02cbc5f3a656465d26e24a4d89d6"
+          },
+          "source": {
+            "blob": "bb08b7e1148284f8fd7395ec190cb5c97366bc13",
+            "sha256": "f38059836d29afc1308d6229d1396817fafc91d2d8a678227d5d2eab4ca15493"
+          },
+          "observedMain": {
+            "blob": "6c6e1c1fb9746a18c76a945a8e5f6e3f26aca26c",
+            "sha256": "f1f6285ae144900813994d6cb60972cb1d567abf237c158fed93a40cf5041e25"
+          }
+        },
+        {
+          "path": "services/main/tests/resource-query-credit-preview.test.ts",
+          "base": null,
+          "rejectedCandidate": {
+            "blob": "e973fd2457e9a3a0c3014598dc4b235dc7c184f4",
+            "sha256": "06cca09e9c63d2061cd7359345118ebd2b1dfb2691951a737f2bc7b8fa03355a"
+          },
+          "source": {
+            "blob": "ab66f414edd1f59f22c6f7e57e6bba1cd9536c93",
+            "sha256": "14a940d3f24b2b7a27207cad7a9b7654aa4812b6a59c72c877a5fe1b0cf87ca1"
+          },
+          "observedMain": null
+        }
+      ],
+      "patches": [
+        {
+          "path": ".temp/goal/credit-preview-qualified-correction/qualified-name-correction.mbox",
+          "sha256": "5653f42fbb7e5cc9dab4f999c84d1e933f12e273d2107b1ae39d276043fe6096"
+        },
+        {
+          "path": ".temp/goal/credit-preview-qualified-correction/qualified-name-correction.diff",
+          "sha256": "837916eceb06e853302c82f7df837fe816707749fb0ae6ebbcd3700697dcba78"
+        },
+        {
+          "path": ".temp/goal/credit-preview-qualified-correction/credit-preview-revised.mbox",
+          "sha256": "c36d2113582f0fea4494822595943639cfd9c22d404dd08256c22d6d63908b5b"
+        },
+        {
+          "path": ".temp/goal/credit-preview-qualified-correction/credit-preview-revised.diff",
+          "sha256": "f275986f2c5b6488aeab277ac0f03ab0a2caebdc323f48790b852cab448a6827"
+        }
+      ],
+      "verified": "Exact parent, candidate tree, two incremental paths, three full extraction paths and every listed Git blob/SHA256 independently verified. All twelve owner inputs are identical to rejected candidate 1dd08285 and frozen observed main 0c037acb96b5cf5fa41fb12d1e42916f9978a887. Canonical ordered source-input content and fingerprint verified, not merely trusted from handoff. resource-contract.ts is unchanged from the previously reviewed comment-only blob.",
+      "ownerInputCount": 12,
+      "ownerInputsUnchanged": true,
+      "sourceInputsFile": {
+        "path": ".temp/credit-preview-qualified-review/source-inputs.json",
+        "sha256": "0728b06f930adbd21283454b0bc46bbe936a8c50910052e497b9f80e12d1e937"
+      }
+    },
+    "inspectedCorrection": [
+      {
+        "location": "services/main/src/modules/query/work-cards.ts:14-20",
+        "behavior": "sourceAuthorKey accepts only external-reference participants with provider open-library and namespace author. Missing V1 namespace retains its existing author interpretation. It returns the original full key without shortening, normalization, parsing, provider inference or identity replacement."
+      },
+      {
+        "location": "services/main/src/modules/query/work-cards.ts:72-79",
+        "behavior": "The Source-name batch contains only keys admitted by sourceAuthorKey, deduplicated by exact key. A foreign qualified participant alone causes no Source-name lookup. There is no new Source store or owner."
+      },
+      {
+        "location": "services/main/src/modules/query/work-cards.ts:102-107",
+        "behavior": "Attachment independently uses sourceAuthorKey before exact Map lookup, so even a name fetched for a valid Open Library author elsewhere in the prefix cannot be copied to a different provider or namespace sharing its key. Existing equal opening/current name checks and saved displayName/nameSource removal remain in place."
+      },
+      {
+        "location": "services/main/tests/resource-query-credit-preview.test.ts",
+        "behavior": "Two additional owner tests cover foreign-only names not being requested and a mixed three-credit prefix with the same opaque key. Only the qualified Open Library author is named; other participants preserve id/provider/namespace/key/ordinal, stay unnamed and have no nameSource. The previous seven tests and fixture are byte-identical after removing exactly these inserted blocks."
+      },
+      {
+        "location": "Exact two-file parent diff",
+        "behavior": "The bounded current owner call, native/Source coalescing, final Source id/key/ordinal check, Agent disclosure, lower-bound credit counts, stale ratings and optional allocation propagation are untouched. There is no quota/page/schema/native owner/authority/conversion change. Accepted earlier source and checks are reused rather than reviewed or run again."
+      }
+    ],
+    "findingDisposition": {
+      "id": "AUD014-CREDIT-PREVIEW-QUALIFIED-NAME-1",
+      "historicalReportCommit": "adec425e32e4f8915c07f775a46ee5de22420cda",
+      "historicalSection": "creditPreviewLagCorrectionReview",
+      "historicalIndependentFailure": {
+        "job": "job:d98c1326-1db5-4a79-832b-dcb084b04c69",
+        "candidate": "1dd08285a143eac3c87111fac79d9aaabab5d9c1",
+        "tests": 2,
+        "failures": 2,
+        "assertionsExecuted": 4,
+        "outcomeAssertionsReached": true,
+        "preserved": true
+      },
+      "currentSourceDisposition": "Both sites that caused the reproduced foreign-provider/foreign-namespace name attachment are corrected. No further source issue in this bounded delta.",
+      "ownerIndependentReplay": {
+        "sourceFixtureSha256": "09a3c40ace8a522bfd70daf4df22376034ff6f2c9c6d0c2ca0add393a86e4086",
+        "relocatedSha256": "220a8efd17e7b7ae1b8f15edd89544bc5369d05639c0764ea933466edd6467f6",
+        "fixtureVerification": "Owner original copy equals the reviewer original bytes; relocated execution changes exactly the six import prefixes and no fixture or assertion byte.",
+        "red": {
+          "job": "job:e372c37b-c03c-41bd-927c-c6bc2547b5d1",
+          "source": "1dd08285a143eac3c87111fac79d9aaabab5d9c1",
+          "tests": 2,
+          "failures": 2,
+          "assertionsExecuted": 4,
+          "outcomeAssertionsReached": true,
+          "evidence": {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2764/.temp/goal/jobs/e372c37b-c03c-41bd-927c-c6bc2547b5d1.log",
+            "sha256": "c605b9f1f245099a438f2027ecee960fab5bbc52198db6c5dff70ba3a5dc1bbe"
+          }
+        },
+        "green": {
+          "job": "job:de0fbda1-ad6a-4b78-91d0-5b5d0ea98955",
+          "step": 1,
+          "tests": 2,
+          "failures": 0,
+          "assertionsExecuted": 8,
+          "evidence": {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2764/.temp/goal/jobs/de0fbda1-ad6a-4b78-91d0-5b5d0ea98955.1.log",
+            "sha256": "3b6fe4b92f810fe3f325146a87953970f79d6b287a6e6cbd7a45313e6532e1ed"
+          },
+          "qualification": "Actual selected standalone execution passed; no QA run ID emitted. This is controlled owner composition, not public/native proof."
+        }
+      },
+      "correctedSourceResult": "The two original reached controlled-caller failures now pass unchanged on b49f11330: foreign participants retain exact identity, displayName null and no nameSource, with the same lower-bound counts. Historical failed-candidate findings remain unchanged. This resolves only the source/caller counterexample, not original public finding/class acceptance."
+    },
+    "matchingOwnerChecks": {
+      "qaRun": "20261019t161741-9a3197",
+      "job": "job:dcf7edda-286d-43bf-9efe-9d150689462a",
+      "ownerResult": {
+        "tests": 21,
+        "failed": 0,
+        "assertions": 136,
+        "files": [
+          "services/main/tests/resource-query-credit-preview.test.ts",
+          "services/main/tests/g-1001-work-cards.test.ts",
+          "services/main/tests/g-1011-optional-previews.test.ts"
+        ]
+      },
+      "sourceIdentity": {
+        "head": "1dd08285a143eac3c87111fac79d9aaabab5d9c1",
+        "fingerprint": "76063ce03e61e3b8ee3b75a1abe024a1f3eb04123e5f3f3f0477d11334cf0cf5",
+        "clean": false
+      },
+      "fingerprintReconstructedExactly": "76063ce03e61e3b8ee3b75a1abe024a1f3eb04123e5f3f3f0477d11334cf0cf5",
+      "fingerprintMethod": "SHA256 of rejected-candidate HEAD plus newline and its exact Git binary diff for the two modified tracked paths reproduces the actual dirty working-tree fingerprint. Those same checked blobs are committed unchanged in b49f11330; the precommit receipt head is not relabeled as the candidate commit.",
+      "sourceStable": true,
+      "evidence": [
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2764/.artifacts/qa/20261019t161741-9a3197/owner.xml",
+          "sha256": "8eac3d871f55cb98461f7dfca175bd70064babe6c33a59f9c6dc35ca2ee25afa"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2764/.artifacts/qa/20261019t161741-9a3197/acceptance.json",
+          "sha256": "2d0182c846eef64084e61ae569e752a627e4e550dab42290fde54c2d3fda31c6"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2764/.artifacts/qa/20261019t161741-9a3197/logs/owner.log",
+          "sha256": "f4a7c13d0c6ea4385c04bcc5938da5153cdbde6641c2dab4ee9df43de46b7df9"
+        }
+      ],
+      "combinedSelectorFailure": {
+        "job": "job:dcf7edda-286d-43bf-9efe-9d150689462a",
+        "exitCode": 1,
+        "classification": "harness selector failure for hidden independent file",
+        "qualification": "The normal owner tier passed 21/136, but the hidden independent path was normalized into an unmatched Bun filter. The combined command is preserved as failed. Its independent cases were executed separately in de0fbda1 step 1; they are not borrowed from the owner pass.",
+        "evidence": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2764/.temp/goal/jobs/dcf7edda-286d-43bf-9efe-9d150689462a.1.log",
+          "sha256": "994e24702e97ba3cedd711de1f019b2cad0e1c358bfbb6a35582f69d1d01224b"
+        }
+      },
+      "targetedTypes": {
+        "job": "job:de0fbda1-ad6a-4b78-91d0-5b5d0ea98955",
+        "step": 2,
+        "result": "Passed: no type errors in 1315 project files",
+        "files": [
+          "services/main/src/modules/query/work-cards.ts",
+          "services/main/tests/resource-query-credit-preview.test.ts"
+        ],
+        "evidence": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2764/.temp/goal/jobs/de0fbda1-ad6a-4b78-91d0-5b5d0ea98955.2.log",
+          "sha256": "51f6f328dca5cf3ef5da7c2466f20acfc95014d603c37f6ffeba348ef0eace44"
+        }
+      },
+      "lintAstGuards": {
+        "job": "job:de0fbda1-ad6a-4b78-91d0-5b5d0ea98955",
+        "step": 3,
+        "result": "Lint, AST and 35/45 selected guards passed; two timed-out guards passed the harness retry",
+        "qualification": "Owner selection included prior navigation paths; reuse covers these exact correction files and is not a new acceptance of other paths.",
+        "evidence": {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2764/.temp/goal/jobs/de0fbda1-ad6a-4b78-91d0-5b5d0ea98955.3.log",
+          "sha256": "e983f52738b835ec4a2fd5248bdc20385066fd261f9e192d1cacf0227156204b"
+        }
+      },
+      "acceptance": {
+        "passed": 0,
+        "partialPass": 0,
+        "failed": 0,
+        "uncovered": 292,
+        "certifiesFull": false
+      },
+      "notRepeated": "No unchanged nineteen-test suite, principal/privacy suite, fourteen original AUD014 comparisons, whole tier, Java/native, generation or web check was rerun. No contract/schema/model change in this correction."
+    },
+    "independentCorrectionProof": {
+      "status": "passed",
+      "command": "bun scripts/goal/goalctl.ts test ./.temp/credit-preview-qualified-review/qualified-credit-name-review.test.ts",
+      "diagnostic": {
+        "path": ".temp/credit-preview-qualified-review/qualified-credit-name-review.test.ts",
+        "sha256": "09a3c40ace8a522bfd70daf4df22376034ff6f2c9c6d0c2ca0add393a86e4086"
+      },
+      "byteIdenticalToOriginal": true,
+      "originalDiagnostic": ".temp/credit-preview-review/qualified-credit-name-review.test.ts",
+      "snapshot": ".temp/credit-preview-qualified-review/snapshot",
+      "sourcePin": "b49f11330ba1df812d07221b85d7a2b3a4b466b5",
+      "purpose": "Execute only the same two independent counterexamples on the corrected immutable source, without changing any fixture, assertion, identity or import text. The original rejected-candidate snapshot and diagnostic remain untouched.",
+      "qualification": "The exact archived caller/discovery-credit/Source readers compose with controlled owner ports. This does not establish a live installed provider/credit, public Jane parity, native allocation, cancellation or class acceptance.",
+      "recordedJob": "job:01a64171-8997-45d8-8d92-21f0254e6ccd",
+      "exitCode": 0,
+      "tests": 2,
+      "assertionsExecuted": 8,
+      "failures": 0,
+      "outcomeAssertionsReached": true,
+      "snapshotTrackedBlobsVerifiedAfterExecution": 9997,
+      "evidence": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2849/.temp/goal/jobs/01a64171-8997-45d8-8d92-21f0254e6ccd.1.log",
+        "sha256": "84bbc41cccd3ffdbc607339e74f6e481c75e1830d576046368a58e513b59dcc1"
+      },
+      "cases": [
+        "current preview cannot attach an Open Library author name to other-provider/author",
+        "current preview cannot attach an Open Library author name to open-library/other-namespace"
+      ],
+      "originalRejectedCandidateEvidencePreserved": true
+    },
+    "newFindings": [],
+    "preservation": {
+      "priorReportSha256": "ee670cb36583aa464bab69a31c22763535891d3284609f66d871595147027e24",
+      "priorReportBlob": "8733afe0d6eb63ae731abfcab95478e1e1fc314e",
+      "preexistingTopLevelValues": 26,
+      "everyPreexistingValueUnchanged": true,
+      "history": "The original eight caller counterexamples, accepted principal/privacy controls, navigation 3-test/97-assertion proof and earlier setup failures, the rejected credit-preview candidate and two negative assertions, accepted registry/native reviews and original fourteen other AUD014 comparison results remain intact. This correction disposition is appended separately; no old finding, pin or result is rewritten.",
+      "otherReports": [
+        {
+          "path": "docs/goals/audit-remediation-20261019/proofs/catalogue-supporting-registry-review.json",
+          "sha256": "9080de934c3808d1096925b7b2eacb3514bb82df858b37d64cb05e7aef6d8429",
+          "byteIdentical": true
+        },
+        {
+          "path": "docs/goals/audit-remediation-20261019/proofs/catalogue-native-credit-successor-review.json",
+          "sha256": "74b17fc962b3a33a319cc28532654b1108d1ebc87506c2f5b14963b3272c2223",
+          "byteIdentical": true
+        }
+      ]
+    },
+    "remainingLimits": [
+      "Acceptance here is limited to the corrected Source-name qualification and unchanged controlled caller counterexamples. Original Jane public comparison, native/current-runtime composition, default All, native allocation, mixed-load, cancellation and original class closure remain unproved by this review.",
+      "Existing G-2791/G-2823 default-read runtime compatibility and manager/Site public proof remain separate. They are not a blanket dependency or new prerequisite for this finite correction.",
+      "Ordinary native APIs perform no provider conversion. Manual citations and Source citation remain independent of converter/evidence/mapper and optional retained derivation. No new provider semantics, Source store, schema, Agent authority, native owner, quota or page-size change is introduced.",
+      "Only the claimed query report is edited. No product implementation, shared lifecycle, network/browser, corpus mutation/import/reset, main/wave landing, rebase, threshold change or account fallback occurred. The corrected snapshot is an exact extraction under this worker worktree; rejected-candidate evidence is preserved."
+    ],
+    "reportValidation": {
+      "status": "passed",
+      "completedAtUtc": "2026-10-19T16:28:54.946980+00:00",
+      "recordedJob": "job:01a64171-8997-45d8-8d92-21f0254e6ccd",
+      "runner": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job",
+      "sequence": [
+        {
+          "command": "bun scripts/goal/goalctl.ts test ./.temp/credit-preview-qualified-review/qualified-credit-name-review.test.ts",
+          "exitCode": 0,
+          "result": "2 passed; 0 failed; all 8 assertions reached on the byte-identical independent diagnostic",
+          "evidence": {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2849/.temp/goal/jobs/01a64171-8997-45d8-8d92-21f0254e6ccd.1.log",
+            "sha256": "84bbc41cccd3ffdbc607339e74f6e481c75e1830d576046368a58e513b59dcc1"
+          }
+        },
+        {
+          "command": "task docs:check",
+          "exitCode": 0,
+          "result": "13 checker tests passed; 249 Markdown files checked; external URLs and runtime not tested",
+          "evidence": {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2849/.temp/goal/jobs/01a64171-8997-45d8-8d92-21f0254e6ccd.2.log",
+            "sha256": "b01ae68d891a26ad15a0983b800a1a9495221aa2a1ac1d02139beb38c2452a65"
+          }
+        },
+        {
+          "command": "task goal -- check",
+          "exitCode": 0,
+          "result": {
+            "types": "ok: no TypeScript workspace changed",
+            "tests": "ok: no test files named in brief",
+            "lint": "ok: no source file changed",
+            "ast": "ok",
+            "guards": "ok: 1/44 selected for claimed reports"
+          },
+          "evidence": {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2849/.temp/goal/jobs/01a64171-8997-45d8-8d92-21f0254e6ccd.3.log",
+            "sha256": "2ce731203134c1f5484f91dc7259108a012f93c393e2adac7b7765eb35f27e8f"
+          }
+        }
+      ],
+      "gateOutput": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2849/.temp/goal/check/run-Nx762r/output.log",
+        "sha256": "409ab04b40082191c8a0f84943d18a2230cb696f891dea77361006f377d79010"
+      },
+      "sourcePinPreservation": "Report staged during the recorded sequence; reviewer HEAD remained adec425e32e4f8915c07f775a46ee5de22420cda. Harness noted five commits behind main. No rebase, merge or implementation edit occurred.",
+      "historyAndExtractionPreservation": "All 26 preexisting top-level report values remain unchanged. Other accepted reports remain byte-identical. All 9997 extracted candidate blobs match b49f11330 after execution. The original rejected-candidate work-cards snapshot and original diagnostic SHA remain intact.",
+      "scope": "Only the meaningful two-counterexample correction proof and report checks ran. Exact owner 21/136, types and lint/AST/guards receipts were reused; no public/native/class acceptance is implied."
+    }
   }
 }
