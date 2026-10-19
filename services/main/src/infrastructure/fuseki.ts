@@ -49,6 +49,7 @@ export interface FusekiReadBudget {
 interface ReadScope {
   parent?: FusekiReadBudget;
   controller: AbortController;
+  deadlineTimer?: ReturnType<typeof setTimeout>;
   request?: { root: FusekiReadBudget; limits: ReadLimits; claimed: boolean };
 }
 interface ReadLimits { calls: number; bytes: number; deadlineMs: number }
@@ -88,24 +89,46 @@ class FusekiReadBudgets extends AsyncLocalStorage<FusekiReadBudget> {
 }
 export const fusekiReadBudget = new FusekiReadBudgets();
 
+function shortenReadDeadline(budget: FusekiReadBudget, deadline: number): void {
+  budget.deadline = Math.min(budget.deadline ?? Infinity, deadline);
+  const scope = readScopes.get(budget)!;
+  clearTimeout(scope.deadlineTimer);
+  scope.deadlineTimer = setTimeout(
+    () => scope.controller.abort(new FusekiReadDeadlineExceeded('Fuseki request deadline exceeded')),
+    Math.max(0, budget.deadline - performance.now()));
+}
+
 /** Enter before admission/readiness. Owners keep their published allocations;
  * an operation without an explicit owner uses the bounded fallback. */
 export async function withFusekiReadRequest<T>(request: Request, limits: ReadLimits,
   read: () => T | Promise<T>): Promise<T> {
-  if (fusekiReadBudget.getStore()) {
+  // Web forwards a positive safe-integer Unix timestamp. Convert its remaining
+  // duration once; later reads and retries stay on the monotonic clock.
+  const forwarded = Number(request.headers.get('x-rezics-server-deadline'));
+  const validDeadline = Number.isSafeInteger(forwarded) && forwarded > 0;
+  const deadline = performance.now() + Math.min(limits.deadlineMs,
+    validDeadline ? forwarded - Date.now() : Infinity);
+  const parent = fusekiReadBudget.getStore();
+  if (parent) {
     assertFusekiReadActive();
+    if (validDeadline) {
+      // Shorten the existing operation, including already running transports;
+      // a nested owner cannot restart the duration or allocation.
+      shortenReadDeadline(readScopes.get(parent)?.request?.root ?? parent,
+        Math.min(deadline, parent.deadline ?? Infinity));
+      assertFusekiReadActive();
+    }
     return read();
   }
   const controller = new AbortController();
   const budget: FusekiReadBudget = {
     signal: AbortSignal.any([request.signal, controller.signal]),
-    deadline: performance.now() + limits.deadlineMs,
+    deadline,
     callsLeft: Number.MAX_SAFE_INTEGER, bytesLeft: Number.MAX_SAFE_INTEGER,
     diagnostics: createFusekiReadDiagnostics(), readPhase: 'preflight',
   };
   readScopes.set(budget, { controller, request: { root: budget, limits, claimed: false } });
-  const timer = setTimeout(() => controller.abort(new FusekiReadDeadlineExceeded('Fuseki request deadline exceeded')),
-    limits.deadlineMs);
+  shortenReadDeadline(budget, deadline);
   try {
     return await fusekiReadBudget.run(budget, async () => {
       assertFusekiReadActive();
@@ -114,7 +137,7 @@ export async function withFusekiReadRequest<T>(request: Request, limits: ReadLim
       return result;
     });
   } finally {
-    clearTimeout(timer);
+    clearTimeout(readScopes.get(budget)!.deadlineTimer);
     // Close escaped async continuations too; returning HTTP must not give them
     // a fresh allocation or leave a transport running under an idle request.
     controller.abort();
