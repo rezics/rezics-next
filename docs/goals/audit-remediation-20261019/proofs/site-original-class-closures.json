@@ -1,8 +1,8 @@
 {
-  "recordedAt": "2026-10-19T11:08:00.051108+00:00",
+  "recordedAt": "2026-10-19T11:53:22.045318+00:00",
   "manager": "site",
   "goal": "audit-remediation-20261019",
-  "assessedMain": "6430441893f5c3609efd97b3921a21a85eab0707",
+  "assessedMain": "979903033fc6d32f3adf74db4dbb22d65973df4a",
   "basis": "Original applicable acceptance and assertions, without adding unrelated classes or full-domain journeys. Product-audit class tracing applied; unchanged exact proof reused.",
   "findings": [
     {
@@ -2276,6 +2276,468 @@
         "checkedMain": "6430441893f5",
         "sameRelevantReviewCheckpoints": true
       }
+    },
+    {
+      "recordedAt": "2026-10-19T11:34:08.554760+00:00",
+      "id": "AUD-008",
+      "status": "closed",
+      "closureBookkeepingPending": false,
+      "main": "8a40424aa15eb5387183a1fa15fa3f24758b45c9",
+      "originalAcceptanceVerbatim": [
+        "覆盖767/768/769与1023/1024/1025及侧栏开关；列数依据可用容器宽度，增宽1px不使单卡骤减一半，标题和作者保有合理可读宽度，重排后焦点/滚动位置保持。"
+      ],
+      "originalRegressionAssertionsVerbatim": [
+        {
+          "id": "AUD-008/assertion-1",
+          "assert": "At 767/768/769 and 1023/1024/1025, adding one pixel does not halve cover width when sidebar/column/padding breakpoints change."
+        },
+        {
+          "id": "AUD-008/assertion-2",
+          "assert": "Columns derive from available container width, retaining readable titles/credits with sidebar expanded and collapsed."
+        },
+        {
+          "id": "AUD-008/assertion-3",
+          "assert": "Reflow preserves keyboard focus and scroll position on actual pages, including mixed results."
+        }
+      ],
+      "canonicalSource": ".temp/site-audit-2026-10-18/round-3/all-findings.json",
+      "canonicalSha256": "e2721c44e74305c694b02e81e757e4476c3a19de414d25b0689617316c5ebc3f",
+      "originalAssertionsChanged": false,
+      "skillApplied": ".agents/skills/product-audit/SKILL.md",
+      "newRuntimeOrReview": false,
+      "sourceEquivalence": [
+        {
+          "path": "apps/web/features/catalogue/catalogue-grid.tsx",
+          "mainBlob": "85ab940c06a66b57a6c335ccd5d06ea0122f7cb0",
+          "testedCandidateBlob": "85ab940c06a66b57a6c335ccd5d06ea0122f7cb0",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/catalogue/catalogue-layout.stories.tsx",
+          "mainBlob": "cbe58bd8013abc694b48f8484f15824692795bfa",
+          "testedCandidateBlob": "cbe58bd8013abc694b48f8484f15824692795bfa",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/catalogue/catalogue-layout.test.tsx",
+          "mainBlob": "d039ef28e288c9258c80b0ea46c2941dee705844",
+          "testedCandidateBlob": "d039ef28e288c9258c80b0ea46c2941dee705844",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/catalogue/catalogue-zone-layout.stories.tsx",
+          "mainBlob": "3fb3dac379abeac042746a07934f29077d662f0c",
+          "testedCandidateBlob": "3fb3dac379abeac042746a07934f29077d662f0c",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/catalogue/catalogue-zone-layout.test.tsx",
+          "mainBlob": "17b1267d6308b4769f4d2ac0b53222dd9d4e6810",
+          "testedCandidateBlob": "17b1267d6308b4769f4d2ac0b53222dd9d4e6810",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/catalogue/work-shelf.tsx",
+          "mainBlob": "8d09830e9bb38b1b9379df1c2e5f9db05a06aa6c",
+          "testedCandidateBlob": "8d09830e9bb38b1b9379df1c2e5f9db05a06aa6c",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/catalogue/work-tile.tsx",
+          "mainBlob": "60303c76df069b775bfbb12305488dc2c699024a",
+          "testedCandidateBlob": "60303c76df069b775bfbb12305488dc2c699024a",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/discover/resource-card.tsx",
+          "mainBlob": "cf79d1cc055b8340d22fdf73fbbab11ccd82b5bc",
+          "testedCandidateBlob": "cf79d1cc055b8340d22fdf73fbbab11ccd82b5bc",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/discover/resource-list.tsx",
+          "mainBlob": "81749c80312e47fb29f7342d0f65a3d21ce071c2",
+          "testedCandidateBlob": "81749c80312e47fb29f7342d0f65a3d21ce071c2",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/work-page/also-enjoyed-row.tsx",
+          "mainBlob": "edac5c3b1f818901783574c1d42f774020b8bd48",
+          "testedCandidateBlob": "edac5c3b1f818901783574c1d42f774020b8bd48",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/zones/browse.tsx",
+          "mainBlob": "75508f34a510be23384454496f53b1b9333cadb2",
+          "testedCandidateBlob": "75508f34a510be23384454496f53b1b9333cadb2",
+          "equal": true
+        },
+        {
+          "path": "packages/ui/src/components/work-cover.stories.tsx",
+          "mainBlob": "0195e051e75f51cf53e18b1059b604ce83870b79",
+          "testedCandidateBlob": "0195e051e75f51cf53e18b1059b604ce83870b79",
+          "equal": true
+        },
+        {
+          "path": "packages/ui/src/components/work-cover.tsx",
+          "mainBlob": "e64eb64b426cace334e0011ef9e7fabeea21b01e",
+          "testedCandidateBlob": "e64eb64b426cace334e0011ef9e7fabeea21b01e",
+          "equal": true
+        }
+      ],
+      "productCommits": [
+        "b33ed9228096dceaae216878390092afe5b4caa8"
+      ],
+      "independentReview": {
+        "task": "G-2832",
+        "engine": "codex-1/gpt-6.1-sol/xhigh",
+        "reportCommit": "20c60d4409f10905d9a28fb20cbd7abde85eb363",
+        "report": "docs/goals/audit-remediation-20261019/proofs/catalogue-geometry.json"
+      },
+      "runtimeFrontend": "30e50cbad39c2af9ca9c1d4c177adc0f10b62c89",
+      "assertionResults": [
+        {
+          "id": "AUD-008/assertion-1",
+          "result": "pass",
+          "evidence": "live/works-live-boundary-{767,768,769,1023,1024,1025}.png; actual bothsidebar128px; four corrected Zone stories preserve title/byline geometry"
+        },
+        {
+          "id": "AUD-008/assertion-2",
+          "result": "pass",
+          "evidence": "Four original Zone stories a65 plus genuine Works mixed Book/document cover/title geometry; container-derived columns and original sidebar-order checks"
+        },
+        {
+          "id": "AUD-008/assertion-3",
+          "result": "pass",
+          "evidence": "live/works-live-interactions.json actual mixed Book/document Works page: same focusedhref and scrollY200 across768to769, originalhreforder after sidebar, actualnextpage20differenthrefs; unchanged mixedcomponent order/focus proof retained"
+        }
+      ],
+      "retainedEvidence": ".temp/audit-remediation-20261019/proofs/catalogue-geometry-G-2832/locator-a65-live-30e",
+      "scopeTrace": "Original breakpoint/availablewidth/title-credit/focus-scroll invariant traced shared grid, WorkShelf, discover cards, alsoenjoyed and Zone consumers. Original sixwidth/sidebar and4Zone stories plus genuineWorks proof cover repaired class. Mixed Work/nonWork public All availability and sameUUIDdensity are separate AUD007/AUD013 original gaps, not reopening this class. Historical shrink/heading/locator/setup failures preserved.",
+      "managerViewed": [
+        "live/works-live-boundary-769.png"
+      ],
+      "limits": [
+        "Backend75409 pointer observed after execution does not attest immutable backend throughout.",
+        "No genuine populated Zone geometry claimed from zero cards; original affected shared geometry is proved with realWorks and unchanged original Zone assertions."
+      ],
+      "bookkeepingPreparedAt": "2026-10-19T11:53:22.045318+00:00",
+      "sourceRevalidatedOnMain": "979903033fc6d32f3adf74db4dbb22d65973df4a",
+      "laterMainMaterialComparison": [
+        {
+          "path": "apps/web/features/discover/resource-list.tsx",
+          "testedBlob": "81749c80312e47fb29f7342d0f65a3d21ce071c2",
+          "currentMainBlob": "a8d8da88ad825c879109cc5b602ed8c2f313eb19",
+          "allOtherBytesEqual": true,
+          "difference": "Optional moreLabel prop with fallback to original t.more in BrowseContinuation only. Grid, resource card, focus and scroll owners untouched.",
+          "assessment": "Original geometry assertions remain applicable; no new runtime/review required for this continuation label-only change."
+        }
+      ]
+    },
+    {
+      "recordedAt": "2026-10-19T11:34:08.554760+00:00",
+      "id": "D2-005",
+      "status": "closed",
+      "closureBookkeepingPending": false,
+      "main": "8a40424aa15eb5387183a1fa15fa3f24758b45c9",
+      "originalAcceptanceVerbatim": [
+        "在同一偏好域保存期间，相关语言按钮明确禁用并说明等待，或完整保留并顺序提交后来的用户更改；不可吞掉已接受的点击。",
+        "对慢响应、503、冲突和快速连续修改，回执只确认实际提交的版本，语言新增/移除/排序与剧透、隐私修改均不相互覆盖。",
+        "1440 与 390 的键盘/触控均能辨认保存状态；刷新后顺序与最后一次被界面接受的操作一致。"
+      ],
+      "originalRegressionAssertionsVerbatim": [
+        {
+          "id": "D2-005/assertion-1",
+          "assert": "While one preference PUT is pending, every other control either visibly rejects interaction as disabled or queues the accepted intent for durable save."
+        },
+        {
+          "id": "D2-005/assertion-2",
+          "assert": "Rapid language/theme/other preference changes under 3500ms delay, success, 503 and 409 retain latest accepted values and accurate pending/saved/error receipts."
+        },
+        {
+          "id": "D2-005/assertion-3",
+          "assert": "Reload reads back the final acknowledged preferences; domains cannot silently drop each other through a shared busy guard."
+        }
+      ],
+      "canonicalSource": ".temp/site-audit-2026-10-18/round-3/all-findings.json",
+      "canonicalSha256": "e2721c44e74305c694b02e81e757e4476c3a19de414d25b0689617316c5ebc3f",
+      "originalAssertionsChanged": false,
+      "skillApplied": ".agents/skills/product-audit/SKILL.md",
+      "newRuntimeOrReview": false,
+      "sourceEquivalence": [
+        {
+          "path": "apps/web/features/settings/notification-settings.stories.tsx",
+          "mainBlob": "3ccb085279de5836b02949ada61d2f137a8fc114",
+          "testedCandidateBlob": "3ccb085279de5836b02949ada61d2f137a8fc114",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/settings/notification-settings.tsx",
+          "mainBlob": "b6f65fb0e1121f5e001c2f7e217b9ccb921c4c20",
+          "testedCandidateBlob": "b6f65fb0e1121f5e001c2f7e217b9ccb921c4c20",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/settings/settings-sections.stories.tsx",
+          "mainBlob": "2e466c2fd025ccfa0f28a0d93bc484b591687ee1",
+          "testedCandidateBlob": "2e466c2fd025ccfa0f28a0d93bc484b591687ee1",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/settings/settings-sections.tsx",
+          "mainBlob": "37c7d37caabaa3383f9987c0e2e606fd7e44bc12",
+          "testedCandidateBlob": "37c7d37caabaa3383f9987c0e2e606fd7e44bc12",
+          "equal": true
+        },
+        {
+          "path": "apps/web/features/settings/use-recovery-focus.ts",
+          "mainBlob": "9731ca50b353e6b20dd05311ff00a9925ab4ef10",
+          "testedCandidateBlob": "9731ca50b353e6b20dd05311ff00a9925ab4ef10",
+          "equal": true
+        }
+      ],
+      "productCommits": [
+        "deeea871ea",
+        "cd159fc6872cbb6a466afb4f3adcd7faf6c0b08e"
+      ],
+      "independentReview": {
+        "task": "G-2829",
+        "engine": "codex-1/gpt-6.1-sol/xhigh",
+        "reportCommit": "f5da3b45b93dcd24bdfa9431e6a8e34bfaff6c5b",
+        "report": "docs/goals/audit-remediation-20261019/proofs/settings-feedback.json"
+      },
+      "runtimeFrontend": [
+        "e96e4846d049d3958695e30ff7e67dacc1af93e9",
+        "d9ebbd3b0f8ae06010a7ee183641f11ed79e5192"
+      ],
+      "compatibleBackend": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "assertionResults": [
+        {
+          "id": "D2-005/assertion-1",
+          "status": "satisfied",
+          "originalAcceptance": "在同一偏好域保存期间，相关语言按钮明确禁用并说明等待，或完整保留并顺序提交后来的用户更改；不可吞掉已接受的点击。",
+          "evidence": [
+            "settings-feedback.json#currentCandidateRuns/current-61df4790bcc1/assertionsReached/officialStories",
+            "settings-feedback.json#genuineJourneyRuns/authenticated-e96e4846d049/assertionsReached/language"
+          ],
+          "observed": "Original slow privacy/spoiler/shared-domain stories plus actual preference saves show disabled language add/remove/reorder/search/save/spoiler controls and visible busy explanation; accepted en/ko/fr draft is preserved. No accepted input is silently discarded."
+        },
+        {
+          "id": "D2-005/assertion-2",
+          "status": "satisfied",
+          "originalAcceptance": "对慢响应、503、冲突和快速连续修改，回执只确认实际提交的版本，语言新增/移除/排序与剧透、隐私修改均不相互覆盖。",
+          "evidence": [
+            "currentCandidateRuns/current-61df4790bcc1 original six Person stories",
+            "genuineJourneyRuns/authenticated-e96e4846d049 actual four language cases",
+            "originalAcceptanceRuns/original-acceptance-e96e4846d049/originalAcceptanceMapping/D2-005",
+            "focusCorrectionRuns/focus-correction-d9ebbd3b0f8a"
+          ],
+          "observed": "Slow200, declared browser503/retry, real409 with current-version refresh, refresh503/recovery and new post-success draft all preserve accepted language/privacy/spoiler intent and truthful receipt. Final real200 plus reload GET confirms values. Account display serialization is separate contrast evidence, not invented concurrent language/theme proof."
+        },
+        {
+          "id": "D2-005/assertion-3",
+          "status": "satisfied",
+          "originalAcceptance": "1440 与 390 的键盘/触控均能辨认保存状态；刷新后顺序与最后一次被界面接受的操作一致。",
+          "evidence": [
+            "genuineJourneyRuns/authenticated-e96e4846d049 four actual language cases and viewed phone/desktop images",
+            "focusCorrectionRuns/focus-correction-d9ebbd3b0f8a/cases"
+          ],
+          "observed": "1440/390 keyboard/pointer journeys expose saving/retry status; actual saves and reload GETs match accepted language order and privacy values. The only bounded phone refresh focus defect is now corrected: recovery-owned focus returns to current visible Try saving again; naturally moved Text size focus remains. No physical touch device or heard-AT evidence added as a new requirement."
+        }
+      ],
+      "actualLanguageCaseReceipts": [
+        {
+          "id": "languages-1440-none",
+          "kind": "genuine person preference draft/save journey",
+          "fault": "none",
+          "writeReceipt": {
+            "profile": "person-preferences-v1",
+            "profileVisibility": "public",
+            "followPolicy": "everyone",
+            "hideReadingActivity": true,
+            "contentLanguages": [
+              "en",
+              "ko",
+              "fr"
+            ],
+            "spoilerPolicy": "hide-unread",
+            "version": 1,
+            "blockedPeople": []
+          },
+          "reload": {
+            "profile": "person-preferences-v1",
+            "profileVisibility": "public",
+            "followPolicy": "everyone",
+            "hideReadingActivity": true,
+            "contentLanguages": [
+              "en",
+              "ko",
+              "fr"
+            ],
+            "spoilerPolicy": "hide-unread",
+            "version": 1,
+            "blockedPeople": []
+          },
+          "reloadPersisted": true,
+          "staleReceiptCleared": true,
+          "evidence": "live-journeys.json#cases/languages-1440-none"
+        },
+        {
+          "id": "languages-390-503",
+          "kind": "genuine person preference draft/save journey",
+          "fault": "503",
+          "writeReceipt": {
+            "profile": "person-preferences-v1",
+            "profileVisibility": "public",
+            "followPolicy": "everyone",
+            "hideReadingActivity": true,
+            "contentLanguages": [
+              "en",
+              "ko",
+              "fr"
+            ],
+            "spoilerPolicy": "hide-unread",
+            "version": 8,
+            "blockedPeople": []
+          },
+          "reload": {
+            "profile": "person-preferences-v1",
+            "profileVisibility": "public",
+            "followPolicy": "everyone",
+            "hideReadingActivity": true,
+            "contentLanguages": [
+              "en",
+              "ko",
+              "fr"
+            ],
+            "spoilerPolicy": "hide-unread",
+            "version": 8,
+            "blockedPeople": []
+          },
+          "reloadPersisted": true,
+          "keyboardRecovered": true,
+          "staleReceiptCleared": true,
+          "evidence": "live-journeys-corrected.json#cases/languages-390-503"
+        },
+        {
+          "id": "languages-1440-409",
+          "kind": "genuine person preference draft/save journey",
+          "fault": "409",
+          "writeReceipt": {
+            "profile": "person-preferences-v1",
+            "profileVisibility": "public",
+            "followPolicy": "nobody",
+            "hideReadingActivity": true,
+            "contentLanguages": [
+              "en",
+              "ko",
+              "fr"
+            ],
+            "spoilerPolicy": "hide-unread",
+            "version": 11,
+            "blockedPeople": []
+          },
+          "reload": {
+            "profile": "person-preferences-v1",
+            "profileVisibility": "public",
+            "followPolicy": "nobody",
+            "hideReadingActivity": true,
+            "contentLanguages": [
+              "en",
+              "ko",
+              "fr"
+            ],
+            "spoilerPolicy": "hide-unread",
+            "version": 11,
+            "blockedPeople": []
+          },
+          "reloadPersisted": true,
+          "keyboardRecovered": true,
+          "staleReceiptCleared": true,
+          "evidence": "live-journeys-corrected.json#cases/languages-1440-409"
+        },
+        {
+          "id": "languages-390-409-refresh503",
+          "kind": "genuine person preference draft/save journey",
+          "fault": "409-refresh503",
+          "writeReceipt": {
+            "profile": "person-preferences-v1",
+            "profileVisibility": "public",
+            "followPolicy": "nobody",
+            "hideReadingActivity": true,
+            "contentLanguages": [
+              "en",
+              "ko",
+              "fr"
+            ],
+            "spoilerPolicy": "hide-unread",
+            "version": 16,
+            "blockedPeople": []
+          },
+          "reload": {
+            "profile": "person-preferences-v1",
+            "profileVisibility": "public",
+            "followPolicy": "nobody",
+            "hideReadingActivity": true,
+            "contentLanguages": [
+              "en",
+              "ko",
+              "fr"
+            ],
+            "spoilerPolicy": "hide-unread",
+            "version": 16,
+            "blockedPeople": []
+          },
+          "reloadPersisted": true,
+          "keyboardRecovered": true,
+          "staleReceiptCleared": true,
+          "evidence": "live-refresh-recovery.json#cases/languages-390-409-refresh503"
+        }
+      ],
+      "retainedChecks": {
+        "stories": "61df4790bcc13e40d1ccce6358edb1d632089db8",
+        "qa": "20261019t063638-162050",
+        "job": "8a721d95-fda0-4ad1-9191-d2e8cd2db938",
+        "storiesPassed": 32,
+        "languageCaseCount": 4,
+        "distinctGenuineCaseCount": 22,
+        "genuineFinalMissingCaseJob": "0b0ff7bd-0ef8-4a2f-953c-8fff9ba37373",
+        "focusJob": "fa835a4d-e079-4710-aa2d-f49a2b363774",
+        "focusVariantCount": 2
+      },
+      "retainedEvidence": [
+        {
+          "bundle": ".temp/audit-remediation-20261019/proofs/settings-feedback-G-2829-focus-d9ebbd3b0f8a",
+          "entries": 29,
+          "allSizesAndSha256Match": true,
+          "mismatches": []
+        },
+        {
+          "bundle": ".temp/audit-remediation-20261019/proofs/settings-feedback-G-2829-auth-e96e4846d049",
+          "entries": 211,
+          "allSizesAndSha256Match": true,
+          "mismatches": []
+        },
+        {
+          "bundle": ".temp/audit-remediation-20261019/proofs/settings-feedback-G-2829-original-acceptance-e96e4846d049",
+          "entries": 59,
+          "allSizesAndSha256Match": true,
+          "mismatches": []
+        }
+      ],
+      "scopeTrace": "Original preference accepted-intent/receipt/version invariant traced add/remove/order/spoiler/privacy and language domains, busy/slow200/503/real409/refresh503/retry/newdraft/reload at1440/390. All22 genuinecases,32 stories,59originalcontrolartifact and corrected2focuscases reused; no new wholeSettings/notification/AT prerequisite.",
+      "managerViewed": [
+        "images/live-focus-recovery-recovery-owns-focus-refresh-complete-focus.png"
+      ],
+      "limits": [
+        "Injected503 is declared browser fault; genuine200/409/save/reload remain distinct.",
+        "Historical failed harness jobs remain retained; no claim they passed.",
+        "Unattributed SSR fallback pageerror in latest focus run remains with existing startup owners and is not claimed cleared or treated as a new D2-005 acceptance hold.",
+        "No whole-tree regression, heard speech, physical touch or unrelated full-domain requirement introduced."
+      ],
+      "bookkeepingPreparedAt": "2026-10-19T11:53:22.045318+00:00",
+      "sourceRevalidatedOnMain": "979903033fc6d32f3adf74db4dbb22d65973df4a",
+      "laterMainMaterialComparison": []
     }
   ]
 }

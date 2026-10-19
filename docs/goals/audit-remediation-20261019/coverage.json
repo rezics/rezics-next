@@ -387,9 +387,18 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "断点叠加使视口变宽 1px、卡片反而骤缩",
-      "status": "build-briefed",
+      "status": "closed",
       "owner": "G-2754",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "AUD-008",
+          "assessedMain": "979903033fc6d32f3adf74db4dbb22d65973df4a",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     },
     {
       "id": "AUD-009",
@@ -486,9 +495,18 @@
       "severity": "P2",
       "sourceConfidence": "confirmed",
       "title": "设置共用 busy 状态，却让可操作的语言控件静默丢弃输入",
-      "status": "build-briefed",
+      "status": "closed",
       "owner": "G-2751",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "D2-005",
+          "assessedMain": "979903033fc6d32f3adf74db4dbb22d65973df4a",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     },
     {
       "id": "D4-001",
