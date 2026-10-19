@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { retainStoppedOwnerBackup, restoreCatalogueBackup } from '../../../../../scripts/load/catalogue-backup.ts';
 import { root, stream, dockerEnvironment } from '../../../../../scripts/fixture/stack.ts';
@@ -23,13 +23,14 @@ type Page<T> = { items: T[]; nextCursor: string | null; sourcePosition: Position
 type Summary = { context: string; status: string; count: number; mainVersion: string; scale: Scale;
   sourcePosition: Position; aggregationScope: { grain: string; population: string; countedTarget: string } };
 type Source = { realms: RetainedPersonaRealm[]; communities: { space: string; realm: string; contexts: Context[] }[];
-  work: string; mainVersion: string; other: string; global: Context; privateContext: Context; incompatible: Context };
+  work: string; mainVersion: string; other: string; published?: boolean; global: Context; privateContext: Context; incompatible: Context };
 const directory = resolve(Bun.env.REZICS_RATING_CONTEXT_SOURCE ?? '.temp/rating-context-source');
 const evidencePath = resolve('.temp/rating-context-results.json');
 const short = (id: string) => id.slice(-36);
 const own = (person: PersonaSession) => ({ actingSubject: person.actingSubject! });
 const qs = (values: Record<string, string>) => new URLSearchParams(values).toString();
 let people: PersonaSessions, privatePeople: PersonaSessions, source: Source;
+let revisedContext: string | undefined;
 let copy: Awaited<ReturnType<typeof restoreCatalogueBackup>> | undefined;
 const evidence: { setup: object; personas: Record<string, object>; requests: object[] } = { setup: {}, personas: {}, requests: [] };
 async function json<T>(pending: Promise<Response>, status = 200): Promise<T> {
@@ -38,6 +39,17 @@ async function json<T>(pending: Promise<Response>, status = 200): Promise<T> {
   return JSON.parse(raw) as T;
 }
 const grant = (person: PersonaSession, scope: string, action: string) => grantPersonaFixtureAuthority(person, [{ scope, action }]);
+async function publish(work: string, mainVersion?: string) {
+  mainVersion ??= (await json<{ mainVersion: string }>(people.owner.main('GET', `/v1/works/${short(work)}?${qs(own(people.owner))}`))).mainVersion;
+  const contribution = await json<{ contribution: string; draftRevision: string }>(people.owner.main('POST', '/v1/contributions', {
+    profile: 'text-contribution-v1', work, language: 'en', body: 'An original acceptance essay about choosing a native rating question.', ...own(people.owner) }), 201);
+  const decision = await json<{ publicationDecision: string }>(people.owner.main('POST', '/v1/contribution-publications', {
+    profile: 'text-publication-v1', contribution: contribution.contribution, expectedDraftHead: contribution.draftRevision,
+    expectedPublicationHead: null, rightsBasis: 'original-contribution', disclosure: 'public', ...own(people.owner) }), 201);
+  await json(people.owner.main('POST', '/v1/publication-selections', { profile: 'main-default-selection-v1', work,
+    contribution: contribution.contribution, publicationDecision: decision.publicationDecision, expectedSelectionHead: null,
+    context: { kind: 'main-version-default', id: mainVersion }, selectionBasis: 'main-maintainer', ...own(people.owner) }), 201);
+}
 async function presentation(context: string, prior?: { component: string; revision: string }) {
   return json<{ component: string; revision: string }>(people.owner.main('POST', '/v1/rating-question-presentations', {
     profile: 'rating-question-presentation-v1', ...(prior ? { target: prior.component } : {}),
@@ -110,7 +122,8 @@ async function prepare(): Promise<Source> {
   await json(privatePeople.owner.main('POST', `${root}/members`, { ...own(privatePeople.owner), member: member.member,
     expectedGeneration: members.generation, expectedMembershipGeneration: member.membershipGeneration,
     reason: 'Revoke the synthetic selection fixture membership', action: 'remove', consent: null, durationSeconds: null }), 201);
-  return { realms: [retainPersonaRealm(people), retainPersonaRealm(privatePeople)], communities, ...work,
+  await publish(work.work, work.mainVersion); await publish(other.work);
+  return { realms: [retainPersonaRealm(people), retainPersonaRealm(privatePeople)], communities, ...work, published: true,
     other: other.work, global, privateContext, incompatible };
 }
 // Preserve the harness-selected raw-update mode across backup lifecycle commands.
@@ -122,6 +135,14 @@ async function stackTask(args: string[]) {
   const result = await runQaStartupChildAsync(root, command.filter(arg => arg !== '--'), 180_000, dockerEnvironment());
   if (!result.ok) throw new Error(`Context fixture startup failed: ${result.output.slice(-2000)}`);
   return result.output;
+}
+async function restoreSource() {
+  const started = Date.now(), runId = `ratings-${randomUUID().slice(0, 18)}`;
+  const restored = await restoreCatalogueBackup(resolve(directory, 'owners/backup.json'), runId, { resourceClass: 'ordinary', task: stackTask });
+  copy = restored; Object.assign(Bun.env, restored.apps, { REZICS_QA_RUN_ID: runId });
+  assertOwnerMigrationsComplete(await migrateOwnerData(restored.apps));
+  [people, privatePeople] = await restorePersonaRealms(source.realms) as [PersonaSessions, PersonaSessions];
+  return { started, runId, restored };
 }
 beforeAll(async () => {
   const started = Date.now();
@@ -137,16 +158,24 @@ beforeAll(async () => {
         stopSourcePostgres: () => stopCorpusSourcePostgres(Bun.env.REZICS_QA_RUN_ID!, AbortSignal.timeout(120_000)),
       }, { task: stackTask });
     } else source = JSON.parse(readFileSync(resolve(directory, 'source.json'), 'utf8')) as Source;
-    const restoreStarted = Date.now();
-    const restoreRunId = `ratings-${randomUUID().slice(0, 18)}`;
-    copy = await restoreCatalogueBackup(resolve(directory, 'owners/backup.json'), restoreRunId, { resourceClass: 'ordinary', task: stackTask });
-    Object.assign(Bun.env, copy.apps, { REZICS_QA_RUN_ID: restoreRunId });
-    assertOwnerMigrationsComplete(await migrateOwnerData(copy.apps));
-    [people, privatePeople] = await restorePersonaRealms(source.realms) as [PersonaSessions, PersonaSessions];
+    let current = await restoreSource();
+    // Complete the retained metadata-only premise once; subsequent runs reuse this exact data cut.
+    if (!source.published) {
+      await publish(source.work, source.mainVersion); await publish(source.other);
+      await people.close();
+      await retainStoppedOwnerBackup(current.runId, 'rating-context-selection', resolve(directory, 'published-owners'), started, {
+        resumeSource: false, purpose: 'corpus', signal: AbortSignal.timeout(Math.max(1, 600_000 - (Date.now() - started))),
+        stopSourcePostgres: () => stopCorpusSourcePostgres(current.runId, AbortSignal.timeout(120_000)),
+      }, { task: stackTask });
+      renameSync(resolve(directory, 'owners'), resolve(directory, 'metadata-owners'));
+      renameSync(resolve(directory, 'published-owners'), resolve(directory, 'owners'));
+      source.published = true; writeFileSync(resolve(directory, 'source.json'), JSON.stringify(source), { mode: 0o600 });
+      await current.restored.stop(); current = await restoreSource();
+    }
     await json(people.visitor.main('GET', `/v1/global-rating-contexts/${short(source.global.context)}`));
-    const restoreMs = Date.now() - restoreStarted - copy.admissionWaitMs;
+    const restoreMs = Date.now() - current.started - current.restored.admissionWaitMs;
     if (restoreMs >= 600_000) throw new Error(`Restore/startup/migrations/readiness/smoke exceeded 600s: ${restoreMs}ms`);
-    evidence.setup = { reached: true, source: directory, restoreMs, totalMs: Date.now() - started, preparation: copy.preparation };
+    evidence.setup = { reached: true, source: directory, restoreMs, totalMs: Date.now() - started, preparation: current.restored.preparation };
   } catch (error) {
     evidence.setup = { ...evidence.setup, reached: false, assertionReached: false, elapsedMs: Date.now() - started, failure: String(error) };
     throw error;
@@ -162,6 +191,8 @@ for (const name of personaNames) test(`O-RATING-INVENTORY/O-RATING-SELECTION ${n
   let requests = 0;
   const request = async (path: string, as = person) => {
     requests++;
+    if (as.actingSubject && (path.startsWith('/v1/resources/') || path.startsWith('/v1/rating-populations?')))
+      path += `${path.includes('?') ? '&' : '?'}${qs(own(as))}`;
     const response = await as.main('GET', path);
     evidence.requests.push({ persona: name, path, status: response.status, body: await response.clone().json() });
     return response;
@@ -181,6 +212,7 @@ for (const name of personaNames) test(`O-RATING-INVENTORY/O-RATING-SELECTION ${n
       expect(items.length).toBeLessThan(24);
       const page: Page<Item> = await json(request(`${path}${cursor ? `&${qs({ cursor })}` : ''}`));
       expect(page.sourcePosition.dataEpoch).toBeString();
+      expect(page.sourcePosition.sequence).toBeString();
       expect(page.items.length).toBeLessThanOrEqual(20);
       items.push(...page.items); cursor = page.nextCursor;
     } while (cursor);
@@ -193,7 +225,8 @@ for (const name of personaNames) test(`O-RATING-INVENTORY/O-RATING-SELECTION ${n
     for (const expected of realm.contexts) {
       const item = listed.find(item => item.context === expected.context)!;
       expect(item).toMatchObject({ revision: expected.contextRevision, question: expected.question, scale: expected.scale,
-        targetGrain: 'main-version', cadence: 'standing', displayQuestion: { language: 'fr' } });
+        targetGrain: 'main-version', cadence: 'standing', displayQuestion: { language: 'fr',
+          value: expected.context === revisedContext ? 'Qualité révisée ?' : 'Quelle qualité ?' } });
     }
   });
   await check('page-two-selection-locale-identity', async () => {
@@ -202,7 +235,7 @@ for (const name of personaNames) test(`O-RATING-INVENTORY/O-RATING-SELECTION ${n
       expect(detail).toMatchObject({ context: selected.context, contextRevision: selected.contextRevision, scale: selected.scale });
       const summary = await json<Summary>(request(rating(realm.realm, selected.context), as));
       expect(summary).toMatchObject({ context: selected.context, mainVersion: source.mainVersion, status: 'available', scale: selected.scale,
-        aggregationScope: { grain: 'main-version', countedTarget: source.mainVersion } });
+        aggregationScope: { question: selected.question, population: 'account-principal', grain: 'main-version', countedTarget: source.mainVersion } });
       expect(summary.sourcePosition.dataEpoch).toBeString();
     }
   });
@@ -219,6 +252,10 @@ for (const name of personaNames) test(`O-RATING-INVENTORY/O-RATING-SELECTION ${n
         results.push([response.status, await response.json()]);
       }
       expect(results[0]).toEqual(results[1]); expect(results[0]![0]).toBe(404);
+      const selectedPrivate = await request(rating(source.realms[1]!.realm, source.privateContext.context), as);
+      const selectedAbsent = await request(rating(source.realms[1]!.realm, absent), as);
+      expect([403, 404]).toContain(selectedPrivate.status);
+      expect([selectedPrivate.status, await selectedPrivate.json()]).toEqual([selectedAbsent.status, await selectedAbsent.json()]);
     }
   });
   const cardinality = name === 'owner' ? 1 : name === 'moderator' ? 3 : name === 'member' ? 10 : 0;
@@ -265,8 +302,10 @@ for (const name of personaNames) test(`O-RATING-INVENTORY/O-RATING-SELECTION ${n
     const changed = await presentation(selected.context, before.displayQuestion.presentation!);
     const after = await json<Item>(request(`/v1/rating-contexts/${short(selected.context)}?languages=fr`));
     expect(after).toMatchObject({ context: selected.context, contextRevision: selected.contextRevision,
-      displayQuestion: { value: 'Qualité révisée ?', presentation: changed } });
+      displayQuestion: { value: 'Qualité révisée ?', presentation: { component: changed.component, revision: changed.revision } } });
     expect(changed.revision).not.toBe(before.displayQuestion.presentation!.revision);
+    revisedContext = selected.context;
+    expect(await json(request(rating(realm.realm, selected.context)))).toMatchObject({ context: selected.context, scale: selected.scale });
   });
   evidence.personas[name] = { reached, requests, checks, failures };
   console.log(JSON.stringify({ persona: name, reached, requests, failures }));
