@@ -5,6 +5,8 @@ import type { RetainedPersonaRealm } from '../support/personas.ts';
 import type { AuditFilePin } from './audit-corpus-contract.ts';
 
 export const publicDomainBaseline = '69eac3ceeaf885be70205a70248bc951e9d81cc9';
+/** Retained array bytes, not a rewritten envelope or a replacement identity list. */
+export const publicDomainOriginalArraySha256 = 'bf9f7abc94aa30887511c05c61bd0433c0fdbb894a2d7d7e30aacdb7e12efa6e';
 export const privateRecipeText = 'PRIVATE unpublished catalogue recipe annotation';
 export type Rational = { numerator: number; denominator: number };
 export type Measure = Static<typeof RecipeMeasure>;
@@ -50,9 +52,9 @@ export interface RealBook {
   author: { agent: string; name: string; evidence: SourceQuote };
   composition: string;
   compositionRevision: string;
-  /** Real native releases with exact coverage of this same retained realization. */
-  releases: Array<{ id: string; revision: string; realization: string; realizationRevision: string;
-    language: string; platform: string; evidence: SourceQuote }>;
+  /** Preserve unknown correspondence and platform as null, including every actual release. */
+  releases: Array<{ id: string; revision: string; realization: string | null; realizationRevision: string | null;
+    language: string | null; platform: string | null; evidence: SourceQuote }>;
   chapters: Array<{ occurrence: string; parent: string; target: string; selectedRevision: string;
     body: SourceQuote; bodyText: string }>;
 }
@@ -92,10 +94,10 @@ const native = (value: unknown): value is string =>
 
 /** Compare against the pinned retained ledger, not merely a list of 113 distinct IDs. */
 export function assertPublicDomainOriginalWorks(importedWorks: readonly string[], originals: unknown): void {
-  if (!object(originals) || originals.format !== 'audit-original-bindings-v1'
-    || !Array.isArray(originals.bindings) || originals.bindings.length !== 113)
+  const bindings: unknown = Array.isArray(originals) ? originals
+    : object(originals) && originals.format === 'audit-original-bindings-v1' ? originals.bindings : undefined;
+  if (!Array.isArray(bindings) || bindings.length !== 113)
     throw new Error('TEST PREMISE: the unchanged original 113 association ledger is required');
-  const bindings = originals.bindings as unknown[];
   for (const binding of bindings) {
     if (!object(binding) || !text(binding.sourceKey) || !native(binding.resource)
       || !native(binding.mainVersion) || !native(binding.revision) || !text(binding.readPath)

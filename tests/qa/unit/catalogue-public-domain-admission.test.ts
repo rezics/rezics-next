@@ -294,3 +294,52 @@ test('selection never bypasses original identity, additional native receipt or s
   manifest.richRecipe.ingredients[0]!.evidence.sha256 = '0'.repeat(64);
   expect(() => assertPublicDomainSelectedPremises(manifest, 'book')).toThrow('source digest/quote is invalid');
 });
+
+test('the retained array ledger accepts the same exact original identities without changing its entries', () => {
+  const bindings = originals().bindings, works = bindings.map(binding => binding.resource), before = structuredClone(bindings);
+  expect(() => assertPublicDomainOriginalWorks(works, bindings)).not.toThrow();
+  expect(bindings).toEqual(before);
+});
+
+for (const kind of ['missing', 'duplicate-source', 'duplicate-work', 'duplicate-main', 'replacement',
+  'missing-revision', 'missing-read-path', 'invalid-pointer'] as const) {
+  test(`array ledger retains original conservation refusal for ${kind}`, () => {
+    const bindings = originals().bindings, works = bindings.map(binding => binding.resource);
+    if (kind === 'missing') bindings.pop();
+    else if (kind === 'duplicate-source') bindings[1]!.sourceKey = bindings[0]!.sourceKey;
+    else if (kind === 'duplicate-work') bindings[1]!.resource = bindings[0]!.resource;
+    else if (kind === 'duplicate-main') bindings[1]!.mainVersion = bindings[0]!.mainVersion;
+    else if (kind === 'replacement') bindings[1]!.resource = work;
+    else if (kind === 'missing-revision') bindings[1]!.revision = '';
+    else if (kind === 'missing-read-path') bindings[1]!.readPath = '';
+    else bindings[1]!.resourcePointer = 'not-a-pointer';
+    expect(() => assertPublicDomainOriginalWorks(works, bindings)).toThrow('TEST PREMISE');
+  });
+}
+
+test('a rewritten array with a newly declared digest cannot substitute for the pinned original bytes', () => {
+  const bindings = originals().bindings;
+  expect(() => assertPublicDomainWorkAdmission({ importedWorks: bindings.map(binding => binding.resource),
+    originals: pinJson(bindings) }, [])).toThrow('pinned original digest');
+});
+
+test('all six releases retain actual null unknown correspondence and platforms without filtering or invention', () => {
+  const book = unitBook(), source = book.releases[0]!;
+  book.releases = Array.from({ length: 6 }, (_, index) => ({ ...source, id: id(70_000 + index),
+    realization: index ? source.realization : null, realizationRevision: index ? source.realizationRevision : null,
+    language: index ? source.language : null, platform: index < 3 ? null : source.platform }));
+  const before = structuredClone(book);
+  expect(() => assertPublicDomainSelectedPremises(selected({ book }), 'book')).not.toThrow();
+  expect(book).toEqual(before);
+  expect(book.releases).toHaveLength(6);
+});
+
+for (const field of ['realization', 'realizationRevision', 'language', 'platform'] as const) {
+  test(`release ${field} requires actual text or explicit null, not omitted or invalid metadata`, () => {
+    for (const invalid of [undefined, 123, '']) {
+      const book = unitBook();
+      (book.releases[0] as unknown as Record<string, unknown>)[field] = invalid;
+      expect(() => assertPublicDomainSelectedPremises(selected({ book }), 'book')).toThrow('strings or explicit nulls');
+    }
+  });
+}

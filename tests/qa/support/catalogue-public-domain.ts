@@ -4,7 +4,7 @@ import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
 import { createCorpusBackupDriver } from '../../../scripts/load/corpus-backup-driver.ts';
 import type { AuditFilePin } from '../fixtures/audit-corpus-contract.ts';
-import { publicDomainBaseline, privateRecipeText, assertPublicDomainOriginalWorks, assertPublicDomainNativeCreation, type PublicDomainCorpus,
+import { publicDomainBaseline, publicDomainOriginalArraySha256, privateRecipeText, assertPublicDomainOriginalWorks, assertPublicDomainNativeCreation, type PublicDomainCorpus,
   type PublicDomainSelectedCorpus, type PublicDomainSelection, type PublicRecipe, type RecipePage, type SourceQuote } from '../fixtures/catalogue-public-domain.ts';
 import { grantPersonaFixtureAuthority } from './persona-fixture-authority.ts';
 import { assertAuditExecution } from './audit-execution.ts';
@@ -53,7 +53,10 @@ function admissionJson(pin: AuditFilePin, label: string): unknown {
 /** Fixture admission only; genuine source, rights, structure and publication checks still follow. */
 export function assertPublicDomainWorkAdmission(corpus: Pick<PublicDomainCorpus, 'originals' | 'importedWorks'>,
   targets: ReadonlyArray<Pick<PublicRecipe, 'work' | 'creationReceipt'> & { mainVersion?: string }>): void {
-  assertPublicDomainOriginalWorks(corpus.importedWorks, admissionJson(corpus.originals, 'original 113 association ledger'));
+  const originals = admissionJson(corpus.originals, 'original 113 association ledger');
+  if (Array.isArray(originals) && corpus.originals.sha256 !== publicDomainOriginalArraySha256)
+    throw new Error('TEST PREMISE: original array ledger must retain its pinned original digest');
+  assertPublicDomainOriginalWorks(corpus.importedWorks, originals);
   for (const target of targets) {
     if (corpus.importedWorks.includes(target.work) && target.creationReceipt === undefined) continue;
     const pin = target.creationReceipt;
@@ -97,6 +100,9 @@ export function assertPublicDomainSelectedPremises(corpus: PublicDomainSelectedC
   }
   const book = corpus.book;
   if (book) {
+    if (book.releases.some(release => [release.realization, release.realizationRevision, release.language, release.platform]
+      .some(value => value !== null && (typeof value !== 'string' || !value.trim()))))
+      throw new Error('TEST PREMISE: release correspondence/platform must retain actual strings or explicit nulls');
     for (const evidence of [book.description.evidence, book.author.evidence,
       ...book.releases.map(item => item.evidence), ...book.chapters.map(item => item.body)]) sourceQuote(evidence);
   }
