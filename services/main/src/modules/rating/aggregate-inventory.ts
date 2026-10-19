@@ -563,16 +563,19 @@ const STANDING_SLOT_SQL = `SELECT ${standingHeadColumns},k.effective_slot AS sel
 
 /** Keep the retained four-statement inventory contract (BEGIN, SET, SELECT,
  * COMMIT). Materialize metadata once, with only an exact admission/member probe
- * for a large component. The original k+1 candidate SQL stays independently
+ * for a large component. The member's primary-key probe precedes seal checks:
+ * a semijoin must not instead scan the population for its last admission.
+ * The original k+1 candidate SQL stays independently
  * explainable; no population branch or native scan limit grows here. */
 export const STANDING_RATING_INVENTORY_SQL = `WITH publication AS MATERIALIZED (
   SELECT p.generation AS standing_generation,p.pending,k.slots,k.unvalued,k.histogram,
     (SELECT jsonb_agg(w) FROM (SELECT ${standingHeadColumns}
       FROM access.rating_aggregate_head h ${standingAdmissions}
       WHERE k.slots>100 AND k.unvalued=0 AND h.admission_id=k.last_admission_id
-        AND EXISTS (SELECT 1 FROM access.rating_standing_contribution member
+        AND EXISTS (SELECT 1 FROM (SELECT * FROM access.rating_standing_contribution member
           WHERE member.context=$1 AND member.main_version=$2 AND member.principal_id=h.principal_id
-            AND member.origin_main_version=h.main_version AND member.origin_slot=h.slot
+          LIMIT 1) member
+          WHERE member.origin_main_version=h.main_version AND member.origin_slot=h.slot
             AND member.admission_id=h.admission_id AND member.value_known)
       LIMIT 2) w) AS witnesses
   FROM access.rating_standing_publication($1,$2) p
