@@ -1,6 +1,21 @@
 {
   "$schema": "https://aspire.dev/reference/cli/configuration/schema.json",
-  "appHost": { "path": "apphost/apphost.mts", "language": "typescript/nodejs" },
-  "sdk": { "version": "13.6.1" },
-  "packages": { "Aspire.Hosting.JavaScript": "13.6.1" }
+  "appHost": {
+    "path": "apphost/apphost.mts",
+    "language": "typescript/nodejs"
+  },
+  "sdk": {
+    "version": "13.6.1"
+  },
+  "packages": {
+    "Aspire.Hosting.JavaScript": "13.6.1"
+  },
+  "profiles": {
+    "https": {
+      "environmentVariables": {
+        "DOTNET_GCHeapHardLimit": "80000000",
+        "DOTNET_GCConserveMemory": "9"
+      }
+    }
+  }
 }
