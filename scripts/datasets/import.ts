@@ -8,7 +8,7 @@ import {
 } from './auth.ts';
 import { replayCommand } from '../lib/command-journal.ts';
 import { atomicJson, canonical, sha256, verifiedBlob } from './store.ts';
-import { checkedComponentState } from '../../services/main/src/modules/semantic/change.ts';
+import { checkedComponentState, type ResourceState } from '../../services/main/src/modules/semantic/change.ts';
 import { importedRightsAssessments } from '../../services/main/src/modules/rights/import-policy.ts';
 import { acquireDatasetImportLock } from './lock.ts';
 import { normalizedCaptureRole, verifyCoverSourceCapture } from './snapshot.ts';
@@ -16,6 +16,7 @@ import { selectDatasetRoots, type DatasetSelectionManifest, type DatasetSelectio
 import type {
   DatasetCommandResponse, DatasetCoverageKey, DatasetEdge, DatasetIntakeCommand, DatasetIntakeCoordinate,
   DatasetIntakeJournal, DatasetIntakeReceipt, DatasetIntakeRequest, DatasetMappingContext, DatasetMapperId,
+  DatasetFieldAdoptionJournal, DatasetRecordedCommand, DatasetRetainedConversionReceipt,
   DatasetNativeMapper, DatasetNativeRecord, DatasetRecord, DatasetRecordEnvelope, DatasetRecordOccurrences,
   DatasetRetainedRecord, DatasetSnapshot, DatasetSnapshotReference, StoredImage,
 } from './types.ts';
@@ -31,6 +32,7 @@ import { datasetMediaMapper, datasetWorkCoverImages, electedDatasetCovers } from
 import { datasetRelationMapper } from './native/relations.ts';
 import { datasetCreditMapper } from './native/credits.ts';
 import { datasetReleaseMapper } from './native/releases.ts';
+import { adoptDatasetFields, DATASET_FIELD_ADOPTION_REVISION } from './native/field-adoption.ts';
 
 const SCHEMA = 'https://schema.org/';
 const RV = 'https://rezics.com/vocab/';
@@ -247,6 +249,8 @@ export interface DatasetImportResult {
   fieldPlansFile: string;
   /** Exact intake intents/replies, including partial attempts after interruption. */
   intakeReceiptsFile: string;
+  /** Actual retained conversion, native acknowledgements and v2 Source supports. */
+  fieldAdoptionsFile: string;
 }
 
 export class DatasetSelectionRefusedError extends Error {
@@ -984,6 +988,7 @@ export async function importDataset(
     const retainedLabels = new Set<string>();
     const sourceObservations = new Map<string, DatasetIntakeReceipt[]>();
     const sourceRetained = new Map<string, DatasetRetainedRecord>();
+    const sourceConversions = new Map<string, DatasetRetainedConversionReceipt>();
     const intakeCommand = (label: string): DatasetIntakeCommand => {
       const entry = journal.entries[label];
       if (!entry?.intake || entry.method !== 'POST' || entry.path !== '/v1/sources/intakes')
@@ -998,7 +1003,8 @@ export async function importDataset(
       const record = byKey.get(key);
       if (!record) throw new Error(`No frozen source record: ${key}`);
       const intakes = sourceObservations.get(key) ?? [];
-      return datasetSourceReference(snapshot, record, intakes.map(intake => intake.observation), intakes, sourceRetained.get(key));
+      return { ...datasetSourceReference(snapshot, record, intakes.map(intake => intake.observation), intakes, sourceRetained.get(key)),
+        ...(sourceConversions.has(key) ? { conversion: structuredClone(sourceConversions.get(key)!) } : {}) };
     };
     const retained = async (label: string, record: DatasetRecord, value: unknown) => {
       const parts = intakeChunks(value),
@@ -1226,6 +1232,9 @@ export async function importDataset(
     const coverageFile = join(root, `coverage-${context}.json`);
     const fieldPlansFile = join(root, `field-plans-${context}.json`);
     const intakeReceiptsFile = join(root, `intakes-${context}.json`);
+    const fieldAdoptionsFile = join(root, `field-adoptions-${context}.json`);
+    const fieldAdoptions: DatasetFieldAdoptionJournal = { profile: 'rezics-dataset-field-adoptions-v1',
+      snapshot: snapshotReference, conversions: {}, fields: [] };
     const completedMappers = new Set<DatasetMapperId>();
     let coverageReport = coverage.report(false, completedMappers);
     try {
@@ -1920,8 +1929,8 @@ export async function importDataset(
             });
           }
         }
-        // A plan describes candidates. It cannot turn an envelope or one part of
-        // multipart raw input into a convertible observation or an adoption.
+        // Plans remain candidates until the retained Source and native owners
+        // return exact acknowledgements for this original record and field.
         for (const plan of fieldPlans) for (const field of plan.fields) for (const evidence of field.evidence) {
           const key: DatasetCoverageKey = { record: plan.source.key, kind: 'field', path: evidence.path };
           const entry = coverage.entries.get(datasetCoverageId(key));
@@ -1929,12 +1938,10 @@ export async function importDataset(
           coverage.disposition(key, {
             status: field.disposition === 'source-only' ? 'source-only' : 'unmapped',
             reason: field.disposition === 'candidate'
-              ? `field-candidate-without-adoption: ${field.reason}; POST /v1/sources/observations/:observation/conversions requires an admitted exact retained input; dataset envelopes and multipart parts are not convertible`
+              ? `field-adoption-pending: ${field.reason}; retained conversion, native owner and Source support acknowledgements required (owner: ${field.native?.owner ?? 'unassigned'})`
               : field.reason,
           });
         }
-        if (fieldPlans.some(plan => plan.fields.some(field => field.disposition === 'candidate')))
-          note('Field plans remain candidates until admitted exact source conversion and adoption/support receipts bind the existing native target; retained dataset envelopes and multipart parts are not substituted for provider observations.');
         for (const entry of coverage.entries.values()) {
           if (entry.kind !== 'source-image' || !inView(entry)) continue;
           coverage.disposition(entry, {
@@ -1959,6 +1966,44 @@ export async function importDataset(
             coverage.disposition(key, value);
           },
         };
+        if (!mapperIds.has('fields')) {
+          const prefix = `mapping:fields:${DATASET_FIELD_ADOPTION_REVISION}:`;
+          const checkpoint = (label: string): DatasetRecordedCommand | undefined => {
+            const fullLabel = prefix + label, entry = journal.entries[fullLabel];
+            if (!entry || entry.method === 'GET') return undefined;
+            return structuredClone({ label: fullLabel, key: `dataset:${sha256(`${context}:${fullLabel}`)}`,
+              method: entry.method, path: entry.path, body: entry.body,
+              responses: entry.responses ?? (entry.result ? [{ body: entry.result }] : []),
+              ...(entry.result ? { result: entry.result } : {}) });
+          };
+          await adoptDatasetFields({ ...mappingContext,
+            command: (label, method, path, body) => command(prefix + label, method, path, body),
+            checkpoint,
+            async execute(label, path, makeBody) {
+              const prior = checkpoint(label);
+              await command(prefix + label, 'POST', path, prior ? prior.body : await makeBody());
+              return checkpoint(label)!;
+            },
+            semanticState(target, revision) {
+              for (const entry of Object.values(journal.entries)) {
+                if (!entry.result || !entry.body || typeof entry.body !== 'object') continue;
+                const body = entry.body as Record<string, unknown>;
+                if (entry.path === '/v1/semantic/changes' && entry.result.component === target
+                  && entry.result.revision === revision) return structuredClone(body.state) as ResourceState;
+                if (entry.path !== '/v1/semantic/changes/bulk' || !Array.isArray(entry.result.items)
+                  || !Array.isArray(body.items)) continue;
+                const index = entry.result.items.findIndex(item => item.component === target && item.revision === revision);
+                if (index >= 0) return structuredClone(body.items[index]) as ResourceState;
+              }
+              return undefined;
+            },
+            converted(key, receipt) { sourceConversions.set(key, structuredClone(receipt)); },
+          }, fieldPlans, fieldAdoptions);
+          if (fieldAdoptions.fields.length > 0 && fieldAdoptions.fields.every(field => field.status === 'mapped')
+            && fieldPlans.every(plan => plan.fields.every(field => field.disposition !== 'candidate'
+              || field.evidence.every(evidence => coverage.entries.get(datasetCoverageId({ record: plan.source.key,
+                kind: 'field', path: evidence.path }))?.disposition.status === 'mapped')))) completedMappers.add('fields');
+        }
         for (const mapper of nativeMappers) {
           if (mapper.id === 'media' && !mapperIds.has('media')) {
             if (!mediaViewValid) continue;
@@ -1985,6 +2030,7 @@ export async function importDataset(
         records: Object.fromEntries(sourceRetained),
       };
       atomicJson(intakeReceiptsFile, intakeJournal);
+      atomicJson(fieldAdoptionsFile, fieldAdoptions);
       for (const entry of coverage.entries.values()) {
         if (!inView(entry) || entry.disposition.status !== 'unmapped') continue;
         if (!retainedLabels.has(`record:${entry.record}`)) entry.disposition.reason = 'source-intake-incomplete';
@@ -2019,6 +2065,7 @@ export async function importDataset(
       ...(selectionFile ? { selectionFile, selection } : {}),
       fieldPlansFile,
       intakeReceiptsFile,
+      fieldAdoptionsFile,
     };
     atomicJson(join(root, 'import-latest.json'), result);
     return result;

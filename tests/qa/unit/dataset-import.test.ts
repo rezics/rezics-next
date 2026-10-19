@@ -21,8 +21,12 @@ import type { DatasetNativeMapper, DatasetNativeRecord } from '../../../scripts/
 import { testDatasetImportCoverage } from '../../../scripts/datasets/conformance.ts';
 import { DatasetIntakeCustodyError } from '../../../scripts/datasets/native/context.ts';
 import type {
-  DatasetIntakeJournal, DatasetIntakeRequest, DatasetRecordEnvelope, DatasetSourceReference,
+  DatasetFieldAdoptionJournal, DatasetIntakeJournal, DatasetIntakeRequest, DatasetRecordEnvelope, DatasetSourceReference,
 } from '../../../scripts/datasets/types.ts';
+import type { RetainedConversionRequest, RetainedSupportRequest } from '../../../services/main/src/modules/source/field-support-contract.ts';
+import { SOURCE_NORMALIZATION, verifyRetainedRecord } from '../../../services/main/src/modules/source/retained-record-normalization.ts';
+import { synopsisSlot } from '../../../services/main/src/modules/source/field-control-native.ts';
+import type { StagedSourceObservation } from '../../../services/main/src/modules/source/intake.ts';
 
 const roots: string[] = [];
 const root = () => {
@@ -2519,3 +2523,266 @@ test('preserves all 113 frozen source/native identities at each retained epoch w
     expect(result.coverage.counts.mapped).toBe(0);
   }
 }, 15_000); // Two complete retained epochs write and verify 226 exact intake journals.
+
+describe('retained field adoption through the actual importer', () => {
+  function setup(settings: { multipart?: boolean; language?: string | null; human?: boolean;
+    lostNativeReplies?: boolean; lostSupportReplies?: boolean; supportRefusal?: boolean; corruptBinding?: boolean; corruptSupport?: boolean;
+    withdrawn?: boolean; semantic?: boolean; editorDuringSupportRead?: boolean } = {}) {
+    const fixture = apiFixture(), directory = root();
+    const work: DatasetRecord = { key: 'vndb:vn:v11', provider: 'vndb', kind: 'vn', externalId: 'v11',
+      title: 'Fate/stay night', language: 'ja', native: 'work', sourceUrl: 'https://vndb.org/v11',
+      data: settings.semantic ? {} : { description: settings.multipart ? '行\n'.repeat(40_000) : '原文のまま\nSecond paragraph.',
+        ...(Object.hasOwn(settings, 'language') ? { description_language: settings.language } : {}) } };
+    const person: DatasetRecord = { key: 'vndb:staff:s1', provider: 'vndb', kind: 'staff', externalId: 's1',
+      title: '原名', language: 'ja', native: 'person', sourceUrl: 'https://vndb.org/s1', data: { country: '日本' } };
+    const source = snapshot(settings.semantic ? [work, person] : [work]);
+    const file = join(directory, 'snapshots', source.id, 'snapshot.json');
+    mkdirSync(dirname(file), { recursive: true });
+    const frozen = JSON.stringify(source, null, 2); writeFileSync(file, frozen);
+    const calls: { method: string; path: string; body: unknown; key?: string }[] = [];
+    const observations = new Map<string, StagedSourceObservation>(), replies = new Map<string, Record<string, unknown>>();
+    const supports = new Map<string, Record<string, unknown>>(), semantic = new Map<string, Record<string, unknown>>();
+    let serial = 900_100, lost = 0, control: Record<string, unknown> | undefined;
+    const freshId = () => iri(serial++), receiptId = (key: string) => `urn:rezics:receipt:${sha256(key)}`;
+    const api: DatasetApi = { ...fixture.api, async request(method, path, body, key) {
+      calls.push(structuredClone({ method, path, body, key }));
+      if (method === 'GET' && path.includes('/fields/synopsis/control')) {
+        const target = `https://rezics.com/id/${path.split('/')[3]}`;
+        control ??= { profile: 'work-editorial-field-control-v1', work: target, field: 'synopsis', slot: synopsisSlot(target),
+          workHead: freshId(), contentHead: settings.human ? freshId() : null, controlHead: settings.human ? freshId() : null,
+          controlEpoch: settings.human ? '3' : '0', protectionHead: null,
+          mode: settings.human ? 'human-controlled' : 'unestablished', value: settings.human ? 'Editor choice' : null,
+          rightsStatus: null };
+        return { status: 200, body: structuredClone(control) };
+      }
+      if (method === 'GET' && path.startsWith('/v1/semantic/resources/')) {
+        const current = semantic.get(path.split('/')[4]!.split('?')[0]!);
+        return current ? { status: 200, body: structuredClone(current) } : { status: 404, body: { code: 'semantic_unavailable' } };
+      }
+      if (method === 'GET' && path.startsWith('/v1/sources/field-supports/')) {
+        const support = supports.get(path.split('/').at(-1)!);
+        if (settings.editorDuringSupportRead) control = { ...control, workHead: freshId(), contentHead: freshId(),
+          controlHead: freshId(), controlEpoch: '2', mode: 'human-controlled', value: 'Concurrent editor choice' };
+        return support ? { status: 200, body: { ...structuredClone(support),
+          ...(settings.withdrawn ? { state: 'withdrawn', withdrawal: { reason: 'independent withdrawal' } } : {}) } }
+          : { status: 404, body: { code: 'source_support_unavailable' } };
+      }
+      const isConversion = method === 'POST' && path.endsWith('/conversions');
+      const isSynopsis = method === 'POST' && path.endsWith('/fields/synopsis/control');
+      const loseReply = isSynopsis && settings.lostNativeReplies || path === '/v1/sources/field-supports' && settings.lostSupportReplies;
+      if (isConversion || isSynopsis || path === '/v1/semantic/changes' || path === '/v1/sources/field-supports') {
+        expect(key).toBeDefined();
+        const saved = replies.get(key!);
+        if (saved) {
+          if (loseReply && lost++ < 8) throw new Error('reply lost after owner commit');
+          return { status: 200, body: { ...structuredClone(saved), replayed: true } };
+        }
+        let result: Record<string, unknown>;
+        if (isConversion) {
+          const input = body as RetainedConversionRequest;
+          expect(input.profile).toBe('source-retained-record-conversion-v1');
+          const actual = input.retained.intakes.map(part => observations.get(part.observation)!);
+          const verified = verifyRetainedRecord(input, actual);
+          expect(input.retained.snapshot.fileSha256).toBe(sha256(Buffer.from(frozen)));
+          const { record: _record, ...retained } = input.retained;
+          const conversion = freshId();
+          result = { conversion: { profile: input.profile, state: 'staged', conversion,
+            observation: input.retained.intakes[0]!.observation, mappingRevision: input.mappingRevision,
+            sourceDigest: input.retained.payload.byteDigest, retainedRecord: { ...retained,
+              profile: 'source-retained-record-binding-v1', binding: freshId(),
+              sourceRecord: input.retained.intakes.length === 1 ? input.retained.intakes[0]!.record : freshId(),
+              conversion, mappingRevision: input.mappingRevision, normalizationRevision: verified.normalizationRevision },
+            fieldInventory: [], createdAt: '2026-10-19T00:00:00Z' }, replayed: false };
+          if (settings.corruptBinding) ((result.conversion as { retainedRecord: { recordDigest: string } }).retainedRecord).recordDigest = '0'.repeat(64);
+        } else if (isSynopsis) {
+          const input = body as Record<string, unknown>;
+          expect(control!.mode).toBe('unestablished');
+          expect(input.expectedWorkHead).toBe(control!.workHead);
+          expect(input.basis).toEqual({ contentHead: null, head: null, epoch: '0', protection: null });
+          const content = freshId(), head = freshId();
+          control = { ...control, workHead: freshId(), contentHead: content, controlHead: head,
+            controlEpoch: '1', mode: 'source-managed', value: input.value, language: input.language };
+          result = { outcome: 'succeeded', work: control.work, slot: control.slot, content, control: head,
+            receipt: receiptId(key!), admissionId: 'field-command', requestDigest: sha256(canonical(input)),
+            authorityEpoch: '1', dataEpoch: 'epoch-1', sequence: '100', scope: `work:edit:${control.work}`, replayed: false };
+        } else if (path === '/v1/semantic/changes') {
+          const input = body as { target: string; expectedHead: string | null; state: unknown };
+          expect(input.expectedHead).toBe(semantic.get(input.target.slice(-36))?.revision ?? null);
+          const revision = freshId();
+          semantic.set(input.target.slice(-36), { component: input.target, revision, state: structuredClone(input.state) });
+          result = { profile: 'semantic-change-v1', component: input.target, revision,
+            predecessor: input.expectedHead, receipt: receiptId(key!), replayed: false };
+        } else {
+          if (settings.supportRefusal) return { status: 409, body: { code: 'source_support_changed', basis: 'native-head' } };
+          const input = body as RetainedSupportRequest;
+          expect(input.profile).toBe('source-field-support-attachment-v2');
+          expect(input.native.receipt).toMatch(/^urn:rezics:receipt:/);
+          const support = freshId(), supportIdentity = freshId();
+          const { profile: _profile, evidence, native, expectedHead, actingSubject: _actor, ...scope } = input;
+          const value: Record<string, unknown> = { ...scope, profile: 'source-field-support-v1', state: 'recorded',
+            support, supportIdentity, mappingRevision: evidence.mappingRevision, valueDigest: evidence.field.valueDigest,
+            nativeRevision: expectedHead, graphReceipt: native.receipt, headGuarantee: 'verified-before-commit', outcome: 'attached',
+            withdrawal: null, replayed: false, createdAt: '2026-10-19T00:00:00Z', admission: {
+              profile: 'source-field-support-admission-v1', sourceRecord: input.sourceRecord, conversion: input.conversion,
+              evidence, native, headGuarantee: 'verified-before-commit', correspondence: {
+                normalizationRevision: SOURCE_NORMALIZATION, rule: 'dataset-record-envelope-v1',
+                payloadPointers: [`/record${evidence.field.pointer}`], selectedValueDigest: evidence.field.valueDigest } },
+            attachment: { profile: 'source-field-attachment-certificate-v1', receipt: receiptId(key!),
+              requestDigest: sha256(canonical(input)), nativeReceipt: native.receipt } };
+          if (settings.corruptSupport) (value.admission as Record<string, unknown>).headGuarantee = 'transaction-guarded';
+          supports.set(shortId(support), structuredClone(value));
+          result = { support: value, replayed: false };
+        }
+        replies.set(key!, structuredClone(result));
+        if (loseReply && lost++ < 8) throw new Error('reply lost after owner commit');
+        return { status: 201, body: structuredClone(result) };
+      }
+      const answer = await fixture.api.request(method, path, body, key);
+      if (path === '/v1/sources/intakes' && answer.status < 300) {
+        const observed = answer.body.observation as unknown as StagedSourceObservation;
+        observations.set(observed.observation, structuredClone(observed));
+      }
+      if (path === '/v1/semantic/changes/bulk' && answer.status < 300) {
+        const items = (body as { items: unknown[] }).items;
+        (answer.body.items as { component: string; revision: string }[]).forEach((item, index) =>
+          semantic.set(shortId(item.component), { component: item.component, revision: item.revision, state: structuredClone(items[index]) }));
+      }
+      return answer;
+    } };
+    const shortId = (value: string) => value.slice(-36);
+    const run = async () => {
+      const result = await importDataset(directory, source, options(api));
+      const adoptions = JSON.parse(readFileSync(result.fieldAdoptionsFile, 'utf8')) as DatasetFieldAdoptionJournal;
+      const coverage = JSON.parse(readFileSync(result.coverageFile, 'utf8'));
+      expect(readFileSync(file, 'utf8')).toBe(frozen);
+      return { result, adoptions, coverage };
+    };
+    return { run, calls, source, work, person, directory, fixture, semantic,
+      editor() { control = { ...control, workHead: freshId(), contentHead: freshId(), controlHead: freshId(),
+        controlEpoch: '2', mode: 'human-controlled', value: 'Later editor choice' }; },
+    };
+  }
+
+  for (const multipart of [false, true]) for (const language of [undefined, null, 'pt-BR'] as const) {
+    test(`adopts exact ${multipart ? 'multipart' : 'single'} synopsis and retains ${String(language)} language through replay`, async () => {
+      const fixture = setup({ multipart, ...(language !== undefined ? { language } : {}) });
+      const first = await fixture.run(), binding = first.adoptions.conversions[fixture.work.key]!;
+      const field = first.adoptions.fields.find(field => field.field.pointer === '/data/description')!;
+      expect(field.status).toBe('mapped');
+      expect(binding.request.retained.record).toEqual(fixture.work);
+      expect(binding.request.retained.intakes.length > 1).toBe(multipart);
+      expect(binding.conversion.retainedRecord.sourceRecord).not.toBe(binding.conversion.conversion);
+      if (multipart) expect(binding.request.retained.intakes.map(part => part.record)).not.toContain(binding.conversion.retainedRecord.sourceRecord);
+      expect(field.native?.body).toMatchObject({ value: fixture.work.data.description,
+        language: language === undefined ? { state: 'omitted' } : language === null ? { state: 'null' } : { state: 'value', value: language } });
+      expect(field.support?.body).toMatchObject({ expectedHead: field.native!.result!.content,
+        native: { owner: 'work-editorial', receipt: field.native!.result!.receipt }, evidence: { field: {
+          pointer: '/data/description', valueDigest: sha256(canonical(fixture.work.data.description)) } } });
+      expect(field.support?.responses[0]?.status).toBe(201);
+      expect(field.supportRead?.body.headGuarantee).toBe('verified-before-commit');
+      expect(first.coverage.entries.find((entry: { path: string }) => entry.path === '/data/description').disposition.status).toBe('mapped');
+      const before = fixture.calls.filter(call => call.method === 'POST').length;
+      const replay = await fixture.run();
+      expect(replay.adoptions.fields.find(field => field.field.pointer === '/data/description')!.status).toBe('mapped');
+      expect(fixture.calls.filter(call => call.method === 'POST')).toHaveLength(before);
+      expect(fixture.fixture.nativeWorks).toHaveLength(1);
+    });
+  }
+
+  test('uses one acknowledged semantic head and preserves the complete producer state for exact facts', async () => {
+    const fixture = setup({ semantic: true });
+    const { adoptions } = await fixture.run();
+    const field = adoptions.fields.find(field => field.field.pointer === '/data/country')!;
+    expect(field.status).toBe('mapped');
+    const native = field.native!.body as { state: { properties: { predicate: string }[] } };
+    expect(native.state.properties.some(property => property.predicate.endsWith('semanticWork'))).toBe(true);
+    expect(native.state.properties.some(property => property.predicate === 'https://schema.org/identifier')).toBe(true);
+    expect(field.support!.body).toMatchObject({ native: { owner: 'semantic', component: field.native!.result!.component,
+      revision: field.native!.result!.revision, receipt: field.native!.result!.receipt } });
+    const state = [...fixture.semantic.values()][0]!;
+    state.revision = iri(999_990);
+    const properties = (state.state as { properties: unknown[] }).properties;
+    properties.push({ predicate: 'https://schema.org/name', value: { kind: 'string', lexical: 'Independent editor fact' } });
+    const before = fixture.calls.filter(call => call.path === '/v1/semantic/changes').length;
+    const replay = await fixture.run();
+    expect(replay.adoptions.fields.find(field => field.field.pointer === '/data/country')!.status).toBe('pending');
+    expect(fixture.calls.filter(call => call.path === '/v1/semantic/changes')).toHaveLength(before);
+    expect(properties).toContainEqual({ predicate: 'https://schema.org/name', value: { kind: 'string', lexical: 'Independent editor fact' } });
+  });
+
+  test('retains the exact native intent when its committed replies are lost and resumes the same key', async () => {
+    const fixture = setup({ lostNativeReplies: true });
+    const first = await fixture.run(), pending = first.adoptions.fields[0]!;
+    expect(pending.status).toBe('pending');
+    expect(pending.native?.result).toBeUndefined();
+    expect(pending.native?.responses).toEqual([]);
+    const resumed = await fixture.run(), complete = resumed.adoptions.fields[0]!;
+    expect(complete.status).toBe('mapped');
+    expect(complete.native?.key).toBe(pending.native?.key);
+    expect(complete.native?.body).toEqual(pending.native?.body);
+    expect(complete.native?.responses[0]?.status).toBe(200);
+    expect(complete.native?.result?.replayed).toBe(true);
+    expect(fixture.calls.filter(call => call.method === 'POST' && call.path.endsWith('/fields/synopsis/control'))).toHaveLength(9);
+  });
+
+  test('leaves an existing human synopsis alone before any native or support command', async () => {
+    const fixture = setup({ human: true }), { adoptions } = await fixture.run();
+    expect(adoptions.fields[0]!.reason).toContain('editor/source synopsis choice is preserved');
+    expect(fixture.calls.some(call => call.method === 'POST' && call.path.endsWith('/fields/synopsis/control'))).toBe(false);
+    expect(fixture.calls.some(call => call.path === '/v1/sources/field-supports')).toBe(false);
+  });
+
+  test('resumes a committed support with the original intent and records its actual replay reply', async () => {
+    const fixture = setup({ lostSupportReplies: true });
+    const first = await fixture.run(), pending = first.adoptions.fields[0]!;
+    expect(pending.status).toBe('pending');
+    expect(pending.native?.result?.outcome).toBe('succeeded');
+    expect(pending.support?.result).toBeUndefined();
+    const resumed = await fixture.run(), complete = resumed.adoptions.fields[0]!;
+    expect(complete.status).toBe('mapped');
+    expect(complete.support?.key).toBe(pending.support?.key);
+    expect(complete.support?.body).toEqual(pending.support?.body);
+    expect(complete.support?.responses[0]?.status).toBe(200);
+    expect(complete.support?.result?.replayed).toBe(true);
+    expect(fixture.calls.filter(call => call.method === 'POST' && call.path.endsWith('/fields/synopsis/control'))).toHaveLength(1);
+    expect(fixture.calls.filter(call => call.method === 'POST' && call.path === '/v1/sources/field-supports')).toHaveLength(9);
+  });
+
+  test('retains support receipts but refuses current adoption when an editor moves the head during its read', async () => {
+    const fixture = setup({ editorDuringSupportRead: true }), { adoptions, coverage } = await fixture.run();
+    const field = adoptions.fields[0]!;
+    expect(field.status).toBe('pending');
+    expect(field.native?.result?.outcome).toBe('succeeded');
+    expect(field.support?.result?.support).toBeDefined();
+    expect(field.nativeReads).toHaveLength(2);
+    expect(field.nativeReads![0]!.body.mode).toBe('source-managed');
+    expect(field.nativeRead?.body.value).toBe('Concurrent editor choice');
+    expect(coverage.entries.find((entry: { path: string }) => entry.path === '/data/description').disposition.status).toBe('unmapped');
+  });
+
+  test('keeps acknowledged native/support receipts after a later editor choice without replaying the mutation', async () => {
+    const fixture = setup(), first = await fixture.run();
+    fixture.editor();
+    const replay = await fixture.run(), field = replay.adoptions.fields[0]!;
+    expect(field.status).toBe('pending');
+    expect(field.native?.result).toEqual(first.adoptions.fields[0]!.native!.result);
+    expect(field.support?.result).toEqual(first.adoptions.fields[0]!.support!.result);
+    expect(field.nativeRead?.body.value).toBe('Later editor choice');
+    expect(fixture.calls.filter(call => call.method === 'POST' && call.path.endsWith('/fields/synopsis/control'))).toHaveLength(1);
+  });
+
+  for (const setting of ['supportRefusal', 'corruptBinding', 'corruptSupport', 'withdrawn'] as const) {
+    test(`never promotes ${setting} into adopted field coverage`, async () => {
+      const fixture = setup({ [setting]: true }), { adoptions, coverage } = await fixture.run();
+      const field = adoptions.fields[0]!;
+      expect(field.status).toBe('pending');
+      expect(coverage.entries.find((entry: { path: string }) => entry.path === '/data/description').disposition.status).toBe('unmapped');
+      if (setting === 'supportRefusal') {
+        expect(field.reason).toContain('source-field-support: HTTP 409 source_support_changed native-head');
+        expect(field.native?.result?.outcome).toBe('succeeded');
+        expect(field.support?.responses[0]).toEqual({ status: 409, body: { code: 'source_support_changed', basis: 'native-head' } });
+      }
+      if (setting === 'corruptBinding') expect(field.native).toBeUndefined();
+    });
+  }
+});

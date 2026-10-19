@@ -1,6 +1,8 @@
 import type { Capture } from './network.ts';
 import type { DatasetSelectionManifest } from './selection.ts';
 import type { ManualSourceIntake } from '../../services/main/src/modules/source/intake.ts';
+import type { RetainedConversionRequest, RetainedSupportRequest } from '../../services/main/src/modules/source/field-support-contract.ts';
+import type { RetainedConversion } from '../../services/main/src/modules/source/retained-record.ts';
 
 export type Provider = 'vndb' | 'bangumi' | 'musicbrainz';
 export interface DatasetRecord {
@@ -173,6 +175,42 @@ export interface DatasetCommandResponse {
   body: Record<string, unknown>;
 }
 
+export interface DatasetRecordedCommand {
+  label: string;
+  key: string;
+  method: 'POST' | 'PUT';
+  path: string;
+  body: unknown;
+  responses: DatasetCommandResponse[];
+  result?: Record<string, unknown>;
+}
+
+export interface DatasetRetainedConversionReceipt {
+  request: RetainedConversionRequest;
+  conversion: RetainedConversion;
+  command: DatasetRecordedCommand;
+}
+
+export interface DatasetFieldAdoption {
+  record: string;
+  field: RetainedSupportRequest['evidence']['field'];
+  status: 'pending' | 'mapped';
+  reason: string;
+  conversion?: DatasetRecordedCommand;
+  native?: DatasetRecordedCommand;
+  nativeRead?: { path: string; body: Record<string, unknown> };
+  nativeReads?: { path: string; body: Record<string, unknown> }[];
+  support?: DatasetRecordedCommand;
+  supportRead?: { path: string; body: Record<string, unknown> };
+}
+
+export interface DatasetFieldAdoptionJournal {
+  profile: 'rezics-dataset-field-adoptions-v1';
+  snapshot: DatasetSnapshotReference;
+  conversions: Record<string, DatasetRetainedConversionReceipt>;
+  fields: DatasetFieldAdoption[];
+}
+
 /** Actual command custody, including intents whose reply has not been observed. */
 export interface DatasetIntakeCommand {
   label: string;
@@ -227,6 +265,8 @@ export interface DatasetSourceReference {
   intakes: readonly DatasetIntakeReference[];
   /** Complete actual envelope and ordered custody, not a conversion/adoption. */
   retained?: DatasetRetainedRecord;
+  /** Only an acknowledged retained conversion supplies the canonical Source record. */
+  conversion?: DatasetRetainedConversionReceipt;
 }
 
 export interface DatasetMappingReceipt {
