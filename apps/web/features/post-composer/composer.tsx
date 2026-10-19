@@ -88,6 +88,7 @@ export function PostComposer({
   const [draft, setDraft] = useState<Draft>(() => blank(initial, target));
   const draftRef = useRef(draft);
   draftRef.current = draft;
+  const titleInput = useRef<HTMLInputElement>(null);
   const [hydrated, setHydrated] = useState(false);
   const [savedValue, setSavedValue] = useState<string | null>(null);
   const [storageError, setStorageError] = useState(false);
@@ -532,6 +533,7 @@ export function PostComposer({
             <label htmlFor="post-title">{words.titleLabel[locale]}</label>
             <Input
               id="post-title"
+              ref={titleInput}
               required
               maxLength={280}
               value={draft.title}
@@ -599,6 +601,7 @@ export function PostComposer({
               <p role="status">{words[writeState === 'none' ? 'unwritten' : writeState === 'unknown' ? 'writeUnknown' : 'writeAcknowledged'][locale]}</p>
               {writeState === 'none' ? (
                 <Button type="button" variant="outline" className="justify-self-start" onClick={() => {
+                  titleInput.current?.focus();
                   change({ progress: null }); setError(null);
                 }}>{words.cancelAttempt[locale]}</Button>
               ) : null}
@@ -624,7 +627,7 @@ export function PostComposer({
               link.click(); URL.revokeObjectURL(url);
             }}>{words.exportDraft[locale]}</Button> : null}
             {storageError ? <Button type="button" variant="outline" onClick={() => {
-              try { persist(draft); } catch { setStorageError(true); }
+              try { persist(draft); titleInput.current?.focus(); } catch { setStorageError(true); }
             }}>{words.retrySave[locale]}</Button> : null}
             {hydrated && !postedHref ? (
               <span role="status" className="text-muted-foreground text-xs">
