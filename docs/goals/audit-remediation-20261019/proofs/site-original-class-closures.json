@@ -1,8 +1,8 @@
 {
-  "recordedAt": "2026-10-19T12:40:49.777559+00:00",
+  "recordedAt": "2026-10-19T13:00:48.548372+00:00",
   "manager": "site",
   "goal": "audit-remediation-20261019",
-  "assessedMain": "32400992a4879132812a83d9e6a0bd1cd5d996bf",
+  "assessedMain": "feb3d091d0dcc6c96f40021b706fdcdeb87daa2b",
   "basis": "Original applicable acceptance and assertions, without adding unrelated classes or full-domain journeys. Product-audit class tracing applied; unchanged exact proof reused.",
   "findings": [
     {
@@ -5562,6 +5562,177 @@
       "skillApplied": ".agents/skills/product-audit/SKILL.md",
       "managerAcceptanceReceipt": ".temp/audit-remediation-20261019/two-hour-sprint/site-D4-003-accepted-closure.json",
       "managerAcceptanceReceiptSHA256": "51110cfd75bbd5cbcf064d05e118bf0337bfa4c3bc01099aadfaf83a8d6eecb5"
+    },
+    {
+      "schemaVersion": 1,
+      "id": "AUD-005",
+      "status": "closed",
+      "assessedAt": "2026-10-19T12:43:38.965319+00:00",
+      "main": "32400992a4879132812a83d9e6a0bd1cd5d996bf",
+      "productCommit": "c8750003b208d0dea217b27bbad5903888184595",
+      "priorOrdinarySourceMainCommit": "2b1bd0c675df504b9610a44dcdcbc2a6e4860f6b",
+      "testedProductPin": "f82754944dc7ba505f7d806232ad33d142761075",
+      "compatibleGenuineBackend": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "canonicalSource": "docs/goals/audit-remediation-20261019/site-plan.json#classes[id=AUD-005]",
+      "canonicalSourceSha256": "4ab008ae2a5144eb71f887daa737f1c5eb1a75b443e084b0f67fa67a0cbec3bc",
+      "originalRegistry": ".temp/site-audit-2026-10-18/round-3/all-findings.json",
+      "originalRegistrySha256": "e2721c44e74305c694b02e81e757e4476c3a19de414d25b0689617316c5ebc3f",
+      "skill": ".agents/skills/product-audit/SKILL.md",
+      "productAuditMethod": "Trace original Feed recovery invariant through generation/query owner, API409 recovery, pending UI, fresh cursor continuation, stale suppression and true-end guard. Reuse exact independently passing proof and compare current-main material blobs; scope includes slow/interrupted RSC, excludes separate auth/preview original classes. Static equivalence is compatibility, not new human-success evidence.",
+      "originalAcceptanceVerbatim": [
+        "保持 query、projection.sequence 均相同，仅首次续页返回 409；随后服务器可正常读取。点击一次 Refresh 应清除旧失败并开始一条新的可继续游标链，语言筛选与 URL 保留，显示可感知的进行中状态。分别覆盖同 sequence 下 reviewSequence 或个人条件变化，以及慢/中断 RSC，禁止依赖浏览器整页刷新。"
+      ],
+      "originalRegressionAssertionsVerbatim": [
+        {
+          "id": "AUD-005/assertion-1",
+          "assert": "Inject exactly one next-page 409 and then restore success; one Refresh shows progress, retains filters, replaces the stale generation and resumes pagination."
+        },
+        {
+          "id": "AUD-005/assertion-2",
+          "assert": "Cover unchanged projection.sequence with changed reviewSequence/personal conditions, both completed and slow/aborted RSC refreshes."
+        },
+        {
+          "id": "AUD-005/assertion-3",
+          "assert": "Ignore stale completions and avoid retry loops or requiring a full browser reload; normal complete feeds still reach a true end."
+        }
+      ],
+      "originalAssertionsChanged": false,
+      "originalCriterionWitnesses": [
+        {
+          "assertion": "Keep query and projection.sequence unchanged; inject only the first successor 409 and let later server reads succeed.",
+          "evidence": "Retained accepted same-query/same-sequence stories cover unchanged sequence, changed reviewSequence=8 and personal-membership modes. This real-browser run injects exactly one successor 409 and then records four genuine 200 responses, identical query excluding cursor, sequence 11938/reviewSequence 67 for all captured API pages.",
+          "tier": "accepted scoped generation stories plus genuine public API transport"
+        },
+        {
+          "assertion": "One Refresh clears the old failure and establishes a new resumable cursor chain.",
+          "evidence": "One native Enter on the real Refresh control; no-cursor recovery page followed by three genuine successors, every successor cursor equals the preceding nextCursor, and the new recovery cursor differs from the failed cursor. The conflict alert is gone and 11 rendered row IDs are unique.",
+          "tier": "actual browser and genuine retained API responses"
+        },
+        {
+          "assertion": "Retain URL and language filter and display observable pending state.",
+          "evidence": "The same /en?lang=en URL, document language and contentLanguages=en query survive. The pending screenshot visibly shows Refreshing posts… and retained rows; the named Posts group has aria-busy=true. Recovered focus stays on that exact group with aria-busy=false.",
+          "tier": "actual DOM and both actually viewed screenshots"
+        },
+        {
+          "assertion": "Cover changed reviewSequence or personal conditions at unchanged sequence.",
+          "evidence": "Retain the already accepted RecoverChangedReviewsAtSameSequence and RecoverChangedPersonalConditionsAtSameSequence story assertions and corresponding captured/rendered proof. Their controlled reviewSequence=8 and personal-membership mode inputs are scoped harness proof; they are not relabelled as genuine signed-in or backend-mutating API evidence. No generation behavior changed in this dependency delta.",
+          "tier": "retained accepted scoped harness proof"
+        },
+        {
+          "assertion": "Recover with slow/interrupted RSC without relying on a whole-page refresh.",
+          "evidence": "The actual router RSC request is boundedly held, concurrent with observable feed recovery pending, and explicitly aborted before delivery. All 22 frozen assertions pass: exactly one document request, original document token, same URL/language/focus, fresh genuine cursor chain. Existing slow/absent-RSC stand-in evidence remains separately labelled.",
+          "tier": "actual controlled browser network interruption plus retained scoped slow/absent proof"
+        }
+      ],
+      "originalRegressionAssertionWitnesses": [
+        {
+          "id": "AUD-005/assertion-1",
+          "status": "PASS at retained controlled-browser + actual genuine API tier",
+          "witness": "One native Refresh after exactly one injected successor409, visible pending, URL/language retained; no-cursor recovery and three linked genuine200 successors,11 unique rendered rows, no alert. Latest frozen22 expectation browser proof and prior independent public14 expectation proof.",
+          "refs": [
+            "docs/goals/audit-remediation-20261019/proofs/feed-candidate-review.json#dependencyCorrectionConfirmation.actualBrowserEvidence",
+            "docs/goals/audit-remediation-20261019/proofs/feed-candidate-review.json#focusCorrectionConfirmation.checks.confirmation"
+          ]
+        },
+        {
+          "id": "AUD-005/assertion-2",
+          "status": "PASS at retained controlled generation stories + actual interrupted-RSC tier",
+          "witness": "RecoverChangedReviewsAtSameSequence and RecoverChangedPersonalConditionsAtSameSequence retained in36 independently passing changed-file stories. Normal completed/new-initial generation and slow/absent stand-ins retain source review/DOM proof. Actual concurrent router RSC held then aborted before delivery while Feed recovery completes; all22 frozen expectations pass. Same-sequence personal/review evidence is controlled harness proof, not claimed as backend mutation.",
+          "refs": [
+            "docs/goals/audit-remediation-20261019/proofs/feed-candidate-review.json#sourceReview.generationsAndCancellation",
+            "docs/goals/audit-remediation-20261019/proofs/feed-candidate-review.json#focusCorrectionConfirmation.checks.confirmation",
+            "docs/goals/audit-remediation-20261019/proofs/feed-candidate-review.json#dependencyCorrectionConfirmation"
+          ]
+        },
+        {
+          "id": "AUD-005/assertion-3",
+          "status": "PASS at retained generation/normal-end stories + actual no-reload browser tier",
+          "witness": "Two independent browser DOM stale-content cases reached and passed; request counters and active/stopped guards suppress obsolete completions. Retained passing EveryKind/FollowingNew end-state stories and original natural163-row completed chain establish normal true end at their stated tiers. Actual latest frozen browser proof retains exactly one document request, same document token, one Refresh and bounded successful chain; no hard reload/retry loop. No HTTP AbortController implementation claim.",
+          "refs": [
+            "docs/goals/audit-remediation-20261019/proofs/feed-candidate-review.json#sourceReview.generationsAndCancellation",
+            "apps/web/features/feed/feed.stories.tsx#EveryKind,FollowingNew",
+            "docs/goals/audit-remediation-20261019/proofs/feed-candidate-review.json#dependencyCorrectionConfirmation.actualBrowserEvidence"
+          ]
+        }
+      ],
+      "independentReview": {
+        "owner": "G-2836",
+        "account": "codex-1",
+        "model": "gpt-6.1-sol",
+        "effort": "xhigh",
+        "fallback": false,
+        "ordinaryReview": "59404fe48fb6ce34f99bd90474de8c610eea8b81",
+        "latestReport": "685fc9d3faf18421fd32731956e6617ffccf9f55",
+        "latestJob": "924a8b8e-bdb7-4dfe-9ad2-ff76e211879f",
+        "latestResult": "1testPASS/0FAIL, all22 frozen expectations byte-identical; immutable install/material verification PASS",
+        "priorChecksReused": {
+          "units": {
+            "passed": 66,
+            "expectCalls": 437,
+            "source": "79a8d1b1c7c55a05525942200939200ac75c2d6b",
+            "reusedUnchanged": true
+          },
+          "changedStoryFile": {
+            "passed": 36,
+            "qaRun": "20261019t094056-746fe8",
+            "source": "c3c84ef50757a2d5b5915dac7312175f7b61adc8"
+          },
+          "unchangedStories": {
+            "passed": 21,
+            "reusedUnchanged": true,
+            "combinedCoverageNotNewRun": 57
+          },
+          "focusComponent": {
+            "passed": 2,
+            "expects": 13,
+            "job": "dfdd5116-1c90-4566-acb7-1d9d8283832f"
+          },
+          "publicRecovery": {
+            "passed": 1,
+            "expects": 14,
+            "job": "dfdd5116-1c90-4566-acb7-1d9d8283832f"
+          },
+          "static": "Original types/lint/guards/inference/AST retained; correction scoped checks pass. No new source implementation or check changes."
+        },
+        "latestScreenshotsActuallyViewedByIndependentReviewer": [
+          "pending-rsc-held-1440.png",
+          "after-rsc-abort-1440.png"
+        ]
+      },
+      "sourceAndArtifacts": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/site-AUD-005-original-closure/source-and-safe-artifact-manifest.json",
+        "sha256": "61b07882928bbfcd92db1afba664cec37cd773b9e5ca257c0d97c5e4fa45e9e4",
+        "bytes": 33775
+      },
+      "remainingOriginalAssertions": [],
+      "sourceOnMain": true,
+      "latestCumulativeProofOnMain": true,
+      "classStatusMutated": true,
+      "rootAcceptanceRequired": false,
+      "reportHistory": {
+        "historicalRSCFailure": "Original FEED-RSC-01 two-document failure at864f report retained; latest correction proves all22 unchanged expectations. Older missing-assertion dispositions remain historical, not erased.",
+        "originalFailuresPreserved": true
+      },
+      "limits": [
+        "One 409 is injected at browser transport; genuine normal recovery responses are retained.",
+        "The real mounted router refresh is invoked separately and concurrently; native Feed Refresh reads the API directly.",
+        "RSC is aborted before delivery; no after-headers/midstream decode claim.",
+        "Same-sequence review/personal generation coverage remains accepted scoped harness proof, not genuine backend mutation or signed-in proof.",
+        "The new actual browser run is anonymous public /en, 1440x1000, light theme; no broader matrix is claimed.",
+        "The patch affects the shared Vinext refresh fallback. Existing ordinary-navigation fallback remains and owner package tests are reused; no second product matrix is claimed.",
+        "Runtime evidence is pinned to the reviewed private source and backend; no rerun on assembled current-main tree.",
+        "Any future package/lock/report overlap must be reconciled before capture rather than replaced.",
+        "Other original D3-001 authenticated identity and D4-016 genuine preview findings remain separate/open; no closure implied.",
+        "No new tests, stack, runtime, review or data action was run for this assessment.",
+        "Only ignored candidate and manifest written; central finding status/index/ledger untouched."
+      ],
+      "acceptedAt": "2026-10-19T12:47:33.978480+00:00",
+      "rootAcceptance": {
+        "manager": "same SITE end-to-end manager",
+        "method": "Original applicable acceptance and regression assertions read verbatim. Product-audit applied to generation owner, query/sequence preservation, retry UI, stale/end guards and shared RSC correction. Root freshly checked all33 source/dependency entries against current main and all51 safe artifact hashes; original historical failures and explicit proof tiers preserved. No new runtime or review claimed.",
+        "mainObserved": "c66468eddfb4ff5b1ac126dd47423c65b46833fd",
+        "remainingOriginalAssertions": []
+      }
     }
   ]
 }

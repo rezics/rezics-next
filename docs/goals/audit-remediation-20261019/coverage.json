@@ -232,9 +232,18 @@
       "severity": "P1",
       "sourceConfidence": "injected",
       "title": "一次游标冲突后 Refresh 在三次 30 秒等待内都不能恢复",
-      "status": "build-dispatched",
+      "status": "closed",
       "owner": "G-2749",
-      "proof": []
+      "proof": [
+        {
+          "kind": "original-class-acceptance",
+          "report": "docs/goals/audit-remediation-20261019/proofs/site-original-class-closures.json",
+          "finding": "AUD-005",
+          "assessedMain": "32400992a4879132812a83d9e6a0bd1cd5d996bf",
+          "originalAssertionsChanged": false
+        }
+      ],
+      "remainingValidation": []
     },
     {
       "id": "D2-002",
