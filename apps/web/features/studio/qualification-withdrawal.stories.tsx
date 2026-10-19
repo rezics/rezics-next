@@ -77,6 +77,7 @@ export const Retry: Story = {
     const dialog = within(await within(document.body).findByRole('dialog'));
     await userEvent.click(dialog.getByRole('button', { name: authorMessages.en.withdraw }));
     await expect(await dialog.findByRole('alert')).toHaveTextContent(authorMessages.en.failed);
+    await waitFor(() => expect(dialog.getByRole('button', { name: authorMessages.en.retry })).toHaveFocus());
     await userEvent.click(dialog.getByRole('button', { name: authorMessages.en.retry }));
     await expect(await dialog.findByRole('status')).toHaveTextContent(authorMessages.en.qualificationWithdrawn);
   },

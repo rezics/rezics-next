@@ -28,6 +28,8 @@ export function QualificationWithdrawal({ target, current, locale, main, onWithd
   const router = useRouter();
   const pathname = usePathname();
   const trigger = useRef<HTMLButtonElement>(null);
+  const resultAction = useRef<HTMLButtonElement>(null);
+  const closeAction = useRef<HTMLButtonElement>(null);
   const pending = useRef<QualificationWithdrawalIntent | null>(null);
   const busyRef = useRef(false);
   const [open, setOpen] = useState(false);
@@ -36,6 +38,12 @@ export function QualificationWithdrawal({ target, current, locale, main, onWithd
   const [receipt, setReceipt] = useState<QualificationWithdrawalReceipt | null>(null);
   const [deviceFailed, setDeviceFailed] = useState(false);
   const key = `rezics:qualification-withdrawal:v1:${target.actingSubject}:${target.chapter}:${target.variant}`;
+
+  useEffect(() => {
+    if (!open || busy || !failure && !receipt) return;
+    const frame = requestAnimationFrame(() => (resultAction.current ?? closeAction.current)?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [open, busy, failure, receipt]);
 
   useEffect(() => {
     try {
@@ -108,11 +116,11 @@ export function QualificationWithdrawal({ target, current, locale, main, onWithd
               <details><summary>{t.receipt}</summary><p dir="ltr" className="mt-2 break-all font-mono text-xs">{receipt?.receipt}</p></details></div> : null}
         </DialogBody>
         <DialogFooter className="flex-wrap">
-          <Button variant="outline" disabled={busy} onClick={close}>{acknowledged ? t.close : t.cancel}</Button>
+          <Button ref={closeAction} variant="outline" disabled={busy} onClick={close}>{acknowledged ? t.close : t.cancel}</Button>
           {failure === 'sign-in' ? <a href={signInPath(pathname)} className="rounded-full px-3 py-2 text-sm font-medium underline">{t.signInAction}</a> : null}
           {!acknowledged && failure && ['stale', 'conflict', 'missing', 'invalid'].includes(failure)
-            ? <Button disabled={busy} onClick={() => void readLatest()}>{t.reload}</Button>
-            : !acknowledged && failure !== 'denied' ? <Button disabled={busy} onClick={() => void run()}>
+            ? <Button ref={resultAction} disabled={busy} onClick={readLatest}>{t.reload}</Button>
+            : !acknowledged && failure !== 'denied' ? <Button ref={resultAction} disabled={busy} onClick={() => void run()}>
               {busy ? t.working : failure ? t.retry : t.withdraw}</Button> : null}
         </DialogFooter>
       </DialogContent>

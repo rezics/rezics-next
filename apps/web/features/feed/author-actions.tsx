@@ -5,7 +5,7 @@ import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader } from '@
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '@rezics/ui/menu';
 import { EllipsisIcon, PencilIcon, Undo2Icon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { bodyText, hasBodyContent } from '../document-editor/body.ts';
 import { BodyEditor } from '../document-editor/body-editor.tsx';
@@ -71,6 +71,8 @@ function OwnedAuthorActions({ target, actingSubject, locale, signInHref, api, on
   const client = useRef<AuthorApi | null>(api ?? null);
   const getApi = () => client.current ??= mainAuthorApi();
   const trigger = useRef<HTMLButtonElement>(null);
+  const resultAction = useRef<HTMLButtonElement>(null);
+  const closeAction = useRef<HTMLButtonElement>(null);
   const [mode, setMode] = useState<'edit' | 'withdraw' | null>(null);
   const [basis, setBasis] = useState<AuthorReplyBasis | null>(null);
   const [body, setBody] = useState('');
@@ -85,6 +87,13 @@ function OwnedAuthorActions({ target, actingSubject, locale, signInHref, api, on
   const correction = useRef<ReplyCorrection | null>(null);
   const withdrawal = useRef<ReplyWithdrawal | null>(null);
   const requestVersion = useRef(0);
+
+  useEffect(() => {
+    if (busy || !mode || !failure && !receipt) return;
+    // Disabling a submitting button can move focus to the document body.
+    const frame = requestAnimationFrame(() => (resultAction.current ?? closeAction.current)?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [busy, mode, failure, receipt]);
 
   function remember(nextBody = body, nextBasis = basis, retained: string | null = recoveryBody ?? null) {
     try {
@@ -219,14 +228,14 @@ function OwnedAuthorActions({ target, actingSubject, locale, signInHref, api, on
           </div> : null}
         </DialogBody>
         <DialogFooter className="flex-wrap">
-          <Button variant="outline" disabled={busy} onClick={close}>{receipt ? t.close : t.cancel}</Button>
+          <Button ref={closeAction} variant="outline" disabled={busy} onClick={close}>{receipt ? t.close : t.cancel}</Button>
           {failure === 'sign-in' ? <a href={signInHref} className="rounded-full px-3 py-2 text-sm font-medium underline">{t.signInAction}</a> : null}
-          {canReadLatest ? <Button disabled={busy} onClick={() => void load(mode === 'edit', true)}>{t.reload}</Button>
-            : !receipt && failure !== 'denied' && failure !== 'sign-in' ? <Button disabled={busy || mode === 'edit' && (!hasBodyContent(body) || bodyText(body).length > 8192 || !editorReady)}
+          {canReadLatest ? <Button ref={resultAction} disabled={busy} onClick={() => void load(mode === 'edit', true)}>{t.reload}</Button>
+            : !receipt && failure !== 'denied' && failure !== 'sign-in' ? <Button ref={resultAction} disabled={busy || mode === 'edit' && (!hasBodyContent(body) || bodyText(body).length > 8192 || !editorReady)}
               onClick={() => basis ? void submit() : void load(Boolean(body))}>
               {busy ? t.working : failure ? t.retry : mode === 'edit' ? t.save : t.withdraw}
             </Button> : null}
-          {failure === 'sign-in' && basis ? <Button disabled={busy} onClick={() => void submit()}>{t.retry}</Button> : null}
+          {failure === 'sign-in' && basis ? <Button ref={resultAction} disabled={busy} onClick={() => void submit()}>{t.retry}</Button> : null}
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -128,7 +128,9 @@ export const NestedReplyMenus: Story = {
     for (const trigger of triggers) await expect(trigger.closest('article')).toHaveTextContent('Daniel Chen');
     const trigger = triggers[0]!;
     await userEvent.click(trigger);
-    const menu = within(await within(document.body).findByRole('menu'));
+    const menuElement = await within(document.body).findByRole('menu');
+    await waitFor(() => expect(menuElement).toHaveFocus());
+    const menu = within(menuElement);
     await expect(menu.getByRole('menuitem', { name: t.edit })).toBeVisible();
     await expect(menu.getByRole('menuitem', { name: t.placement })).toBeVisible();
     await userEvent.keyboard('{Escape}');
@@ -257,7 +259,7 @@ export const KeyboardRetry: Story = {
     save.focus();
     await userEvent.keyboard('{Enter}');
     await expect(await dialog.findByRole('alert')).toHaveTextContent(t.failed);
-    await expect(dialog.getByRole('button', { name: t.retry })).toHaveFocus();
+    await waitFor(() => expect(dialog.getByRole('button', { name: t.retry })).toHaveFocus());
     await userEvent.keyboard('{Enter}');
     await expect(await dialog.findByRole('status')).toHaveTextContent(t.corrected);
     await userEvent.keyboard('{Escape}');
