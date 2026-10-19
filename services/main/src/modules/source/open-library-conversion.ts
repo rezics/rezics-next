@@ -6,6 +6,7 @@ import type { SourceIntakeStore, StagedSourceObservation } from './intake.ts';
 import { mappedNativeDisposition } from './mapped-values.ts';
 import { projectRegisteredSourceMapping } from './provider-adapters.ts';
 import type { MappedSourceConversion, MappedSourceValues, VerifiedMappedSource } from './mapped-values.ts';
+import { SourceRetainedRecordStore } from './retained-record.ts';
 
 export class SourceConversionInvalid extends Error {}
 export class SourceConversionUnavailable extends Error {}
@@ -193,6 +194,9 @@ function stable(value: unknown, depth = 0): string {
 
 export class OpenLibraryConversionStore {
   constructor(private readonly pool: Pool, private readonly intake: SourceIntakeStore) {}
+
+  /** The retained profile uses this conversion owner, with its own verified coordinate system. */
+  get retained(): SourceRetainedRecordStore { return new SourceRetainedRecordStore(this.pool, this.intake); }
 
   /** Shared evidence boundary. Legacy projection bytes remain unchanged for exact receipts. */
   async mappedRead(principalId: string, conversionId: string): Promise<VerifiedMappedSource | null> {

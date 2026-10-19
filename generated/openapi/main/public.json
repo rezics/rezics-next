@@ -808739,6 +808739,244 @@
                         "createdAt"
                       ],
                       "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "conversion": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string"
+                        },
+                        "fieldInventory": {
+                          "items": {
+                            "properties": {
+                              "disposition": {
+                                "type": "string"
+                              },
+                              "field": {
+                                "type": "string"
+                              },
+                              "grain": {
+                                "type": "string"
+                              },
+                              "language": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "ordinal": {
+                                "type": "integer"
+                              },
+                              "pointer": {
+                                "type": "string"
+                              },
+                              "reason": {
+                                "type": "string"
+                              },
+                              "role": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "grain",
+                              "field",
+                              "pointer",
+                              "disposition",
+                              "reason",
+                              "role"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "mappingRevision": {
+                          "type": "string"
+                        },
+                        "observation": {
+                          "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "profile": {
+                          "const": "source-retained-record-conversion-v1",
+                          "type": "string"
+                        },
+                        "retainedRecord": {
+                          "properties": {
+                            "binding": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "conversion": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "identity": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "externalId": {
+                                  "type": "string"
+                                },
+                                "key": {
+                                  "type": "string"
+                                },
+                                "namespace": {
+                                  "type": "string"
+                                },
+                                "provider": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "key",
+                                "provider",
+                                "namespace",
+                                "externalId"
+                              ],
+                              "type": "object"
+                            },
+                            "intakes": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "byteDigest": {
+                                    "pattern": "^[0-9a-f]{64}$",
+                                    "type": "string"
+                                  },
+                                  "index": {
+                                    "maximum": 511,
+                                    "minimum": 0,
+                                    "type": "integer"
+                                  },
+                                  "observation": {
+                                    "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  },
+                                  "record": {
+                                    "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "index",
+                                  "record",
+                                  "observation",
+                                  "byteDigest"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 512,
+                              "minItems": 1,
+                              "type": "array"
+                            },
+                            "mappingRevision": {
+                              "type": "string"
+                            },
+                            "normalizationRevision": {
+                              "type": "string"
+                            },
+                            "payload": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "byteDigest": {
+                                  "pattern": "^[0-9a-f]{64}$",
+                                  "type": "string"
+                                },
+                                "byteLength": {
+                                  "maximum": 16777216,
+                                  "minimum": 1,
+                                  "type": "integer"
+                                },
+                                "format": {
+                                  "enum": [
+                                    "json",
+                                    "rezics-dataset-chunk-v1"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "format",
+                                "byteDigest",
+                                "byteLength"
+                              ],
+                              "type": "object"
+                            },
+                            "profile": {
+                              "const": "source-retained-record-binding-v1",
+                              "type": "string"
+                            },
+                            "recordDigest": {
+                              "pattern": "^[0-9a-f]{64}$",
+                              "type": "string"
+                            },
+                            "snapshot": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "digest": {
+                                  "pattern": "^[0-9a-f]{64}$",
+                                  "type": "string"
+                                },
+                                "fileSha256": {
+                                  "pattern": "^[0-9a-f]{64}$",
+                                  "type": "string"
+                                },
+                                "id": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "digest",
+                                "fileSha256"
+                              ],
+                              "type": "object"
+                            },
+                            "sourceRecord": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "identity",
+                            "snapshot",
+                            "recordDigest",
+                            "intakes",
+                            "payload",
+                            "binding",
+                            "sourceRecord",
+                            "conversion",
+                            "mappingRevision",
+                            "normalizationRevision"
+                          ],
+                          "type": "object"
+                        },
+                        "sourceDigest": {
+                          "pattern": "^[0-9a-f]{64}$",
+                          "type": "string"
+                        },
+                        "state": {
+                          "const": "staged",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "profile",
+                        "state",
+                        "conversion",
+                        "observation",
+                        "mappingRevision",
+                        "sourceDigest",
+                        "retainedRecord",
+                        "fieldInventory",
+                        "createdAt"
+                      ],
+                      "type": "object"
                     }
                   ]
                 }
@@ -830944,47 +831182,692 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "profile": {
-                    "pattern": "^[a-z0-9][a-z0-9-]{0,94}-v[1-9][0-9]{0,2}$",
-                    "type": "string"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "mappingRevision": {
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "source-retained-record-conversion-v1",
+                        "type": "string"
+                      },
+                      "retained": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "identity": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "externalId": {
+                                "type": "string"
+                              },
+                              "key": {
+                                "type": "string"
+                              },
+                              "namespace": {
+                                "type": "string"
+                              },
+                              "provider": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "key",
+                              "provider",
+                              "namespace",
+                              "externalId"
+                            ],
+                            "type": "object"
+                          },
+                          "intakes": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "byteDigest": {
+                                  "pattern": "^[0-9a-f]{64}$",
+                                  "type": "string"
+                                },
+                                "index": {
+                                  "maximum": 511,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "observation": {
+                                  "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                },
+                                "record": {
+                                  "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "index",
+                                "record",
+                                "observation",
+                                "byteDigest"
+                              ],
+                              "type": "object"
+                            },
+                            "maxItems": 512,
+                            "minItems": 1,
+                            "type": "array"
+                          },
+                          "payload": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "byteDigest": {
+                                "pattern": "^[0-9a-f]{64}$",
+                                "type": "string"
+                              },
+                              "byteLength": {
+                                "maximum": 16777216,
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "format": {
+                                "enum": [
+                                  "json",
+                                  "rezics-dataset-chunk-v1"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "format",
+                              "byteDigest",
+                              "byteLength"
+                            ],
+                            "type": "object"
+                          },
+                          "record": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "data": {
+                                "patternProperties": {
+                                  "^.*$": {}
+                                },
+                                "type": "object"
+                              },
+                              "externalId": {
+                                "type": "string"
+                              },
+                              "key": {
+                                "type": "string"
+                              },
+                              "kind": {
+                                "type": "string"
+                              },
+                              "language": {
+                                "type": "string"
+                              },
+                              "native": {
+                                "enum": [
+                                  "work",
+                                  "release",
+                                  "person",
+                                  "organization",
+                                  "character",
+                                  "concept",
+                                  "source-only",
+                                  "episode"
+                                ],
+                                "type": "string"
+                              },
+                              "provider": {
+                                "enum": [
+                                  "vndb",
+                                  "bangumi",
+                                  "musicbrainz"
+                                ],
+                                "type": "string"
+                              },
+                              "semanticTypes": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "sourceUrl": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "key",
+                              "provider",
+                              "kind",
+                              "externalId",
+                              "title",
+                              "language",
+                              "sourceUrl",
+                              "native",
+                              "data"
+                            ],
+                            "type": "object"
+                          },
+                          "recordDigest": {
+                            "pattern": "^[0-9a-f]{64}$",
+                            "type": "string"
+                          },
+                          "snapshot": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "digest": {
+                                "pattern": "^[0-9a-f]{64}$",
+                                "type": "string"
+                              },
+                              "fileSha256": {
+                                "pattern": "^[0-9a-f]{64}$",
+                                "type": "string"
+                              },
+                              "id": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "digest",
+                              "fileSha256"
+                            ],
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "identity",
+                          "snapshot",
+                          "recordDigest",
+                          "intakes",
+                          "payload",
+                          "record"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "mappingRevision",
+                      "retained"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "profile": {
+                        "pattern": "^[a-z0-9][a-z0-9-]{0,94}-v[1-9][0-9]{0,2}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile"
-                ],
-                "type": "object"
+                ]
               }
             },
             "application/x-www-form-urlencoded": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "profile": {
-                    "pattern": "^[a-z0-9][a-z0-9-]{0,94}-v[1-9][0-9]{0,2}$",
-                    "type": "string"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "mappingRevision": {
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "source-retained-record-conversion-v1",
+                        "type": "string"
+                      },
+                      "retained": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "identity": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "externalId": {
+                                "type": "string"
+                              },
+                              "key": {
+                                "type": "string"
+                              },
+                              "namespace": {
+                                "type": "string"
+                              },
+                              "provider": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "key",
+                              "provider",
+                              "namespace",
+                              "externalId"
+                            ],
+                            "type": "object"
+                          },
+                          "intakes": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "byteDigest": {
+                                  "pattern": "^[0-9a-f]{64}$",
+                                  "type": "string"
+                                },
+                                "index": {
+                                  "maximum": 511,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "observation": {
+                                  "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                },
+                                "record": {
+                                  "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "index",
+                                "record",
+                                "observation",
+                                "byteDigest"
+                              ],
+                              "type": "object"
+                            },
+                            "maxItems": 512,
+                            "minItems": 1,
+                            "type": "array"
+                          },
+                          "payload": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "byteDigest": {
+                                "pattern": "^[0-9a-f]{64}$",
+                                "type": "string"
+                              },
+                              "byteLength": {
+                                "maximum": 16777216,
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "format": {
+                                "enum": [
+                                  "json",
+                                  "rezics-dataset-chunk-v1"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "format",
+                              "byteDigest",
+                              "byteLength"
+                            ],
+                            "type": "object"
+                          },
+                          "record": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "data": {
+                                "patternProperties": {
+                                  "^.*$": {}
+                                },
+                                "type": "object"
+                              },
+                              "externalId": {
+                                "type": "string"
+                              },
+                              "key": {
+                                "type": "string"
+                              },
+                              "kind": {
+                                "type": "string"
+                              },
+                              "language": {
+                                "type": "string"
+                              },
+                              "native": {
+                                "enum": [
+                                  "work",
+                                  "release",
+                                  "person",
+                                  "organization",
+                                  "character",
+                                  "concept",
+                                  "source-only",
+                                  "episode"
+                                ],
+                                "type": "string"
+                              },
+                              "provider": {
+                                "enum": [
+                                  "vndb",
+                                  "bangumi",
+                                  "musicbrainz"
+                                ],
+                                "type": "string"
+                              },
+                              "semanticTypes": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "sourceUrl": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "key",
+                              "provider",
+                              "kind",
+                              "externalId",
+                              "title",
+                              "language",
+                              "sourceUrl",
+                              "native",
+                              "data"
+                            ],
+                            "type": "object"
+                          },
+                          "recordDigest": {
+                            "pattern": "^[0-9a-f]{64}$",
+                            "type": "string"
+                          },
+                          "snapshot": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "digest": {
+                                "pattern": "^[0-9a-f]{64}$",
+                                "type": "string"
+                              },
+                              "fileSha256": {
+                                "pattern": "^[0-9a-f]{64}$",
+                                "type": "string"
+                              },
+                              "id": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "digest",
+                              "fileSha256"
+                            ],
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "identity",
+                          "snapshot",
+                          "recordDigest",
+                          "intakes",
+                          "payload",
+                          "record"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "mappingRevision",
+                      "retained"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "profile": {
+                        "pattern": "^[a-z0-9][a-z0-9-]{0,94}-v[1-9][0-9]{0,2}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile"
-                ],
-                "type": "object"
+                ]
               }
             },
             "multipart/form-data": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "profile": {
-                    "pattern": "^[a-z0-9][a-z0-9-]{0,94}-v[1-9][0-9]{0,2}$",
-                    "type": "string"
+                "anyOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "mappingRevision": {
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "source-retained-record-conversion-v1",
+                        "type": "string"
+                      },
+                      "retained": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "identity": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "externalId": {
+                                "type": "string"
+                              },
+                              "key": {
+                                "type": "string"
+                              },
+                              "namespace": {
+                                "type": "string"
+                              },
+                              "provider": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "key",
+                              "provider",
+                              "namespace",
+                              "externalId"
+                            ],
+                            "type": "object"
+                          },
+                          "intakes": {
+                            "items": {
+                              "additionalProperties": false,
+                              "properties": {
+                                "byteDigest": {
+                                  "pattern": "^[0-9a-f]{64}$",
+                                  "type": "string"
+                                },
+                                "index": {
+                                  "maximum": 511,
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "observation": {
+                                  "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                },
+                                "record": {
+                                  "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "index",
+                                "record",
+                                "observation",
+                                "byteDigest"
+                              ],
+                              "type": "object"
+                            },
+                            "maxItems": 512,
+                            "minItems": 1,
+                            "type": "array"
+                          },
+                          "payload": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "byteDigest": {
+                                "pattern": "^[0-9a-f]{64}$",
+                                "type": "string"
+                              },
+                              "byteLength": {
+                                "maximum": 16777216,
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "format": {
+                                "enum": [
+                                  "json",
+                                  "rezics-dataset-chunk-v1"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "format",
+                              "byteDigest",
+                              "byteLength"
+                            ],
+                            "type": "object"
+                          },
+                          "record": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "data": {
+                                "patternProperties": {
+                                  "^.*$": {}
+                                },
+                                "type": "object"
+                              },
+                              "externalId": {
+                                "type": "string"
+                              },
+                              "key": {
+                                "type": "string"
+                              },
+                              "kind": {
+                                "type": "string"
+                              },
+                              "language": {
+                                "type": "string"
+                              },
+                              "native": {
+                                "enum": [
+                                  "work",
+                                  "release",
+                                  "person",
+                                  "organization",
+                                  "character",
+                                  "concept",
+                                  "source-only",
+                                  "episode"
+                                ],
+                                "type": "string"
+                              },
+                              "provider": {
+                                "enum": [
+                                  "vndb",
+                                  "bangumi",
+                                  "musicbrainz"
+                                ],
+                                "type": "string"
+                              },
+                              "semanticTypes": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "sourceUrl": {
+                                "type": "string"
+                              },
+                              "title": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "key",
+                              "provider",
+                              "kind",
+                              "externalId",
+                              "title",
+                              "language",
+                              "sourceUrl",
+                              "native",
+                              "data"
+                            ],
+                            "type": "object"
+                          },
+                          "recordDigest": {
+                            "pattern": "^[0-9a-f]{64}$",
+                            "type": "string"
+                          },
+                          "snapshot": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "digest": {
+                                "pattern": "^[0-9a-f]{64}$",
+                                "type": "string"
+                              },
+                              "fileSha256": {
+                                "pattern": "^[0-9a-f]{64}$",
+                                "type": "string"
+                              },
+                              "id": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "digest",
+                              "fileSha256"
+                            ],
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "identity",
+                          "snapshot",
+                          "recordDigest",
+                          "intakes",
+                          "payload",
+                          "record"
+                        ],
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "mappingRevision",
+                      "retained"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "profile": {
+                        "pattern": "^[a-z0-9][a-z0-9-]{0,94}-v[1-9][0-9]{0,2}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile"
+                    ],
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile"
-                ],
-                "type": "object"
+                ]
               }
             }
           },
@@ -830997,60 +831880,234 @@
                 "schema": {
                   "properties": {
                     "conversion": {
-                      "properties": {
-                        "conversion": {
-                          "type": "string"
-                        },
-                        "createdAt": {
-                          "type": "string"
-                        },
-                        "fieldInventory": {
-                          "items": {
-                            "properties": {
-                              "disposition": {
-                                "type": "string"
-                              },
-                              "field": {
-                                "type": "string"
-                              },
-                              "grain": {
-                                "type": "string"
-                              },
-                              "reason": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "grain",
-                              "field",
-                              "disposition"
-                            ],
-                            "type": "object"
-                          },
-                          "type": "array"
-                        },
-                        "mappingRevision": {
-                          "type": "string"
-                        },
-                        "observation": {
-                          "type": "string"
-                        },
-                        "profile": {
-                          "const": "source-mapped-conversion-v1",
-                          "type": "string"
-                        },
-                        "projection": {
+                      "anyOf": [
+                        {
                           "properties": {
-                            "children": {
+                            "conversion": {
+                              "type": "string"
+                            },
+                            "createdAt": {
+                              "type": "string"
+                            },
+                            "fieldInventory": {
                               "items": {
                                 "properties": {
+                                  "disposition": {
+                                    "type": "string"
+                                  },
                                   "field": {
                                     "type": "string"
                                   },
                                   "grain": {
                                     "type": "string"
                                   },
-                                  "slot": {
+                                  "reason": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "grain",
+                                  "field",
+                                  "disposition"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "mappingRevision": {
+                              "type": "string"
+                            },
+                            "observation": {
+                              "type": "string"
+                            },
+                            "profile": {
+                              "const": "source-mapped-conversion-v1",
+                              "type": "string"
+                            },
+                            "projection": {
+                              "properties": {
+                                "children": {
+                                  "items": {
+                                    "properties": {
+                                      "field": {
+                                        "type": "string"
+                                      },
+                                      "grain": {
+                                        "type": "string"
+                                      },
+                                      "slot": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "values": {
+                                        "~elyTyp": 7,
+                                        "items": {
+                                          "properties": {
+                                            "pointer": {
+                                              "type": "string"
+                                            },
+                                            "roleKey": {
+                                              "~elyTyp": 7,
+                                              "nullable": true,
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
+                                            },
+                                            "sourceKey": {
+                                              "type": "string"
+                                            },
+                                            "value": {}
+                                          },
+                                          "required": [
+                                            "sourceKey",
+                                            "roleKey",
+                                            "pointer",
+                                            "value"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "nullable": true,
+                                        "type": [
+                                          "array",
+                                          "null"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "field",
+                                      "grain",
+                                      "slot",
+                                      "values"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "fields": {
+                                  "items": {
+                                    "properties": {
+                                      "field": {
+                                        "type": "string"
+                                      },
+                                      "grain": {
+                                        "type": "string"
+                                      },
+                                      "pointer": {
+                                        "type": "string"
+                                      },
+                                      "slot": {
+                                        "type": "string"
+                                      },
+                                      "value": {}
+                                    },
+                                    "required": [
+                                      "grain",
+                                      "field",
+                                      "pointer",
+                                      "slot",
+                                      "value"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "semanticTypes": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "type": "array"
+                                },
+                                "sourceOnlyFields": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "type": "array"
+                                },
+                                "title": {
+                                  "properties": {
+                                    "field": {
+                                      "type": "string"
+                                    },
+                                    "grain": {
+                                      "type": "string"
+                                    },
+                                    "pointer": {
+                                      "type": "string"
+                                    },
+                                    "slot": {
+                                      "type": "string"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "grain",
+                                    "field",
+                                    "pointer",
+                                    "slot",
+                                    "value"
+                                  ],
+                                  "type": "object"
+                                }
+                              },
+                              "required": [
+                                "title",
+                                "semanticTypes",
+                                "fields",
+                                "children",
+                                "sourceOnlyFields"
+                              ],
+                              "type": "object"
+                            },
+                            "sourceDigest": {
+                              "type": "string"
+                            },
+                            "state": {
+                              "const": "staged",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "state",
+                            "conversion",
+                            "observation",
+                            "mappingRevision",
+                            "sourceDigest",
+                            "projection",
+                            "fieldInventory",
+                            "createdAt"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "conversion": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "createdAt": {
+                              "type": "string"
+                            },
+                            "fieldInventory": {
+                              "items": {
+                                "properties": {
+                                  "disposition": {
+                                    "type": "string"
+                                  },
+                                  "field": {
+                                    "type": "string"
+                                  },
+                                  "grain": {
+                                    "type": "string"
+                                  },
+                                  "language": {
                                     "~elyTyp": 7,
                                     "nullable": true,
                                     "type": [
@@ -831058,148 +832115,216 @@
                                       "null"
                                     ]
                                   },
-                                  "values": {
-                                    "~elyTyp": 7,
-                                    "items": {
-                                      "properties": {
-                                        "pointer": {
-                                          "type": "string"
-                                        },
-                                        "roleKey": {
-                                          "~elyTyp": 7,
-                                          "nullable": true,
-                                          "type": [
-                                            "string",
-                                            "null"
-                                          ]
-                                        },
-                                        "sourceKey": {
-                                          "type": "string"
-                                        },
-                                        "value": {}
-                                      },
-                                      "required": [
-                                        "sourceKey",
-                                        "roleKey",
-                                        "pointer",
-                                        "value"
-                                      ],
-                                      "type": "object"
-                                    },
-                                    "nullable": true,
-                                    "type": [
-                                      "array",
-                                      "null"
-                                    ]
-                                  }
-                                },
-                                "required": [
-                                  "field",
-                                  "grain",
-                                  "slot",
-                                  "values"
-                                ],
-                                "type": "object"
-                              },
-                              "type": "array"
-                            },
-                            "fields": {
-                              "items": {
-                                "properties": {
-                                  "field": {
-                                    "type": "string"
-                                  },
-                                  "grain": {
-                                    "type": "string"
+                                  "ordinal": {
+                                    "type": "integer"
                                   },
                                   "pointer": {
                                     "type": "string"
                                   },
-                                  "slot": {
+                                  "reason": {
                                     "type": "string"
                                   },
-                                  "value": {}
+                                  "role": {
+                                    "type": "string"
+                                  }
                                 },
                                 "required": [
                                   "grain",
                                   "field",
                                   "pointer",
-                                  "slot",
-                                  "value"
+                                  "disposition",
+                                  "reason",
+                                  "role"
                                 ],
                                 "type": "object"
                               },
                               "type": "array"
                             },
-                            "semanticTypes": {
-                              "items": {
-                                "type": "string"
-                              },
-                              "type": "array"
+                            "mappingRevision": {
+                              "type": "string"
                             },
-                            "sourceOnlyFields": {
-                              "items": {
-                                "type": "string"
-                              },
-                              "type": "array"
+                            "observation": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
                             },
-                            "title": {
+                            "profile": {
+                              "const": "source-retained-record-conversion-v1",
+                              "type": "string"
+                            },
+                            "retainedRecord": {
                               "properties": {
-                                "field": {
+                                "binding": {
+                                  "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
                                   "type": "string"
                                 },
-                                "grain": {
+                                "conversion": {
+                                  "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
                                   "type": "string"
                                 },
-                                "pointer": {
+                                "identity": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "externalId": {
+                                      "type": "string"
+                                    },
+                                    "key": {
+                                      "type": "string"
+                                    },
+                                    "namespace": {
+                                      "type": "string"
+                                    },
+                                    "provider": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "key",
+                                    "provider",
+                                    "namespace",
+                                    "externalId"
+                                  ],
+                                  "type": "object"
+                                },
+                                "intakes": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "byteDigest": {
+                                        "pattern": "^[0-9a-f]{64}$",
+                                        "type": "string"
+                                      },
+                                      "index": {
+                                        "maximum": 511,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "observation": {
+                                        "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                                        "type": "string"
+                                      },
+                                      "record": {
+                                        "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "index",
+                                      "record",
+                                      "observation",
+                                      "byteDigest"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 512,
+                                  "minItems": 1,
+                                  "type": "array"
+                                },
+                                "mappingRevision": {
                                   "type": "string"
                                 },
-                                "slot": {
+                                "normalizationRevision": {
                                   "type": "string"
                                 },
-                                "value": {
+                                "payload": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "byteDigest": {
+                                      "pattern": "^[0-9a-f]{64}$",
+                                      "type": "string"
+                                    },
+                                    "byteLength": {
+                                      "maximum": 16777216,
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "format": {
+                                      "enum": [
+                                        "json",
+                                        "rezics-dataset-chunk-v1"
+                                      ],
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "format",
+                                    "byteDigest",
+                                    "byteLength"
+                                  ],
+                                  "type": "object"
+                                },
+                                "profile": {
+                                  "const": "source-retained-record-binding-v1",
+                                  "type": "string"
+                                },
+                                "recordDigest": {
+                                  "pattern": "^[0-9a-f]{64}$",
+                                  "type": "string"
+                                },
+                                "snapshot": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "digest": {
+                                      "pattern": "^[0-9a-f]{64}$",
+                                      "type": "string"
+                                    },
+                                    "fileSha256": {
+                                      "pattern": "^[0-9a-f]{64}$",
+                                      "type": "string"
+                                    },
+                                    "id": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "digest",
+                                    "fileSha256"
+                                  ],
+                                  "type": "object"
+                                },
+                                "sourceRecord": {
+                                  "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
                                   "type": "string"
                                 }
                               },
                               "required": [
-                                "grain",
-                                "field",
-                                "pointer",
-                                "slot",
-                                "value"
+                                "profile",
+                                "identity",
+                                "snapshot",
+                                "recordDigest",
+                                "intakes",
+                                "payload",
+                                "binding",
+                                "sourceRecord",
+                                "conversion",
+                                "mappingRevision",
+                                "normalizationRevision"
                               ],
                               "type": "object"
+                            },
+                            "sourceDigest": {
+                              "pattern": "^[0-9a-f]{64}$",
+                              "type": "string"
+                            },
+                            "state": {
+                              "const": "staged",
+                              "type": "string"
                             }
                           },
                           "required": [
-                            "title",
-                            "semanticTypes",
-                            "fields",
-                            "children",
-                            "sourceOnlyFields"
+                            "profile",
+                            "state",
+                            "conversion",
+                            "observation",
+                            "mappingRevision",
+                            "sourceDigest",
+                            "retainedRecord",
+                            "fieldInventory",
+                            "createdAt"
                           ],
                           "type": "object"
-                        },
-                        "sourceDigest": {
-                          "type": "string"
-                        },
-                        "state": {
-                          "const": "staged",
-                          "type": "string"
                         }
-                      },
-                      "required": [
-                        "profile",
-                        "state",
-                        "conversion",
-                        "observation",
-                        "mappingRevision",
-                        "sourceDigest",
-                        "projection",
-                        "fieldInventory",
-                        "createdAt"
-                      ],
-                      "type": "object"
+                      ]
                     },
                     "replayed": {
                       "type": "boolean"
@@ -831221,60 +832346,234 @@
                 "schema": {
                   "properties": {
                     "conversion": {
-                      "properties": {
-                        "conversion": {
-                          "type": "string"
-                        },
-                        "createdAt": {
-                          "type": "string"
-                        },
-                        "fieldInventory": {
-                          "items": {
-                            "properties": {
-                              "disposition": {
-                                "type": "string"
-                              },
-                              "field": {
-                                "type": "string"
-                              },
-                              "grain": {
-                                "type": "string"
-                              },
-                              "reason": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "grain",
-                              "field",
-                              "disposition"
-                            ],
-                            "type": "object"
-                          },
-                          "type": "array"
-                        },
-                        "mappingRevision": {
-                          "type": "string"
-                        },
-                        "observation": {
-                          "type": "string"
-                        },
-                        "profile": {
-                          "const": "source-mapped-conversion-v1",
-                          "type": "string"
-                        },
-                        "projection": {
+                      "anyOf": [
+                        {
                           "properties": {
-                            "children": {
+                            "conversion": {
+                              "type": "string"
+                            },
+                            "createdAt": {
+                              "type": "string"
+                            },
+                            "fieldInventory": {
                               "items": {
                                 "properties": {
+                                  "disposition": {
+                                    "type": "string"
+                                  },
                                   "field": {
                                     "type": "string"
                                   },
                                   "grain": {
                                     "type": "string"
                                   },
-                                  "slot": {
+                                  "reason": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "grain",
+                                  "field",
+                                  "disposition"
+                                ],
+                                "type": "object"
+                              },
+                              "type": "array"
+                            },
+                            "mappingRevision": {
+                              "type": "string"
+                            },
+                            "observation": {
+                              "type": "string"
+                            },
+                            "profile": {
+                              "const": "source-mapped-conversion-v1",
+                              "type": "string"
+                            },
+                            "projection": {
+                              "properties": {
+                                "children": {
+                                  "items": {
+                                    "properties": {
+                                      "field": {
+                                        "type": "string"
+                                      },
+                                      "grain": {
+                                        "type": "string"
+                                      },
+                                      "slot": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "values": {
+                                        "~elyTyp": 7,
+                                        "items": {
+                                          "properties": {
+                                            "pointer": {
+                                              "type": "string"
+                                            },
+                                            "roleKey": {
+                                              "~elyTyp": 7,
+                                              "nullable": true,
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
+                                            },
+                                            "sourceKey": {
+                                              "type": "string"
+                                            },
+                                            "value": {}
+                                          },
+                                          "required": [
+                                            "sourceKey",
+                                            "roleKey",
+                                            "pointer",
+                                            "value"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "nullable": true,
+                                        "type": [
+                                          "array",
+                                          "null"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "field",
+                                      "grain",
+                                      "slot",
+                                      "values"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "fields": {
+                                  "items": {
+                                    "properties": {
+                                      "field": {
+                                        "type": "string"
+                                      },
+                                      "grain": {
+                                        "type": "string"
+                                      },
+                                      "pointer": {
+                                        "type": "string"
+                                      },
+                                      "slot": {
+                                        "type": "string"
+                                      },
+                                      "value": {}
+                                    },
+                                    "required": [
+                                      "grain",
+                                      "field",
+                                      "pointer",
+                                      "slot",
+                                      "value"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "type": "array"
+                                },
+                                "semanticTypes": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "type": "array"
+                                },
+                                "sourceOnlyFields": {
+                                  "items": {
+                                    "type": "string"
+                                  },
+                                  "type": "array"
+                                },
+                                "title": {
+                                  "properties": {
+                                    "field": {
+                                      "type": "string"
+                                    },
+                                    "grain": {
+                                      "type": "string"
+                                    },
+                                    "pointer": {
+                                      "type": "string"
+                                    },
+                                    "slot": {
+                                      "type": "string"
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "grain",
+                                    "field",
+                                    "pointer",
+                                    "slot",
+                                    "value"
+                                  ],
+                                  "type": "object"
+                                }
+                              },
+                              "required": [
+                                "title",
+                                "semanticTypes",
+                                "fields",
+                                "children",
+                                "sourceOnlyFields"
+                              ],
+                              "type": "object"
+                            },
+                            "sourceDigest": {
+                              "type": "string"
+                            },
+                            "state": {
+                              "const": "staged",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "profile",
+                            "state",
+                            "conversion",
+                            "observation",
+                            "mappingRevision",
+                            "sourceDigest",
+                            "projection",
+                            "fieldInventory",
+                            "createdAt"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "properties": {
+                            "conversion": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "createdAt": {
+                              "type": "string"
+                            },
+                            "fieldInventory": {
+                              "items": {
+                                "properties": {
+                                  "disposition": {
+                                    "type": "string"
+                                  },
+                                  "field": {
+                                    "type": "string"
+                                  },
+                                  "grain": {
+                                    "type": "string"
+                                  },
+                                  "language": {
                                     "~elyTyp": 7,
                                     "nullable": true,
                                     "type": [
@@ -831282,148 +832581,216 @@
                                       "null"
                                     ]
                                   },
-                                  "values": {
-                                    "~elyTyp": 7,
-                                    "items": {
-                                      "properties": {
-                                        "pointer": {
-                                          "type": "string"
-                                        },
-                                        "roleKey": {
-                                          "~elyTyp": 7,
-                                          "nullable": true,
-                                          "type": [
-                                            "string",
-                                            "null"
-                                          ]
-                                        },
-                                        "sourceKey": {
-                                          "type": "string"
-                                        },
-                                        "value": {}
-                                      },
-                                      "required": [
-                                        "sourceKey",
-                                        "roleKey",
-                                        "pointer",
-                                        "value"
-                                      ],
-                                      "type": "object"
-                                    },
-                                    "nullable": true,
-                                    "type": [
-                                      "array",
-                                      "null"
-                                    ]
-                                  }
-                                },
-                                "required": [
-                                  "field",
-                                  "grain",
-                                  "slot",
-                                  "values"
-                                ],
-                                "type": "object"
-                              },
-                              "type": "array"
-                            },
-                            "fields": {
-                              "items": {
-                                "properties": {
-                                  "field": {
-                                    "type": "string"
-                                  },
-                                  "grain": {
-                                    "type": "string"
+                                  "ordinal": {
+                                    "type": "integer"
                                   },
                                   "pointer": {
                                     "type": "string"
                                   },
-                                  "slot": {
+                                  "reason": {
                                     "type": "string"
                                   },
-                                  "value": {}
+                                  "role": {
+                                    "type": "string"
+                                  }
                                 },
                                 "required": [
                                   "grain",
                                   "field",
                                   "pointer",
-                                  "slot",
-                                  "value"
+                                  "disposition",
+                                  "reason",
+                                  "role"
                                 ],
                                 "type": "object"
                               },
                               "type": "array"
                             },
-                            "semanticTypes": {
-                              "items": {
-                                "type": "string"
-                              },
-                              "type": "array"
+                            "mappingRevision": {
+                              "type": "string"
                             },
-                            "sourceOnlyFields": {
-                              "items": {
-                                "type": "string"
-                              },
-                              "type": "array"
+                            "observation": {
+                              "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
                             },
-                            "title": {
+                            "profile": {
+                              "const": "source-retained-record-conversion-v1",
+                              "type": "string"
+                            },
+                            "retainedRecord": {
                               "properties": {
-                                "field": {
+                                "binding": {
+                                  "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
                                   "type": "string"
                                 },
-                                "grain": {
+                                "conversion": {
+                                  "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
                                   "type": "string"
                                 },
-                                "pointer": {
+                                "identity": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "externalId": {
+                                      "type": "string"
+                                    },
+                                    "key": {
+                                      "type": "string"
+                                    },
+                                    "namespace": {
+                                      "type": "string"
+                                    },
+                                    "provider": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "key",
+                                    "provider",
+                                    "namespace",
+                                    "externalId"
+                                  ],
+                                  "type": "object"
+                                },
+                                "intakes": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "byteDigest": {
+                                        "pattern": "^[0-9a-f]{64}$",
+                                        "type": "string"
+                                      },
+                                      "index": {
+                                        "maximum": 511,
+                                        "minimum": 0,
+                                        "type": "integer"
+                                      },
+                                      "observation": {
+                                        "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                                        "type": "string"
+                                      },
+                                      "record": {
+                                        "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "index",
+                                      "record",
+                                      "observation",
+                                      "byteDigest"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 512,
+                                  "minItems": 1,
+                                  "type": "array"
+                                },
+                                "mappingRevision": {
                                   "type": "string"
                                 },
-                                "slot": {
+                                "normalizationRevision": {
                                   "type": "string"
                                 },
-                                "value": {
+                                "payload": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "byteDigest": {
+                                      "pattern": "^[0-9a-f]{64}$",
+                                      "type": "string"
+                                    },
+                                    "byteLength": {
+                                      "maximum": 16777216,
+                                      "minimum": 1,
+                                      "type": "integer"
+                                    },
+                                    "format": {
+                                      "enum": [
+                                        "json",
+                                        "rezics-dataset-chunk-v1"
+                                      ],
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "format",
+                                    "byteDigest",
+                                    "byteLength"
+                                  ],
+                                  "type": "object"
+                                },
+                                "profile": {
+                                  "const": "source-retained-record-binding-v1",
+                                  "type": "string"
+                                },
+                                "recordDigest": {
+                                  "pattern": "^[0-9a-f]{64}$",
+                                  "type": "string"
+                                },
+                                "snapshot": {
+                                  "additionalProperties": false,
+                                  "properties": {
+                                    "digest": {
+                                      "pattern": "^[0-9a-f]{64}$",
+                                      "type": "string"
+                                    },
+                                    "fileSha256": {
+                                      "pattern": "^[0-9a-f]{64}$",
+                                      "type": "string"
+                                    },
+                                    "id": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "id",
+                                    "digest",
+                                    "fileSha256"
+                                  ],
+                                  "type": "object"
+                                },
+                                "sourceRecord": {
+                                  "pattern": "^https://rezics.com/id/[0-9a-f-]{36}$",
                                   "type": "string"
                                 }
                               },
                               "required": [
-                                "grain",
-                                "field",
-                                "pointer",
-                                "slot",
-                                "value"
+                                "profile",
+                                "identity",
+                                "snapshot",
+                                "recordDigest",
+                                "intakes",
+                                "payload",
+                                "binding",
+                                "sourceRecord",
+                                "conversion",
+                                "mappingRevision",
+                                "normalizationRevision"
                               ],
                               "type": "object"
+                            },
+                            "sourceDigest": {
+                              "pattern": "^[0-9a-f]{64}$",
+                              "type": "string"
+                            },
+                            "state": {
+                              "const": "staged",
+                              "type": "string"
                             }
                           },
                           "required": [
-                            "title",
-                            "semanticTypes",
-                            "fields",
-                            "children",
-                            "sourceOnlyFields"
+                            "profile",
+                            "state",
+                            "conversion",
+                            "observation",
+                            "mappingRevision",
+                            "sourceDigest",
+                            "retainedRecord",
+                            "fieldInventory",
+                            "createdAt"
                           ],
                           "type": "object"
-                        },
-                        "sourceDigest": {
-                          "type": "string"
-                        },
-                        "state": {
-                          "const": "staged",
-                          "type": "string"
                         }
-                      },
-                      "required": [
-                        "profile",
-                        "state",
-                        "conversion",
-                        "observation",
-                        "mappingRevision",
-                        "sourceDigest",
-                        "projection",
-                        "fieldInventory",
-                        "createdAt"
-                      ],
-                      "type": "object"
+                      ]
                     },
                     "replayed": {
                       "type": "boolean"

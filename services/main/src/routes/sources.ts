@@ -15,6 +15,7 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { groupAgent, groupUuid, sourceRightsEvidence } from './shared.ts';
 import { requireSourceImportAuthority } from './source-runs.ts';
+import { retainedConversionRequest, retainedConversionResult } from '../modules/source/retained-record-schema.ts';
 
 export const openApiOperations = {
   '/v1/sources/open-library/authors/{author}/name': {
@@ -373,19 +374,23 @@ export function sourceRoutes(work: MainWorkDependencies) {
     })
     .post('/v1/sources/observations/:observation/conversions', {
       params: t.Object({ observation: groupUuid }),
-      body: t.Object({ profile: t.String({ pattern: '^[a-z0-9][a-z0-9-]{0,94}-v[1-9][0-9]{0,2}$' }) },
-        { additionalProperties: false }),
+      body: t.Union([retainedConversionRequest,
+        t.Object({ profile: t.String({ pattern: '^[a-z0-9][a-z0-9-]{0,94}-v[1-9][0-9]{0,2}$' }) },
+          { additionalProperties: false })]),
       response: transportResponses(openApiOperations["/v1/sources/observations/{observation}/conversions"].post,
-        { 200: t.Object({ conversion: mappedConversionResult, replayed: t.Boolean() }),
-          201: t.Object({ conversion: mappedConversionResult, replayed: t.Boolean() }),
+        { 200: t.Object({ conversion: t.Union([mappedConversionResult, retainedConversionResult]), replayed: t.Boolean() }),
+          201: t.Object({ conversion: t.Union([mappedConversionResult, retainedConversionResult]), replayed: t.Boolean() }),
           ...writeProblems, 404: problemResult(404), 422: problemResult(422) }, 'POST'),
     }, async ({ request, params, body }) => {
       try {
         if (!work.sourceConversions) return problem(503, 'source_conversion_unavailable', 'Source conversion owner is unavailable');
         const principal = await work.account.verify(request, ['source:convert']);
+        if ('retained' in body) await requireSourceImportAuthority(work, principal);
         const principalId = await work.access.activePrincipalId(principal);
         if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
-        const result = await work.sourceConversions.convertMapped(principalId, params.observation, body.profile);
+        const result = 'retained' in body
+          ? await work.sourceConversions.retained.convert(principalId, params.observation, body)
+          : await work.sourceConversions.convertMapped(principalId, params.observation, body.profile);
         if (!result) return problem(404, 'source_observation_unavailable', 'Source observation is unavailable');
         return Response.json(result, { status: result.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
@@ -413,7 +418,7 @@ export function sourceRoutes(work: MainWorkDependencies) {
     })
     .get('/v1/sources/conversions/:conversion', {
       params: t.Object({ conversion: groupUuid }),
-      response: transportResponses(openApiOperations["/v1/sources/conversions/{conversion}"].get, { 200: t.Union([sourceConversionResult, mappedConversionResult]), ...authorizedReadProblems,
+      response: transportResponses(openApiOperations["/v1/sources/conversions/{conversion}"].get, { 200: t.Union([sourceConversionResult, mappedConversionResult, retainedConversionResult]), ...authorizedReadProblems,
         422: problemResult(422) }, 'GET'),
     }, async ({ request, params }) => {
       try {
@@ -423,6 +428,8 @@ export function sourceRoutes(work: MainWorkDependencies) {
         const principal = await work.account.verify(request, ['source:read']);
         const principalId = await work.access.activePrincipalId(principal);
         if (!principalId) return problem(403, 'authority_denied', 'Source principal is inactive');
+        const retained = await work.sourceConversions.retained.read(principalId, params.conversion);
+        if (retained) return Response.json(retained, { headers: { 'cache-control': 'no-store' } });
         const evidence = await work.sourceConversions.mappedRead(principalId, params.conversion);
         const result = evidence?.legacy ?? evidence?.conversion;
         if (!result) return problem(404, 'source_conversion_unavailable',
