@@ -335,5 +335,527 @@
       "detail": "Parsed JSON; checked artifact hashes, all 75 class summaries against the 571-test Maven total, 18 declared target methods, all 12 native failure/error records and the distinct one-test wrapper XML; verified fixed source digests and report-only diff."
     }
   },
-  "cleanup": "No owned running container or application stack was created; retained BuildKit history and all worktree artifacts. Shared resources were left running."
+  "cleanup": "No owned running container or application stack was created; retained BuildKit history and all worktree artifacts. Shared resources were left running.",
+  "currentCandidateRun": {
+    "id": "minimal-main-native-c5d6014d47-full-20261019",
+    "status": "Native full-suite passed; independent cumulative review found one reached P1; complete candidate and D5 outcomes remain open.",
+    "historicalSeparation": "All pre-existing top-level fields describe the unchanged historical failed run at 92b8a78. This separately identified run neither replaces that evidence nor extends its source scope.",
+    "reviewer": {
+      "worker": "G-2822",
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "independent": true,
+      "nestedAgents": false,
+      "fallback": false
+    },
+    "source": {
+      "base": "32482a6efd9e34c6fafcd7581af85c59d46f5ad7",
+      "head": "c5d6014d47edbf8ea207ad54ca330fb5f85cf498",
+      "cleanBefore": true,
+      "immutableSnapshot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2822/.temp/native-current-candidate",
+      "fixedTrackedFiles": 9779,
+      "historicalSource": "92b8a78f1cb06fb4a02703f2b471b80d1d069199",
+      "reportDeliveryBase": "6c9c122fb9a3c4c15e5d7067e8f356080e359e88",
+      "runnerLandedCommit": "00d7cdff027e26d845253edac218357b44e67048",
+      "runnerAndTestSha256": {
+        "Taskfile.yml": "9ebb829d62cd74ab42b1fa2bd4ad2786cd9ef8d16e61ef4f3637d9a40693516f",
+        "infra/jena/Dockerfile": "3e80fae08ed7b680c1340225f2f7d483af8949195e90ce13d22b6d1c873dd64f",
+        "scripts/dev/fuseki-image.ts": "c259287afbf30744e20f39b92c8677d7b8704b6d9a628d647077aac6df0a2fe7",
+        "scripts/qa/native-module-suite.ts": "cd1d33a6351c7a86af1292718fe3ea6343a2edba7c9761fd156d3c451d083cf8",
+        "scripts/qa/native-module-suite.test.ts": "d0dbe6c1b224e273ddba7b05ad00aef7e6fe3e718552dbc75d55836a6c05f1dc",
+        "scripts/qa/host-admission.ts": "db0e7a1be1133627aa19acead4b00959c3c038b6c705240f864770d7776b6e01",
+        "infra/jena/tests/native-module-suite.test.ts": "055234945b73f93d3fdec7863bc409a41c0d2430e73bb9977d8e6eaca28cf620",
+        "infra/jena/command-module/pom.xml": "357f4efe29bb3adaf59b2d1b818882d9ae40ee356c01c85e209ee0037f59562b",
+        "infra/jena/command-module/src/test/java/com/rezics/jena/RequestReadBoundaryTest.java": "3cb15021448237690e6d128a5b81f93a8318dcb54427abfdcb915bbebe03cf58",
+        "infra/jena/command-module/src/test/java/com/rezics/jena/RequestReadCaptureBoundaryTest.java": "5279e0f69654736dc96c6a89e8eaebb22f6eb9f6e8056b915b586839bc069dc4",
+        "infra/jena/command-module/src/test/java/com/rezics/jena/ConsistentReadCaptureTest.java": "eb9d7b0839f4476bcb4355839b3dcb1fb1512562192e06f5529d6d289ee1b4cc",
+        "infra/jena/command-module/src/test/java/com/rezics/jena/RequestReadTransportTest.java": "0f629fae13a9775813b34d151738648f6a37e59d938dc5a4b3ea21b5cc4d3b41"
+      },
+      "authoredRepairImports": [
+        {
+          "source": "5af7f5038a152247bbd8c8d016fb8adbe3359eef",
+          "candidateCommit": "e51e35f9c30eafdd13f9c985a50c34106f157eee",
+          "authoredFiles": [
+            "infra/jena/command-module/src/main/java/com/rezics/jena/CommandModule.java",
+            "infra/jena/command-module/src/main/java/com/rezics/jena/CommandService.java",
+            "infra/jena/command-module/src/main/java/com/rezics/jena/QueryWorkService.java",
+            "infra/jena/command-module/src/main/java/com/rezics/jena/TemplateQueryService.java",
+            "infra/jena/command-module/src/test/java/com/rezics/jena/RequestReadBoundaryTest.java",
+            "services/main/src/app.ts",
+            "services/main/src/infrastructure/fuseki.ts",
+            "services/main/src/modules/display-language/public-request.ts",
+            "services/main/src/modules/work/read-problems.ts",
+            "services/main/src/modules/work/read-session.ts",
+            "services/main/tests/request-read-budget.test.ts",
+            "tests/qa/integration/request-read-budget.test.ts"
+          ],
+          "authoredAddedRemovedLinesMatch": true
+        },
+        {
+          "source": "52b50a5eb574a22461ee2671e6bf3420887902f2",
+          "candidateCommit": "7f407a4ed9c0b595f79d2364fb209ad5d265b0b9",
+          "authoredFiles": [
+            "infra/jena/command-module/src/main/java/com/rezics/jena/QueryWorkService.java",
+            "infra/jena/command-module/src/test/java/com/rezics/jena/RequestReadBoundaryTest.java"
+          ],
+          "authoredAddedRemovedLinesMatch": true
+        },
+        {
+          "source": "316c21909d52e261000b80f6313b50892e0719fb",
+          "candidateCommit": "b74cdae14afaec5eb25f2c2c2bf3b9bc2891c4e4",
+          "authoredFiles": [
+            "infra/jena/command-module/src/main/java/com/rezics/jena/CommandService.java",
+            "infra/jena/command-module/src/main/java/com/rezics/jena/QueryWorkService.java",
+            "infra/jena/command-module/src/main/java/com/rezics/jena/SearchDeltaJournal.java",
+            "infra/jena/command-module/src/main/java/com/rezics/jena/TemplateQueryService.java",
+            "infra/jena/command-module/src/test/java/com/rezics/jena/ConsistentReadCaptureTest.java",
+            "infra/jena/command-module/src/test/java/com/rezics/jena/ExactUnitProbeTest.java",
+            "infra/jena/command-module/src/test/java/com/rezics/jena/RequestReadCaptureBoundaryTest.java"
+          ],
+          "authoredAddedRemovedLinesMatch": true
+        },
+        {
+          "source": "abc8519409b975ba5c575fed40df85f555008428",
+          "candidateCommit": "470acc044eb203fa12e85cd73b86c7a3322f9bb1",
+          "authoredFiles": [
+            "infra/jena/command-module/src/main/java/com/rezics/jena/QueryWorkService.java",
+            "infra/jena/command-module/src/test/java/com/rezics/jena/RequestReadTransportTest.java"
+          ],
+          "authoredAddedRemovedLinesMatch": true
+        },
+        {
+          "source": "15683988b8d753e7ae1faf0c1c0b1e45764bb3f0",
+          "candidateCommit": "535efdbaa2511fb562926e12f1a22acf17166a7a",
+          "authoredFiles": [
+            "infra/jena/command-module/src/test/java/com/rezics/jena/RequestReadBoundaryTest.java"
+          ],
+          "authoredAddedRemovedLinesMatch": true
+        }
+      ],
+      "excluded": "No unrelated wave or Content qualification repair imported."
+    },
+    "review": {
+      "scope": "Exactly the cumulative 20-path base..head diff and material integration; prior G-2817 review reused only where source blobs match. Native transport probe and fixture seed reviewed independently.",
+      "priorReview": "docs/goals/audit-remediation-20261019/request-budget-native-capture-review.json",
+      "sourceReceipt": ".temp/native-request-boundary/current/implementation-receipt.json",
+      "scopeReceipt": ".temp/native-request-boundary/current/review-scope.json",
+      "findings": [
+        {
+          "id": "G2822-CURRENT-01",
+          "priority": "P1",
+          "owner": "G-2827",
+          "file": "services/main/src/infrastructure/fuseki.ts",
+          "line": 93,
+          "assertionReached": true,
+          "reproduction": "task goal -- slot -- task -t .temp/native-request-boundary/current/Taskfile.yml review:deadline",
+          "job": "270ed8bf-7a42-4fde-a7a9-1caf2d88f055",
+          "expected": "An expired x-rezics-server-deadline starts zero admission callbacks.",
+          "actual": "admissionStarts=1; rejected=false; strict assertion 1 !== 0.",
+          "cause": "Candidate imports 5af7f503 but excludes reviewed forwarded-deadline repair fd75c85a; withFusekiReadRequest starts a fresh local deadline.",
+          "fixDirection": "Preserve the minimum incoming absolute/local/ambient deadline in the existing request owner; reuse original unchanged deadline tests. No product or assertion edit made by reviewer.",
+          "kind": "Reached source/component counterexample; not native JUnit or public persona evidence."
+        }
+      ],
+      "otherMaterialIntegration": "Read cancellation uses interruptible publication lock; commit/end/qualification stay in one writer fence; readers retain their own DirectoryReader outside fence. Probe is armed after body-complete engine/capture entry, returns a pipelined byte to Jetty, cancels its timer and clears its own interrupt on close. Existing 300ms capture, no-late-work, survivor, retry and atomic-cut assertions remain unchanged. No additional confirmed native source counterexample.",
+      "residual": "Account-wait/deadline repairs included in G-2817 review are not all present in this five-commit candidate; that broader review cannot be used to close complete D5 or public persona proof. Only the expired-deadline omission was independently reproduced here."
+    },
+    "execution": {
+      "recordedJob": "e3063275-a71a-400e-adeb-190af2f2f47b",
+      "recordedCommand": "REZICS_QA_ARTIFACT_ROOT=<worktree>/.temp/native-request-boundary/current/qa bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task goal -- test --result-file .temp/native-request-boundary/current/qa-result.json ./.temp/native-request-boundary/current/native-full.test.ts --reporter=junit --reporter-outfile .temp/native-request-boundary/current/wrapper.xml",
+      "taskCommand": "task --dir <immutableSnapshot> jena:test",
+      "taskAdmission": "task jena:test runs host-admission.ts --gib 4; the temporary one-test driver invokes this supported Task without changing native tests. Goal QA admission receipt is qa-result.json.",
+      "nativeInvocation": "mvn -B -ntp -DexcludedGroups=com.rezics.jena.ExternalFixture -DargLine=-Xmx384m -DforkCount=1 -DreuseForks=false package",
+      "selection": null,
+      "scope": "full supported module-test suite, excluding only existing ExternalFixture category",
+      "startedAtUtc": "2026-10-19T06:36:33.068Z",
+      "finishedAtUtc": "2026-10-19T07:10:42.788Z",
+      "priorJob": {
+        "id": "0da5ff47-2bec-48f9-8f1e-f618b8323681",
+        "exit": 0,
+        "endedAtEpochMs": 1792391234463,
+        "thisJobStartedEpochMs": 1792391776699,
+        "noOverlap": true
+      },
+      "image": {
+        "inputTag": "rezics/fuseki:6.2.0-cmd0.5.43-30a451230866",
+        "reusedRuntimeImageId": "sha256:ae3f1f46eb9da174d000834ecac8067956ce8a734b372467d23ef993df9b5698",
+        "runtimeImagePreparedBy": "G-2827 exact-source normal image preparation; no second runtime image build",
+        "moduleTestOutputImage": "sha256:8959337b6dd683988d93e44720aaf1f54df6ec13c93f66d5f371afd737fb4f8c",
+        "moduleTestConfig": "sha256:d168d747ded4aa2f9e3deb70310ab842da239e08d1e7f438535d937e81a85bef",
+        "buildRef": "default/default/o2w5dq7deqvk03dy0ugkq5lp9",
+        "actualExecution": "#15 DONE 2033.5s; emitted 74 class summaries and BUILD SUCCESS; the Maven test layer was not CACHED."
+      },
+      "exitCodes": {
+        "recordedJob": 0,
+        "goalQa": 0,
+        "taskJenaTest": 0,
+        "dockerModuleTest": 0,
+        "maven": 0
+      },
+      "setupAttempts": [
+        {
+          "job": "f9ade761-5f44-45f2-9c0c-569b35802baa",
+          "kind": "review wrapper setup",
+          "assertionReached": false,
+          "detail": "Temporary Task cwd was corrected before the counterexample reached its assertion."
+        },
+        {
+          "job": "1e69fc73-5d8f-4c8f-a273-30d2218e4b74",
+          "kind": "test discovery setup",
+          "assertionReached": false,
+          "nativeStarted": false,
+          "detail": "Bun required ./ before the ignored .temp test path. No native execution occurred."
+        }
+      ]
+    },
+    "counts": {
+      "nativeMaven": {
+        "executed": 566,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "passed": 566,
+        "classReports": 74
+      },
+      "nativeJUnit": {
+        "xmlReports": 74,
+        "executed": 566,
+        "passed": 566,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "qaWrapperJUnit": {
+        "xmlReports": 1,
+        "executed": 1,
+        "passed": 1,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "requiredThreeClasses": {
+        "executed": 18,
+        "passed": 18,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "withTransport": {
+        "executed": 21,
+        "passed": 21,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "independentSourceCounterexample": {
+        "executed": 1,
+        "passed": 0,
+        "assertionFailures": 1,
+        "nativeJUnit": false,
+        "publicPersona": false
+      }
+    },
+    "targetClasses": [
+      {
+        "executed": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "mavenLogLine": 587,
+        "class": "RequestReadBoundaryTest",
+        "passed": 3,
+        "nativeJUnit": ".temp/native-request-boundary/current/surefire-reports/TEST-com.rezics.jena.RequestReadBoundaryTest.xml"
+      },
+      {
+        "executed": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "mavenLogLine": 595,
+        "class": "RequestReadCaptureBoundaryTest",
+        "passed": 9,
+        "nativeJUnit": ".temp/native-request-boundary/current/surefire-reports/TEST-com.rezics.jena.RequestReadCaptureBoundaryTest.xml"
+      },
+      {
+        "executed": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "mavenLogLine": 283,
+        "class": "ConsistentReadCaptureTest",
+        "passed": 6,
+        "nativeJUnit": ".temp/native-request-boundary/current/surefire-reports/TEST-com.rezics.jena.ConsistentReadCaptureTest.xml"
+      },
+      {
+        "executed": 3,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "mavenLogLine": 601,
+        "class": "RequestReadTransportTest",
+        "passed": 3,
+        "nativeJUnit": ".temp/native-request-boundary/current/surefire-reports/TEST-com.rezics.jena.RequestReadTransportTest.xml"
+      }
+    ],
+    "observedAssertions": [
+      "Nine capture cases passed: query/delta/exact-unit/prefix expiry and disconnect exit within the unchanged 300ms grace while publication holder remains; typed causes, zero late transactions/engine starts, independent blocked reader survival, successful release and fresh retry are reached assertions. Template model-read independence also passed.",
+      "Six ConsistentReadCaptureTest cases passed, including an intact committed RDF/Lucene cut through lazy consumption and a later request observing the later cut.",
+      "Ordinary/template engine entry now reaches cancellation/deadline assertions after the fixture graph seed; both release and fresh retry pass. Three added live HTTP/1 transport cases pass, including pipelined next-request bytes."
+    ],
+    "nativeFailureOwnership": [],
+    "historicalFailureDisposition": [
+      {
+        "owner": "G-2827",
+        "historicalCases": 6,
+        "current": "All six originally failing request/capture cases now pass at this candidate."
+      },
+      {
+        "owner": "G-2765",
+        "historicalCases": 4,
+        "classes": [
+          "PublicTextRestartTest",
+          "QueryCutQualificationTest",
+          "SearchDeltaJournalTest"
+        ],
+        "current": "Complete current classes pass; historical qualification/restart failures are preserved and were not reproduced at this different minimal source. This does not waive their wave-source investigation."
+      },
+      {
+        "owner": "G-2765",
+        "historicalCases": 2,
+        "class": "ContentSearchQualificationTest",
+        "current": "Class is absent from this minimal main source and is not covered or waived."
+      }
+    ],
+    "suiteScopeDifference": {
+      "historicalExecuted": 571,
+      "removedHistoricalClasses": [
+        {
+          "class": "ContentSearchQualificationTest",
+          "executed": 2
+        },
+        {
+          "class": "NamedResourceDiscoveryTest",
+          "executed": 6
+        }
+      ],
+      "addedClass": {
+        "class": "RequestReadTransportTest",
+        "executed": 3
+      },
+      "currentExecuted": 566,
+      "reason": "571 - 2 - 6 + 3 = 566. Existing supported suite ran in full at its own exact source, with zero skipped cases; no test filter or assertion weakening."
+    },
+    "retention": {
+      "root": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2822/.temp/native-request-boundary/current",
+      "artifacts": [
+        {
+          "path": ".temp/native-request-boundary/current/implementation-receipt.json",
+          "bytes": 9613,
+          "sha256": "77f8cab9a30952991ff64d21fd15c1e37e254f66f4d91ca2ec7fe23bbbd5fd17"
+        },
+        {
+          "path": ".temp/native-request-boundary/current/preceding-job.json",
+          "bytes": 1950,
+          "sha256": "2da05750ca36e14596176d4707f1d2c3ef1a54bd80487c33bfce7d273dae0c13"
+        },
+        {
+          "path": ".temp/native-request-boundary/current/snapshot-files.json",
+          "bytes": 1190279,
+          "sha256": "8127bb046cd951b40d753f5e3aee4c3df7eb4dca18970753f3ba2d56921ccc92"
+        },
+        {
+          "path": ".temp/native-request-boundary/current/source-pins.json",
+          "bytes": 1670,
+          "sha256": "de6c965a0d1dec22dfcc45bdcd4ad8f0347f4db926a6845c57d549e1b5fbe471"
+        },
+        {
+          "path": ".temp/native-request-boundary/current/review-scope.json",
+          "bytes": 3640,
+          "sha256": "ca5ae48d3085f28ba20db2b7d25f2323723a45fe7650de172f6fdc74881fae2d"
+        },
+        {
+          "path": ".temp/native-request-boundary/current/cumulative.diff",
+          "bytes": 122365,
+          "sha256": "6240ba668e9e6dfdc852a0061acff76419418cd463f96e70a92bb19162fa0c54"
+        },
+        {
+          "path": ".temp/native-request-boundary/current/review.json",
+          "bytes": 2474,
+          "sha256": "288a86457d49961a30970eec2d7d8d8260de60e6e25f9e9f1d0fa4618c065dc6"
+        },
+        {
+          "path": ".temp/native-request-boundary/current/forwarded-deadline-counterexample.ts",
+          "bytes": 811,
+          "sha256": "474ab9f176e463ca044c77e5e36179726d7128d026c80ff9633f22532d68b79f"
+        },
+        {
+          "path": ".temp/native-request-boundary/current/Taskfile.yml",
+          "bytes": 380,
+          "sha256": "aa553ce90bffd2bdb6861d2ca7eb83359c01df5b0db6f5c3d84e0cb80223d093"
+        },
+        {
+          "path": ".temp/native-request-boundary/current/native-full.test.ts",
+          "bytes": 490,
+          "sha256": "9b628842a6778c347f9afd0ee39bfd0615094a81ec79eabf9299b43adc9e0b89"
+        },
+        {
+          "path": ".temp/native-request-boundary/current/native-runner-record.json",
+          "bytes": 978,
+          "sha256": "7b314909c8e6c6f7fd1990f31bb9cdef4fea662a42e750804fc7f0be76f2bf58"
+        },
+        {
+          "path": ".temp/native-request-boundary/current/native-maven.log",
+          "bytes": 82072,
+          "sha256": "1a1a1704c76c2657c62c70c5721d74c85974de9cfa3e8076381b4d8da7cf2101"
+        },
+        {
+          "path": ".temp/native-request-boundary/current/native-summary.json",
+          "bytes": 76626,
+          "sha256": "6abfd1fb152e06145423e4210102d95e1b0a56370d0be2110b8be9af42810420"
+        },
+        {
+          "path": ".temp/native-request-boundary/current/module-test-image.json",
+          "bytes": 3565,
+          "sha256": "935878b48efadf493d6e6e74aa7ddeee356bb286121c9b17bd523c1f182eae46"
+        },
+        {
+          "path": ".temp/native-request-boundary/current/runtime-image.json",
+          "bytes": 3172,
+          "sha256": "b2082f5589e91e763b1235cfd523fb0499da174bb9e13fe21840bb415deba3e5"
+        },
+        {
+          "path": ".temp/native-request-boundary/current/report-export-container.txt",
+          "bytes": 65,
+          "sha256": "83c8151eaa6cab2beed3326b1bb8d55f62139fe75a3f9d4fe0874943788505df"
+        },
+        {
+          "path": ".temp/native-request-boundary/current/surefire-manifest.json",
+          "bytes": 33511,
+          "sha256": "a80f159460f0897f9cc495b7154abdfd574908174ae31274c230d66a7e095e50"
+        },
+        {
+          "path": ".temp/native-request-boundary/current/qa-result.json",
+          "bytes": 189,
+          "sha256": "0a380d6238d51fdfc615d7bb4fcd4b8f03478bf40b9f6828edc3908a82266904"
+        },
+        {
+          "path": ".temp/native-request-boundary/current/wrapper.xml",
+          "bytes": 622,
+          "sha256": "c2cbc060ee769d5da8df3601054cd67c92ac2d3548175fc4b98863f6a4119602"
+        },
+        {
+          "path": ".temp/native-request-boundary/current/e3063275-a71a-400e-adeb-190af2f2f47b.job.json",
+          "bytes": 1107,
+          "sha256": "530fc94c92d1f61edfd934eb0f91321f829383a3d66b75a94ca4b0fa5bbb5256"
+        },
+        {
+          "path": ".temp/native-request-boundary/current/e3063275-a71a-400e-adeb-190af2f2f47b.log",
+          "bytes": 901,
+          "sha256": "50f7d1fc74663623397c51967f1b2831bb32372de9b012f6ebe74ff1a6322326"
+        },
+        {
+          "path": ".temp/native-request-boundary/current/270ed8bf-7a42-4fde-a7a9-1caf2d88f055.job.json",
+          "bytes": 946,
+          "sha256": "89f00297769350ee8b7411b3ee055965824f5c0602d28869c6bc27085b9c7292"
+        },
+        {
+          "path": ".temp/native-request-boundary/current/270ed8bf-7a42-4fde-a7a9-1caf2d88f055.log",
+          "bytes": 1430,
+          "sha256": "ec900f1ee4116430e67ac595ab44f8594fca68eb6e42be0b4354ef0b48a8fbc7"
+        },
+        {
+          "path": ".temp/native-request-boundary/current/1e69fc73-5d8f-4c8f-a273-30d2218e4b74.job.json",
+          "bytes": 1086,
+          "sha256": "4f0a6759b369df6d4977f881e406ad84b6f7bbb00c38aa0215780b6bf037e2b1"
+        },
+        {
+          "path": ".temp/native-request-boundary/current/1e69fc73-5d8f-4c8f-a273-30d2218e4b74.log",
+          "bytes": 750,
+          "sha256": "364a419ed0ad9cceee4af96d0ba9f6e259edf00dd93cf675a614c898d81eabe9"
+        },
+        {
+          "path": ".temp/native-request-boundary/current/f9ade761-5f44-45f2-9c0c-569b35802baa.job.json",
+          "bytes": 946,
+          "sha256": "ebf5e8d456e15b02de0c311677ea7aebd87a61fab3f56c96cf66c547d9e9ef98"
+        },
+        {
+          "path": ".temp/native-request-boundary/current/f9ade761-5f44-45f2-9c0c-569b35802baa.log",
+          "bytes": 498,
+          "sha256": "d75ac8b821487c8d95a48483098f537fbcd4975f4bd01c3af67aaa100b45e995"
+        },
+        {
+          "path": ".temp/native-request-boundary/current/affected-checks.job.json",
+          "bytes": 1657,
+          "sha256": "d4dabcc947dea3140053156e53bed5fecc5c19432fd70fe4546616f89857bd59"
+        },
+        {
+          "path": ".temp/native-request-boundary/current/validate-report.py",
+          "bytes": 7733,
+          "sha256": "ca89bb9820d8fa21783f1e33ffcf864f23aa45e38ada0c7959dccadb4fbff519"
+        },
+        {
+          "path": ".temp/goal/jobs/06a668a2-2dce-4c99-9c5a-3f0212d22f90.1.log",
+          "bytes": 1152,
+          "sha256": "ad95277642b6b3c1e614e4094a08731bffcbf2fdf0bea6ba6addc7f0f00bd82c"
+        },
+        {
+          "path": ".temp/goal/jobs/06a668a2-2dce-4c99-9c5a-3f0212d22f90.2.log",
+          "bytes": 542,
+          "sha256": "7873a0560849677de5fb7aee89093df51d19cb76e4c0c23a148d6ff2223d8872"
+        },
+        {
+          "path": ".temp/goal/jobs/06a668a2-2dce-4c99-9c5a-3f0212d22f90.3.log",
+          "bytes": 359,
+          "sha256": "fe77df791d25c34498605a9ef2c27c15ffeb05be2de71920a6b340e30763034f"
+        },
+        {
+          "path": ".temp/goal/check/run-HWOtDh/output.log",
+          "bytes": 2863,
+          "sha256": "4dd6c5627302f2b423910f18d768976c7b7dd96fd6411f8c104a55d0fdda1281"
+        }
+      ],
+      "nativeSurefire": {
+        "manifest": ".temp/native-request-boundary/current/surefire-manifest.json",
+        "files": 148,
+        "xmlReports": 74,
+        "textReports": 74,
+        "export": "docker create from completed module-test output image; docker cp /build/target/surefire-reports; remove only that never-started owned disposable container. No native rerun."
+      },
+      "historicalOriginalRoot": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2822",
+      "historicalRetainedBundle": "/home/edge/projects/rezics/rezics-next/.temp/audit-remediation-20261019/native-full-g2822",
+      "historicalArtifactsPreserved": 17
+    },
+    "decision": {
+      "candidateCanLandAsCompleteRepair": false,
+      "reason": "Reached P1 G2822-CURRENT-01: this five-repair candidate restarts expired forwarded Web deadlines before Main admission. G-2827 owns the concrete repair; no code/assertions were edited by this reviewer. Native component success is established independently.",
+      "reportCanLandIndependently": true,
+      "D5-001": "Open: expired cross-hop deadline counterexample and real signed-in notification-reader/public cancellation and mixed-load proof.",
+      "D5-002": "Open: real Discover visitor/default legal list, allocation/call count, concurrency, cancellation and retry.",
+      "D5-003": "Open: real growing-corpus body search latency, qualification transitions and mixed-load cancellation; G-2765 keeps qualification ownership.",
+      "transport100ms": "Not independently rerun here; unchanged owner assertion is covered only by the retained exact-source G-2827 12-test receipt. Original native 300ms assertions executed and passed in this run. Public persona acceptance remains unproved.",
+      "next": "Manager forwards the executable deadline finding to G-2827, accepts this report independently and keeps G-2765/G-2828 repair ownership; no additional review chain or full API campaign."
+    },
+    "checks": {
+      "status": "passed",
+      "recordedJob": "06a668a2-2dce-4c99-9c5a-3f0212d22f90",
+      "reportValidation": {
+        "command": "task -t .temp/native-request-boundary/current/Taskfile.yml report:validate",
+        "log": ".temp/goal/jobs/06a668a2-2dce-4c99-9c5a-3f0212d22f90.1.log",
+        "detail": "149 historical git-object digests, 17 artifacts at both historical locations, 75 historical class summaries, 9779 fixed candidate files, 74 current Maven/JUnit class totals, 148 Surefire files, 21 target cases and report-only diff all verified.",
+        "finalReceipt": ".temp/native-request-boundary/current/validation.json"
+      },
+      "workerCheck": {
+        "command": "env GOAL_CHECK_PREPARED_TREE=<worktree> task goal -- check",
+        "log": ".temp/goal/jobs/06a668a2-2dce-4c99-9c5a-3f0212d22f90.2.log",
+        "detail": "AST and 1/44 affected repository guards passed; no source or brief test files changed."
+      },
+      "documentation": {
+        "command": "task docs:check",
+        "log": ".temp/goal/jobs/06a668a2-2dce-4c99-9c5a-3f0212d22f90.3.log",
+        "detail": "13 checker tests and links/navigation across 243 Markdown files passed."
+      }
+    },
+    "cleanup": "No shared stack/data/reset/import/refresh, wave push or main mutation. One owned report-export container was created without starting and removed. Native output image, logs, all Surefire reports, snapshot and all historical artifacts retained."
+  }
 }
