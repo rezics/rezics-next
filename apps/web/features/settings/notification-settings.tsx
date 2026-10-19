@@ -4,7 +4,7 @@ import { Card, CardContent } from '@rezics/ui/card';
 import { Button } from '@rezics/ui/button';
 import { Field, FieldHelper, FieldLabel } from '@rezics/ui/field';
 import { Switch } from '@rezics/ui/switch';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { SettingsMessages } from './messages.ts';
 
 export const notificationChannels = ['inbox', 'push', 'email'] as const;
@@ -134,6 +134,18 @@ export function NotificationSettings({
   const inFlight = useRef(false);
   const feedbackId = useId();
   const [feedback, setFeedback] = useState<Record<string, ChoiceFeedback>>({});
+  const feedbackFields = useRef(new Map<string, HTMLDivElement>());
+  const activeChoice = useRef('');
+  useLayoutEffect(() => {
+    const field = feedbackFields.current.get(activeChoice.current);
+    if (!field) return;
+    const { top, bottom } = field.getBoundingClientRect();
+    // New feedback can extend below a visible switch. Reveal its recovery without moving focus,
+    // but do not pull someone back after they have scrolled away during the request.
+    if (top < window.innerHeight && bottom > 0) {
+      field.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'instant' });
+    }
+  }, [feedback]);
   const forgetSavedReceipts = () => {
     // A refresh may replace an earlier saved value; its receipt no longer describes the displayed version.
     setFeedback(current => Object.fromEntries(Object.entries(current).filter(([, result]) => result.state !== 'saved')));
@@ -156,6 +168,7 @@ export function NotificationSettings({
     if (inFlight.current || preview) return;
     inFlight.current = true;
     const key = `${choice.topic}:${choice.channel}`;
+    activeChoice.current = key;
     const report = (state: ChoiceFeedback['state']) => setFeedback(current => ({ ...current, [key]: { state, checked } }));
     setSaving(key);
     report('saving');
@@ -198,6 +211,7 @@ export function NotificationSettings({
     if (inFlight.current || preview) return;
     inFlight.current = true;
     const key = `${choice.topic}:${choice.channel}`;
+    activeChoice.current = key;
     const report = (state: ChoiceFeedback['state']) => setFeedback(current => ({ ...current, [key]: { state, checked } }));
     setSaving(key); report('refreshing');
     try {
@@ -249,8 +263,12 @@ export function NotificationSettings({
                       : result?.checked ? t.notificationEnable : t.notificationDisable;
                     return (
                       <Field key={channel} ids={{ helperText: statusId }}
+                        ref={element => {
+                          if (element) feedbackFields.current.set(key, element);
+                          else feedbackFields.current.delete(key);
+                        }}
                         className="grid min-w-0 content-start justify-items-center gap-2 self-start">
-                        <FieldLabel className="sr-only">{`${label} · ${channelLabel}`}</FieldLabel>
+                        <FieldLabel className="sr-only w-px!">{`${label} · ${channelLabel}`}</FieldLabel>
                         <span aria-hidden="true" className="break-words text-center text-muted-foreground text-xs sm:hidden">
                           {channelLabel}</span>
                         <div className="flex justify-center">
