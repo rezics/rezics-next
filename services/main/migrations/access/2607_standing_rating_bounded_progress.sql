@@ -122,13 +122,15 @@ END $$;
 
 -- page_limit counts discovery as well as mutations, including exhausted probes.
 -- No recursive CTE, whole-history aggregate or pre-LIMIT sort is hidden here.
-CREATE FUNCTION access.advance_rating_standing_transition(t text,page_limit integer)
+CREATE FUNCTION access.advance_rating_standing_transition(t text,page_limit integer,cleanup_allowed boolean DEFAULT true)
 RETURNS TABLE(steps integer,prepared boolean,refreshed integer) LANGUAGE plpgsql AS $$
 DECLARE job access.rating_standing_progress%ROWTYPE; cut access.rating_standing_transition%ROWTYPE;
   node access.rating_standing_walk%ROWTYPE; r record; i integer;
 BEGIN
   steps:=0; refreshed:=0;
-  SELECT * INTO cut FROM access.rating_standing_transition WHERE task_key=t FOR SHARE;
+  -- Serialize this task's state machine before its cursor; concurrent preparers
+  -- must not hold shared task locks while waiting to upgrade the same row.
+  SELECT * INTO cut FROM access.rating_standing_transition WHERE task_key=t FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'Standing transition is unavailable'; END IF;
   SELECT * INTO job FROM access.rating_standing_progress WHERE task_key=t FOR UPDATE;
   IF NOT FOUND THEN prepared:=cut.prepared; RETURN NEXT; RETURN; END IF;
@@ -197,6 +199,9 @@ BEGIN
             AND (main_version,principal_id)>(node.after_key,node.after_person)
           ORDER BY main_version,principal_id LIMIT 1 FOR UPDATE;
         IF FOUND THEN
+          -- Completion may release already consistent cuts, but does not hide
+          -- a projection mutation page inside the identity journal trigger.
+          IF NOT cleanup_allowed THEN EXIT; END IF;
           PERFORM 1 FROM access.scope_gate WHERE id='rating:observe:'||node.context FOR SHARE;
           DELETE FROM access.rating_merge_selection WHERE (context,main_version,principal_id)=(node.context,r.main_version,r.principal_id);
           refreshed:=refreshed+1;
@@ -220,7 +225,7 @@ CREATE OR REPLACE FUNCTION access.rating_standing_transition_finished() RETURNS 
 BEGIN
   UPDATE access.rating_standing_transition SET finished=true WHERE task_key=NEW.task_key;
   UPDATE access.rating_standing_progress SET phase='cleanup' WHERE task_key=NEW.task_key AND phase='wait';
-  PERFORM access.advance_rating_standing_transition(NEW.task_key,100);
+  PERFORM access.advance_rating_standing_transition(NEW.task_key,100,false);
   RETURN NULL;
 END $$;
 

@@ -25,8 +25,8 @@ test('standing lineage discovery persists limit-one progress without recursive d
   const pool = new Pool({ connectionString: databases.urls.access, max: 1 });
   const context = id(), sourceWork = id(), sourceMainVersion = id(), survivorWork = id(), survivorMainVersion = id();
   const cut = { sourceWork, sourceMainVersion, survivorWork, survivorMainVersion, originalKey: null as string | null };
-  const principal = randomUUID(), actor = id(), proposal = randomUUID();
-  const original = `editorial:${proposal}:1`, inverse = `editorial:${proposal}:2`;
+  const principal = randomUUID(), actor = id(), proposals = [randomUUID(),randomUUID()];
+  const original = `editorial:${proposals[0]}:1`, inverse = `editorial:${proposals[1]}:1`;
   const source = { resource: sourceWork, revision: id() }, survivor = { resource: survivorWork, revision: id() };
   const plans: NativePlan[] = [], measurements: { label: string; plans: NativePlan[] }[] = [];
   let capture = false;
@@ -66,22 +66,22 @@ test('standing lineage discovery persists limit-one progress without recursive d
     } finally { client.release(); }
     await pool.query("INSERT INTO access.principal(id,account_issuer,account_subject) VALUES($1::uuid,'standing-work',$1::text)", [principal]);
     await pool.query("INSERT INTO access.authority_subject(id,kind) VALUES($1,'agent')", [actor]);
-    await pool.query(`INSERT INTO access.editorial_proposal
+    const task = async (n: number) => {
+      const proposal = proposals[n-1]!, key = `editorial:${proposal}:1`, application = randomUUID();
+      await pool.query(`INSERT INTO access.editorial_proposal
       (id,kind,target,resource,context,work,proposer_principal,proposer_agent,proposer_key,proposer_controllers)
       VALUES($1,'merge',$2,$3,'urn:rezics:context:global',$3,$4,$5,$6,ARRAY[$4::uuid])`,
     [proposal,source,sourceWork,principal,actor,'2'.repeat(64)]);
-    const task = async (n: number) => {
-      const key = `editorial:${proposal}:${n}`, application = randomUUID();
       const canonical = canonicalCandidate({ operation:n === 1 ? 'merge' : 'unmerge', source,survivor,evidence:[],
         ...(n === 1 ? {} : { original }) });
       await pool.query(`INSERT INTO access.editorial_revision
         (proposal,n,candidate,candidate_digest,before_state,base_heads,evidence,author_agent)
         VALUES($1,$2,$3,$4,'null',$5,'[]',$6)`,
-      [proposal,n,JSON.stringify(canonical.candidate),canonical.digest,JSON.stringify([source,survivor]),actor]);
+      [proposal,1,JSON.stringify(canonical.candidate),canonical.digest,JSON.stringify([source,survivor]),actor]);
       await pool.query(`INSERT INTO access.editorial_application
         (id,proposal,revision,principal,actor,operation_key,command_key,command_digest,approve,required,message)
         VALUES($1::uuid,$2,$3,$4,$5,$6,$1::text,$7,false,2,'Bounded lineage native fixture')`,
-      [application,proposal,n,principal,actor,key,canonical.digest]);
+      [application,proposal,1,principal,actor,key,canonical.digest]);
       await pool.query(`INSERT INTO access.identity_merge_task(task_key,application,candidate_digest,plan,data_epoch,handlers,original_key)
         VALUES($1,$2,$3,$4,'standing-work','[{"owner":"rating","version":"effective-person-vote-v3"}]',$5)`,
       [key,application,canonical.digest,JSON.stringify(canonical.candidate),n === 1 ? null : original]);

@@ -92,7 +92,7 @@ test('standing components retain exact effective slots through 100/101/large, me
     expect((await pool.query('SELECT access.rating_standing_slot($1,$2,$3) AS slot',
       [people[0], context, originMain])).rows[0].slot).toBe(items[0]!.slot);
     let previous = 0;
-    const currentTargets = [id(),id()].sort();
+    const currentTargets = [{main:id(),work:id()},{main:id(),work:id()}].sort((a,b) => a.main.localeCompare(b.main));
     const workMeasurements: Record<string,unknown>[] = [];
     const measure = async (sql: string, parameters: unknown[]) => {
       const plan = (await pool.query(`EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON) ${sql}`,parameters)).rows[0]['QUERY PLAN'][0];
@@ -122,7 +122,7 @@ test('standing components retain exact effective slots through 100/101/large, me
         (context,work,main_version,principal_id,origin_main_version,origin_slot,task_key)
         SELECT $2,$3,$4,x.principal::uuid,$5,x.slot,$6
         FROM jsonb_to_recordset($1::jsonb) x(principal text,slot text)`,
-      [JSON.stringify(items.slice(0,population)),context,work,target,originMain,task]);
+      [JSON.stringify(items.slice(0,population)),context,target.work,target.main,originMain,task]);
       const replacements = items.slice(0,population).map(item => ({ ...item, admission: randomUUID() }));
       await admissions(replacements);
       await pool.query(`UPDATE access.rating_aggregate_head h SET admission_id=x.admission::uuid
@@ -131,11 +131,11 @@ test('standing components retain exact effective slots through 100/101/large, me
       [JSON.stringify(replacements),context,originMain]);
       expect(Number((await pool.query('SELECT count(*) FROM access.rating_standing_refresh WHERE context=$1', [context])).rows[0].count)).toBe(population);
       const nativeCurrent = await readRatingAggregateInventory(pool,context,originMain);
-      const delivered = await readRatingAggregateInventory(pool,context,currentTargets[0]!);
+      const delivered = await readRatingAggregateInventory(pool,context,currentTargets[0]!.main);
       expect(nativeCurrent.standing!.slots).toBe(population);
       expect(delivered.standing!.slots).toBe(population);
-      await expect(readRatingAggregateInventory(pool,context,currentTargets[1]!)).rejects.toThrow('publication is incomplete');
-      const cuts = [originMain,currentTargets[0]!].map((mainVersion,index) => ({ context,main_version:mainVersion,
+      await expect(readRatingAggregateInventory(pool,context,currentTargets[1]!.main)).rejects.toThrow('publication is incomplete');
+      const cuts = [originMain,currentTargets[0]!.main].map((mainVersion,index) => ({ context,main_version:mainVersion,
         generation: [nativeCurrent,delivered][index]!.standingGeneration! }));
       const readiness = await measure('SELECT * FROM access.rating_standing_publication($1,$2)',[context,originMain]);
       const read = await measure(STANDING_RATING_INVENTORY_SQL,[context,originMain]);
@@ -144,7 +144,7 @@ test('standing components retain exact effective slots through 100/101/large, me
       expect(read.examined).toBeLessThan(2000);
       expect(fence.examined).toBeLessThan(128);
       workMeasurements.push({ population, readiness, read, fence });
-      await pool.query('DELETE FROM access.rating_merge_selection WHERE context=$1 AND main_version=ANY($2::text[])',[context,currentTargets]);
+      await pool.query('DELETE FROM access.rating_merge_selection WHERE context=$1 AND main_version=ANY($2::text[])',[context,currentTargets.map(target => target.main)]);
       while (!(await refreshStandingRatingProjections(pool,{ context,limit:100 })).complete) { /* one bounded origin page */ }
     }
     console.log('standing native readiness work', JSON.stringify(workMeasurements.map(row => ({ population:row.population,
