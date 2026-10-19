@@ -35,7 +35,7 @@ async function retained(text = '原作', language: string | null | undefined = '
   const principalId = randomUUID(), externalId = randomUUID();
   const alias = { name: text,...(language === undefined ? {} : { locale: language }) };
   const record: DatasetRecord = { key: `musicbrainz:artist:${externalId}`,provider: 'musicbrainz',kind: 'artist',externalId,
-    title: text,sourceUrl: `https://musicbrainz.org/artist/${externalId}`,native: 'person',
+    title: text,language: 'ja',sourceUrl: `https://musicbrainz.org/artist/${externalId}`,native: 'person',
     data: { id: externalId,name: text,aliases: [alias] } };
   const snapshot = { id: 'source-native-owner-shape',digest: 'a'.repeat(64),fileSha256: 'b'.repeat(64) };
   const bytes = Buffer.from(canonicalJson({ format: 'rezics-dataset-record-v1',snapshot: snapshot.id,
