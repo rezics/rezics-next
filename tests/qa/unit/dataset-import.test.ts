@@ -353,6 +353,61 @@ function requestFile(receiptFile: string, label: string): string {
 }
 
 describe('actual importer intake custody', () => {
+  for (const multipart of [false, true]) test(`preserves the original unknown-rights ${multipart ? 'multipart' : 'single-part'} requests and status-less acknowledgements`, async () => {
+    const fixture = apiFixture(), directory = root(), original = retainedCase(0, multipart);
+    const source = sealSnapshot(snapshot([original])), frozen = freezeSnapshotFile(directory, source);
+    const result = await importDataset(directory, source, { ...options(fixture.api), native: false });
+    const retained = intakeJournal(result.intakeReceiptsFile).records[original.key]!;
+    const historical = retained.intakes.map(part => {
+      const file = requestFile(result.receiptFile, part.command.label), saved = JSON.parse(readFileSync(file, 'utf8'));
+      const rights = { basis: 'unknown',
+        note: `Frozen local development evidence from ${original.sourceUrl}; raw provider data and images retain their original rights. No redistribution permission is asserted.` };
+      saved.entry.body.rightsEvidence = rights;
+      saved.entry.result.observation.rightsEvidence = rights;
+      delete saved.entry.result.observation.rawBytesBase64;
+      // The retained pre-custody journals have requests and owner results, with
+      // no producer coordinate annotation or recorded HTTP status.
+      delete saved.entry.intake;
+      delete saved.entry.responses;
+      delete saved.entry.responseStatus;
+      writeFileSync(file, JSON.stringify(saved));
+      return { file, label: part.command.label, key: part.command.key, entry: saved.entry };
+    });
+    const calls = fixture.requests.length;
+    for (let replay = 0; replay < 2; replay++) {
+      const replayed = await importDataset(directory, source, { ...options(fixture.api), native: false });
+      const receipts = intakeJournal(replayed.intakeReceiptsFile).records[original.key]!;
+      expect(receipts.intakes).toHaveLength(historical.length);
+      for (const [index, part] of receipts.intakes.entries()) {
+        const prior = historical[index]!, command = part.command;
+        expect(command.label).toBe(prior.label);
+        expect(command.key).toBe(prior.key);
+        expect(command.request).toEqual(prior.entry.body);
+        expect(command.result).toEqual(prior.entry.result);
+        expect(command.responses).toEqual([{ body: prior.entry.result }]);
+        expect(command.responses[0]).not.toHaveProperty('status');
+        expect(command.coordinate).toEqual(retained.intakes[index]!.command.coordinate);
+        expect(command.request.rightsEvidence.basis).toBe('unknown');
+        expect(part.byteDigest).toBe(retained.intakes[index]!.byteDigest);
+        const persisted = JSON.parse(readFileSync(prior.file, 'utf8')).entry;
+        expect(persisted.body).toEqual(prior.entry.body);
+        expect(persisted.result).toEqual(prior.entry.result);
+      }
+      expect(fixture.requests.slice(calls).every(call => call.path === '/v1/catalogue/candidates')).toBe(true);
+      expect(readFileSync(join(directory, 'snapshots', source.id, 'snapshot.json'))).toEqual(frozen);
+    }
+    const first = historical[0]!, before = readFileSync(first.file, 'utf8'), changed = JSON.parse(before);
+    changed.entry.body.rightsEvidence.note += ' unrelated claim';
+    changed.entry.result.observation.rightsEvidence = changed.entry.body.rightsEvidence;
+    writeFileSync(first.file, JSON.stringify(changed));
+    const error = await importDataset(directory, source, { ...options(fixture.api), native: false }).catch(error => error);
+    expect(error).toBeInstanceOf(DatasetIntakeCustodyError);
+    expect(error.basis).toBe('request');
+    expect(error.message).toContain('rightsEvidence');
+    expect(fixture.requests.slice(calls).every(call => call.path === '/v1/catalogue/candidates')).toBe(true);
+    writeFileSync(first.file, before);
+  });
+
   for (const multipart of [false, true]) for (let index = 0; index < retainedCases.length; index++) {
     const key = retainedCases[index]!.slice(0, 3).join(':');
     test(`retains exact ${multipart ? 'multipart' : 'single-part'} request/reply bindings for ${key}`, async () => {
