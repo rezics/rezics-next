@@ -428,8 +428,8 @@ describe('actual importer intake custody', () => {
   }
 
   for (const multipart of [false, true]) test(`checks the whole ${multipart ? 'multipart' : 'single-part'} envelope and original selected indices`, async () => {
-    const fixture = apiFixture(), directory = root(), original = retainedCase(0, multipart);
-    const outside = record('outside'), child = record('child');
+    const fixture = apiFixture(), directory = root(), original = { ...retainedCase(0, multipart), native: 'work' as const };
+    const outside = record('outside'), child = record('child', 'character');
     const source = snapshot([outside, original, child]);
     source.sources[0]!.edges = [{ from: outside.key, to: child.key, kind: 'character', data: { order: 0 } },
       { from: original.key, to: child.key, kind: 'character', data: { order: 1 } }];
@@ -2518,4 +2518,4 @@ test('preserves all 113 frozen source/native identities at each retained epoch w
     expect(result.coverage.catalogueReady).toBe(false);
     expect(result.coverage.counts.mapped).toBe(0);
   }
-});
+}, 15_000); // Two complete retained epochs write and verify 226 exact intake journals.

@@ -88,6 +88,9 @@ export function datasetIntakeReceipt(command: DatasetIntakeCommand,
   assertDatasetIntakeRequest(command.request, expected);
   const result = command.result, observation = result?.observation;
   if (!result || !object(observation)) throw new DatasetIntakeCustodyError('receipt', 'missing acknowledged observation');
+  if (!command.responses.some(reply => (reply.status === undefined || reply.status === 200 || reply.status === 201)
+    && equal(reply.body, result)))
+    throw new DatasetIntakeCustodyError('receipt', 'observation has no matching acknowledged response');
   for (const field of ['profile', 'provider', 'namespace', 'externalId', 'sourceRevision',
     'mediaType', 'retention', 'coverage', 'rightsEvidence'] as const)
     if (!equal(observation[field], expected[field]))

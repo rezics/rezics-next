@@ -757,7 +757,10 @@ export async function importDataset(
   const snapshotFile = join(root, 'snapshots', snapshot.id, 'snapshot.json');
   if (existsSync(snapshotFile)) {
     const bytes = readFileSync(snapshotFile);
-    if (canonical(JSON.parse(bytes.toString())) !== canonical(snapshot))
+    let retainedSnapshot: unknown;
+    try { retainedSnapshot = JSON.parse(bytes.toString()); }
+    catch { throw new DatasetIntakeCustodyError('snapshot', 'retained snapshot file is not JSON'); }
+    if (canonical(retainedSnapshot) !== canonical(snapshot))
       throw new DatasetIntakeCustodyError('snapshot', 'retained snapshot file differs from the immutable parent');
     snapshotReference.fileSha256 = sha256(bytes);
   }
