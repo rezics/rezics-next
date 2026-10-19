@@ -154,10 +154,10 @@ async function expectUnavailableRegions(canvasElement: HTMLElement, locale: keyo
     await expect(region.getByRole('heading', { name, level: 2 })).toBeVisible();
     await expect(region.getByRole('alert')).toHaveTextContent(labels.unavailable);
     await expect(region.getByRole('button', { name: labels.retry })).toBeVisible();
+    await expect(region.queryByRole('list')).toBeNull();
   }
   // A failed group response identifies no individual section or successful rows.
   await expect(canvas.queryByRole('heading', { name: labels.sites })).toBeNull();
-  await expect(canvas.queryByRole('list')).toBeNull();
 }
 async function expectPreparingRegions(canvasElement: HTMLElement, locale: keyof typeof regionLabels) {
   const canvas = within(canvasElement), labels = regionLabels[locale];
