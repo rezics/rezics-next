@@ -842586,7 +842586,7 @@
                                           },
                                           "language": {
                                             "maxLength": 35,
-                                            "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                                            "minLength": 2,
                                             "type": "string"
                                           },
                                           "lexical": {
@@ -842629,7 +842629,7 @@
                                             "type": "string"
                                           },
                                           "timeZone": {
-                                            "maxLength": 6,
+                                            "maxLength": 64,
                                             "type": "string"
                                           }
                                         },
@@ -843658,7 +843658,7 @@
                                           },
                                           "language": {
                                             "maxLength": 35,
-                                            "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                                            "minLength": 2,
                                             "type": "string"
                                           },
                                           "lexical": {
@@ -843701,7 +843701,7 @@
                                             "type": "string"
                                           },
                                           "timeZone": {
-                                            "maxLength": 6,
+                                            "maxLength": 64,
                                             "type": "string"
                                           }
                                         },
@@ -844730,7 +844730,7 @@
                                           },
                                           "language": {
                                             "maxLength": 35,
-                                            "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                                            "minLength": 2,
                                             "type": "string"
                                           },
                                           "lexical": {
@@ -844773,7 +844773,7 @@
                                             "type": "string"
                                           },
                                           "timeZone": {
-                                            "maxLength": 6,
+                                            "maxLength": 64,
                                             "type": "string"
                                           }
                                         },
@@ -845739,7 +845739,7 @@
                                                 },
                                                 "language": {
                                                   "maxLength": 35,
-                                                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                                                  "minLength": 2,
                                                   "type": "string"
                                                 },
                                                 "lexical": {
@@ -845782,7 +845782,7 @@
                                                   "type": "string"
                                                 },
                                                 "timeZone": {
-                                                  "maxLength": 6,
+                                                  "maxLength": 64,
                                                   "type": "string"
                                                 }
                                               },
@@ -847032,7 +847032,7 @@
                                                 },
                                                 "language": {
                                                   "maxLength": 35,
-                                                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                                                  "minLength": 2,
                                                   "type": "string"
                                                 },
                                                 "lexical": {
@@ -847075,7 +847075,7 @@
                                                   "type": "string"
                                                 },
                                                 "timeZone": {
-                                                  "maxLength": 6,
+                                                  "maxLength": 64,
                                                   "type": "string"
                                                 }
                                               },
@@ -849319,7 +849319,7 @@
                                             },
                                             "language": {
                                               "maxLength": 35,
-                                              "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                                              "minLength": 2,
                                               "type": "string"
                                             },
                                             "lexical": {
@@ -849362,7 +849362,7 @@
                                               "type": "string"
                                             },
                                             "timeZone": {
-                                              "maxLength": 6,
+                                              "maxLength": 64,
                                               "type": "string"
                                             }
                                           },
@@ -877547,7 +877547,7 @@
                                                 },
                                                 "language": {
                                                   "maxLength": 35,
-                                                  "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                                                  "minLength": 2,
                                                   "type": "string"
                                                 },
                                                 "lexical": {
@@ -877590,7 +877590,7 @@
                                                   "type": "string"
                                                 },
                                                 "timeZone": {
-                                                  "maxLength": 6,
+                                                  "maxLength": 64,
                                                   "type": "string"
                                                 }
                                               },
@@ -880703,7 +880703,7 @@
                                                     },
                                                     "language": {
                                                       "maxLength": 35,
-                                                      "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                                                      "minLength": 2,
                                                       "type": "string"
                                                     },
                                                     "lexical": {
@@ -880746,7 +880746,7 @@
                                                       "type": "string"
                                                     },
                                                     "timeZone": {
-                                                      "maxLength": 6,
+                                                      "maxLength": 64,
                                                       "type": "string"
                                                     }
                                                   },
@@ -883031,7 +883031,7 @@
                                                     },
                                                     "language": {
                                                       "maxLength": 35,
-                                                      "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+                                                      "minLength": 2,
                                                       "type": "string"
                                                     },
                                                     "lexical": {
@@ -883074,7 +883074,7 @@
                                                       "type": "string"
                                                     },
                                                     "timeZone": {
-                                                      "maxLength": 6,
+                                                      "maxLength": 64,
                                                       "type": "string"
                                                     }
                                                   },
