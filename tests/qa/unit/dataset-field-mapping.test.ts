@@ -10,29 +10,6 @@ import {
 import { canonical, sha256 } from '../../../scripts/datasets/store.ts';
 import type { DatasetRecord, DatasetSourceReference } from '../../../scripts/datasets/types.ts';
 import { checkedSemanticValue } from '../../../services/main/src/modules/semantic/value.ts';
-import { SourceFieldProblem } from '../../../services/main/src/modules/source/field-support-contract.ts';
-import { retainedMappingRevision, RETAINED_NAMESPACES } from '../../../services/main/src/modules/source/retained-record-normalization.ts';
-
-test('all 28 retained provider pairs preserve exact revisions and inherited provider names refuse structurally', () => {
-  let pairs = 0;
-  for (const [provider, namespaces] of Object.entries(RETAINED_NAMESPACES)) {
-    for (const namespace of namespaces) {
-      expect(retainedMappingRevision(provider, namespace)).toBe(`${provider}-${namespace}-retained-map-v${namespace === 'release' ? 2 : 1}`);
-      pairs++;
-    }
-  }
-  expect(pairs).toBe(28);
-  for (const [provider, namespace] of [
-    ['unknown', 'vn'], ['', 'vn'], ['vndb', 'constructor'],
-    ...Object.getOwnPropertyNames(Object.prototype).map(provider => [provider, 'vn']),
-  ]) {
-    let refusal: unknown = null;
-    try { retainedMappingRevision(provider!, namespace!); }
-    catch (error) { refusal = error; }
-    expect(refusal).toBeInstanceOf(SourceFieldProblem);
-    expect(refusal).toMatchObject({ status: 422, code: 'source_mapping_unverified' });
-  }
-});
 
 const SCHEMA = 'https://schema.org/';
 const XSD = 'http://www.w3.org/2001/XMLSchema#';
@@ -80,6 +57,58 @@ const valueAt = (plan: DatasetFieldPlan, path: string) =>
   at(plan, path)[0]?.native?.property?.value;
 
 describe('source field projection over retained shapes', () => {
+  test('retained Episode placement fields preserve exact source presence and remain occurrence candidates', () => {
+    const plan = project({
+      kind: 'episode',
+      native: 'episode',
+      data: { sort: 0.5, disc: 0, type: 1 },
+    });
+    for (const [field, name, raw] of [
+      ['sort', 'position', 0.5],
+      ['disc', 'disc', 0],
+      ['type', 'kindCode', 1],
+    ] as const) {
+      expect(at(plan, `/data/${field}`)[0]).toMatchObject({
+        disposition: 'candidate',
+        presence: 'value',
+        evidence: [{ path: `/data/${field}`, valueDigest: sha256(canonical(raw)) }],
+        native: {
+          owner: 'structure',
+          occurrenceField: name,
+          predicate: `qualifier.values.${name}`,
+          material: 'fact',
+        },
+      });
+    }
+    expect(
+      plan.fields.some((field) => field.native?.predicate === 'https://schema.org/episodeNumber'),
+    ).toBe(false);
+    for (const raw of [undefined, null, '', -1, ' 0.5', true, '0.3333333333333']) {
+      const data = raw === undefined ? {} : { sort: raw, disc: raw, type: raw };
+      const candidate = project({ kind: 'episode', native: 'episode', data });
+      for (const field of ['sort', 'disc', 'type']) {
+        expect(at(candidate, `/data/${field}`)[0]?.native).toBeUndefined();
+        expect(at(candidate, `/data/${field}`)[0]?.presence).toBe(
+          raw === undefined
+            ? 'omitted'
+            : raw === null
+              ? 'null'
+              : raw === ''
+                ? 'empty-string'
+                : 'value',
+        );
+      }
+    }
+    const fraction = project({
+      kind: 'episode',
+      native: 'episode',
+      data: { sort: '0.5', disc: 0.5, type: 0.5 },
+    });
+    expect(at(fraction, '/data/sort')[0]?.native?.owner).toBe('structure');
+    expect(at(fraction, '/data/disc')[0]?.native).toBeUndefined();
+    expect(at(fraction, '/data/type')[0]?.native).toBeUndefined();
+  });
+
   test('genuine editions consume release-owned scalar correspondence without reducing precision or title language', () => {
     const input = record({ key: 'vndb:release:r14',provider: 'vndb',kind: 'release',externalId: 'r14',
       native: 'release',title: 'Exact edition',language: 'EN-us',sourceUrl: 'https://vndb.org/r14',

@@ -11,6 +11,7 @@ import type { DatasetRecord, DatasetSourceReference } from '../types.ts';
 import { datasetRecordDigest } from './context.ts';
 import { validSynopsisText, suppliedLanguage, synopsisPropertyValue } from '../../../services/main/src/modules/source/field-control-language.ts';
 import { projectDatasetReleases } from './releases.ts';
+import { episodeRational, episodeKindCode, type EpisodeOccurrenceField } from '../../../services/main/src/modules/source/field-support-episode.ts';
 
 const SCHEMA = 'https://schema.org/';
 const XSD = 'http://www.w3.org/2001/XMLSchema#';
@@ -47,7 +48,8 @@ export interface DatasetNativeField {
   reason: string;
   /** A candidate is not adoption, publication, rights clearance or a support receipt. */
   native?: {
-    owner: 'work-metadata' | 'work-editorial' | 'semantic' | 'statement' | 'release' | 'realization';
+    owner: 'work-metadata' | 'work-editorial' | 'semantic' | 'statement' | 'release' | 'realization' | 'structure';
+    occurrenceField?: EpisodeOccurrenceField;
     property?: SemanticProperty;
     statementValue?: StatementValue;
     predicate: string;
@@ -610,7 +612,27 @@ export function projectDatasetFields(
         `${SCHEMA}datePublished`,
       );
       if (record.kind === 'episode') {
-        number(row, base, 'sort', 'episode-number', `${SCHEMA}episodeNumber`);
+        if (base === '/data') for (const [key, name] of [
+          ['sort','position'], ['disc','disc'], ['type','kindCode'],
+        ] as const) {
+          const path = child(base,key), raw = row[key], exists = Object.hasOwn(row,key);
+          covered.add(path);
+          const valid = name === 'kindCode' ? episodeKindCode(raw) !== null : episodeRational(raw,name === 'disc') !== null;
+          const item: DatasetNativeField = { role: `episode-${name}`,presence: presence(raw,exists),
+            evidence: [evidence(path,raw,exists)],disposition: valid ? 'candidate' : 'source-only',
+            reason: valid ? 'Exact occurrence qualifier candidate; original placement and acknowledged native receipt required'
+              : 'No exact admitted occurrence value; source presence and value remain unchanged' };
+          let property: SemanticProperty | undefined;
+          if (valid && name === 'position') {
+            try { property = { predicate: 'qualifier.values.position',value: exact(String(raw)) }; }
+            catch { /* Scientific JSON spelling remains an exact occurrence candidate. */ }
+          }
+          if (valid) item.native = { owner: 'structure',predicate: `qualifier.values.${name}`,occurrenceField: name,
+            material: 'fact',
+            // Preserve the existing readable source number, independently of semantic episodeNumber and sibling order.
+            ...(property ? { property } : {}) };
+          fields.push(item);
+        }
         // The archive duration is human text (e.g. 00:24:00), not minutes.
         text(row, base, 'duration', 'duration', `${SCHEMA}duration`, undefined);
       }

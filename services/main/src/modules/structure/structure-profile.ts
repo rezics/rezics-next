@@ -1,6 +1,7 @@
 import { RV } from '../work/activate.ts';
 import { hydrateBookGroup, projectBookGroup, validateBookGroups } from './book-group.ts';
 import type { StructureProfileRegistration } from './profiles.ts';
+import { episodeStructureProfile } from './episode-profile.ts';
 
 /** Book composition is a registration, the same way every other owner is. */
 export const structureProfiles: readonly StructureProfileRegistration[] = [{
@@ -19,4 +20,4 @@ export const structureProfiles: readonly StructureProfileRegistration[] = [{
   maxDepth: 2,
   projectQualifier: projectBookGroup, hydrateQualifier: hydrateBookGroup,
   qualifierValidations: validateBookGroups,
-}];
+}, episodeStructureProfile];

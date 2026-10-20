@@ -1,8 +1,9 @@
 import { t } from 'elysia';
+import type { TSchema } from 'typebox';
 import { associationValue } from '../query/association-contract.ts';
 import { statementCoverageSchema, statementQualificationSchema } from '../statement/contract.ts';
 import { SYNOPSIS_TEXT_LIMIT } from './field-control-language.ts';
-import type { RetainedSupportRequest } from './field-support-contract.ts';
+import type { VerifiedRetainedSupportAdmission, RetainedSupportRequest, SuppliedLanguage } from './field-support-contract.ts';
 import { EXPORT_BASIS_KINDS, EXPORT_OBLIGATIONS, EXPORT_USE_SCOPES } from '../export/schema.ts';
 
 const closed = { additionalProperties: false } as const;
@@ -10,10 +11,10 @@ const id = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}
 const digest = t.String({ pattern: '^[0-9a-f]{64}$' });
 const receipt = t.String({ pattern: '^urn:rezics:receipt:[0-9a-f]{64}$' });
 const term = t.String({ minLength: 1, maxLength: 2048, pattern: '^https?://[^\\s<>"{}|\\\\^`]+$' });
-export const suppliedLanguageSchema = t.Union([
+export const suppliedLanguageSchema = t.Unsafe<SuppliedLanguage>(t.Union([
   t.Object({ state: t.Literal('omitted') },closed), t.Object({ state: t.Literal('null') },closed),
   t.Object({ state: t.Literal('value'), value: t.String({ maxLength: 255 }) },closed),
-]);
+]));
 const field = t.Object({ pointer: t.String({ minLength: 1, maxLength: 4096 }),
   presence: t.Union((['value','omitted','null','empty-string','empty-array','empty-object'] as const).map(v => t.Literal(v))),
   valueDigest: t.Optional(digest), ordinal: t.Optional(t.Integer({ minimum: 0 })),
@@ -31,7 +32,11 @@ const releaseBasis = t.Object(command,closed);
 const statementBasis = { kind: t.Literal('statement'), owner: t.Literal('statement'), target: id, revision: id, receipt,
   statement: id, relationDefinition: term, predicate: term, context: t.String({ minLength: 1, maxLength: 2048 }),
   acceptance: t.Nullable(t.Object({ context: t.String(), decision: id, source: t.String() },closed)) };
-const native = t.Union([
+// The request/admission exports carry the owner type. Keep the complete closed
+// validators without re-expanding this internal union in every route.
+const native = t.Union<TSchema[]>([
+  t.Object({ kind: t.Literal('structure-occurrence'), owner: t.Literal('structure'), target: id,
+    component: id, structure: id, profile: t.Literal('episode-list-v1'), revision: id, receipt, occurrence: id },closed),
   t.Object({ kind: t.Literal('component-property'), owner: t.Literal('semantic'), target: id,
     component: id, revision: id, receipt, property: t.Object({ predicate: term, value: associationValue },closed) },closed),
   t.Object({ kind: t.Literal('component-property'), owner: t.Literal('work-editorial'), target: id,
@@ -66,11 +71,11 @@ export const retainedSupportRequest = t.Unsafe<RetainedSupportRequest>(t.Object(
   grain: t.String({ minLength: 1, maxLength: 64 }), sourceField: t.String({ minLength: 1, maxLength: 200 }),
   sourceOccurrence: t.Nullable(t.String({ maxLength: 100 })), expectedHead: id, actingSubject: id,
   evidence, native },closed));
-export const retainedSupportAdmission = t.Object({ profile: t.Literal('source-field-support-admission-v1'),
+export const retainedSupportAdmission = t.Unsafe<VerifiedRetainedSupportAdmission>(t.Object({ profile: t.Literal('source-field-support-admission-v1'),
   sourceRecord: id, conversion: id, evidence, native,
   correspondence: t.Object({ normalizationRevision: t.String(), rule: t.String(),
     payloadPointers: t.Array(t.String()), selectedValueDigest: digest },closed),
-  headGuarantee: t.Literal('verified-before-commit') },closed);
+  headGuarantee: t.Literal('verified-before-commit') },closed));
 export const fieldAttachmentCertificate = t.Object({ profile: t.Literal('source-field-attachment-certificate-v1'),
   receipt, requestDigest: digest, nativeReceipt: receipt },closed);
 export const retainedPublicEvidence = t.Object({ id, sourceWork: t.Null(), representationSha256: digest,

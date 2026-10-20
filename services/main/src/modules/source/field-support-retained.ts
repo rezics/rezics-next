@@ -142,7 +142,8 @@ export class SourceRetainedFieldSupportStore {
     if (!candidate) return supportChanged('native-value');
   }
 
-  async attach(principal: VerifiedPrincipal, principalId: string, key: string, raw: RetainedSupportRequest):
+  async attach(principal: VerifiedPrincipal, principalId: string, key: string, raw: RetainedSupportRequest,
+    session = currentWorkReadSession()):
     Promise<{ support: string; replayed: boolean; step: string }> {
     if (!sourceId(principalId) || !KEY.test(key) || raw.profile !== 'source-field-support-attachment-v2'
       || raw.slot.length < 1 || raw.slot.length > 512
@@ -164,12 +165,16 @@ export class SourceRetainedFieldSupportStore {
       WHERE st.principal_id=$1 AND st.idempotency_key=$2`, [principalId,key])).rows[0];
     if (prior) {
       if (canonicalJson(prior.request) !== canonicalJson(input)) return supportChanged('conversion');
-      const saved = await this.read(principalId, prior.support_id, prior.step_id, principal);
+      const saved = await this.read(principalId, prior.support_id, prior.step_id, principal, session);
       if (!saved) return supportUnavailable();
       return { support: saved.support, replayed: true, step: sourceIri(prior.step_id) };
     }
+    if (input.native.kind === 'structure-occurrence'
+      && (!session || currentWorkReadSession() !== session || session.options.actingSubject !== input.actingSubject)) {
+      return supportUnavailable();
+    }
     await assertGraphAdmissionOpen(this.env.fuseki, this.env.lineage);
-    const native = await verifySourceNative(this.env, input, this.owners,true,{ principal,selected: field.selected });
+    const native = await verifySourceNative(this.env, input, this.owners,true,{ principal,selected: field.selected,session,evidence });
     const requestDigest = retainedAttachmentDigest(principalId,input,admission,native);
     return this.access.withOwnerAuthority({ principal, actingSubject: input.actingSubject,
       scope: native.scope, action: native.action }, async () => {
@@ -224,6 +229,17 @@ export class SourceRetainedFieldSupportStore {
         await client.query(`INSERT INTO source.field_support_attachment
           (step_id,principal_id,receipt,request_digest,request,certificate) VALUES ($1,$2,$3,$4,$5,$6)`,
         [stepId,principalId,receipt,requestDigest,JSON.stringify(input),JSON.stringify(certificate)]);
+        if (input.native.kind === 'structure-occurrence') {
+          if (!session || currentWorkReadSession() !== session) return supportUnavailable();
+          // Recheck custody/reuse while the owner-authority transaction surrounds settlement.
+          await this.evidence(principalId,input,async custody => {
+            if (!this.owners.authorizeReuse) return supportUnavailable();
+            await this.owners.authorizeReuse(principal,input.actingSubject,custody,input.sourceRecord);
+          });
+          await session.fenceDependencies();
+          await session.fenceAuthority();
+          session.checkDeadline();
+        }
         await client.query('COMMIT');
         return { support: sourceIri(head.id), replayed: false, step: sourceIri(stepId) };
       } catch (error) {
@@ -235,7 +251,13 @@ export class SourceRetainedFieldSupportStore {
   }
 
   async read(principalId: string, support: string, step?: string,
-    principal?: VerifiedPrincipal): Promise<RetainedFieldSupportResult | null> {
+    principal?: VerifiedPrincipal, session = currentWorkReadSession()): Promise<RetainedFieldSupportResult | null> {
+    return this.readProjection(principalId,support,step,principal,session,'direct');
+  }
+
+  private async readProjection(principalId: string, support: string, step: string | undefined,
+    principal: VerifiedPrincipal | undefined, session: WorkReadSession | undefined,
+    mode: 'direct' | 'window'): Promise<RetainedFieldSupportResult | null> {
     const id = sourceId(support), stepId = step === undefined ? null : sourceId(step);
     if (!sourceId(principalId) || !id || (step !== undefined && !stepId)) return coordinateInvalid();
     const row = (await this.pool.query<SavedAttachment>(savedSql,[id,principalId,stepId])).rows[0];
@@ -250,13 +272,31 @@ export class SourceRetainedFieldSupportStore {
     // The immutable Source settlement retains the verified acknowledgement.
     // Historical receipt custody does not require the native head to stay current.
     let publicEvidence: RetainedPublicEvidence | null = null;
-    if (!row.withdrawal_id) {
+    const structure = input.native.kind === 'structure-occurrence';
+    if (!row.withdrawal_id && (!structure || session?.principal && session.options.actingSubject)) {
       try {
         const current = await verifySourceNative(this.env,input,this.owners,true,
-          principal ? { principal,selected: field.selected } : undefined);
+          principal ? { principal,selected: field.selected,session,evidence } : undefined);
         if (canonicalJson(current) === canonicalJson(row.native_acknowledgement)) {
           if (!this.owners.publicEvidence) return supportUnavailable();
           publicEvidence = await this.owners.publicEvidence(evidence,field,input,{ principal: principal ?? null });
+          if (structure && session) {
+            session.observeDependency(`source-structure-support:${id}:${row.step_id}`,row,
+              async () => (await this.pool.query<SavedAttachment>(savedSql,[id,principalId,stepId])).rows[0]);
+            session.observeDependency(`source-structure-rights:${id}:${row.step_id}`,publicEvidence,async () => {
+              if (!this.owners.publicEvidence) return supportUnavailable();
+              return this.owners.publicEvidence(await this.evidence(principalId,input),field,input,
+                { principal: principal ?? null });
+            });
+            // A window projection is itself an owner-dependency reread. It
+            // registers these checks on the same session; only its enclosing
+            // reader may run the final fence without reentering that window.
+            if (mode === 'direct') {
+              await session.fenceDependencies();
+              await session.fenceAuthority();
+            }
+            session.checkDeadline();
+          }
         }
       } catch (error) {
         // A stale native head is historical custody, not current public evidence.
@@ -315,7 +355,7 @@ export class SourceRetainedFieldSupportStore {
         selection.component,selection.revision,frontier ? sourceId(frontier.after) : null,limit+1])).rows;
       const items: SourceEvidenceWindow['items'] = [];
       for (const row of rows.slice(0,limit)) {
-        const support = await this.read(row.principal_id,row.id,undefined,session.principal ?? undefined);
+        const support = await this.readProjection(row.principal_id,row.id,undefined,session.principal ?? undefined,session,'window');
         if (!support) return supportUnavailable();
         const evidence = support.publicEvidence;
         if (evidence) items.push(evidence);

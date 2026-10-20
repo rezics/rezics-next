@@ -1,6 +1,7 @@
 import type { DatasetRecord } from '../../../../../scripts/datasets/types.ts';
 import type { SemanticProperty } from '../semantic/change.ts';
 import type { AcknowledgedSemanticBasis, VerifiedSemanticBasis } from '../semantic/native-basis.ts';
+import type { AcknowledgedStructureOccurrence, VerifiedStructureOccurrence } from '../structure/native-basis.ts';
 import type { ReleaseSourceNativeBasis, RealizationSourceNativeBasis } from './release-native-verifier.ts';
 
 /** Private Source refusals. Check evidence custody and reuse before disclosing a basis. */
@@ -48,7 +49,7 @@ export interface RetainedFieldCoordinate {
   valueDigest?: string; language?: string | null; ordinal?: number;
 }
 export type AcknowledgedNativeBasis = ReleaseSourceNativeBasis | RealizationSourceNativeBasis
-  | AcknowledgedSemanticBasis | {
+  | AcknowledgedSemanticBasis | AcknowledgedStructureOccurrence | {
   kind: 'component-property'; owner: 'work-editorial'; target: string; component: string;
   revision: string; receipt: string; field: 'synopsis'; property: SemanticProperty;
   language: SuppliedLanguage;
@@ -67,6 +68,9 @@ export interface RetainedSupportAdmission {
   correspondence: { normalizationRevision: string; rule: string; payloadPointers: string[]; selectedValueDigest: string };
   native: AcknowledgedNativeBasis; headGuarantee: 'transaction-guarded' | 'verified-before-commit';
 }
+export interface VerifiedRetainedSupportAdmission extends RetainedSupportAdmission {
+  headGuarantee: 'verified-before-commit';
+}
 export interface FieldAttachmentCertificate {
   profile: 'source-field-attachment-certificate-v1'; receipt: string; requestDigest: string; nativeReceipt: string;
 }
@@ -81,6 +85,8 @@ export interface VerifiedNativeAcknowledgement {
     // Earlier immutable acknowledgements predate the native owner's full receipt.
     & Partial<Pick<VerifiedSemanticBasis, 'commandReceipt' | 'occurrenceAdoption'>>;
   editorial?: { workHead: string; controlHead: string; controlEpoch: string; protectionHead: string | null };
+  /** Actual native command, exact child and root-to-parent ancestry. */
+  structure?: VerifiedStructureOccurrence & { sourceBinding: string };
   release?: { currentHeads: { release: string; realization: string };
     correspondence: { work: string; release: ReleaseSourceNativeBasis['coverage']['realization'];
       realization: ReleaseSourceNativeBasis['coverage']['realization'];

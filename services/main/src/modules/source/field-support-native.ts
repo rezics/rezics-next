@@ -4,6 +4,8 @@ import { readNativeFieldControl, readNativeFieldReceipt, synopsisSlot } from './
 import { synopsisPropertyValue } from './field-control-language.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import type { NativeBasisVerificationInput } from '../semantic/native-basis.ts';
+import { WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
+import type { RetainedEvidence } from './field-support-evidence.ts';
 import { verifyReleaseSourceNative } from '../release/source-verifier.ts';
 import { verifyRealizationSourceNative } from '../realization/source-verifier.ts';
 import { mappingUnverified, supportChanged, supportUnavailable, SourceFieldProblem,
@@ -11,10 +13,12 @@ import { mappingUnverified, supportChanged, supportUnavailable, SourceFieldProbl
 
 export interface SourceNativeVerificationContext {
   principal: VerifiedPrincipal; selected: NativeBasisVerificationInput['selected'];
+  session?: WorkReadSession;
+  evidence?: RetainedEvidence;
 }
 export type NativeSupportVerifier = (input: RetainedSupportRequest,
   requireCurrent: boolean, context?: SourceNativeVerificationContext) => Promise<VerifiedNativeAcknowledgement>;
-export interface SourceNativeVerifiers { semantic?: NativeSupportVerifier; statement?: NativeSupportVerifier }
+export interface SourceNativeVerifiers { semantic?: NativeSupportVerifier; statement?: NativeSupportVerifier; structure?: NativeSupportVerifier }
 const equal = (left: unknown, right: unknown) => canonicalJson(left) === canonicalJson(right);
 const RECEIPT = /^urn:rezics:receipt:[0-9a-f]{64}$/;
 
@@ -25,7 +29,10 @@ export async function verifySourceNative(env: WorkActivationEnvironment, input: 
   owners: SourceNativeVerifiers = {}, requireCurrent = true,
   context?: SourceNativeVerificationContext): Promise<VerifiedNativeAcknowledgement> {
   try { return await resolveSourceNative(env,input,owners,requireCurrent,context); }
-  catch (error) { if (error instanceof SourceFieldProblem) throw error; return supportUnavailable(); }
+  catch (error) {
+    if (error instanceof SourceFieldProblem || error instanceof WorkReadMoved || error instanceof WorkReadUnavailable) throw error;
+    return supportUnavailable();
+  }
 }
 async function resolveSourceNative(env: WorkActivationEnvironment, input: RetainedSupportRequest,
   owners: SourceNativeVerifiers, requireCurrent: boolean,
@@ -33,6 +40,11 @@ async function resolveSourceNative(env: WorkActivationEnvironment, input: Retain
   const native = input.native;
   if (native.target !== input.target) return supportChanged('native-target');
   if (native.revision !== input.expectedHead || !RECEIPT.test(native.receipt)) return supportChanged('native-head');
+  if (native.kind === 'structure-occurrence') {
+    if (input.context !== native.structure || input.occurrence !== native.occurrence) return supportChanged('native-target');
+    if (!owners.structure) return supportUnavailable();
+    return owners.structure(input,requireCurrent,context);
+  }
   if (native.kind === 'statement') {
     if (input.context !== native.context || input.slot !== 'statement-v1#value') return supportChanged('native-target');
     if (!owners.statement) return supportUnavailable();

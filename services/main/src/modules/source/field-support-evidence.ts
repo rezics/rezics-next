@@ -3,6 +3,7 @@ import type { DatasetNativeField } from '../../../../../scripts/datasets/native/
 import type { SourceRetainedRecordStore } from './retained-record.ts';
 import { canonicalDigest } from './retained-record-normalization.ts';
 import { suppliedLanguage } from './field-control-language.ts';
+import { episodeOccurrenceField } from './field-support-episode.ts';
 import type { NativeBasisVerificationInput } from '../semantic/native-basis.ts';
 import { coordinateInvalid, mappingUnverified, supportChanged, type RetainedSupportRequest,
   supportUnavailable, type RetainedFieldCoordinate, type RetainedSupportAdmission } from './field-support-contract.ts';
@@ -77,9 +78,11 @@ export async function verifyRetainedField(input: RetainedSupportRequest,
   if (field.valueDigest !== digest) return supportChanged('value-digest');
   const component = input.native.kind === 'component-property'
     && (input.native.owner === 'release' || input.native.owner === 'realization') ? input.native.component : null;
+  const structure = input.native.kind === 'structure-occurrence' ? input.native : null;
+  // A retained record field and an acknowledged native child have distinct coordinates.
   if (input.sourceOccurrence !== null) return coordinateInvalid();
   const occurrence = input.native.kind === 'statement' && input.native.coverage
-    && input.native.coverage.kind !== 'subject-global' ? input.native.coverage.occurrence : component;
+    && input.native.coverage.kind !== 'subject-global' ? input.native.coverage.occurrence : structure?.occurrence ?? component;
   if (input.occurrence !== occurrence) return supportChanged('native-target');
   const plan = evidence.fieldPlan;
   if (!plan) return supportUnavailable();
@@ -98,7 +101,9 @@ export async function verifyRetainedField(input: RetainedSupportRequest,
   if (input.grain !== evidence.record.kind || input.sourceField !== retainedFieldKey(field.pointer)) {
     return supportChanged('evidence-binding');
   }
-  const predicate = input.native.kind === 'statement' ? input.native.predicate : input.native.property.predicate;
+  const occurrenceField = structure ? episodeOccurrenceField(field.pointer) : undefined;
+  const predicate = input.native.kind === 'statement' ? input.native.predicate
+    : input.native.kind === 'structure-occurrence' ? `qualifier.values.${occurrenceField}` : input.native.property.predicate;
   const candidate = candidates.find(item => item.native?.predicate === predicate && item.native.owner === input.native.owner)
     ?? candidates.find(item => item.native?.predicate === predicate);
   if (!candidate) return candidates.some(item => item.native) ? supportChanged('evidence-binding') : mappingUnverified();
@@ -111,12 +116,22 @@ export async function verifyRetainedField(input: RetainedSupportRequest,
     if (input.native.kind !== 'component-property' || input.native.owner !== 'work-editorial') return mappingUnverified();
     if (!same(input.native.language,suppliedLanguage(candidate.evidence[0]!))) return supportChanged('native-value');
   }
+  if (structure) {
+    if (evidence.record.provider !== 'bangumi' || evidence.record.kind !== 'episode'
+      || !occurrenceField || candidate.native.owner !== 'structure'
+      || candidate.native.occurrenceField !== occurrenceField) return mappingUnverified();
+    if (input.context !== structure.structure || input.slot !== `structure-occurrence-v1#qualifier.values.${occurrenceField}`) {
+      return supportChanged('native-target');
+    }
+  }
   // Authored V2 coverage selects the native SemanticValue shape. Its absence
   // retains the exact legacy StatementValue contract, without inferred coverage.
   const expected = input.native.kind === 'statement' && !input.native.coverage
     ? candidate.native.statementValue : candidate.native.property?.value;
-  const actual = input.native.kind === 'statement' ? input.native.value : input.native.property.value;
-  if (expected === undefined || !same(expected, actual)) return supportChanged('native-value');
+  if (input.native.kind !== 'structure-occurrence') {
+    const actual = input.native.kind === 'statement' ? input.native.value : input.native.property.value;
+    if (expected === undefined || !same(expected, actual)) return supportChanged('native-value');
+  }
   const pointers = payloadPointers(evidence, field.pointer);
   for (const pointer of pointers) {
     const value = retainedValueAt(evidence.payload, pointer);
