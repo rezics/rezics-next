@@ -62,6 +62,10 @@ const nutritionBody = t.Object({ basis: t.Union([t.Literal('per-serving'), t.Lit
       unit: t.String({ minLength: 1, maxLength: 2048 }), amount: rational },
     { additionalProperties: false }), { maxItems: 64 }) }, { additionalProperties: false }), { maxItems: 512 }) },
 { additionalProperties: false });
+const nativeNutrientMeasure = t.Object({ ...RecipeMeasure.properties,
+  kind: t.Literal('nutrient'),
+  ...t.Required(t.Pick(RecipeMeasure, ['nutrient', 'unit'])).properties,
+}, { additionalProperties: false });
 const storedNutritionBody = t.Object({
   expectedHead: ref, actingSubject: ref,
   yield: t.Object({ value: rational, unit: t.Optional(t.String({ format: 'uri', maxLength: 2048 })),
@@ -81,6 +85,8 @@ const storedNutritionBody = t.Object({
         unit: t.String({ format: 'uri', maxLength: 2048 }), amount: rational },
       { additionalProperties: false }), { maxItems: 64 }) }, { additionalProperties: false }),
     { maxItems: 512 }) }, { additionalProperties: false })),
+  /** Omitted preserves nutrients; [] clears them. Native rows and calculation inputs are exclusive. */
+  nutrients: t.Optional(t.Array(nativeNutrientMeasure, { maxItems: STRUCTURE_LIMITS.measures })),
 }, { additionalProperties: false });
 const timing = t.Object({ value: rational, unit: t.Optional(t.String({ format: 'uri', maxLength: 2048 })),
   unitText: t.Optional(t.String({ minLength: 1, maxLength: 100 })),
@@ -470,6 +476,9 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       const idempotencyKey = key(request);
       if (!idempotencyKey) return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
       try {
+        if (body.nutrition !== undefined && body.nutrients !== undefined) {
+          return problem(400, 'invalid_recipe_measure', 'Supply native nutrients or nutrition calculation inputs');
+        }
         if (!body.yield.unit && !body.yield.unitText) {
           return problem(400, 'invalid_recipe_measure', 'Yield requires a unit or unitText');
         }
@@ -486,7 +495,7 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           })),
         })), body.nutrition.basis) : null;
         const kept = stored.filter(item => durationKinds.has(item.kind)
-          || !nutrition && item.kind === 'nutrient');
+          || !nutrition && body.nutrients === undefined && item.kind === 'nutrient');
         const reduced = (value: { numerator: number; denominator: number }) => {
           const result = exactRational(BigInt(value.numerator), BigInt(value.denominator));
           return { numerator: Number(result.numerator), denominator: Number(result.denominator) };
@@ -506,6 +515,7 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
             value: { numerator: Number(item.amount.numerator), denominator: Number(item.amount.denominator) },
             basis: nutrition.basis, coverage: nutrition.coverage,
             provenance: 'computed' as const })) ?? []),
+          ...(body.nutrients ?? []),
           ...kept,
         ];
         if (measures.length > STRUCTURE_LIMITS.measures) {

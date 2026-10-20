@@ -216,7 +216,8 @@ export async function readRecipeHierarchyPage(input: {
     // These are repeated observations, not ingredient totals. Keep each source
     // measure and its qualification; only whole-recipe nutrients follow servings.
     displayedMeasures = measures.map(measure => {
-      if (measure.kind !== 'nutrient' || measure.basis !== 'whole-recipe') return measure;
+      if (measure.kind !== 'nutrient' || measure.basis !== 'whole-recipe'
+        || factor.numerator === factor.denominator) return measure;
       const value = scaleExact(exactRational(BigInt(measure.value.numerator), BigInt(measure.value.denominator)), factor);
       return { ...measure, value: { numerator: Number(value.numerator), denominator: Number(value.denominator) } };
     });
