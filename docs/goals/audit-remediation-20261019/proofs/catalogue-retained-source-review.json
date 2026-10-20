@@ -2347,5 +2347,605 @@
     "SOURCE-REFUSAL-1": "corrected; both sites accepted",
     "originalDecisionAndFailuresAreHistorical": true,
     "originalClassClosure": false
+  },
+  "structureV2AdapterFirstSourceReview": {
+    "schema": "source-structure-v2-adapter-first-source-review-v1",
+    "review": {
+      "task": "G-2859",
+      "goal": "audit-remediation-20261019",
+      "reviewer": "codex-1/GPT-6.1 Sol/xhigh",
+      "reviewKind": "first-independent-review-of-new-13-file-delta",
+      "reviewedAt": "2026-10-20T12:21:07Z",
+      "reportBase": "7b30661fe20c0fd04faa7b3d7795ae7f144367cf",
+      "scopeDecision": "The 2026-10-20T12:09:49Z Decision supersedes the old 86-file assignment. Review only 0bae541e30043100fe525fe1dbcedadb6b904e7b against f1c42d420130d899605fcd06e1a6ab2b3e14faf7. No advancing wave tip or previously accepted candidate is reviewed again.",
+      "reviewOnly": true,
+      "productEdits": false,
+      "originalClassClosure": false
+    },
+    "candidate": {
+      "parent": "f1c42d420130d899605fcd06e1a6ab2b3e14faf7",
+      "candidate": "0bae541e30043100fe525fe1dbcedadb6b904e7b",
+      "files": [
+        {
+          "path": "generated/openapi/main/public.json",
+          "gitBlob": "d1ef62dee65708957ebc69902b38e291d220d624",
+          "sha256": "0c5df657a9a8e915da42f95206f70cab54b7f03495c307bb187daa852276b4f1",
+          "parentBlob": "94bd0bdeb050deeb85162a791b6c4349e4b6231a"
+        },
+        {
+          "path": "scripts/datasets/native/fields.ts",
+          "gitBlob": "81ffea26b8da449ff6de0bec86b1f65d689b98b3",
+          "sha256": "84720ed24307eafc5ecccf90d6cc4d5f2d4effceef0fdbc8924d674d75e12713",
+          "parentBlob": "6799af9d11ece61274853576c7a09ed6752e3767"
+        },
+        {
+          "path": "services/main/src/modules/source/field-support-contract.ts",
+          "gitBlob": "359e3b9b8699365421ce2d1ef67553c88ae0294b",
+          "sha256": "b6dd07f3f86e2f66f058f948665349aee1add75f636914699c836a5ea09a8b40",
+          "parentBlob": "7205592cf7fbb3ee6302c92ab43bcf8cb70f3a3d"
+        },
+        {
+          "path": "services/main/src/modules/source/field-support-episode.ts",
+          "gitBlob": "5b1db55e5e40320fecffd314f8a2912c1a51e440",
+          "sha256": "45b021f2d8a2286e35317036023b731f2f7024f1840156296d32d93972a20bf0",
+          "parentBlob": null
+        },
+        {
+          "path": "services/main/src/modules/source/field-support-evidence.ts",
+          "gitBlob": "d60a0748b45db7677fab68e995a0e9ce447cb666",
+          "sha256": "aa63e00ed401eeb212b276b6bc23b67818c51c7ae7d04e69b73aef8e529eaf9d",
+          "parentBlob": "bc32ab47458c202a18ee4094da3f8e1d2eca9f18"
+        },
+        {
+          "path": "services/main/src/modules/source/field-support-native.ts",
+          "gitBlob": "c023ce1030e0586b23b5e77a3d76f2a38c6069c2",
+          "sha256": "441fc3ff107f2b5578d46ed6e2d2f4e5138ac40035d46a9d7e4f407bbc562b93",
+          "parentBlob": "e113dbcbdacd2438d62d5d503f93086b22c684cf"
+        },
+        {
+          "path": "services/main/src/modules/source/field-support-retained.ts",
+          "gitBlob": "892248a6d607727f531b85398d707f34e0d85113",
+          "sha256": "983fc402b50c2a12fbb0346176b66b84048aa7f65de0ec84ed564cfd0debc7d4",
+          "parentBlob": "811373af9c9c88b783edc4fdcc46aa9d7ac6faa7"
+        },
+        {
+          "path": "services/main/src/modules/source/field-support-schema.ts",
+          "gitBlob": "c09f90af16a07b1a5ef1c7c7d27bbb95494cab6d",
+          "sha256": "3e65b8b98ff352c1b83001f8736e758298aff72289ff390296a7da4072e09ca9",
+          "parentBlob": "8dd9a4a5e82aa826860e24ed5378bda7e8c3735b"
+        },
+        {
+          "path": "services/main/src/modules/source/field-support-structure.ts",
+          "gitBlob": "461daf0da0f9ac0a450ff56439c9fec246663649",
+          "sha256": "5f02be29cf4c18a1336ec11dcebe45b86ed9890bb464e6c2026a9a3cbb1c4c07",
+          "parentBlob": null
+        },
+        {
+          "path": "services/main/src/routes/source-supports.ts",
+          "gitBlob": "f5d418ee664ededa60f79f72e7c16fb9ac57501d",
+          "sha256": "2e47cbf791657207a20280b5d9803a5984d8ab54bfccc66b298c03c476be26e7",
+          "parentBlob": "08cec1ad5db0319451cd781d1ee468e647569705"
+        },
+        {
+          "path": "services/main/tests/source-field-structure-fixture.ts",
+          "gitBlob": "0220fe805d1db2c428329f146bac3d701eb82767",
+          "sha256": "c3edd2afe3083724363bb44b70bce61cac95219e809d49992f46dd3b18189bd9",
+          "parentBlob": null
+        },
+        {
+          "path": "services/main/tests/source-field-structure.test.ts",
+          "gitBlob": "274f5dab3acf11007fa18806d72fefcb5f534377",
+          "sha256": "30341054ad669bc17bc190277f5bc7b1a83f83796c5a29b232e69fa23a2b4e37",
+          "parentBlob": null
+        },
+        {
+          "path": "tests/qa/unit/dataset-field-mapping.test.ts",
+          "gitBlob": "8fd2cb36440683c631e66ef9f72dcdac8f54bd4a",
+          "sha256": "cda97201b4e4e70c698a252da1b8adfc80e4ac48766f88b627f50c9fa3bd6a9f",
+          "parentBlob": "5d43e3d4ebec7607505060a90ea344f9c2c625b6"
+        }
+      ],
+      "manifestSha256": "f5babaad4e5387c31b74d6beb283c29e4843b8e4694933f9f438f7b46dc51839",
+      "exactFirstParentVerified": true,
+      "changedFileCount": 13,
+      "manifestSource": ".temp/worktrees/g-2781/.temp/goal/source-structure-publication.json",
+      "manifestSnapshot": ".temp/review/structure-v2/source-structure-publication.json",
+      "manifestMeaning": "All 13 manifest Git blobs and SHA-256 values independently match git diff parent..candidate; every changed candidate file was inspected. Candidate runtime source used by the focused check is also extracted from this immutable commit, with no product patch.",
+      "publicationSha256": "f5babaad4e5387c31b74d6beb283c29e4843b8e4694933f9f438f7b46dc51839",
+      "handoffSha256": "05c6e82f275c9c48a0631a48ca6a7a95e79fe0b313ef4855d516aeef16690582",
+      "ownerValidationSha256": "524a67b8bd8d7dd896d377a57bb9087d5761593ab5240331e58f8be717317237",
+      "authorship": "Edge-coordinates <Edgecoordinates@gmail.com>",
+      "preservedAuthorship": [
+        {
+          "commit": "f3ee0c069dc66bfb9470220476d50cfd64a7af25",
+          "author": "Edge-coordinates <Edgecoordinates@gmail.com>",
+          "isAncestor": false
+        },
+        {
+          "commit": "e44ea5413624f3f868fb04c8591b74eb845c8505",
+          "author": "Edge-coordinates <Edgecoordinates@gmail.com>",
+          "isAncestor": false
+        },
+        {
+          "commit": "c6d99a317355ba5c83f46efad2c6ae8ca9d63d3f",
+          "author": "Edge-coordinates <Edgecoordinates@gmail.com>",
+          "isAncestor": true
+        },
+        {
+          "commit": "7224fd87fcb68f2a5299d6e11d011516daaca28c",
+          "author": "Edge-coordinates <Edgecoordinates@gmail.com>",
+          "isAncestor": true
+        },
+        {
+          "commit": "f1c42d420130d899605fcd06e1a6ab2b3e14faf7",
+          "author": "Edge-coordinates <Edgecoordinates@gmail.com>",
+          "isAncestor": true
+        }
+      ],
+      "baseSourceAuthorship": [
+        {
+          "commit": "867d708b2ac4a83f88032717e7e63a04a36e0277",
+          "author": "Edge-coordinates <Edgecoordinates@gmail.com>",
+          "isAncestor": true
+        },
+        {
+          "commit": "b6ccfb47911e4381006c8e5220909f3b96e027e9",
+          "author": "Edge-coordinates <Edgecoordinates@gmail.com>",
+          "isAncestor": true
+        },
+        {
+          "commit": "61ba57c0767dee7666f993e41773c2b7dac6a58c",
+          "author": "Edge-coordinates <Edgecoordinates@gmail.com>",
+          "isAncestor": true
+        }
+      ]
+    },
+    "disposition": {
+      "accepted": false,
+      "decision": "request-bounded-source-correction",
+      "blockingFindings": [
+        "SOURCE-STRUCTURE-FENCE-1"
+      ],
+      "summary": "The new acknowledgement and finite retained correspondence preserve the intended owner boundary, but a stable Structure evidence window cannot complete the enclosing session dependency fence. Its registered reread calls read(), which runs the full fence again and recursively rereads the same window until the request budget expires. Even withheld evidence triggers the loop.",
+      "existingOwner": "G-2781 Source; shared composition wiring remains with G-2763",
+      "landingPerformed": false,
+      "originalClassClosure": false
+    },
+    "actionableFindings": [
+      {
+        "id": "SOURCE-STRUCTURE-FENCE-1",
+        "priority": "P1",
+        "class": "An owner dependency reread reenters its enclosing session-wide fence",
+        "status": "confirmed-at-outcome-assertion",
+        "locations": [
+          {
+            "path": "services/main/src/modules/source/field-support-retained.ts",
+            "line": 285,
+            "detail": "The new Structure read branch calls session.fenceDependencies() after native acknowledgement comparison and evidence projection, including when publicEvidence is null."
+          },
+          {
+            "path": "services/main/src/modules/source/field-support-retained.ts",
+            "line": 347,
+            "detail": "The existing window loader now explicitly passes the same session to each retained support read."
+          },
+          {
+            "path": "services/main/src/modules/source/field-support-retained.ts",
+            "line": 359,
+            "detail": "session.dependency registers load() as the whole current evidence-window reread."
+          },
+          {
+            "path": "services/main/src/modules/work/read-session.ts",
+            "line": 211,
+            "detail": "The unchanged session fence awaits each registered owner dependency. The window callback therefore returns to read() and starts this same fence again."
+          }
+        ],
+        "counterexample": {
+          "reader": "An authenticated reader with actingSubject in one active WorkReadSession",
+          "selection": "One current, unchanged retained Structure occurrence support; all SQL/native/custody/evidence owner inputs remain fixed",
+          "evidence": "publicEvidence returns null, so no public quotation or installed disclosure positive is assumed",
+          "initialResult": {
+            "items": [],
+            "generation": "1",
+            "more": false,
+            "next": null
+          },
+          "expected": "The enclosing final dependency fence completes on unchanged inputs and permits emission of the empty evidence window.",
+          "observed": "The initial window load passed. The enclosing session.fenceDependencies() then reloaded the window 668 more times (669 total window loads/native verifier reads) and raised FusekiReadDeadlineExceeded. The actual source stack alternates field-support-retained.ts read:285 -> load:347 -> dependency callback:360 -> read-session.ts fenceDependencies:211.",
+          "assertion": "expect(failure, \"unchanged input and withheld evidence must allow the final fence to complete\").toBeUndefined()",
+          "assertionLine": 77,
+          "assertionReached": true,
+          "result": "0 pass / 1 fail / 3 expect calls; no setup error in the confirming run"
+        },
+        "proof": {
+          "job": "01b8fe8d-e7f0-43b8-93b1-ab0e00f20599",
+          "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --taskfile .temp/review/structure-v2/Taskfile.yml evidence-fence",
+          "taskCommand": "bun scripts/goal/goalctl.ts test ./.temp/review/structure-v2/structure-evidence-reentrancy.test.ts",
+          "exitCode": 201,
+          "log": {
+            "path": ".temp/goal/jobs/01b8fe8d-e7f0-43b8-93b1-ab0e00f20599.log",
+            "sha256": "b79bd600f642ef7d22fb08e7f17405392604b61e07adb0b78ada7b8bdd66911c"
+          },
+          "testPath": ".temp/review/structure-v2/structure-evidence-reentrancy.test.ts",
+          "testSha256": "aea95a3641e309f8059f717d6c133cbc87cd3845a6efd07596e24c915818c264",
+          "testSource": "import { expect, test } from 'bun:test';\nimport { randomUUID } from 'node:crypto';\nimport { SourceRetainedFieldSupportStore, retainedAttachmentDigest } from './runtime/services/main/src/modules/source/field-support-retained.ts';\nimport { verifyRetainedField } from './runtime/services/main/src/modules/source/field-support-evidence.ts';\nimport { canonicalDigest } from './runtime/services/main/src/modules/source/retained-record-normalization.ts';\nimport { WorkReadSession, withWorkReadSession } from './runtime/services/main/src/modules/work/read-session.ts';\nimport { fusekiReadBudget } from './runtime/services/main/src/infrastructure/fuseki.ts';\nimport { projectDatasetFields } from './runtime/scripts/datasets/native/fields.ts';\n\n// Unit counterexample: actual Source read/window/session methods; controlled SQL,\n// retained custody and native/evidence owner ports. No native admission, SQL\n// service or installed/public product claim is made by these prerequisites.\ntest('stable retained Structure evidence window completes its final dependency fence', async () => {\n  const id = () => `https://rezics.com/id/${randomUUID()}`;\n  const principalId = randomUUID(), supportId = randomUUID(), stepId = randomUUID();\n  const principal = { issuer: 'https://account.test', subject: 'reader' };\n  const record = { key: 'bangumi:episode:101', provider: 'bangumi', kind: 'episode', externalId: '101',\n    title: 'Episode', native: 'episode', data: { id: 101, subject_id: 10, sort: 0.5, disc: 0, type: 1 } };\n  const binding = { binding: id(), sourceRecord: id(), conversion: id(), recordDigest: canonicalDigest(record),\n    mappingRevision: 'bangumi-episode-retained-map-v1', normalizationRevision: 'retained-record-json-v1' };\n  const source = { key: record.key, provider: record.provider, namespace: record.kind, externalId: record.externalId,\n    snapshot: 'snapshot', snapshotDigest: 'a'.repeat(64), recordDigest: binding.recordDigest, observations: [], intakes: [] };\n  const evidence = { record, payload: { record }, rule: 'dataset-record-envelope-v1',\n    conversion: { retainedRecord: binding }, fieldPlan: projectDatasetFields(record as never, source as never) };\n  const native = { kind: 'structure-occurrence', owner: 'structure', target: id(), component: id(), structure: id(),\n    profile: 'episode-list-v1', revision: id(), receipt: `urn:rezics:receipt:${'b'.repeat(64)}`, occurrence: id() };\n  const request = { profile: 'source-field-support-attachment-v2', target: native.target,\n    slot: 'structure-occurrence-v1#qualifier.values.position', occurrence: native.occurrence,\n    context: native.structure, sourceRecord: binding.sourceRecord, conversion: binding.conversion,\n    grain: 'episode', sourceField: 'sort', sourceOccurrence: null, expectedHead: native.revision, actingSubject: id(), native,\n    evidence: { binding: binding.binding, recordDigest: binding.recordDigest, mappingRevision: binding.mappingRevision,\n      field: { pointer: '/data/sort', presence: 'value', valueDigest: canonicalDigest(0.5) } } };\n  const field = await verifyRetainedField(request as never, evidence as never);\n  const acknowledgement = { receipt: native.receipt, admissionId: randomUUID(), scope: `work:edit:${native.target}`,\n    action: 'work.edit', component: native.component, revision: native.revision, dataEpoch: randomUUID(), sequence: '1' };\n  const admission = { profile: 'source-field-support-admission-v1', sourceRecord: binding.sourceRecord,\n    conversion: binding.conversion, evidence: request.evidence, correspondence: field.correspondence,\n    native, headGuarantee: 'verified-before-commit' };\n  const digest = retainedAttachmentDigest(principalId, request as never, admission as never, acknowledgement as never);\n  const saved = { support_id: supportId, step_id: stepId, request, request_digest: digest,\n    retained_admission: admission, native_acknowledgement: acknowledgement,\n    certificate: { profile: 'source-field-attachment-certificate-v1', receipt: `urn:rezics:receipt:${'c'.repeat(64)}`,\n      requestDigest: digest, nativeReceipt: native.receipt }, created_at: new Date('2026-10-20T00:00:00Z'),\n    withdrawal_id: null, reason: null, withdrawn_at: null };\n  let windowLoads = 0, nativeReads = 0;\n  const pool = { query: async (sql: string) => {\n    if (sql.includes('field_support_generation')) return { rows: [{ generation: '1' }], rowCount: 1 };\n    if (sql.includes('SELECT s.id,s.principal_id')) {\n      windowLoads++;\n      return { rows: [{ id: supportId, principal_id: principalId }], rowCount: 1 };\n    }\n    if (sql.includes('AS support_id')) return { rows: [saved], rowCount: 1 };\n    if (sql.startsWith('SELECT 1 FROM source.retained_record_binding')) return { rows: [{}], rowCount: 1 };\n    if (sql.startsWith('SELECT principal_id,conversion_id')) return { rows: [{ principal_id: principalId,\n      conversion_id: binding.conversion.slice(-36) }], rowCount: 1 };\n    throw new Error(`Unexpected SQL: ${sql}`);\n  } };\n  const deps = { environment: {}, access: { activePrincipalId: async () => principalId, assertRecoveryOpen: async () => {} } };\n  const session = new WorkReadSession(deps as never, new Request('https://main.test/v1/evidence'),\n    { actingSubject: request.actingSubject }, { dataEpoch: acknowledgement.dataEpoch, sequence: '1' });\n  session.principal = principal;\n  const store = new SourceRetainedFieldSupportStore(pool as never, {} as never, {} as never,\n    { evidence: async () => evidence } as never, {\n      structure: async () => { nativeReads++; return acknowledgement; },\n      publicEvidence: async () => null,\n    } as never);\n  const budget = { callsLeft: 100, bytesLeft: 1_048_576, deadline: Infinity, signal: new AbortController().signal };\n  await fusekiReadBudget.run(budget, () => withWorkReadSession(session, async () => {\n    const window = await store.readEvidenceWindow(session, { target: native.target, slot: request.slot,\n      occurrence: native.occurrence, context: native.structure, component: native.component, revision: native.revision });\n    expect(window).toEqual({ items: [], generation: '1', more: false, next: null });\n    expect(windowLoads).toBe(1);\n    budget.deadline = performance.now() + 100;\n    let failure: unknown;\n    try { await session.fenceDependencies(); } catch (error) { failure = error; }\n    console.log(JSON.stringify({ windowLoads, nativeReads, finalFenceError: failure instanceof Error ? failure.name : null }));\n    expect(failure, 'unchanged input and withheld evidence must allow the final fence to complete').toBeUndefined();\n  }));\n});\n",
+          "runtimePin": "0bae541e30043100fe525fe1dbcedadb6b904e7b",
+          "reconstruction": "Extract candidate sources into .temp/review/structure-v2/runtime, including services/main/src, scripts/datasets, scripts/lib and packages, and resolve their relative tracked imports from the same immutable commit. Point only snapshot-local @rezics package links at those extracted packages; reuse installed external dependencies without installs. The embedded test imports this snapshot. The recorded Taskfile evidence-fence task invokes the worktree goalctl test command above.",
+          "runtimeClosureArtifact": {
+            "path": ".temp/review/structure-v2/runtime-closure.json",
+            "sha256": "15fe5cf3f598dcb13c5ea94a02f5b15e6779eab3a5acc5683c28f0f5ef76e8ef"
+          },
+          "premiseLimits": "Actual unmodified Source read(), readEvidenceWindow(), verifyRetainedField(), verifySourceNative() dispatch, field planning and WorkReadSession code; controlled SQL transport, retained evidence/custody store port, Structure verifier and null public-evidence owner. This is a unit counterexample to session composition, not an outcome test or evidence of actual native admission. A 100ms real request deadline bounds the otherwise recursive stable reread. No services, PostgreSQL, captures, accounts or installed public API ran."
+        },
+        "boundedClassInspection": "Within the 13-file cut the reentrant call is in the one new Structure branch of read(). Every selected current Structure support reached through readEvidenceWindow is affected when the active session has a principal/actingSubject and the acknowledgement is current. Withheld/null evidence still enters this branch. Direct private historical reads without a qualified session skip current projection; direct POST settlement has no registered enclosing evidence-window reread. Existing V1 and other V2 reads do not enter this new branch.",
+        "ownerAction": "The existing Source owner must make support projection safe as an owner-dependency reread while preserving the outer final fences for native inputs, current subject, custody/reuse, rights, withdrawal and evidence. Add a regression that performs the complete window -> enclosing final-fence sequence, including stable withheld/current evidence and movement or revocation. Freeze the corrected bounded delta for this same reviewer. No new mapping framework, owner API or cross-owner transaction is requested."
+      }
+    ],
+    "acceptedObservations": [
+      {
+        "area": "Closed acknowledgement and native authority",
+        "finding": "The new runtime native union is closed and requires kind/owner/Work/component/Structure/profile/revision/receipt/exact native child. verifySourceNative binds target, expected head, context and occurrence before dispatch; an absent Structure owner refuses unavailable. The adapter consumes the existing readAcknowledgedStructureOccurrence rather than creating, adopting or converting a native object."
+      },
+      {
+        "area": "Exact native receipt and same-revision ancestry",
+        "finding": "The existing native owner resolves an actual succeeded terminal receipt, admission, operation and revision anchor; verifies the Structure owner/component/profile/current head; loads the immutable manifest and exact active child/order entry; traverses active container ancestry at the same revision; checks current target grain and disclosure; and registers dependencies for closing fences. The Source acknowledgement retains that result, source binding, manifest, operation, epoch and sequence. The adapter additionally requires work.edit, the exact Work edit scope and exact receipt/Structure/revision."
+      },
+      {
+        "area": "Finite retained placement and value/language fidelity",
+        "finding": "Only Bangumi episode /data/sort, /data/disc and /data/type map to occurrence position/disc/kindCode. The Map-based pointer lookup refuses inherited aliases. Exact nonnegative decimal rationals reduce after parsing; 0.5 becomes 1/2 and zero becomes 0/1; disc/type require integral values and existing native magnitude bounds. Missing, null and empty evidence retain separate presence. The whole retained placement, optional-field presence, kindScheme bangumi:episode:type, native sourceKey, episode identity and adopted subject Work must agree. Selected retained value and supplied language are independently compared; sibling order and semantic episodeNumber are not substituted."
+      },
+      {
+        "area": "Current subject/session and verified-before-commit",
+        "finding": "New Structure settlement requires the exact active WorkReadSession, the input actingSubject and matching verified principal. The adapter consumes this session. Source uses existing live withOwnerAuthority, rereads custody/reuse, fences selected native/adoption/identity dependencies and authority, and checks the deadline before Source COMMIT. The POST route uses localBasis and one workRead attempt; request.method POST prevents read retries around committing callbacks. This is verified-before-commit only, with no atomic cross-owner guarantee."
+      },
+      {
+        "area": "Replay, withdrawal and custody",
+        "finding": "Exact idempotent replay is resolved from the persisted request and immutable certificate before current-head settlement. A moved head with a new key must pass fresh acknowledgement verification and is refused. Historical certificate custody is distinct from current public evidence. Support/withdrawal SQL and the current rights/evidence projection are registered as dependencies; independent Source withdrawal has no native effect. The enclosing evidence-window fence is blocked by SOURCE-STRUCTURE-FENCE-1, so these mechanisms do not establish a working complete public evidence path."
+      },
+      {
+        "area": "Evidence continuation shape",
+        "finding": "The selected coordinate, private generation/after frontier, limit 16 and limit+1 physical-row scan remain intact; withheld rows retain their physical continuation position. The only window code delta passes the same session into read(). The intended continuation shape is preserved, but final emission for a current authenticated Structure window fails as the confirmed counterexample demonstrates."
+      },
+      {
+        "area": "Existing branches and citation independence",
+        "finding": "The route split preserves handler order, policies, runtime validators and V1/other V2 branches apart from the new Structure dispatch/session path. ownerSchema is a type-only identity cast preserving Elysia validator objects. No migration, lockfile, converter, native write API, manual citation model or owner composition file is in the delta. Manual citations and ordinary native commands remain independent of conversion; the V2 retained-evidence contract is not imposed on them."
+      }
+    ],
+    "exactDependenciesConsulted": {
+      "scope": "Only the existing owner/session/custody/authority boundary needed to assess this new adapter; accepted native/query/Source implementations are not independently reviewed again.",
+      "files": [
+        {
+          "path": "services/main/src/modules/structure/native-basis.ts",
+          "gitBlob": "6af834b2d903502e6eb8a0af03eb3b68ee04a796",
+          "sha256": "98950f274622580471977a3f56b7cc2f2e51c8a9c3896483f762a578687725b8",
+          "unchangedFromParent": true
+        },
+        {
+          "path": "services/main/src/modules/structure/episode-profile.ts",
+          "gitBlob": "941506974f4ff87d13f93da0e8d7ce00f199c400",
+          "sha256": "8c3bbf9f76a2cb6586344e11cc5d4ce74caf5a25503815457ff3bdd6910817d0",
+          "unchangedFromParent": true
+        },
+        {
+          "path": "services/main/src/modules/work/read-session.ts",
+          "gitBlob": "85381184a0704f74645f97e0b0327a2b13d0d27d",
+          "sha256": "1e057f09ae28386be2ee2a737826a5060bf67aabe3dd4ce8abe105183659b4db",
+          "unchangedFromParent": true
+        },
+        {
+          "path": "services/main/src/modules/source/native-work-adoption.ts",
+          "gitBlob": "3e0946319e8a4d8415aa5cb3f3162e40e086313e",
+          "sha256": "3d964e805c9f33a9b4a586593b9aeca0e45a79f689cc941ecb633710ef1fc1d0",
+          "unchangedFromParent": true
+        },
+        {
+          "path": "services/main/src/modules/source/retained-evidence.ts",
+          "gitBlob": "15d1e6e6f90f1be63a902d51fa01e7a8bb4682b0",
+          "sha256": "8c48b69b75ba7abef233b36c20a08001f2ec4bc3b70f1cca9bb9dcac67a89ff6",
+          "unchangedFromParent": true
+        },
+        {
+          "path": "services/main/src/modules/access/admission.ts",
+          "gitBlob": "aef348515d8573ec066c9c765af01139151d719c",
+          "sha256": "38249c3dc3e91bb26c1ec36c06aa2bbeadfae9ad64450f78f4b5615636068a4b",
+          "unchangedFromParent": true
+        },
+        {
+          "path": "services/main/src/routes/work-reads.ts",
+          "gitBlob": "97443a6c90c5cddb1842270b6b456ee176415f3d",
+          "sha256": "58028ef063c188144a290b04fc95da135eed088ee8c7e5bc8c55c0d2226a65e3",
+          "unchangedFromParent": true
+        },
+        {
+          "path": "services/main/src/modules/structure/read.ts",
+          "gitBlob": "67093e29eb9bb4196a48f4fe2bd4ec2f70b87814",
+          "sha256": "2a533d4da3e1b0e453bd36d2ab2f22e06ef06a78dc1249efa4befb987f5c9413",
+          "unchangedFromParent": true
+        }
+      ],
+      "sections": [
+        "structure/native-basis.ts acknowledged read and its return contract",
+        "structure/episode-profile.ts checkEpisodeOrder and current Episode target guard",
+        "structure/read.ts readCompositionSnapshot",
+        "work/read-session.ts dependency registration, fenceDependencies, fenceAuthority, active session and workRead retry/closing semantics",
+        "source/native-work-adoption.ts importBinding and assertActive",
+        "source/retained-evidence.ts retained reuse and reader-authorized public projection",
+        "access/admission.ts withOwnerAuthority",
+        "routes/work-reads.ts workReadError"
+      ]
+    },
+    "generatedOutputInspection": {
+      "structureBranchLocations": [
+        "/paths//v1/sources/field-supports/post/requestBody/content/application/json/schema/anyOf/1/properties/native/anyOf",
+        "/paths//v1/sources/field-supports/post/requestBody/content/application/x-www-form-urlencoded/schema/anyOf/1/properties/native/anyOf",
+        "/paths//v1/sources/field-supports/post/requestBody/content/multipart/form-data/schema/anyOf/1/properties/native/anyOf",
+        "/paths//v1/sources/field-supports/post/responses/200/content/application/json/schema/properties/support/properties/admission/properties/native/anyOf",
+        "/paths//v1/sources/field-supports/post/responses/201/content/application/json/schema/properties/support/properties/admission/properties/native/anyOf",
+        "/paths//v1/sources/field-supports/{support}/get/responses/200/content/application/json/schema/properties/admission/properties/native/anyOf",
+        "/paths//v1/sources/supports/{support}/get/responses/200/content/application/json/schema/anyOf/0/properties/admission/properties/native/anyOf",
+        "/paths//v1/sources/withdrawals/post/responses/200/content/application/json/schema/properties/support/anyOf/0/properties/admission/properties/native/anyOf",
+        "/paths//v1/sources/withdrawals/post/responses/201/content/application/json/schema/properties/support/anyOf/0/properties/admission/properties/native/anyOf"
+      ],
+      "newBranchCount": 9,
+      "allNewBranchesIdentical": true,
+      "closedRequiredFields": [
+        "kind",
+        "owner",
+        "target",
+        "component",
+        "structure",
+        "profile",
+        "revision",
+        "receipt",
+        "occurrence"
+      ],
+      "equalToParentAfterRemovingOnlyNewStructureBranches": true,
+      "unchangedGuardInputs": [
+        "apps/web",
+        "scripts/static",
+        "package.json",
+        "yarn.lock"
+      ],
+      "reviewRuntimeSourceFiles": 1941,
+      "method": "Independently traverse the exact candidate public OpenAPI; remove only the nine native anyOf structure-occurrence branches; compare the complete remaining JSON to the exact parent. All nine new branches are equal, closed, and match the actual nine-field validator including literal episode-list-v1. Runtime field-support schemas and unchanged old branch definitions were inspected separately.",
+      "datasetMapping": "The exact changed dataset mapper uses the same episodeRational/episodeKindCode primitives as retained verification and names the three actual occurrence qualifier fields. Source-only values never gain a native candidate; the existing semantic episodeNumber projection is removed for these Episode placement fields. This is planning, not importer adoption.",
+      "migrationsChanged": false,
+      "otherGeneratedOwnersChanged": false
+    },
+    "checksActuallyExecuted": [
+      {
+        "kind": "read-only-pin-and-report-verification",
+        "result": "passed",
+        "details": "Verified exact parent/13-file union, each candidate Git blob/SHA-256, candidate runtime bytes for changed source files, new OpenAPI branches and full remaining projection equality, unchanged web/static/package/lock guard inputs, and byte preservation of prior reports. No product test is inferred from static inspection."
+      },
+      {
+        "kind": "targeted-counterexample-setup-failure",
+        "job": "5d145798-e89b-4c34-90ae-56a784cfccc6",
+        "result": "failed before loading the test: Bun treated the hidden .temp path as a filter",
+        "assertionReached": false,
+        "correction": "Prefix the test path with ./ in the Task invocation.",
+        "log": {
+          "path": ".temp/goal/jobs/5d145798-e89b-4c34-90ae-56a784cfccc6.log",
+          "sha256": "cd5df21ab0c72d646afc9584f57a65808b91dd3d9343a7531efd542ada5e3d35"
+        }
+      },
+      {
+        "kind": "targeted-counterexample-source-loading-failure",
+        "job": "40c86df9-afdd-4b46-a002-55b1d65db8f8",
+        "result": "0 pass/1 fail/1 error before test assertions: the temporary source snapshot lacked services/content/src/connection.ts",
+        "assertionReached": false,
+        "correction": "Complete relative tracked imports from the exact same candidate. No test body or product source was changed.",
+        "log": {
+          "path": ".temp/goal/jobs/40c86df9-afdd-4b46-a002-55b1d65db8f8.log",
+          "sha256": "b48dddc2e237419c4caa40919e0aa422405bb36b8fe7f59da9aff2f5dc035511"
+        }
+      },
+      {
+        "kind": "targeted-counterexample",
+        "job": "01b8fe8d-e7f0-43b8-93b1-ab0e00f20599",
+        "result": "failed at the final stable-window outcome assertion; confirms SOURCE-STRUCTURE-FENCE-1",
+        "assertionReached": true,
+        "tests": 1,
+        "passing": 0,
+        "failing": 1,
+        "expectCalls": 3,
+        "log": {
+          "path": ".temp/goal/jobs/01b8fe8d-e7f0-43b8-93b1-ab0e00f20599.log",
+          "sha256": "b79bd600f642ef7d22fb08e7f17405392604b61e07adb0b78ada7b8bdd66911c"
+        }
+      }
+    ],
+    "reusedEvidence": {
+      "job": "2035e24c-f7d6-47ce-b086-85bb82ed9a34",
+      "basis": "Explicitly authorized matching publication proof. Its manifest candidate files match the immutable reviewed blobs; QA records a stable dirty-source fingerprint on parent f1c42d42 before publication. Job sequence and exit statuses were read from the owner job database read-only; QA summaries/JUnit and selected logs were inspected without rerunning them.",
+      "sequence": [
+        {
+          "command": [
+            "task",
+            "--taskfile",
+            ".temp/goal/source-structure.Taskfile.yml",
+            "openapi"
+          ],
+          "started": 1792496296898,
+          "code": 0,
+          "ended": 1792496301666
+        },
+        {
+          "command": [
+            "/bin/sh",
+            "-c",
+            "bun scripts/goal/goalctl.ts test services/main/tests/source-field-structure.test.ts services/main/tests/source-field-native-basis.test.ts services/main/tests/source-retained-record.test.ts services/main/tests/source-retained-evidence.test.ts services/main/tests/source-retained-archive-routes.test.ts tests/qa/unit/dataset-field-mapping.test.ts tests/qa/unit/source-field-values.test.ts tests/qa/unit/conversion-library.test.ts"
+          ],
+          "started": 1792496301715,
+          "code": 0,
+          "ended": 1792496387060
+        },
+        {
+          "command": [
+            "/bin/sh",
+            "-c",
+            "task web:typecheck"
+          ],
+          "started": 1792496387100,
+          "code": 0,
+          "ended": 1792496417802
+        },
+        {
+          "command": [
+            "/bin/sh",
+            "-c",
+            "task goal -- check --only types,lint,guards"
+          ],
+          "started": 1792496417838,
+          "code": 201,
+          "ended": 1792496554621
+        }
+      ],
+      "qa": {
+        "run": "20261020t113825-940361",
+        "source": "f1c42d420130d899605fcd06e1a6ab2b3e14faf7",
+        "fingerprint": "de368ce272ca",
+        "stable": true,
+        "files": [
+          "services/main/tests/source-field-structure.test.ts",
+          "services/main/tests/source-field-native-basis.test.ts",
+          "services/main/tests/source-retained-record.test.ts",
+          "services/main/tests/source-retained-evidence.test.ts",
+          "services/main/tests/source-retained-archive-routes.test.ts",
+          "tests/qa/unit/dataset-field-mapping.test.ts",
+          "tests/qa/unit/source-field-values.test.ts",
+          "tests/qa/unit/conversion-library.test.ts"
+        ],
+        "tests": 48,
+        "assertions": 1255,
+        "result": "passed; full qualification no",
+        "fingerprintFull": "de368ce272cafbbdab835659fe5b48e8a51bfba0f4151bb91fd850e855921c30",
+        "owner": {
+          "tests": 29,
+          "assertions": 1026,
+          "failures": 0
+        },
+        "unit": {
+          "tests": 19,
+          "assertions": 229,
+          "failures": 0
+        },
+        "sourceClean": false,
+        "fullQualification": false,
+        "acceptanceIdsPassed": 0
+      },
+      "openapiGeneration": "passed; step 1",
+      "webTypes": "passed; 4062 files; step 3",
+      "mainTypes": "passed",
+      "lint": "passed",
+      "ast": "passed",
+      "fullInference": {
+        "result": "passed",
+        "mainInstantiations": 26948971,
+        "mainUnchangedLimit": 26950993.65,
+        "webInstantiations": 38791263,
+        "edenInstantiations": 17710656,
+        "artifacts": ".temp/api-inference/run-t9YArw"
+      },
+      "fullCheck": "Not green: the guards step exited 201 on the unchanged-base Home/Zone continuation assertion. Passing types/inference/48 focused tests do not refute the newly confirmed outer-window fence counterexample, which the six new Structure tests never perform.",
+      "fixtureLimits": "Owner tests use actual isolated PostgreSQL, actual retained intake/conversion and receipt readers, but controlled native graph/access transports and explicit adoption/terminal prerequisites. Structure publicEvidence is null. They establish neither installed native create/import nor production current Structure public evidence."
+    },
+    "preservedNegativeEvidence": {
+      "unchangedBaseGuard": {
+        "test": "scripts/static/web-continuations.test.ts:13",
+        "assertionReached": true,
+        "instances": [
+          "apps/web/features/home/continue-strip.tsx ContinueStrip dropped continuation",
+          "apps/web/features/zones/site-route.tsx ZoneSiteRoute dropped route.items",
+          "apps/web/features/zones/site-route.tsx ZoneSiteRoute invented routeCursor continuation"
+        ],
+        "scope": "All apps/web, scripts/static, package and lockfile tracked inputs are unchanged between parent and candidate. These remain later integration gates with their existing owner; they are not this Source correction and do not themselves determine this source verdict."
+      },
+      "historical": "Every prior report value, SQL2201B, original Source refusal failures, CONV-REFUSAL-1/5011f702, accepted correction verdict and failed probes remain preserved. No accepted candidate is reviewed again and no old failure is relabelled as a new candidate failure.",
+      "newProbeFailures": "Both test setup failures and the assertion-confirming failure are recorded separately above; no setup run is counted as a confirmed finding."
+    },
+    "preservedAcceptedWork": {
+      "originalReportSha256": "f6aa110ea53c8a8f3357b7420edb5010e223864882a666cb044cb63286c323a6",
+      "preservedReports": [
+        {
+          "path": "docs/goals/audit-remediation-20261019/proofs/catalogue-A19-nutrition-absence-review.json",
+          "gitBlob": "f314de0649d2b20ff09a550c7a880b44950f6929",
+          "sha256": "62b8d0a00a19e82cb5bdaf2baae36ad5962d454a268316d1725940dc28e9bcc3"
+        },
+        {
+          "path": "docs/goals/audit-remediation-20261019/proofs/catalogue-conversion-library-review.json",
+          "gitBlob": "a5b1e8d3aad1b99e09456656bd6a8780e42376c9",
+          "sha256": "02c5d961af18f0fa43befcd49657bfb7c7a84537d5d72a0d891adffd52919826"
+        }
+      ],
+      "originalReportValuesUnchanged": true,
+      "acceptedReportsUnchanged": true,
+      "acceptedSourceRefusalReport": "7b30661fe20c0fd04faa7b3d7795ae7f144367cf",
+      "nativeQueryA19LibraryVerdictsReopened": false,
+      "strictLibraryIntegrationRequirement": {
+        "acceptedLibraryCandidate": "d27a26dd20ebf71a27f212fca84484467fb7fa0f",
+        "acceptedReview": "311fd8c0e01f17da51896b2cb64c00587a3d4bed",
+        "acceptedIndexBlob": "4d07ac212265d7b2f3ac14b6df4906609e16526c",
+        "inheritedParentAndCandidateIndexBlob": "2e9229364cf18fa397e1d33da37d80621ec7d531",
+        "inside13FileDelta": false,
+        "disposition": "Identity-only integration check: the pinned adapter candidate inherits the older index from its parent. The manager must preserve the already accepted strict Map-based refusal on composition and must not overwrite it with this inherited library. The five library files remain outside this review; CONV-REFUSAL-1 is not reviewed or reproduced again."
+      }
+    },
+    "existingOwnerDependencies": [
+      "G-2781 corrects SOURCE-STRUCTURE-FENCE-1 and publishes only the bounded correction with a matching focused window/final-fence regression.",
+      "G-2763 composes acknowledgedStructureSupportOwners({sourceAdoptions}) with the existing RetainedFieldOwners passed to SourceRetainedFieldSupportStore. Until installed, a new Structure support refuses 503 source_support_unavailable; this publication alone installs no admission.",
+      "G-2778 supplies actual selected retained coordinates and acknowledged native receipts through its existing importer; no importer adoption is established here.",
+      "Native/query consumers retain one qualified fenced session and the existing support cursor; preserve G-2846 profile review, accepted native/query/Source/A19/library verdicts and later composition gates.",
+      "The existing web owner resolves the unchanged Home/Zone continuation guards before normal integration."
+    ],
+    "unexecutedLimits": [
+      "No product edits, migrations, generation, installs, services, runtime stack, browser, lease, accounts, captures, corpus, import, restore, shared data writes, merge, rebase or landing.",
+      "No repeated whole-tier tests or independent rerun of the accepted Source87/refusal/native/query/A19/library reviews. Only the concrete new fence concern received a focused recorded unit check.",
+      "No installed public native admission, real importer adoption, production Structure public-evidence positive, original A01/all113 journey, Composition target-disclosure outcome or original class closure.",
+      "The native admission and rights mechanisms were read at their exact dependency blobs; controlled owner proof and the unit counterexample do not constitute current installed/public product acceptance.",
+      "Verified-before-commit remains the guarantee. No cross-owner atomic transaction is claimed."
+    ],
+    "reportValidation": {
+      "status": "passed",
+      "recordedSequence": "0f1bc221-a640-4a68-8198-4a34bcce0a6a",
+      "results": [
+        {
+          "kind": "report-integrity",
+          "job": "0f1bc221-a640-4a68-8198-4a34bcce0a6a",
+          "command": "task --taskfile .temp/review/structure-v2/Taskfile.yml report-integrity",
+          "result": "passed",
+          "exitCode": 0,
+          "log": {
+            "path": ".temp/goal/jobs/0f1bc221-a640-4a68-8198-4a34bcce0a6a.1.log",
+            "sha256": "f4e01ca886a91584d8d483e7177856e7d3733e13f1ffd21a6253ff072d21f267"
+          }
+        },
+        {
+          "kind": "report-documentation-check",
+          "job": "0f1bc221-a640-4a68-8198-4a34bcce0a6a",
+          "command": "task docs:check",
+          "result": "passed",
+          "exitCode": 0,
+          "log": {
+            "path": ".temp/goal/jobs/0f1bc221-a640-4a68-8198-4a34bcce0a6a.2.log",
+            "sha256": "d95e54515af6363f5028aa6cf81a9c700fd40c01733d54dbbc6541b6a183943e"
+          },
+          "markdownFiles": 259,
+          "checks": 13
+        },
+        {
+          "kind": "affected-report-worker-gate",
+          "job": "0f1bc221-a640-4a68-8198-4a34bcce0a6a",
+          "command": "task goal -- check",
+          "result": "passed",
+          "exitCode": 0,
+          "log": {
+            "path": ".temp/goal/jobs/0f1bc221-a640-4a68-8198-4a34bcce0a6a.3.log",
+            "sha256": "df85e3bb926966cadffa3c58521bdc2776d11259161940236fc3f7f0de63de0e"
+          },
+          "details": "AST and 1/45 selected repository guards passed. Types: no TypeScript workspace changed; tests: no test files named in brief; lint: no source file changed. The inherited gate path union mentions the accepted library report, whose working-tree bytes remain unchanged. No implementation type/test suite was rerun by this report-only gate."
+        }
+      ],
+      "finalization": "Receipt metadata appended after the passing sequence. Final Task report-integrity and docs:check run before commit and are reported in the worker handoff. Only this new review key changes; all earlier report values, test-source bytes and historical failures are preserved."
+    }
   }
 }
