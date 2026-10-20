@@ -204,7 +204,27 @@ export const SnapshotFailureKeepsCurrentText: Story = {
   },
 };
 
-export const UnwrittenPhoneChinese: Story = { ...CancelUnwrittenAttempt, args: { locale: 'zh-Hans' }, globals: { locale: 'zh-Hans', viewport: { value: 'phone' } } };
+const unwrittenRecovery: Story = {
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement), locale = args.locale;
+    await post(canvasElement, locale);
+    const cancel = await canvas.findByRole('button', { name: postText.cancelAttempt[locale] });
+    cancel.focus();
+    await userEvent.keyboard('{Enter}');
+    const editor = canvas.getByRole('textbox', { name: postText.body[locale] });
+    await expect(editor).toHaveFocus();
+    await expect(canvas.queryByRole('alert')).toBeNull();
+    await expect(canvas.getByDisplayValue('A complete draft')).not.toHaveAttribute('readonly');
+    await userEvent.keyboard('{End} Continued after cancel.');
+    await expect(editor).toHaveTextContent('Continued after cancel.');
+    await waitFor(() => expect(JSON.parse(localStorage.getItem(draftKey)!).progress).toBeNull());
+    await userEvent.click(canvas.getByRole('button', { name: 'Reopen draft' }));
+    await expect(await canvas.findByRole('textbox', { name: postText.body[locale] })).toHaveTextContent('Continued after cancel.');
+    await expect(await canvas.findByText(postText.draftSaved[locale])).toBeVisible();
+  },
+};
+export const UnwrittenPhone: Story = { ...unwrittenRecovery, globals: { viewport: { value: 'phone' } } };
+export const UnwrittenPhoneChinese: Story = { ...unwrittenRecovery, args: { locale: 'zh-Hans' }, globals: { locale: 'zh-Hans', viewport: { value: 'phone' } } };
 
 const storageRecovery: Story = {
   parameters: { recovery: 'storage' },
@@ -237,9 +257,11 @@ const storageRecovery: Story = {
     await expect(await canvas.findByText(t.draftSaved[locale])).toBeVisible();
     await expect(canvas.queryByRole('button', { name: t.retrySave[locale] })).toBeNull();
     await expect(canvas.getByRole('textbox', { name: t.body[locale] })).toHaveFocus();
+    await userEvent.keyboard('{End} Continued after saving.');
+    await expect(canvas.getByRole('textbox', { name: t.body[locale] })).toHaveTextContent('Continued after saving.');
     await userEvent.click(canvas.getByRole('button', { name: 'Reopen draft' }));
     await expect(await canvas.findByDisplayValue('A complete draft revised')).toBeVisible();
-    await expect(canvas.getByRole('textbox', { name: t.body[locale] })).toHaveTextContent('Keep the text through failures.');
+    await expect(canvas.getByRole('textbox', { name: t.body[locale] })).toHaveTextContent('Continued after saving.');
     await expect(await canvas.findByText(t.draftSaved[locale])).toBeVisible();
   },
 };
