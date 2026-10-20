@@ -4928,5 +4928,320 @@
       "minimalUnclaimedTrackedOwnerChanges": []
     },
     "independentOriginalSuiteCommandAuthority": "The existing false independentOriginalSuiteCommandAuthorizedNow flag applies to this G-2750 environment-only continuation. The maintained authorization reserves original-suite execution for the already delegated G-2826, using the exact handoff; G-2750 does not launch it."
+  },
+  "originalCancellationSelectionHandoff": {
+    "result": "partial",
+    "decision": "2026-10-20T10:38:35Z cut to original notification and cancellation executable handoffs; Product mail255f1b3d-c911-4964-9beb-84fc95d7d9bb",
+    "handoff": {
+      "path": ".temp/original-read-cancellation-handoff/handoff.json",
+      "sha256": "acdd1ae0d2ddf9a4d04892da4ad4bf6a90670e491c1d72ffd5ae5831418594a1"
+    },
+    "inputMatrixSha256": "db5e76820b28af9b39df3e1218034941e55d051707ed5a6433ce0e4029d753b1",
+    "originalBaseline": "69eac3ceeaf885be70205a70248bc951e9d81cc9",
+    "productCompilePin": "76c5955006dbea2016e84465d8f3e79fdf4fc979",
+    "fixturePin": "b074b5b4cd9f08e6af9b6d9d09bbeeb490d8995b",
+    "recordedStackFreeCheck": {
+      "job": "db701d5f-afe8-49a8-b148-7e96c7020410",
+      "result": "passed",
+      "commands": [
+        "task -t .temp/original-read-cancellation-handoff/Taskfile.yml stage",
+        "task -t .temp/original-read-cancellation-handoff/Taskfile.yml compile"
+      ],
+      "logs": [
+        {
+          "path": ".temp/goal/jobs/db701d5f-afe8-49a8-b148-7e96c7020410.1.log",
+          "sha256": "53e631a35722767ec851974a2ad4a8701c908cb3b0f8115fe77642f572b2bbec"
+        },
+        {
+          "path": ".temp/goal/jobs/db701d5f-afe8-49a8-b148-7e96c7020410.2.log",
+          "sha256": "df1a6f49cc115d801be38aad01a62f5e2e77d887ed5cfb58ca2eb502cff1b3fd"
+        }
+      ],
+      "selection": "All10101 staged source hashes verified; five original titles; exact body/predicates unchanged.",
+      "compile": "Bun bundled1627 modules in374ms against product76c5955006; syntax/import linking only, not a TypeScript typecheck or runtime proof.",
+      "repeatableVerificationCommand": "task -t .temp/original-read-cancellation-handoff/Taskfile.yml verify",
+      "documentationCheck": "task docs:check after the claimed matrix addition; result belongs to the final worker handoff.",
+      "outcomeAssertionReached": false
+    },
+    "notificationCancel": {
+      "matrixKey": "tests.notificationCancel",
+      "originalFile": {
+        "path": "tests/qa/integration/notification-read-budget.test.ts",
+        "sha256": "7e8fb5f50896ac7d5d7be1375dbe9f529f408f83f4e55c72ac2fb31e08a6346e"
+      },
+      "originalLine": 64,
+      "cases": [
+        "D5-001 stranger: leaving an inbox stops later subject reads and permits a fresh retry",
+        "D5-001 member: leaving an inbox stops later subject reads and permits a fresh retry",
+        "D5-001 owner: leaving an inbox stops later subject reads and permits a fresh retry",
+        "D5-001 moderator: leaving an inbox stops later subject reads and permits a fresh retry",
+        "D5-001 operator: leaving an inbox stops later subject reads and permits a fresh retry"
+      ],
+      "visitor": "No cancellation case: anonymous personal inbox admission is refused. Existing 401/privacy controls retained without replay.",
+      "selection": {
+        "file": ".temp/original-read-cancellation-handoff/source/tests/qa/integration/notification-read-budget.test.ts",
+        "sha256": "0b087997e891b3da72a7cb8150ac4993b6a035d279db9f37f89e160271b80392",
+        "bodySha256": "98ece66c6199867e456494864424250511ba6bb8f578715d689dafbc86dda7bf",
+        "derivation": "Original imports/setup and entire five-persona cancellation loop; no body or predicate edited. Other cases stay in the unchanged canonical file and are not replayed.",
+        "registrationReason": "goalctl test accepts only acceptance-ID filters; D5-001 plus persona cannot select these five titles. The ignored copy keeps the registered path and contains only the unchanged cancellation loop, so full-file selection is exact. No canonical test is edited.",
+        "receipt": {
+          "path": ".temp/original-read-cancellation-handoff/selection.json",
+          "sha256": "adf4e86880fb463a0936934c52dcf958a5bc2656a0cd829959545b6db2ffdf82"
+        },
+        "productPin": "76c5955006dbea2016e84465d8f3e79fdf4fc979",
+        "productTree": "296f4df5e406447b59ec4c693b6fd19ef9201539",
+        "fixturePin": "b074b5b4cd9f08e6af9b6d9d09bbeeb490d8995b",
+        "fixtureFiles": {
+          "tests/qa/integration/notification-read-budget.test.ts": "7e8fb5f50896ac7d5d7be1375dbe9f529f408f83f4e55c72ac2fb31e08a6346e",
+          "tests/qa/support/personas.ts": "e38b4eff624b971ab4f6c58b028a66e4c7fe4017f83e47fbc2ce39bbb57c502b",
+          "tests/qa/support/joining-auth.ts": "75a589feff7afc2fb6766438328511a8af6a3530af81247a323b6ad1ba37ae81",
+          "tests/qa/support/outcome-response.ts": "a90f459d3b78eb6c5cd63f6e7bbca49a707072278274118fc118774e151e3f54",
+          "tests/qa/support/provisioned-agent.ts": "6d9476993fa270fc3ccb89daa3d6eb9f382135ca3681f87b6683c0cc939cb441",
+          "tests/qa/support/proof-phase.ts": "5a4a37c1655cbcdfe10d0a223d9fe1df622e43ab6cc381201d33253a6ccc45dc",
+          "tests/qa/support/settled-write.ts": "cdbbbde9c406f4638ee75603af7fbac5a72c1128dbb6a3c0884aa050b1e15409",
+          "tests/qa/support/command-race.ts": "9a5ca99363437d8c33ced50fbebcc8773183bede43c818e13950a10f68b78f77",
+          "tests/qa/support/request-watch.ts": "066eed949f90cf9c375df2cf5cb8ec78da39dc907d615277638e1ea3a79a1e53",
+          "tests/qa/support/bounded-read-corpus.ts": "22b736942522a2915b25603908f8ef8b0ce4d2c1b187e87d3a7dc0b7a8374a79",
+          "tests/qa/support/work-profile.ts": "a950846b08f32e1e74573518cacd473629686cd26318bd28c895e45a111a707b",
+          "packages/observability/tests/otlp.ts": "5a6715bcab3808d75b4e0b6cdda881f1245a2881a86cdc74e559be6c89462ec1",
+          "tests/qa/support/persona-fixture-authority.ts": "02a60db426f311e024a8448e8f1c2a17e9fe809e89bfc0ca27aeaa25e3ed9e69",
+          "scripts/qa/resource-classes.ts": "ccbeac9d7c6a4fcd6451451e16771f6656cfecbae8aaffc3d0b872cba7578420",
+          "scripts/qa/isolated-integration-files.ts": "b684f0ebd48e5f27f776984c74501d321f3fb7d6fc29ab713d744ac254b0b362"
+        },
+        "allSourceHashes": ".temp/original-read-cancellation-handoff/selection.json#/sourceFiles",
+        "runtimeWorkingDirectoryAfterAdmission": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/original-read-cancellation-handoff/source",
+        "runtimeArgvAfterAdmission": [
+          "bun",
+          "scripts/goal/goalctl.ts",
+          "test",
+          "tests/qa/integration/notification-read-budget.test.ts"
+        ],
+        "runtimeCommandAfterAdmission": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test tests/qa/integration/notification-read-budget.test.ts",
+        "runtimeExecuted": false,
+        "runtimeCallback": null,
+        "runtimeReady": false,
+        "executionGuard": "Do not execute this command before G-2791 supplies a compatible governance corpus/backup and G-2823 qualifies custody. The unchanged helper builds a new corpus when its file is missing; this continuation authorizes no such fallback. No runtime Task or callback is offered."
+      },
+      "unchangedBodyPredicates": [
+        "At least three traced in-flight graph exchanges within the original 5000ms wait; abort the actual HTTP request.",
+        "100ms grace then 300ms observation; zero later graph calls and zero active traced exchanges.",
+        "Fresh independent limit=1 inbox retry returns HTTP200 and exactly one item.",
+        "The existing finally drain follows the observed assertions and cannot turn a failed cancellation into a pass."
+      ],
+      "retainedControlsWithoutReplay": [
+        "All six original inbox/unread allocation and visitor401 controls.",
+        "All six original personal admission/missing controls and signed-in alien404 isolation.",
+        "All prior cursor, chapter, Zone, rating, diagnostic and native/composition evidence remains unchanged."
+      ],
+      "governanceBinding": {
+        "parser": "tests/qa/support/bounded-read-corpus.ts:useBoundedReadCorpus",
+        "format": "bounded-public-reads-v2",
+        "capability": "notifications",
+        "corpus": ".temp/audit-bounded-reads/notifications-governance/corpus.json",
+        "backup": ".temp/audit-bounded-reads/notifications-governance/owners/backup.json",
+        "privateBindings": "Existing retained Account/OAuth/persona records stay private; no credentials or command receipts enter Git.",
+        "corpusIdentity": {
+          "path": ".temp/audit-bounded-reads/notifications-governance/corpus.json",
+          "sha256": "6cb1071be53f5067f4b59ce2405bb7adee11a56ad4e2d94ea53e431c587fad72"
+        },
+        "backupManifestIdentity": {
+          "path": ".temp/audit-bounded-reads/notifications-governance/owners/backup.json",
+          "sha256": "d7a37e08ee2c9ca4980fe757f6754cfe801684c3cba6e899336b154e4ad0de86"
+        },
+        "historicalWireIdentity": {
+          "path": ".temp/audit-bounded-reads/notifications-governance/bounded-bbcac2c38dbc48b2-evidence.json",
+          "sha256": "27580aa4087df3b53cf81e686fa99d510ab9ba125292a474c0194fa0cd39c29d"
+        },
+        "requiredPointers": [
+          "/format",
+          "/capability",
+          "/baseline",
+          "/backup",
+          "/records",
+          "/notificationRealm",
+          "/book",
+          "/preparedMs",
+          "/startupMs"
+        ],
+        "recordsBinding": "RetainedPersonaRealm[] binds public/private/reserve Realms, five distinct Account/Agent identities, one retained operator and shared issuer/OAuth clients. Credentials stay only in the existing private corpus. Real normal-OAuth sessions are freshly admitted after an authorized restore.",
+        "book": null,
+        "subjectPredicate": "For each of stranger/member/owner/moderator/operator, >=24 inbox items whose subject is non-null, display.kind is realm_role_change and display.realm equals corpus.notificationRealm, from independently authored acknowledged auxiliary-Realm permission changes; preserve primary persona roles.",
+        "historicalPopulation": {
+          "stranger": {
+            "pointer": "/evidence/31",
+            "status": 200,
+            "visibleNonNullSubjects": 25
+          },
+          "member": {
+            "pointer": "/evidence/34",
+            "status": 200,
+            "visibleNonNullSubjects": 25
+          },
+          "owner": {
+            "pointer": "/evidence/37",
+            "status": 200,
+            "visibleNonNullSubjects": 25
+          },
+          "moderator": {
+            "pointer": "/evidence/40",
+            "status": 200,
+            "visibleNonNullSubjects": 25
+          },
+          "operator": {
+            "pointer": "/evidence/43",
+            "status": 200,
+            "visibleNonNullSubjects": 25
+          }
+        },
+        "historicalAcknowledgedProgress": {
+          "count": 24,
+          "phase": "acknowledged and produced governance notices",
+          "standaloneCommandReceipts": null
+        },
+        "historicalAssertions": {
+          "stranger": {
+            "pointer": "/evidence/58",
+            "assertionReached": true,
+            "graceMs": 100,
+            "observedMs": 300,
+            "lateCalls": 11,
+            "activeCalls": 1
+          },
+          "member": {
+            "pointer": "/evidence/61",
+            "assertionReached": true,
+            "graceMs": 100,
+            "observedMs": 300,
+            "lateCalls": 10,
+            "activeCalls": 1
+          },
+          "owner": {
+            "pointer": "/evidence/64",
+            "assertionReached": true,
+            "graceMs": 100,
+            "observedMs": 300,
+            "lateCalls": 11,
+            "activeCalls": 1
+          },
+          "moderator": {
+            "pointer": "/evidence/67",
+            "assertionReached": true,
+            "graceMs": 100,
+            "observedMs": 300,
+            "lateCalls": 11,
+            "activeCalls": 1
+          },
+          "operator": {
+            "pointer": "/evidence/70",
+            "assertionReached": true,
+            "graceMs": 100,
+            "observedMs": 300,
+            "lateCalls": 11,
+            "activeCalls": 1
+          }
+        },
+        "historicalFreshRetry": "All five retain HTTP200 in the following D5-001-retry events; no new run or relabelling.",
+        "historicalProductRevision": "7df2e285d3199c32b4e61c08c33ba9c25afaaa21",
+        "historicalRun": "20261018t212935-ae08d6",
+        "preparation": {
+          "classification": "historical measurements only; no preparation or restore executed in this continuation",
+          "sourceBuildAndBackupMs": 281716.04627,
+          "sourceStartupMs": 46058,
+          "sourceActiveTotalMs": 327774.04627,
+          "stoppedBackupSegmentMs": 84214,
+          "historicalProofRestoreMs": 50846.04414200003,
+          "historicalProofAdmissionWaitMs": 2379,
+          "budgetMs": 600000,
+          "budgetDisposition": "Retained timing facts are not a G-2791 preparation estimate or readiness certification. Its eventual admitted inspection/setup/backup/round-trip must fit the existing 600-second active budget, with each proof restore separately budgeted; only host admission wait is excluded."
+        },
+        "currentQualification": "not established; retained corpus and 24-hour role assignments cannot establish current authority, source/native/model/migration compatibility, physical backup usability or custody release",
+        "producer": "G-2791, the existing sole shared corpus producer",
+        "custodian": "G-2823 only after an actual qualified release",
+        "missingOperation": "G-2791 must supply the genuine compatible governance consumer release and stopped-backup/copy custody, including current identity/authority validity, source/native/model/migration pins, and real role-impact/role-change/join/hint receipt bindings. The retained corpus stores notificationRealm and answer/progress evidence, not those individual command response/generation/impactDigest/frontier receipt files. No new producer or manifest is created here.",
+        "smallBookRelease": "The existing Book/image/default copy has no qualifying five-recipient governance population and is not borrowed for this lane.",
+        "originalFeed": "The separately retained null-subject Feed fixture does not meet this predicate; null is not a visible subject or an allocation-exhaustion assertion."
+      },
+      "pendingNativeLimit": "The original body observes traced graph starts/active exchanges. It has no independent native queue/SQL pending probe. Retain the native pending-zero and cross-hop release obligations below; source counters or proxy release alone provide no such credit."
+    },
+    "authenticatedCancellation": {
+      "selection": "authenticated Web-to-Main-to-Account/native cancellation and authority",
+      "originalRequirement": "request-budget-native-capture-review.json#/unresolvedProductProof/2 (lines1426-1441); G-2762 proof receipt#/unexecutedMissingSelections/1",
+      "existingPartial": {
+        "path": "services/main/tests/account-assertion.integration.test.ts",
+        "sha256": "93c52b2e8a0f9cfe5fd198115b75439a8866977bb627240aa73a950037349017",
+        "case": "IAM02/IAM10 partial: signed Account token needs current enforcement",
+        "limit": "A local signed-token verifier fixture; no real Web ingress, normal-OAuth Account session, actual Account-server/native release or full cancellation chain.",
+        "executedThisContinuation": false
+      },
+      "existingOwnerSupport": {
+        "path": "services/main/tests/request-read-budget-account.test.ts",
+        "sha256": "7ac7afa28dc7a48ed783826338686bf52e2c39b69f43d9148f70f7255777fa90",
+        "caseTemplates": [
+          "an expired Main deadline starts no Account admission, introspection or graph work",
+          "%s releases a shared-key waiter without cancelling another reader or starting later work",
+          "%s cancels active Account introspection before its default timeout and admits a fresh retry",
+          "%s bounds current-assertion authority rechecks without turning expiry into a denial",
+          "admission handoff keeps Request identity and cannot reuse a cached grant after cancellation",
+          "an authority assertion cannot escape its completed Main operation",
+          "current-session revocation and insufficient consent remain denials, with no graph disclosure"
+        ],
+        "modes": [
+          "deadline",
+          "caller"
+        ],
+        "limit": "Existing bounded local fixtures retain meaningful Main/verifier controls; they are not original authenticated cross-hop acceptance. Prior checks are reused, not rerun."
+      },
+      "frozenRequirements": [
+        "IAM02/IAM10 authority: real current Account session, consent and required scope; revoked/insufficient/currentAssertion refusals retain disclosure and do not leak private resources.",
+        "An open inbound Web connection expires under the original absolute deadline while shared JWKS waiting; no later signature/introspection/graph/native work for that expired waiter.",
+        "Actual Web/Main caller departure releases the waiting admission; an unaffected concurrent waiter still uses the shared refresh and succeeds.",
+        "Cancel actually active introspection before its independent default timeout and observe real Account-server/native worker release, not only local fetch rejection.",
+        "Rechecks obey the tighter operation deadline and signal, preserve Request identity and one-use admission handoffs, and never map cancellation/expiry to invalid-token denial.",
+        "At100ms proxy grace, then throughout300ms: no new child work, active/pending work zero; real release and fresh independent retry; public/private controls retained."
+      ],
+      "originalExecutable": null,
+      "runtimeCallback": null,
+      "originalAssertionReachedThisContinuation": false,
+      "missingOperation": "No retained full authenticated original file/case/body is callable: the retained spec and reviews name only the partial IAM case plus prose obligations. Recover the original normal-OAuth Web/Main/Account cancellation executable, including actual in-flight/introspection departure and pending/native release predicates. G-2762 is the existing request-budget proof owner; the manager/original assertion owner must supply or explicitly admit that missing original operation before G-2823 can bind a runtime. There is no unchanged full body from which this continuation can construct a selection adapter.",
+      "adapterAuthored": false
+    },
+    "mixedReaders": {
+      "selection": "mixed notification/Work/discovery/body-search with independent retries",
+      "originalRequirements": [
+        "site-plan.json :: D5-001/assertion-2",
+        "site-plan.json :: D5-001/assertion-3",
+        "request-budget-native-capture-review.json#/unresolvedProductProof/1 (lines1414-1422)",
+        "G-2762 proof receipt#/unexecutedMissingSelections/2"
+      ],
+      "readers": [
+        1,
+        2,
+        4,
+        8
+      ],
+      "capabilities": [
+        "notifications",
+        "Work",
+        "default discovery",
+        "public chapter body search"
+      ],
+      "frozenRequirements": [
+        "Comparable supported workload on isolated restored copies; core reads complete at1/2/4/8 readers within inherited wall/RPC/byte/SQL/native-work allocations and all tighter owner limits.",
+        "Real caller abort/navigation stops new child query/RPC/subject work; at100ms proxy grace then300ms observation no new/active/pending work, including no-user idle observation.",
+        "Pending native work returns to zero, capacity is released, unaffected independent readers and fresh retries succeed.",
+        "Preserve exact receipt/object identity, authority/disclosure/final fences and complete/unknown/incomplete/unavailable distinctions; errors are not zero matches."
+      ],
+      "budgetSources": [
+        "Frozen WORK_READ_COST:10000ms/160 graph calls/4194304 graph bytes, plus tighter enclosing allocations.",
+        "Frozen search-readiness:1500ms/72 Fuseki calls/8388608 bytes; no candidate or timeout increase.",
+        "Frozen discovery RESOURCE_LIST_COST and inherited allocations; G-2762 owns pre-debit observations, G-2764 consumes them. This handoff adds no diagnostic owner or instrumentation."
+      ],
+      "originalExecutable": null,
+      "runtimeCallback": null,
+      "originalAssertionReachedThisContinuation": false,
+      "missingOperation": "The retained original outcome spec, notification driver and matrix contain individual reader bodies but no callable original scheduler/test body for the four-capability1/2/4/8 mix with pending-zero. G-2762 remains the existing request-budget proof owner, with manager/original assertion ownership supplying or explicitly admitting this missing original executable. G-2791 retains compatible fixture production and G-2823 runtime custody; no scheduler, workload, pending predicate or corpus is invented here.",
+      "adapterAuthored": false
+    },
+    "claimsAndCustody": "All existing matrix evidence and persona expectations remain unchanged. No runtime, corpus, restore, new owner/instrumentation or proof closure. G-2791 sole production and G-2823 lifecycle/borrowers/stop custody remain intact; G-2762 owns Fuseki diagnostics and G-2764 consumes them."
   }
 }
