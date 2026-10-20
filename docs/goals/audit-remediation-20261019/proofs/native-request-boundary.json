@@ -2675,5 +2675,301 @@
       "runtimeOrCaptureExecuted": false
     },
     "landingDisposition": "Report-only landing after affected checks; G-2762 may compose the approved diagnostic delta with the exact requirements above. No whole-wave admission, new review chain, query capture or public-finding closure."
+  },
+  "accountSharedKeyWaitDeltaReviewV1": {
+    "schemaVersion": 1,
+    "reviewId": "G-2822-ACCOUNT-SHARED-KEY-WAIT-DELTA-01",
+    "reviewedAtUtc": "2026-10-20T14:27:01.060620+00:00",
+    "reviewer": {
+      "owner": "G-2822",
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "sameExistingReviewOwner": true,
+      "independentSourceReviewCount": 1,
+      "nestedOrFallbackAgents": false
+    },
+    "scope": {
+      "base": "b6107b916bfa7d5bc8498be33c5ad15353dfb599",
+      "head": "d7711c90d3b804f1c5fa70b88806c189b1b20c97",
+      "tree": "a3be9c2f3b3f00057bf3746005dcdb245ed3a91a",
+      "frozenProduct": "76c5955006dbea2016e84465d8f3e79fdf4fc979",
+      "workerHeadBeforeReport": "9a33aa402aca0d29dfdae1884ad7a1b21aa3b1b7",
+      "privatePinnedSnapshot": ".temp/account-waiter-delta-review-v1/candidate",
+      "sourceFixedDuringReview": true,
+      "changedPaths": [
+        "services/main/src/modules/account/verify-assertion.ts",
+        "services/main/tests/request-read-budget-shared-key-observation.test.ts"
+      ],
+      "inspectedBlobs": [
+        {
+          "path": "services/main/src/modules/account/verify-assertion.ts",
+          "before": {
+            "mode": "100644",
+            "kind": "blob",
+            "blob": "8e2e575f544236b6445a4d5ff7df3931b2c1b97b",
+            "bytes": 14554,
+            "sha256": "2846d1ff43bccb2b05a197c108e2127aee5f35f23b16e2ef60db2dac978ee07e"
+          },
+          "after": {
+            "mode": "100644",
+            "kind": "blob",
+            "blob": "ef5081cb11389b76b9ee44404d27884df26ee5b6",
+            "bytes": 15807,
+            "sha256": "6e215f67c2f6cd4d288aa8d6077d5c53c9a74192dd18fa1f7f1b0d30dd1c1182"
+          }
+        },
+        {
+          "path": "services/main/tests/request-read-budget-shared-key-observation.test.ts",
+          "before": null,
+          "after": {
+            "mode": "100644",
+            "kind": "blob",
+            "blob": "8a25ced0fc504a6126deaf80e25219bbe12c9860",
+            "bytes": 12419,
+            "sha256": "380b22a205d46d498b4b2c6a57995d4ed987d294f69cede8a72d77b174e5358a"
+          }
+        }
+      ],
+      "consumerAttachment": [
+        {
+          "path": ".temp/account-waiter-delta-review-v1/attachment/bind-shared-key-wait.ts",
+          "bytes": 819,
+          "sha256": "899fc593d7b35daceb9b761abdfdf31d73e01a2458c7c55c27ac199f3a72af24"
+        },
+        {
+          "path": ".temp/account-waiter-delta-review-v1/attachment/binding-contract.ts",
+          "bytes": 617,
+          "sha256": "5ad8e17ba2e47cff39580b5cafa02ce49a6f0ba78f7a5f013b27db08a69a8758"
+        }
+      ],
+      "inputReceipts": [
+        {
+          "path": ".temp/account-waiter-delta-review-v1/producer/consumer-handoff.md",
+          "bytes": 10773,
+          "sha256": "540aa476b063bd72e3df94b96710a3b780a8b9f58f00cda132157dc666e57445"
+        },
+        {
+          "path": ".temp/account-waiter-delta-review-v1/producer/observer-input.json",
+          "bytes": 2607,
+          "sha256": "b8814835ef04695cff57877dd36388c3bb0af06d6f7c44bc277080faea098fa7"
+        },
+        {
+          "path": ".temp/account-waiter-delta-review-v1/producer/affected-input-comparison.json",
+          "bytes": 3840,
+          "sha256": "873ceca746f99c99811396d30c671140ce7e9e66d64ed1dfa7cc45c72c1f33c2"
+        },
+        {
+          "path": ".temp/account-waiter-delta-review-v1/producer/checks.json",
+          "bytes": 8023,
+          "sha256": "98ac8763d7885c38747895198d92851e81c650b3e0d674ac6ab559b2851ac890"
+        }
+      ],
+      "acceptedReviewsReopened": false,
+      "oldNativeOrDiagnosticSourceReviewedAgain": false,
+      "productOrAssertionEdits": false
+    },
+    "sourceVerdict": "APPROVE this exact two-path Account waiter-observation delta for composition with the accepted parent, subject to the consumer obligations below. No blocking executable source finding. This is source approval only; observer-input.json is neither a complete original Runtime binding nor a public log, and no individual product landing or original outcome is approved.",
+    "reviewedSemantics": [
+      {
+        "invariant": "Real pending refresh waits only; exact Request and shared identity",
+        "evidence": "verify-assertion.ts:160-164 passes the original verifyCurrent Request into the existing signal-bounded JWKS wait. fetchJwks:218-239 observes the first and joining waiters against the same entry/promise. observeKeyWait:242-250 gates on the existing Infinity pending sentinel. Success/failure handlers replace it with their original finite cache deadlines; settled cache hits emit nothing. Each newly created entry owns a crypto.randomUUID refreshId, including independent verifier instances. No credential-derived key, synthetic Request, trace or refresh identity is introduced."
+      },
+      {
+        "invariant": "Optional callback does not become an awaited admission dependency",
+        "evidence": "observeKeyWait returns before allocating an event when no observer is supplied or the entry is settled. Its synchronous callback is wrapped in try/catch; Promise.resolve(...).catch consumes asynchronous rejection without awaiting settlement. The frozen event contains only kind, at, request and refreshId. A pending callback promise does not hold admission or the refresh open. Disabled instrumentation adds one random ID per new refresh but changes no exchange, refusal, cache or wait decision. A trusted callback must return promptly and only observe; freezing the envelope does not freeze the Request."
+      },
+      {
+        "invariant": "Per-waiter cancellation, independent refresh timeout and current authority remain owned by the existing paths",
+        "evidence": "The only existing verification expression changed is fetchJwks(request) inside the unchanged withFusekiReadWait(signal,...). Outer request signal/deadline waits, post-signature active checks, per-request introspection and currentAssertion are unchanged. JWKS exchange still receives only method GET and uses its independent timeout; introspection still carries the caller signal. Five-minute success caching, thirty-second failure backoff, error classes/propagation, consent/scope and final admission fences retain identical logic. No transport, native, Account-service, allocation/cost or read/publication fence path changes."
+      },
+      {
+        "invariant": "No product-side Request/event history; consumer attachment preserves identities",
+        "evidence": "The verifier stores one existing refresh-cache entry with the added refreshId, not Requests/events. bind-shared-key-wait.ts:9-17 looks up the actual event.request, ignores undefined traces and forwards a frozen copy preserving that same Request and refreshId to record. binding-contract.ts only checks constructor/attachment types; it constructs no runtime at module load. The attachment implements neither storage limits nor releaseSupport; those remain explicit consumer prerequisites."
+      }
+    ],
+    "affectedInputComparison": {
+      "method": "Compared actual Git mode/blob maps of frozen product, accepted parent and sealed head, then checked extracted source/test SHA256 and receipt blobs; did not rely on count summaries.",
+      "acceptedToCandidate": {
+        "changedPaths": [
+          "services/main/src/modules/account/verify-assertion.ts",
+          "services/main/tests/request-read-budget-shared-key-observation.test.ts"
+        ],
+        "unchangedEntries": 10099,
+        "beforeEntries": 10100,
+        "afterEntries": 10101
+      },
+      "frozenToCandidate": {
+        "changedPaths": [
+          "services/main/src/infrastructure/fuseki.ts",
+          "services/main/src/modules/account/verify-assertion.ts",
+          "services/main/tests/request-read-budget-observation.test.ts",
+          "services/main/tests/request-read-budget-shared-key-observation.test.ts"
+        ],
+        "unchangedEntries": 10097,
+        "beforeEntries": 10099,
+        "afterEntries": 10101
+      },
+      "approvedDiagnosticBlobsUnchanged": true,
+      "unrelatedWaveChangesImported": false,
+      "acceptedDiagnosticPaths": [
+        "services/main/src/infrastructure/fuseki.ts",
+        "services/main/tests/request-read-budget-observation.test.ts"
+      ],
+      "originalRequest": {
+        "bytes": 100,
+        "sha256": "49d9dabeefeedbd562209a078d92873c8ca56cada2841d75abb76cadd0db0c24",
+        "calls": 72,
+        "bytesLimit": 8388608,
+        "deadlineMs": 10000,
+        "tighterEnclosingAllocationsDeadlinesSignalsPreserved": true
+      },
+      "existingDefaultCallbackSha256": "ae8ebf644cf2f7f117f86f02ee63d9a104a41f6efe72433eb9a9b5fabd0f6e17",
+      "moduleResolution": "Reused exact-source static resolution: Main and attachment resolve the same candidate-local verifier; Main and accepted diagnostic callback resolve the same candidate-local Fuseki module; all 12 workspace packages remain local. No application import or activation."
+    },
+    "reusedChecks": {
+      "ownerJob": "8d9dcbfb-8564-4a3b-b8b1-544edb24a304",
+      "qa": "20261020t135249-457f2b",
+      "source": "d7711c90d3b804f1c5fa70b88806c189b1b20c97",
+      "tree": "a3be9c2f3b3f00057bf3746005dcdb245ed3a91a",
+      "ownerTests": {
+        "file": "services/main/tests/request-read-budget-shared-key-observation.test.ts",
+        "executed": 13,
+        "passed": 13,
+        "assertions": 136,
+        "failures": 0,
+        "errors": 0,
+        "skips": 0,
+        "allRenderedCasesAndAssertionSumsVerified": true,
+        "junit": ".temp/account-waiter-delta-review-v1/producer/retained/owner.xml"
+      },
+      "gate": {
+        "recordedExit": 0,
+        "checks": [
+          "types",
+          "inference",
+          "lint",
+          "ast",
+          "guards"
+        ],
+        "selectedGuardFiles": 24,
+        "gateLog": ".temp/account-waiter-delta-review-v1/producer/retained/8d9dcbfb-8564-4a3b-b8b1-544edb24a304.2.log",
+        "mainInferenceInstantiations": 26796685,
+        "unchangedMainInferenceCeiling": 26950993.65,
+        "inheritedBaseExceptionUsed": false
+      },
+      "consumerTypes": {
+        "passed": true,
+        "files": 1358,
+        "log": ".temp/account-waiter-delta-review-v1/producer/retained/8d9dcbfb-8564-4a3b-b8b1-544edb24a304.3.log"
+      },
+      "compositionAndStaticModuleResolution": {
+        "passed": true,
+        "log": ".temp/account-waiter-delta-review-v1/producer/retained/8d9dcbfb-8564-4a3b-b8b1-544edb24a304.4.log"
+      },
+      "guardReceiptLimitation": {
+        "path": ".temp/account-waiter-delta-review-v1/producer/retained/guards.xml",
+        "sha256": "d40b5a4c32c2ac7ae5cc49a91319be713d7efed91c3f7515829538ac1fe1fd37",
+        "xmlWellFormed": false,
+        "parseError": "mismatched tag: line 220, column 2",
+        "headerTests": 172,
+        "renderedTestcaseRecords": 168,
+        "failureOrErrorElements": 0,
+        "missingRecordsSynthesized": false,
+        "interpretation": "The recorded gate exit 0 is valid process evidence, reported independently. This malformed/incomplete XML cannot establish 172 individually recorded passes; only 168 testcase records are present.",
+        "sealingJob": "47c02696-be25-4e36-bc8e-d0ad63de7d99",
+        "sealingResult": "Initial artifact packaging failed parsing the original guard XML; not a JUnit outcome failure or a source-test rerun."
+      },
+      "acceptedEvidenceReusedWithoutReplay": [
+        "native 566-test execution",
+        "request-boundary and G-2813/G-2817 source reviews",
+        "G-2765 readiness approval",
+        "pre-debit diagnostic review and 85 tests / 546 assertions",
+        "completed default capture"
+      ],
+      "newFocusedCounterexamplesExecuted": 0,
+      "whyNoNewSourceTest": "The 13 recorded cases exercise first/joining waiter caller cancellation and deadline expiry, pre-aborted/pre-expired admission, success/failure cache silence, later/independent refresh IDs, throwing/rejected/pending/frozen-event observers, exact Request handoff, current authority and the optional disabled path. The tiny ignored adapter is direct identity lookup/forwarding with no additional wait, cache or sink implementation. No genuinely missing focused source counterexample was identified; no accepted test was replayed."
+    },
+    "consumerObligations": [
+      "Compose exactly d7711c90d3b804f1c5fa70b88806c189b1b20c97 / a3be9c2f3b3f00057bf3746005dcdb245ed3a91a over accepted b6107b916bfa7d5bc8498be33c5ad15353dfb599. Retain frozen product 76c5955006dbea2016e84465d8f3e79fdf4fc979 and the accepted two diagnostic paths; do not import other wave changes. Retain the exact source/test and attachment hashes above.",
+      "G-2762 attaches the pinned sharedKeyWaitObserver to the actual AccountAssertionVerifier instance consumed by Main through its existing Account composition input, with unchanged Account configuration. Main, verifier, callback and dependencies must resolve inside that same immutable composed checkout. No per-request replacement verifier, cloned Request, alternate-process attachment, mock owner or synthesized trace/refresh identity.",
+      "Resolve traceForRequest only from the original binder's selected real Main ingress Request identities. Keep Request, headers, bearer, principal and events private and in process; never serialize or publish them. The event envelope is shallowly frozen; the callback must not mutate or consume the Request and must return promptly.",
+      "Consumer owns bounded event/byte storage, bounded pending sink operations, recording-window selection and explicit releaseSupport cleanup of Request/trace/event references and subscriptions. Detach or gate the observer after release; clear capture storage and settle/cancel owned sink work. Product code keeps no Request history, but does not enforce consumer retention limits.",
+      "Supply independent private-sink failure, flush/close, event/count and byte/hash receipts before interpreting missing events. Callback throw/rejection is intentionally swallowed by product code. This event records entry into a pending wait; it supplies no leave/end event and alone proves neither pending-zero nor no-work after cancellation.",
+      "observer-input.json and binding-contract.ts supply only this attachment, not the complete original Runtime input or all control/capture owners. Preserve every original real control, current assertion/consent/scope/cost/fence check and exact Request/principal handoff. Runtime readiness and proof admission remain manager-owned; G-2823 alone owns lifecycle/lease/stop and G-2764 remains the query consumer."
+    ],
+    "executableFindings": [],
+    "preservation": {
+      "priorFieldCount": 18,
+      "priorReportSha256": "5e471919bff6e9d90c776fc35b4de016322cedd5f7d1ec958f77d1dd5c672c98",
+      "allPriorFieldsAndHistoricalFailuresUnchanged": true,
+      "historicalNative571FailureAndArtifactsPreserved": true,
+      "acceptedNative566AndArtifactsPreserved": true,
+      "acceptedReviewsAndDefaultCapturePreserved": true,
+      "originalPacket": "Unchanged original-read-cancellation-full-v1 is reused; 70 authenticated and four mixed callable bodies remain unchanged.",
+      "runtimeOrOriginalOutcomeExecuted": false,
+      "fullTierReplay": false,
+      "diagnosticReplay": false,
+      "nativeBuild": false,
+      "oauthCorpusLeaseOrStackAction": false,
+      "individualProductLanding": false
+    },
+    "remainingProof": {
+      "originalClassDispositions": "D5-001/002/003/004/006 and AUD-001 unchanged; no finding closes from this source review or the 13 owner tests. Original acceptance remains 23/61.",
+      "actualOutcomes": "IAM02/IAM10; actual Web/Main/Account enforcement; 70 authenticated and four mixed cases; 1/2/4/8 readers; exact Request/principal/handoff and current assertion/consent/scope; in-flight introspection/native release; 100 ms grace then 300 ms no new/active/pending work; native/SQL pending-zero; unaffected independent waiters, private disclosure and fresh retry remain separately open.",
+      "queryAndLimits": "Original 100-byte request SHA256 49d9dabeefeedbd562209a078d92873c8ca56cada2841d75abb76cadd0db0c24, 72 calls / 8,388,608 bytes / 10,000 ms and every tighter enclosing allocation/deadline/signal remain unchanged."
+    },
+    "artifacts": {
+      "root": ".temp/account-waiter-delta-review-v1",
+      "pin": ".temp/account-waiter-delta-review-v1/pin.json",
+      "originalReport": ".temp/account-waiter-delta-review-v1/original-report.json",
+      "sourceDiff": ".temp/account-waiter-delta-review-v1/account-observer.patch",
+      "retainedChecks": ".temp/account-waiter-delta-review-v1/producer/retained",
+      "validation": ".temp/account-waiter-delta-review-v1/verification.json"
+    },
+    "checks": {
+      "status": "passed",
+      "job": "55823120-316a-448c-a57f-e35070c01840",
+      "steps": [
+        {
+          "command": "task -t .temp/account-waiter-delta-review-v1/Taskfile.yml report:validate",
+          "exit": 0,
+          "log": ".temp/goal/jobs/55823120-316a-448c-a57f-e35070c01840.1.log",
+          "retainedLog": ".temp/account-waiter-delta-review-v1/report-checks/55823120-316a-448c-a57f-e35070c01840.1.log",
+          "logSha256": "18c2551ad9c6fd24651d87daa78291e766f673d52f8cf6029feaf8f96e451b4c"
+        },
+        {
+          "command": "task docs:check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/55823120-316a-448c-a57f-e35070c01840.2.log",
+          "retainedLog": ".temp/account-waiter-delta-review-v1/report-checks/55823120-316a-448c-a57f-e35070c01840.2.log",
+          "logSha256": "53eed4f96d7f5ddc2bc25cfc2f81d89ee90e3c07b381c1d4419299c343f1ffe1"
+        },
+        {
+          "command": "env GOAL_CHECK_PREPARED_TREE=/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2822 task goal -- check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/55823120-316a-448c-a57f-e35070c01840.3.log",
+          "retainedLog": ".temp/account-waiter-delta-review-v1/report-checks/55823120-316a-448c-a57f-e35070c01840.3.log",
+          "logSha256": "84f479b39bbaaa0aca7f877ac6964baeaffc755cadfa5f6b1b9820be580cb81c"
+        }
+      ],
+      "docs": {
+        "status": "passed",
+        "markdownFiles": 249,
+        "checkerTests": 13
+      },
+      "workerCheck": {
+        "types": "not selected; no TypeScript workspace changed",
+        "tests": "not selected; no test files named in brief",
+        "lint": "not selected; no source file changed",
+        "ast": "passed",
+        "guards": "passed; 1/44 selected",
+        "output": ".temp/goal/check/run-OYtIPR/output.log"
+      },
+      "sourceCheckReruns": 0,
+      "currency": "Used the existing prepared-tree option to honor the explicit no-self-rebase instruction. Worker head remains 9a33aa402aca0d29dfdae1884ad7a1b21aa3b1b7; reviewed source remains the separately frozen d7711c90 candidate.",
+      "runtimeOrOriginalOutcomeExecuted": false
+    },
+    "landingDisposition": "Source verdict is ready independently of later runtime inputs. Manager may accept this report-only commit and pass these exact composition/consumer requirements to G-2762. This does not authorize individual product landing, new review chains or closure of any original class/persona outcome."
   }
 }
