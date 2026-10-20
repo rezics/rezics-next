@@ -9834,5 +9834,328 @@
       "resultReportedInWorkerHandoff": true
     },
     "managerNext": "Consume explicit NEW CAS9 root-bound release plus real owned shutdown, then ask SAME G-2831 for guarded semantic restoration. Assess the actual heading failures and wrong-document Orca context without product/class closure or silently changing original assertions. No further callback authorized by this execution."
+  },
+  "homeNativeWindowSupportOfflineConsumption20261020": {
+    "atUTC": "2026-10-20T13:10:23.080375+00:00",
+    "worker": "G-2847",
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "fallbackUsed": false,
+      "nestedAgents": false
+    },
+    "decision": "ONLY committed Decision 2026-10-20T13:04:08Z and manager continuation: independent offline consumption of G-2747 attempt67 exact native-window support; no original callback or product/source-review replay.",
+    "result": "bounded-native-window-support-consumed-offline-controls-passed",
+    "verdict": "Accept this exact versioned native-window support for the bounded offline ownership/focus checks. No blocking counterexample was established within this authorized slice. EWMH/X11 alignment has no demonstrated live effect on Orca document selection or the original Home callbacks; every original acceptance assertion and AUD-012 remain open.",
+    "pins": {
+      "reportBranchBase": "6af5731286f05b5371bdce668eb50ee7c37724c1",
+      "currentMainReadOnlyCompared": "3fe70083433f23637da8f748401116092c0f3284",
+      "producerSourceHead": "08fc5f5de07d44f0ff2a3502bf46da476c3fba66",
+      "producerBranch": "candidate/shell-page-end-20261019",
+      "producerTrackedStatusAtHandoff": "",
+      "bundleSealSHA256": "ff10d84f82ba9b5ac45c0f315b06177d1404bd116fb9cc32e390c3809aebda9e",
+      "verifiedSealedArtifacts": 22,
+      "nativeHelperBeforeSHA256": "24be0ad831a58cf27cdb714c8fb0804f9156c2a1a9f02bb9894a471714fb1262",
+      "nativeHelperAfterSHA256": "fe35508068db359186514d76f98c2a5e7273ffbd3a3048016100e35be41290db",
+      "frozenCallbackSHA256": "9c56d91f687e9a03a00ce05dc88171ba22d63beab60d7de6b55592d0296aa4e8",
+      "frozenTemplateSHA256": "22e5b9c90dc1fd0fce2cf412df44a46ab01bf354b72a9b74f6008a9b830868bc",
+      "originalCallbackAndTemplateByteChanges": false,
+      "historicalFrontendOnly": "8b8a2c0a97b5662e6283fa7531a8f1c600f37fd0",
+      "historicalInstalledBackendOnly": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "historicalCAS9Reused": false,
+      "mainRecordedJobCodeSHA256": {
+        "scripts/goal/goalctl.ts": "cf06b6b0727f466917913fc2a607194323c43037439b8636ce8bc84342d6ccac",
+        "scripts/goal/job.ts": "6db2de365b1df669032c10bfada7295ca5f9b4793745381ea0ed053ee51b8539"
+      },
+      "worktreeAdmissionCodeSHA256": {
+        "scripts/goal/goalctl.ts": "cf06b6b0727f466917913fc2a607194323c43037439b8636ce8bc84342d6ccac",
+        "scripts/goal/dependencies.ts": "a37482a13fad4f0b5c53a1747ed83df86f74ff2899e6cc20b3d562b74fff350a",
+        "scripts/qa/test.ts": "3f57d88efe82ff83e300594443f5c8bb824711003525ff3db615ef15a2165a80"
+      }
+    },
+    "preservation": {
+      "all46ExistingWorkerReportFieldsUnchanged": true,
+      "all45CurrentMainReportFieldsUnchanged": true,
+      "workerOnlyHistoricalFieldRetained": "originalHomeDefrCAS9Callbacks20261020",
+      "reportBefore": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/native-window-support-independent-consumption-20261020/report-before.json",
+        "sha256": "a1c95063fc6412173a8c3dbd015fe0d2ad7428b1296c8cba4056adec0031d796",
+        "bytes": 530871
+      },
+      "comparisonReceipt": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/native-window-support-independent-consumption-20261020/execution-pins.json",
+        "sha256": "34d67c58ed91463f734cad66579f6482958df0ca9f01b2593e0435e4c25dba11",
+        "bytes": 1165
+      },
+      "qualification": "Initial full-document equality check was too strict: worker already retains its additional originalHomeDefrCAS9Callbacks20261020 history. All 45 current-main fields equal their corresponding worker fields; preserve all 46 worker fields without replacement.",
+      "priorSourceReviewsIdentityRecoveryNativeRadioCorrectionAndAllHistoricalFailuresRetained": true,
+      "CAS9DispositionReusedFromNewestDecision": "Spent; G-2831 cleanup 9d12ce restored semantic state with invariant readbacks. No borrow, lease, cleanup or restoration repeated here."
+    },
+    "consumedArtifacts": {
+      "sealedConsumerCopy": ".temp/home-document-binding-support-v3-20261020",
+      "privateBundleCopy": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/native-window-support-independent-consumption-20261020/sealed-producer-bundle",
+      "copyAndSealVerification": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/native-window-support-independent-consumption-20261020/copy-and-seal-verification.json",
+        "sha256": "2969080f9cdc6e2185b39f9472dffff750a26283613b79308f09a1d79453e462",
+        "bytes": 3960
+      },
+      "handoff": {
+        "path": ".temp/home-document-binding-support-v3-20261020/handoff.json",
+        "sha256": "18353829fc28561825d1af62491fc7903c2aad1ded4a65068c6da578bc92c3c6",
+        "bytes": 2850
+      },
+      "diagnosis": {
+        "path": ".temp/home-document-binding-support-v3-20261020/diagnosis.json",
+        "sha256": "31a7c4e71c3b3a90279d4bbcb4d4a920fc9a1f6ea05a6236535779f9f85b2c72",
+        "bytes": 10076
+      },
+      "producerChecks": {
+        "path": ".temp/home-document-binding-support-v3-20261020/checks.json",
+        "sha256": "06e7f0dd787361da1f4d7efbebb2aa91b3c990a373a17f68f0ecee9f4cc8db5d",
+        "bytes": 2682
+      },
+      "futureBinding": {
+        "path": ".temp/home-document-binding-support-v3-20261020/future-binding.json",
+        "sha256": "282b132428e23f5b0125a98fe9abe08d61275395981e13ad0e39541975f205e5",
+        "bytes": 6667
+      },
+      "changedExecutable": {
+        "path": ".temp/home-document-binding-support-v3-20261020/native-key-server.py",
+        "sha256": "fe35508068db359186514d76f98c2a5e7273ffbd3a3048016100e35be41290db",
+        "bytes": 12025
+      },
+      "offlineBunControls": {
+        "path": ".temp/home-document-binding-support-v3-20261020/offline-controls.test.ts",
+        "sha256": "634a441439920dfcecb2cc96483b4ae7a580a7df7bab9fb7792456696c124a0c",
+        "bytes": 4736
+      },
+      "offlinePythonControls": {
+        "path": ".temp/home-document-binding-support-v3-20261020/native_window_binding_test.py",
+        "sha256": "a1d25490b8153e239909f77541939c85c6f3893e10c3eebaf168c182f1a51210",
+        "bytes": 10598
+      },
+      "exactHelperDelta": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/native-window-support-independent-consumption-20261020/native-helper-exact-delta.patch",
+        "sha256": "05335873acef7c63a0171bfaac9dcfab87de3e76f32f20a9d98788d6c20116c7",
+        "bytes": 16832
+      }
+    },
+    "independentAssessment": {
+      "scope": "Only changed native-key-server.py versus frozen v2, its offline controls, and exact producer handoff/diagnosis/checks/future binding. No product, editor, startup, navigation or dependency architecture review.",
+      "checkedInvariants": [
+        {
+          "paths": [
+            "native-key-server.py:65",
+            "native_window_binding_test.py:82",
+            "native_window_binding_test.py:117"
+          ],
+          "result": "Activation selects exactly one usable managed client for the supplied browser PID; zero/multiple candidates refuse, and only that client receives one EWMH request. Failed acknowledgement invalidates the selection."
+        },
+        {
+          "paths": [
+            "native-key-server.py:30",
+            "native-key-server.py:41",
+            "native-key-server.py:59",
+            "native_window_binding_test.py:69",
+            "native_window_binding_test.py:96",
+            "native_window_binding_test.py:127",
+            "native_window_binding_test.py:151",
+            "native_window_binding_test.py:188"
+          ],
+          "result": "A key requires the selected managed, same-PID, usable client to equal _NET_ACTIVE_WINDOW, with X focus on that client or a bounded acyclic descendant. Foreign focus/activation, missing WM acknowledgement, closure, ownership change, minimization and cyclic ancestry refuse. The retained v2 PID predicate accepts the synthetic old mismatch while v3 refuses it without key events."
+        },
+        {
+          "paths": [
+            "native-key-server.py:88",
+            "native_window_binding_test.py:88",
+            "native_window_binding_test.py:162",
+            "native_window_binding_test.py:168",
+            "native_window_binding_test.py:174",
+            "native_window_binding_test.py:181"
+          ],
+          "result": "No key before successful activation. Resolve the entire chord before presses; require the binding before, between and after presses. Mid-chord drift refuses Home and releases the already pressed modifier; post-key drift is reported as refusal, never owned success."
+        },
+        {
+          "paths": [
+            "native-key-server.py:125",
+            "native-key-server.py:174",
+            "native-key-server.py:223",
+            "native_window_binding_test.py:196"
+          ],
+          "result": "The actual adapter encodes an EWMH ClientMessage for the selected client to the root with SubstructureRedirect/Notify masks, pager source2, CurrentTime0 and current-active-client data. The offline control intercepts library loading and validates this encoding; there is no XSetInputFocus/XRaiseWindow fallback."
+        },
+        {
+          "paths": [
+            "offline-controls.test.ts:16",
+            "offline-controls.test.ts:29",
+            "offline-controls.test.ts:71"
+          ],
+          "result": "Exact frozen callback/template, retained CAS9 field and referenced evidence hashes remain bound. Both retained original Control+Home events selected the GitHub caret root despite owned focus and Browse qualification; each heading failure remains preserved."
+        }
+      ],
+      "confirmedActionableCounterexamples": [],
+      "coverageLimit": "Unique-candidate refusal is checked at activation; later keys are bound to that selected client. Sampling X11 properties and focus is not an atomic input transaction and does not establish Orca active-frame/document agreement.",
+      "inspectedScreenshots": [],
+      "screenshotQualification": "Offline controls only. No screenshot or live speech acceptance produced; CAS9 card screenshots and later speech/axe assertions were not reached and remain so."
+    },
+    "executedControls": {
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --taskfile .temp/home-document-binding-support-v3-20261020/Taskfile.yml controls",
+      "taskCommand": "task --taskfile .temp/home-document-binding-support-v3-20261020/Taskfile.yml controls",
+      "selectedAssertionCommand": "bun scripts/goal/goalctl.ts test ./.temp/home-document-binding-support-v3-20261020/offline-controls.test.ts",
+      "recordedJob": "dd3c827f-8484-44e8-aef0-ab4d6b23e71a",
+      "result": "passed",
+      "exitStatus": 0,
+      "bunTests": 3,
+      "bunFailures": 0,
+      "bunExpectCalls": 81,
+      "pythonSuite": {
+        "command": "python3 -B native_window_binding_test.py",
+        "cases": 17,
+        "caseNames": [
+          "test_legacy_pid_predicate_accepts_the_retained_failure_shape",
+          "test_activation_requests_the_unique_owned_managed_client",
+          "test_control_home_and_owned_child_focus_preserve_the_binding",
+          "test_raw_focus_without_window_manager_activation_times_out",
+          "test_window_manager_activation_without_input_focus_times_out",
+          "test_missing_window_manager_active_client_is_not_a_fallback",
+          "test_same_browser_pid_does_not_select_an_arbitrary_second_window",
+          "test_foreign_input_focus_refuses_a_key_even_with_owned_active_window",
+          "test_peer_active_window_refuses_a_key_even_with_owned_input_focus",
+          "test_another_owned_client_cannot_substitute_for_the_activated_client",
+          "test_closed_reowned_or_minimized_client_refuses_keys",
+          "test_key_requires_a_prior_successful_activation",
+          "test_invalid_key_sends_no_partial_modifier",
+          "test_mid_chord_drift_prevents_home_and_releases_the_sent_modifier",
+          "test_post_key_drift_is_not_reported_as_an_owned_success",
+          "test_cyclic_or_unbounded_parent_chain_does_not_qualify",
+          "test_actual_adapter_encodes_owned_ewmh_request_without_loading_native_libraries"
+        ],
+        "exitStatus": 0,
+        "qualification": "Executed by the third Bun assertion with a ten-second child timeout; successful child output is captured, not printed in the recorded outer log. No separate Python assertion count claimed."
+      },
+      "hostedQARunId": null,
+      "admissionQualification": "Exact ignored-file selection through the normal goalctl test wrapper; no hosted stack tier or runtime started.",
+      "log": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/native-window-support-independent-consumption-20261020/offline-controls.log",
+        "sha256": "4fd23ec105906867074a835f112a0b8f46e4ac4e27cfd260cd190e71aeca1277",
+        "bytes": 414
+      },
+      "producerPassingJobReusedAsProvenance": "f8cc8fad-36ac-47eb-b7f1-eccbe9398125"
+    },
+    "dependencyBinding": {
+      "expectedAndActualDigestAndStamp": "afed563fd4dcabbfa62a2354edc5c7b7b8856b5067fc2a39011e76ff75b59c64",
+      "staleBeforeAndAfter": false,
+      "stampMtimeUnchanged": "2026-10-20T10:57:36.586Z",
+      "installStateMtimeUnchanged": "2026-10-19T13:06:11.463Z",
+      "before": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/native-window-support-independent-consumption-20261020/dependency-binding-before.json",
+        "sha256": "a6befade5878be27dc894ce2677f38e45e31ac569bd6348336f1b6573215f0b1",
+        "bytes": 431
+      },
+      "afterControls": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/native-window-support-independent-consumption-20261020/dependency-binding-after-controls.json",
+        "sha256": "1edeb9bba34275f4286f55375b2a840d6024f09b18b27d9d254a582d260af2f1",
+        "bytes": 275
+      },
+      "consumerControlsInstallObserved": false,
+      "consumerQualification": "Normal wrapper was retained; digest/stamp matched the authorized afed binding before and after. No dependency-install line in the recorded run; stamp/install-state mtimes unchanged. No manual bypass, install, tooling repair or dependency copy performed.",
+      "producerSideEffectPreserved": {
+        "observed": "Controls wrapper logged 'Dependencies changed ... running task install' and completed with exit0",
+        "initiator": "goalctl test -> ensureDependencies(process.cwd()) -> worktree dependency-install directory lease -> task install -> corepack yarn install --immutable -> recordDependencyInstall",
+        "explicitInstallRequestedByWorker": false,
+        "knownLocalMetadataWrite": "node_modules/.rezics-dependencies mtime2026-10-20 20:56 +0800",
+        "retainedYarnInstallStateMtime": "2026-10-19 20:59 +0800",
+        "trackedTreeAfterward": "",
+        "qualification": "Automatic dependency bookkeeping outside .temp occurred despite the manager's retained-binding premise. No lockfile/tracked change; do not claim zero dependency-side effects. Installer stdout is captured and suppressed by ensureDependencies on success, so no complete write inventory is claimed.",
+        "nextOwner": "Goal manager/tooling owner reconciles the retained Task dependency binding; no further install or source repair done here"
+      }
+    },
+    "futureBindingOnly": {
+      "supportVersion": "owned-window-binding-v3-20261020",
+      "futureStageRelativeDirectory": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding",
+      "bindingManifest": {
+        "path": ".temp/home-document-binding-support-v3-20261020/future-binding.json",
+        "sha256": "282b132428e23f5b0125a98fe9abe08d61275395981e13ad0e39541975f205e5",
+        "bytes": 6667
+      },
+      "futureOriginalCommandNotExecuted": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test ./.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/aud012-home-only.test.ts",
+      "requires": [
+        "A new manager authorization and actual fresh root custody/ready/CAS; CAS9 is spent and must never be rebound",
+        "Fresh selection-manifest.json, renewed-ready.json and leased-source-selection.json owned by G-2847 under that exact authorization",
+        "An independently pinned clean leased-source plus matching installed environment as the unchanged template requires; do not copy stale node_modules/locks or change packages",
+        "A fresh outputDirectoryName; never overwrite original CAS9 output or reuse its lease/release",
+        "Existing owner validates the normal Task/dependency binding before admission; do not repair dependency premises in this support task"
+      ],
+      "requiredRuntimePremiseReceipts": [
+        "Native supportVersion3 and EWMH activationMethod; unique owned managed client, WM_STATE NormalState, _NET_ACTIVE_WINDOW and X focus on that exact client/descendant before and after keys",
+        "Owned AT-SPI focus plus actual Orca active frame/document agree; if missing or another document, classify setup failure before heading acceptance",
+        "The unchanged actual mode, heading, description/status speech, dispatcher/Pulse, screenshot and axe assertions retain independent reach and failure reports"
+      ],
+      "unchangedSupportFiles": [
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/at-session.ts",
+          "sha256": "57e00c0662c7140b22ea03c2594108af1eec04d587811563365c295bb4728113",
+          "bytes": 12438,
+          "sourceWorktree": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847",
+          "destination": "at-session.ts"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/atspi-monitor.py",
+          "sha256": "9d83b6f8c89045e9be464a33a557db83230b193183d9e657fc7a1295658e6c08",
+          "bytes": 2280,
+          "sourceWorktree": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847",
+          "destination": "atspi-monitor.py"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/observe-document-mode.ts",
+          "sha256": "8d53c9c973a20289423f350934ca4c4e86ad8a492bade5d8b2913f0b64c8d604",
+          "bytes": 3468,
+          "sourceWorktree": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847",
+          "destination": "observe-document-mode.ts"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/temporary-native-permission.py",
+          "sha256": "b9c1331df4be36e87feb7a92301e44bd710477476ae3f0cae2e24ab2aa35f437",
+          "bytes": 7595,
+          "sourceWorktree": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847",
+          "destination": "temporary-native-permission.py"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/verify-owned-cleanup.py",
+          "sha256": "541030c8fb94a6045d5d2f1be57728498c178196b62c8f9d6e78437354851e1f",
+          "bytes": 4387,
+          "sourceWorktree": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847",
+          "destination": "verify-owned-cleanup.py"
+        }
+      ],
+      "callbackPatch": null,
+      "materializedOrExecuted": false
+    },
+    "liveEffectsAndLimits": {
+      "runtimeEffectProved": false,
+      "originalCallbacksExecuted": false,
+      "originalAcceptanceReached": false,
+      "classClosed": false,
+      "frontendBrowserATPermissionOAuthStarted": false,
+      "runtimeOrBackendLifecycleAction": false,
+      "readerStateWriteOrCustodyAction": false,
+      "productSourceOrTestChanges": false,
+      "externalMessagesSent": false,
+      "shutdown": "No frontend/browser/AT/native socket/runtime was started and no lease was borrowed. Recorded offline job exited0; no runtime shutdown, signal or custody release claimed.",
+      "remainingAcceptance": "A later separately authorized finite run needs fresh same-owner preparation and a NEW explicit root lease; CAS9 and older leases remain spent. Establish actual owned EWMH/X focus AND Orca frame/document alignment, then reach the two unchanged original callbacks with native speech/dispatcher/Pulse/AT-SPI/focus/screenshot/axe assertions. AUD-012 and every original acceptance assertion remain open; no current-main native/model/Studio qualification."
+    },
+    "instructionDisposition": {
+      "file": "docs/goals/audit-remediation-20261019/tasks/G-2847.md",
+      "decision": "2026-10-20T13:04:08Z",
+      "quote": "This split authorizes no frontend/browser/AT/permission action, OAuth, runtime, lease/CAS reacquisition, reader-state write, corpus/restore/import or backend lifecycle.",
+      "effect": "Execute only sealed offline controls and append this report. Earlier live callback decisions do not authorize another run; the future command remains documentation only."
+    },
+    "documentationValidation": {
+      "command": "task docs:check",
+      "resultReceipt": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/native-window-support-independent-consumption-20261020/docs-check-receipt.json",
+      "resultReportedInWorkerHandoff": true
+    },
+    "managerNext": "Consume this support-only verdict and exact future-binding artifact. Preserve all original failures and open assertions. Only a separate authorization with fresh custody can execute the two original Home callbacks; no runtime, lease or class closure follows from this offline result."
   }
 }
