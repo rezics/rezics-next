@@ -2,7 +2,8 @@ import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { FusekiClient, fusekiReadBudget, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import type { ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
-import { canReadCompositionWork, compositionTargetBatchReader } from '../src/modules/composition/disclosure-read.ts';
+import { canReadCompositionWork, compositionTargetBatchReader,
+  compositionTargetDisclosureBatchReader } from '../src/modules/composition/disclosure-read.ts';
 import { readWorkParts, readWorkWholes } from '../src/modules/composition/read.ts';
 import { compositionWorkBatchReader } from '../src/modules/composition/visible-targets.ts';
 import { configureDisclosure } from '../src/modules/disclosure/read.ts';
@@ -57,9 +58,10 @@ function fixture(input: Target[], signedIn = false) {
         [...match[1]!.matchAll(/<([^>]+)>/g)].map(value => value[1]!)))];
       // Exercise the real registered guard builder, including its exact base
       // exclusions. This transport fixture is not a native SPARQL proof.
-      expect(query).toContain('https://schema.org/TVEpisode');
       expect(query).toContain('rv:semanticHead');
-      expect(query).toContain('rv:FixedRelease');
+      const checksProfile = query.includes('https://schema.org/TVEpisode');
+      if (checksProfile) expect(query).toContain('rv:FixedRelease');
+      else expect(query).toContain('OPTIONAL { GRAPH');
       const valid = (resource: string) => {
         const target = indexed.get(resource);
         return target?.base === 'resource' && !target.missingRevision
@@ -67,8 +69,10 @@ function fixture(input: Target[], signedIn = false) {
       };
       return { results: { bindings: query.includes('SELECT ?target WHERE')
         ? resources.filter(resource => !valid(resource)).slice(0, 1).map(resource => ({ target: uri(resource) }))
-        : resources.filter(valid).map(resource => ({ target: uri(resource),
-          head: uri(indexed.get(resource)?.semanticHead ?? revision) })) } };
+        : resources.filter(resource => !checksProfile || valid(resource)).map(resource => ({ target: uri(resource),
+          ...(indexed.get(resource)?.base === 'resource' && !indexed.get(resource)?.missingRevision
+            || indexed.get(resource)?.semanticHead
+            ? { head: uri(indexed.get(resource)?.semanticHead ?? revision) } : {}) })) } };
     }
     if (query.includes('SELECT ?resource ?head')) {
       const resources = [...query.matchAll(/VALUES \?resource \{([^}]+)\}/g)].flatMap(match =>
@@ -277,6 +281,59 @@ test('Episode profile reads admit only current native TVEpisode resources for pu
     expect(f.queries.filter(query => query.includes('SELECT ?target WHERE'))).toHaveLength(1);
     expect(f.queries.filter(query => query.includes('SELECT DISTINCT ?target ?head'))).toHaveLength(1);
     await session.fenceDependencies();
+  }
+});
+
+test('Episode disclosure reads preserve visible profile mismatches for native classification', async () => {
+  const profile = structureProfileFor('episode-list-v1');
+  for (const signedIn of [false, true]) {
+    const input: Target[] = targets(7).map(target => ({ ...target, base: 'resource',
+      types: ['https://schema.org/Movie'] }));
+    input[0]!.types = ['https://schema.org/TVEpisode'];
+    input[2]!.base = 'work';
+    input[3]!.private = input[3]!.granted = true;
+    input[4]!.private = true;
+    input[5]!.erased = true;
+    input[6]!.hidden = true;
+    const f = await episodeFixture(input, signedIn), session = f.session();
+    const read = compositionTargetDisclosureBatchReader(session, profile);
+    expect(await read([])).toEqual(new Set());
+    expect(f.queries).toEqual([]);
+    const resources = input.flatMap(target => [target.resource, target.resource]);
+    const disclosed = new Set([input[0]!.resource, input[1]!.resource, input[2]!.resource,
+      ...(signedIn ? [input[3]!.resource] : [])]);
+    expect(await read(resources)).toEqual(disclosed);
+    // Pure disclosure consumes no native guard diagnostic, including for the
+    // private invalid target. The native owner checks validity after admission.
+    expect(f.queries.filter(query => query.includes('SELECT ?target WHERE'))).toHaveLength(0);
+    const selections = f.queries.filter(query => query.includes('SELECT DISTINCT ?target ?head'));
+    expect(selections).toHaveLength(1);
+    for (const target of input) expect(selections[0]!.includes(`<${target.resource}>`))
+      .toBe(disclosed.has(target.resource));
+    await session.fenceDependencies();
+    // Public projections still withhold the readable Movie and wrong grain.
+    const projection = f.session();
+    expect(await compositionTargetBatchReader(projection, profile)(resources)).toEqual(new Set([input[0]!.resource]));
+    await projection.fenceDependencies();
+  }
+});
+
+test('Episode disclosure reads fence selected heads and authority without hiding owner failures', async () => {
+  const profile = structureProfileFor('episode-list-v1');
+  for (const change of ['head', 'grant', 'erasure', 'disclosure', 'owner'] as const) {
+    const input: Target[] = [{ ...targets(1)[0]!, base: 'resource', types: ['https://schema.org/Movie'],
+      private: true, granted: true }];
+    const f = await episodeFixture(input, true), session = f.session();
+    expect(await compositionTargetDisclosureBatchReader(session, profile)([input[0]!.resource]))
+      .toEqual(new Set([input[0]!.resource]));
+    await session.fenceDependencies();
+    if (change === 'head') input[0]!.semanticHead = derivedId('moved-disclosed-semantic-head');
+    else if (change === 'grant') input[0]!.granted = false;
+    else if (change === 'erasure') input[0]!.erased = true;
+    else if (change === 'disclosure') input[0]!.hidden = true;
+    else f.failOwner();
+    if (change === 'owner') await expect(session.fenceDependencies()).rejects.toThrow('Media owner unavailable');
+    else await expect(session.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
   }
 });
 

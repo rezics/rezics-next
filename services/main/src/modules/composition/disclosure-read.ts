@@ -65,12 +65,14 @@ async function canReadCompositionResources(session: WorkReadSession, resources: 
   return readable;
 }
 
-/** Episode admission is independent of editing authority. Reuse the registered
- * native guard as a correlated predicate, keeping valid neighbours when one
- * target changes grain. Two probes per bounded batch; the selected heads and
- * predicate are rechecked by the enclosing session's final dependency fence. */
+type CompositionTargetBatchReader = (targets: readonly string[]) => Promise<ReadonlySet<string>>;
+type TargetReadPurpose = 'projection' | 'disclosure';
+
+/** Projection admission applies the native guard; disclosure leaves profile
+ * diagnostics to the native owner. Both retain the selected semantic heads and
+ * summary authority in the enclosing session's final dependency fence. */
 async function currentEpisodeTargets(session: WorkReadSession, profile: StructureProfileRegistration,
-  targets: readonly string[]) {
+  targets: readonly string[], purpose: TargetReadPurpose) {
   const readable = new Set<string>();
   if (!profile.targetGuard) throw new WorkReadUnavailable('Episode target validation is unavailable');
   for (let at = 0; at < targets.length; at += TARGET_RESOLVE_COST.batch) {
@@ -83,18 +85,27 @@ async function currentEpisodeTargets(session: WorkReadSession, profile: Structur
     if (!batch.length) continue;
     // The Episode guard has no owner-dependent term; no editing principal or
     // Structure owner is supplied as public disclosure authority.
-    session.checkDeadline();
-    const { guard } = await profile.targetGuard(session.deps.environment, '', batch);
-    if (!guard) throw new WorkReadUnavailable('Episode target validation is unavailable');
+    let guard = '';
+    if (purpose === 'projection') {
+      session.checkDeadline();
+      guard = (await profile.targetGuard(session.deps.environment, '', batch)).guard;
+      if (!guard) throw new WorkReadUnavailable('Episode target validation is unavailable');
+    }
+    // A disclosed Work or other grain can lack a semantic head. Keep that
+    // absence fenced so the native owner can classify its profile mismatch.
+    const head = `GRAPH ${iri(GRAPHS.current)} { ?target rv:semanticHead ?head }`;
     const rows = await session.query(`SELECT DISTINCT ?target ?head WHERE {
       VALUES ?target { ${batch.map(iri).join(' ')} }
       ${guard}
-      GRAPH ${iri(GRAPHS.current)} { ?target rv:semanticHead ?head }
+      ${purpose === 'projection' ? head : `OPTIONAL { ${head} }`}
     } LIMIT ${batch.length + 1}`, batch.length);
+    if (purpose === 'disclosure' && rows.length !== batch.length) {
+      throw new WorkReadUnavailable('Episode target identity is unavailable');
+    }
     for (const row of rows) {
       const target = row.target?.value;
       if (row.target?.type !== 'uri' || !target || !batch.includes(target)
-        || row.head?.type !== 'uri' || readable.has(target)) {
+        || (row.head ? row.head.type !== 'uri' : purpose === 'projection') || readable.has(target)) {
         throw new WorkReadUnavailable('Episode target identity is ambiguous');
       }
       readable.add(target);
@@ -112,7 +123,22 @@ export function compositionTargetReader(session: WorkReadSession, profile: Struc
 
 /** The single profile decision for both scalar probes and candidate ranges.
  * Catalog identifiers have no native revision and retain their profile proof. */
-export function compositionTargetBatchReader(session: WorkReadSession, profile: StructureProfileRegistration) {
+export function compositionTargetBatchReader(session: WorkReadSession,
+  profile: StructureProfileRegistration): CompositionTargetBatchReader {
+  return targetBatchReader(session, profile, 'projection');
+}
+
+/** Native acknowledgement checks disclosure before reporting private profile
+ * diagnostics. Its owner must still validate the current target profile at
+ * opening, closing and final fences; this reader alone admits no native basis.
+ * Other profiles retain their existing target-authority policy. */
+export function compositionTargetDisclosureBatchReader(session: WorkReadSession,
+  profile: StructureProfileRegistration): CompositionTargetBatchReader {
+  return targetBatchReader(session, profile, 'disclosure');
+}
+
+function targetBatchReader(session: WorkReadSession, profile: StructureProfileRegistration,
+  purpose: TargetReadPurpose): CompositionTargetBatchReader {
   const read = collectionTargetBatchReader(session);
   return async (targets: readonly string[]): Promise<ReadonlySet<string>> => {
     const distinct = [...new Set(targets)];
@@ -123,7 +149,7 @@ export function compositionTargetBatchReader(session: WorkReadSession, profile: 
     if (disclosure === 'work') readable = await read(native);
     else if (disclosure === 'resource') readable = await canReadCompositionResources(session, native);
     else if (profile.id === 'episode-list-v1') {
-      readable = await currentEpisodeTargets(session, profile, native);
+      readable = await currentEpisodeTargets(session, profile, native, purpose);
     } else {
       // Only an explicitly declared public resource policy supplies a baseline.
       // Recipe and Zone retain their own target authority instead of accepting
