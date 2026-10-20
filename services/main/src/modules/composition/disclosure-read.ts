@@ -1,6 +1,6 @@
 import { GRAPHS, iri } from '../work/activate.ts';
 import { publicWork, unerased, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
-import { targetSummaryReader, TARGET_RESOLVE_COST } from '../target/resolve.ts';
+import { targetSummaries, targetSummaryReader, TARGET_RESOLVE_COST } from '../target/resolve.ts';
 import { readResourceSummaries } from '../media/summary.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../media/store.ts';
 import { canReadStructureTargets, isCatalogTarget, type StructureProfileRegistration } from '../structure/profiles.ts';
@@ -65,8 +65,45 @@ async function canReadCompositionResources(session: WorkReadSession, resources: 
   return readable;
 }
 
-/** Read projections use public baselines; command authority keeps using the
- * profile's existing authorization hook. Mixed Collection members still pass
+/** Episode admission is independent of editing authority. Reuse the registered
+ * native guard as a correlated predicate, keeping valid neighbours when one
+ * target changes grain. Two probes per bounded batch; the selected heads and
+ * predicate are rechecked by the enclosing session's final dependency fence. */
+async function currentEpisodeTargets(session: WorkReadSession, profile: StructureProfileRegistration,
+  targets: readonly string[]) {
+  const readable = new Set<string>();
+  if (!profile.targetGuard) throw new WorkReadUnavailable('Episode target validation is unavailable');
+  for (let at = 0; at < targets.length; at += TARGET_RESOLVE_COST.batch) {
+    session.checkDeadline();
+    const candidates = targets.slice(at, at + TARGET_RESOLVE_COST.batch);
+    // The resolver owns public/granted disclosure and its final authority fence.
+    const summaries = await targetSummaries(session, [...candidates], { includeCollections: true });
+    const batch = summaries.summaries.filter(summary => summary.status === 'available')
+      .map(summary => summary.reference);
+    if (!batch.length) continue;
+    // The Episode guard has no owner-dependent term; no editing principal or
+    // Structure owner is supplied as public disclosure authority.
+    session.checkDeadline();
+    const { guard } = await profile.targetGuard(session.deps.environment, '', batch);
+    if (!guard) throw new WorkReadUnavailable('Episode target validation is unavailable');
+    const rows = await session.query(`SELECT DISTINCT ?target ?head WHERE {
+      VALUES ?target { ${batch.map(iri).join(' ')} }
+      ${guard}
+      GRAPH ${iri(GRAPHS.current)} { ?target rv:semanticHead ?head }
+    } LIMIT ${batch.length + 1}`, batch.length);
+    for (const row of rows) {
+      const target = row.target?.value;
+      if (row.target?.type !== 'uri' || !target || !batch.includes(target)
+        || row.head?.type !== 'uri' || readable.has(target)) {
+        throw new WorkReadUnavailable('Episode target identity is ambiguous');
+      }
+      readable.add(target);
+    }
+  }
+  return readable;
+}
+
+/** Read projections keep each profile's disclosure policy. Mixed Collection members pass
  * through the capability resolver so this adds no new admitted target grain. */
 export function compositionTargetReader(session: WorkReadSession, profile: StructureProfileRegistration) {
   const read = compositionTargetBatchReader(session, profile);
@@ -85,10 +122,14 @@ export function compositionTargetBatchReader(session: WorkReadSession, profile: 
     let readable: ReadonlySet<string>;
     if (disclosure === 'work') readable = await read(native);
     else if (disclosure === 'resource') readable = await canReadCompositionResources(session, native);
-    else {
-      // Every reader gets the target owners' baseline. Profile authority can
-      // additionally admit restricted targets for a principal acting as a subject.
-      const baseline = await canReadCompositionResources(session, native);
+    else if (profile.id === 'episode-list-v1') {
+      readable = await currentEpisodeTargets(session, profile, native);
+    } else {
+      // Only an explicitly declared public resource policy supplies a baseline.
+      // Recipe and Zone retain their own target authority instead of accepting
+      // an unrelated public Work summary as a profile admission.
+      const baseline = profile.targetDisclosure === 'structure-target'
+        ? await canReadCompositionResources(session, native) : new Set<string>();
       if (!session.principal || !session.options.actingSubject) readable = baseline;
       else {
         const granted = await canReadStructureTargets(profile, { environment: session.deps.environment,

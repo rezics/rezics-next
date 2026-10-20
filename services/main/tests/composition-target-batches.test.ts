@@ -15,7 +15,8 @@ import { STRUCTURE_MANIFEST_FORMAT, STRUCTURE_PAGE_FORMAT, STRUCTURE_PROFILE,
 import { derivedId, orderTreeKey } from '../src/modules/structure/graph.ts';
 import { structureProfileFor } from '../src/modules/structure/profiles.ts';
 import { newCost } from '../src/modules/structure/tree.ts';
-import { WorkReadSession, WorkReadUnavailable } from '../src/modules/work/read-session.ts';
+import { WorkReadMoved, WorkReadSession, WorkReadUnavailable } from '../src/modules/work/read-session.ts';
+import { WORK_READ_COST } from '../src/modules/work/read-contract.ts';
 import { prepareWorkComponent } from '../src/modules/work/activate.ts';
 import { PublishedStructureSourceUnavailable, type PublishedStructuredWorkSource }
   from '../src/modules/work/public-patterns.ts';
@@ -25,7 +26,8 @@ import { structuredWorkPublicationAnswer, structuredWorkSourceRow } from './stru
 const literal = (value: string) => ({ type: 'literal' as const, value });
 const uri = (value: string) => ({ type: 'uri' as const, value });
 type Target = { resource: string; base?: 'work' | 'realization' | 'release' | 'occurrence' | 'resource';
-  private?: boolean; granted?: boolean; erased?: boolean; hidden?: boolean; missingRevision?: boolean };
+  private?: boolean; granted?: boolean; erased?: boolean; hidden?: boolean; missingRevision?: boolean;
+  types?: string[]; semanticHead?: string };
 const targets = (count: number): Target[] => Array.from({ length: count }, (_, index) =>
   ({ resource: derivedId(`composition-batch-target-${index}`) }));
 
@@ -50,6 +52,24 @@ function fixture(input: Target[], signedIn = false) {
   let graphBytes = 0;
   graph.query = async query => {
     queries.push(query);
+    if (query.includes('SELECT ?target WHERE') || query.includes('SELECT DISTINCT ?target ?head')) {
+      const resources = [...new Set([...query.matchAll(/VALUES \?target \{([^}]+)\}/g)].flatMap(match =>
+        [...match[1]!.matchAll(/<([^>]+)>/g)].map(value => value[1]!)))];
+      // Exercise the real registered guard builder, including its exact base
+      // exclusions. This transport fixture is not a native SPARQL proof.
+      expect(query).toContain('https://schema.org/TVEpisode');
+      expect(query).toContain('rv:semanticHead');
+      expect(query).toContain('rv:FixedRelease');
+      const valid = (resource: string) => {
+        const target = indexed.get(resource);
+        return target?.base === 'resource' && !target.missingRevision
+          && target.types?.includes('https://schema.org/TVEpisode');
+      };
+      return { results: { bindings: query.includes('SELECT ?target WHERE')
+        ? resources.filter(resource => !valid(resource)).slice(0, 1).map(resource => ({ target: uri(resource) }))
+        : resources.filter(valid).map(resource => ({ target: uri(resource),
+          head: uri(indexed.get(resource)?.semanticHead ?? revision) })) } };
+    }
     if (query.includes('SELECT ?resource ?head')) {
       const resources = [...query.matchAll(/VALUES \?resource \{([^}]+)\}/g)].flatMap(match =>
         [...match[1]!.matchAll(/<([^>]+)>/g)].map(value => value[1]!));
@@ -96,10 +116,10 @@ function fixture(input: Target[], signedIn = false) {
       } else if (query.includes('SELECT ?epoch ?sequence ?r ?revision')) {
         if (target.missingRevision) continue;
         const base = target.base ?? 'work';
-        const types = base === 'work' ? ['https://schema.org/Book', 'https://schema.org/CreativeWork']
+        const types = target.types ?? (base === 'work' ? ['https://schema.org/Book', 'https://schema.org/CreativeWork']
           : base === 'resource' ? ['https://schema.org/Episode']
             : base === 'occurrence' ? ['https://schema.org/ListItem']
-              : [`https://rezics.com/vocab/${base === 'realization' ? 'Realization' : 'Release'}`];
+              : [`https://rezics.com/vocab/${base === 'realization' ? 'Realization' : 'Release'}`]);
         for (const type of types) bindings.push({ epoch: literal(graphEpoch), sequence: literal(sequence), r: uri(resource),
           revision: uri(revision), type: uri(type) });
         if (ambiguous) bindings.push({ ...bindings.at(-1)!, revision: uri(derivedId('composition-other-revision')) });
@@ -152,6 +172,20 @@ function fixture(input: Target[], signedIn = false) {
   return { deps, input, graph, revision, session, queries, hydration, disclosure, grants, objects, semanticManifests, semanticBatches,
     graphBytes: () => graphBytes, move: () => { graphEpoch = 'recovered'; }, moveSequence: () => { sequence = '2'; },
     ambiguous: () => { ambiguous = true; }, failOwner: () => { failOwner = true; } };
+}
+
+async function episodeFixture(input: Target[], signedIn = false) {
+  const f = fixture(input, signedIn);
+  for (const target of input) {
+    if (target.base !== 'resource') continue;
+    const state = checkedComponentState({ component: 'resource',
+      types: target.types ?? ['https://schema.org/TVEpisode'], lifecycle: 'active',
+      properties: [{ predicate: 'https://schema.org/name',
+        value: { kind: 'language-string', lexical: 'Episode target', language: 'en' } }] });
+    const digest = await prepareWorkComponent(f.objects, target.resource, state, PROFILES.resource);
+    f.semanticManifests.set(target.resource, `urn:rezics:sha256:${digest}`);
+  }
+  return f;
 }
 
 test('Composition profile batches hydrate 100 distinct Work identities in two bounded owner passes', async () => {
@@ -213,6 +247,123 @@ test('Composition profile batching preserves catalog targets and leaves other pr
     expect(await readTargets([f.input[0]!.resource])).toEqual(new Set(
       profile === 'book-composition' ? [f.input[0]!.resource] : []));
   }
+});
+
+test('Episode profile reads admit only current native TVEpisode resources for public and granted readers', async () => {
+  for (const signedIn of [false, true]) {
+    const input: Target[] = targets(13).map(target => ({ ...target, base: 'resource',
+      types: ['https://schema.org/TVEpisode'] }));
+    input[1]!.types = ['https://schema.org/MusicComposition'];
+    input[2]!.base = 'work';
+    input[3]!.private = input[3]!.granted = true;
+    input[4]!.private = input[4]!.granted = true;
+    input[4]!.types = ['https://schema.org/MusicComposition'];
+    input[5]!.types = ['https://schema.org/Episode'];
+    input[6]!.erased = true;
+    input[7]!.hidden = true;
+    input[8]!.missingRevision = true;
+    input[9]!.base = 'realization';
+    input[10]!.base = 'release';
+    input[11]!.base = 'occurrence';
+    input[12]!.private = true;
+    const f = await episodeFixture(input, signedIn);
+    f.deps.access.canReadWork = async () => { throw new Error('Episode resources need no Work target grant'); };
+    const session = f.session();
+    const result = await compositionTargetBatchReader(session, structureProfileFor('episode-list-v1'))(
+      input.flatMap(target => [target.resource, target.resource]));
+    expect(result).toEqual(new Set([input[0]!.resource, ...(signedIn ? [input[3]!.resource] : [])]));
+    expect(session.principal).toEqual(signedIn ? { issuer: 'account', subject: 'reader' } : null);
+    expect(f.grants).toEqual([]);
+    expect(f.queries.filter(query => query.includes('SELECT ?target WHERE'))).toHaveLength(1);
+    expect(f.queries.filter(query => query.includes('SELECT DISTINCT ?target ?head'))).toHaveLength(1);
+    await session.fenceDependencies();
+  }
+});
+
+test('Episode profile reads keep a full public page within the existing request allocation', async () => {
+  const input: Target[] = targets(100).map(target => ({ ...target, base: 'resource',
+    types: ['https://schema.org/TVEpisode'] }));
+  const f = await episodeFixture(input);
+  const session = f.session();
+  await fusekiReadBudget.run({ signal: new AbortController().signal,
+    callsLeft: WORK_READ_COST.graphCalls, bytesLeft: WORK_READ_COST.graphBytes }, async () => {
+    const read = compositionTargetBatchReader(session, structureProfileFor('episode-list-v1'));
+    expect(await read([])).toEqual(new Set());
+    expect(f.queries).toEqual([]);
+    expect(await read(input.flatMap(target => [target.resource, target.resource])))
+      .toEqual(new Set(input.map(target => target.resource)));
+    expect(f.semanticBatches.map(batch => batch.length)).toEqual([64, 36]);
+    expect(f.hydration.map(batch => batch.length)).toEqual([64, 36]);
+    expect(f.queries.filter(query => query.includes('SELECT ?target WHERE'))).toHaveLength(2);
+    expect(f.queries.filter(query => query.includes('SELECT DISTINCT ?target ?head'))).toHaveLength(2);
+    expect(f.queries.length).toBeLessThanOrEqual(10);
+    await session.fenceDependencies();
+    expect(f.queries.filter(query => query.includes('SELECT DISTINCT ?target ?head'))).toHaveLength(4);
+    expect(f.queries.length).toBeLessThanOrEqual(20);
+  });
+});
+
+test('Episode profile final fences refuse type, grain and head movement after selection', async () => {
+  for (const signedIn of [false, true]) for (const move of ['type', 'grain', 'head'] as const) {
+    const input: Target[] = targets(2).map(target => ({ ...target, base: 'resource',
+      types: ['https://schema.org/TVEpisode'], private: signedIn, granted: signedIn }));
+    const f = await episodeFixture(input, signedIn), session = f.session();
+    const resources = input.map(target => target.resource);
+    const read = compositionTargetBatchReader(session, structureProfileFor('episode-list-v1'));
+    expect(await read(resources)).toEqual(new Set(resources));
+    if (move === 'type') input[0]!.types = ['https://schema.org/MusicComposition'];
+    else if (move === 'grain') input[0]!.base = 'work';
+    else input[0]!.semanticHead = derivedId('moved-episode-semantic-head');
+    await expect(session.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
+    // Old display/Structure evidence cannot re-admit a target after an
+    // independent native edit; an unchanged neighbour stays readable.
+    const retry = f.session();
+    expect(await compositionTargetBatchReader(retry, structureProfileFor('episode-list-v1'))(resources))
+      .toEqual(new Set(move === 'head' ? resources : [input[1]!.resource]));
+    await retry.fenceDependencies();
+  }
+});
+
+test('Episode profile final fences retain recipient, erasure and disclosure refusals', async () => {
+  for (const change of ['grant', 'erasure', 'disclosure'] as const) {
+    const input: Target[] = [{ ...targets(1)[0]!, base: 'resource', types: ['https://schema.org/TVEpisode'],
+      private: true, granted: true }];
+    const f = await episodeFixture(input, true), session = f.session();
+    expect(await compositionTargetBatchReader(session, structureProfileFor('episode-list-v1'))(
+      [input[0]!.resource])).toEqual(new Set([input[0]!.resource]));
+    if (change === 'grant') input[0]!.granted = false;
+    else if (change === 'erasure') input[0]!.erased = true;
+    else input[0]!.hidden = true;
+    await expect(session.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
+  }
+});
+
+test('Episode profile cancellation stops later target probes and permits a fresh retry', async () => {
+  const input: Target[] = targets(100).map(target => ({ ...target, base: 'resource',
+    types: ['https://schema.org/TVEpisode'] }));
+  const f = await episodeFixture(input), abort = new AbortController();
+  const queryTargets = f.graph.query.bind(f.graph);
+  f.graph.query = async query => {
+    const result = await queryTargets(query);
+    if (query.includes('SELECT ?target WHERE')) abort.abort(new Error('Episode read cancelled'));
+    return result;
+  };
+  await expect(fusekiReadBudget.run({ signal: abort.signal,
+    callsLeft: WORK_READ_COST.graphCalls, bytesLeft: WORK_READ_COST.graphBytes },
+    () => compositionTargetBatchReader(f.session(), structureProfileFor('episode-list-v1'))(
+      input.map(target => target.resource)))).rejects.toThrow('Episode read cancelled');
+  expect(f.queries.filter(query => query.includes('SELECT ?target WHERE'))).toHaveLength(1);
+  expect(f.queries.filter(query => query.includes('SELECT DISTINCT ?target ?head'))).toHaveLength(0);
+  expect(f.semanticBatches.map(batch => batch.length)).toEqual([64]);
+  expect(f.hydration.map(batch => batch.length)).toEqual([64]);
+  f.graph.query = queryTargets;
+  const session = f.session();
+  await fusekiReadBudget.run({ signal: new AbortController().signal,
+    callsLeft: WORK_READ_COST.graphCalls, bytesLeft: WORK_READ_COST.graphBytes }, async () => {
+    expect(await compositionTargetBatchReader(session, structureProfileFor('episode-list-v1'))(
+      input.map(target => target.resource))).toEqual(new Set(input.map(target => target.resource)));
+    await session.fenceDependencies();
+  });
 });
 
 test('Composition batch disclosure withholds private, erased, hidden and revision-missing targets individually', async () => {
