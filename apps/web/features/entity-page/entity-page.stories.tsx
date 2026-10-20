@@ -7,7 +7,8 @@ import { expect, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
 import { servedTypes } from '../catalogue/type-fixtures.ts';
 import { RelationRows } from '../work-levels/connections.tsx';
-import { relations as relationsPage, summary } from '../work-levels/fixtures.ts';
+import { iri, relations as relationsPage, summary } from '../work-levels/fixtures.ts';
+import type { RelationEntry } from '../work-levels/types.ts';
 import { copyOf as levelsCopy } from '../work-levels/messages.ts';
 import { relationRows } from '../work-levels/relation-rows.ts';
 import * as fixture from '../work-page/fixtures.ts';
@@ -151,6 +152,54 @@ export const Relations: Story = {
     await expect(canvas.getByRole('heading', { name: 'Relations' })).toBeVisible();
     // A counterpart that is a Work links to its own host.
     await expect(canvas.getAllByRole('link').some(link => addressPath(link.getAttribute('href') ?? '')?.lookup.scope === 'work')).toBe(true);
+  },
+};
+
+const purposeCases = [
+  [null, 'collections', 'A franchise in name only'], ['reading-list', 'readingLists', 'The recommended series'],
+  ['recipe-selection', 'recipeSelections', 'Franchise dinners'], ['series', 'series', 'A plain collection'],
+  ['franchise', 'franchises', 'The shared reading list'],
+] as const;
+const purposeEntries: RelationEntry[] = purposeCases.map(([kind, , title], index) => {
+  const reference = iri(`b0${index}`);
+  return { relation: reference, kind: 'collection', revision: null, evidence: null,
+    collectionPurpose: kind === null ? null : { kind, statement: iri(`b1${index}`), revision: iri(`b2${index}`), sources: [] },
+    counterparts: [summary(reference, title, 'en', 'resource')],
+    rendering: { profile: 'relation-rendering-v1', meaning: null,
+      structuralBasis: { profile: 'collection-membership', collection: reference, member: character.summary.reference },
+      occurrence: null, viewingRole: 'member', bindings: [], projections: [] } };
+});
+
+export const CollectionPurposes: Story = {
+  render: (_args, context) => {
+    const locale = context.globals.locale as UiLocale;
+    return <Page locale={locale}><RelationsView page={{ ok: true, data: { profile: 'resource-relations-v1',
+      resource: character.summary.reference, items: purposeEntries, next: 'next+/=',
+      sourcePosition: { datasetId: 'product', dataEpoch: 'epoch', sequence: '1' } } }} cursor="current"
+      {...common(locale)} /></Page>;
+  },
+  async play({ canvasElement, globals }) {
+    const locale = globals.locale as UiLocale, canvas = within(canvasElement), t = levelsCopy(locale);
+    for (const [index, [, key, title]] of purposeCases.entries()) {
+      const group = within(canvas.getByRole('region', { name: t[key] }));
+      const named = purposeEntries[index]!.counterparts[0]!;
+      if (named.status !== 'available') throw new Error('Expected a named Collection');
+      await expect(group.getByRole('heading', { name: t[key] })).toBeVisible();
+      await expect(group.getByRole('link', { name: title })).toHaveAttribute('href',
+        localizedPath(resourceHref('/e/', named.address as CanonicalAddress), locale));
+    }
+    const pages = within(canvas.getByRole('navigation', { name: workMessages[locale].pagination }));
+    await expect(pages.getByRole('link', { name: workMessages[locale].nextPage })).toHaveAttribute('href',
+      localizedPath(`${resourceHref('/e/', '0b9e4d2a-6c1f-4e8b-a3d5-7f2c9e1b4a6d')}?relations=next%2B%2F%3D#relations`, locale));
+  },
+};
+
+export const CollectionPurposesPhone: Story = {
+  ...CollectionPurposes,
+  globals: { locale: 'ja', viewport: { value: 'phone' } },
+  async play(context) {
+    await CollectionPurposes.play?.(context);
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 };
 

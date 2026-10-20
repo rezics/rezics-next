@@ -14,7 +14,7 @@ import type { WorkPageMessages } from '../work-page/messages.ts';
 import { Region, RegionFailure } from '../work-page/region.tsx';
 import type { Copy } from './messages.ts';
 import { namedWorkHref, NameLink, SummaryLink, type SummaryHref, summaryWorkHref } from './names.tsx';
-import { type Appearance, type CreditedName, labelFor, type RelationItem, type RelationRow, relationRows } from './relation-rows.ts';
+import { type Appearance, type CollectionGroup, collectionGroups, type CreditedName, labelFor, type RelationItem, type RelationRow, relationRows } from './relation-rows.ts';
 import { anchors, connectionsHref, type ConnectionsQuery, type Grain, grains } from './route.ts';
 import type { CollectionMembers, Loaded, Names, PartsPage, People, RelationsPage, Summary } from './types.ts';
 import type { PublicCollectionPage as CollectionRead } from './read.ts';
@@ -64,7 +64,7 @@ export function PublicCollectionPage({ summary, page, currentUrl, locale, messag
   </PageContainer>;
 }
 
-/** A franchise Collection, its members in Main's order, and at the parts grain each member's parts. */
+/** A hydrated Collection, its members in Main's order, and at the parts grain each member's parts. */
 export interface Franchise {
   collection: Summary;
   members: Loaded<CollectionMembers>;
@@ -206,11 +206,14 @@ export function RelationRows({ rows, locale, t, hrefFor, people }: { rows: reado
   </div>;
 }
 
-function GrainSwitch({ workRef, query, t }: { workRef: WorkAt; query: ConnectionsQuery; t: Copy }) {
-  const label: Record<Grain, string> = { series: t.grainSeries, parts: t.grainParts };
-  return <nav aria-label={t.grainSwitch} className="flex flex-wrap items-center gap-2">
+function GrainSwitch({ workRef, query, t, franchiseOnly }: {
+  workRef: WorkAt; query: ConnectionsQuery; t: Copy; franchiseOnly: boolean;
+}) {
+  const label: Record<Grain, string> = { series: franchiseOnly ? t.grainSeries : t.members, parts: t.grainParts };
+  const title = franchiseOnly ? t.grainSwitch : t.collectionGrainSwitch;
+  return <nav aria-label={title} className="flex flex-wrap items-center gap-2">
     <span className="text-muted-foreground text-sm">{t.grainLabel}</span>
-    <div role="group" aria-label={t.grainSwitch} className="inline-flex rounded-lg border border-border/80 p-0.5">
+    <div role="group" aria-label={title} className="inline-flex rounded-lg border border-border/80 p-0.5">
       {grains.map(grain => <Link documentNavigation key={grain} scroll={false} aria-current={query.grain === grain ? 'true' : undefined}
         href={connectionsHref(workRef, { ...query, grain, membersAfter: undefined }, anchors.franchises)}
         className={cn('rounded-md px-3 py-1 font-medium text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring',
@@ -220,20 +223,22 @@ function GrainSwitch({ workRef, query, t }: { workRef: WorkAt; query: Connection
   </nav>;
 }
 
-function Members({ franchise, current, names, workRef, query, t }: {
+function Members({ franchise, current, names, workRef, query, t, purpose, pageMessages }: {
   franchise: Franchise; current: string; names: Names; workRef: WorkAt; query: ConnectionsQuery; t: Copy;
+  purpose: CollectionGroup['purpose']; pageMessages: WorkPageMessages;
 }) {
   const members = franchise.members;
-  if (!members.ok) return <p role="status" className="text-muted-foreground text-sm">{t.membersUnavailable}</p>;
-  if (!members.data.members.length) return <p className="text-muted-foreground text-sm">{t.noMembers}</p>;
+  if (!members.ok) return <RegionFailure title={t.membersUnavailable} failure={members.failure} messages={pageMessages} />;
   const id = franchise.collection.reference.slice(-36);
   return <div className="grid gap-2">
-    <ol aria-label={query.grain === 'parts' ? t.grainParts : t.grainSeries} className="grid gap-2">
+    {!members.data.members.length && !members.data.next && (query.franchise !== id || !query.membersAfter)
+      ? <p className="text-muted-foreground text-sm">{t.noMembers}</p> :
+    <ol aria-label={query.grain === 'parts' ? t.grainParts : purpose === 'franchise' ? t.grainSeries : t.members} className="grid gap-2">
       {members.data.members.map(member => {
         const work = member.target!;
         const parts = franchise.parts.get(work);
         const workPage = namedWorkHref(work, names);
-        return <li key={member.occurrence} className="grid min-w-0 gap-1"
+        return <li key={member.occurrence} data-occurrence={member.occurrence} className="grid min-w-0 gap-1"
           aria-current={work.endsWith(current) ? 'true' : undefined}>
           <span className="flex flex-wrap items-center gap-2">
             <NameLink reference={work} names={names} unavailable={t.unavailable} unnamed={t.unnamed} undisclosed={t.nameNotShown} />
@@ -254,34 +259,41 @@ function Members({ franchise, current, names, workRef, query, t }: {
             : null}
         </li>;
       })}
-    </ol>
+    </ol>}
     {members.data.next ? <Link documentNavigation className={`${outline} w-fit`} scroll={false}
       href={connectionsHref(workRef, { ...query, franchise: id, membersAfter: members.data.next }, anchors.franchises)}>
       {t.showMore}</Link> : null}
   </div>;
 }
 
-function Franchises({ franchises, names, workRef, current, query, t }: {
-  franchises: readonly Franchise[]; names: Names; workRef: WorkAt; current: string; query: ConnectionsQuery; t: Copy;
+function Collections({ groups, franchises, names, workRef, current, query, t, pageMessages }: {
+  groups: readonly CollectionGroup[]; franchises: readonly Franchise[]; names: Names;
+  workRef: WorkAt; current: string; query: ConnectionsQuery; t: Copy; pageMessages: WorkPageMessages;
 }) {
-  if (!franchises.length) return null;
+  if (!groups.length) return null;
+  const hydrated = new Map(franchises.map(item => [item.collection.reference, item]));
   return <div id={anchors.franchises} className="grid scroll-mt-20 gap-3">
-    <h3 className="font-semibold text-base">{t.franchises}</h3>
-    <GrainSwitch workRef={workRef} query={query} t={t} />
-    {franchises.map(franchise => {
-      const summary = franchise.collection;
-      return <section key={summary.reference} aria-label={summary.status === 'available' ? summary.name.value : t.unavailable}
-        className="grid gap-2 rounded-xl border border-border/70 p-4">
-        <h4 className="font-medium">{summary.status === 'available'
-          ? <LocalizedText text={summary.name} /> : <span className="text-muted-foreground">{t.unavailable}</span>}</h4>
-        <Members franchise={franchise} current={current} names={names} workRef={workRef} query={query} t={t} />
-      </section>;
-    })}
+    {franchises.length ? <GrainSwitch workRef={workRef} query={query} t={t}
+      franchiseOnly={groups.length === 1 && groups[0]!.purpose === 'franchise'} /> : null}
+    {groups.map(group => <section key={group.heading} aria-labelledby={`connections-${group.heading}`} className="grid gap-3">
+      <h3 id={`connections-${group.heading}`} className="font-semibold text-base">{t[group.heading]}</h3>
+      {group.items.map(({ relation, summary }, index) => {
+        const franchise = summary.status === 'available' ? hydrated.get(summary.reference) : undefined;
+        return <section key={`${relation}-${summary.reference}-${index}`} aria-label={summary.status === 'available' ? summary.name.value || t.unnamed : t.nameNotShown}
+          className="grid gap-2 rounded-xl border border-border/70 p-4">
+          <h4 className="font-medium"><SummaryLink summary={summary} unavailable={t.unavailable} unnamed={t.unnamed} undisclosed={t.nameNotShown}
+            hrefFor={named => resourceHref('/e/', named.address as AddressTarget)} /></h4>
+          {franchise ? <Members franchise={franchise} current={current} names={names} workRef={workRef} query={query} t={t}
+            purpose={group.purpose} pageMessages={pageMessages} /> : null}
+        </section>;
+      })}
+      </section>
+    )}
   </div>;
 }
 
 /**
- * Typed relations in both directions, the franchises (Collections) that contain
+ * Typed relations in both directions, the explicitly purposed Collections that contain
  * the Work with their series ⇄ parts grain, and Main's continuation of both.
  */
 export function ConnectionsSection({ relations, franchises, names, people, workRef, current, query, locale, t, pageMessages }: {
@@ -296,12 +308,15 @@ export function ConnectionsSection({ relations, franchises, names, people, workR
     </Region>;
   }
   const rows = relationRows(relations.data.items);
-  const empty = !rows.length && !franchises.length;
+  const collections = collectionGroups(relations.data.items);
+  const empty = !rows.length && !collections.length;
   return <Region id={anchors.relations} title={t.connections} className="scroll-mt-20">
     {empty
-      ? <EmptyState icon={NetworkIcon} headingLevel={3} title={t.noConnections} description={t.noConnectionsBody} />
+      ? !relations.data.next && !query.relationsAfter
+        ? <EmptyState icon={NetworkIcon} headingLevel={3} title={t.noConnections} description={t.noConnectionsBody} /> : null
       : <>
-        <Franchises franchises={franchises} names={names} workRef={workRef} current={current} query={query} t={t} />
+        <Collections groups={collections} franchises={franchises} names={names} workRef={workRef} current={current} query={query} t={t}
+          pageMessages={pageMessages} />
         {rows.length ? <RelationRows rows={rows} locale={locale} t={t} people={people} /> : null}
       </>}
     {query.relationsAfter || relations.data.next

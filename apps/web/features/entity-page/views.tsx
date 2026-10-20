@@ -11,7 +11,7 @@ import { RelationRows } from '../work-levels/connections.tsx';
 import { copyOf as levelsCopy } from '../work-levels/messages.ts';
 import { SummaryLink, type SummaryHref } from '../work-levels/names.tsx';
 import type { Names } from '../work-levels/types.ts';
-import { franchisesOf, relationRows } from '../work-levels/relation-rows.ts';
+import { collectionGroups, relationRows } from '../work-levels/relation-rows.ts';
 import { DiscussionList } from '../work-page/discussion.tsx';
 import type { WorkPageMessages } from '../work-page/messages.ts';
 import type { ScopeRealm } from '../work-page/scope-bar.tsx';
@@ -353,18 +353,19 @@ export function RelationsView({
     );
   }
   const rows = relationRows(page.data.items, { together: true });
-  const franchises = franchisesOf(page.data.items);
+  const collections = collectionGroups(page.data.items);
   const levels = levelsCopy(locale);
   return (
     <Region id="relations" title={t.relations}>
-      {rows.length || franchises.length ? (
+      {rows.length || collections.length ? (
         <div className="grid gap-5">
-          {franchises.length ? (
-            <div className="grid gap-1 sm:grid-cols-[minmax(9rem,14rem)_1fr] sm:gap-4">
-              <h3 className="font-medium text-muted-foreground text-sm">{levels.franchises}</h3>
+          {collections.map(group => (
+            <section key={group.heading} aria-labelledby={`relations-${group.heading}`}
+              className="grid gap-1 sm:grid-cols-[minmax(9rem,14rem)_1fr] sm:gap-4">
+              <h3 id={`relations-${group.heading}`} className="font-medium text-muted-foreground text-sm">{levels[group.heading]}</h3>
               <ul className="grid gap-1">
-                {franchises.map((summary) => (
-                  <li key={summary.reference}>
+                {group.items.map(({ relation, summary }, index) => (
+                  <li key={`${relation}-${summary.reference}-${index}`}>
                     <SummaryLink
                       summary={summary}
                       unavailable={t.unavailable}
@@ -375,13 +376,13 @@ export function RelationsView({
                   </li>
                 ))}
               </ul>
-            </div>
-          ) : null}
+            </section>
+          ))}
           <RelationRows rows={rows} locale={locale} t={levels} hrefFor={summaryHref(hrefFor)} />
         </div>
-      ) : (
+      ) : !cursor && !page.data.next ? (
         <Quiet title={t.noRelations} body={t.noRelationsBody} />
-      )}
+      ) : null}
       <Pages
         cursor={cursor}
         next={page.data.next}

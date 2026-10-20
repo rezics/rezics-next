@@ -109,7 +109,7 @@ function targetsOf(projection: RelationProjection, summaries: ReadonlyMap<string
 }
 
 /**
- * Collection entries are franchises, not typed relations; every other entry
+ * Collection entries retain their own purpose groups, not typed relations; every other entry
  * is one row per viewing direction, rows sharing a meaning, direction and
  * label gathered under one heading in Main's order. With `together`, an
  * occurrence that places the viewed resource in a Work and says more about it
@@ -156,7 +156,34 @@ export function relationRows(entries: readonly RelationEntry[], { together = fal
     style: items.every(item => isWork(item.target)) ? 'row' as const : 'chips' as const, items }));
 }
 
-/** The franchises (Collections) an entry list places the Work in, in Main's order. */
+type CollectionPurpose = NonNullable<RelationEntry['collectionPurpose']>['kind'];
+const collectionHeadings = {
+  'reading-list': 'readingLists', 'recipe-selection': 'recipeSelections', series: 'series', franchise: 'franchises',
+} as const satisfies Record<CollectionPurpose, string>;
+
+export interface CollectionGroup {
+  purpose: CollectionPurpose | null;
+  heading: 'collections' | typeof collectionHeadings[CollectionPurpose];
+  items: { relation: string; summary: Summary }[];
+}
+
+/** Only an explicit native purpose names a group. Keep every incidence in Main's order within it. */
+export function collectionGroups(entries: readonly RelationEntry[]): CollectionGroup[] {
+  const groups = new Map<CollectionPurpose | null, CollectionGroup>();
+  for (const entry of entries) {
+    if (entry.kind !== 'collection') continue;
+    const purpose = entry.collectionPurpose?.kind ?? null;
+    const group = groups.get(purpose) ?? { purpose,
+      heading: purpose === null ? 'collections' : collectionHeadings[purpose], items: [] };
+    const summaries: readonly Summary[] = entry.counterparts.length ? entry.counterparts
+      : [{ reference: entry.relation, status: 'unavailable' }];
+    for (const summary of summaries) group.items.push({ relation: entry.relation, summary });
+    groups.set(purpose, group);
+  }
+  return [...groups.values()];
+}
+
+/** Collection summaries in Main's order. The legacy name preserves the existing member-hydration callers. */
 export function franchisesOf(entries: readonly RelationEntry[]): Summary[] {
   return entries.flatMap(entry => (entry.kind === 'collection' ? entry.counterparts : []));
 }

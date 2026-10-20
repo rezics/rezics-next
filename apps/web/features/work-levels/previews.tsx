@@ -3,6 +3,7 @@ import { buttonVariants } from '@rezics/ui/button';
 import { LocalizedText } from '@rezics/ui/localized-text';
 import { ArrowRightIcon } from 'lucide-react';
 import type { UiLocale } from '../../i18n/define.ts';
+import { resourceHref, type AddressTarget } from '../address/path.ts';
 import { contentText } from '../language/untagged.ts';
 import Link from '../shell/localized-link.tsx';
 import type { WorkPageMessages } from '../work-page/messages.ts';
@@ -10,9 +11,9 @@ import { Region, RegionFailure } from '../work-page/region.tsx';
 import { RelationRows } from './connections.tsx';
 import { LanguageName } from './editions.tsx';
 import type { Copy } from './messages.ts';
-import { NameLink } from './names.tsx';
+import { NameLink, SummaryLink } from './names.tsx';
 import { WholesLines } from './parts.tsx';
-import { franchisesOf, relationRows } from './relation-rows.ts';
+import { collectionGroups, relationRows } from './relation-rows.ts';
 import { anchors, connectionsHref, editionsHref, releaseHref } from './route.ts';
 import type {
   Loaded,
@@ -107,7 +108,7 @@ export function PartsPreviewView({
   );
 }
 
-/** The first typed relations and the franchises that contain the Work. */
+/** The first typed relations and the explicitly purposed Collections that contain the Work. */
 export function ConnectionsPreviewView({
   relations,
   people,
@@ -135,25 +136,23 @@ export function ConnectionsPreviewView({
     );
   }
   const rows = relationRows(relations.data.items).slice(0, PREVIEW_COUNTS.relations);
-  const franchises = franchisesOf(relations.data.items);
-  if (!rows.length && !franchises.length && !relations.data.next) return null;
+  const collections = collectionGroups(relations.data.items);
+  if (!rows.length && !collections.length && !relations.data.next) return null;
   return (
     <Region id="connections-preview" title={t.connections}>
-      {franchises.length ? (
-        <p className="text-sm">
-          <span className="text-muted-foreground">{t.franchises}</span>{' '}
-          {franchises.map((franchise, index) => (
-            <span key={franchise.reference}>
-              {index ? ', ' : ''}
-              {franchise.status === 'available' ? (
-                <LocalizedText text={franchise.name} className="font-medium" />
-              ) : (
-                <span className="text-muted-foreground">{t.unavailable}</span>
-              )}
-            </span>
-          ))}
-        </p>
-      ) : null}
+      {collections.map(group => (
+        <section key={group.heading} aria-labelledby={`connections-preview-${group.heading}`} className="grid gap-1 text-sm">
+          <h3 id={`connections-preview-${group.heading}`} className="font-medium text-muted-foreground">{t[group.heading]}</h3>
+          <ul className="flex flex-wrap gap-x-4 gap-y-1">
+            {group.items.map(({ relation, summary }, index) => (
+              <li key={`${relation}-${summary.reference}-${index}`}>
+                <SummaryLink summary={summary} unavailable={t.unavailable} unnamed={t.unnamed} undisclosed={t.nameNotShown}
+                  hrefFor={named => resourceHref('/e/', named.address as AddressTarget)} />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
       {rows.length ? <RelationRows rows={rows} locale={locale} t={t} people={people} /> : null}
       <ViewAll href={connectionsHref(workRef, {}, anchors.relations)} label={t.allConnections} />
     </Region>

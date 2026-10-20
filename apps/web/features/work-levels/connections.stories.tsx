@@ -11,7 +11,14 @@ import { copyOf } from './messages.ts';
 import { namedWorkHref } from './names.tsx';
 import { ConnectionsPreviewView } from './previews.tsx';
 import type { ConnectionsQuery } from './route.ts';
-import type { AvailableSummary, Loaded, RelationsPage } from './types.ts';
+import type { AvailableSummary, Loaded, RelationEntry, RelationsPage } from './types.ts';
+
+// This fixture is an explicitly declared franchise; its title never supplies its purpose.
+const franchiseRelations: Loaded<RelationsPage> = fixture.relations.ok ? { ok: true, data: { ...fixture.relations.data,
+  items: fixture.relationEntries.map((entry, index) => index === 0 ? { ...entry, collectionPurpose: {
+    kind: 'franchise', statement: fixture.iri('d01'), revision: fixture.iri('d02'), sources: [],
+  } } : entry),
+} } : fixture.relations;
 
 const franchise = (grain: 'series' | 'parts', paged = false): Franchise => ({
   collection: fixture.summary(
@@ -46,7 +53,7 @@ const franchise = (grain: 'series' | 'parts', paged = false): Franchise => ({
 function Page({
   locale,
   grain = 'series',
-  relations = fixture.relations,
+  relations = franchiseRelations,
   preview = false,
   paged = false,
 }: {
@@ -203,6 +210,111 @@ export const SignInNeeded: Story = {
     await expect(within(canvasElement).getByRole('alert')).toHaveTextContent(
       'Connections could not be loaded.',
     );
+  },
+};
+
+const purposeCases = [
+  [null, 'collections', 'A series and franchise in name only'],
+  ['reading-list', 'readingLists', 'Franchise reading recommendations'],
+  ['recipe-selection', 'recipeSelections', 'The dinner series'],
+  ['series', 'series', 'An ordinary-sounding list'],
+  ['franchise', 'franchises', 'The shared collection'],
+] as const;
+const purposeEntries: RelationEntry[] = purposeCases.map(([kind, , title], index) => {
+  const reference = fixture.iri(`b0${index}`);
+  return { relation: reference, kind: 'collection', revision: null, evidence: null,
+    collectionPurpose: kind === null ? null : { kind, statement: fixture.iri(`b1${index}`), revision: fixture.iri(`b2${index}`), sources: [] },
+    counterparts: [fixture.summary(reference, title, 'en', 'collection')],
+    rendering: { profile: 'relation-rendering-v1', meaning: null,
+      structuralBasis: { profile: 'collection-membership', collection: reference, member: fixture.iri('100') },
+      occurrence: null, viewingRole: 'member', bindings: [], projections: [] } };
+});
+const purposeRelations: Loaded<RelationsPage> = fixture.relations.ok
+  ? { ok: true, data: { ...fixture.relations.data, items: purposeEntries, next: 'relations-next+/=' } }
+  : fixture.relations;
+const purposeMembers: Franchise[] = purposeEntries.map((entry, index) => ({ collection: entry.counterparts[0]!, parts: new Map(),
+  members: { ok: true, data: { collection: entry.relation, next: `members-next-${index}`,
+    members: ['101', '102', '101'].map((target, occurrence) => ({ occurrence: fixture.iri(`c${index}${occurrence}`),
+      role: 'member', parent: entry.relation, target: fixture.iri(target), orderKey: `${occurrence}`, labels: [] })) } },
+}));
+const purposeQuery: ConnectionsQuery = { grain: 'series', relationsAfter: 'relations-current', membersAfter: 'members-current', partsAfter: 'parts-current' };
+
+function PurposePage({ locale = 'en', preview = false, refused = false }: { locale?: UiLocale; preview?: boolean; refused?: boolean }) {
+  const shared = { locale, workRef: fixture.workRef, t: copyOf(locale), pageMessages: pageMessages[locale], relations: purposeRelations };
+  const members: Franchise[] = refused ? purposeMembers.map((item, index) => ({ ...item,
+    members: index < 3 ? { ok: false, failure: (['missing', 'sign-in', 'unavailable'] as const)[index]! }
+      : { ok: true, data: { collection: item.collection.reference, members: [], next: `empty-next-${index}` } },
+  })) : purposeMembers;
+  return <div className="mx-auto grid max-w-[46rem] gap-8 px-4 py-8 sm:px-8">
+    {preview ? <ConnectionsPreviewView {...shared} /> : <ConnectionsSection {...shared} franchises={[...members].reverse()}
+      names={fixture.names} current={fixture.current} query={purposeQuery} />}
+  </div>;
+}
+
+async function assertPurposeLinks(canvasElement: HTMLElement, locale: UiLocale) {
+  const canvas = within(canvasElement), t = copyOf(locale);
+  for (const [index, [, key, title]] of purposeCases.entries()) {
+    const region = within(canvas.getByRole('region', { name: t[key] }));
+    const summary = purposeEntries[index]!.counterparts[0]!;
+    if (summary.status !== 'available') throw new Error('Expected an available Collection fixture');
+    await expect(region.getByRole('heading', { name: t[key] })).toBeVisible();
+    await expect(region.getByRole('link', { name: title })).toHaveAttribute('href',
+      localizedPath(resourceHref('/e/', summary.address as CanonicalAddress), locale));
+  }
+}
+
+/** Explicit purpose, not a title or a type label, determines each region. Repeated members remain separate occurrences. */
+export const ExplicitCollectionPurposes: Story = {
+  render: () => <PurposePage />,
+  async play({ canvasElement }) {
+    await assertPurposeLinks(canvasElement, 'en');
+    const canvas = within(canvasElement), t = copyOf('en');
+    for (const [index, [, key]] of purposeCases.entries()) {
+      const region = within(canvas.getByRole('region', { name: t[key] }));
+      await expect(region.getAllByRole('listitem').map(item => item.getAttribute('data-occurrence'))).toEqual(
+        ['0', '1', '2'].map(occurrence => fixture.iri(`c${index}${occurrence}`)));
+      await expect(region.getAllByRole('link', { name: 'A Certain Magical Index NT 1' })).toHaveLength(2);
+      await expect(region.getByRole('link', { name: 'Show more' })).toHaveAttribute('href', localizedPath(
+        `${resourceHref('/w/', fixture.workRef)}/connections?relationsAfter=relations-current&membersAfter=members-next-${index}&partsAfter=parts-current&franchise=${fixture.iri(`b0${index}`).slice(-36)}#franchises`, 'en'));
+    }
+    const pages = within(canvas.getByRole('navigation', { name: 'Relations pages' }));
+    await expect(pages.getByRole('link', { name: 'Back to the start' })).toBeVisible();
+    await expect(pages.getByRole('link', { name: 'Show more' })).toHaveAttribute('href', localizedPath(
+      `${resourceHref('/w/', fixture.workRef)}/connections?relationsAfter=relations-next%2B%2F%3D&membersAfter=members-current&partsAfter=parts-current#relations`, 'en'));
+  },
+};
+
+export const ExplicitCollectionPurposesPhone: Story = {
+  render: () => <PurposePage locale="ja" />,
+  globals: { locale: 'ja', viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    await assertPurposeLinks(canvasElement, 'ja');
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+
+export const CollectionPurposesPreview: Story = {
+  render: () => <PurposePage preview />,
+  async play({ canvasElement }) {
+    await assertPurposeLinks(canvasElement, 'en');
+    await expect(within(canvasElement).getByRole('link', { name: 'All connections' })).toHaveAttribute('href',
+      localizedPath(`${resourceHref('/w/', fixture.workRef)}/connections#relations`, 'en'));
+    await expect(canvasElement.querySelector('[data-occurrence]')).toBeNull();
+  },
+};
+
+export const RefusedCollectionMembers: Story = {
+  render: () => <PurposePage refused />,
+  async play({ canvasElement }) {
+    await assertPurposeLinks(canvasElement, 'en');
+    const canvas = within(canvasElement);
+    await expect(within(canvas.getByRole('region', { name: 'Collections' })).getByRole('status')).toHaveTextContent(pageMessages.en.regionMissing);
+    await expect(within(canvas.getByRole('region', { name: 'Reading lists' })).getByRole('alert')).toHaveTextContent(pageMessages.en.regionDenied);
+    await expect(within(canvas.getByRole('region', { name: 'Recipe selections' })).getByRole('alert')).toHaveTextContent(pageMessages.en.regionUnavailable);
+    const empty = within(canvas.getByRole('region', { name: 'Series' }));
+    await expect(empty.queryByText(copyOf('en').noMembers)).toBeNull();
+    await expect(empty.getByRole('link', { name: 'Show more' })).toHaveAttribute('href', localizedPath(
+      `${resourceHref('/w/', fixture.workRef)}/connections?relationsAfter=relations-current&membersAfter=empty-next-3&partsAfter=parts-current&franchise=${fixture.iri('b03').slice(-36)}#franchises`, 'en'));
   },
 };
 
