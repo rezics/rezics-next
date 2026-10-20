@@ -6469,5 +6469,490 @@
       "currentMainReportAtReviewIdenticalToPriorOwnReport": true,
       "newKeyOnly": "retainedBookRecipeHistoryExtensionFirstReview"
     }
+  },
+  "boundedProfileReaderFirstReview": {
+    "reviewedAt": "2026-10-20T10:34:07.216078+00:00",
+    "authority": "Maintainer decision 2026-10-20T10:26:35.178Z supersedes pending earlier assignments: first review of published G-2763 profile reader correction; reuse exact-source checks, inspect three retained native-basis failures once, documentation check only.",
+    "reviewer": {
+      "worker": "G-2846",
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "authoredCandidateChanges": false,
+      "independentReviewsPerformedForThisDelta": 1,
+      "nestedAgentsUsed": false,
+      "accountFallbackUsed": false,
+      "previousAcceptedReviewsReplayed": false
+    },
+    "candidate": {
+      "commit": "4bc710fb943053b0e8b4c074fdd9b102080be910",
+      "parent": "f1c42d420130d899605fcd06e1a6ab2b3e14faf7",
+      "paths": [
+        {
+          "path": "services/main/src/modules/composition/disclosure-read.ts",
+          "before": {
+            "blob": "5b081a7631a668a986300e231f64a4f7eb431b77",
+            "sha256": "a939f8287f832b493e09a903af8f80837495a883a05797028393adf627c2eeac"
+          },
+          "after": {
+            "blob": "f0331a5b00ddfee85e39af5c56645f2912936fd2",
+            "sha256": "d829380646a066f8032049b3b89df8d556aff314ce49936e2aa9bf56f8627e89"
+          }
+        },
+        {
+          "path": "services/main/tests/composition-target-batches.test.ts",
+          "before": {
+            "blob": "3897168ba6ca81e84b94ae20f3a86b1d6866b4f6",
+            "sha256": "ccca3007080c1082ba3268150899efa076a35a3cf5f894e09f30caf630b471c5"
+          },
+          "after": {
+            "blob": "cfb7d32a3bb53b0d1ae4bc6c27bde92bf2160328",
+            "sha256": "d68a84d82aa6fddbb5795416370106e9274258b345fa386911384d90963dbcbc"
+          }
+        }
+      ],
+      "immutableCommitVerified": true,
+      "changedPathsEqualAssignedTwoPaths": true,
+      "comparison": "git diff --no-renames f1c42d420130d899605fcd06e1a6ab2b3e14faf7 4bc710fb943053b0e8b4c074fdd9b102080be910",
+      "reviewMethod": "Read immutable Git objects and actual diff with owning-call context; no candidate checkout, source edit, rebase or branch mutation.",
+      "reviewerWorktreeHead": "3b3491ef32af0429730fde41083f8017430cd652",
+      "dependencyPin": "f1c42d420130d899605fcd06e1a6ab2b3e14faf7",
+      "dependencyDisposition": "The compatible Episode/native owner source in this parent is required by this delta; no claim that it is already on current main. Unchanged dependency context is not another candidate or review."
+    },
+    "sourceVerdict": {
+      "result": "changes-requested-for-acknowledgement-composition",
+      "readerProjection": "No additional defect found in the bounded public/granted reader projection, batch selection, movement fences, cancellation boundaries or independent retry source.",
+      "reason": "The new profile-filtering reader is also consumed as a pure visibility predicate by the unchanged acknowledged-occurrence owner. An independently readable resource that no longer satisfies the Episode profile is withheld before that caller can classify its native mismatch. Updating only the unsupported test transport does not resolve this source-level ordering problem.",
+      "unconditionalLandingApproval": false,
+      "requiredOwnerAction": "Return the classification concern to existing G-2763, coordinating its native-basis dependency with existing G-2799. Preserve disclosure-before-diagnostic privacy and the original mismatch assertions; support the actual batched/head query in the owned fixture and resolve the visibility/profile-validity composition. This review implements no repair.",
+      "runtimeFindingStatus": "Static owning-call counterexample; not represented as a newly reproduced public/runtime assertion failure or a confirmed runtime blocker consuming an owner fix round.",
+      "classClosure": false
+    },
+    "reviewCoverage": [
+      {
+        "path": "services/main/src/modules/composition/disclosure-read.ts",
+        "lines": "72-103,115-142",
+        "observation": "Distinct inputs are selected once, catalog proof is retained, and only episode-list-v1 uses the new reader. targetSummaries retains public/granted Semantic authority, erasure and disclosure. The registered current TVEpisode guard then excludes Work, realization, release, occurrence and other forbidden grains; a grant or historical Structure command is not a type/grain substitute. The empty owner argument is safe for this registered Episode guard, whose owner parameter is unused."
+      },
+      {
+        "path": "services/main/src/modules/composition/disclosure-read.ts",
+        "lines": "76-101",
+        "observation": "Selection uses existing TARGET_RESOLVE_COST.batch=64. Each nonempty disclosed batch invokes the existing guard probe and one bounded SELECT DISTINCT target/head, LIMIT batch.length+1 with session row cap batch.length. Non-URI, alien or duplicate identities refuse. Invalid neighbors are filtered by the correlated guard rather than admitting the whole batch from one valid item. The guard probe invalid flag is deliberately not used as an all-or-nothing batch admission.",
+        "limit": "The controlled transport emulates the predicate and does not establish native SPARQL execution, engine work, wall time or complete real-stack allocation."
+      },
+      {
+        "path": "services/main/src/modules/composition/disclosure-read.ts",
+        "lines": "79-93",
+        "observation": "targetSummaries records live summary/authority dependencies; session.query records the selected head plus current guard predicate. The enclosing WorkReadSession closes dependencies and authority. Type, forbidden-grain, head, grant, erasure and disclosure movement cannot reuse the opening decision. No module-global or cross-request result cache was added."
+      },
+      {
+        "path": "services/main/src/modules/composition/disclosure-read.ts",
+        "lines": "76-93,128-139",
+        "observation": "Deadline/abort checks precede each bounded batch and guard call; session.query checks again before the following selection probe. Existing transport allocation and enclosing close remain in force. The stricter branch does not acquire editing authority. Work/resource branches and catalog identities survive; only explicitly declared structure-target policy contributes a generic resource baseline, so Recipe and Zone continue to use their own target authority.",
+        "limit": "Source inspection plus controlled abort/retry coverage does not certify live transport cancellation grace, resource drain or mixed-load behavior."
+      },
+      {
+        "path": "services/main/tests/composition-target-batches.test.ts",
+        "lines": "55-71,177-188,239-367",
+        "observation": "Five added cases exercise public and granted current TVEpisode admission, mixed wrong types/grains and private controls, 100 distinct targets and duplicate/empty input, selected type/grain/head changes and fresh retry, grant/erasure/disclosure revocation, and abort before the selected-head probe followed by an independent retry. The original catalog/Recipe/Zone case is byte-identical against the parent.",
+        "preservedOriginalCase": "Composition profile batching preserves catalog targets and leaves other profile authorities in charge",
+        "preservedCaseExtractionSha256": "a6848c7f5ed7bf85e68fcd518e73bd5bf93926aa4a35a8d9c3252f498ccb8611",
+        "hashScope": "Whole test call from test( through closing });, excluding trailing newline; before and after equal.",
+        "limit": "Fixture overrides graph.query and simulates storage/Access. Its query counts and allocation envelope are useful controlled evidence; its pass is not measured native RPC/bytes/SQL/engine or public-persona acceptance."
+      }
+    ],
+    "nativeBasisFailureAnalysis": {
+      "selectionReplayed": false,
+      "retainedQa": "20261020t040533-108210",
+      "retainedJob": "5c40cd5e-c626-4089-ba50-7ce9e45a2f14",
+      "exitCode": 1,
+      "originalAssertionsChanged": false,
+      "unchangedTestBlob": "ec98cb0f2c7db08379ce48327252b149a542bd40",
+      "selectionCounts": {
+        "executed": 51,
+        "passed": 48,
+        "failed": 3,
+        "errorsOutsideCases": 0,
+        "skipped": 0,
+        "assertions": 609
+      },
+      "nativeBasisFileCounts": {
+        "executed": 19,
+        "passed": 16,
+        "failed": 3,
+        "skipped": 0,
+        "assertions": 158
+      },
+      "fixtureSupport": {
+        "path": "services/main/tests/structure-native-basis.test.ts",
+        "lines": "55-104",
+        "actualCause": "The controlled query dispatcher recognizes SELECT ?target WHERE but has no SELECT DISTINCT ?target ?head branch. It throws Unexpected owner query at line 103. native-basis.ts:204-208 wraps that transport exception as 503 structure_basis_unavailable. This is not evidence that a real native query rejected the product predicate.",
+        "smallestSetupCorrection": "Existing fixture owner must model the actual bounded per-target guard/head query, including current type/grain/head and the original mutation hooks. Do not replace or weaken any test assertion."
+      },
+      "cases": [
+        {
+          "name": "an acknowledged episode retains repeated uses but a later target type change cannot borrow its historical command",
+          "path": "services/main/tests/structure-native-basis.test.ts",
+          "lines": "235-254",
+          "observed": "Initial read at line 237 throws 503 from unsupported selected-head query.",
+          "outcomeAssertionReached": false,
+          "unreached": "Repeated-use identity, later Movie type change, expected structure_target_mismatch at line 247, unchanged receipt/head/write checks.",
+          "sourceConcernAfterSetupCorrection": "The later, readable Movie premise would be filtered by currentEpisodeTargets and hit native-basis.ts:178 before its profile check at line 179. Predicted 403 structure_basis_denied, not the original required 422. This prediction was not executed or relabelled as the retained observed 503."
+        },
+        {
+          "name": "a target grain change during acknowledgement refuses the current use without replacing a child",
+          "path": "services/main/tests/structure-native-basis.test.ts",
+          "lines": "256-265",
+          "observed": "The refused helper reaches its code assertion at line 200: expected structure_target_mismatch, received structure_basis_unavailable.",
+          "outcomeAssertionReached": true,
+          "intendedGrainMutationReached": false,
+          "explanation": "The unsupported query follows the first guard probe. The original hook mutates on the second guard probe, which was not reached. With valid initial query support this specific hook reaches the following targetsValid check; no claim that its eventual original assertion must still fail.",
+          "unreached": "Expected 422 status, two-check count, unchanged receipt count and writes."
+        },
+        {
+          "name": "the caller final fence rechecks the native target profile after returning an acknowledged child",
+          "path": "services/main/tests/structure-native-basis.test.ts",
+          "lines": "267-276",
+          "observed": "Initial read at line 269 throws 503 from unsupported selected-head query.",
+          "outcomeAssertionReached": false,
+          "unreached": "Successful acknowledgement, baseline final fence, later Movie mutation, WorkReadMoved assertion, repeated-check and unchanged-receipt assertions."
+        }
+      ],
+      "disposition": "Retain all three failed cases. Immediate recorded failures are fixture-support failures; the separate type-change classification ordering concern is real in source and still needs owner resolution. No newly reached native/public assertion and no invented fixed pass."
+    },
+    "actionableFindings": [
+      {
+        "id": "profile-reader-native-mismatch-classification",
+        "severity": "P2",
+        "owner": "G-2763",
+        "coordinateWithExistingOwner": "G-2799",
+        "path": "services/main/src/modules/composition/disclosure-read.ts",
+        "lines": "125-126",
+        "owningCall": {
+          "path": "services/main/src/modules/structure/native-basis.ts",
+          "lines": "165-186"
+        },
+        "regression": "Profile validity is now folded into the boolean returned to an acknowledgement caller that distinguishes disclosure denial from profile mismatch. The caller returns structure_basis_denied before targetsValid can classify an otherwise disclosed target.",
+        "smallestReproduction": "Use the unchanged native-basis case at lines 235-254: acknowledge a TVEpisode, retain both repeated children and command receipt, independently change its Semantic type to Movie while keeping it readable, then read the original acknowledgement. After supporting the actual selected-head query, preserve the original expected 422 structure_target_mismatch. The current source path returns an empty readable set and predicts 403 at native-basis.ts:178.",
+        "expected": "Disclosed-but-invalid native target is 422 structure_target_mismatch; inaccessible targets remain denied without leaking profile diagnostics, unavailable evidence remains 503, and no receipt or child is replaced.",
+        "evidenceKind": "source-control-flow counterexample, with original assertion retained but unreached after its current setup failure",
+        "runtimeReproduced": false,
+        "fixRoundConsumed": false,
+        "requestedCorrection": "Resolve the shared visibility/profile-validity composition in the existing owners and support the real batched fixture, retaining all original assertions and disclosure fences. A fixture-only adaptation cannot certify the later type-change assertion."
+      }
+    ],
+    "productAudit": {
+      "scope": "The new profile reader branch and its actual acknowledged-occurrence consumer only; unchanged Source/notification/Zone/native-request implementations were not re-reviewed.",
+      "invariant": "A stricter read projection must preserve an existing caller distinction between disclosure denial, unavailable dependency and a current native profile mismatch.",
+      "instances": [
+        "native-basis.ts:178-179 opening target checks",
+        "native-basis.ts:182-186 closing target checks"
+      ],
+      "evidence": "Both sites evaluate the new combined readable predicate before targetsValid. A move already visible at either read check can preempt mismatch classification. The caller final dependency fence still refuses movement; that refusal does not repair the opening/closing machine-readable classification.",
+      "guard": "Existing original native-basis type/grain/final-fence assertions; support their actual transport without changing the expected outcomes. Preserve denial-before-private-diagnostic behavior.",
+      "apiOrUiJourneyExecuted": false,
+      "closureRecommended": false
+    },
+    "checks": {
+      "reusePolicy": "Reused completed exact-source receipts; no product, native, corpus, integration or whole-domain check rerun.",
+      "sourceVerification": {
+        "fingerprintAlgorithm": "SHA256(parent HEAD with newline + git diff --binary --no-ext-diff parent candidate); no untracked additions",
+        "reconstructedFingerprint": "8752a27db8da3b1924818c915a4407c8c2fb5575db0aabbbc37d39dae4bc8ee6",
+        "qa": {
+          "20261020t040635-00ea4f": {
+            "source": {
+              "head": "f1c42d420130d899605fcd06e1a6ab2b3e14faf7",
+              "fingerprint": "8752a27db8da3b1924818c915a4407c8c2fb5575db0aabbbc37d39dae4bc8ee6",
+              "clean": false
+            },
+            "sourceStable": true,
+            "fingerprintEqualsExactParentPlusTwoFileDelta": true,
+            "suites": [
+              {
+                "name": "services/main/tests/composition-disclosure.test.ts",
+                "file": "services/main/tests/composition-disclosure.test.ts",
+                "tests": "4",
+                "assertions": "13",
+                "failures": "0",
+                "skipped": "0",
+                "time": "0.709341687",
+                "hostname": "ah-ipv6"
+              },
+              {
+                "name": "services/main/tests/composition-target-batches.test.ts",
+                "file": "services/main/tests/composition-target-batches.test.ts",
+                "tests": "17",
+                "assertions": "320",
+                "failures": "0",
+                "skipped": "0",
+                "time": "0.358256049",
+                "hostname": "ah-ipv6"
+              },
+              {
+                "name": "services/main/tests/structure-profile-data.test.ts",
+                "file": "services/main/tests/structure-profile-data.test.ts",
+                "tests": "2",
+                "assertions": "15",
+                "failures": "0",
+                "skipped": "0",
+                "time": "0.020321954",
+                "hostname": "ah-ipv6"
+              },
+              {
+                "name": "services/main/tests/structure-episode-profile.test.ts",
+                "file": "services/main/tests/structure-episode-profile.test.ts",
+                "tests": "9",
+                "assertions": "103",
+                "failures": "0",
+                "skipped": "0",
+                "time": "0.078226166",
+                "hostname": "ah-ipv6"
+              }
+            ],
+            "tiers": [
+              {
+                "name": "owner",
+                "status": "passed",
+                "elapsedMs": 1219
+              }
+            ]
+          },
+          "20261020t040533-108210": {
+            "source": {
+              "head": "f1c42d420130d899605fcd06e1a6ab2b3e14faf7",
+              "fingerprint": "8752a27db8da3b1924818c915a4407c8c2fb5575db0aabbbc37d39dae4bc8ee6",
+              "clean": false
+            },
+            "sourceStable": true,
+            "fingerprintEqualsExactParentPlusTwoFileDelta": true,
+            "suites": [
+              {
+                "name": "services/main/tests/composition-disclosure.test.ts",
+                "file": "services/main/tests/composition-disclosure.test.ts",
+                "tests": "4",
+                "assertions": "13",
+                "failures": "0",
+                "skipped": "0",
+                "time": "1.042001162",
+                "hostname": "ah-ipv6"
+              },
+              {
+                "name": "services/main/tests/composition-target-batches.test.ts",
+                "file": "services/main/tests/composition-target-batches.test.ts",
+                "tests": "17",
+                "assertions": "320",
+                "failures": "0",
+                "skipped": "0",
+                "time": "0.386031658",
+                "hostname": "ah-ipv6"
+              },
+              {
+                "name": "services/main/tests/structure-profile-data.test.ts",
+                "file": "services/main/tests/structure-profile-data.test.ts",
+                "tests": "2",
+                "assertions": "15",
+                "failures": "0",
+                "skipped": "0",
+                "time": "0.008363332",
+                "hostname": "ah-ipv6"
+              },
+              {
+                "name": "services/main/tests/structure-episode-profile.test.ts",
+                "file": "services/main/tests/structure-episode-profile.test.ts",
+                "tests": "9",
+                "assertions": "103",
+                "failures": "0",
+                "skipped": "0",
+                "time": "0.104801809",
+                "hostname": "ah-ipv6"
+              },
+              {
+                "name": "services/main/tests/structure-native-basis.test.ts",
+                "file": "services/main/tests/structure-native-basis.test.ts",
+                "tests": "19",
+                "assertions": "158",
+                "failures": "3",
+                "skipped": "0",
+                "time": "0.116792901",
+                "hostname": "ah-ipv6"
+              }
+            ],
+            "tiers": [
+              {
+                "name": "owner",
+                "status": "failed",
+                "elapsedMs": 1726,
+                "failureClass": "assertion"
+              }
+            ]
+          }
+        }
+      },
+      "focused": {
+        "job": "f40fd8f3-ac61-470d-b8e4-6eba09f89c8f",
+        "sequenceStep": 0,
+        "qa": "20261020t040635-00ea4f",
+        "exitCode": 0,
+        "result": "pass",
+        "command": "bun scripts/goal/goalctl.ts test services/main/tests/composition-target-batches.test.ts services/main/tests/composition-disclosure.test.ts services/main/tests/structure-episode-profile.test.ts services/main/tests/structure-profile-data.test.ts",
+        "counts": {
+          "executed": 32,
+          "passed": 32,
+          "failed": 0,
+          "errorsOutsideCases": 0,
+          "skipped": 0,
+          "assertions": 451
+        },
+        "changedTestFileCounts": {
+          "executed": 17,
+          "passed": 17,
+          "failed": 0,
+          "skipped": 0,
+          "assertions": 320
+        },
+        "scope": "Controlled owner/transport tests; no public-persona or native runtime acceptance."
+      },
+      "worker": {
+        "job": "f40fd8f3-ac61-470d-b8e4-6eba09f89c8f",
+        "sequenceStep": 1,
+        "command": "task goal -- check --only types,lint,guards",
+        "exitCode": 0,
+        "result": "pass",
+        "checks": [
+          "guards",
+          "types",
+          "inference",
+          "lint",
+          "ast"
+        ],
+        "changedPathsReportedByCheck": "services/main/src/modules/composition/disclosure-read.ts, services/main/tests/composition-target-batches.test.ts",
+        "log": ".temp/read-availability-review/profile-reader-4bc710/checks/output.log"
+      },
+      "mainTypecheck": {
+        "job": "7a66bd52-27ea-4c0c-b4cd-d42ff3b2171e",
+        "command": "task main:typecheck",
+        "exitCode": 0,
+        "result": "pass",
+        "files": 2839,
+        "log": ".temp/read-availability-review/profile-reader-4bc710/checks/main-typecheck.log"
+      },
+      "documentation": {
+        "job": "52836561-c71a-4d48-9188-12651cb4f986",
+        "command": "task docs:check",
+        "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task docs:check",
+        "exitCode": 0,
+        "result": "pass",
+        "tests": 13,
+        "markdownFiles": 249,
+        "limits": "Local links, fragments and design navigation; no external URL or runtime validation.",
+        "log": ".temp/read-availability-review/profile-reader-4bc710/checks/52836561-c71a-4d48-9188-12651cb4f986.log"
+      },
+      "newProductTestsExecuted": 0
+    },
+    "materialDependencyManifest": {
+      "sourcePin": "4bc710fb943053b0e8b4c074fdd9b102080be910",
+      "parent": "4bc710fb943053b0e8b4c074fdd9b102080be910^",
+      "purpose": "Material calls/test/runner context only; not a second source review or candidate",
+      "paths": [
+        {
+          "path": "services/main/src/modules/structure/native-basis.ts",
+          "blob": "6af834b2d903502e6eb8a0af03eb3b68ee04a796",
+          "unchangedAgainstParent": true,
+          "sha256": "98950f274622580471977a3f56b7cc2f2e51c8a9c3896483f762a578687725b8"
+        },
+        {
+          "path": "services/main/tests/structure-native-basis.test.ts",
+          "blob": "ec98cb0f2c7db08379ce48327252b149a542bd40",
+          "unchangedAgainstParent": true,
+          "sha256": "755f831f21af7e2111ef987f2aeb1400f81dabd376a8ee0b70c4652aee90dddc"
+        },
+        {
+          "path": "services/main/src/modules/structure/episode-profile.ts",
+          "blob": "941506974f4ff87d13f93da0e8d7ce00f199c400",
+          "unchangedAgainstParent": true,
+          "sha256": "8c3bbf9f76a2cb6586344e11cc5d4ce74caf5a25503815457ff3bdd6910817d0"
+        },
+        {
+          "path": "services/main/src/modules/target/resolve.ts",
+          "blob": "95ecab4fc79b8bf8c19a2797d67e584cc7be4f72",
+          "unchangedAgainstParent": true,
+          "sha256": "391197731d12257c71b65b8410e7b93b5c1c332bb59845cd2d189e4b3a4a1519"
+        },
+        {
+          "path": "services/main/src/modules/work/read-session.ts",
+          "blob": "85381184a0704f74645f97e0b0327a2b13d0d27d",
+          "unchangedAgainstParent": true,
+          "sha256": "1e057f09ae28386be2ee2a737826a5060bf67aabe3dd4ce8abe105183659b4db"
+        },
+        {
+          "path": "services/main/src/modules/work/read-contract.ts",
+          "blob": "d1aca76967ca4a564f0fd5908042ab99c7383a48",
+          "unchangedAgainstParent": true,
+          "sha256": "98b6f6e424dfc743f7f5a3d3a584270a46793861373bf0c77d29e471c5ec06f6"
+        },
+        {
+          "path": "services/main/src/modules/media/summary.ts",
+          "blob": "ec27f2faf4ef3e727185baabc928083a05c026f6",
+          "unchangedAgainstParent": true,
+          "sha256": "1c8fd2b69740566c2f705d9469215989d14ff6f8457fff91bcc8fcebb342f16c"
+        },
+        {
+          "path": "services/main/tests/composition-disclosure.test.ts",
+          "blob": "935f17764ba1a44e0de7bc63aa3bcb05958cfdc3",
+          "unchangedAgainstParent": true,
+          "sha256": "17279ab45fe73d26679fe3bf94ad858ba5609419651845c6977d58901aea6de3"
+        },
+        {
+          "path": "services/main/tests/structure-episode-profile.test.ts",
+          "blob": "817df488480b8c610d4906711efdec98661358c3",
+          "unchangedAgainstParent": true,
+          "sha256": "1368960a069d157ceaba1841d62d425f049b363a00ff3d2a47e824aa9ba92505"
+        },
+        {
+          "path": "services/main/tests/structure-profile-data.test.ts",
+          "blob": "715405e702537201a5b82229c781be20345702f8",
+          "unchangedAgainstParent": true,
+          "sha256": "333e4648528b85c85f2b2dabef86ab4ea1135d8e50c36b93288ab6d0805e8bf7"
+        },
+        {
+          "path": "scripts/qa/core.ts",
+          "blob": "7e73c7a7b25c09930781ef55fd0f837587c7a97f",
+          "unchangedAgainstParent": true,
+          "sha256": "c22fed1e7e7665bb18690864003b58563302e8c93e1884801a6a74973be8586c"
+        },
+        {
+          "path": "scripts/goal/check.ts",
+          "blob": "d6258d34c6a16f889561705939ce73a0bc019e05",
+          "unchangedAgainstParent": true,
+          "sha256": "eb83ef21a91f8089fa992334ffdc22130c0358ba1e38ab577b6069e6d9b9db92"
+        }
+      ]
+    },
+    "originalProofStillDue": [
+      "Three unchanged native-basis assertions remain unresolved at their original reach; no fixture change or source repair was performed by this reviewer.",
+      "Original public 100-distinct-Episode current/exact Composition case remains unexecuted in this review; native SPARQL execution, real allocation, runtime cancellation and mixed load remain with their existing proof owners.",
+      "No notification, query, Source or six-persona acceptance is gained from this source verdict or the 32 controlled tests; all earlier findings, failures and residuals retain their existing dispositions.",
+      "D4-007 eligible-account Library/Studio/relationships recovery and D4-008 genuine Book entrance, body/navigation at 1440/390, unavailable metadata and same-revision retry remain with existing UI/data/proof owners. They are not extra gates for this bounded source review."
+    ],
+    "evidence": {
+      "bundle": ".temp/read-availability-review/profile-reader-4bc710",
+      "producerReceipt": ".temp/read-availability-review/profile-reader-4bc710/producer-receipt.json",
+      "producerAttempt25Handoff": ".temp/read-availability-review/profile-reader-4bc710/producer-attempt-25-handoff.md",
+      "sourceManifest": ".temp/read-availability-review/profile-reader-4bc710/source-manifest.json",
+      "dependencyManifest": ".temp/read-availability-review/profile-reader-4bc710/dependency-manifest.json",
+      "sourceFingerprintVerification": ".temp/read-availability-review/profile-reader-4bc710/qa-source-verification.json",
+      "focusedRawLog": ".temp/read-availability-review/profile-reader-4bc710/focused/owner.log",
+      "retainedFailureRawLog": ".temp/read-availability-review/profile-reader-4bc710/native-basis/owner.log",
+      "rawEvidenceContainsCredentials": false,
+      "rawManifest": ".temp/read-availability-review/profile-reader-4bc710/raw-manifest.json",
+      "rawManifestSha256": "022abe9429e7e4c0110cf1e06c90e064b7dfae8e0ac48f6f4c053658bec3ffcb",
+      "rawEvidenceFiles": 50
+    },
+    "historyPreservation": {
+      "previousTopLevelKeys": 34,
+      "allPreviousValuesUnchanged": true,
+      "priorReportSha256": "092bf875bb7574d4c360b12b3e6b10464bd24685c6039582e16bb4a05c04a33e",
+      "newKeyOnly": "boundedProfileReaderFirstReview"
+    }
   }
 }
