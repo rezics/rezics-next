@@ -4,8 +4,10 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import type { AuditCommandReceipt, AuditOriginals } from '../fixtures/audit-corpus-contract.ts';
 import { assertPublicDomainNativeCreation, assertPublicDomainOriginalWorks, type PublicDomainSelectedCorpus,
-  type PublicRecipe, type RealBook, type Measure } from '../fixtures/catalogue-public-domain.ts';
-import { assertPublicDomainWorkAdmission, assertPublicDomainSelectedPremises } from '../support/catalogue-public-domain.ts';
+  type PublicDomainCorpus, type PublicRecipe, type RealBook, type Measure } from '../fixtures/catalogue-public-domain.ts';
+import { assertPublicDomainWorkAdmission, assertPublicDomainSelectedPremises, assertPublicDomainBorrowedBook,
+  attachPublicDomainBook, loadPublicDomainBorrowedBook } from '../support/catalogue-public-domain.ts';
+import { personaNames } from '../support/personas.ts';
 
 // Synthetic metadata exercises admission only; none of these IDs or receipts is product evidence.
 const id = (value: number) => `https://rezics.com/id/00000000-0000-4000-8000-${value.toString(16).padStart(12, '0')}`;
@@ -343,3 +345,184 @@ for (const field of ['realization', 'realizationRevision', 'language', 'platform
     }
   });
 }
+
+function borrowedBook() {
+  const product = '76c5955006dbea2016e84465d8f3e79fdf4fc979', support = 'd2f04140fe615eadef0379a52c26291e6e083217';
+  const run = 'book-current-site-20261020-r1', project = `rezics-qa-${run}`;
+  const endpoints = { main: 'http://127.0.0.1:42963', account: 'http://127.0.0.1:42701' };
+  const manifest = { ...selected({ book: unitBook() }), execution: {
+    productBaseline: '69eac3ceeaf885be70205a70248bc951e9d81cc9', productRevision: product,
+    frontendRevision: product, testRevision: 'a'.repeat(40), fixtureGeneration: 'recipes-build-mw0book-8b7d14',
+    retainedCustody: { file: 'unit-custody', sha256: 'b'.repeat(64) },
+  } } as PublicDomainCorpus & { execution: Record<string, unknown> };
+  manifest.personas = { realm: id(80_000), space: id(80_001), zone: id(80_002), visibility: 'public',
+    identities: Object.fromEntries(personaNames.filter(name => name !== 'visitor').map((name, index) =>
+      [name, { email: `${name}@example.invalid`, password: `unit-${name}`, accountId: `unit-account-${name}`,
+        actingSubject: id(80_010 + index) }])) as PublicDomainCorpus['personas']['identities'],
+    auth: { accountOrigin: 'http://retained-account.invalid', clientId: 'unit-client', redirectUris: ['http://unit.invalid/callback'],
+      scope: 'openid offline_access', mainClientId: 'unit-main', mainClientSecret: 'unit-secret', resource: 'https://main.rezics.test' },
+  } as PublicDomainCorpus['personas'];
+  const original = structuredClone(manifest);
+  original.execution.testRevision = support;
+  const model = { file: 'generated/model/manifest.json', sha256: 'c'.repeat(64) };
+  const owner = { pid: 1234, startTicks: 'unit-start', script: '/unit/owner.ts' };
+  const records = {
+    producer: { productRevision: product, consumerSupportRevision: support, fixtureGeneration: manifest.execution.fixtureGeneration,
+      releasedTo: 'G-2823', copy: { runId: run, project }, endpoints,
+      artifacts: { publicDomainConsumer: { sha256: '767717d646390e440a2048eacd9b4b8d5d51afa43ad2f483399b2261866eb13c' },
+        custody: { sha256: 'b'.repeat(64) }, stoppedBackup: { sha256: 'd'.repeat(64) } },
+      runtime: { product, testRevision: support, runId: run, model }, compatibilityDigest: 'e'.repeat(64),
+      bookNative: { work: manifest.book.work } },
+    ready: { exit: 0, pid: owner.pid, productRevision: product, supportRevision: support, runId: run, project, ...endpoints },
+    qualification: { exit: 0, productRevision: product, overlayRevision: support, project, ownerProcess: { ...owner }, model,
+      compatibility: { digest: 'e'.repeat(64) }, migrations: { pending: [] as string[] }, native: {
+        moduleVersion: '0.5.43', instanceId: '11d5871b-af7e-44e7-927b-667c943ed3e7', publicSearchWriteEpoch: '4',
+        profilesSha256: 'd3b0d41321fbd5c38bce4b8fa8327d381fb8be0ba601f6922c839ea0146f406e' } },
+    physical: { exit: 0, backupManifest: { sha256: 'd'.repeat(64), verified: true } },
+    owner, corpus: original, personas: structuredClone(manifest.personas),
+  };
+  return { manifest, records, endpoints };
+}
+
+test('borrowed Book admits the exact retained copy with a separate executable test pin', () => {
+  const { manifest, records, endpoints } = borrowedBook(), before = structuredClone({ manifest, records });
+  expect(assertPublicDomainBorrowedBook(manifest, 'book', records)).toEqual(endpoints);
+  expect({ manifest, records }).toEqual(before);
+});
+
+const borrowRefusals: Array<[string, (input: ReturnType<typeof borrowedBook>) => void]> = [
+  ['product pin', input => { input.manifest.execution.productRevision = 'f'.repeat(40); }],
+  ['support pin', input => { input.records.ready.supportRevision = 'f'.repeat(40); }],
+  ['frontend pin', input => { input.manifest.execution.frontendRevision = 'f'.repeat(40); }],
+  ['missing test pin', input => { delete input.manifest.execution.testRevision; }],
+  ['wrong generation', input => { input.manifest.execution.fixtureGeneration = 'recipes-build-unbound-123456'; }],
+  ['unqualified copy', input => { input.records.qualification.exit = 1; }],
+  ['wrong run', input => { input.records.ready.runId = 'another-copy'; }],
+  ['wrong Main', input => { input.records.ready.main = 'http://127.0.0.1:1'; }],
+  ['wrong Account', input => { input.records.producer.endpoints.account = 'http://127.0.0.1:2'; }],
+  ['stale owner', input => { input.records.owner.startTicks = 'reused-pid'; }],
+  ['changed owner script', input => { input.records.owner.script = '/other/owner.ts'; }],
+  ['unverified backup', input => { input.records.physical.backupManifest.verified = false; }],
+  ['wrong backup', input => { input.records.physical.backupManifest.sha256 = 'f'.repeat(64); }],
+  ['wrong native instance', input => { input.records.qualification.native.instanceId = 'another-instance'; }],
+  ['wrong native profiles', input => { input.records.qualification.native.profilesSha256 = 'f'.repeat(64); }],
+  ['wrong model', input => { input.records.qualification.model = { file: 'changed', sha256: 'f'.repeat(64) }; }],
+  ['pending migration', input => { input.records.qualification.migrations.pending.push('unit-migration'); }],
+  ['wrong original identity', input => { input.manifest.importedWorks[0] = work; }],
+  ['changed Book', input => { input.manifest.book.chapters[0]!.selectedRevision = id(90_000); }],
+  ['changed Account', input => { input.manifest.personas.identities.member.accountId = 'another-account'; }],
+  ['changed acting subject', input => { input.manifest.personas.identities.moderator.actingSubject = id(90_001); }],
+  ['swapped roles', input => {
+    const identities = input.manifest.personas.identities;
+    [identities.owner, identities.operator] = [identities.operator, identities.owner];
+  }],
+];
+for (const [name, alter] of borrowRefusals) test(`borrowed Book refuses ${name} before attachment`, () => {
+  const input = borrowedBook(); alter(input);
+  expect(() => assertPublicDomainBorrowedBook(input.manifest, 'book', input.records)).toThrow('TEST PREMISE');
+});
+for (const selection of ['recipe', 'nutrition'] as const) test(`borrowed Book refuses ${selection} selection`, () => {
+  const { manifest, records } = borrowedBook();
+  expect(() => assertPublicDomainBorrowedBook(manifest, selection, records)).toThrow('Book-only');
+});
+
+for (const kind of ['missing', 'self-declared-ready', 'changed-attachment', 'changed-custodian-bytes'] as const)
+  test(`borrowed Book refuses ${kind} evidence without a network request`, () => {
+    const keys = ['REZICS_PUBLIC_DOMAIN_BORROWED_BOOK', 'REZICS_PUBLIC_DOMAIN_BORROWED_BOOK_SHA256'] as const;
+    const previous = keys.map(key => Bun.env[key]);
+    try {
+      for (const key of keys) delete Bun.env[key];
+      if (kind !== 'missing') {
+        const evidence = pinJson({ invented: true });
+        const pin = pinJson(kind === 'changed-custodian-bytes' ? { producer: {
+          file: evidence.file, sha256: '67f2daa27512f56e20ddf44f6d60ac5fc64f1b55756ec912534a470dbd50621c',
+        } } : { ready: true, main: 'http://127.0.0.1:42963' });
+        Bun.env[keys[0]] = pin.file;
+        Bun.env[keys[1]] = kind === 'changed-attachment' ? '0'.repeat(64) : pin.sha256;
+      }
+      expect(() => loadPublicDomainBorrowedBook(borrowedBook().manifest, 'book')).toThrow('TEST PREMISE');
+    } finally {
+      keys.forEach((key, index) => {
+        if (previous[index] === undefined) delete Bun.env[key]; else Bun.env[key] = previous[index];
+      });
+    }
+  });
+
+// Exercise the existing OAuth and persona operations with transport-only doubles; no application or storage starts.
+async function borrowTransport(failure?: 'account' | 'oauth' | 'attach' | 'cleanup') {
+  const input = borrowedBook(), requests: Array<{ path: string; cookie: string | null; authorization: string | null; session: string | null }> = [];
+  let logins = 0, tokens = 0, bindings = 0;
+  const previous = globalThis.fetch;
+  const fake: typeof fetch = Object.assign(async (url: string | URL | Request, init?: RequestInit) => {
+    const parsed = new URL(String(url)), path = parsed.pathname, headers = new Headers(init?.headers);
+    requests.push({ path, cookie: headers.get('cookie'), authorization: headers.get('authorization'), session: headers.get('x-session-key') });
+    if (path === '/api/auth/sign-in/email') {
+      logins++;
+      const { email } = JSON.parse(String(init?.body)) as { email: string };
+      const identity = Object.values(input.manifest.personas.identities).find(person => person.email === email)!;
+      return Response.json({ user: { id: failure === 'account' && logins === 3 ? 'wrong-account' : identity.accountId } },
+        { headers: { 'set-cookie': `unit-fresh=${logins}; Path=/; HttpOnly` } });
+    }
+    if (path === '/api/auth/oauth2/authorize') return new Response(null,
+      { status: 302, headers: { location: '/consent?oauth_query=unit' } });
+    if (path === '/api/account/consent') return Response.json({ url: 'http://unit.invalid/callback?code=unit' });
+    if (path === '/api/auth/oauth2/token') {
+      tokens++;
+      if (failure === 'oauth' && tokens === 3) return Response.json({ error: 'invalid_grant' }, { status: 400 });
+      return Response.json({ access_token: `e30.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url')}.unit-${tokens}`,
+        refresh_token: `unit-refresh-${tokens}`, expires_in: 3600, scope: 'openid offline_access' });
+    }
+    if (path === '/v1/me/session-agent') {
+      bindings++;
+      const body = JSON.parse(String(init?.body)) as { actingSubject: string; expectedRevision: null };
+      expect(body).toEqual({ actingSubject: input.manifest.personas.identities[personaNames[bindings]! as 'stranger'].actingSubject, expectedRevision: null });
+      return Response.json({}, { status: failure === 'attach' && bindings === 3 ? 403 : 200 });
+    }
+    if (path === '/api/auth/sign-out' || path === '/api/auth/oauth2/revoke')
+      return Response.json({}, { status: failure === 'cleanup' && path.endsWith('revoke') ? 503 : 200 });
+    if (path === '/unit-anonymous') return Response.json({ anonymous: true });
+    throw new Error(`Unexpected borrowed transport operation: ${path}`);
+  }, { preconnect: previous.preconnect });
+  globalThis.fetch = fake;
+  return { ...input, requests, restore: () => { globalThis.fetch = previous; } };
+}
+
+test('borrowed Book attaches five fresh normal OAuth sessions and closes only their auth handles', async () => {
+  const input = await borrowTransport();
+  try {
+    const people = await attachPublicDomainBook(input.manifest, input.endpoints);
+    expect(people.visitor.accountId).toBeNull(); expect(people.visitor.actingSubject).toBeNull();
+    await people.visitor.main('GET', '/unit-anonymous');
+    expect(input.requests.at(-1)).toMatchObject({ authorization: null, cookie: null });
+    for (const name of personaNames.filter(name => name !== 'visitor'))
+      expect([people[name].accountId, people[name].actingSubject]).toEqual([
+        input.manifest.personas.identities[name].accountId, input.manifest.personas.identities[name].actingSubject]);
+    const bindings = input.requests.filter(request => request.path === '/v1/me/session-agent');
+    expect(bindings).toHaveLength(5); expect(new Set(bindings.map(request => request.session)).size).toBe(5);
+    expect(bindings.every(request => request.authorization?.startsWith('Bearer '))).toBe(true);
+    await people.close();
+    expect(input.requests.filter(request => request.path.endsWith('/revoke'))).toHaveLength(10);
+    expect(input.requests.filter(request => request.path.endsWith('/sign-out')).map(request => request.cookie))
+      .toEqual(Array.from({ length: 5 }, (_, index) => `unit-fresh=${index + 1}`));
+    const count = input.requests.length; await people.close(); expect(input.requests).toHaveLength(count);
+  } finally { input.restore(); }
+});
+
+for (const failure of ['account', 'oauth', 'attach'] as const) test(`borrowed Book failed ${failure} attach closes all acquired fresh handles`, async () => {
+  const input = await borrowTransport(failure);
+  try {
+    await expect(attachPublicDomainBook(input.manifest, input.endpoints)).rejects.toThrow();
+    expect(input.requests.filter(request => request.path.endsWith('/sign-out'))).toHaveLength(3);
+    expect(input.requests.filter(request => request.path.endsWith('/revoke'))).toHaveLength(failure === 'attach' ? 6 : 4);
+    expect(input.requests.filter(request => request.path.endsWith('/sign-in/email'))).toHaveLength(3);
+  } finally { input.restore(); }
+});
+
+test('borrowed Book cleanup failure is reported after every borrower handle gets sign-out', async () => {
+  const input = await borrowTransport('cleanup');
+  try {
+    const people = await attachPublicDomainBook(input.manifest, input.endpoints);
+    await expect(people.close()).rejects.toThrow('auth cleanup failed');
+    expect(input.requests.filter(request => request.path.endsWith('/sign-out'))).toHaveLength(5);
+  } finally { input.restore(); }
+});

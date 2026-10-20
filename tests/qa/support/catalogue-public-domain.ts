@@ -1,14 +1,16 @@
 import { expect } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
+import { isDeepStrictEqual } from 'node:util';
 import { createCorpusBackupDriver } from '../../../scripts/load/corpus-backup-driver.ts';
+import { signIn, type LocalOAuthSession } from '../../../scripts/lib/oauth-client.ts';
 import type { AuditFilePin } from '../fixtures/audit-corpus-contract.ts';
 import { publicDomainBaseline, publicDomainOriginalArraySha256, privateRecipeText, assertPublicDomainOriginalWorks, assertPublicDomainNativeCreation, type PublicDomainCorpus,
   type PublicDomainSelectedCorpus, type PublicDomainSelection, type PublicRecipe, type RecipePage, type SourceQuote } from '../fixtures/catalogue-public-domain.ts';
 import { grantPersonaFixtureAuthority } from './persona-fixture-authority.ts';
 import { assertAuditExecution } from './audit-execution.ts';
-import { restorePersonaRealms, type PersonaSession, type PersonaSessions } from './personas.ts';
+import { personaNames, personaSession, restorePersonaRealms, type PersonaSession, type PersonaSessions } from './personas.ts';
 
 export const short = (id: string) => id.slice(-36);
 export const viewer = (person: PersonaSession, path: string) => person.actingSubject
@@ -159,10 +161,176 @@ export function assertPublicDomainSelectedPremises(corpus: PublicDomainSelectedC
     throw new Error('TEST PREMISE: missing author-declared exact substitute occurrence evidence');
 }
 
-/** Restores only. A failed/missing prerequisite never triggers a fresh import. */
+// These are the existing custodian's immutable release receipts, not a new readiness declaration.
+const borrowedBookReceipts = {
+  producer: '67f2daa27512f56e20ddf44f6d60ac5fc64f1b55756ec912534a470dbd50621c',
+  ready: '0fa18b85f40cc548f6a5c7f359199d7ec186b8058a7ae74463332068e251b675',
+  qualification: 'fe64d6ed0a649b21cd78d7f99a8c025a08672b9fb05fea67441987100e246144',
+  physical: 'a2f0aef93367e2330c4ad9dc9b236b425b7de230dbd21a1c1a3bcddd4426879c',
+  owner: 'ffaa87a9875391f2062a114d763c75bf20092ec8054e6b297ae88de2f6182653',
+  corpus: '767717d646390e440a2048eacd9b4b8d5d51afa43ad2f483399b2261866eb13c',
+  personas: 'ae4aa80ec68007bef5ec65540472d5a914cefe2d2e90bc1d3e87774748b89ece',
+} as const;
+type BorrowedBookRecords = Record<keyof typeof borrowedBookReceipts, unknown>;
+function borrowedPremise(condition: unknown, detail: string): asserts condition {
+  if (!condition) throw new Error(`TEST PREMISE: borrowed Book ${detail}; no product assertion reached`);
+}
+function borrowedRecord(value: unknown): Record<string, unknown> {
+  borrowedPremise(value && typeof value === 'object' && !Array.isArray(value), 'receipt is missing');
+  return value as Record<string, unknown>;
+}
+
+/** Pure binding check over already digest-admitted custodian receipts. No runtime operation. */
+export function assertPublicDomainBorrowedBook(corpus: PublicDomainCorpus, selection: PublicDomainSelection,
+  records: BorrowedBookRecords): { main: string; account: string } {
+  borrowedPremise(selection === 'book', 'attachment is Book-only');
+  const execution = borrowedRecord(borrowedRecord(corpus).execution);
+  const producer = borrowedRecord(records.producer), ready = borrowedRecord(records.ready);
+  const qualification = borrowedRecord(records.qualification), physical = borrowedRecord(records.physical);
+  const owner = borrowedRecord(records.owner), original = borrowedRecord(structuredClone(records.corpus));
+  const product = '76c5955006dbea2016e84465d8f3e79fdf4fc979';
+  const support = 'd2f04140fe615eadef0379a52c26291e6e083217';
+  const run = 'book-current-site-20261020-r1', project = `rezics-qa-${run}`;
+  const main = 'http://127.0.0.1:42963', account = 'http://127.0.0.1:42701';
+  borrowedPremise(execution.productBaseline === publicDomainBaseline && execution.productRevision === product
+    && execution.frontendRevision === product && execution.fixtureGeneration === 'recipes-build-mw0book-8b7d14'
+    && typeof execution.testRevision === 'string' && /^[a-f0-9]{40}$/.test(execution.testRevision)
+    && producer.productRevision === product && producer.consumerSupportRevision === support
+    && producer.fixtureGeneration === execution.fixtureGeneration && producer.releasedTo === 'G-2823'
+    && ready.productRevision === product && ready.supportRevision === support
+    && qualification.productRevision === product && qualification.overlayRevision === support,
+  'product/support/frontend/generation pins differ');
+  borrowedPremise(ready.exit === 0 && qualification.exit === 0 && physical.exit === 0
+    && ready.runId === run && ready.project === project && qualification.project === project
+    && borrowedRecord(producer.copy).runId === run && borrowedRecord(producer.copy).project === project
+    && ready.main === main && ready.account === account
+    && borrowedRecord(producer.endpoints).main === main && borrowedRecord(producer.endpoints).account === account,
+  'copy qualification or endpoints differ');
+  borrowedPremise(ready.pid === owner.pid && Number.isSafeInteger(owner.pid) && Number(owner.pid) > 0
+    && borrowedRecord(qualification.ownerProcess).pid === owner.pid
+    && borrowedRecord(qualification.ownerProcess).startTicks === owner.startTicks
+    && borrowedRecord(qualification.ownerProcess).script === owner.script,
+  'custodian process identity differs');
+  const artifacts = borrowedRecord(producer.artifacts), runtime = borrowedRecord(producer.runtime);
+  borrowedPremise(borrowedRecord(artifacts.publicDomainConsumer).sha256 === borrowedBookReceipts.corpus
+    && borrowedRecord(artifacts.custody).sha256 === borrowedRecord(execution.retainedCustody).sha256
+    && borrowedRecord(artifacts.stoppedBackup).sha256 === borrowedRecord(physical.backupManifest).sha256
+    && borrowedRecord(physical.backupManifest).verified === true
+    && runtime.product === product && runtime.testRevision === support && runtime.runId === run
+    && isDeepStrictEqual(runtime.model, qualification.model)
+    && borrowedRecord(qualification.compatibility).digest === producer.compatibilityDigest
+    && Array.isArray(borrowedRecord(qualification.migrations).pending)
+    && (borrowedRecord(qualification.migrations).pending as unknown[]).length === 0
+    && borrowedRecord(qualification.native).moduleVersion === '0.5.43'
+    && borrowedRecord(qualification.native).instanceId === '11d5871b-af7e-44e7-927b-667c943ed3e7'
+    && borrowedRecord(qualification.native).publicSearchWriteEpoch === '4'
+    && borrowedRecord(qualification.native).profilesSha256 === 'd3b0d41321fbd5c38bce4b8fa8327d381fb8be0ba601f6922c839ea0146f406e',
+  'backup/native/model custody differs');
+  // Only the executable test/support pin is projected; every retained fixture identity/value stays exact.
+  borrowedRecord(original.execution).testRevision = execution.testRevision;
+  borrowedPremise(isDeepStrictEqual(original, corpus) && isDeepStrictEqual(records.personas, corpus.personas)
+    && borrowedRecord(producer.bookNative).work === corpus.book.work,
+  'corpus or retained personas differ');
+  const identities = personaNames.filter(name => name !== 'visitor').map(name => corpus.personas.identities[name]);
+  borrowedPremise(identities.every(identity => identity.accountId && identity.actingSubject && identity.email && identity.password)
+    && new Set(identities.map(identity => identity.accountId)).size === 5
+    && new Set(identities.map(identity => identity.actingSubject)).size === 5,
+  'five distinct retained people are required');
+  return { main, account };
+}
+
+export function loadPublicDomainBorrowedBook(corpus: PublicDomainCorpus, selection: PublicDomainSelection) {
+  const pin = { file: Bun.env.REZICS_PUBLIC_DOMAIN_BORROWED_BOOK!, sha256: Bun.env.REZICS_PUBLIC_DOMAIN_BORROWED_BOOK_SHA256! };
+  const pins = borrowedRecord(admissionJson(pin, 'borrowed Book attachment'));
+  const records = {} as BorrowedBookRecords;
+  for (const name of Object.keys(borrowedBookReceipts) as Array<keyof BorrowedBookRecords>) {
+    const evidence = borrowedRecord(pins[name]);
+    borrowedPremise(evidence.sha256 === borrowedBookReceipts[name], `${name} differs from the released custodian evidence`);
+    records[name] = admissionJson(evidence as unknown as AuditFilePin, `borrowed Book ${name}`);
+    if (name === 'personas' || name === 'corpus')
+      borrowedPremise((statSync(localFile(String(evidence.file))).mode & 0o777) === 0o600, 'private evidence must be mode 0600');
+  }
+  borrowedPremise((statSync(localFile('.temp/goal/public-domain-corpus.json')).mode & 0o777) === 0o600,
+    'private manifest must be mode 0600');
+  const endpoints = assertPublicDomainBorrowedBook(corpus, selection, records);
+  borrowedPremise(Bun.env.REZICS_QA_RUN_ID === borrowedRecord(records.ready).runId, 'existing run identity differs');
+  const owner = borrowedRecord(records.owner), pid = Number(owner.pid);
+  try {
+    const stat = readFileSync(`/proc/${pid}/stat`, 'utf8').split(') ').slice(1).join(') ').split(' ');
+    const args = readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0');
+    borrowedPremise(stat[19] === owner.startTicks && !['Z', 'X'].includes(stat[0]!)
+      && args.includes(String(owner.script)), 'custodian is stale or changed');
+  } catch (cause) { throw new Error('TEST PREMISE: borrowed Book custodian is unavailable', { cause }); }
+  return endpoints;
+}
+
+/** Fresh normal OAuth handles only. This lifetime owns no applications, restore driver or runtime. */
+export async function attachPublicDomainBook(corpus: PublicDomainCorpus, endpoints: { main: string; account: string }): Promise<PersonaSessions> {
+  const started = performance.now(), retained = corpus.personas;
+  const resource = borrowedRecord(retained.auth).resource;
+  borrowedPremise(typeof resource === 'string' && resource.length > 0, 'retained OAuth resource is missing');
+  const cleanups: Array<() => Promise<void>> = [];
+  let closed = false;
+  const close = async () => {
+    if (closed) return;
+    closed = true;
+    const results = await Promise.allSettled(cleanups.map(cleanup => cleanup()));
+    const failures = results.filter(result => result.status === 'rejected');
+    if (failures.length) throw new AggregateError(failures.map(result => result.reason), 'Borrowed Book auth cleanup failed');
+  };
+  const visitor = personaSession(endpoints.main, endpoints.account, null);
+  const people = {} as Record<Exclude<typeof personaNames[number], 'visitor'>, PersonaSession>;
+  try {
+    for (const name of personaNames.filter(name => name !== 'visitor')) {
+      const identity = retained.identities[name];
+      const anonymous = personaSession(endpoints.main, endpoints.account, null, undefined, undefined,
+        undefined, name, undefined, undefined, retained.auth.accountOrigin);
+      const login = await anonymous.account('POST', '/api/auth/sign-in/email', { email: identity.email, password: identity.password });
+      const cookie = login.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
+      let oauth: LocalOAuthSession | undefined;
+      if (cookie) cleanups.push(async () => {
+        try {
+          if (oauth) for (const [token, hint] of [[oauth.refreshToken, 'refresh_token'], [oauth.accessToken, 'access_token']]) {
+            if (!token) continue;
+            const revoked = await fetch(`${endpoints.account}/api/auth/oauth2/revoke`, { method: 'POST',
+              headers: { 'content-type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(30_000),
+              body: new URLSearchParams({ token, token_type_hint: hint!, client_id: retained.auth.clientId }) });
+            if (!revoked.ok) throw new Error('Borrowed Book OAuth revocation failed');
+          }
+        } finally {
+          const signedOut = await fetch(`${endpoints.account}/api/auth/sign-out`, { method: 'POST',
+            headers: { cookie, origin: retained.auth.accountOrigin }, signal: AbortSignal.timeout(30_000) });
+          if (!signedOut.ok) throw new Error('Borrowed Book Account sign-out failed');
+        }
+      });
+      const user = await answer<{ user: { id: string } }>(Promise.resolve(login));
+      borrowedPremise(cookie && user.user.id === identity.accountId, `normal sign-in selected a different Account for ${name}`);
+      oauth = await signIn({ account: retained.auth.accountOrigin, service: endpoints.account,
+        clientId: retained.auth.clientId, redirectUri: retained.auth.redirectUris[0]!, scope: retained.auth.scope, resource }, cookie);
+      const person = personaSession(endpoints.main, endpoints.account, identity.accountId, cookie, oauth,
+        undefined, name, undefined, undefined, retained.auth.accountOrigin);
+      person.actingSubject = identity.actingSubject;
+      await answer(person.main('PUT', '/v1/me/session-agent', { actingSubject: identity.actingSubject, expectedRevision: null }));
+      people[name] = person;
+    }
+    return { realm: retained.realm, space: retained.space, zone: retained.zone, visibility: retained.visibility,
+      visitor, ...people, elapsedSeconds: (performance.now() - started) / 1000, close };
+  } catch (error) {
+    try { await close(); } catch (cleanup) { throw new AggregateError([error, cleanup], 'Borrowed Book attach and auth cleanup failed'); }
+    throw error;
+  }
+}
+
+/** Default consumers restore; an explicit qualified Book borrower attaches without lifecycle ownership. */
 export async function publicDomainFixture(selection: PublicDomainSelection) {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Use goalctl test with an isolated QA stack');
   const corpus = loadPublicDomainCorpus(selection);
+  if (Bun.env.REZICS_PUBLIC_DOMAIN_BORROWED_BOOK !== undefined
+    || Bun.env.REZICS_PUBLIC_DOMAIN_BORROWED_BOOK_SHA256 !== undefined) {
+    const endpoints = loadPublicDomainBorrowedBook(corpus, selection);
+    const people = await attachPublicDomainBook(corpus, endpoints);
+    return { corpus, people, preparation: undefined, close: people.close };
+  }
   const smokeWork = selection === 'book' ? corpus.book.work
     : selection === 'recipe' ? corpus.richRecipe.work : corpus.noNutritionRecipe.work;
   const target = `public-domain-${selection}-${randomUUID().slice(0, 8)}`;
