@@ -1075,5 +1075,397 @@
     "originalClassClosed": false,
     "priorFailureSectionsUnchanged": true,
     "onlyNewWrite": "docs/goals/audit-remediation-20261019/proofs/catalogue-retained-importer-review.json"
+  },
+  "additiveCorpusSourceFirstReview": {
+    "format": "audit-additive-corpus-source-first-review-v1",
+    "decision": "2026-10-20T11:14:29Z",
+    "reviewer": {
+      "worker": "G-2857",
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "firstIndependentReviewOfThisDelta": true,
+      "additionalReviewersUsed": false,
+      "accountOrModelFallbackUsed": false
+    },
+    "disposition": {
+      "result": "accepted-source-handoff-only",
+      "summary": "The exact four-file additive inspection delta and sealed NHLBI r2 source handoff are accepted for source readiness. No blocking source counterexample was found. Symbolic references become actual identities only through later successful AuditRecorder responses. Inspection never claims execution, native adoption, citation, public admission or original outcome acceptance.",
+      "blockingFindings": [],
+      "nativeOrPublicExecutionAccepted": false,
+      "consumerManifestAccepted": false,
+      "originalClassClosed": false,
+      "C27Proved": false,
+      "C30Proved": false,
+      "entireNutritionMatrixProved": false,
+      "implementationOrIndividualLandingPerformed": false
+    },
+    "pins": {
+      "candidate": "186134b1afe1882d1d34db874df4bcb904d3e8a7",
+      "dependencyParent": "83e4702e1399de8c0575b9f746c4601f4fe2f61c",
+      "candidateHasExactDependencyParent": true,
+      "reviewManifest": [
+        {
+          "file": "scripts/goal/commands/prepare-audit.ts",
+          "sha256": "60494f293b78294b0a5ddfece0a0c25352c15b681f7d53f715f8344b7ecccf65",
+          "byteLength": 1727,
+          "parentBlob": "37da86464830e05b2974058787304e76fe8eb037",
+          "candidateBlob": "0b1f5c48d04d206536711313470c91416315cc22"
+        },
+        {
+          "file": "scripts/qa/fixtures/audit-corpus.test.ts",
+          "sha256": "04da10a9984ba9e4e940dec8764813e7f5ec06d23e57c1b7c6e0198a92118379",
+          "byteLength": 62201,
+          "parentBlob": "8fbfab735a60c9977e3ca5a924b9a9a750446121",
+          "candidateBlob": "2ae22a32742e6d0eb0d1868cc85aa48df20accef"
+        },
+        {
+          "file": "scripts/qa/fixtures/audit-corpus.ts",
+          "sha256": "06e1098e68c1444a29ca8e5ae83d55694f6e843c0000c5a10407d7fb0b8ea8ab",
+          "byteLength": 117388,
+          "parentBlob": "188b00f3817d900c93c3802c6c7a6d9436b1d814",
+          "candidateBlob": "1052b38cac7454c4674590cf9bdbbed462051aab"
+        },
+        {
+          "file": "tests/qa/fixtures/audit-corpus-contract.ts",
+          "sha256": "637d24af10b26f0dd643af3e2a069486c7a1207180221e52de0b564c20317529",
+          "byteLength": 12933,
+          "parentBlob": "0ca7e29a6755a8b79d6680a05c860234c52cb8ee",
+          "candidateBlob": "25b0a8010562d7fa2c8faf485bd01d3aaaaaa117"
+        }
+      ],
+      "manifestMatchesSealedReceipt": true,
+      "exactlyFourChangedFiles": true,
+      "reportBaseCommit": "0ddd13130493d4988ac4b0d2393e29c4e48d90e2",
+      "previousReportBlob": "dd4c233902b7d6825dd270c6c3b6272b6b5c55e6",
+      "previousReportSha256": "4e9ab14716aefe2d9f203a7de8b6bf2271ded539cbe95163406693e0a927ef9c",
+      "sealedArtifacts": {
+        "HANDOFF.txt": {
+          "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2791/.temp/audit-remediation-20261019/recovery-20261020/nhlbi-tuna-additive/HANDOFF.txt",
+          "sha256": "4a0e6be77ee8c6c5e167b71efba0a82b89fc41fe3d2246eeba4fe45d89419c78",
+          "byteLength": 10246
+        },
+        "handoff-receipt.json": {
+          "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2791/.temp/audit-remediation-20261019/recovery-20261020/nhlbi-tuna-additive/handoff-receipt.json",
+          "sha256": "1959380b3c39bee2bd000d32cfebec90bba1fd4b2e6bc8f2c49501ca77a43d88",
+          "byteLength": 8595
+        },
+        "Taskfile.yml": {
+          "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2791/.temp/audit-remediation-20261019/recovery-20261020/nhlbi-tuna-additive/Taskfile.yml",
+          "sha256": "7c6a3dcf1b0f6b74e4a00ed4bccbf87cb74ffdb275d18d05d8b23c57386e8c71",
+          "byteLength": 1071
+        },
+        "addition": {
+          "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2791/.temp/audit-remediation-20261019/recovery-20261020/nhlbi-tuna-additive/native-addition-r2.json",
+          "sha256": "ed1ef8340872b487073dcd7e981a0ca00e513b82fa3f19302bbad54ff4c659d6",
+          "byteLength": 76818
+        },
+        "facts": {
+          "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2791/.temp/audit-remediation-20261019/recovery-20261020/nhlbi-tuna-additive/source-facts-r2.json",
+          "sha256": "63f6aab7fdd08db989cac5db6fdcb9bfb00f6be85c2faa02468ff1ffbcc24a0c",
+          "byteLength": 17126
+        },
+        "immutableInputs": {
+          "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2791/.temp/audit-remediation-20261019/recovery-20261020/nhlbi-tuna-additive/immutable-inputs.json",
+          "sha256": "372ef8313e7098915f9b6a6110fd611a4ef5b503378381aca2008cf757003579",
+          "byteLength": 16090
+        },
+        "capture": {
+          "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2791/.temp/audit-remediation-20261019/recovery-20261020/nhlbi-tuna-additive/capture.json",
+          "sha256": "29ce7fe6e6a64d1ba04ded3178835187e2bfeb7bae26a7fefbc21f4c3c4b9813",
+          "byteLength": 2403
+        },
+        "inspection": {
+          "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2791/.temp/audit-remediation-20261019/recovery-20261020/nhlbi-tuna-additive/addition-inspection-r2.json",
+          "sha256": "d3df245027b325426e3dbb47985cc7b9d93655804adb9424f3d9d5f49fa11449",
+          "byteLength": 4320
+        },
+        "nativeSchemaCheck": {
+          "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2791/.temp/audit-remediation-20261019/recovery-20261020/nhlbi-tuna-additive/native-schema-check.json",
+          "sha256": "fcb972c6612b57e464ffe34969d9d0577a7b0eef4829d203a049b84e648caa7d",
+          "byteLength": 354
+        }
+      },
+      "sourceEvidencePins": {
+        "recipe": {
+          "file": ".temp/audit-remediation-20261019/recovery-20261020/nhlbi-tuna-additive/nhlbi-recipe.html",
+          "sha256": "6525f21c27d94a1bde7385436497ae1cdee49f86493190401f8743550831530b"
+        },
+        "terms": {
+          "file": ".temp/audit-remediation-20261019/recovery-20261020/nhlbi-tuna-additive/nhlbi-reuse-terms.html",
+          "sha256": "b1596944e954129b76d9f4407ea00acbc3f0dfd7e55ca97cc9819caae807b764"
+        },
+        "recipeText": {
+          "file": ".temp/audit-remediation-20261019/recovery-20261020/nhlbi-tuna-additive/nhlbi-recipe.txt",
+          "sha256": "669f39cd4e9f01e11137342bdbc381608335756d23ab13fb7633dbc1c74a9671"
+        },
+        "termsText": {
+          "file": ".temp/audit-remediation-20261019/recovery-20261020/nhlbi-tuna-additive/nhlbi-reuse-terms.txt",
+          "sha256": "26a0be910b369663402f12f55c4eb5c00044eb63fa224848cda102992295d479"
+        },
+        "usda": {
+          "file": ".temp/audit-remediation-20261019/recovery-20261020/nhlbi-tuna-additive/usda-sr28-page150.web.txt",
+          "sha256": "e717b47b436ac93e4590a3666f4b31c86bfe25878f0cac03e27430ebdc4b1c63"
+        },
+        "usdaRawPdfRetained": false
+      },
+      "preservedImmutableInputPins": [
+        {
+          "file": ".temp/audit-corpus/inputs/originals/native-bindings.json",
+          "sha256": "bf9f7abc94aa30887511c05c61bd0433c0fdbb894a2d7d7e30aacdb7e12efa6e"
+        },
+        {
+          "file": "tests/fixtures/gutenberg/recipe-extract-pins.json",
+          "sha256": "885e38ae361aed24ece2063dc86c36f795e4a261141026d4befd0bf6381d19d8"
+        },
+        {
+          "file": "tests/fixtures/fixtures.lock.json",
+          "sha256": "abd58a3c3e7849bd8f40c830c95b02d40bd26f41ac30e278cce84fb0c9697946"
+        },
+        {
+          "file": "tests/fixtures/gutenberg/24ca660f8d7c2df8b2dfd3864041daa21a1eeae42696c0a87b674c5def78e095.json",
+          "sha256": "24ca660f8d7c2df8b2dfd3864041daa21a1eeae42696c0a87b674c5def78e095"
+        },
+        {
+          "file": "tests/fixtures/gutenberg/3fc5f084da016477ae65f45cde8b0047603f3fa77941f8db74d277d523f0e471.json",
+          "sha256": "3fc5f084da016477ae65f45cde8b0047603f3fa77941f8db74d277d523f0e471"
+        }
+      ],
+      "privateArtifactsReadOnly": true,
+      "privateEvidenceLocation": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2791/.temp/audit-remediation-20261019/recovery-20261020/nhlbi-tuna-additive",
+      "supersededNativeAddition": "native-addition.json is earlier preparation only; only native-addition-r2.json with SHA256 ed1ef8340872b487073dcd7e981a0ca00e513b82fa3f19302bbad54ff4c659d6 is reviewed for later owner-controlled execution."
+    },
+    "sourceReview": {
+      "readOnlyBoundary": {
+        "prepareAudit": "inspect-addition returns before withSlot; it calls the read-only inspector and prints pins, command count and deferred operations. It reports ready:false/assertionsReached:false. Existing inspect/prepare behavior is retained.",
+        "inspector": "The new function reads and hashes private input/evidence files, parses retained JSON, validates stages/templates/source quotes/rights and returns the recipe. It performs no requests, grants, importer/converter calls, backup, restore, publication or consumer admission.",
+        "schemaEvidenceLimit": "native-schema-check.json is offline validation of 17 qualifiers and 10 deferred nutrient rows plus source quotes and encoded actor round trip, with zero HTTP requests. Its placeholder native IRI is confined to validation; it is absent from command and expected identity inputs."
+      },
+      "commandCustody": {
+        "actualShape": "One ordered AuditStage containing 11 commands: 10 mutations and one native read. HANDOFF prose refers to eleven stages; the sealed JSON actually has one stage and eleven commands. This wording does not change the execution order or constitute execution evidence.",
+        "stageAndReplay": "Extracted assertAuditStages preserves the parent checks for earlier stage dependencies, unique stage/command IDs, distinct mutation replay keys, GET null keys, evidence membership, realm/persona membership and expected successful status. Each sealed mutation keeps its original fixed nhlbi-tuna:6525f21c27d94a1b key.",
+        "references": "All 150 references in command paths/bodies and the final expected projection name realms or an earlier command/receipt slot; no self or future command reference and no literal replacement native IRI was found. concat/tail shapes and JSON pointers are valid. Structure edits and measures/timings use the immediately preceding actual revision through expectedHead.",
+        "actualResponsesRequired": "Inspection validates reference order symbolically and never resolves them to an observed response. Existing resolveAuditValue requires a bound value and own-property JSON pointer; AuditRecorder.command binds command:<id> and receipt:<id> only after the actual response matches expected status and its request/caller/status/body evidence file has been retained. Missing/failed responses cannot supply later identities. Transport failures retain null status/answer and no invented HTTP reply; unexpected statuses stop with no automatic replay.",
+        "actor": "Every sealed command uses catalogue/operator. Authored bodies resolve actingSubject only from realms/catalogue/identities/operator/actingSubject; the final read encodes that same actual IRI through concat/tail. No literal account, actor, Work, Structure, occurrence, revision, epoch or receipt was invented.",
+        "authorityLimit": "The inspector does not establish that the named realm/actor or grants exist in a live session. Later execution must use the existing admitted AuditSession and retained operator principal, Account work:create/work:edit/work:read, Access work.create on work:create:root, then work.edit and recipe.edit on work:edit:<actual Work>, and work.read on work:read:<actual Work>. The historical catalogue-import mandate or operator label does not grant these scopes.",
+        "requiredSignatures": "Reviewed only the existing auditLocalFile/pinnedBytes, auditPointer/resolveAuditValue, supportedPath, assertAuditNativeProvenance and AuditRecorder.command/bind signatures needed by this delta, plus narrow parent Work/composition/Recipe response and measure/timing signatures. Work creation exposes work/mainVersion/workRevision; composition writes expose structure/revision/occurrences; measure/timing writes expose revision. Missing optional response members fail later pointer resolution rather than being synthesized. This is not a re-review of the native/query or Source campaigns."
+      },
+      "genuineFacts": {
+        "originalText": "All eleven original ingredient quotes and all five method quotes match the captured NHLBI HTML text and its frozen extraction. The recipe operations match source-facts-r2 qualifiers. The twelve authored ingredient occurrences consist of those eleven original rows plus the explicit optional oregano alternative.",
+        "distinctLemonOccurrences": "2 Tbsp lemon juice is ingredient occurrence 2 of nhlbi-tuna-ingredients; 1 Tbsp lemon juice is occurrence 2 of nhlbi-tuna-salad. The marinade and salad methods reference the respective observed occurrence batches; equal ingredient names do not collapse identities.",
+        "packages": "Chickpeas remain 1/2 can (15½ oz); spinach remains 1/2 bag (10 oz). Package sizes and fractions are retained; no drained mass, density, oil choice or fish species is inferred.",
+        "alternative": "Optional 1 tsp dried oregano retains the complete source statement and substituteFor references command:nhlbi-tuna-ingredients /answer/occurrences/3, the 1 Tbsp minced oregano occurrence. No name-based substitution lookup is used.",
+        "methodsAndTimes": "Five exact methods retain ingredient links, including both distinct lemon uses. Four servings, serving-size text, 25 preparation minutes and 20 cooking minutes remain source stated; totalMinutes is null and no total timing command is emitted.",
+        "attributionAndRights": "Institutional attribution is National Heart, Lung, and Blood Institute; National Institutes of Health; U.S. Department of Health and Human Services. No individual author is inferred. Frozen NHLBI terms support the handoff text/facts-only public-domain disposition with the retained exceptions and attribution, no logo/images/endorsement and preservation of source wording/formatted originals. This source rights inspection is not a native publication receipt or legal certification.",
+        "publishedPanel": "Nine NHLBI per-serving nutrient rows remain provenance:source-stated, coverage:unknown with the original recipe URL and exact pinned source quote. They are deferred native nutrient expectations; no nutrient command is emitted.",
+        "pepperOnlyCalcium": "Frozen USDA SR28 p150 NDB02030 text states ground black pepper 1 tsp / 2.3g / 10mg calcium. 10 × 1/8 ÷ 4 = 5/16 mg per serving. This is computed/partial and pepper only: exact arithmetic on a rounded reference, with all other ingredients uncounted. It is not whole-recipe or complete nutrition.",
+        "captureTruth": "Actual NHLBI HTML bodies, text extractions and capture URLs/hashes are retained. Successful-body HTTP metadata was not retained, so no success status is inferred. USDA origin attempts returned 403; its challenge body and headers are separate from the frozen official browser-extracted p150 text. No PDF bytes are retained or claimed, and the 403 body is not PDF evidence."
+      },
+      "acceptedDispositionAndCounterexamples": [
+        "No new source defect requiring candidate execution was found; no fresh targeted candidate test was authorized or run.",
+        "Existing four new unit cases reject changed bytes, absent quotes, duplicate replay keys, unknown evidence, changed command persona, future/self response references, literal unobserved native IRIs and direct-owner paths. Their accepted 42-test/378-assertion run is reused, not rerun.",
+        "Template ordering and source rights checks are preflight only. Real actor authority, successful API responses, exact current heads and original assertion outcomes remain later owner obligations.",
+        "expected.nutrition=\"stated\" and deferredNativeNutrients describe source expectations only. sourceProofOnly:true and consumerManifestProduced:false prevent interpreting this private projection as admitted native/public nutrient evidence."
+      ]
+    },
+    "preservation": {
+      "originalNativeBindings": {
+        "count": 113,
+        "digestVerifiedAgainstImmutableManifest": true
+      },
+      "retainedRecipes": {
+        "records": 30,
+        "ingredientRows": 173,
+        "immutableManifestAndSourceBytesVerified": true,
+        "identitiesAndRightsUnchanged": "The pinned originals ledger, recipe extract pins, fixture lock and two retained source JSONs still match the sealed manifest. The four-file code delta changes none of them. No recapture or extraction/import was performed."
+      },
+      "historicalReviewPins": [
+        {
+          "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2857/docs/goals/audit-remediation-20261019/proofs/catalogue-A02-importer-consumer-review.json",
+          "sha256": "ca0b13bd35b854f66a0bec6c82b54b695d4341fed3e079510a745af1d0c03ae5",
+          "byteLength": 21840
+        },
+        {
+          "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2857/docs/goals/audit-remediation-20261019/proofs/catalogue-A09-work-header-ratings-review.json",
+          "sha256": "25fba9c85be0fb658ad6682c8fca13edd9650526597d76bf5ba88e8d1447217c",
+          "byteLength": 18299
+        }
+      ],
+      "unchangedAssertionFiles": [
+        {
+          "file": "tests/qa/integration/outcomes/catalogue/import-fidelity.test.ts",
+          "unchangedBlob": "dd3c33169cefd2a3e6ad0eec84e0e0631e7adf3c",
+          "sha256": "b2c08e0e7e48f11f79c4185cb4f43ab6ebdfda1215895184160cc47b8c785de3"
+        },
+        {
+          "file": "tests/qa/integration/outcomes/catalogue/source-coverage.test.ts",
+          "unchangedBlob": "f1bd63eba4d2b53edd8bf56063f216900950fbb8",
+          "sha256": "5df205a57e9d05339cca06bc67f3f266b23b7e0de54f8040083e3a43fc232ba2"
+        },
+        {
+          "file": "tests/qa/integration/outcomes/catalogue/supporting-information.test.ts",
+          "unchangedBlob": "04d74fc91c3ebdd1b1a2e0d30be0163c8008f8be",
+          "sha256": "d9070ef332648b933592c46339bcf39053f96ff6134d80ccfdde9880784eac5a"
+        },
+        {
+          "file": "tests/qa/integration/outcomes/catalogue/releases-and-media.test.ts",
+          "unchangedBlob": "04477f49a25487dc11220e8f31d91e47c9441a2f",
+          "sha256": "5838a8d50549d49ecb46a9d0297fdba5ef7620f788ed130f8ccee839483a6c05"
+        },
+        {
+          "file": "tests/qa/integration/catalogue-public-recipe.test.ts",
+          "unchangedBlob": "021b34e6be0b8aba9410a23a163276657fbbfaa3",
+          "sha256": "f2e36b4d4063e2e47c08b6233927201ce1515c852e901bd5e008ce085b34d10a"
+        },
+        {
+          "file": "tests/qa/integration/outcomes/recipes/nutrition-and-substitutions.test.ts",
+          "unchangedBlob": "852fd5b1ba1a92d1c2bcbd516249cc391005a7b4",
+          "sha256": "f75e92cfa4f0ec88cc787acbf28d01536b73083cb3c50a8a4d33481a88a4e8bc"
+        },
+        {
+          "file": "tests/qa/integration/catalogue-real-book-reading.test.ts",
+          "unchangedBlob": "2a170a2a17c5ad7e56c08349821d39963491db92",
+          "sha256": "f7e73b921abc432ea86f8abeaf9447b74e18ace1c31a68a7fc337c097e031598"
+        }
+      ],
+      "allPreviousReportKeysPreserved": true,
+      "acceptedEvidencePreserved": "All existing importer/A02/A09/Source/native/corpus report keys, including the accepted importer parent-custody correction and prior failed candidates, remain untouched. No repeat review or acceptance was performed.",
+      "originalSource206IdentitiesOrEpochsWritten": false,
+      "ArtusiAbsenceControlsChanged": false,
+      "fourIndependentCatalogueOutcomeFilesChanged": false,
+      "runtimeWrites": 0,
+      "corpusBuilds": 0,
+      "restores": 0,
+      "imports": 0,
+      "networkCaptureOrServicesOrInstalls": false
+    },
+    "reusedChecks": {
+      "recordedJob": "c22abbcd-44df-42bb-9c5d-1aa4c44c1232",
+      "qaRun": "20261020t105751-1fb8b9",
+      "qaSourceRevision": "83e4702e1399de8c0575b9f746c4601f4fe2f61c",
+      "qaWorkingDigest": "1565989c40b3",
+      "sourceStable": true,
+      "tests": 42,
+      "assertions": 378,
+      "failures": 0,
+      "commands": [
+        "bun scripts/goal/goalctl.ts test scripts/qa/fixtures/audit-corpus.test.ts",
+        "task goal -- check"
+      ],
+      "affectedChecks": "Producer guards, affected types, inference, lint and AST passed. Its log selects 31/45 guards including inherited changes; the existing web-accepted-commands timeout retry passed. No brief tests were named. The affected plan was listed only.",
+      "producerLogPins": [
+        {
+          "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2791/.temp/goal/jobs/c22abbcd-44df-42bb-9c5d-1aa4c44c1232.1.log",
+          "sha256": "988893cdfee5c44a9807bc5552d88d542341a8bde2122184a2bbf340c8777188",
+          "byteLength": 869
+        },
+        {
+          "file": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2791/.temp/goal/jobs/c22abbcd-44df-42bb-9c5d-1aa4c44c1232.2.log",
+          "sha256": "9199fe27d1655a3e4f64cc1da4ad162eda839172963db15c122cf6e52602c77f",
+          "byteLength": 818
+        }
+      ],
+      "qaLimits": "Historical QA used the exact parent plus source-stable working digest; the sealed changed-file hashes match all four committed candidate blobs. Full qualification:false and zero original acceptance IDs passed. The source review does not relabel this as new runtime proof.",
+      "acceptedReadiness": {
+        "attempt": 46,
+        "tests": 38,
+        "assertions": 365,
+        "chapterHashes": 5,
+        "preparationMs": 209887,
+        "restoreMs": 66107,
+        "rerun": false
+      },
+      "earlierCorpusEvidence": "Reuse accepted 38 tests / 365 assertions / five chapter hashes / preparation 209.887s / restore 66.107s without another prepare, restore or unchanged test run.",
+      "freshCandidateTestsRun": false
+    },
+    "provenanceAndBudget": {
+      "producerTask": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2791/.temp/audit-remediation-20261019/recovery-20261020/nhlbi-tuna-additive/Taskfile.yml",
+      "taskInspectedNotExecuted": true,
+      "commands": "Task prepare/finalize/inspect/validate-native/seal refer to private producer artifacts. They were read only as command provenance; none was invoked in this review and none supplies native/public outcome proof.",
+      "producerMeasuredCost": {
+        "nhlbiParallelCaptureAndFailedUsdaRequestWallMs": 2204.216,
+        "usdaCurl403TransferMs": 832.208,
+        "offlinePreparationMs": 33.328,
+        "offlineCommandFinalizationMs": 4.202,
+        "scope": "Measured capture attempts and local artifact construction only; excludes browser-tool latency, implementation, review and QA. No admitted corpus preparation was run."
+      },
+      "preparationBudget": "Existing 600-second build/restore ceiling remains. Capture/local artifact costs exclude browser-tool latency, implementation, review and QA and do not establish an admitted full-corpus preparation duration. The accepted 209.887s preparation / 66.107s restore remains separate historical evidence."
+    },
+    "dependencyQualifications": {
+      "publicMeasures": "Existing G-2799 owns A17 and the later measures bridge. The pinned public writer aggregates nutrient coverage, forces computed provenance and drops per-row evidence. Yield/servings/timings are expressible, but the nine source-stated/unknown rows and one computed/partial subtotal cannot be faithfully admitted as nutrients through that writer. This handoff defers them; no conversion evidence is invented.",
+      "independentManualPublication": "The existing publication/source-citation owner still must support a manually authored cited native Recipe independently of retained Source. The sealed handoff records the pinned Source-observation/converter-order/sourceKey restrictions and defers publication. This four-file delta does not repair or accept those owner capabilities.",
+      "conversionBoundary": "No intake/import/conversion/publication call is in the additive command list. Conversion remains a standalone external library invoked only by the separate explicit Source conversion interface. Ordinary native APIs never convert. Manual citations remain independent; optional retained lineage cannot substitute for an authored manual citation.",
+      "existingOwners": {
+        "G-2793": "API fixture admission and execution metadata",
+        "G-2773": "Original API outcomes and retained C28 representation premise",
+        "G-2774": "Browser outcomes and actual consumer/native/public admission",
+        "G-2799": "Original A17 and later faithful measures bridge",
+        "G-2823": "Existing controlled runtime/lease custody, with G-2793 metadata; no runtime operation is granted here"
+      },
+      "campaignsNotRepeated": "A02, A09, accepted importer correction, Source87, native/query and the current corpus qualification remain existing owner evidence. No source/native campaign, corpus preparation or review-of-review was absorbed into this pass.",
+      "remainingProof": "C27/C30, the entire nutrition basis/coverage/provenance/evidence matrix, manual citation publication, actual native/public receipts and original API/browser outcomes remain unproved. No original class closes from source readiness."
+    },
+    "actualSourceInspection": {
+      "command": "python .temp/review/additive-source-inspection.py",
+      "result": "source-inspection-passed",
+      "candidateCodeExecuted": false,
+      "scope": "Read-only Git blob/manifest/hash comparison and independent static inspection of frozen HTML/text, facts and ordered command templates. This is source evidence inspection, not QA, a runtime operation or a candidate test.",
+      "checkedFilePinsIncludingRepeatedReferences": 22,
+      "commandCount": 11,
+      "referenceCount": 150
+    },
+    "reportValidation": {
+      "status": "selected-report-components-passed",
+      "normalWorkerWrapperExecuted": false,
+      "reason": "This worktree still requires dependency digest afed563fd4dcabbfa62a2354edc5c7b7b8856b5067fc2a39011e76ff75b59c64 while the installed stamp is 379a1a7fd693a541828a37f3ccec3b7c73da8587888b1b006177b9f644e20abe. check.ts calls ensureDependencies, which would run task install. The explicit no-installs instruction takes precedence. Execute the normal report-selected Task components directly, without changing dependency stamps or rebasing.",
+      "instructionSource": {
+        "path": ".agents/skills/goal-worker/SKILL.md",
+        "quote": "Run the recorded check once before handing off done; it includes the repository-wide guards.",
+        "effect": "Run the report-selected docs/AST/repository-guard components in one recorded main-code job. Disclose that the wrapper was not run; no request for runtime permission follows."
+      },
+      "commands": [
+        "task docs:check",
+        "task ast-grep -- scan docs/goals/audit-remediation-20261019/proofs/catalogue-retained-importer-review.json",
+        "task guards -- scripts/static/one-language-parser-debt.test.ts"
+      ],
+      "guardSelection": {
+        "selected": 1,
+        "total": 45,
+        "files": [
+          "scripts/static/one-language-parser-debt.test.ts"
+        ],
+        "passedTests": 2
+      },
+      "skippedBySelection": {
+        "types": "no TypeScript workspace changed",
+        "inference": "not selected",
+        "lint": "no source file changed",
+        "briefTests": "none"
+      },
+      "job": "d91f9516-847f-4f20-b084-a459a7472297",
+      "mainCodeJobLauncher": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job",
+      "actualChecks": [
+        {
+          "command": "task docs:check",
+          "exitCode": 0,
+          "log": ".temp/goal/jobs/d91f9516-847f-4f20-b084-a459a7472297.1.log",
+          "sha256": "b5e6cd153951af3a87ef068d31d57899e488edc862363fb32c665cbd828a1bb5"
+        },
+        {
+          "command": "task ast-grep -- scan docs/goals/audit-remediation-20261019/proofs/catalogue-retained-importer-review.json",
+          "exitCode": 0,
+          "log": ".temp/goal/jobs/d91f9516-847f-4f20-b084-a459a7472297.2.log",
+          "sha256": "5f24a60f247a158f799a128d86200e8d63723c0cb10ac4ad634d5b603e3e54d2"
+        },
+        {
+          "command": "task guards -- scripts/static/one-language-parser-debt.test.ts",
+          "exitCode": 0,
+          "log": ".temp/goal/jobs/d91f9516-847f-4f20-b084-a459a7472297.3.log",
+          "sha256": "edb7195caa61be79e03ff986c78c418460ec632e2116c964fd2b50c829b850ac"
+        }
+      ],
+      "docsScope": "259 Markdown files; 13 checker tests passed. Local links/fragments/navigation only; external URLs and runtime behavior not tested.",
+      "finalVerification": "JSON parsed and git diff --check passed. All 17 historical top-level keys and values, A02/A09 report hashes and pinned original assertions remain unchanged. Only the additive entry and its validation metadata were written; no additional gate run is needed for result metadata."
+    }
   }
 }
