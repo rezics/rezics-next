@@ -4510,6 +4510,57 @@
       "docsCheck": "Pending recorded task docs:check after this additive append; separate result will resolve this entry."
     }
   },
+  "cas9StatusDateSemanticRestorationAdministrativeCheck": {
+    "atUTC": "2026-10-20T12:42:40.047123+00:00",
+    "scope": "Administrative documentation check and final evidence preservation only. Resolves pending docsCheck in cas9StatusDateSemanticRestoration; no original Home/AT callback or product acceptance.",
+    "checkedReportCommit": "58379b1453a5c4d3659123125c5bfcb2d2005906",
+    "command": "task docs:check",
+    "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task docs:check",
+    "recordedJob": "e00eb32a-c831-4376-a168-a34891d39b4d",
+    "exitStatus": 0,
+    "result": "passed",
+    "testsPassed": 13,
+    "markdownFilesChecked": 259,
+    "log": ".temp/reading-home-CAS9-cleanup-G-2831-20261020T1240Z/docs-check.log",
+    "logSHA256": "2e567cac606c49ecfd05ffb84a3fd827fcda4a52d68b13b6c5da3b62446d408c",
+    "affectedCleanupSelection": {
+      "job": "96bc9b47-7bf4-4c51-b265-8173fe1a3b53",
+      "result": "passed",
+      "bunWrapperPassed": 1,
+      "playwrightCleanupPassed": 1,
+      "originalCallbackTestsRun": 0
+    },
+    "all24PreexistingReportFieldsPreserved": true,
+    "allFiveCustodyHashesUnchanged": {
+      "ready-for-G2847-HomeDEFR-CAS9.json": "df5ebbab8875848c168d44cc665b28690e1efb78138fe804d4f4c2fa25162c2b",
+      "private/before-backup.json": "92cf460178d98622e3c68d69247c8e9de797d4b418d7dbc3f891a17969bcd2d0",
+      "private/lease-state.json": "fdd873b0c4809c011faaf8146cf9daec7b2a01943e3078eb448be4b93f23d559",
+      "same-owner-cleanup-operation.json": "792f5b966f6b8f1242b15124b55b36b1bb834fa7671962723c7f7434cffa2823",
+      "source/retained-supported-cleanup-callback.ts": "b1d6b4ecac9df4879b7a59a18976b54cdee9b80778561db52c9707f6e27e4c79"
+    },
+    "knownOwnedRunnerAndJobPidsAbsent": [
+      1140656,
+      1140751,
+      1149672,
+      1149968,
+      1150948,
+      1155612,
+      1213740,
+      1213862
+    ],
+    "owned43131AndBorrower52181Closed": true,
+    "Task1677097StartTicksUnchanged": "10065363",
+    "mainProcess1372265CwdStillInstalled75409": true,
+    "productSourceAndOriginalTestsChanged": false,
+    "otherTrackedPathsChanged": false,
+    "wholeGoalCheckOrOriginalSourceReviewOrATRerun": false,
+    "checkScopeReason": "Latest committed finite decision authorizes affected cleanup and docs:check, then exit; no broad check or rerun of original outcomes belongs to cleanup.",
+    "writeBoundaryQualification": "Only this worktree was manually written. Recorded goalctl commands may write their authorized bookkeeping under main .temp/goal-orchestration. No peer runtime/control/lease/source/storage was changed.",
+    "gitCommitAdministrativeObservation": "First report commit succeeded58379b145. Optional auto pack-refs emitted main-only-moves-forward hook rejection; no correction or shared Git maintenance attempted. Final evidence commit disables optional auto-maintenance for that invocation.",
+    "nativeCallbacksOrNewBorrowRun": false,
+    "originalFindingOrClassClosed": false,
+    "audit": "ACTIVE"
+  },
   "homeDEFRStatusOnlyPreparationV3": {
     "atUTC": "2026-10-20T13:31:36.546093+00:00",
     "worker": "G-2831",
