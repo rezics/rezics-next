@@ -65,7 +65,7 @@ test('C28 representation premise refuses identity lookalikes and preserves body 
   expect(contentText({ body: body.replace('Retained', 'Changed') })).not.toBe(body);
 });
 
-for (const name of personaNames) test.failing(`C28 real public Book / ${name}: understand, choose, read, navigate and return`, async () => {
+for (const name of personaNames) test(`C28 real public Book / ${name}: understand, choose, read, navigate and return`, async () => {
   const { book } = fixture.corpus, people = fixture.people, person = people[name];
   const workPath = `/v1/works/${short(book.work)}`;
   const read = <T,>(path: string) => answer<T>(person.main('GET', viewer(person, path)));
