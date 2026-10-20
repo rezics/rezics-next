@@ -2781,13 +2781,51 @@
         "Owner final unit log reaches the actual original assertions; final types/lint/AST/inference and selected guard logs inspected."
       ],
       "focusedProductRerun": "None. No concrete unresolved counterexample emerged, so exact owner checks were reused as instructed.",
-      "recorded": [],
+      "recorded": [
+        {
+          "job": "759b3375-ab86-4639-89ad-dea8da200781",
+          "command": "task docs:check",
+          "exitCode": 0,
+          "result": "PASS: 13 documentation-check self-tests and 249 Markdown files; external URLs/runtime excluded.",
+          "log": ".temp/goal/jobs/759b3375-ab86-4639-89ad-dea8da200781.1.log",
+          "logSha256": "c856caea5dac047ff7ec3d9c7f875b08fd05e0b7fb60611dfc8e0a1cfb6fda9a"
+        },
+        {
+          "job": "759b3375-ab86-4639-89ad-dea8da200781",
+          "command": "task goal -- check",
+          "exitCode": 201,
+          "result": "HARNESS FAILURE: normal automatic rebase conflicted on historical catalogue-query-credit-privacy-review.json and was automatically undone. No product/guard assertion was run or failed. HEAD remained 148be90001c1bd9e4c78c9acc53be1945f20230d and the worktree was clean.",
+          "log": ".temp/goal/jobs/759b3375-ab86-4639-89ad-dea8da200781.2.log",
+          "logSha256": "a5950ed0ba01ebd84e61b781886999d340af7ab2c76a587cb9ffc06e2e3422e1"
+        },
+        {
+          "job": "b83e8449-507f-4d5e-9a34-d995708b6dc6",
+          "command": "task goal -- check",
+          "exitCode": 0,
+          "result": "PASS: report-path AST and selected repository guard 1/44, 2 tests / 6 assertions; types/lint skipped with no relevant source; no test files named in brief. Historical report paths were selected from cumulative branch ancestry without rereview or edits.",
+          "log": ".temp/goal/jobs/b83e8449-507f-4d5e-9a34-d995708b6dc6.1.log",
+          "logSha256": "cc0d9cb8be767eafdb9521eb48dc203df0e02a09b230249042ef8980e43dd4ef"
+        },
+        {
+          "job": "b83e8449-507f-4d5e-9a34-d995708b6dc6",
+          "command": "task docs:check",
+          "exitCode": 0,
+          "result": "PASS: 13 documentation-check self-tests and 249 Markdown files; external URLs/runtime excluded.",
+          "log": ".temp/goal/jobs/b83e8449-507f-4d5e-9a34-d995708b6dc6.2.log",
+          "logSha256": "217214bf6b8713edadf499c31d6375d17ea2fc4f2969f3521966acd5248e6db2"
+        }
+      ],
       "historicalPreservation": {
         "priorFileSha256": "9389807dac729f0cdb41d21522685b9fdd73477bf1dfe5aa86774f617359e4e9",
         "allPriorParsedValuesUnchanged": true,
         "priorTextPrefixPreserved": true
       },
-      "gitDiffCheck": "pending affected report checks"
+      "gitDiffCheck": "pass",
+      "treeCurrency": "Normal Task first attempted its automatic rebase and restored HEAD 148be90001c1bd9e4c78c9acc53be1945f20230d after the historical query-report conflict. Its second run checked the ordinary pending report/receipt update, warned of seven missing main harness commits, and passed. No manual rebase, reset, discard, history rewrite or prepared-tree override occurred. The source review remained pinned to the declared immutable base/head; no wave update was imported.",
+      "workerCheckOutput": {
+        "path": ".temp/goal/check/run-Or5wKo/output.log",
+        "sha256": "63d438f876a92469cf504a3b4860c5a9745e9d6efb77c5c5701832301e8b05e0"
+      }
     },
     "limitations": [
       "This is one bounded correction source verdict, not a review of accepted source batches or review of reviews.",
