@@ -10435,5 +10435,534 @@
       "scope": "Only the claimed report changed; no passing unchanged source, browser, Storybook, native or API selection was replayed.",
       "preservationValidation": "All 29 pre-existing report keys/values equal report-before.json; exactly originalFourApiCorrectedConsumerProof was appended. JSON parsing and git diff --check pass."
     }
+  },
+  "privatePublicationBindingFirstReview": {
+    "format": "studio-private-publication-binding-first-review-v1",
+    "recordedAtUtc": "2026-10-20T11:26:00.767987+00:00",
+    "result": "done for the authorized two-path source-review split: no source blocker; focused native-query regression passed. Original live private-draft, visitor-refusal and owner-bound proof remains due after compatible composition.",
+    "authority": "Latest committed Decision and manager note, 2026-10-20T11:17:19Z: independently review only 08f385a2 against its first parent, execute its missing one-shot native regression, preserve previous proof, append this addendum, docs:check and commit only this report. No original live rerun authorized.",
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "independent": true,
+      "candidateAuthoredByReviewer": false,
+      "nestedAgents": 0,
+      "accountOrModelFallback": false,
+      "firstIndependentReviewOfThisNewTwoPathDelta": true,
+      "priorStudioReviewRepeated": false
+    },
+    "preservation": {
+      "historicalSectionsRemainAuthoritativeForTheirPins": true,
+      "priorReportCommit": "419bb2bd35934ec3b6e12750fc4deb7263c2d04d",
+      "priorReportSha256": "5dc1551e60db70959cbf29f82790fb0a5a7a357c0d9d3ec4ed4b79bd09e634f1",
+      "oldReportKeysPreserved": [
+        "goal",
+        "worker",
+        "reportVersion",
+        "reportedAtUtc",
+        "result",
+        "reviewer",
+        "scope",
+        "pins",
+        "inputsRead",
+        "historicalEvidence",
+        "reviewedPaths",
+        "receiptVerification",
+        "sourceReview",
+        "checks",
+        "renderedEvidence",
+        "findings",
+        "originalCriteria",
+        "originalAcceptanceTests",
+        "setupBlockers",
+        "resourceAndDataUse",
+        "proposedTasks",
+        "completionBoundary",
+        "procedure",
+        "correctionVerification",
+        "runtimeCompatibilityVerification",
+        "maintainersSsrCorrectionVerification",
+        "admissionFixtureCastReview",
+        "d4014OriginalEvidenceQualification",
+        "duplicateRevisionBatchFirstReview",
+        "originalFourApiCorrectedConsumerProof"
+      ],
+      "oldReportValuesChanged": false,
+      "historicalReachedPrivateDraftFailureRetained": true,
+      "previousReportVersionNotRelabeled": true
+    },
+    "scope": {
+      "reviewedPaths": [
+        "services/main/src/modules/studio/works.ts",
+        "services/main/tests/studio-publication-query.test.ts"
+      ],
+      "productionChangesByReviewer": [],
+      "assertionChanges": [],
+      "registryChanges": [],
+      "managerStateChanges": [],
+      "sourceIntegratedOrRebased": false,
+      "onlyTrackedReportChanged": true,
+      "unchangedSemanticsRead": [
+        "services/main/src/modules/studio/works.ts:26-31,74-97,114-145,229-291",
+        "services/main/tests/structured-work-publication-fixture.ts:42-54",
+        "infra/jena/tests/tdb2-integrity/support.ts:8-80",
+        "infra/jena/tests/tdb2-integrity/QueryDataset.java:17-41"
+      ],
+      "sourceReadingBoundary": "Read both complete new diff paths and only the unchanged bindings/state/authority/count and one-shot helper context needed to assess them. Ancillary pins were compared without commissioning or repeating their reviews."
+    },
+    "pins": {
+      "reviewedSource": "08f385a2a2cbd9aa963f55428ae7c4bf0b01fa8f",
+      "firstParent": "dd5753e21e91468e6a9905ff0d5f7cfe67ed9850",
+      "diffSha256": "b6753e31a042e218738dfc7cd49c351cb21f1bda5780e632d4180cd7b20d85dd",
+      "changedPathsAndBlobs": [
+        {
+          "path": "services/main/src/modules/studio/works.ts",
+          "parentBlob": "e9bb2042c1626ddf9651068c42f2920e6a93c4d8",
+          "sourceBlob": "8cbdde3a0befdbbb52c4012d43ec049f9ab3cc2d",
+          "managerComparisonBlob": "e9bb2042c1626ddf9651068c42f2920e6a93c4d8",
+          "mainBlobAtReview": "e9bb2042c1626ddf9651068c42f2920e6a93c4d8",
+          "actualSnapshotBlob": "8cbdde3a0befdbbb52c4012d43ec049f9ab3cc2d",
+          "actualSnapshotSha256": "6858ce03cd97155f3c89aeecee024ffd7be3e56269e9a6aad13142c5a574d311"
+        },
+        {
+          "path": "services/main/tests/studio-publication-query.test.ts",
+          "parentBlob": null,
+          "sourceBlob": "562790f94bdec44c06bffa4c50cdf0c056a5055f",
+          "managerComparisonBlob": null,
+          "mainBlobAtReview": null,
+          "actualSnapshotBlob": "562790f94bdec44c06bffa4c50cdf0c056a5055f",
+          "actualSnapshotSha256": "bf3d740dc6afa1112f4ce9b7722969a32366b46a2e159b73b1a1e39dac983e76"
+        }
+      ],
+      "sourceSnapshot": {
+        "path": ".temp/studio-review/private-publication-first-review/source",
+        "detached": true,
+        "cleanExactBeforeReviewAndCheck": true,
+        "cleanExactAfterCheck": true,
+        "qaSource": {
+          "head": "08f385a2a2cbd9aa963f55428ae7c4bf0b01fa8f",
+          "fingerprint": "157cc05370c57879d468e73bd1f48f31aa3d46e3ad29608b7c97a98b7d5e6e1f",
+          "clean": true
+        },
+        "qaSourceStable": true,
+        "productionOrTestOverlay": false
+      },
+      "mainAtReviewAndCompositionCheck": "005d644b90ddd0cad4e6bb37590115e654a6634b",
+      "managerComparison": "e1a51dc289744e4cdc7ae9f14a393fe062ffbcec",
+      "runner": {
+        "testAndTaskSource": "08f385a2a2cbd9aa963f55428ae7c4bf0b01fa8f",
+        "recordedJobAndOuterSlot": "/home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts",
+        "controlCodeMainAtExecution": "005d644b90ddd0cad4e6bb37590115e654a6634b",
+        "admission": "Main recorded job and host QA slot, then exact snapshot Task goal -- test, which delegates to bun scripts/goal/goalctl.ts test. One owner-tier selection; no heavy admission, stack or borrower lease.",
+        "automaticDependencyPreparation": "Supported runner ran task install inside the owned snapshot. Tracked source stayed clean and the full source fingerprint equals the producer state-test fingerprint."
+      },
+      "nativeImages": [
+        {
+          "image": "rezics/fuseki:6.2.0-cmd0.5.43-27f6a1bf73f2",
+          "inspectExit": 0,
+          "id": "sha256:264bc2bdb9775bef15b601f7ad97c26c574741250b64f19d3c107d52120e3999",
+          "repoDigests": [
+            "rezics/fuseki@sha256:264bc2bdb9775bef15b601f7ad97c26c574741250b64f19d3c107d52120e3999"
+          ],
+          "created": "2026-10-20T00:56:10.146699112+08:00",
+          "architecture": "amd64",
+          "os": "linux"
+        },
+        {
+          "image": "maven:3.9.16-eclipse-temurin-21@sha256:c2a2c58516d160f43b50f12baa427ca86989e0bc942609e04aff61da5d9a7d74",
+          "inspectExit": 0,
+          "id": "sha256:c2a2c58516d160f43b50f12baa427ca86989e0bc942609e04aff61da5d9a7d74",
+          "repoDigests": [
+            "maven@sha256:c2a2c58516d160f43b50f12baa427ca86989e0bc942609e04aff61da5d9a7d74"
+          ],
+          "created": "2026-09-16T05:17:44.815391566Z",
+          "architecture": "amd64",
+          "os": "linux"
+        }
+      ],
+      "nativeAndRunnerFiles": [
+        {
+          "path": "services/main/tests/structured-work-publication-fixture.ts",
+          "sourceBlob": "7cf0199e136b030040e5241b79460ba1e8200184",
+          "unchangedFromParent": true,
+          "sha256": "0ebfa29b49ff7bce1d5a9adbc89f427ef27733088f38fd26b98aac7a29f9992f"
+        },
+        {
+          "path": "infra/jena/tests/tdb2-integrity/support.ts",
+          "sourceBlob": "1836ba85d2fb619ca4f72d4db0eec6461878f8d8",
+          "unchangedFromParent": true,
+          "sha256": "cf0c13048f697018aefce9fd5f84460fbcf31b4f4adfca3306dddf1dded85817"
+        },
+        {
+          "path": "infra/jena/tests/tdb2-integrity/QueryDataset.java",
+          "sourceBlob": "bef0771efd5b50888a9fd2e637ace7e3fe8c5e42",
+          "unchangedFromParent": true,
+          "sha256": "11041bf16518dbdfa354b9fe48b24a7049e44940b6436def58db68bdea805113"
+        },
+        {
+          "path": "infra/dev/compose.yaml",
+          "sourceBlob": "12ce8401431244953ba231a6bfb63873405422fe",
+          "unchangedFromParent": true,
+          "sha256": "65d6c42ab550c8e2287b646bc065495cbf69c31817a6372c117f179124feb57e"
+        },
+        {
+          "path": "infra/jena/Dockerfile",
+          "sourceBlob": "13819b53ad3d13f57ac3408f199d60286c2f7a21",
+          "unchangedFromParent": true,
+          "sha256": "3e80fae08ed7b680c1340225f2f7d483af8949195e90ce13d22b6d1c873dd64f"
+        },
+        {
+          "path": "scripts/goal/goalctl.ts",
+          "sourceBlob": "329c2cfe66c9ef7ed12514b380432df97296100a",
+          "unchangedFromParent": true,
+          "sha256": "2df513f782332d0181ecd2fd9042e99cc44bba5198937e2310990e95f59c9510"
+        },
+        {
+          "path": "scripts/qa/test.ts",
+          "sourceBlob": "81c4fa2ae7770c68b359f86ae910069aca509c08",
+          "unchangedFromParent": true,
+          "sha256": "3f57d88efe82ff83e300594443f5c8bb824711003525ff3db615ef15a2165a80"
+        },
+        {
+          "path": "Taskfile.yml",
+          "sourceBlob": "30cfc2093436fab2cc18a589404a2f589783f7c7",
+          "unchangedFromParent": true,
+          "sha256": "9ebb829d62cd74ab42b1fa2bd4ad2786cd9ef8d16e61ef4f3637d9a40693516f"
+        }
+      ],
+      "jarAndPostRunVerification": {
+        "verifiedAtUtc": "2026-10-20T11:24:47.229718+00:00",
+        "sourceHead": "08f385a2a2cbd9aa963f55428ae7c4bf0b01fa8f",
+        "trackedCleanAfter": true,
+        "sourceStableFromQa": true,
+        "imageIdsUnchangedAcrossRun": true,
+        "serverJar": ".temp/studio-review/private-publication-first-review/source/.temp/tdb2-integrity/jars/264bc2bdb977/fuseki-server.jar",
+        "serverJarSha256": "88a176e9542f5f1dd142b86bef639f658871e448d3cd7356d70563a80decb041",
+        "oneShotOwnedContainersStillRunning": [],
+        "fixtureDirectoriesRemaining": [],
+        "workerHead": "419bb2bd35934ec3b6e12750fc4deb7263c2d04d"
+      },
+      "integrationProduct": null,
+      "runtimeMainAccountsWeb": null,
+      "runtimeNativeImage": null,
+      "schemaMigrationHistory": null,
+      "backupOrCorpus": null,
+      "actorOrAuthSession": null,
+      "qualification": "Only the one-shot native semantic test used an image in this split. No runtime, restored database, migration, session or genuine product pin was qualified; earlier live pins remain preserved historical evidence."
+    },
+    "sourceReview": [
+      {
+        "path": "services/main/src/modules/studio/works.ts",
+        "lines": "99-110",
+        "verdict": "no blocker",
+        "reason": "Exact read now left-joins the contribution publicationHead edge and nests selectedDraft inside that same OPTIONAL. An unpublished contribution cannot join an unrelated revisions-graph publication when publication is unbound. A matching publication without selectedDraft keeps its publicationHead and null publicationDraft."
+      },
+      {
+        "path": "services/main/src/modules/studio/works.ts",
+        "lines": "229-239",
+        "verdict": "no blocker",
+        "reason": "List projection uses the same nested pattern with the selected Work VALUES and Agent author restriction. The contribution identity joins publications only to their own text; same-Work other-author, other-Work same-author and unattached revisions publications do not become the private text publication."
+      },
+      {
+        "path": "services/main/src/modules/studio/works.ts",
+        "lines": "26-31,74-97,111-145,168-228,240-291",
+        "verdict": "preserved behavior",
+        "reason": "Both diff hunks change only publication query grouping. No imports, types, count calls/bounds, inventory cuts, ordering/filters, live-authority fences, authored/curated classification, disclosure mapping or null conversions changed. State still follows publicationHead independently of selectedDraft. This is a source comparison, not new live authority or disclosure acceptance."
+      },
+      {
+        "path": "services/main/tests/studio-publication-query.test.ts",
+        "lines": "7-11,13-54,56-97",
+        "verdict": "adequate focused semantic regression; no additional counterexample needed",
+        "reason": "Captures three exact and two list text-query shapes from production reads, evaluates all five with real Jena on an in-memory TriG dataset, then supplies those native answers back to the same owner functions. Covers private draft; published text with selectedDraft; published text without selectedDraft; unrelated other author on the same Work; same author on another Work; unattached revision publication. Checks exact/list projection and draft filter results. Authority, receipt heads and empty chapter structures are explicit doubles; this file cannot establish genuine API authorization or original count topology."
+      },
+      {
+        "path": "services/main/tests/structured-work-publication-fixture.ts",
+        "lines": "42-54",
+        "verdict": "unchanged helper is appropriate",
+        "reason": "Batches five real query/dataset cases into existing QueryDataset through runJava. QueryDataset parses TriG and evaluates authored SELECTs against independent transaction-memory Jena datasets, preserving graph and OPTIONAL semantics. It returns native bindings rather than synthesized publication rows. Helper removes temporary query files; raw native answers are not retained separately in this run."
+      }
+    ],
+    "sourceVerdict": {
+      "status": "approved for the exact minimal two-path slice",
+      "blockingFindings": [],
+      "wholeWaveApproved": false,
+      "newApiFailureReproduced": false,
+      "originalReachedFailureCause": "The producer diagnosis accepted by the latest Decision identifies unrelated publications attached to an unpublished text. The new nested OPTIONAL repairs that query class; the historical original private-draft failure is retained until its unchanged live assertion passes on the composed product."
+    },
+    "composition": {
+      "status": "minimal slice composes at the checked main pin",
+      "main": "005d644b90ddd0cad4e6bb37590115e654a6634b",
+      "exactProductionPreimageMatchesReviewedParent": true,
+      "newTestPathAbsentOnMain": true,
+      "unchangedAncillaryAndHelperBlobs": [
+        {
+          "path": "services/main/src/modules/studio/works.ts",
+          "mainBlob": "e9bb2042c1626ddf9651068c42f2920e6a93c4d8",
+          "sourceBlob": "8cbdde3a0befdbbb52c4012d43ec049f9ab3cc2d",
+          "parentBlob": "e9bb2042c1626ddf9651068c42f2920e6a93c4d8"
+        },
+        {
+          "path": "services/main/src/modules/studio/access.ts",
+          "mainBlob": "e1a76597038a74975df36d5ec82f6166853bc6a2",
+          "sourceBlob": "e1a76597038a74975df36d5ec82f6166853bc6a2",
+          "parentBlob": "e1a76597038a74975df36d5ec82f6166853bc6a2"
+        },
+        {
+          "path": "services/main/src/modules/studio/chapters.ts",
+          "mainBlob": "39b42541832c5499ff77a7ec18dcf07d0dcd0a09",
+          "sourceBlob": "39b42541832c5499ff77a7ec18dcf07d0dcd0a09",
+          "parentBlob": "39b42541832c5499ff77a7ec18dcf07d0dcd0a09"
+        },
+        {
+          "path": "services/main/src/routes/studio.ts",
+          "mainBlob": "332c6b0ee18c92237863e9ecd8478a03ec501802",
+          "sourceBlob": "332c6b0ee18c92237863e9ecd8478a03ec501802",
+          "parentBlob": "332c6b0ee18c92237863e9ecd8478a03ec501802"
+        },
+        {
+          "path": "services/main/tests/structured-work-publication-fixture.ts",
+          "mainBlob": "7cf0199e136b030040e5241b79460ba1e8200184",
+          "sourceBlob": "7cf0199e136b030040e5241b79460ba1e8200184",
+          "parentBlob": "7cf0199e136b030040e5241b79460ba1e8200184"
+        },
+        {
+          "path": "infra/jena/tests/tdb2-integrity/support.ts",
+          "mainBlob": "1836ba85d2fb619ca4f72d4db0eec6461878f8d8",
+          "sourceBlob": "1836ba85d2fb619ca4f72d4db0eec6461878f8d8",
+          "parentBlob": "1836ba85d2fb619ca4f72d4db0eec6461878f8d8"
+        },
+        {
+          "path": "infra/jena/tests/tdb2-integrity/QueryDataset.java",
+          "mainBlob": "bef0771efd5b50888a9fd2e637ace7e3fe8c5e42",
+          "sourceBlob": "bef0771efd5b50888a9fd2e637ace7e3fe8c5e42",
+          "parentBlob": "bef0771efd5b50888a9fd2e637ace7e3fe8c5e42"
+        }
+      ],
+      "nonMutatingPatchCheck": {
+        "commands": [
+          "GIT_INDEX_FILE=<owned .temp/main-compose.index> git read-tree 005d644b90ddd0cad4e6bb37590115e654a6634b",
+          "GIT_INDEX_FILE=<owned .temp/main-compose.index> git apply --cached --check <owned source.diff>"
+        ],
+        "exitStatus": 0,
+        "stdout": "",
+        "stderr": "",
+        "workingTreeOrBranchChanged": false
+      },
+      "limit": "No integration or composed compile/runtime was created. Only the two-path repair can be considered for manager composition; this verdict carries no unrelated wave edits or blanket dependency approval."
+    },
+    "focusedCheck": {
+      "jobId": "job:125e3ab7-63f4-4ce6-b015-a3420882ed7a",
+      "command": "GOAL_ID=audit-remediation-20261019 bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts slot -- task --dir .temp/studio-review/private-publication-first-review/source goal -- test services/main/tests/studio-publication-query.test.ts",
+      "exitStatus": 0,
+      "jobLog": ".temp/goal/jobs/125e3ab7-63f4-4ce6-b015-a3420882ed7a.log",
+      "qaRunId": "20261020t112156-fa0ff2",
+      "tier": "owner",
+      "testFiles": 1,
+      "testBodies": 1,
+      "testsPassed": 1,
+      "testsFailed": 0,
+      "testsSkipped": 0,
+      "assertionsExecuted": 10,
+      "body": {
+        "file": "services/main/tests/studio-publication-query.test.ts",
+        "line": 56,
+        "name": "Studio exact and list reads keep private drafts separate from unrelated publications",
+        "bodyReached": true,
+        "status": "passed",
+        "expectedFailureOrPendingWrapper": false,
+        "assertionReach": [
+          "one assertion checks all five production query shapes were captured",
+          "three exact-read assertions compare private/published/missing-selectedDraft states and text identities",
+          "three unfiltered-list assertions compare length, all three projections and exact-page count",
+          "three draft-list assertions compare one private item and null continuation"
+        ]
+      },
+      "nativeEvaluationCalls": 1,
+      "queryCasesEvaluated": 5,
+      "qaAcceptanceIdsPassed": 0,
+      "qaCertifiesFull": false,
+      "apiStatuses": [],
+      "apiAnswers": [],
+      "publicLatencyMeasured": false,
+      "assertionFailureOutput": null,
+      "evidenceKind": "executed native-query/owner regression with explicit owner boundary doubles; not genuine API proof",
+      "artifacts": [
+        {
+          "path": ".temp/studio-review/private-publication-first-review/source/.artifacts/qa/20261020t112156-fa0ff2/owner.xml",
+          "sha256": "a02265e41ac915b827ffae7d2416e406ee98f23bd91300880c7845ada56e6eec"
+        },
+        {
+          "path": ".temp/studio-review/private-publication-first-review/source/.artifacts/qa/20261020t112156-fa0ff2/acceptance.json",
+          "sha256": "f35166514793420f78f5bebc394d3cdc247395b057cda524139136491ba48c73"
+        },
+        {
+          "path": ".temp/studio-review/private-publication-first-review/source/.artifacts/qa/20261020t112156-fa0ff2/summary.md",
+          "sha256": "a5e20fba629762f05f1557f45e2742af38ce54c4bc03c4f2ae168c2fb81ba5de"
+        }
+      ]
+    },
+    "producerAndPriorEvidenceReuse": {
+      "producerHandoff": {
+        "path": ".temp/studio-review/private-publication-first-review/producer-handoff.json",
+        "sha256": "1d488de7e5e37a22da5a5529ccbea6c0099f95969ea7cae5a5e13b8a384a2c34"
+      },
+      "producerJobId": "job:f4d98ebd-5a6d-4b85-b7ec-b3764f9eb084",
+      "stateTest": {
+        "qaRunId": "20261020t110831-381665",
+        "source": {
+          "head": "08f385a2a2cbd9aa963f55428ae7c4bf0b01fa8f",
+          "fingerprint": "157cc05370c57879d468e73bd1f48f31aa3d46e3ad29608b7c97a98b7d5e6e1f",
+          "clean": true
+        },
+        "status": "passed",
+        "tests": 3,
+        "assertions": 9,
+        "rerunByReviewer": false
+      },
+      "static": {
+        "command": "task goal -- check --only types,lint,guards",
+        "reusedPasses": [
+          "guards",
+          "lint on both new paths",
+          "AST on both new paths",
+          "Main compiler including new regression"
+        ],
+        "overallTypesStatus": "failed: nine inherited nullable meaning web errors in seven files",
+        "overallInferenceStatus": "failed at web compiler before complete measurements/base comparison",
+        "mainCompiler": "reused successful Main diagnostic output; 27,006,031 instantiations, 14.629 seconds check time",
+        "existingOwner": "collection/relation consumer owner for 1e283dfe5028265a394fb2e8f00c59a7748731d3; unchanged and outside this split",
+        "rerunOrDiagnosisByReviewer": false
+      },
+      "priorSectionsReused": [
+        "sourceReview",
+        "correctionVerification",
+        "d4014OriginalEvidenceQualification",
+        "duplicateRevisionBatchFirstReview",
+        "originalFourApiCorrectedConsumerProof"
+      ],
+      "priorTwoOriginalApiPassesReplayed": false,
+      "D4014Replayed": false,
+      "frozenAnswersAndHashes": "Preserved verbatim under originalFourApiCorrectedConsumerProof and its evidence list; no producer or outcome assertions/support were edited.",
+      "receiptCopies": [
+        {
+          "producerFile": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/studio-private-publication-fix/fix-handoff-20261020.json",
+          "retainedCopy": ".temp/studio-review/private-publication-first-review/producer-handoff.json",
+          "sha256": "1d488de7e5e37a22da5a5529ccbea6c0099f95969ea7cae5a5e13b8a384a2c34"
+        },
+        {
+          "producerFile": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/goal/check/run-ruugF6/output.log",
+          "retainedCopy": ".temp/studio-review/private-publication-first-review/producer-check.log",
+          "sha256": "a60b5bf129524337c10fa1b835663e5e9e77cfb0710692350320ce89decc3418"
+        },
+        {
+          "producerFile": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.temp/api-inference/run-7LHN4z/sample-1/main-tsc.log",
+          "retainedCopy": ".temp/studio-review/private-publication-first-review/producer-main-tsc.log",
+          "sha256": "6570f9b6c39af6cc4f820bca090c497de06f66d3fa7c626c0eb2791cea1e5f2e"
+        },
+        {
+          "producerFile": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.artifacts/qa/20261020t110831-381665/acceptance.json",
+          "retainedCopy": ".temp/studio-review/private-publication-first-review/producer-state-acceptance.json",
+          "sha256": "c9bad4b7097f6bb29c9f0c399b2bf0590283bcdb94fa873b6f1628f0bde7e0e0"
+        },
+        {
+          "producerFile": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2753/.artifacts/qa/20261020t110831-381665/owner.xml",
+          "retainedCopy": ".temp/studio-review/private-publication-first-review/producer-state-owner.xml",
+          "sha256": "d3aaa4a947533086d1bc30a077118de24f6312abe29300840099d398524ba0e4"
+        }
+      ]
+    },
+    "originalCriteriaDisposition": {
+      "AUD011_privateDraft": "Source repair approved and focused native regression passed. Historical genuine author-state assertion remains failed at its recorded pin; unchanged original private-draft assertion must pass after composition on a compatible runtime with the SAME lawful actor.",
+      "AUD011_visitorRefusalAndPrivateFieldAbsence": "Still unproved in the corrected original live run; requires the unchanged visitor refusal/private-field assertions after composition. No new grants or actor substitution authorized.",
+      "AUD011_ownerBoundIncompleteZeroLowerBound": "Still unproved: the original body was guarded before every bound assertion. Remains due through existing lawful owner/runtime support; source verdict does not make an unavailable scan a proved zero.",
+      "AUD011_retained23AndOriginalRootVolumeExtras": "Reuse both completed original count/topology passes, all exact/list/traversal identities and retained answers/hashes from originalFourApiCorrectedConsumerProof. No count re-execution in this split.",
+      "AUD011_nonBookNull": "Reuse the two completed original callback results; unchanged.",
+      "AUD011_originalFourChapterRecord": "Preserve the prior original-record disposition without substitution or rerun.",
+      "D4014": "Previously independently qualified acceptance retained; no new hold or rerun.",
+      "D4002": "Prior Studio-specific navigation evidence and residual Discover/whole-class limits retained; no navigation or whole-class closure.",
+      "AMGT01_and_STUDIO01": "Prior separate wider persona/body and author-flow reach/limits preserved; no new API/browser bodies executed.",
+      "AUD011_class": "Open. This source/regression verdict closes no original product finding or class."
+    },
+    "resourcesAndScope": {
+      "newCorpus": false,
+      "restores": 0,
+      "schemaTransitions": 0,
+      "serversStarted": 0,
+      "borrowerLeases": 0,
+      "sharedRefreshResetImport": false,
+      "authorityOrGraphSeedingOnRuntime": false,
+      "ownedTemporaryData": "Only the existing test in-memory TriG fixtures and owned helper query directory; removed by helper. Retained corpus/backup and original lawful actor unchanged.",
+      "oneShotContainersRemaining": 0,
+      "newScreenshotsActuallyViewed": [],
+      "newDomJourneys": [],
+      "newBrowserJourneys": [],
+      "storybookReview": "No visible product edit in the two-path slice; previous rendered evidence retained.",
+      "credentialsReported": false,
+      "otherWorkersOrJobsInterrupted": false,
+      "temporaryArtifactsRoot": ".temp/studio-review/private-publication-first-review"
+    },
+    "evidence": [
+      {
+        "path": ".temp/studio-review/private-publication-first-review/report-before.json",
+        "sha256": "5dc1551e60db70959cbf29f82790fb0a5a7a357c0d9d3ec4ed4b79bd09e634f1"
+      },
+      {
+        "path": ".temp/studio-review/private-publication-first-review/source.diff",
+        "sha256": "b6753e31a042e218738dfc7cd49c351cb21f1bda5780e632d4180cd7b20d85dd"
+      },
+      {
+        "path": ".temp/studio-review/private-publication-first-review/source-verification.json",
+        "sha256": "06189e090ba9b364db99db52dfd4ced9c84b07f0bb09bd57af8e3c92aa991b2d"
+      },
+      {
+        "path": ".temp/studio-review/private-publication-first-review/native-and-runner-pins.json",
+        "sha256": "14b15bf197c08e8cd0511bcc30658ef0ee7828bcf4de74b7e3ff3e351266f447"
+      },
+      {
+        "path": ".temp/studio-review/private-publication-first-review/main-compose-check.json",
+        "sha256": "75eeacab9362072e1c6f668e655474e4a398842980b9e212a06a5d6fd5e89940"
+      },
+      {
+        "path": ".temp/studio-review/private-publication-first-review/post-check-source-and-resources.json",
+        "sha256": "af44b14af1e33a2b39369298bfb7462d77f5e04244ade3584e8f65726777270d"
+      },
+      {
+        "path": ".temp/studio-review/private-publication-first-review/producer-check-evidence.json",
+        "sha256": "c76820d0623a27f50c04c65c4964799a3e151958ad9441353522107e2ad2ddfa"
+      }
+    ],
+    "procedure": {
+      "skills": [
+        "goal-worker",
+        "product-audit",
+        "local-development (read procedure only; no stack authorized)"
+      ],
+      "instructionEffect": "Latest Decision narrows this continuation to two new paths and the missing one-shot native test; it supersedes original whole-candidate/live/story check work. Goal-worker recorded-job rule parked the turn once and resumed the same job, without polling or a fix round. Report checks use the dirty report tree so prepareCheckTree cannot rebase it."
+    },
+    "reportChecks": {
+      "status": "passed",
+      "jobId": "job:bd3ef0d7-d86f-4332-a0de-c11153edf688",
+      "exitStatus": 0,
+      "command": "GOAL_ID=audit-remediation-20261019 bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "steps": [
+        {
+          "command": "task docs:check",
+          "exitStatus": 0,
+          "log": ".temp/goal/jobs/bd3ef0d7-d86f-4332-a0de-c11153edf688.1.log",
+          "result": "13 checker tests passed; 259 Markdown files checked."
+        },
+        {
+          "command": "task goal -- check",
+          "exitStatus": 0,
+          "log": ".temp/goal/jobs/bd3ef0d7-d86f-4332-a0de-c11153edf688.2.log",
+          "fullOutput": ".temp/goal/check/run-uSBe3G/output.log",
+          "result": "AST scan passed; selected scripts/static/one-language-parser-debt.test.ts guard passed 2 tests and 6 assertions. Types/lint had no changed source files; no tests named in brief. No rebase or source update occurred."
+        }
+      ],
+      "scope": "Only the claimed report changed. Reused Studio/count/D4-014 and producer state/static/Main checks were not rerun.",
+      "preservationValidation": "All 30 pre-existing report keys/values equal report-before.json; exactly privatePublicationBindingFirstReview appended. JSON parsing and git diff --check pass."
+    },
+    "next": "Manager may compose only the reviewed two-path slice with current main, preserve accepted Studio/count/D4-014 evidence, and arrange the residual original private-draft, visitor-refusal and owner-bound proof on compatible runtime using the SAME lawful actor. Keep inherited web consumer diagnosis with its existing owner; no automatic landing or class closure."
   }
 }
