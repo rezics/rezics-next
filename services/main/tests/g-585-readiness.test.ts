@@ -41,8 +41,11 @@ test('G-585: native generation qualification alone cannot admit an older profile
   for (const query of queries) {
     expect(query).toContain(TEXT_INDEX_PROFILE);
     expect(query).toContain(TEXT_INDEX_PROBE_BODY);
-    for (const term of TEXT_INDEX_PROBE_QUERIES) expect(query).toContain(JSON.stringify(`"${term}"`));
-    expect(query.match(/text:query/g)).toHaveLength(TEXT_INDEX_PROBE_QUERIES.length);
+    const probes = [...query.matchAll(/text:query\s+\(rv:searchBody ("(?:\\.|[^"\\])*") 2\)/g)];
+    expect(probes).toHaveLength(1);
+    // One Lucene search still requires every independent folding witness.
+    expect(JSON.parse(probes[0]![1]!).split(' AND '))
+      .toEqual(TEXT_INDEX_PROBE_QUERIES.map(term => `"${term}"`));
     expect(query).not.toMatch(/COUNT\(|body:\*/);
   }
 });
