@@ -22,9 +22,48 @@ const normalize = (text: string) => text.replace(/\s+/gu, ' ').trim();
 function contentText(value: unknown): string {
   if (Array.isArray(value)) return value.map(contentText).join('');
   if (!value || typeof value !== 'object') return '';
+  if ('body' in value && typeof value.body === 'string') return value.body;
   return Object.entries(value).map(([key, child]) => key === 'text' && typeof child === 'string'
     ? child : contentText(child)).join('');
 }
+
+// Content references carry a UUID; selection carries its exact Content revision URN.
+function contentRevisionUrn(reference: { owner: string; resourceId: string; revisionId: string }, target: string): string | null {
+  if (reference.owner !== 'content' || reference.resourceId !== target
+    || !/^https:\/\/rezics\.com\/id\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/u.test(target)
+    || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/u.test(reference.revisionId)) return null;
+  return `urn:rezics:content:revision:${reference.revisionId}`;
+}
+
+test('C28 representation premise refuses identity lookalikes and preserves body bytes', () => {
+  const target = 'https://rezics.com/id/c3d6212e-6b90-847a-84aa-2017108a42c6';
+  const revisionId = '8933c22e-e959-435e-ad63-53db33b306d4';
+  const selected = `urn:rezics:content:revision:${revisionId}`;
+  const reference = { owner: 'content', resourceId: target, revisionId };
+  expect(contentRevisionUrn(reference, target)).toBe(selected);
+  for (const wrong of [revisionId, target, `urn:other:content:revision:${revisionId}`,
+    `urn:rezics:work:revision:${revisionId}`, `urn:rezics:content:variant:${revisionId}`,
+    `https://elsewhere.example/id/${revisionId}`, `prefix:${selected}`]) {
+    expect(contentRevisionUrn(reference, target)).not.toBe(wrong);
+  }
+  expect(contentRevisionUrn({ ...reference, owner: 'work' }, target)).toBeNull();
+  expect(contentRevisionUrn({ ...reference, resourceId: target.replace('rezics.com', 'elsewhere.example') }, target)).toBeNull();
+  expect(contentRevisionUrn(reference, target.replace('rezics.com', 'elsewhere.example'))).toBeNull();
+  const wrongAuthority = target.replace('rezics.com', 'rezics.com.elsewhere.example');
+  expect(contentRevisionUrn({ ...reference, resourceId: wrongAuthority }, wrongAuthority)).toBeNull();
+  expect(contentRevisionUrn({ ...reference, resourceId: target.replace('/id/', '/other/') }, target)).toBeNull();
+  expect(contentRevisionUrn(reference, target.replace('c3d6212e', 'd3d6212e'))).toBeNull();
+  for (const wrong of [selected, `prefix:${revisionId}`, `${revisionId}suffix`, revisionId.toUpperCase()]) {
+    expect(contentRevisionUrn({ ...reference, revisionId: wrong }, target)).toBeNull();
+  }
+  const body = 'Retained paragraph.\n\nSecond paragraph with  exact spacing.\r\n';
+  expect(contentText({ body })).toBe(body);
+  expect(contentText({ type: 'doc', content: [{ type: 'text', text: body }] })).toBe(body);
+  expect(contentText({ body, document: { type: 'doc', content: [{ type: 'text', text: body }] } })).toBe(body);
+  expect(contentText({ body: 42 })).toBe('');
+  expect(contentText({ title: body })).toBe('');
+  expect(contentText({ body: body.replace('Retained', 'Changed') })).not.toBe(body);
+});
 
 for (const name of personaNames) test.failing(`C28 real public Book / ${name}: understand, choose, read, navigate and return`, async () => {
   const { book } = fixture.corpus, people = fixture.people, person = people[name];
@@ -100,7 +139,7 @@ for (const name of personaNames) test.failing(`C28 real public Book / ${name}: u
       previous: book.chapters[index - 1]?.occurrence ?? null, next: book.chapters[index + 1]?.occurrence ?? null });
     const exact = await read<Static<typeof exactContentRevision>>(`/v1/content-revisions/${short(source.selectedRevision)}`);
     expect(exact).toEqual(chapter.content);
-    expect(exact.reference.revisionId).toBe(source.selectedRevision);
+    expect(contentRevisionUrn(exact.reference, source.target)).toBe(source.selectedRevision);
     expect(createHash('sha256').update(exact.serializedJson).digest('hex')).toBe(exact.reference.byteDigest);
     expect(normalize(contentText(exact.body))).toContain(normalize(source.bodyText));
   }
