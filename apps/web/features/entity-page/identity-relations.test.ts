@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import type { CanonicalAddress } from '@rezics/model/address';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup as renderMarkup } from 'react-dom/server';
 import { AppRouterContext, type AppRouterInstance } from 'next/dist/shared/lib/app-router-context.shared-runtime.js';
@@ -38,6 +39,71 @@ const renderToStaticMarkup = (element: ReactElement) =>
   renderMarkup(createElement(AppRouterContext.Provider, { value: router }, element));
 
 describe('Identity relations', () => {
+  test('empty selected family and discovery pages keep their own current/next tokens and generic continuity', () => {
+    const current = 'family-current:+/%?=&雪', next = 'family-next:+/%?=&雪';
+    const variantCurrent = 'variant-current:+/%?=&雪', variantNext = 'variant-next:+/%?=&雪';
+    const base = resourceHref('/e/', alter.reference);
+    const query = new URLSearchParams({ family: current, variants: variantCurrent, relations: 'generic-current:+/%', position: 'at', frame: 'frame' });
+    const page: RelationsPage = { profile: 'resource-relations-v1', resource: alter.reference, items: [], next,
+      sourcePosition: { datasetId: 'product', dataEpoch: 'epoch', sequence: '1' } };
+    const html = renderToStaticMarkup(createElement(IdentitySectionsView, {
+      data: { ok: true, data: { sections: [{ kind: 'family', hub: null, members: [], page, cursor: current, cursorKey: 'family',
+        next: { resource: alter, cursor: next }, discovery: { page: { ...page, next: variantNext }, cursor: variantCurrent, fallback: [] } }] } },
+      self: alter, locale: 'en', t: copyOf('en'), messages: workMessages.en,
+      currentHref: `${base}?${query}`, hrefFor: standaloneHrefFor({}, base),
+    }));
+    const escaped = (href: string) => `/en${href}`.replaceAll('&', '&amp;');
+    const family = new URLSearchParams(query); family.set('family', next);
+    const discovery = new URLSearchParams(query); discovery.set('variants', variantNext); discovery.delete('family');
+    expect(html).toContain(`href="${escaped(`${base}?${family}#identity-family`)}"`);
+    expect(html).toContain(`href="${escaped(`${base}?${discovery}#identity-family`)}"`);
+    const firstFamily = new URLSearchParams(query); firstFamily.delete('family');
+    const firstDiscovery = new URLSearchParams(query); firstDiscovery.delete('family'); firstDiscovery.delete('variants');
+    expect(html).toContain(`href="${escaped(`${base}?${firstFamily}#identity-family`)}"`);
+    expect(html).toContain(`href="${escaped(`${base}?${firstDiscovery}#identity-family`)}"`);
+    expect(html.match(/First page/g)).toHaveLength(2);
+    expect(html.match(/More relations/g)).toHaveLength(2);
+    expect(html).not.toContain(copyOf('en').noVariants);
+    expect(html).toContain('id="identity-family"');
+    expect(page.items).toEqual([]);
+    expect(page.next).toBe(next);
+  });
+
+  test('a terminal empty selected page retains restart navigation and refused family counterparts stay unlinked', () => {
+    const entry = identityEntry('hub', 'variant', alter);
+    const withheld: RelationEntry = { ...entry, rendering: null,
+      counterparts: [{ reference: alter.reference, status: 'unavailable' }] };
+    const data: IdentityData = { sections: [{ kind: 'family', hub: null, members: [], next: null,
+      cursor: 'terminal:+/%', cursorKey: 'family', fallback: [withheld, { ...entry, counterparts: [persona, persona] }] }] };
+    const html = renderToStaticMarkup(createElement(IdentitySectionsView, {
+      data: { ok: true, data }, self: saber, locale: 'en', t: copyOf('en'), messages: workMessages.en,
+      currentHref: `${resourceHref('/e/', saber.reference)}?family=terminal%3A%2B%2F%25&relations=generic&variants=discovery`,
+      hrefFor: standaloneHrefFor({}, resourceHref('/e/', saber.reference)),
+    }));
+    expect(html).toContain('First page');
+    expect(html).not.toContain(copyOf('en').noVariants);
+    expect(html).not.toContain('More relations');
+    expect(html).not.toContain(alter.reference);
+    expect(html).toContain(copyOf('en').nameNotShown);
+    expect(html.match(/>Persona<\/bdi>/g)).toHaveLength(2);
+    expect(html).toContain(`href="/en${resourceHref('/e/', persona.address as CanonicalAddress)}"`);
+    expect(html).toContain('relations=generic&amp;variants=discovery#identity-family');
+  });
+
+  test('family discovery cursors are single bounded values and cannot carry a former hub token', () => {
+    expect(parseEntityCursors({ variants: 'opaque:+/%?=&雪' })).toEqual({ variants: 'opaque:+/%?=&雪' });
+    expect(parseEntityCursors({ variants: ['a', 'b'] })).toBeNull();
+    expect(parseEntityCursors({ variants: 'a'.repeat(2049) })).toBeNull();
+    const href = identityContinuation(`${resourceHref('/e/', saber.reference)}?relations=generic&family=former&position=at&frame=f`, 'variants', 'opaque:+/%?=&雪');
+    const url = new URL(href, 'https://rezics.test');
+    expect(url.searchParams.get('variants')).toBe('opaque:+/%?=&雪');
+    expect(url.searchParams.get('family')).toBeNull();
+    expect(url.searchParams.get('relations')).toBe('generic');
+    expect(url.searchParams.get('position')).toBe('at');
+    expect(url.searchParams.get('frame')).toBe('f');
+    expect(url.hash).toBe('#identity-family');
+  });
+
   test('only actually displayed occurrences leave the generic page, with repetitions and the complete native page retained', () => {
     const shown = identityEntry('unit', 'character', alter);
     const unknownRole = identityEntry('unrecognized', 'character', saber);

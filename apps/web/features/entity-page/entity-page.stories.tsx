@@ -349,6 +349,172 @@ export const LateHubRepeatedOccurrencesPhoneJapanese: Story = {
   globals: { locale: 'ja', viewport: { value: 'phone' } },
 };
 
+const variantsCurrent = 'variants-current:+/%?=&雪', variantsNext = 'variants-next:+/%?=&雪';
+const variantsAfter = 'variants-after:+/%?=&雪', selectedHubNext = 'selected-hub-next:+/%?=&雪';
+const selectedPosition: RelationsPage['sourcePosition'] = { datasetId: 'product', dataEpoch: 'epoch', sequence: '12' };
+const selectedPage = (resource: string, items: RelationEntry[], next: string | null): RelationsPage => ({
+  profile: 'resource-relations-v1', resource, items, next, sourcePosition: selectedPosition,
+});
+const selectedFamilyEntries = [
+  { ...familyEntries[0]!, counterparts: [alter, extraCounterpart, withheldCounterpart, alter] },
+  ...familyEntries.slice(1), semanticWithheld,
+];
+const selectedDiscoveryEntry: RelationEntry = { ...identityEntry('variant', 'hub', saber),
+  counterparts: [saber, extraCounterpart, withheldCounterpart] };
+const selectedTerminalEntry: RelationEntry = { ...semanticWithheld, counterparts: [withheldCounterpart] };
+const selectedGenericPage = selectedPage(alter.reference, [semanticWithheld, partialIncidence, partialIncidence], ownNext);
+
+/** Supplied native-selector reader snapshots, including independently continued variant and hub selections. */
+function SelectedIdentityPage({ locale, terminal = false }: { locale: UiLocale; terminal?: boolean }) {
+  const [discovered, setDiscovered] = useState(false);
+  const cursors = { relations: ownCurrent, variants: discovered ? variantsNext : variantsCurrent,
+    ...(!discovered ? { family: familyCurrent } : {}) };
+  const links = standaloneHrefFor(cursors, familyBase);
+  const currentHref = `${familyBase}?${new URLSearchParams(cursors)}`;
+  const familyPage = selectedPage(discovered ? saber.reference : alter.reference,
+    discovered ? selectedFamilyEntries : terminal ? [selectedTerminalEntry] : [],
+    terminal ? null : discovered ? selectedHubNext : familyNext);
+  const discoveryPage = selectedPage(alter.reference,
+    discovered ? [selectedDiscoveryEntry] : [], terminal ? null : discovered ? variantsAfter : variantsNext);
+  const data: Loaded<IdentityData> = { ok: true, data: { relations: selectedGenericPage, sections: [{
+    kind: 'family', hub: discovered ? saber : null, hidden: false,
+    members: discovered ? [
+      { summary: saber, entry: null, hub: true, kind: null, applicability: [], ratings: null },
+      ...selectedFamilyEntries.slice(0, 3).map(entry => ({ summary: alter, entry, hub: false, kind: null, applicability: [], ratings: null })),
+    ] : [],
+    next: familyPage.next ? { resource: discovered ? saber : alter, cursor: familyPage.next } : null,
+    page: familyPage, cursor: cursors.family, cursorKey: 'family',
+    fallback: discovered ? [
+      { ...selectedFamilyEntries[0]!, counterparts: [extraCounterpart, withheldCounterpart, alter] }, semanticWithheld,
+    ] : terminal ? [selectedTerminalEntry] : [],
+    discovery: { page: discoveryPage, cursor: cursors.variants,
+      fallback: discovered ? [{ ...selectedDiscoveryEntry, counterparts: [extraCounterpart, withheldCounterpart] }] : [] },
+  }] } };
+  const discoveryDestination = new URL(currentHref, 'https://rezics.invalid');
+  discoveryDestination.searchParams.set('variants', variantsNext);
+  discoveryDestination.searchParams.delete('family');
+  discoveryDestination.hash = 'identity-family';
+  return <div className="mx-auto grid max-w-4xl gap-8 px-4 py-6" onClickCapture={event => {
+    const link = event.target instanceof Element ? event.target.closest('a') : null;
+    if (!terminal && link?.getAttribute('href') === localizedPath(
+      discoveryDestination.pathname + discoveryDestination.search + discoveryDestination.hash, locale)) {
+      event.preventDefault();
+      setDiscovered(true);
+    }
+  }}>
+    <h1 className="font-semibold text-2xl">{alter.name.value}</h1>
+    <IdentitySectionsView data={data} self={alter} locale={locale} t={copyOf(locale)} messages={workMessages[locale]}
+      hrefFor={links} currentHref={currentHref} />
+    <RelationsView page={{ ok: true, data: selectedGenericPage }} cursor={ownCurrent} {...common(locale)} hrefFor={links} />
+  </div>;
+}
+
+export const SelectedIdentityFrontiers: Story = {
+  parameters: { docs: { description: { story: 'Supplied native-contract reader snapshots: empty selected discovery and hub pages retain their independent opaque continuations. Following discovery supplies a late hub, three distinct occurrences of one target and every additional/withheld counterpart. Generic Relations keeps its original page. This component example establishes no backend selection, persistence or authority.' } } },
+  render: (_args, { globals }) => <SelectedIdentityPage locale={globals.locale as UiLocale} />,
+  async play({ canvasElement, globals }) {
+    const locale = globals.locale as UiLocale, canvas = within(canvasElement), t = copyOf(locale), messages = workMessages[locale];
+    const initialFamily = canvas.getByRole('region', { name: t.variantFamily });
+    await expect(within(initialFamily).getByText(t.visibleRelationsOnly)).toBeVisible();
+    await expect(canvas.queryByText(t.noVariants)).toBeNull();
+    const initialMore = within(initialFamily).getAllByRole('link', { name: t.moreIdentityRelations });
+    await expect(initialMore).toHaveLength(2);
+    const hubUrl = new URL(initialMore[0]!.getAttribute('href')!, 'https://rezics.invalid');
+    await expect(hubUrl.searchParams.get('family')).toBe(familyNext);
+    await expect(hubUrl.searchParams.get('variants')).toBe(variantsCurrent);
+    await expect(hubUrl.searchParams.get('relations')).toBe(ownCurrent);
+    const discovery = within(initialFamily).getByRole('navigation', { name: t.variantOf });
+    await expect(within(discovery).getByText(t.variantOf)).toBeVisible();
+    const discoverMore = within(discovery).getByRole('link', { name: t.moreIdentityRelations });
+    const discoveryUrl = new URL(discoverMore.getAttribute('href')!, 'https://rezics.invalid');
+    await expect(discoveryUrl.searchParams.get('variants')).toBe(variantsNext);
+    await expect(discoveryUrl.searchParams.has('family')).toBe(false);
+    await expect(discoveryUrl.searchParams.get('relations')).toBe(ownCurrent);
+    const genericBefore = canvas.getByRole('region', { name: t.relations }).textContent;
+    discoverMore.focus();
+    await expect(discoverMore).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    const family = canvas.getByRole('region', { name: t.variantFamily });
+    const members = [...family.querySelectorAll<HTMLElement>('[data-identity-member]')];
+    await expect(members.map(member => member.getAttribute('data-identity-member')))
+      .toEqual([saber.reference, alter.reference, alter.reference, alter.reference]);
+    for (const member of members.slice(1)) {
+      await expect(within(member).getByRole('link', { name: alter.name.value })).toHaveAttribute('href', localizedPath(familyBase, locale));
+      await expect(within(member).getByText(t.unknownVariantKind)).toBeVisible();
+    }
+    const companionLinks = within(family).getAllByRole('link', { name: 'Companion anthology' });
+    await expect(companionLinks).toHaveLength(2);
+    const guide = semanticWithheld.counterparts[0]!;
+    if (extraCounterpart.status !== 'available' || guide.status !== 'available') throw new Error('Expected canonical fixture addresses');
+    for (const link of companionLinks) await expect(link).toHaveAttribute('href',
+      localizedPath(resourceHref('/w/', extraCounterpart.address as CanonicalAddress), locale));
+    await expect(within(family).getByRole('link', { name: 'Side story guide' })).toHaveAttribute('href',
+      localizedPath(resourceHref('/w/', guide.address as CanonicalAddress), locale));
+    await expect(within(family).getAllByText(levelsCopy(locale).nameNotShown)).toHaveLength(2);
+    await expect(within(family).queryByRole('link', { name: levelsCopy(locale).nameNotShown })).toBeNull();
+    await expect(family.querySelectorAll('[data-relation]').length).toBe(3);
+    await expect(canvas.getByRole('region', { name: t.relations }).textContent).toBe(genericBefore);
+    const familyMore = within(family).getAllByRole('link', { name: t.moreIdentityRelations })[0]!;
+    const familyUrl = new URL(familyMore.getAttribute('href')!, 'https://rezics.invalid');
+    await expect(familyUrl.searchParams.get('family')).toBe(selectedHubNext);
+    await expect(familyUrl.searchParams.get('variants')).toBe(variantsNext);
+    const discoveryMore = within(within(family).getByRole('navigation', { name: t.variantOf }))
+      .getByRole('link', { name: t.moreIdentityRelations });
+    const discoveryAfter = new URL(discoveryMore.getAttribute('href')!, 'https://rezics.invalid');
+    await expect(discoveryAfter.searchParams.get('variants')).toBe(variantsAfter);
+    await expect(discoveryAfter.searchParams.has('family')).toBe(false);
+    const genericMore = canvas.getByRole('link', { name: messages.nextPage });
+    const genericUrl = new URL(genericMore.getAttribute('href')!, 'https://rezics.invalid');
+    await expect(genericUrl.searchParams.get('relations')).toBe(ownNext);
+    await expect(genericUrl.searchParams.get('variants')).toBe(variantsNext);
+    await expect(genericUrl.searchParams.has('family')).toBe(false);
+    familyMore.focus();
+    await expect(familyMore).toHaveFocus();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+
+export const SelectedIdentityFrontiersPhoneJapanese: Story = {
+  ...SelectedIdentityFrontiers,
+  globals: { locale: 'ja', viewport: { value: 'phone' } },
+};
+
+export const SelectedIdentityTerminalPage: Story = {
+  parameters: { docs: { description: { story: 'Supplied native-contract terminal reader pages without readable members retain First page for each current cursor; the selected family page retains its withheld incidence without an invented destination. Generic Relations has a separate next page.' } } },
+  render: (_args, { globals }) => <SelectedIdentityPage locale={globals.locale as UiLocale} terminal />,
+  async play({ canvasElement, globals }) {
+    const locale = globals.locale as UiLocale, canvas = within(canvasElement), t = copyOf(locale), messages = workMessages[locale];
+    const family = within(canvas.getByRole('region', { name: t.variantFamily }));
+    const starts = family.getAllByRole('link', { name: messages.firstPage });
+    await expect(starts).toHaveLength(2);
+    const hub = new URL(starts[0]!.getAttribute('href')!, 'https://rezics.invalid');
+    await expect(hub.searchParams.has('family')).toBe(false);
+    await expect(hub.searchParams.get('variants')).toBe(variantsCurrent);
+    const discovery = new URL(starts[1]!.getAttribute('href')!, 'https://rezics.invalid');
+    await expect(discovery.searchParams.has('variants')).toBe(false);
+    await expect(discovery.searchParams.has('family')).toBe(false);
+    for (const url of [hub, discovery]) await expect(url.searchParams.get('relations')).toBe(ownCurrent);
+    await expect(within(family.getByRole('navigation', { name: t.variantOf })).getByText(t.variantOf)).toBeVisible();
+    await expect(family.queryByRole('link', { name: t.moreIdentityRelations })).toBeNull();
+    await expect(family.getByText(t.visibleRelationsOnly)).toBeVisible();
+    await expect(family.getByText(levelsCopy(locale).nameNotShown)).toBeVisible();
+    await expect(family.queryByRole('link', { name: levelsCopy(locale).nameNotShown })).toBeNull();
+    await expect(canvas.queryByText(t.noVariants)).toBeNull();
+    const generic = new URL(canvas.getByRole('link', { name: messages.nextPage }).getAttribute('href')!, 'https://rezics.invalid');
+    await expect(generic.searchParams.get('relations')).toBe(ownNext);
+    await expect(generic.searchParams.get('family')).toBe(familyCurrent);
+    await expect(generic.searchParams.get('variants')).toBe(variantsCurrent);
+    starts[1]!.focus();
+    await expect(starts[1]).toHaveFocus();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+
+export const SelectedIdentityTerminalPagePhoneJapanese: Story = {
+  ...SelectedIdentityTerminalPage,
+  globals: { locale: 'ja', viewport: { value: 'phone' } },
+};
+
 export const Appearances: Story = {
   render: (_args, context) => {
     const locale = context.globals.locale as UiLocale;

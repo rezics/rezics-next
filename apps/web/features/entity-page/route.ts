@@ -16,14 +16,14 @@ export const entityHref = (resource: AddressTarget) => resourceHref('/e/', resou
 /** The cursor each list continues from. Statements and discussion answer `nextCursor`, relations `next`. */
 export const cursorKeys = { statements: 'statements', relations: 'relations', discussion: 'discussion' } as const;
 export type CursorSection = keyof typeof cursorKeys;
-export type EntityCursors = Partial<Record<CursorSection | 'family', string>>;
+export type EntityCursors = Partial<Record<CursorSection | 'family' | 'variants', string>>;
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
 /** The lists' cursors from the URL; null when one is repeated or oversized, which the page refuses. */
 export function parseEntityCursors(params: SearchParams): EntityCursors | null {
   const cursors: EntityCursors = {};
-  for (const section of [...Object.keys(cursorKeys), 'family'] as (CursorSection | 'family')[]) {
+  for (const section of [...Object.keys(cursorKeys), 'family', 'variants'] as (keyof EntityCursors)[]) {
     const value = params[section];
     if (Array.isArray(value)) return null;
     if (value === undefined || value === '') continue;

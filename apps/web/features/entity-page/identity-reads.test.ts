@@ -31,6 +31,118 @@ const pageOf = (self: typeof saber) =>
   ({ summary: self, target: { types: [`${namespaces.rv}Character`] } }) as unknown as EntityProjection;
 
 describe('Identity sections on a page that is not the whole list', () => {
+  test('native discovery and hub-family selections keep independent opaque frontiers and every mixed incidence', async () => {
+    const own = relationsPage(alter.reference, [identityEntry('holder', 'title', title)], 'generic-next:+/%?=&雪');
+    const selectedVariant = identityEntry('variant', 'hub', saber);
+    selectedVariant.rendering!.bindings[0]!.participant = { kind: 'resource', ref: alter.reference };
+    const one = identityEntry('hub', 'variant', alter);
+    const two = { ...one, relation: 'https://rezics.com/id/01944100-0000-7000-8000-000000000802' };
+    const three = { ...one, relation: 'https://rezics.com/id/01944100-0000-7000-8000-000000000803' };
+    const discoveryNext = 'discovery-next:+/%?=&雪';
+    const familyNext = 'family-next:+/%?=&雪';
+    const at = 'https://rezics.com/id/01944100-0000-7000-8000-000000000999';
+    const frame = 'https://rezics.com/id/01944100-0000-7000-8000-000000000998';
+    double = mainDouble(url => {
+      const key = url.pathname.match(/\/lexicon\/definitions\/(.+)$/)?.[1];
+      if (key) return { definition: definitions[key] };
+      if (url.pathname === `/v1/resources/${idOf(saber.reference)}/page`) return { summary: saber };
+      if (!url.pathname.endsWith('/relations')) return 404;
+      if (!url.searchParams.has('definition')) return own;
+      expect(url.searchParams.get('definition')).toBe(definitions['variant-of']!);
+      expect(url.searchParams.get('position')).toBe(at);
+      expect(url.searchParams.getAll('frame')).toEqual([frame]);
+      expect(url.searchParams.get('limit')).toBe('20');
+      if (url.searchParams.get('viewingRole') === 'variant') {
+        expect(url.pathname).toBe(`/v1/resources/${idOf(alter.reference)}/relations`);
+        return url.searchParams.get('after') === discoveryNext
+          ? relationsPage(alter.reference, [selectedVariant]) : relationsPage(alter.reference, [], discoveryNext);
+      }
+      expect(url.searchParams.get('viewingRole')).toBe('hub');
+      return url.pathname === `/v1/resources/${idOf(saber.reference)}/relations`
+        ? { ...relationsPage(saber.reference, [one, two, three], familyNext), sourcePosition: { ...position, sequence: '2' } }
+        : relationsPage(alter.reference, []);
+    });
+    const first = await pageRequest(() => readIdentitySections(pageOf(alter), { relations: 'generic-current:+/%' }, { scope: 'global' }, at, frame));
+    expect(first.ok).toBe(true);
+    if (!first.ok) throw new Error('Selected discovery unavailable');
+    const pending = first.data.sections.find(section => section.kind === 'family');
+    expect(pending?.hub).toBeNull();
+    expect(pending?.members).toEqual([]);
+    expect(pending?.discovery?.page).toEqual(relationsPage(alter.reference, [], discoveryNext));
+    expect(first.data.relations).toEqual(own);
+    const later = await pageRequest(() => readIdentitySections(pageOf(alter), {
+      relations: 'generic-current:+/%', variants: discoveryNext, family: 'family-current:+/%',
+    }, { scope: 'global' }, at, frame));
+    expect(later.ok).toBe(true);
+    if (!later.ok) throw new Error('Selected family unavailable');
+    const family = later.data.sections.find(section => section.kind === 'family');
+    expect(family?.members.map(item => item.summary.reference)).toEqual([saber.reference, alter.reference, alter.reference, alter.reference]);
+    expect(family?.members.flatMap(item => item.entry?.relation ?? [])).toEqual([one.relation, two.relation, three.relation]);
+    expect(family?.fallback).toEqual([]);
+    expect(family?.page).toEqual({ ...relationsPage(saber.reference, [one, two, three], familyNext), sourcePosition: { ...position, sequence: '2' } });
+    expect(family?.next).toEqual({ resource: saber, cursor: familyNext });
+    expect(family?.cursorKey).toBe('family');
+    expect(family?.cursor).toBe('family-current:+/%');
+    expect(later.data.relations).toEqual(own);
+    expect(double.calls.filter(call => call.url.pathname.endsWith('/relations')).map(call => [
+      call.url.pathname, call.url.searchParams.get('viewingRole'), call.url.searchParams.get('after'),
+    ])).toEqual([
+      [`/v1/resources/${idOf(alter.reference)}/relations`, null, 'generic-current:+/%'],
+      [`/v1/resources/${idOf(alter.reference)}/relations`, 'variant', null],
+      [`/v1/resources/${idOf(alter.reference)}/relations`, 'hub', null],
+      [`/v1/resources/${idOf(alter.reference)}/relations`, null, 'generic-current:+/%'],
+      [`/v1/resources/${idOf(alter.reference)}/relations`, 'variant', discoveryNext],
+      [`/v1/resources/${idOf(saber.reference)}/relations`, 'hub', 'family-current:+/%'],
+    ]);
+  });
+
+  test('selected family cards preserve additional, repeated, withheld and semantically unavailable counterparts', async () => {
+    const entry = identityEntry('hub', 'variant', alter);
+    const extra = { ...entry, counterparts: [alter, alter, title, { reference: persona.reference, status: 'unavailable' as const }] };
+    const withheld: RelationEntry = { ...entry, relation: 'https://rezics.com/id/01944100-0000-7000-8000-000000000804',
+      counterparts: [{ reference: alter.reference, status: 'unavailable' }] };
+    const unknown: RelationEntry = { ...entry, relation: 'https://rezics.com/id/01944100-0000-7000-8000-000000000805', rendering: null };
+    const familyPage = relationsPage(saber.reference, [extra, withheld, unknown], 'family-next');
+    const own = relationsPage(saber.reference, [identityEntry('holder', 'title', title)], 'generic-next');
+    double = mainDouble(url => {
+      const key = url.pathname.match(/\/lexicon\/definitions\/(.+)$/)?.[1];
+      if (key) return { definition: definitions[key] };
+      if (url.pathname.endsWith('/relations')) return url.searchParams.get('viewingRole') === 'hub' ? familyPage
+        : url.searchParams.get('viewingRole') === 'variant' ? relationsPage(saber.reference, []) : own;
+      return 404;
+    });
+    const read = await pageRequest(() => readIdentitySections(pageOf(saber), {}, { scope: 'global' }));
+    expect(read.ok).toBe(true);
+    if (!read.ok) throw new Error('Selected family unavailable');
+    const family = read.data.sections.find(section => section.kind === 'family');
+    expect(family?.members.flatMap(member => member.entry?.relation ?? [])).toEqual([extra.relation]);
+    expect(family?.fallback).toEqual([{ ...extra, counterparts: extra.counterparts.slice(1) }, withheld, unknown]);
+    expect(family?.page).toEqual(familyPage);
+    expect(read.data.relations).toEqual(own);
+  });
+
+  test.each([403, 404, 503])('a refused selected family read (%s) cannot narrow or replace generic Relations', async status => {
+    const own = relationsPage(saber.reference, [identityEntry('holder', 'title', title)], 'generic-next');
+    double = mainDouble(url => {
+      const key = url.pathname.match(/\/lexicon\/definitions\/(.+)$/)?.[1];
+      if (key) return { definition: definitions[key] };
+      if (url.searchParams.has('definition')) return status;
+      if (url.pathname.endsWith('/relations')) return own;
+      return 404;
+    });
+    const identity = await pageRequest(() => readIdentitySections(pageOf(saber), {}, { scope: 'global' }));
+    expect(identity.ok).toBe(false);
+    if (identity.ok) throw new Error('Selected read was not refused');
+    expect(identity.status).toBe(status);
+    const generic = await pageRequest(() => RelationsSection({
+      section: { id: 'relations', href: `/v1/resources/${idOf(saber.reference)}/relations`, actions: [] },
+      hideIdentity: true, identity, cursor: 'generic-current', locale: 'en', t: copyOf('en'), messages: workMessages.en,
+      hrefFor: standaloneHrefFor({}, resourceHref('/e/', saber.reference)),
+    }));
+    expect(generic?.props.page).toEqual({ ok: true, data: own });
+    expect(generic?.props.cursor).toBe('generic-current');
+  });
+
   test('a variant occurrence on the current page finds its hub even when the first page has no variant occurrence', async () => {
     const late = identityEntry('variant', 'hub', saber, persona);
     late.rendering!.bindings[0]!.participant = { kind: 'resource', ref: alter.reference };
@@ -41,6 +153,8 @@ describe('Identity sections on a page that is not the whole list', () => {
     double = mainDouble(url => {
       const key = url.pathname.match(/\/lexicon\/definitions\/(.+)$/)?.[1];
       if (key) return { definition: definitions[key] };
+      if (url.pathname === `/v1/resources/${idOf(alter.reference)}/relations` && url.searchParams.has('definition'))
+        return relationsPage(alter.reference, [late]);
       if (url.pathname === `/v1/resources/${idOf(alter.reference)}/relations`)
         return relationsPage(alter.reference, url.searchParams.has('after') ? [late] : [], 'own-next:+/%');
       if (url.pathname === `/v1/resources/${idOf(saber.reference)}/page`) return { summary: saber };
@@ -81,6 +195,7 @@ describe('Identity sections on a page that is not the whole list', () => {
     double = mainDouble(url => {
       const key = url.pathname.match(/\/lexicon\/definitions\/(.+)$/)?.[1];
       if (key) return { definition: definitions[key] };
+      if (url.searchParams.has('definition')) return relationsPage(saber.reference, []);
       if (url.pathname === `/v1/resources/${idOf(saber.reference)}/relations`)
         return relationsPage(saber.reference, items, 'opaque:+/%?=&雪');
       return 404;
@@ -97,7 +212,8 @@ describe('Identity sections on a page that is not the whole list', () => {
     }));
     expect(generic?.props.page).toEqual({ ok: true, data: relationsPage(saber.reference, [unknown, withheld, semanticWithheld], 'opaque:+/%?=&雪') });
     expect(generic?.props.cursor).toBe('current:+/%');
-    expect(double.calls.filter(call => call.url.pathname.endsWith('/relations')).map(call => call.url.searchParams.get('after')))
+    expect(double.calls.filter(call => call.url.pathname.endsWith('/relations') && call.url.searchParams.get('viewingRole') !== 'hub')
+      .map(call => call.url.searchParams.get('after')))
       .toEqual(['current:+/%', null, 'current:+/%']);
   });
 
@@ -118,6 +234,7 @@ describe('Identity sections on a page that is not the whole list', () => {
     double = mainDouble((url) => {
       const key = url.pathname.match(/\/lexicon\/definitions\/(.+)$/)?.[1];
       if (key) return { definition: definitions[key] };
+      if (url.searchParams.has('definition')) return relationsPage(saber.reference, []);
       if (url.pathname === `/v1/resources/${idOf(saber.reference)}/relations`)
         return relationsPage(saber.reference, [membership, titleEntry], 'next-page');
       return 404;
@@ -139,7 +256,7 @@ describe('Identity sections on a page that is not the whole list', () => {
     if (!section) throw new Error('Structural membership was hidden');
     expect(section.props.page).toEqual({ ok: true, data: relationsPage(saber.reference, [membership], 'next-page') });
     expect(section.props.cursor).toBe('current-page');
-    const calls = double.calls.filter((call) => call.url.pathname.endsWith('/relations'));
+    const calls = double.calls.filter((call) => call.url.pathname.endsWith('/relations') && !call.url.searchParams.has('definition'));
     expect(calls).toHaveLength(2);
     expect(calls.map((call) => call.url.searchParams.get('position'))).toEqual([at, at]);
     expect(calls[1]!.url.searchParams.get('after')).toBe('current-page');
@@ -149,6 +266,7 @@ describe('Identity sections on a page that is not the whole list', () => {
     double = mainDouble((url) => {
       const key = url.pathname.match(/\/lexicon\/definitions\/(.+)$/)?.[1];
       if (key) return { definition: definitions[key] };
+      if (url.searchParams.has('definition')) return relationsPage(saber.reference, []);
       if (url.pathname === `/v1/resources/${idOf(saber.reference)}/relations`)
         return relationsPage(saber.reference, [identityEntry('holder', 'title', title)]);
       return 404;
@@ -165,6 +283,8 @@ describe('Identity sections on a page that is not the whole list', () => {
     double = mainDouble((url) => {
       const key = url.pathname.match(/\/lexicon\/definitions\/(.+)$/)?.[1];
       if (key) return { definition: definitions[key] };
+      if (url.pathname === `/v1/resources/${variant}/relations` && url.searchParams.has('definition'))
+        return relationsPage(alter.reference, [identityEntry('variant', 'hub', saber, persona)]);
       const later = url.searchParams.get('after') === 'page-2';
       if (url.pathname === `/v1/resources/${variant}/relations`)
         // The variant-of relation is on the first page; the second holds only later relations.
@@ -188,6 +308,7 @@ describe('Identity sections on a page that is not the whole list', () => {
     double = mainDouble((url) => {
       const key = url.pathname.match(/\/lexicon\/definitions\/(.+)$/)?.[1];
       if (key) return { definition: definitions[key] };
+      if (url.searchParams.has('definition')) return relationsPage(saber.reference, []);
       if (url.pathname === `/v1/resources/${idOf(saber.reference)}/relations`)
         return relationsPage(saber.reference, [], 'page-2');
       return 404;

@@ -29,6 +29,13 @@ export interface IdentitySectionData {
   };
   /** The next relation page, on the resource whose incidence list was read. */
   next: { resource: AvailableSummary; cursor: string } | null;
+  /** Native selected family answer, retained independently of generic Relations. */
+  page?: RelationsPage;
+  cursor?: string;
+  cursorKey?: 'family';
+  fallback?: RelationEntry[];
+  /** The viewed resource's variant-role selection has its own opaque frontier. */
+  discovery?: { page: RelationsPage; cursor?: string; fallback: RelationEntry[] };
 }
 export interface IdentityData {
   sections: IdentitySectionData[];

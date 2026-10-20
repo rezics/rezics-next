@@ -125,7 +125,7 @@ export async function EntityPage({ resource, locale, hrefFor, frame = true, curs
   // This page's own address, without any list's cursor, which is where a choice made here (the continuity, signing in) returns to.
   const here = (() => {
     const url = new URL(address({ kind: 'continue', section: 'statements', cursor: null }), 'https://rezics.invalid');
-    for (const cursor of ['statements', 'relations', 'discussion', 'family']) url.searchParams.delete(cursor);
+    for (const cursor of ['statements', 'relations', 'discussion', 'family', 'variants']) url.searchParams.delete(cursor);
     return url.pathname + url.search;
   })();
   const scoped = isPlace ? await getMessages('scopedRating', locale) : null;
