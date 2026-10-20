@@ -1,10 +1,10 @@
 # Product completeness state
 
-Checkpoint e803665b-db29-44de-b717-c31c23855107 retains checkpoint 9804fceb
-and covers handled events mail:fba0815a-d3f3-4116-b7de-aec79cf4b170,
-task:G-2823:47 and mail:811ab8e8-170e-46cc-b3a0-889a7d96e1e4.
+Checkpoint cc2e0861-1d3e-48f3-b31d-f0bb662399da retains checkpoint e803665b
+and covers handled events mail:6d8b6407-94f4-4ae6-81b6-a2eceec8d87e,
+task:G-2823:48, mail:882de8bd-94a7-46a4-93c2-43accc79f571 and task:G-2823:49.
 Both original mail acknowledgements were confirmed, at
-2026-10-20T11:47:17.703Z and 12:01:02.433Z respectively.
+2026-10-20T12:41:41.241Z and 13:02:58.354Z respectively.
 Measures were read at this checkpoint and may include later activity; other
 turns retain their own dispositions. This checkpoint changes only this state,
 no brief or worker instruction, and proves no additional product row or
@@ -132,7 +132,11 @@ revocation and availability.
 Product accepted G-2823's finite image/backend handoff and retained Media Use
 inspection. The remaining request-budget runtime handoff needs actual source/
 control binding and governance custody; its executable source inputs are now
-supplied below. Host repair and runtime acceptance remain due.
+supplied below. Its separate Studio cut stopped at actual compatibility refusal;
+Audit/G-2776 received the exact supported-transition request. The last covered
+decision resumed attempt 50 for the independent retained Recipe attachment only;
+its result belongs to a separate event. Host repair and runtime acceptance
+remain due.
 G-2825 is closed verified for its report
 and fixture handoff;
 audit owns residual finding
@@ -755,6 +759,102 @@ OAuth revocation remains unconfirmed. Original G-2830 genuine image proof at
 1440/390 in en/zh-Hans remains open for an admitted repaired composition.
 These events accept no cleanup repair, refresh, telemetry or original finding.
 
+Mail 6d8b6407 produced committed G-2823 decision 07ae53378a and an actual
+same-worker codex-1/high resume of attempt 48 for G-2776's single Studio input
+to SAME G-2848. Packet SHA-256
+ec14d3bca0ddb1587463c1a460a981b28b1225f4a8aefa6892c9e7b8ee053f1b,
+manifest e04f812cc87eb7a0e435541c167dc7603884b434ae1343b336343ca56f2370dc
+and original operation 0e194bfbe776192797330e14d1e5e9ddb15348e4ffdbe89f033869acd7635851
+were verified. The historical 9da346a1ec56 donor guard and disposed runtime
+cannot qualify the selected landed 96ff469b Studio repair or a current session.
+
+Event task:G-2823:48 retained the bounded missing-input result under
+`.temp/worktrees/g-2823/.temp/lifecycle/studio-borrower-G2848-runtime-v1/`.
+No compatible callable restoreCorrectedAuthorManagementCorpus binding was
+available in the inspected receipts. All 33 declared whole-file references
+matched; four function-range digests remained declarations with their containing
+files verified. No runtime, API/OAuth, lease, restore or original assertion ran.
+Committed decision b79eb3f757 then authorized actual construction and one
+supported isolated qualification, and resumed SAME worker as attempt 49 after
+manager rebase. This superseded inspection-only authority for that finite cut,
+without weakening the historical guard or original proof callbacks.
+
+The selected immutable product was 721d83178513e38fc1de8b5c18bf116688e2ade3;
+all six selected Studio/model files match landed
+96ff469b064013047020517725e7770da08d2e42. Retain author generation
+rs-author-management-40bb7b7a324608c197999fcaee428285d7aa8a0d770ff53220d27ab59595359b,
+actor https://rezics.com/id/aa753fe2-e448-432a-8f0f-ca69746396f8,
+Realm https://rezics.com/id/01a15474-98c4-748c-acfb-0939f228da3c and all 23
+genuine occurrence/target identities. Source comparisons establish no installed
+native/model alignment, current session or physical custody qualification.
+
+Event task:G-2823:49 took the brief's required compatibility-refusal branch.
+Recorded job 38fa129a-f028-475c-81d8-779a0d6b5b54 reached the unchanged
+restoreCatalogueBackup/compatibleLoadStorage refusal at 13:01:09.112Z:
+retained storage digest c439757e85a3a30748e60641708947e3d60fa23efe6fdc24007074603d17900d
+has 531 inputs, selected digest 769ee679dc5db8962823fe7512f33bd0cd05ad45c38b349ac1d11ff8cb344e69
+has 536. Exact differences are the model manifest, Compose/native pin and five
+selected-only Content migrations 2701–2705; no retained-only inputs or changed
+existing migration bytes. This is no executed SQL or original product failure.
+The retained file-integrity check passed; no restore, startup, session/OAuth,
+resource creation, cleanup, peer change or original assertion followed.
+
+Preserve the initial incomplete native COPY-input snapshot failure in job
+bef3195e-c16f-45c4-bf95-f431ef32036d separately from the corrected preflight's
+actual refusal. Static preflight totalled 496.301 ms; retained preparation is
+385,568 ms, with zero new restore/application preparation and the unchanged
+600-second ceiling. The v2 handoff is
+`.temp/worktrees/g-2823/.temp/lifecycle/studio-borrower-G2848-runtime-v2/handoff.md`,
+SHA-256 9bbf72dccb297e759d02a10ea022396b707c310e7bc08a2d402dc5ca6b27465d;
+adjacent handoff.json and preflight.json have hashes
+97b41041b5f4a76ac3c8293acb53524b495820edf10dce9fbc5606e17569432b and
+adf0a8e98b94b1baa23e9ca412a769c1fde0df7590ae563a886122441d56fe54.
+No tracked delta is available to land from either Studio handoff.
+
+Audit received the exact transition request in mail d11c8da4 for existing
+G-2776, which retains corpus/restore-input custody; G-2823 retains orchestration
+and runtime lifetime. Studio qualification remains stopped until that owner
+supplies the supported transition and actual native/model/migration/custody
+receipts, or the one unavailable existing-owner operation. Do not repeat the
+preflight or missing-input inspection, bypass a guard, replace the corpus or
+build an unapproved native image. SAME G-2848 retains separately admitted
+private-draft, visitor-refusal/private-field-absence and guarded incomplete-zero
+proof, unchanged runCase/completeTopology and prior review 2ef4d23142, ten query
+assertions and accepted count/topology evidence. No replay or new review is due.
+
+Mail 882de8bd produced committed G-2823 decision 2cf8af7448, recording the one
+Recipe attachment request without interrupting active Studio attempt 49.
+Its result event then committed 77afce7698 and actually resumed SAME codex-1/high
+worker as attempt 50 for this retained-only cut. This is the current executable
+selection from the covered decisions, superseding queued-only Recipe and Studio
+construction authority for this continuation. It authorizes no new runtime,
+restore/import/reset, startup/replacement, API/OAuth action or original proof.
+
+The requested attachment is for SAME G-2774 and genuine Artusi Recipe
+01a1532a-2e60-7260-9f3a-d6aa69f61c4b, exact method
+`Il filetto pestatelo nel mortaio e passatelo dallo staccio.`. It must bind
+selected landed successor 0b768930acf0eb2743a5288b4586130d4693f110, reviewed
+G-2757 source 09a9c1d5874a753904bb20eb644d4fe7e4e9e3a3, actual retained
+product/native/model/corpus identities, public visitor semantics, same-object
+method readback and explicit custodian/lifetime. Retain G-2841 approval
+9e1c7c142c9 and actual-candidate gates. The historical frontend05c9534e/backend46775,
+endpoint, matching Work ID and default/basicRecipe/Book readiness do not qualify it.
+Package one already-retained compatible attachment and finite G-2774 borrow only
+if existing custody permits; otherwise identify the exact absent input and owner
+once. No new lease is inferred. Output belongs under this worker's
+`.temp/lifecycle/recipe-G2774-retained-attachment-v1/`; a later result event
+owns its disposition, without a duplicate resume or wait here.
+
+Catalogue retains runner composition and original four visitor cells at
+1440/390 by network/unavailable, all 18 assertions, 5000 ms and at most three
+native attempts. Preserve the healthy-initial 503 and three reached recovery
+negatives. No C27/C30 fixture writes or repeated source review are required.
+Main42963/Account42701, default borrower, released image-lease disposition,
+Task1677097/hosts77717/78038 and KEEP/peer resources remain protected; G-2791
+retains sole catalogue corpus custody and G-2823 sole startup/stop custody.
+These four events prove no new outcome, original finding or lifecycle repair;
+cleanup, reviewed follow-up landing, shared refresh and telemetry remain due.
+
 Site turn 021 also reported G-2831's same-owner preparation 39 after 8c7c785372,
 retaining corrected baseline preparation and spent CAS7 history. Studio's approved
 08f385a2 two-file repair was passing manager composition gates; original G-2848
@@ -887,12 +987,12 @@ proof. Small main batches need affected checks and codex-1/xhigh review;
 coordinate publication. Final full regression/confirmation precedes wave merge.
 
 Checkpoint measures: scope remains 68/68 rows and 408 cells; these events add
-zero proved rows. First attempts are 9/17 (53%; current day 0/3), retaining
-attempt 47's sameScope fix round. Landed median is 4.5 attempts,
-maximum 47 (G-2823); the current worker-token reading is 107.4M input/938.6k
+zero proved rows. First attempts are 9/20 (45%; current day 0/6), including
+the three additional scoped G-2823 continuations. Landed median is 4.5 attempts,
+maximum 50 (G-2823); the current worker-token reading is 112.5M input/974.6k
 output, and tokens per proved row remain unavailable. Tool counts include job
 wakes and open partial-landing continuations. Eight environment attempts, one
-step continuation and eight fixes;
+step continuation and 11 fixes;
 89 job wakes: 33 passes, 35 assertion failures, two environment failures,
 17 harness failures and two unclassified. The previous day's first-attempt share
 was 3/8 (38%); reviewed G-2842 support on main 4c77554c3b addresses the common
@@ -903,22 +1003,31 @@ custody rather than another setup experiment. Event-29's storage-reader harness
 cause was corrected through the existing owner reader in the accepted finite
 comparison. G-2823 owns the isolated backend handoff and causal cleanup repair. The
 unclassified wakes and one retained other-kind refusal still need tooling
-disposition. The three successful covered manager turns recorded 3,230,158 input/
-26,094 output tokens, including 3,002,368 cached input. No failed wrapper attempt
-was recorded for these three event keys; the earlier checkpoint's 18 failed wrapper
+disposition. The four successful covered manager turns recorded 6,153,479 input/
+44,701 output tokens, including 5,853,312 cached input. No failed wrapper attempt
+was recorded for these four event keys; the earlier checkpoint's 18 failed wrapper
 attempts remain historical. This checkpoint and other events are excluded from
 the covered-turn total, which establishes no comparable manager/worker share.
-Product has no live worker and two open tasks; G-2823 attempt 47 and
-G-2826 attempt 32 are exited. The former needs actual source/control bindings
-and governance release/custody, with its executable source packets now supplied;
-the latter retains its separate composed-landing execution event. Repeated
-runtime inspection cannot supply actual owner bindings or governance custody; existing
-owners retain those concrete operations without another worker loop.
+The status measure read reports no live Product worker and two open tasks;
+the last covered decision resumed G-2823 attempt 50, and its result or later
+activity belongs to its own event. G-2826 attempt 32 retains its separate
+composed-landing execution event. The below-half first-attempt share includes
+finite input handoffs: Studio's exact compatibility refusal is now with G-2776,
+and the independent retained Recipe request was selected without replaying it.
+Deferred source/control bindings and governance release/custody remain with
+their existing owners; repeated runtime inspection cannot supply them.
 
-The current full 12-hour read, 2026-10-20T00:22:12Z–2026-10-20T12:22:12Z,
+The current full 12-hour read, 2026-10-20T01:18:05Z–2026-10-20T13:18:05Z,
+contains 259 sessions, 844.39M input/804.69M cached, worker input 57%, other
+sessions 43%, two landing-review sessions and 21% no-decision share. It includes
+continuing sessions and does not isolate these four events or manager-only
+tokens; other-session share is not a manager share. These overlapping readings
+establish no causal savings. No monitor or research task was started.
+
+The preceding full 12-hour read, 2026-10-20T00:22:12Z–2026-10-20T12:22:12Z,
 contains 211 sessions, 744.85M input/710.76M cached, worker input 51%, other
 sessions 49%, zero landing-review sessions and 22% no-decision share. It includes
-continuing sessions and does not isolate these three events or manager-only
+continuing sessions and did not isolate its three covered events or manager-only
 tokens; other-session share is not a manager share. These overlapping readings
 establish no causal savings. No monitor or research task was started.
 
@@ -944,7 +1053,12 @@ comparison and instrumentation attribution remain due.
 
 Next event owners: G-2823 attempt 45's finite image/authentication handoff is
 accepted; attempt 47's bounded negative Media Use retention result is accepted,
-with no tracked delta to land or inspection to repeat. Its five-case selector
+with no tracked delta to land or inspection to repeat. Its Studio attempts
+48/49 returned the bounded missing binding and exact compatibility refusal;
+Audit/G-2776 owns the supported transition, with no unchanged Product retry.
+Consume attempt 50's separately selected retained Recipe attachment result in
+its own event; Catalogue/G-2774 retains original proof after valid input and
+separate admission. G-2823's five-case selector
 under c874e147c9 and authenticated/mixed source inputs under 089d4941946c are
 accepted as source only. Audit routes G-2762's actual source/control bindings
 and G-2791's compatible governance manifest/stopped-copy custody before Product
