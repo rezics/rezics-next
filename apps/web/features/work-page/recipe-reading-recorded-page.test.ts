@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import { browserMainApi } from '../api/browser.ts';
+import { serverFetch } from '../api/server-fetch.ts';
 import type { AnswerPersona, AnswerRecord, AnswerSample } from '../../../../scripts/api/answer-record.ts';
 import recipes from '../../../../tests/qa/fixtures/outcomes/recipes/read-a-recipe.json';
 import { mainApiWithToken } from '../api/main.ts';
@@ -392,4 +393,65 @@ test('Cook requires a complete published method, including every available instr
     visit.dispose();
   }
   expect(visit.misses).toEqual([]);
+});
+
+test.each(['browser', 'server'] as const)('Recipe recovery respects the %s transport attempt bound', async transport => {
+  const start = sample('owner', 'recipe-start');
+  const actingSubject = actingSubjectOf(start.path);
+  const requests: URL[] = [];
+  let failing = true;
+  const sender = Object.assign(async (input: RequestInfo | URL) => {
+    requests.push(new URL(input instanceof Request ? input.url : String(input)));
+    if (failing) throw Object.assign(new TypeError('Connection closed'), { code: 'ECONNRESET' });
+    return Response.json(start.answer);
+  }, { preconnect: fetch.preconnect });
+  const main = transport === 'browser' ? browserMainApi('https://recorded.invalid', { fetcher: sender })
+    : mainApiWithToken(undefined, { fetcher: Object.assign(
+      (input: RequestInfo | URL, init?: RequestInit) => serverFetch(input, init, { fetch: sender }),
+      { preconnect: fetch.preconnect },
+    ) });
+  const read = recipePageReader({ main, actingSubject }, start.path);
+  const failed = await read({ cursor: 'exact-retry-cursor', servings: 8 });
+  expect(failed.data).toBeNull();
+  expect(failed.error?.status).toBe(503);
+  // The client already repeated the failed socket. The Recipe owner must not multiply its attempts.
+  expect(requests).toHaveLength(2);
+  expect(requests[1]!.href).toBe(requests[0]!.href);
+  expect(requests[0]!.searchParams.get('actingSubject')).toBe(actingSubject);
+  expect(requests[0]!.searchParams.get('cursor')).toBe('exact-retry-cursor');
+  expect(requests[0]!.searchParams.has('servings')).toBe(false);
+  failing = false;
+  const recovered = await read({ cursor: 'exact-retry-cursor', servings: 8 });
+  expect(requests).toHaveLength(3);
+  expect(requests[2]!.href).toBe(requests[0]!.href);
+  expect(recovered.error).toBeNull();
+  expect(recovered.data).toEqual(asRecipe(start.answer));
+});
+
+test('a cancelled owner followed by a lost connection uses at most three native attempts', async () => {
+  let attempts = 0;
+  const sender = async () => {
+    if (++attempts === 1) return Response.json({ code: 'work_read_unavailable' }, { status: 503 });
+    throw Object.assign(new TypeError('Connection closed'), { code: 'ECONNRESET' });
+  };
+  const main = mainApiWithToken(undefined, { fetcher: Object.assign(
+    (input: RequestInfo | URL, init?: RequestInit) => serverFetch(input, init, { fetch: sender }),
+    { preconnect: fetch.preconnect },
+  ) });
+  const answer = await recipePageReader({ main }, '/v1/recipes/works/00000000-0000-4000-8000-000000000001')({});
+  expect(answer.error?.status).toBe(503);
+  expect(answer.data).toBeNull();
+  expect(attempts).toBe(3);
+});
+
+test.each(['AbortError', 'TimeoutError'])('a Recipe %s stays failed without restarting its exhausted read', async name => {
+  let attempts = 0;
+  const main = mainApiWithToken(undefined, { fetcher: Object.assign(async () => {
+    attempts++;
+    throw new DOMException('Read stopped', name);
+  }, { preconnect: fetch.preconnect }) });
+  const answer = await recipePageReader({ main }, '/v1/recipes/works/00000000-0000-4000-8000-000000000001')({});
+  expect(answer.error?.status).toBe(503);
+  expect(answer.data).toBeNull();
+  expect(attempts).toBe(1);
 });
