@@ -783282,6 +783282,46 @@
                                     },
                                     "type": "array"
                                   },
+                                  "collectionPurpose": {
+                                    "~elyTyp": 7,
+                                    "additionalProperties": false,
+                                    "nullable": true,
+                                    "properties": {
+                                      "kind": {
+                                        "enum": [
+                                          "reading-list",
+                                          "recipe-selection",
+                                          "series",
+                                          "franchise"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "revision": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                        "type": "string"
+                                      },
+                                      "sources": {
+                                        "items": {
+                                          "type": "string"
+                                        },
+                                        "type": "array"
+                                      },
+                                      "statement": {
+                                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "statement",
+                                      "revision",
+                                      "sources"
+                                    ],
+                                    "type": [
+                                      "object",
+                                      "null"
+                                    ]
+                                  },
                                   "counterparts": {
                                     "items": {
                                       "anyOf": [
@@ -784784,425 +784824,819 @@
                                   },
                                   "rendering": {
                                     "~elyTyp": 7,
-                                    "nullable": true,
-                                    "properties": {
-                                      "bindings": {
-                                        "items": {
-                                          "properties": {
-                                            "creditedName": {
-                                              "properties": {
-                                                "language": {
-                                                  "type": "string"
-                                                },
-                                                "lexical": {
-                                                  "type": "string"
-                                                }
-                                              },
-                                              "required": [
-                                                "lexical",
-                                                "language"
-                                              ],
-                                              "type": "object"
-                                            },
-                                            "participant": {},
-                                            "position": {
-                                              "type": "integer"
-                                            },
-                                            "role": {
-                                              "type": "string"
-                                            }
-                                          },
-                                          "required": [
-                                            "role",
-                                            "participant"
-                                          ],
-                                          "type": "object"
-                                        },
-                                        "type": "array"
-                                      },
-                                      "meaning": {
-                                        "properties": {
-                                          "definition": {
-                                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                                            "type": "string"
-                                          },
-                                          "lifecycle": {
-                                            "type": "string"
-                                          },
-                                          "revision": {
-                                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                                            "type": "string"
-                                          },
-                                          "roles": {
-                                            "items": {
-                                              "properties": {
-                                                "key": {
-                                                  "type": "string"
-                                                },
-                                                "maxParticipants": {
-                                                  "type": "integer"
-                                                },
-                                                "members": {
-                                                  "items": {
-                                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                                                    "type": "string"
-                                                  },
-                                                  "type": "array"
-                                                },
-                                                "minParticipants": {
-                                                  "type": "integer"
-                                                },
-                                                "ordered": {
-                                                  "type": "boolean"
-                                                },
-                                                "role": {
-                                                  "type": "string"
-                                                }
-                                              },
-                                              "required": [
-                                                "role",
-                                                "key",
-                                                "minParticipants",
-                                                "maxParticipants",
-                                                "ordered"
-                                              ],
-                                              "type": "object"
-                                            },
-                                            "type": "array"
-                                          }
-                                        },
-                                        "required": [
-                                          "definition",
-                                          "revision",
-                                          "lifecycle",
-                                          "roles"
-                                        ],
-                                        "type": "object"
-                                      },
-                                      "occurrence": {
-                                        "~elyTyp": 7,
-                                        "nullable": true,
-                                        "properties": {
-                                          "component": {
-                                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                                            "type": "string"
-                                          },
-                                          "revision": {
-                                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                                            "type": "string"
-                                          }
-                                        },
-                                        "required": [
-                                          "component",
-                                          "revision"
-                                        ],
-                                        "type": [
-                                          "object",
-                                          "null"
-                                        ]
-                                      },
-                                      "profile": {
-                                        "const": "relation-rendering-v1",
-                                        "type": "string"
-                                      },
-                                      "projections": {
-                                        "items": {
-                                          "properties": {
-                                            "arguments": {
-                                              "items": {
-                                                "properties": {
-                                                  "creditedName": {
-                                                    "properties": {
-                                                      "language": {
-                                                        "type": "string"
-                                                      },
-                                                      "lexical": {
-                                                        "type": "string"
-                                                      }
-                                                    },
-                                                    "required": [
-                                                      "lexical",
-                                                      "language"
-                                                    ],
-                                                    "type": "object"
-                                                  },
-                                                  "position": {
-                                                    "type": "integer"
-                                                  },
-                                                  "role": {
-                                                    "type": "string"
-                                                  },
-                                                  "type": {
-                                                    "type": "string"
-                                                  },
-                                                  "value": {}
-                                                },
-                                                "required": [
-                                                  "role",
-                                                  "type",
-                                                  "value"
-                                                ],
-                                                "type": "object"
-                                              },
-                                              "type": "array"
-                                            },
-                                            "direction": {
-                                              "~elyTyp": 7,
-                                              "enum": [
-                                                "ltr",
-                                                "rtl",
-                                                null
-                                              ],
-                                              "nullable": true,
-                                              "type": [
-                                                "string",
-                                                "null"
-                                              ]
-                                            },
-                                            "fallback": {
-                                              "~elyTyp": 7,
-                                              "nullable": true,
-                                              "properties": {
-                                                "conversion": {
-                                                  "type": "null"
-                                                },
-                                                "crossedScript": {
-                                                  "type": "boolean"
-                                                },
-                                                "reason": {
-                                                  "enum": [
-                                                    "language-fallback",
-                                                    "script-fallback",
-                                                    "missing-direction"
-                                                  ],
-                                                  "type": "string"
-                                                },
-                                                "requestedLanguages": {
-                                                  "items": {
-                                                    "type": "string"
-                                                  },
-                                                  "type": "array"
-                                                },
-                                                "requestedScript": {
-                                                  "~elyTyp": 7,
-                                                  "nullable": true,
-                                                  "type": [
-                                                    "string",
-                                                    "null"
-                                                  ]
-                                                },
-                                                "usedLanguage": {
-                                                  "~elyTyp": 7,
-                                                  "nullable": true,
-                                                  "type": [
-                                                    "string",
-                                                    "null"
-                                                  ]
-                                                },
-                                                "usedScript": {
-                                                  "~elyTyp": 7,
-                                                  "nullable": true,
-                                                  "type": [
-                                                    "string",
-                                                    "null"
-                                                  ]
-                                                }
-                                              },
-                                              "required": [
-                                                "reason",
-                                                "requestedLanguages",
-                                                "usedLanguage",
-                                                "requestedScript",
-                                                "usedScript",
-                                                "crossedScript",
-                                                "conversion"
-                                              ],
-                                              "type": [
-                                                "object",
-                                                "null"
-                                              ]
-                                            },
-                                            "fromRole": {
-                                              "type": "string"
-                                            },
-                                            "labels": {
-                                              "~elyTyp": 7,
-                                              "nullable": true,
-                                              "properties": {
-                                                "grammaticalForms": {
-                                                  "items": {
-                                                    "additionalProperties": false,
-                                                    "properties": {
-                                                      "case": {
-                                                        "type": "string"
-                                                      },
-                                                      "gender": {
-                                                        "type": "string"
-                                                      },
-                                                      "number": {
-                                                        "type": "string"
-                                                      },
-                                                      "value": {
-                                                        "type": "string"
-                                                      }
-                                                    },
-                                                    "required": [
-                                                      "value"
-                                                    ],
-                                                    "type": "object"
-                                                  },
-                                                  "type": "array"
-                                                },
-                                                "heading": {
-                                                  "type": "string"
-                                                },
-                                                "noun": {
-                                                  "type": "string"
-                                                },
-                                                "plurals": {
-                                                  "additionalProperties": false,
+                                    "anyOf": [
+                                      {
+                                        "anyOf": [
+                                          {
+                                            "properties": {
+                                              "bindings": {
+                                                "items": {
                                                   "properties": {
-                                                    "few": {
-                                                      "type": "string"
+                                                    "creditedName": {
+                                                      "properties": {
+                                                        "language": {
+                                                          "type": "string"
+                                                        },
+                                                        "lexical": {
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "lexical",
+                                                        "language"
+                                                      ],
+                                                      "type": "object"
                                                     },
-                                                    "many": {
-                                                      "type": "string"
+                                                    "participant": {},
+                                                    "position": {
+                                                      "type": "integer"
                                                     },
-                                                    "one": {
-                                                      "type": "string"
-                                                    },
-                                                    "other": {
-                                                      "type": "string"
-                                                    },
-                                                    "two": {
-                                                      "type": "string"
-                                                    },
-                                                    "zero": {
+                                                    "role": {
                                                       "type": "string"
                                                     }
                                                   },
                                                   "required": [
-                                                    "other"
+                                                    "role",
+                                                    "participant"
                                                   ],
                                                   "type": "object"
-                                                }
-                                              },
-                                              "required": [
-                                                "noun",
-                                                "heading",
-                                                "plurals",
-                                                "grammaticalForms"
-                                              ],
-                                              "type": [
-                                                "object",
-                                                "null"
-                                              ]
-                                            },
-                                            "language": {
-                                              "~elyTyp": 7,
-                                              "nullable": true,
-                                              "type": [
-                                                "string",
-                                                "null"
-                                              ]
-                                            },
-                                            "licence": {
-                                              "~elyTyp": 7,
-                                              "nullable": true,
-                                              "type": [
-                                                "string",
-                                                "null"
-                                              ]
-                                            },
-                                            "presentation": {
-                                              "~elyTyp": 7,
-                                              "nullable": true,
-                                              "properties": {
-                                                "component": {
-                                                  "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                                                  "type": "string"
                                                 },
-                                                "revision": {
-                                                  "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                                                  "type": "string"
-                                                }
+                                                "type": "array"
                                               },
-                                              "required": [
-                                                "component",
-                                                "revision"
-                                              ],
-                                              "type": [
-                                                "object",
-                                                "null"
-                                              ]
+                                              "meaning": {
+                                                "properties": {
+                                                  "definition": {
+                                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                    "type": "string"
+                                                  },
+                                                  "lifecycle": {
+                                                    "type": "string"
+                                                  },
+                                                  "revision": {
+                                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                    "type": "string"
+                                                  },
+                                                  "roles": {
+                                                    "items": {
+                                                      "properties": {
+                                                        "key": {
+                                                          "type": "string"
+                                                        },
+                                                        "maxParticipants": {
+                                                          "type": "integer"
+                                                        },
+                                                        "members": {
+                                                          "items": {
+                                                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                            "type": "string"
+                                                          },
+                                                          "type": "array"
+                                                        },
+                                                        "minParticipants": {
+                                                          "type": "integer"
+                                                        },
+                                                        "ordered": {
+                                                          "type": "boolean"
+                                                        },
+                                                        "role": {
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "role",
+                                                        "key",
+                                                        "minParticipants",
+                                                        "maxParticipants",
+                                                        "ordered"
+                                                      ],
+                                                      "type": "object"
+                                                    },
+                                                    "type": "array"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "definition",
+                                                  "revision",
+                                                  "lifecycle",
+                                                  "roles"
+                                                ],
+                                                "type": "object"
+                                              },
+                                              "occurrence": {
+                                                "~elyTyp": 7,
+                                                "nullable": true,
+                                                "properties": {
+                                                  "component": {
+                                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                    "type": "string"
+                                                  },
+                                                  "revision": {
+                                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "component",
+                                                  "revision"
+                                                ],
+                                                "type": [
+                                                  "object",
+                                                  "null"
+                                                ]
+                                              },
+                                              "profile": {
+                                                "const": "relation-rendering-v1",
+                                                "type": "string"
+                                              },
+                                              "projections": {
+                                                "items": {
+                                                  "properties": {
+                                                    "arguments": {
+                                                      "items": {
+                                                        "properties": {
+                                                          "creditedName": {
+                                                            "properties": {
+                                                              "language": {
+                                                                "type": "string"
+                                                              },
+                                                              "lexical": {
+                                                                "type": "string"
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "lexical",
+                                                              "language"
+                                                            ],
+                                                            "type": "object"
+                                                          },
+                                                          "position": {
+                                                            "type": "integer"
+                                                          },
+                                                          "role": {
+                                                            "type": "string"
+                                                          },
+                                                          "type": {
+                                                            "type": "string"
+                                                          },
+                                                          "value": {}
+                                                        },
+                                                        "required": [
+                                                          "role",
+                                                          "type",
+                                                          "value"
+                                                        ],
+                                                        "type": "object"
+                                                      },
+                                                      "type": "array"
+                                                    },
+                                                    "direction": {
+                                                      "~elyTyp": 7,
+                                                      "enum": [
+                                                        "ltr",
+                                                        "rtl",
+                                                        null
+                                                      ],
+                                                      "nullable": true,
+                                                      "type": [
+                                                        "string",
+                                                        "null"
+                                                      ]
+                                                    },
+                                                    "fallback": {
+                                                      "~elyTyp": 7,
+                                                      "nullable": true,
+                                                      "properties": {
+                                                        "conversion": {
+                                                          "type": "null"
+                                                        },
+                                                        "crossedScript": {
+                                                          "type": "boolean"
+                                                        },
+                                                        "reason": {
+                                                          "enum": [
+                                                            "language-fallback",
+                                                            "script-fallback",
+                                                            "missing-direction"
+                                                          ],
+                                                          "type": "string"
+                                                        },
+                                                        "requestedLanguages": {
+                                                          "items": {
+                                                            "type": "string"
+                                                          },
+                                                          "type": "array"
+                                                        },
+                                                        "requestedScript": {
+                                                          "~elyTyp": 7,
+                                                          "nullable": true,
+                                                          "type": [
+                                                            "string",
+                                                            "null"
+                                                          ]
+                                                        },
+                                                        "usedLanguage": {
+                                                          "~elyTyp": 7,
+                                                          "nullable": true,
+                                                          "type": [
+                                                            "string",
+                                                            "null"
+                                                          ]
+                                                        },
+                                                        "usedScript": {
+                                                          "~elyTyp": 7,
+                                                          "nullable": true,
+                                                          "type": [
+                                                            "string",
+                                                            "null"
+                                                          ]
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "reason",
+                                                        "requestedLanguages",
+                                                        "usedLanguage",
+                                                        "requestedScript",
+                                                        "usedScript",
+                                                        "crossedScript",
+                                                        "conversion"
+                                                      ],
+                                                      "type": [
+                                                        "object",
+                                                        "null"
+                                                      ]
+                                                    },
+                                                    "fromRole": {
+                                                      "type": "string"
+                                                    },
+                                                    "labels": {
+                                                      "~elyTyp": 7,
+                                                      "nullable": true,
+                                                      "properties": {
+                                                        "grammaticalForms": {
+                                                          "items": {
+                                                            "additionalProperties": false,
+                                                            "properties": {
+                                                              "case": {
+                                                                "type": "string"
+                                                              },
+                                                              "gender": {
+                                                                "type": "string"
+                                                              },
+                                                              "number": {
+                                                                "type": "string"
+                                                              },
+                                                              "value": {
+                                                                "type": "string"
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "value"
+                                                            ],
+                                                            "type": "object"
+                                                          },
+                                                          "type": "array"
+                                                        },
+                                                        "heading": {
+                                                          "type": "string"
+                                                        },
+                                                        "noun": {
+                                                          "type": "string"
+                                                        },
+                                                        "plurals": {
+                                                          "additionalProperties": false,
+                                                          "properties": {
+                                                            "few": {
+                                                              "type": "string"
+                                                            },
+                                                            "many": {
+                                                              "type": "string"
+                                                            },
+                                                            "one": {
+                                                              "type": "string"
+                                                            },
+                                                            "other": {
+                                                              "type": "string"
+                                                            },
+                                                            "two": {
+                                                              "type": "string"
+                                                            },
+                                                            "zero": {
+                                                              "type": "string"
+                                                            }
+                                                          },
+                                                          "required": [
+                                                            "other"
+                                                          ],
+                                                          "type": "object"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "noun",
+                                                        "heading",
+                                                        "plurals",
+                                                        "grammaticalForms"
+                                                      ],
+                                                      "type": [
+                                                        "object",
+                                                        "null"
+                                                      ]
+                                                    },
+                                                    "language": {
+                                                      "~elyTyp": 7,
+                                                      "nullable": true,
+                                                      "type": [
+                                                        "string",
+                                                        "null"
+                                                      ]
+                                                    },
+                                                    "licence": {
+                                                      "~elyTyp": 7,
+                                                      "nullable": true,
+                                                      "type": [
+                                                        "string",
+                                                        "null"
+                                                      ]
+                                                    },
+                                                    "presentation": {
+                                                      "~elyTyp": 7,
+                                                      "nullable": true,
+                                                      "properties": {
+                                                        "component": {
+                                                          "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                          "type": "string"
+                                                        },
+                                                        "revision": {
+                                                          "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "component",
+                                                        "revision"
+                                                      ],
+                                                      "type": [
+                                                        "object",
+                                                        "null"
+                                                      ]
+                                                    },
+                                                    "reviewStatus": {
+                                                      "~elyTyp": 7,
+                                                      "enum": [
+                                                        "draft",
+                                                        "reviewed",
+                                                        null
+                                                      ],
+                                                      "nullable": true,
+                                                      "type": [
+                                                        "string",
+                                                        "null"
+                                                      ]
+                                                    },
+                                                    "script": {
+                                                      "~elyTyp": 7,
+                                                      "nullable": true,
+                                                      "type": [
+                                                        "string",
+                                                        "null"
+                                                      ]
+                                                    },
+                                                    "source": {
+                                                      "~elyTyp": 7,
+                                                      "nullable": true,
+                                                      "type": [
+                                                        "string",
+                                                        "null"
+                                                      ]
+                                                    },
+                                                    "toRole": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "fromRole",
+                                                    "toRole",
+                                                    "presentation",
+                                                    "labels",
+                                                    "language",
+                                                    "script",
+                                                    "direction",
+                                                    "reviewStatus",
+                                                    "source",
+                                                    "licence",
+                                                    "fallback",
+                                                    "arguments"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                "type": "array"
+                                              },
+                                              "viewingRole": {
+                                                "type": "string"
+                                              }
                                             },
-                                            "reviewStatus": {
-                                              "~elyTyp": 7,
-                                              "enum": [
-                                                "draft",
-                                                "reviewed",
-                                                null
-                                              ],
-                                              "nullable": true,
-                                              "type": [
-                                                "string",
-                                                "null"
-                                              ]
-                                            },
-                                            "script": {
-                                              "~elyTyp": 7,
-                                              "nullable": true,
-                                              "type": [
-                                                "string",
-                                                "null"
-                                              ]
-                                            },
-                                            "source": {
-                                              "~elyTyp": 7,
-                                              "nullable": true,
-                                              "type": [
-                                                "string",
-                                                "null"
-                                              ]
-                                            },
-                                            "toRole": {
-                                              "type": "string"
-                                            }
+                                            "required": [
+                                              "profile",
+                                              "meaning",
+                                              "occurrence",
+                                              "viewingRole",
+                                              "bindings",
+                                              "projections"
+                                            ],
+                                            "type": "object"
                                           },
-                                          "required": [
-                                            "fromRole",
-                                            "toRole",
-                                            "presentation",
-                                            "labels",
-                                            "language",
-                                            "script",
-                                            "direction",
-                                            "reviewStatus",
-                                            "source",
-                                            "licence",
-                                            "fallback",
-                                            "arguments"
-                                          ],
-                                          "type": "object"
-                                        },
-                                        "type": "array"
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "bindings": {
+                                                "items": {
+                                                  "properties": {
+                                                    "creditedName": {
+                                                      "properties": {
+                                                        "language": {
+                                                          "type": "string"
+                                                        },
+                                                        "lexical": {
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "lexical",
+                                                        "language"
+                                                      ],
+                                                      "type": "object"
+                                                    },
+                                                    "participant": {},
+                                                    "position": {
+                                                      "type": "integer"
+                                                    },
+                                                    "role": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "role",
+                                                    "participant"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                "type": "array"
+                                              },
+                                              "meaning": {
+                                                "type": "null"
+                                              },
+                                              "occurrence": {
+                                                "~elyTyp": 7,
+                                                "nullable": true,
+                                                "properties": {
+                                                  "component": {
+                                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                    "type": "string"
+                                                  },
+                                                  "revision": {
+                                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "component",
+                                                  "revision"
+                                                ],
+                                                "type": [
+                                                  "object",
+                                                  "null"
+                                                ]
+                                              },
+                                              "profile": {
+                                                "const": "relation-rendering-v1",
+                                                "type": "string"
+                                              },
+                                              "projections": {
+                                                "items": {
+                                                  "properties": {
+                                                    "arguments": {
+                                                      "items": {
+                                                        "properties": {
+                                                          "creditedName": {
+                                                            "properties": {
+                                                              "language": {
+                                                                "type": "string"
+                                                              },
+                                                              "lexical": {
+                                                                "type": "string"
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "lexical",
+                                                              "language"
+                                                            ],
+                                                            "type": "object"
+                                                          },
+                                                          "position": {
+                                                            "type": "integer"
+                                                          },
+                                                          "role": {
+                                                            "type": "string"
+                                                          },
+                                                          "type": {
+                                                            "type": "string"
+                                                          },
+                                                          "value": {}
+                                                        },
+                                                        "required": [
+                                                          "role",
+                                                          "type",
+                                                          "value"
+                                                        ],
+                                                        "type": "object"
+                                                      },
+                                                      "type": "array"
+                                                    },
+                                                    "direction": {
+                                                      "~elyTyp": 7,
+                                                      "enum": [
+                                                        "ltr",
+                                                        "rtl",
+                                                        null
+                                                      ],
+                                                      "nullable": true,
+                                                      "type": [
+                                                        "string",
+                                                        "null"
+                                                      ]
+                                                    },
+                                                    "fallback": {
+                                                      "~elyTyp": 7,
+                                                      "nullable": true,
+                                                      "properties": {
+                                                        "conversion": {
+                                                          "type": "null"
+                                                        },
+                                                        "crossedScript": {
+                                                          "type": "boolean"
+                                                        },
+                                                        "reason": {
+                                                          "enum": [
+                                                            "language-fallback",
+                                                            "script-fallback",
+                                                            "missing-direction"
+                                                          ],
+                                                          "type": "string"
+                                                        },
+                                                        "requestedLanguages": {
+                                                          "items": {
+                                                            "type": "string"
+                                                          },
+                                                          "type": "array"
+                                                        },
+                                                        "requestedScript": {
+                                                          "~elyTyp": 7,
+                                                          "nullable": true,
+                                                          "type": [
+                                                            "string",
+                                                            "null"
+                                                          ]
+                                                        },
+                                                        "usedLanguage": {
+                                                          "~elyTyp": 7,
+                                                          "nullable": true,
+                                                          "type": [
+                                                            "string",
+                                                            "null"
+                                                          ]
+                                                        },
+                                                        "usedScript": {
+                                                          "~elyTyp": 7,
+                                                          "nullable": true,
+                                                          "type": [
+                                                            "string",
+                                                            "null"
+                                                          ]
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "reason",
+                                                        "requestedLanguages",
+                                                        "usedLanguage",
+                                                        "requestedScript",
+                                                        "usedScript",
+                                                        "crossedScript",
+                                                        "conversion"
+                                                      ],
+                                                      "type": [
+                                                        "object",
+                                                        "null"
+                                                      ]
+                                                    },
+                                                    "fromRole": {
+                                                      "type": "string"
+                                                    },
+                                                    "labels": {
+                                                      "~elyTyp": 7,
+                                                      "nullable": true,
+                                                      "properties": {
+                                                        "grammaticalForms": {
+                                                          "items": {
+                                                            "additionalProperties": false,
+                                                            "properties": {
+                                                              "case": {
+                                                                "type": "string"
+                                                              },
+                                                              "gender": {
+                                                                "type": "string"
+                                                              },
+                                                              "number": {
+                                                                "type": "string"
+                                                              },
+                                                              "value": {
+                                                                "type": "string"
+                                                              }
+                                                            },
+                                                            "required": [
+                                                              "value"
+                                                            ],
+                                                            "type": "object"
+                                                          },
+                                                          "type": "array"
+                                                        },
+                                                        "heading": {
+                                                          "type": "string"
+                                                        },
+                                                        "noun": {
+                                                          "type": "string"
+                                                        },
+                                                        "plurals": {
+                                                          "additionalProperties": false,
+                                                          "properties": {
+                                                            "few": {
+                                                              "type": "string"
+                                                            },
+                                                            "many": {
+                                                              "type": "string"
+                                                            },
+                                                            "one": {
+                                                              "type": "string"
+                                                            },
+                                                            "other": {
+                                                              "type": "string"
+                                                            },
+                                                            "two": {
+                                                              "type": "string"
+                                                            },
+                                                            "zero": {
+                                                              "type": "string"
+                                                            }
+                                                          },
+                                                          "required": [
+                                                            "other"
+                                                          ],
+                                                          "type": "object"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "noun",
+                                                        "heading",
+                                                        "plurals",
+                                                        "grammaticalForms"
+                                                      ],
+                                                      "type": [
+                                                        "object",
+                                                        "null"
+                                                      ]
+                                                    },
+                                                    "language": {
+                                                      "~elyTyp": 7,
+                                                      "nullable": true,
+                                                      "type": [
+                                                        "string",
+                                                        "null"
+                                                      ]
+                                                    },
+                                                    "licence": {
+                                                      "~elyTyp": 7,
+                                                      "nullable": true,
+                                                      "type": [
+                                                        "string",
+                                                        "null"
+                                                      ]
+                                                    },
+                                                    "presentation": {
+                                                      "~elyTyp": 7,
+                                                      "nullable": true,
+                                                      "properties": {
+                                                        "component": {
+                                                          "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                          "type": "string"
+                                                        },
+                                                        "revision": {
+                                                          "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                          "type": "string"
+                                                        }
+                                                      },
+                                                      "required": [
+                                                        "component",
+                                                        "revision"
+                                                      ],
+                                                      "type": [
+                                                        "object",
+                                                        "null"
+                                                      ]
+                                                    },
+                                                    "reviewStatus": {
+                                                      "~elyTyp": 7,
+                                                      "enum": [
+                                                        "draft",
+                                                        "reviewed",
+                                                        null
+                                                      ],
+                                                      "nullable": true,
+                                                      "type": [
+                                                        "string",
+                                                        "null"
+                                                      ]
+                                                    },
+                                                    "script": {
+                                                      "~elyTyp": 7,
+                                                      "nullable": true,
+                                                      "type": [
+                                                        "string",
+                                                        "null"
+                                                      ]
+                                                    },
+                                                    "source": {
+                                                      "~elyTyp": 7,
+                                                      "nullable": true,
+                                                      "type": [
+                                                        "string",
+                                                        "null"
+                                                      ]
+                                                    },
+                                                    "toRole": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "fromRole",
+                                                    "toRole",
+                                                    "presentation",
+                                                    "labels",
+                                                    "language",
+                                                    "script",
+                                                    "direction",
+                                                    "reviewStatus",
+                                                    "source",
+                                                    "licence",
+                                                    "fallback",
+                                                    "arguments"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                "type": "array"
+                                              },
+                                              "structuralBasis": {
+                                                "additionalProperties": false,
+                                                "properties": {
+                                                  "collection": {
+                                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                                    "type": "string"
+                                                  },
+                                                  "member": {
+                                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                                    "type": "string"
+                                                  },
+                                                  "profile": {
+                                                    "const": "collection-membership",
+                                                    "type": "string"
+                                                  }
+                                                },
+                                                "required": [
+                                                  "profile",
+                                                  "collection",
+                                                  "member"
+                                                ],
+                                                "type": "object"
+                                              },
+                                              "viewingRole": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "profile",
+                                              "meaning",
+                                              "occurrence",
+                                              "viewingRole",
+                                              "bindings",
+                                              "projections",
+                                              "structuralBasis"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        ]
                                       },
-                                      "viewingRole": {
-                                        "type": "string"
+                                      {
+                                        "type": "null"
                                       }
-                                    },
-                                    "required": [
-                                      "profile",
-                                      "meaning",
-                                      "occurrence",
-                                      "viewingRole",
-                                      "bindings",
-                                      "projections"
                                     ],
-                                    "type": [
-                                      "object",
-                                      "null"
-                                    ]
+                                    "nullable": true
                                   },
                                   "revision": {
                                     "~elyTyp": 7,
@@ -794415,6 +794849,46 @@
                             },
                             "type": "array"
                           },
+                          "collectionPurpose": {
+                            "~elyTyp": 7,
+                            "additionalProperties": false,
+                            "nullable": true,
+                            "properties": {
+                              "kind": {
+                                "enum": [
+                                  "reading-list",
+                                  "recipe-selection",
+                                  "series",
+                                  "franchise"
+                                ],
+                                "type": "string"
+                              },
+                              "revision": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "sources": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "statement": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "statement",
+                              "revision",
+                              "sources"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          },
                           "counterparts": {
                             "items": {
                               "anyOf": [
@@ -795917,425 +796391,819 @@
                           },
                           "rendering": {
                             "~elyTyp": 7,
-                            "nullable": true,
-                            "properties": {
-                              "bindings": {
-                                "items": {
-                                  "properties": {
-                                    "creditedName": {
-                                      "properties": {
-                                        "language": {
-                                          "type": "string"
-                                        },
-                                        "lexical": {
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": [
-                                        "lexical",
-                                        "language"
-                                      ],
-                                      "type": "object"
-                                    },
-                                    "participant": {},
-                                    "position": {
-                                      "type": "integer"
-                                    },
-                                    "role": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "required": [
-                                    "role",
-                                    "participant"
-                                  ],
-                                  "type": "object"
-                                },
-                                "type": "array"
-                              },
-                              "meaning": {
-                                "properties": {
-                                  "definition": {
-                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                                    "type": "string"
-                                  },
-                                  "lifecycle": {
-                                    "type": "string"
-                                  },
-                                  "revision": {
-                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                                    "type": "string"
-                                  },
-                                  "roles": {
-                                    "items": {
-                                      "properties": {
-                                        "key": {
-                                          "type": "string"
-                                        },
-                                        "maxParticipants": {
-                                          "type": "integer"
-                                        },
-                                        "members": {
-                                          "items": {
-                                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                                            "type": "string"
-                                          },
-                                          "type": "array"
-                                        },
-                                        "minParticipants": {
-                                          "type": "integer"
-                                        },
-                                        "ordered": {
-                                          "type": "boolean"
-                                        },
-                                        "role": {
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": [
-                                        "role",
-                                        "key",
-                                        "minParticipants",
-                                        "maxParticipants",
-                                        "ordered"
-                                      ],
-                                      "type": "object"
-                                    },
-                                    "type": "array"
-                                  }
-                                },
-                                "required": [
-                                  "definition",
-                                  "revision",
-                                  "lifecycle",
-                                  "roles"
-                                ],
-                                "type": "object"
-                              },
-                              "occurrence": {
-                                "~elyTyp": 7,
-                                "nullable": true,
-                                "properties": {
-                                  "component": {
-                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                                    "type": "string"
-                                  },
-                                  "revision": {
-                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                                    "type": "string"
-                                  }
-                                },
-                                "required": [
-                                  "component",
-                                  "revision"
-                                ],
-                                "type": [
-                                  "object",
-                                  "null"
-                                ]
-                              },
-                              "profile": {
-                                "const": "relation-rendering-v1",
-                                "type": "string"
-                              },
-                              "projections": {
-                                "items": {
-                                  "properties": {
-                                    "arguments": {
-                                      "items": {
-                                        "properties": {
-                                          "creditedName": {
-                                            "properties": {
-                                              "language": {
-                                                "type": "string"
-                                              },
-                                              "lexical": {
-                                                "type": "string"
-                                              }
-                                            },
-                                            "required": [
-                                              "lexical",
-                                              "language"
-                                            ],
-                                            "type": "object"
-                                          },
-                                          "position": {
-                                            "type": "integer"
-                                          },
-                                          "role": {
-                                            "type": "string"
-                                          },
-                                          "type": {
-                                            "type": "string"
-                                          },
-                                          "value": {}
-                                        },
-                                        "required": [
-                                          "role",
-                                          "type",
-                                          "value"
-                                        ],
-                                        "type": "object"
-                                      },
-                                      "type": "array"
-                                    },
-                                    "direction": {
-                                      "~elyTyp": 7,
-                                      "enum": [
-                                        "ltr",
-                                        "rtl",
-                                        null
-                                      ],
-                                      "nullable": true,
-                                      "type": [
-                                        "string",
-                                        "null"
-                                      ]
-                                    },
-                                    "fallback": {
-                                      "~elyTyp": 7,
-                                      "nullable": true,
-                                      "properties": {
-                                        "conversion": {
-                                          "type": "null"
-                                        },
-                                        "crossedScript": {
-                                          "type": "boolean"
-                                        },
-                                        "reason": {
-                                          "enum": [
-                                            "language-fallback",
-                                            "script-fallback",
-                                            "missing-direction"
-                                          ],
-                                          "type": "string"
-                                        },
-                                        "requestedLanguages": {
-                                          "items": {
-                                            "type": "string"
-                                          },
-                                          "type": "array"
-                                        },
-                                        "requestedScript": {
-                                          "~elyTyp": 7,
-                                          "nullable": true,
-                                          "type": [
-                                            "string",
-                                            "null"
-                                          ]
-                                        },
-                                        "usedLanguage": {
-                                          "~elyTyp": 7,
-                                          "nullable": true,
-                                          "type": [
-                                            "string",
-                                            "null"
-                                          ]
-                                        },
-                                        "usedScript": {
-                                          "~elyTyp": 7,
-                                          "nullable": true,
-                                          "type": [
-                                            "string",
-                                            "null"
-                                          ]
-                                        }
-                                      },
-                                      "required": [
-                                        "reason",
-                                        "requestedLanguages",
-                                        "usedLanguage",
-                                        "requestedScript",
-                                        "usedScript",
-                                        "crossedScript",
-                                        "conversion"
-                                      ],
-                                      "type": [
-                                        "object",
-                                        "null"
-                                      ]
-                                    },
-                                    "fromRole": {
-                                      "type": "string"
-                                    },
-                                    "labels": {
-                                      "~elyTyp": 7,
-                                      "nullable": true,
-                                      "properties": {
-                                        "grammaticalForms": {
-                                          "items": {
-                                            "additionalProperties": false,
-                                            "properties": {
-                                              "case": {
-                                                "type": "string"
-                                              },
-                                              "gender": {
-                                                "type": "string"
-                                              },
-                                              "number": {
-                                                "type": "string"
-                                              },
-                                              "value": {
-                                                "type": "string"
-                                              }
-                                            },
-                                            "required": [
-                                              "value"
-                                            ],
-                                            "type": "object"
-                                          },
-                                          "type": "array"
-                                        },
-                                        "heading": {
-                                          "type": "string"
-                                        },
-                                        "noun": {
-                                          "type": "string"
-                                        },
-                                        "plurals": {
-                                          "additionalProperties": false,
+                            "anyOf": [
+                              {
+                                "anyOf": [
+                                  {
+                                    "properties": {
+                                      "bindings": {
+                                        "items": {
                                           "properties": {
-                                            "few": {
-                                              "type": "string"
+                                            "creditedName": {
+                                              "properties": {
+                                                "language": {
+                                                  "type": "string"
+                                                },
+                                                "lexical": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "lexical",
+                                                "language"
+                                              ],
+                                              "type": "object"
                                             },
-                                            "many": {
-                                              "type": "string"
+                                            "participant": {},
+                                            "position": {
+                                              "type": "integer"
                                             },
-                                            "one": {
-                                              "type": "string"
-                                            },
-                                            "other": {
-                                              "type": "string"
-                                            },
-                                            "two": {
-                                              "type": "string"
-                                            },
-                                            "zero": {
+                                            "role": {
                                               "type": "string"
                                             }
                                           },
                                           "required": [
-                                            "other"
+                                            "role",
+                                            "participant"
                                           ],
                                           "type": "object"
-                                        }
-                                      },
-                                      "required": [
-                                        "noun",
-                                        "heading",
-                                        "plurals",
-                                        "grammaticalForms"
-                                      ],
-                                      "type": [
-                                        "object",
-                                        "null"
-                                      ]
-                                    },
-                                    "language": {
-                                      "~elyTyp": 7,
-                                      "nullable": true,
-                                      "type": [
-                                        "string",
-                                        "null"
-                                      ]
-                                    },
-                                    "licence": {
-                                      "~elyTyp": 7,
-                                      "nullable": true,
-                                      "type": [
-                                        "string",
-                                        "null"
-                                      ]
-                                    },
-                                    "presentation": {
-                                      "~elyTyp": 7,
-                                      "nullable": true,
-                                      "properties": {
-                                        "component": {
-                                          "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                                          "type": "string"
                                         },
-                                        "revision": {
-                                          "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                                          "type": "string"
-                                        }
+                                        "type": "array"
                                       },
-                                      "required": [
-                                        "component",
-                                        "revision"
-                                      ],
-                                      "type": [
-                                        "object",
-                                        "null"
-                                      ]
+                                      "meaning": {
+                                        "properties": {
+                                          "definition": {
+                                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                            "type": "string"
+                                          },
+                                          "lifecycle": {
+                                            "type": "string"
+                                          },
+                                          "revision": {
+                                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                            "type": "string"
+                                          },
+                                          "roles": {
+                                            "items": {
+                                              "properties": {
+                                                "key": {
+                                                  "type": "string"
+                                                },
+                                                "maxParticipants": {
+                                                  "type": "integer"
+                                                },
+                                                "members": {
+                                                  "items": {
+                                                    "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                    "type": "string"
+                                                  },
+                                                  "type": "array"
+                                                },
+                                                "minParticipants": {
+                                                  "type": "integer"
+                                                },
+                                                "ordered": {
+                                                  "type": "boolean"
+                                                },
+                                                "role": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "role",
+                                                "key",
+                                                "minParticipants",
+                                                "maxParticipants",
+                                                "ordered"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "type": "array"
+                                          }
+                                        },
+                                        "required": [
+                                          "definition",
+                                          "revision",
+                                          "lifecycle",
+                                          "roles"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "occurrence": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "properties": {
+                                          "component": {
+                                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                            "type": "string"
+                                          },
+                                          "revision": {
+                                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "component",
+                                          "revision"
+                                        ],
+                                        "type": [
+                                          "object",
+                                          "null"
+                                        ]
+                                      },
+                                      "profile": {
+                                        "const": "relation-rendering-v1",
+                                        "type": "string"
+                                      },
+                                      "projections": {
+                                        "items": {
+                                          "properties": {
+                                            "arguments": {
+                                              "items": {
+                                                "properties": {
+                                                  "creditedName": {
+                                                    "properties": {
+                                                      "language": {
+                                                        "type": "string"
+                                                      },
+                                                      "lexical": {
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "lexical",
+                                                      "language"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "position": {
+                                                    "type": "integer"
+                                                  },
+                                                  "role": {
+                                                    "type": "string"
+                                                  },
+                                                  "type": {
+                                                    "type": "string"
+                                                  },
+                                                  "value": {}
+                                                },
+                                                "required": [
+                                                  "role",
+                                                  "type",
+                                                  "value"
+                                                ],
+                                                "type": "object"
+                                              },
+                                              "type": "array"
+                                            },
+                                            "direction": {
+                                              "~elyTyp": 7,
+                                              "enum": [
+                                                "ltr",
+                                                "rtl",
+                                                null
+                                              ],
+                                              "nullable": true,
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
+                                            },
+                                            "fallback": {
+                                              "~elyTyp": 7,
+                                              "nullable": true,
+                                              "properties": {
+                                                "conversion": {
+                                                  "type": "null"
+                                                },
+                                                "crossedScript": {
+                                                  "type": "boolean"
+                                                },
+                                                "reason": {
+                                                  "enum": [
+                                                    "language-fallback",
+                                                    "script-fallback",
+                                                    "missing-direction"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "requestedLanguages": {
+                                                  "items": {
+                                                    "type": "string"
+                                                  },
+                                                  "type": "array"
+                                                },
+                                                "requestedScript": {
+                                                  "~elyTyp": 7,
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
+                                                },
+                                                "usedLanguage": {
+                                                  "~elyTyp": 7,
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
+                                                },
+                                                "usedScript": {
+                                                  "~elyTyp": 7,
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
+                                                }
+                                              },
+                                              "required": [
+                                                "reason",
+                                                "requestedLanguages",
+                                                "usedLanguage",
+                                                "requestedScript",
+                                                "usedScript",
+                                                "crossedScript",
+                                                "conversion"
+                                              ],
+                                              "type": [
+                                                "object",
+                                                "null"
+                                              ]
+                                            },
+                                            "fromRole": {
+                                              "type": "string"
+                                            },
+                                            "labels": {
+                                              "~elyTyp": 7,
+                                              "nullable": true,
+                                              "properties": {
+                                                "grammaticalForms": {
+                                                  "items": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "case": {
+                                                        "type": "string"
+                                                      },
+                                                      "gender": {
+                                                        "type": "string"
+                                                      },
+                                                      "number": {
+                                                        "type": "string"
+                                                      },
+                                                      "value": {
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "value"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "type": "array"
+                                                },
+                                                "heading": {
+                                                  "type": "string"
+                                                },
+                                                "noun": {
+                                                  "type": "string"
+                                                },
+                                                "plurals": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "few": {
+                                                      "type": "string"
+                                                    },
+                                                    "many": {
+                                                      "type": "string"
+                                                    },
+                                                    "one": {
+                                                      "type": "string"
+                                                    },
+                                                    "other": {
+                                                      "type": "string"
+                                                    },
+                                                    "two": {
+                                                      "type": "string"
+                                                    },
+                                                    "zero": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "other"
+                                                  ],
+                                                  "type": "object"
+                                                }
+                                              },
+                                              "required": [
+                                                "noun",
+                                                "heading",
+                                                "plurals",
+                                                "grammaticalForms"
+                                              ],
+                                              "type": [
+                                                "object",
+                                                "null"
+                                              ]
+                                            },
+                                            "language": {
+                                              "~elyTyp": 7,
+                                              "nullable": true,
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
+                                            },
+                                            "licence": {
+                                              "~elyTyp": 7,
+                                              "nullable": true,
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
+                                            },
+                                            "presentation": {
+                                              "~elyTyp": 7,
+                                              "nullable": true,
+                                              "properties": {
+                                                "component": {
+                                                  "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                  "type": "string"
+                                                },
+                                                "revision": {
+                                                  "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "component",
+                                                "revision"
+                                              ],
+                                              "type": [
+                                                "object",
+                                                "null"
+                                              ]
+                                            },
+                                            "reviewStatus": {
+                                              "~elyTyp": 7,
+                                              "enum": [
+                                                "draft",
+                                                "reviewed",
+                                                null
+                                              ],
+                                              "nullable": true,
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
+                                            },
+                                            "script": {
+                                              "~elyTyp": 7,
+                                              "nullable": true,
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
+                                            },
+                                            "source": {
+                                              "~elyTyp": 7,
+                                              "nullable": true,
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
+                                            },
+                                            "toRole": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "fromRole",
+                                            "toRole",
+                                            "presentation",
+                                            "labels",
+                                            "language",
+                                            "script",
+                                            "direction",
+                                            "reviewStatus",
+                                            "source",
+                                            "licence",
+                                            "fallback",
+                                            "arguments"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "type": "array"
+                                      },
+                                      "viewingRole": {
+                                        "type": "string"
+                                      }
                                     },
-                                    "reviewStatus": {
-                                      "~elyTyp": 7,
-                                      "enum": [
-                                        "draft",
-                                        "reviewed",
-                                        null
-                                      ],
-                                      "nullable": true,
-                                      "type": [
-                                        "string",
-                                        "null"
-                                      ]
-                                    },
-                                    "script": {
-                                      "~elyTyp": 7,
-                                      "nullable": true,
-                                      "type": [
-                                        "string",
-                                        "null"
-                                      ]
-                                    },
-                                    "source": {
-                                      "~elyTyp": 7,
-                                      "nullable": true,
-                                      "type": [
-                                        "string",
-                                        "null"
-                                      ]
-                                    },
-                                    "toRole": {
-                                      "type": "string"
-                                    }
+                                    "required": [
+                                      "profile",
+                                      "meaning",
+                                      "occurrence",
+                                      "viewingRole",
+                                      "bindings",
+                                      "projections"
+                                    ],
+                                    "type": "object"
                                   },
-                                  "required": [
-                                    "fromRole",
-                                    "toRole",
-                                    "presentation",
-                                    "labels",
-                                    "language",
-                                    "script",
-                                    "direction",
-                                    "reviewStatus",
-                                    "source",
-                                    "licence",
-                                    "fallback",
-                                    "arguments"
-                                  ],
-                                  "type": "object"
-                                },
-                                "type": "array"
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "bindings": {
+                                        "items": {
+                                          "properties": {
+                                            "creditedName": {
+                                              "properties": {
+                                                "language": {
+                                                  "type": "string"
+                                                },
+                                                "lexical": {
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "lexical",
+                                                "language"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "participant": {},
+                                            "position": {
+                                              "type": "integer"
+                                            },
+                                            "role": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "role",
+                                            "participant"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "type": "array"
+                                      },
+                                      "meaning": {
+                                        "type": "null"
+                                      },
+                                      "occurrence": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "properties": {
+                                          "component": {
+                                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                            "type": "string"
+                                          },
+                                          "revision": {
+                                            "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "component",
+                                          "revision"
+                                        ],
+                                        "type": [
+                                          "object",
+                                          "null"
+                                        ]
+                                      },
+                                      "profile": {
+                                        "const": "relation-rendering-v1",
+                                        "type": "string"
+                                      },
+                                      "projections": {
+                                        "items": {
+                                          "properties": {
+                                            "arguments": {
+                                              "items": {
+                                                "properties": {
+                                                  "creditedName": {
+                                                    "properties": {
+                                                      "language": {
+                                                        "type": "string"
+                                                      },
+                                                      "lexical": {
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "lexical",
+                                                      "language"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "position": {
+                                                    "type": "integer"
+                                                  },
+                                                  "role": {
+                                                    "type": "string"
+                                                  },
+                                                  "type": {
+                                                    "type": "string"
+                                                  },
+                                                  "value": {}
+                                                },
+                                                "required": [
+                                                  "role",
+                                                  "type",
+                                                  "value"
+                                                ],
+                                                "type": "object"
+                                              },
+                                              "type": "array"
+                                            },
+                                            "direction": {
+                                              "~elyTyp": 7,
+                                              "enum": [
+                                                "ltr",
+                                                "rtl",
+                                                null
+                                              ],
+                                              "nullable": true,
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
+                                            },
+                                            "fallback": {
+                                              "~elyTyp": 7,
+                                              "nullable": true,
+                                              "properties": {
+                                                "conversion": {
+                                                  "type": "null"
+                                                },
+                                                "crossedScript": {
+                                                  "type": "boolean"
+                                                },
+                                                "reason": {
+                                                  "enum": [
+                                                    "language-fallback",
+                                                    "script-fallback",
+                                                    "missing-direction"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "requestedLanguages": {
+                                                  "items": {
+                                                    "type": "string"
+                                                  },
+                                                  "type": "array"
+                                                },
+                                                "requestedScript": {
+                                                  "~elyTyp": 7,
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
+                                                },
+                                                "usedLanguage": {
+                                                  "~elyTyp": 7,
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
+                                                },
+                                                "usedScript": {
+                                                  "~elyTyp": 7,
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
+                                                }
+                                              },
+                                              "required": [
+                                                "reason",
+                                                "requestedLanguages",
+                                                "usedLanguage",
+                                                "requestedScript",
+                                                "usedScript",
+                                                "crossedScript",
+                                                "conversion"
+                                              ],
+                                              "type": [
+                                                "object",
+                                                "null"
+                                              ]
+                                            },
+                                            "fromRole": {
+                                              "type": "string"
+                                            },
+                                            "labels": {
+                                              "~elyTyp": 7,
+                                              "nullable": true,
+                                              "properties": {
+                                                "grammaticalForms": {
+                                                  "items": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "case": {
+                                                        "type": "string"
+                                                      },
+                                                      "gender": {
+                                                        "type": "string"
+                                                      },
+                                                      "number": {
+                                                        "type": "string"
+                                                      },
+                                                      "value": {
+                                                        "type": "string"
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "value"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "type": "array"
+                                                },
+                                                "heading": {
+                                                  "type": "string"
+                                                },
+                                                "noun": {
+                                                  "type": "string"
+                                                },
+                                                "plurals": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "few": {
+                                                      "type": "string"
+                                                    },
+                                                    "many": {
+                                                      "type": "string"
+                                                    },
+                                                    "one": {
+                                                      "type": "string"
+                                                    },
+                                                    "other": {
+                                                      "type": "string"
+                                                    },
+                                                    "two": {
+                                                      "type": "string"
+                                                    },
+                                                    "zero": {
+                                                      "type": "string"
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "other"
+                                                  ],
+                                                  "type": "object"
+                                                }
+                                              },
+                                              "required": [
+                                                "noun",
+                                                "heading",
+                                                "plurals",
+                                                "grammaticalForms"
+                                              ],
+                                              "type": [
+                                                "object",
+                                                "null"
+                                              ]
+                                            },
+                                            "language": {
+                                              "~elyTyp": 7,
+                                              "nullable": true,
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
+                                            },
+                                            "licence": {
+                                              "~elyTyp": 7,
+                                              "nullable": true,
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
+                                            },
+                                            "presentation": {
+                                              "~elyTyp": 7,
+                                              "nullable": true,
+                                              "properties": {
+                                                "component": {
+                                                  "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                  "type": "string"
+                                                },
+                                                "revision": {
+                                                  "pattern": "^https://rezics\\.com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "component",
+                                                "revision"
+                                              ],
+                                              "type": [
+                                                "object",
+                                                "null"
+                                              ]
+                                            },
+                                            "reviewStatus": {
+                                              "~elyTyp": 7,
+                                              "enum": [
+                                                "draft",
+                                                "reviewed",
+                                                null
+                                              ],
+                                              "nullable": true,
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
+                                            },
+                                            "script": {
+                                              "~elyTyp": 7,
+                                              "nullable": true,
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
+                                            },
+                                            "source": {
+                                              "~elyTyp": 7,
+                                              "nullable": true,
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
+                                            },
+                                            "toRole": {
+                                              "type": "string"
+                                            }
+                                          },
+                                          "required": [
+                                            "fromRole",
+                                            "toRole",
+                                            "presentation",
+                                            "labels",
+                                            "language",
+                                            "script",
+                                            "direction",
+                                            "reviewStatus",
+                                            "source",
+                                            "licence",
+                                            "fallback",
+                                            "arguments"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "type": "array"
+                                      },
+                                      "structuralBasis": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "collection": {
+                                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                            "type": "string"
+                                          },
+                                          "member": {
+                                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                            "type": "string"
+                                          },
+                                          "profile": {
+                                            "const": "collection-membership",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "profile",
+                                          "collection",
+                                          "member"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "viewingRole": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "profile",
+                                      "meaning",
+                                      "occurrence",
+                                      "viewingRole",
+                                      "bindings",
+                                      "projections",
+                                      "structuralBasis"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
                               },
-                              "viewingRole": {
-                                "type": "string"
+                              {
+                                "type": "null"
                               }
-                            },
-                            "required": [
-                              "profile",
-                              "meaning",
-                              "occurrence",
-                              "viewingRole",
-                              "bindings",
-                              "projections"
                             ],
-                            "type": [
-                              "object",
-                              "null"
-                            ]
+                            "nullable": true
                           },
                           "revision": {
                             "~elyTyp": 7,

@@ -27,7 +27,9 @@ import { framePattern, matchFromScore, readContinuityMemberships,
 import { CONTINUITY_MEMBERSHIP_COST, type Coordinate } from '../projection/dimension.ts';
 import { resolveTargets, targetSummaries } from '../target/resolve.ts';
 import { readingBoundary } from '../reading-position/boundary.ts';
-import { decodeReadCursor, encodeReadCursor, WorkReadInvalid, type WorkReadSession } from '../work/read-session.ts';
+import { decodeReadCursor, encodeReadCursor, WorkReadInvalid, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
+import { readCollectionPurpose, renderCollectionIncidence, type CollectionIncidenceRendering,
+  type CollectionPurpose } from '../collection/purpose.ts';
 
 /** One Work target, at most eight 64-row membership batches and one summary batch for up to 64 results.
  * Hidden rows use the scan budget but cannot fail the read; a cursor continues even an empty page. */
@@ -80,9 +82,10 @@ export interface RelationPageEntry {
   sourceMainVersion?: string | null;
   sourceMainRevision?: string | null;
   targetMainRevision?: string;
-  rendering: RelationRendering | null;
+  rendering: RelationRendering | CollectionIncidenceRendering | null;
   counterparts: ResourceSummary[];
   frameMatch?: ReturnType<typeof matchFromScore>;
+  collectionPurpose?: CollectionPurpose | null;
 }
 interface Candidate {
   key: string;
@@ -174,6 +177,7 @@ async function resolveCandidate(
   canReadOccurrence: ReferenceCheck,
   definition: (key: string, legacy: boolean) => Promise<ExactDefinition | null>,
   publicOccurrences?: ReadonlyMap<string,ReadonlySet<string>>,
+  session?: WorkReadSession,
 ): Promise<Resolved | null> {
   const base = {
     relation: candidate.relation,
@@ -183,7 +187,9 @@ async function resolveCandidate(
   };
   if (candidate.kind === 'collection') {
     if (!(await canRead(candidate.relation))) return null;
-    return { entry: base, references: [candidate.relation] };
+    if (!session) throw new WorkReadUnavailable('Collection purpose read session is unavailable');
+    const collectionPurpose = await readCollectionPurpose(session, candidate.relation);
+    return { entry: { ...base, collectionPurpose }, references: [candidate.relation] };
   }
   if (candidate.kind === 'author-credit') {
     if (!(await canRead(resource))) return null;
@@ -441,6 +447,7 @@ async function readResourceRelationsAtPosition(
           input.canReadOccurrence,
           definition,
           publicOccurrences,
+          session,
         );
         if (resolved) {
           if (resolved.entry.evidence && publicOccurrences?.get(candidate.relation)?.has(resolved.entry.evidence)) {
@@ -487,7 +494,9 @@ async function readResourceRelationsAtPosition(
   const items: RelationPageEntry[] = [];
   const renderings = new Map<string, RelationRendering>();
   for (const { candidate, resolved } of selected) {
-    let rendering: RelationRendering | null = null;
+    let rendering: RelationRendering | CollectionIncidenceRendering | null = resolved.entry.kind === 'collection'
+      ? renderCollectionIncidence(resolved.entry.relation, input.resource, resolved.entry.collectionPurpose ?? null, input.languages)
+      : null;
     if (resolved.meaning && resolved.viewingRole && resolved.bindings) {
       const key = `${resolved.meaning.revision}:${resolved.viewingRole}`;
       if (!renderings.has(key))

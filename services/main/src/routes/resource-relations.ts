@@ -164,7 +164,7 @@ export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDepen
             readingPosition: JSON.stringify([principal ? [principal.issuer, principal.subject,
               principal.emailVerified ?? false, principal.contentEvidence ?? null] : null,
               actor, await boundary.binding()]),
-          }));
+          }, boundary.session));
           const evidence = await readWikiClaimEvidence(boundary.session,result.items
             .filter(item => item.kind === 'occurrence').map(item => item.relation),'relation',boundary);
           const projected = await projectWikiEvidence(boundary.session,[...evidence.values()].flat());
