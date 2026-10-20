@@ -1,14 +1,12 @@
 # Product completeness state
 
-Checkpoint 22f35050-84e6-4996-a4c2-b8118b340630 retains checkpoint 869d6bce
-and covers handled events:
-mail:e5577a22-de12-4ec3-9756-14a249d4e878,
-mail:977e8af5-3c49-45b9-b973-099088f33d06 and
-mail:71274ec3-f510-482e-ac29-a28be1bff0aa.
-The three turns ran between 16:20:45Z and 16:31:19Z on 2026-10-19.
-All three mail acknowledgements were confirmed at this checkpoint. Measures
-were read here and may include later activity; other turns retain their own
-dispositions. This checkpoint changes no brief or worker instruction.
+Checkpoint 32564370-7361-4618-8df7-e98e0e59168d retains checkpoint 22f35050
+and covers handled event mail:2f13c60b-3f91-42e6-97f3-93c08b5b1779.
+Its decision is committed at 76c5955006; the mail's acknowledgement at
+2026-10-19T17:26:45.956Z was confirmed here. Measures were read at this
+checkpoint and may include later activity; other turns retain their own
+dispositions. This checkpoint changes only this state, no brief or worker
+instruction, and proves no additional product row or original finding.
 
 Scope remains domain-leading completeness across supported domains, including
 specialist jobs, with API outcomes first and actual rendered/interaction proof.
@@ -429,7 +427,8 @@ nor product assertions ran. The immutable blocker was confirmed at
 notified; G-2823 remains open without an unchanged retry or landing.
 
 G-2791 remains sole retained-data/runtime custodian. Its actual39 qualification
-8015dc7909 exited blocked, supplying no compatible current copy or released lease.
+8015dc7909 exited blocked, supplying no compatible current copy or released lease;
+the latest event supersedes that unsupported-history hold, not its evidence.
 Mail e5577a22 was disposed as an already executing correction: G-2842's decision
 a05621a0fd8bee0a98cea1744b271fb0c876fa29 was on main and attempt 11, resumed
 at 16:17:18.952Z on codex-2/max, was confirmed live on that clean source.
@@ -444,8 +443,9 @@ filename transitions before adoption. Preserve unknown/partial/drift refusals,
 original 759244 refusals, ordinary behavior, locks, idempotence and budgets.
 Earlier b0b3a5e7's eight-case verification proves only its earlier supported
 input; the new sourcecut, first independent codex-1/xhigh review and result were
-not supplied by these events. Audit retains their later disposition. G-2791
-remains idle pending that reviewed owner delta, then owes the supported isolated
+not supplied by those earlier events. Mail 2f13c60b supplies reviewed history
+support on main 4c77554c3b; G-2791 actual40 was confirmed live at 17:23:33Z.
+It owes the supported isolated
 copy/history verification/owner migrations/model bootstrap/native readiness/
 stopped current backup/qualified restore and released G-2823 proof lease.
 Diagnostic job 9023a0b9 establishes no admission or acceptance. Book46775/C2746787
@@ -456,9 +456,55 @@ adoption, shared reset or full 113-record reconstruction/trace prerequisite foll
 G-2823's actual readiness still requires exact served/source/native/migration/
 lineage and resource receipts, genuine data/rights/authentication, preparation
 within 600 seconds, a real authenticated Main request and borrower/stop custody.
-Preserve Book46775/C2746787/shared3001 and active leases. G-2830 retains actual
+Preserve Book46775/C2746787/shared3001 and active leases, subject only to the
+coordinated released-consumer capture below. G-2830 retains actual
 normal-OAuth upload, durable use, reopen/retry/remove/export and 1440/390 en/zh
 focus proof; backend readiness alone closes no finding.
+
+Decision 76c5955006 cuts G-2823 to the custodian's actual distinct current/native/
+history/model/readback/stopped-backup/qualified-restore output and released lease.
+No new qualified endpoint or lease was published at that decision; the retained
+qualification-r1 report and an active transition establish neither. The manager
+rebased its clean branch with unchanged dependency inputs and resumed attempt 43
+on codex-1/high. Status now reports exited43 with no accepted handoff; its exit
+belongs to its own event. Do not duplicate preparation, resume or landing from
+this checkpoint. Original113 topology is no prerequisite.
+
+The same runtime owner retains a separate exact I1-001/A16 fixture cut alongside
+the independently qualified current-source image handoff. Runtime
+ce1b267f27f8d09f5475ebdc55ebf7de3df8f587 on retained 4a616b079a36 contains the
+two approved Main 8caf9bd4bfa3 WorkActivity modules; 534 equal storage inputs
+qualify only that named seam. A newly upgraded current copy needs its own affected
+source/native/storage comparison. Existing thread-store parent/root/revision
+fields require no new migration or native schema for the retained seam.
+
+Before discussion launch, verify original Work 01a0e909-2857-70fc-b300-8091dc9a973f,
+Realm 01a0e914-1857-74d8-8763-6628387b7f39, root and both nested replies with exact
+immutable revisions, placements and parent/root tuples against
+`.temp/audit-remediation-20261019/two-hour-sprint/site-I1001-menu-premise-20261019T1637/receipt.json`
+and `A16-retained-runtime-pin.json` in the same directory. Shared3001 returned
+the actual three rows at 16:41:15Z; its declared 75409ac3 source is unattested.
+Book46775's 17:10:20Z 404/resource_unavailable establishes neither absence nor
+withholding and cannot qualify the original tuple. Do not synthesize or relabel
+Book/author-donor rows. Preserve callback SHA-256
+c0d5eb27454415887a2c54f3aa98911382020a3ee3e033ebe39cd68c0a5b698a and frontend
+8caf9bd4bfa312b7e07bdfa5f9e124ccd4462929, or an explicit later affected comparison.
+
+An existing matching stopped copy needs source/native/model/readback qualification
+and a distinct supported restore with normal Task/Main startup. Main startup
+writes; a server over live retained stores is no admissible read-only overlay.
+If retained custody contains no verified original copy, Program mail 6496f134
+requests the existing lifecycle owner's supported finite sharedMain3001
+stop/capture/resume into an owned stopped consistent backup after actual borrower
+release and cleanup. G-2847 was active57 at the decision; exited56 was no release.
+Audit coordination mail f48642bd requests the actual release and exact tuple
+qualification through the existing custodian at a safe checkpoint. Preserve
+Book46775/Accounts43369, Feed G-2775's source lease and every peer borrower.
+Return one concrete missing release/capture action and its owner/receipt if that
+boundary remains; no waiting, watcher or renewed generic compatibility hold.
+The route needs no new Program product ruling. Image/reopen/export/focus proof
+continues independently when its own current copy qualifies; no runtime receipt
+closes I1-001/A16. Earlier cleanup, shared-refresh and telemetry acceptance remain.
 
 RecipeV3 diagnosis fdc4328786fe617f3d9e1d15ec677e066d7ce05801d836a7fc950b338dd5876a
 was verified and routed to Audit's existing Work/Recipe owner. Desktop-network
@@ -535,36 +581,42 @@ restore isolated copies. Corpus prerequisites do not block independent site
 proof. Small main batches need affected checks and codex-1/xhigh review;
 coordinate publication. Final full regression/confirmation precedes wave merge.
 
-Checkpoint measures: first attempts 9/14 (64%; today 3/8, 38%); landed median
-4.5 attempts, maximum 42 (G-2823); 101.7M input/888.7k output; tokens per proved
+Checkpoint measures: first attempts 9/14 (64%; current day no attempts); landed
+median 4.5 attempts, maximum 43 (G-2823); 101.7M input/888.7k output; tokens per proved
 row unavailable. Tool counts include job wakes and open partial-landing
-continuations. Six environment attempts, one step continuation and five fixes;
+continuations. Seven environment attempts, one step continuation and five fixes;
 89 job wakes: 33 passes, 35 assertion failures, two environment failures,
-17 harness failures and two unclassified. The common history/setup cause remains
-with G-2842; event-23's backup-location cause received supported checkout-local
+17 harness failures and two unclassified. The previous day's first-attempt share
+was 3/8 (38%); reviewed G-2842 support on main 4c77554c3b addresses the common
+history/setup cause, with actual copy qualification still due from G-2791.
+Event-23's backup-location cause received supported checkout-local
 custody rather than another setup experiment. Event-29's storage-reader harness
 cause was corrected through the existing owner reader in the accepted finite
 comparison. G-2823 owns the isolated backend handoff and causal cleanup repair. The
 unclassified wakes and one retained other-kind refusal still need tooling
-disposition. The three successful manager turns for the covered events recorded
-2,362,035 input/21,269 output tokens, including 2,188,416 cached input. These
+disposition. The successful manager turn for this covered event recorded
+2,051,532 input/12,858 output tokens, including 1,961,856 cached input. These
 exclude this checkpoint and do not establish a comparable manager/worker share.
 Product has no live worker and two open tasks.
 Latest recorded efficiency window remains 2026-10-18T08:36:08Z–20:36:08Z;
 retain its earlier 552.47M input/527.63M cached and 37% other-session reading.
-The same start-time window reread here returned 135 sessions, 1,232.46M input
-and 1,174.98M cached: workers 83%, landing reviews under 1%, other sessions 17%.
+The preceding checkpoint's same start-time window returned 135 sessions,
+1,232.46M input/1,174.98M cached and 17% other-session input. Reread here it
+returned 135 sessions, 1,263.95M input and 1,204.85M cached: workers 84%,
+landing reviews under 1%, other sessions 16%.
 Continuing sessions change this cumulative reading; the figures omit older-started
 sessions and other-session share cannot establish manager-only share. No
 comparable savings or spending claim follows. Audit owns shared scheduling;
 verified hourly coverage, later full-window comparison and instrumentation
 attribution remain due.
 
-Next event owners: Audit consumes G-2842's existing bounded history result and
-its first independent review, then delivers the accepted supported owner cut
-through sole custodian G-2791, its actual qualified recipe and released
-copy lease. Product resumes G-2823 only on that changed premise for the isolated
-current-source backend handoff; G-2830 retains image-persistence acceptance.
+Next event owners: G-2791 delivers the actual qualified current copy, recipe and
+released lease under reviewed history support 4c77554c3b. Product consumes
+G-2823 attempt43's exit through its own event for the distinct image/discussion
+qualifications above; no unchanged replay follows. Program's existing lifecycle
+owner and Audit coordinate the supported original capture only if no retained
+copy qualifies, preserving actual consumers until release. G-2830 retains
+image-persistence acceptance; Site retains the unchanged I1-001/A16 assertions.
 After that handoff, product requires demonstrated cleanup repair and reviewed
 follow-up landing, then executes delegated normal refresh and runtime proof.
 Existing Work/Recipe, G-2762/Book and A16 owners retain their bounded fixes,
@@ -576,8 +628,8 @@ prerequisite and routes residual site acceptance to existing owners. Product
 starts G-2826's accepted single composed landing against decision f1792f86d9,
 with the remaining test/report review and affected gates, then consumes its
 landing-result mail before closing verified. No new D5-006 proof or review is due.
-The existing owner still owes G-2842's landed identity. Preserve G-2826's
-accepted runtime evidence and its distinct setup and over-budget preparation failures.
+G-2842's reviewed support is now main 4c77554c3b. Preserve G-2826's accepted
+runtime evidence and its distinct setup and over-budget preparation failures.
 Existing catalogue/Program lifecycle owners retain the remaining endpoint
 leases; the two completed runtime releases need no repeated stop operation.
 Audit retains finding closure, focused native fixes and
