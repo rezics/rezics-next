@@ -5011,5 +5011,68 @@
       "docsCheck": "Pending required recorded task docs:check after this additive append; separate result will resolve this field.",
       "noBroadGoalOrRegressionGate": "Latest finite Decision authorizes affected preparation and docs:check only; product/original tests unchanged."
     }
+  },
+  "homeDEFRStatusOnlyPreparationV3AdministrativeCheck": {
+    "atUTC": "2026-10-20T13:34:27.130509+00:00",
+    "scope": "Administrative documentation check and final immutable-custody preservation only; resolves pending docsCheck in homeDEFRStatusOnlyPreparationV3. No new product/AT acceptance.",
+    "checkedReportCommit": "82046ce9d0bd5a3040714ca8687d17b375b8bc0d",
+    "command": "task docs:check",
+    "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task docs:check",
+    "recordedJob": "4b1f07ce-0f01-4096-8aca-4aa8b5aef158",
+    "exitStatus": 0,
+    "result": "passed",
+    "testsPassed": 13,
+    "markdownFilesChecked": 259,
+    "log": {
+      "path": ".temp/reading-home-HomeDEFR-preparation-v3-G-2831-20261020T1325Z/docs-check.log",
+      "sha256": "2c23f367d06d0be8661793118669755457be63d0d1fe24de8dac166c0fbf0b96",
+      "bytes": 517
+    },
+    "affectedPreparationSelection": {
+      "job": "a695df0a-f67a-4b87-9893-47db40be6a3a",
+      "result": "passed",
+      "bunWrapperPassed": 1,
+      "expectations": 8,
+      "playwrightPreparationPassed": 1,
+      "ATCallbacksRun": 0
+    },
+    "allFiveNewCustodyHashesUnchanged": {
+      "ready-for-G2847-HomeDEFR-CAS11.json": "ce99bd43ba061789e528798f45528d561d94597d884c5d6cbfe0867c031cbf24",
+      "private/before-backup.json": "06ffd0e8110a0ee46f6b8a345035043cc1bc9550b5c7576af8c0c498a3716420",
+      "private/lease-state.json": "a7a1d41b3f4d34c13bf1715bff091c98f2e05b2e9bb703c629552a86152ac6a7",
+      "same-owner-cleanup-operation.json": "c95f0af4a7f1864a0ffdcf1cdd4ebc4945654b38e83eeefb05bdf44c54276aa2",
+      "owned-shutdown-verification.json": "61f519657c391a6d0153d7f5d3dac8ccbabab5d849fc5658ca420ae1d82dbdfb"
+    },
+    "allFivePriorCAS9CustodyHashesUnchanged": {
+      "ready-for-G2847-HomeDEFR-CAS9.json": "df5ebbab8875848c168d44cc665b28690e1efb78138fe804d4f4c2fa25162c2b",
+      "private/before-backup.json": "92cf460178d98622e3c68d69247c8e9de797d4b418d7dbc3f891a17969bcd2d0",
+      "private/lease-state.json": "fdd873b0c4809c011faaf8146cf9daec7b2a01943e3078eb448be4b93f23d559",
+      "same-owner-cleanup-operation.json": "792f5b966f6b8f1242b15124b55b36b1bb834fa7671962723c7f7434cffa2823",
+      "source/retained-supported-cleanup-callback.ts": "b1d6b4ecac9df4879b7a59a18976b54cdee9b80778561db52c9707f6e27e4c79"
+    },
+    "allHistoricalReportMemberBytesPreserved": true,
+    "all26PriorParsedTopLevelFieldsPreserved": true,
+    "reportSerializerCorrection": "09fd62932 serialized the append and collapsed an existing duplicate administrative key. Separate commit82046ce9d0 restores all prior report-member bytes; aggregate diff is additive. No historical evidence value changed.",
+    "ownedDocJobPidsAbsent": [
+      1782071,
+      1782347
+    ],
+    "temporaryPortsListening": {
+      "43131": false,
+      "52181": false
+    },
+    "Task1677097StartTicksUnchanged": "10065363",
+    "mainProcess1372265CwdStillInstalled75409": true,
+    "productSourceOrOriginalTestsChanged": false,
+    "otherTrackedFilesChanged": false,
+    "wholeGoalOrRegressionGateRun": false,
+    "sourceOrSupportReviewRepeated": false,
+    "offlineControlsRepeated": false,
+    "newBorrowOrATCallbackAuthorized": false,
+    "preparedStateHeldForRootSeparateLaterLease": true,
+    "cleanupOwner": "SAME G-2831 after explicit release of THIS later new borrow and genuine shutdown",
+    "audit": "ACTIVE",
+    "writeBoundaryQualification": "Writes only inside G-2831 worktree. Recorded goalctl commands may write authorized main orchestration bookkeeping. Root must copy bundle if needed; no main/peer data/control/lease/source write.",
+    "commitAdministrativeObservation": "First commit succeeded while automatic Git pack-refs printed a main-forward-only reference-hook refusal. Later commits use command-local gc.auto=0; no main ref changed."
   }
 }
