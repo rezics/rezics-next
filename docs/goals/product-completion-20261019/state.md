@@ -1,12 +1,11 @@
 # Product completeness state
 
-Checkpoint f999af7c-4b47-4e0b-8f79-8d184d6791ec retains checkpoint 15009e9d
-and covers handled events mail:37ba58b7-0687-47f2-b9d2-9d52becd5e9f,
-mail:overdue:mail:b0da07b1-b40f-42b3-9dd1-6af80dce5bf6:product-completion-20261019,
-mail:348b3ee1-0dd3-4262-96cd-2750f1d4da23, task:G-2823:44 and
-mail:186df6bd-8d7d-4097-8c75-8474c8123fa2. All four original mail
-acknowledgements were confirmed, at 2026-10-20T09:42:08.355Z,
-09:53:03.045Z, 09:58:48.108Z and 10:10:24.859Z respectively.
+Checkpoint a51c9bf3-ace3-4d2b-90fe-e64dc1292eba retains checkpoint f999af7c
+and covers handled events mail:2d2ea757-4c87-4a2a-8cbb-4bfbc62a5b8f,
+mail:720638da-de56-4f98-851b-3a791190b96e,
+mail:a85605ff-50eb-465d-83cc-cada41959fe3, task:G-2823:45 and
+task:G-2823:46. All three original mail acknowledgements were confirmed, at
+2026-10-20T10:16:33.437Z, 10:04:37.423Z and 10:28:12.700Z respectively.
 Measures were read at this checkpoint and may include later activity; other
 turns retain their own dispositions. This checkpoint changes only this state,
 no brief or worker instruction, and proves no additional product row or
@@ -131,8 +130,10 @@ Preserve independent assertions, actual authority, exact retained bytes/values/
 rights and real receipts. G-2786 must scope refusal to affected cuts, preserving
 revocation and availability.
 
-Product retains G-2823's isolated backend handoff first, then host repair and
-runtime acceptance. G-2825 is closed verified for its report and fixture handoff;
+Product accepted G-2823's finite image/backend handoff; the remaining
+request-budget runtime handoff is blocked on existing-owner inputs below, before
+host repair and runtime acceptance. G-2825 is closed verified for its report
+and fixture handoff;
 audit owns residual finding
 acceptance. Site retains G-2826's supported continuation under existing delegated
 proof authority and GOAL_ID=product-completion-20261019. Product retains task
@@ -530,9 +531,10 @@ The overdue b0da07b1 event consumed G-2791's actual qualified delivery, not
 another preparation request. Committed G-2823 decisions 1a00362187 and
 013a92733c, dated for the finite resume gate by ea2168c760, supersede the
 historical missing-copy hold and add the frozen default capture. After manager
-rebase, attempt 45 was actually resumed on codex-1/high for this finite cut.
-It has since exited; its result belongs to its own event. This checkpoint
-starts no duplicate worker, restore, runtime or landing.
+rebase, attempt 45 resumed on codex-1/high and supplied the finite handoff
+accepted below. Mail 720638da acknowledged the same delivery as already consumed
+under those instructions; it required no brief change, repeated preparation,
+resume or landing. Qualification remains separate from original consumer proof.
 
 The released project is rezics-qa-book-current-site-20261020-r1 in G-2791's
 existing book-current-20261020-r1 checkout. Product 76c5955006dbea2016e84465d8f3e79fdf4fc979
@@ -564,11 +566,13 @@ no original outcome or full acceptance and supplies no independent source review
 
 Mail 186df6bd's disposition consumed G-2823's later finite handoff at
 `.temp/worktrees/g-2823/.temp/lifecycle/site-image-backend-handoff.md` and routed
-the remaining diagnostic gap to Audit's existing source owners. It reports Main
+the remaining diagnostic gap to Audit's existing source owners. Decision
+15914e4a00 subsequently accepted attempt 45's finite runtime/authentication
+qualification and precise missing-operation handoff. It reports Main
 42963, Account 42701 and Fuseki 39711 ready at 09:57:06.820Z, a normal-OAuth
 authenticated Main session-agent 200, native module 0.5.43, zero pending owner
-migrations and 536 matching storage/model inputs. Those are reported runtime
-qualifications, not a checkpoint acceptance of attempt 45. G-2830 is offered
+migrations and 536 matching storage/model inputs. Acceptance covers only the
+named runtime lanes, not an original outcome. G-2830 is offered
 site-image-book-current-20261020-r1; G-2764 is offered
 default-capture-book-current-20261020-r1. No borrower execution or acceptance is
 inferred. Preserve the endpoint until both explicit releases; G-2823 retains
@@ -576,22 +580,82 @@ the exact supported stop operation and completion receipt, leaving storage and
 peers intact. The handoff charges 217,890.949 ms cumulatively within 600 seconds
 and retains its initial qualification-helper mapping failure separately.
 
+Attempt 45 has temporary receipts and no tracked delta or commits to land.
+G-2823 remains open; its cleanup candidates are not accepted. Program mail
+4ff4a1e0, acknowledged in that result event, corrects diagnostic ownership:
+G-2762 supplies the existing Fuseki boundary observation; G-2764 consumes the
+exact query. This supersedes historical G-2764 source-owner wording without
+rewriting retained evidence. Audit owns source implementation and consumer
+coordination; no G-2823 instrumentation or qualification loop follows.
+
 The exact anonymous default POST /v1/query remains unexecuted: retain the
 100-byte wire body including newline, SHA-256
 49d9dabeefeedbd562209a078d92873c8ca56cada2841d75abb76cadd0db0c24,
 resource-list-v1/global/all/newest/page20 and 72 calls/8,388,608 bytes/10,000 ms
 with all enclosing allocations, authority/final fences and cancellation.
 The successful producer body was 99 bytes and is separate evidence. The
-missing operation, owned by G-2764 and first recorded at 10:00:53.539Z, is a
+missing operation, first recorded at 10:00:53.539Z and now assigned to G-2762
+as the source owner, is a
 supported source diagnostic callback/observation before takeReadCost or
 transport: every attempted owner/stage/call, query hash, counters before/after,
 enclosing allocation and refused-debit caller/readPhase/abort/deadline, with
 installed native/data/physical read-cut pins and one propagated trace. The
 last-eight history omits refused debits; no incomplete callback, current defect
-or historical call-33 diagnosis is accepted. Audit received the executable gap;
-G-2764's own recorded callback writes only its own output. No new transport,
+or historical call-33 diagnosis is accepted. A changed diagnostic source needs
+an explicit affected comparison before use with the frozen runtime. Audit
+received the executable gap; a recorded callback writes only its caller's
+output. No new transport,
 quota change, speculative repair, corpus preparation or competing runtime
 follows. D5-002/AUD-001/AUD-009 and original image acceptance remain pending.
+
+Mail 2d2ea757 requested existing-owner handoffs only; Product replied with the
+missing authenticated callback, governance manifest and mixed-reader mapping,
+without changing a brief or restarting a worker. Mail a85605ff retained G-2762's
+separate original composition pass at f1c42d420130: job 72454503 passed one test
+and 17 assertions, covering expired-entry zero-start, nested cancellation,
+100 ms transport grace plus 300 ms without new/active work, bounded native
+allocations and public/private fresh retries. Its Account override supplies no
+authenticated cross-hop credit or native-engine release. Prior df1a88d9de
+passes, original assertions and historical failures remain; no replay or
+finding closure follows.
+
+Decision 30d4c601e1 selected only the remaining request-budget runtime handoff
+and actually resumed G-2823 attempt 46 on codex-1/high. The worker completed the
+finite inspection and exited blocked, with no new qualifying lane, callback,
+lease, outcome assertion or tracked delta to land. Handoff
+`.temp/worktrees/g-2823/.temp/lifecycle/request-budget-runtime-handoff.md`
+has SHA-256 db21ca64a291e8b8b256ec9d616ba6a1ebb346045e936bc0272478ed46fbc611;
+its `request-budget-runtime-20261020/receipt.json` has SHA-256
+a84ea3da1f86bbdcfde23f941e55916298949bc4dd200fdee02304b0317b0ae8.
+Recorded inspection job 11772411-ea21-4719-a9f7-4a6d8708edff exited zero, and
+all four retained handoff/receipt/helper/Taskfile hashes matched validation.
+The gaps were confirmed at 10:33:05.060911Z; this is the cut's confirmation,
+not their original occurrence. Result event 46 mailed Audit e130be43 for:
+
+- G-2791's compatible released governance manifest and identified stopped-copy
+  custody: actual normal-OAuth stranger/member/owner/moderator/operator, each
+  with at least 24 visible non-null realm_role_change subjects from acknowledged
+  auxiliary Realm changes. G-2750 retains the unchanged notificationCancel
+  staging in notification-read-budget.test.ts, case
+  `D5-001 ${name}: leaving an inbox stops later subject reads and permits a fresh retry`.
+  Book/image readiness and null-subject Feed notices do not qualify.
+- Audit/G-2750's exact full authenticated Web/Main/Account/native executable
+  selector and supported normal-OAuth callback, with affected source/native/
+  model/migration/fixture pins and released custody. Preserve deadline,
+  cancellation, unaffected concurrent waiter, current authority/Request identity,
+  disclosure and retry, including the 100 ms grace and 300 ms pending-zero fence.
+  Local IAM02/IAM10 and the image session-agent 200 supply no cross-hop credit.
+- Audit/G-2750's executable mapping and missing-only staging for original
+  D5-001/assertion-2 and assertion-3 mixed notification/Work/discovery/body-search
+  at 1/2/4/8 readers, retaining pending-zero and fresh retry, plus compatible
+  released fixture/custody. No substitute assertion or producer is authorized.
+
+G-2762 executes the missing proof; G-2765 retains separate finite cold/growth
+proof. G-2823 can qualify the remaining runtime only after those inputs arrive.
+Do not repeat the unchanged inspection or image/default startup, prepare another
+copy, resume for missing inputs or add a catalogue-completeness prerequisite.
+Both image/default borrowers and G-2823's stop custody remain preserved. These
+events accept no cleanup repair, shared refresh, telemetry or original finding.
 
 Product routed the concrete C28 identity/body-reader discrepancy to Audit's
 existing G-2793 owner in mail 90161ead, acknowledged there at 04:10:44.967Z.
@@ -717,10 +781,13 @@ restore isolated copies. Corpus prerequisites do not block independent site
 proof. Small main batches need affected checks and codex-1/xhigh review;
 coordinate publication. Final full regression/confirmation precedes wave merge.
 
-Checkpoint measures: first attempts 9/15 (60%; current day 0/1); landed
-median 4.5 attempts, maximum 45 (G-2823); 105.4M input/920.6k output; tokens per proved
-row unavailable. Tool counts include job wakes and open partial-landing
-continuations. Eight environment attempts, one step continuation and six fixes;
+Checkpoint measures: scope remains 68/68 rows and 408 cells; these events add
+zero proved rows. First attempts are 9/16 (56%; current day 0/2), adding attempt
+46's sameScope fix round to the retained count. Landed median is 4.5 attempts,
+maximum 46 (G-2823); the prior worker-token reading was 105.4M input/920.6k
+output, and tokens per proved row remain unavailable. Tool counts include job
+wakes and open partial-landing continuations. Eight environment attempts, one
+step continuation and seven fixes;
 89 job wakes: 33 passes, 35 assertion failures, two environment failures,
 17 harness failures and two unclassified. The previous day's first-attempt share
 was 3/8 (38%); reviewed G-2842 support on main 4c77554c3b addresses the common
@@ -731,13 +798,22 @@ custody rather than another setup experiment. Event-29's storage-reader harness
 cause was corrected through the existing owner reader in the accepted finite
 comparison. G-2823 owns the isolated backend handoff and causal cleanup repair. The
 unclassified wakes and one retained other-kind refusal still need tooling
-disposition. The five successful covered manager turns recorded 4,501,422 input/
-42,907 output tokens, including 4,188,032 cached input. There were also 43 failed
+disposition. The five successful covered manager turns recorded 4,386,708 input/
+34,224 output tokens, including 4,033,920 cached input. There were also 18 failed
 wrapper attempts for these events; missing usage and this checkpoint are excluded
 from that successful-turn total, which establishes no comparable manager/worker
-share. Product has no live worker and two open tasks; G-2823 attempt 45 and
-G-2826 attempt 32 are exited. Their separate execution/result events own the
-next dispositions.
+share. Product has no live worker and two open tasks; G-2823 attempt 46 and
+G-2826 attempt 32 are exited. The former needs the three actual owner handoffs;
+the latter retains its separate composed-landing execution event. Repeated
+runtime inspection cannot resolve the missing selectors or fixture; existing
+owners retain those concrete operations without another worker loop.
+
+The current full 12-hour read, 2026-10-19T22:50:34Z–2026-10-20T10:50:34Z,
+contains 119 sessions, 483.05M input/461.98M cached, worker input 43%, other
+sessions 57%, zero landing-review sessions and 24% no-decision share. The
+largest recorded worker totals are G-2791 90.29M and G-2823 30.27M input;
+this aggregate does not isolate the work of these five events or manager-only
+tokens. No new monitor or research task was started by this checkpoint.
 
 The measured full 12-hour window 2026-10-19T22:16:24Z–2026-10-20T10:16:24Z
 contains 65 sessions, 293.71M input/281.64M cached, worker input 54%, other
@@ -750,12 +826,14 @@ figures omit older-started sessions and other-session share is not manager-only
 share. Audit owns shared scheduling; verified hourly coverage, later full-window
 comparison and instrumentation attribution remain due.
 
-Next event owners: product consumes G-2823 attempt 45's finite image/authentication
-handoff and precise source-diagnostic blocker through its own result event;
-G-2791 remains sole custodian of the delivered qualified copy, with no repeated
-preparation/restore. Audit routes the supported diagnostic operation through
-G-2764's existing source owner and the exact single-request proof through its
-offered lease. G-2830 retains the original image journeys through its separate
+Next event owners: G-2823 attempt 45's finite image/authentication handoff is
+accepted; attempt 46 remains exited for the three actual existing-owner inputs
+requested in mail e130be43. Audit routes G-2791's governance manifest and
+G-2750's authenticated and mixed-reader selectors/callbacks before Product
+qualifies those lanes. G-2791 remains sole custodian of the delivered qualified
+Book copy, with no repeated preparation/restore. Audit routes the supported
+diagnostic observation through G-2762 and G-2764's exact single-request proof
+through its offered lease. G-2830 retains the original image journeys through its separate
 offered lease. Preserve the endpoint and G-2823's stop custody until both actual
 borrowers release. Audit retains G-2793's exact C28 binding, G-2781's unchanged
 cancellation assertion and the G-2799/Site consumer gate coordination.
