@@ -252,7 +252,8 @@ test('absolute citation IRIs finish one native command and retain exact rows thr
   const f = await fixture(), key = randomUUID();
   const row = { ...nutrients[0]!, nutrient: 'urn:recipe:nutrient/energy#panel', unit: 'qudt:KiloCAL',
     evidence: 'doi:10.1000/182' };
-  const intent = f.body({ nutrients: [row, { ...row, evidence: 'tag:example.test,2026:panel/é?part=2#row' }] });
+  const expectedRows = [row, { ...row, evidence: 'tag:example.test,2026:panel/é?part=2#row' }];
+  const intent = f.body({ nutrients: expectedRows });
   const response = await f.post(intent, key);
   expect(response.status).toBe(200);
   const written = await response.json();
@@ -264,7 +265,7 @@ test('absolute citation IRIs finish one native command and retain exact rows thr
   expect(f.receipts.size).toBe(1);
   expect(f.versions.size).toBe(2);
   const stored = await f.measures();
-  expect(stored.filter(item => item.kind === 'nutrient')).toEqual(intent.nutrients);
+  expect(stored.filter(item => item.kind === 'nutrient')).toEqual(expectedRows);
   for (const path of [`/v1/recipes/${structure.slice(-36)}/measures`, `/v1/recipes/works/${work.slice(-36)}`]) {
     const read = await f.get(`${path}?actingSubject=${actor}&revision=${written.revision}`);
     expect(read.status).toBe(200);

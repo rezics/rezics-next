@@ -62,14 +62,15 @@ test('exact revision measures use Recipe, Duration and nutrition terms with expl
 });
 
 test('measure RDF preserves absolute reference identities and rejects terms that could escape an IRI', () => {
+  const nutrient = 'urn:recipe:nutrient/energy?panel=1#row', unit = 'qudt:KiloCAL';
   const measure: RecipeMeasure = { kind: 'nutrient', value: { numerator: 1, denominator: 3 },
-    nutrient: 'urn:recipe:nutrient/energy?panel=1#row', unit: 'qudt:KiloCAL', basis: 'per-serving',
+    nutrient, unit, basis: 'per-serving',
     coverage: 'unknown', provenance: 'source-stated', evidence: 'doi:10.1000/182' };
   for (const evidence of ['doi:10.1000/182', 'mailto:author@example.test',
     'tag:example.test,2026:panel/é?part=2#row', 'https://example.test/panel%20one#row']) {
     const triples = quads(projectRecipeMeasures([{ ...measure, evidence }], id, id));
     for (const [predicate, value] of [['http://www.w3.org/ns/prov#wasDerivedFrom', evidence],
-      ['https://schema.org/unitCode', measure.unit], ['https://schema.org/propertyID', measure.nutrient]]) {
+      ['https://schema.org/unitCode', unit], ['https://schema.org/propertyID', nutrient]]) {
       expect(triples.filter(q => q.predicate.value === predicate).map(q => ({ kind: q.object.termType, value: q.object.value })))
         .toEqual([{ kind: 'NamedNode', value }]);
     }
