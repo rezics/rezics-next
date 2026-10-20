@@ -2834,5 +2834,646 @@
       "Absolute Main inference and existing web composition guard gates remain red; original C27/C30 and complete nutrition matrix proof remain due."
     ],
     "managerNext": "Use this appended source verdict for the single native-recipe-measure-citation-iri-pending correction at 6c3a071baba93664d44f63e3026c398fe3f34c1b. Preserve original 1096981a evidence and the independent 7c61 scanner finding, keep original acceptance and actual composition landing gates open, and route remaining proof to its existing owners."
+  },
+  "nativeProjectedOutputLifetimeCorrectionFollowUp": {
+    "profile": "native-projected-output-lifetime-finding-follow-up-v1",
+    "reviewedAt": "2026-10-20T14:12:28.368515Z",
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "sameOriginalReviewer": true,
+      "delegation": false,
+      "fallback": false
+    },
+    "decision": {
+      "sourceVerdict": "accepted-bounded-correction",
+      "finding": "native-next-projected-output-overwrite",
+      "findingDisposition": "resolved at the sealed scanner source and unchanged controlled assertions; original product acceptance remains open",
+      "reason": "Native next forwarding now requires the enclosing projection literal to be the direct function return or concise-arrow body, after only transparent parentheses. Stored, aliased, spread-wrapped and Object.assign-wrapped output lifetimes are conservatively refused. Existing input-stability, duplicate-key, override and partition checks remain intact.",
+      "newIntroducedDefectDemonstrated": false,
+      "missingCorrectionDependency": null,
+      "scope": "Only 6c3a071baba93664d44f63e3026c398fe3f34c1b..3fdc9277188a80ec5e7235678236cb823f21cd4f, exactly two changed paths; follow-up to the finding in retainedPageConsumerCorrectionFirstSourceReview at 7c61dfd27b. No moving consumer source or accepted batch was reviewed.",
+      "historicalPreservation": "Append this new top-level key only. All historical values, original changes-requested verdicts, raw assertion/setup failures, and accepted Collection/native/Source/query/Recipe/citation/library reports remain unchanged. Citation verdict 148be90001 and check receipt 3391a82758 are consumed without rereview.",
+      "staticGuardFindingResolved": true,
+      "productionEntriesResolved": 0,
+      "productionEntriesIntroduced": 0,
+      "originalA17C29NativeAcceptance": false,
+      "runtimeAcceptance": false,
+      "classClosure": false,
+      "landingApproval": false
+    },
+    "pins": {
+      "parent": "6c3a071baba93664d44f63e3026c398fe3f34c1b",
+      "candidate": "3fdc9277188a80ec5e7235678236cb823f21cd4f",
+      "candidateDirectParentVerified": "6c3a071baba93664d44f63e3026c398fe3f34c1b",
+      "historicalFindingReview": "7c61dfd27bc0dd126ff10698c8902cfb37b5e00e",
+      "historicalReviewKey": "retainedPageConsumerCorrectionFirstSourceReview",
+      "reviewWorktreeHeadBeforeReport": "3391a827583b39c074ca834d5f7dba5b09c40cbe",
+      "changedPaths": 2,
+      "additions": 70,
+      "deletions": 2,
+      "changedBlobs": [
+        {
+          "path": "scripts/static/web-continuations.ts",
+          "before": {
+            "blob": "113e12dc6c2c2f61a70b41ab1e8075cc11619f2b",
+            "bytes": 20912,
+            "sha256": "b91622183cbc98cc0885432a1bae711ca0cd8b42ef83daf1df748be4d69b5aa5"
+          },
+          "published": {
+            "blob": "a00c81832f1837c634a3a4c6b17448ad2c618cf2",
+            "bytes": 21346,
+            "sha256": "74b92b6e1a865b386509dc026215fad264c9e63bc9e1bedb333da173e95eb67f"
+          },
+          "numstat": "10\t2\tscripts/static/web-continuations.ts"
+        },
+        {
+          "path": "scripts/static/web-relations-page.test.ts",
+          "before": {
+            "blob": "5b044468271a4cde05ecadba3227ab1902cbb6a3",
+            "bytes": 5208,
+            "sha256": "36278b65162b93671162f73e0945dc32056b2863a5439b0f7af62e52f0e98d9b"
+          },
+          "published": {
+            "blob": "55bfa73df4e33826f624a9bb9a256de0341681b7",
+            "bytes": 8663,
+            "sha256": "61e66a8294cdf8b05f9eff68cef1075b0e4e96fde2b0234188695fc2e27fe50b"
+          },
+          "numstat": "60\t0\tscripts/static/web-relations-page.test.ts"
+        }
+      ],
+      "beforeScannerEqualsPreviouslyReviewed79a25d53": true
+    },
+    "inputs": {
+      "ownerWorktreeReadOnly": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2758",
+      "frozenHandoff": {
+        "path": ".temp/goal/projected-output-follow-up/projected-output-handoff.md",
+        "sha256": "03adf519dbb81229431ec8db3928ddff7f7b3e45c512b2e24571d94008221ad1"
+      },
+      "sourceMap": {
+        "path": ".temp/goal/projected-output-follow-up/projected-output-source-map.json",
+        "sha256": "9edcc9b119689032c22651b4dbe00b3dfdd1eea126d418fc60bc1d039a9d0765"
+      },
+      "guardMap": {
+        "path": ".temp/goal/projected-output-follow-up/projected-output-guard-map.json",
+        "sha256": "823dccb59bbc4f62443005a8b2346e19befce78351fa6ad571e5a8d5ec4109a9"
+      },
+      "counterexample": {
+        "path": ".temp/goal/projected-output-follow-up/native-projection-override.test.ts",
+        "sha256": "f5a80373f86eaf6cac7c5a66a5847ddf8df829dc85f87a6280e514e90c58504c",
+        "bytes": 1924,
+        "matchesOriginalReviewerFile": true
+      },
+      "receiptReuse": "Exact immutable changed blobs, direct parent, original test prefix, 19 unchanged owner/guard/outcome dependencies and 3 native bindings independently checked through Git blob IDs, byte counts and SHA256. Every check log in the source map and both development-failure logs were copied read-only and hash-verified. No owner working-source reads or product reruns."
+    },
+    "actualSourceReview": {
+      "changedImplementation": "scripts/static/web-continuations.ts:184-222, with caller at continuationInventory native branch. stableNativeEnvelope follows only ParenthesizedExpression ancestors from the literal, then requires ReturnStatement.argument or ArrowFunctionExpression.body identity. VariableDeclarator, enclosing ObjectExpression, CallExpression, nested wrapper and other output parents fail before the existing input-envelope scan.",
+      "preservedExistingChecks": "No whitelist or inventory increase. Existing single input binding, writes/escapes/shadows, exact same-envelope native next, literal unique keys, no computed/getter/method/spread/__proto__ overrides, and exhaustive partition proof are unchanged. web-page-filtering.ts and the shared production tests/inventories are byte-identical. The entire original 5208-byte scanner-test prefix is preserved.",
+      "positiveControls": "Five direct function/arrow forms execute with both empty items and repeated object incidences, and opaque Unicode/punctuation, zero-string, empty-string and null tokens. Exact array identity and token equality are asserted before scanner acceptance. Transparent parentheses preserve direct forwarding.",
+      "lossControls": "Eight additive executable losses cover stored mutation, alias and nested alias mutation, replacement, escaping helper mutation, enclosing spread override and both Object.assign positions. They establish unchanged input items/token and null output token, then require dropped-continuation for page.items. Four further stored/wrapped safe examples are deliberately refused because their lifetimes are unproved.",
+      "preservedOriginalControls": "All 44 original cases remain byte-for-byte: direct forwarding, dropped/wrong/null/invented native token, empty-page conditional loss, duplicate item/next keys, spread overrides, input writes/aliases/shadowing, slice/filter and dropped partition branches; the new 61-case receipt reruns them.",
+      "proofBoundary": "This is a local conservative structural rule, not an interprocedural alias, Map/helper/React or post-return caller proof. Unknown stored/wrapped projections may still be reported when safe. No broader analyzer or consumer behavior approval is inferred."
+    },
+    "findings": [
+      {
+        "id": "native-next-projected-output-overwrite",
+        "status": "resolved-bounded-source-and-static-assertions",
+        "historicalReview": "7c61dfd27b",
+        "before": {
+          "job": "fdf9ea3e-d7b5-4efd-9944-64c78de4549f",
+          "result": "4 pass / 3 fail / 25 expectations",
+          "outcomeAssertionReached": true,
+          "details": "All three original loss programs execute: output next becomes null while input token and item-array identity remain intact. At fixture line 30 the old native scanner returns no dropped-continuation for stored binding mutation, enclosing spread and Object.assign override. Three exact-parent refusals and unchanged direct-forwarding control pass. Base 6c3a071b scanner is byte-identical to reviewed 79a25d53."
+        },
+        "after": {
+          "job": "218413ca-a2fc-43b8-ae6f-9bbaa92f46f3",
+          "step": 1,
+          "result": "7 pass / 0 fail / 25 expectations",
+          "outcomeAssertionReached": true,
+          "details": "The identical fixture now gets dropped-continuation/page.items for all three loss programs; exact-parent controls and safe direct forwarding remain passed."
+        },
+        "assertionsChanged": false,
+        "setupFailureInTheseRuns": false,
+        "closureBoundary": "Resolves the reproduced static-guard false negatives only. It demonstrates no actual public native/API/UI success or runtime data-loss repair."
+      }
+    ],
+    "reusedChecks": [
+      {
+        "kind": "exact-review-counterexample-before",
+        "result": "fail-assertion",
+        "job": "fdf9ea3e-d7b5-4efd-9944-64c78de4549f",
+        "cases": "4 pass / 3 fail / 25 expectations",
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/goal/projected-output-review-inputs/native-projection-override.test.ts",
+        "logs": [
+          ".temp/goal/jobs/fdf9ea3e-d7b5-4efd-9944-64c78de4549f.log"
+        ],
+        "logBytes": [
+          {
+            "path": ".temp/goal/jobs/fdf9ea3e-d7b5-4efd-9944-64c78de4549f.log",
+            "bytes": 5175,
+            "sha256": "e0b537e973460420e30e28da7cb1b8bcad70a43f49fe9f4fcb5a790bde792c17"
+          }
+        ]
+      },
+      {
+        "kind": "exact-review-counterexample-after",
+        "result": "pass",
+        "job": "218413ca-a2fc-43b8-ae6f-9bbaa92f46f3",
+        "step": 1,
+        "cases": "7 pass / 0 fail / 25 expectations",
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/goal/projected-output-review-inputs/native-projection-override.test.ts",
+        "logs": [
+          ".temp/goal/jobs/218413ca-a2fc-43b8-ae6f-9bbaa92f46f3.1.log"
+        ],
+        "logBytes": [
+          {
+            "path": ".temp/goal/jobs/218413ca-a2fc-43b8-ae6f-9bbaa92f46f3.1.log",
+            "bytes": 3158,
+            "sha256": "3ef1cc28ec8f1413484665018cff1fce0e0d851d6847dc6d221f246cb8f408a6"
+          }
+        ]
+      },
+      {
+        "kind": "additive-scanner-controls",
+        "result": "pass",
+        "job": "218413ca-a2fc-43b8-ae6f-9bbaa92f46f3",
+        "step": 2,
+        "qa": "20261020t134530-42b7a6",
+        "cases": "61 pass / 0 fail / 195 expectations",
+        "command": "bun scripts/goal/goalctl.ts test scripts/static/web-relations-page.test.ts",
+        "logs": [
+          ".temp/goal/jobs/218413ca-a2fc-43b8-ae6f-9bbaa92f46f3.2.log",
+          ".artifacts/qa/20261020t134530-42b7a6/logs/owner.log"
+        ],
+        "logBytes": [
+          {
+            "path": ".temp/goal/jobs/218413ca-a2fc-43b8-ae6f-9bbaa92f46f3.2.log",
+            "bytes": 881,
+            "sha256": "d0997d2e02ce0b724fa9aade6cae24adda25adfd6525151c46f6a1f0dadcf107"
+          },
+          {
+            "path": ".artifacts/qa/20261020t134530-42b7a6/logs/owner.log",
+            "bytes": 11730,
+            "sha256": "4a88e15a0dae8d24e828dc01234e951952f4d3561c7ffd8265ac4557371e9d4d"
+          }
+        ]
+      },
+      {
+        "kind": "focused-types",
+        "result": "pass",
+        "job": "218413ca-a2fc-43b8-ae6f-9bbaa92f46f3",
+        "step": 3,
+        "files": 6,
+        "command": "task goal:type-files -- --project scripts/tsconfig.json scripts/static/web-continuations.ts scripts/static/web-relations-page.test.ts",
+        "logs": [
+          ".temp/goal/jobs/218413ca-a2fc-43b8-ae6f-9bbaa92f46f3.3.log"
+        ],
+        "logBytes": [
+          {
+            "path": ".temp/goal/jobs/218413ca-a2fc-43b8-ae6f-9bbaa92f46f3.3.log",
+            "bytes": 639,
+            "sha256": "9ae3b0077410e0a045772634a405da5be002981858d61173b22a2d86c5f1ba78"
+          }
+        ]
+      },
+      {
+        "kind": "normal-lint-and-ast",
+        "result": "pass",
+        "job": "218413ca-a2fc-43b8-ae6f-9bbaa92f46f3",
+        "step": 4,
+        "command": "task goal -- check --only lint",
+        "logs": [
+          ".temp/goal/jobs/218413ca-a2fc-43b8-ae6f-9bbaa92f46f3.4.log",
+          ".temp/goal/check/run-uvUXxZ/output.log"
+        ],
+        "logBytes": [
+          {
+            "path": ".temp/goal/jobs/218413ca-a2fc-43b8-ae6f-9bbaa92f46f3.4.log",
+            "bytes": 189,
+            "sha256": "5961bf9aa35ab0d816ba9d42cba9dd0d4b7f5ff0a6a6b140efbbf4f8cc7cde24"
+          },
+          {
+            "path": ".temp/goal/check/run-uvUXxZ/output.log",
+            "bytes": 692,
+            "sha256": "d7104914759412596a7e3beba34b514afd8e2ca71f0d36cf6cb4dbf09831a154"
+          }
+        ]
+      },
+      {
+        "kind": "exact-production-guard-comparison",
+        "result": "pass-diagnostic-only",
+        "job": "218413ca-a2fc-43b8-ae6f-9bbaa92f46f3",
+        "step": 5,
+        "command": "task -t .temp/goal/projected-output.Taskfile.yml guard-map",
+        "logs": [
+          ".temp/goal/jobs/218413ca-a2fc-43b8-ae6f-9bbaa92f46f3.5.log"
+        ],
+        "logBytes": [
+          {
+            "path": ".temp/goal/jobs/218413ca-a2fc-43b8-ae6f-9bbaa92f46f3.5.log",
+            "bytes": 607,
+            "sha256": "6c198e6d55c27f6eef3e241db5228a214e96691c7937de63a65177a1f52069f4"
+          }
+        ]
+      },
+      {
+        "kind": "both-unchanged-production-guard-files",
+        "result": "fail-assertion",
+        "job": "218413ca-a2fc-43b8-ae6f-9bbaa92f46f3",
+        "step": 6,
+        "qa": "20261020t134557-76f778",
+        "cases": "60 pass / 2 fail / 87 expectations",
+        "continuation": 17,
+        "predicates": 3,
+        "command": "bun scripts/goal/goalctl.ts test scripts/static/web-continuations.test.ts scripts/static/web-page-filtering.test.ts",
+        "logs": [
+          ".temp/goal/jobs/218413ca-a2fc-43b8-ae6f-9bbaa92f46f3.6.log",
+          ".artifacts/qa/20261020t134557-76f778/logs/owner.log"
+        ],
+        "logBytes": [
+          {
+            "path": ".temp/goal/jobs/218413ca-a2fc-43b8-ae6f-9bbaa92f46f3.6.log",
+            "bytes": 1018,
+            "sha256": "faacbc1d95ebc7eae4da3dbdea71db554f71a29a9cab864dda07768efa3cfbbb"
+          },
+          {
+            "path": ".artifacts/qa/20261020t134557-76f778/logs/owner.log",
+            "bytes": 19135,
+            "sha256": "b1632ae31f3c2e216cd224e533e2f39b6f6281fcc8f7fb702531051f338d5c19"
+          }
+        ]
+      },
+      {
+        "kind": "post-rebase-focused-types",
+        "result": "pass",
+        "job": "4520acc6-9cff-4703-a2af-8028dc4f13c2",
+        "step": 1,
+        "pin": "3fdc9277188a80ec5e7235678236cb823f21cd4f",
+        "files": 6,
+        "command": "task goal:type-files -- --project scripts/tsconfig.json scripts/static/web-continuations.ts scripts/static/web-relations-page.test.ts",
+        "logs": [
+          ".temp/goal/jobs/4520acc6-9cff-4703-a2af-8028dc4f13c2.1.log"
+        ],
+        "logBytes": [
+          {
+            "path": ".temp/goal/jobs/4520acc6-9cff-4703-a2af-8028dc4f13c2.1.log",
+            "bytes": 628,
+            "sha256": "68c87effdb8500b1157bcb0a915e956b41f4fd2641a6e8f8fd23eeb692a91dea"
+          }
+        ]
+      },
+      {
+        "kind": "local-wave-publish",
+        "result": "pass",
+        "job": "4520acc6-9cff-4703-a2af-8028dc4f13c2",
+        "step": 2,
+        "pin": "3fdc9277188a80ec5e7235678236cb823f21cd4f",
+        "command": "git push . HEAD:refs/heads/wave/audit-20261019",
+        "logs": [
+          ".temp/goal/jobs/4520acc6-9cff-4703-a2af-8028dc4f13c2.2.log"
+        ],
+        "logBytes": [
+          {
+            "path": ".temp/goal/jobs/4520acc6-9cff-4703-a2af-8028dc4f13c2.2.log",
+            "bytes": 331,
+            "sha256": "99b2303ab238238360d636d7aa33b4fcd1caa8f91ab74087c37ffca3ca7fd2bf"
+          }
+        ]
+      }
+    ],
+    "retainedCorrectionFailure": {
+      "job": "86be14dd-6690-437c-afdc-caf3f3b67427",
+      "qa": "20261020t134417-9e8545",
+      "cases": "59 pass / 1 fail / 178 expectations",
+      "reason": "New positive concise-arrow control caught transparent parentheses being refused. Fixed with parenthesized-expression ancestry only; no assertion removed.",
+      "logs": [
+        {
+          "path": ".temp/goal/jobs/86be14dd-6690-437c-afdc-caf3f3b67427.2.log",
+          "bytes": 976,
+          "sha256": "08a6333545ea97adf526b04fb497b3061986c22e9c00e7d3145bc5851da9128b"
+        },
+        {
+          "path": ".artifacts/qa/20261020t134417-9e8545/logs/owner.log",
+          "bytes": 12520,
+          "sha256": "828069ce5417e886de10653af148e941e55f01348159ff0d81960b8b32b423b3"
+        }
+      ]
+    },
+    "unchangedDependencies": [
+      {
+        "path": "scripts/static/web-continuations.test.ts",
+        "reviewedBlob": "6b235b24fdb2a486a2e51c7bc25ef653444ff8d3",
+        "currentBlob": "6b235b24fdb2a486a2e51c7bc25ef653444ff8d3",
+        "sha256": "01cf9f4d023c941bc3246a24246ba3daa8b11900ff3257a292cffc4ff0dec0ba",
+        "bytes": 11245
+      },
+      {
+        "path": "scripts/static/web-page-filtering.test.ts",
+        "reviewedBlob": "93efd32140c4befe6fa3a8586986c0e1a2e7a9d4",
+        "currentBlob": "93efd32140c4befe6fa3a8586986c0e1a2e7a9d4",
+        "sha256": "b7b2be8b461241b1cd82cbffb4665930799b70e86c37cb5ee47d7588e9e9f4fe",
+        "bytes": 5454
+      },
+      {
+        "path": "scripts/static/web-continuations.inventory.json",
+        "reviewedBlob": "657afcd915946269c48897559453b25b334d7496",
+        "currentBlob": "657afcd915946269c48897559453b25b334d7496",
+        "sha256": "64a2a39920b1eaaf86bd89d8dbe40f6c9a2a876a317ab87f707804bfaf1241de",
+        "bytes": 305371
+      },
+      {
+        "path": "scripts/static/web-page-filtering.inventory.json",
+        "reviewedBlob": "0b483885106d15b3a5822296f9a2bf354aba2209",
+        "currentBlob": "0b483885106d15b3a5822296f9a2bf354aba2209",
+        "sha256": "7afb8219d982f85921ee5e658fc6c251b5776d9df397d44ab8f2c24dafa9b9fc",
+        "bytes": 58548
+      },
+      {
+        "path": "scripts/static/web-page-filtering.ts",
+        "reviewedBlob": "c3ab827628a4ec16deecf402b4cf59f05c198b46",
+        "currentBlob": "c3ab827628a4ec16deecf402b4cf59f05c198b46",
+        "sha256": "6ccaec3dd8163784a0eb566959ed9f2f32537d7ebfe51bf43bf22df2c3be436d",
+        "bytes": 15106
+      },
+      {
+        "path": "scripts/static/web-source-scan.ts",
+        "reviewedBlob": "ceb9d00d758ec1f2033d5ab53fb7b1af8569a697",
+        "currentBlob": "ceb9d00d758ec1f2033d5ab53fb7b1af8569a697",
+        "sha256": "993a7b51346ba84d79f67e6b6ee7ae4c5f31aaf672d7c8d696ca0f8f8c9f3b2b",
+        "bytes": 2931
+      },
+      {
+        "path": "apps/web/features/entity-page/identity-read.ts",
+        "reviewedBlob": "c4e2e1c8f544695e0b1c4d0aa660d4b977c7941a",
+        "currentBlob": "c4e2e1c8f544695e0b1c4d0aa660d4b977c7941a",
+        "sha256": "26bb5c98cd31db8b8aa37f6dda8809011b21f8ebe730accfeb131a8bc9200e0e",
+        "bytes": 10586
+      },
+      {
+        "path": "apps/web/features/entity-page/identity-relations.ts",
+        "reviewedBlob": "05d34bcfff4d84611bdc2f1266f4532ca83651c2",
+        "currentBlob": "05d34bcfff4d84611bdc2f1266f4532ca83651c2",
+        "sha256": "8b7ddcbf222dd9aee9420f30031fbb5752c303bb211e8e28868c6eb739f4435e",
+        "bytes": 4126
+      },
+      {
+        "path": "apps/web/features/entity-page/sections.tsx",
+        "reviewedBlob": "c82579bf3c6c5fe1bb78049f0ed9d249d5c36f23",
+        "currentBlob": "c82579bf3c6c5fe1bb78049f0ed9d249d5c36f23",
+        "sha256": "27af956d9ee5fc2e4c80e3efbf3f905ce1a2a539a620b7633cc5aa915e218890",
+        "bytes": 7251
+      },
+      {
+        "path": "apps/web/features/entity-page/entity-page.tsx",
+        "reviewedBlob": "c8213dba9e79177300de284c1cc1fbd079f19b1b",
+        "currentBlob": "c8213dba9e79177300de284c1cc1fbd079f19b1b",
+        "sha256": "01f76819634506016c58e52c052edabc767d20d12bd6b8c3b8878ee3c2c3536e",
+        "bytes": 16490
+      },
+      {
+        "path": "apps/web/features/entity-page/identity-relations.test.ts",
+        "reviewedBlob": "afeac4cde8291bbec18ed2847e8c55c840ab0d58",
+        "currentBlob": "afeac4cde8291bbec18ed2847e8c55c840ab0d58",
+        "sha256": "0c8360045bfc04cf47489a768b3d0fb164840de462eceef3262862618ca0970a",
+        "bytes": 15740
+      },
+      {
+        "path": "apps/web/features/entity-page/identity-reads.test.ts",
+        "reviewedBlob": "9c656b37ac430bc88734bcf58eb8c06888500a7b",
+        "currentBlob": "9c656b37ac430bc88734bcf58eb8c06888500a7b",
+        "sha256": "c2aae69f4865f3563ed5a6672642e9ac59a14c0c5002ba0a622f73ff05f9fd34",
+        "bytes": 12979
+      },
+      {
+        "path": "apps/web/features/work-levels/relation-rows.ts",
+        "reviewedBlob": "4d00b26b6088dd2cba54369302e0cf263ef8cb82",
+        "currentBlob": "4d00b26b6088dd2cba54369302e0cf263ef8cb82",
+        "sha256": "4a048151d43774b65c2cd3c2571673d97cbbe1891aaa3926ff59f62953982cc4",
+        "bytes": 11988
+      },
+      {
+        "path": "apps/web/features/entity-page/views.tsx",
+        "reviewedBlob": "af1852178ed48456d78b962f2c2e7d429f446233",
+        "currentBlob": "af1852178ed48456d78b962f2c2e7d429f446233",
+        "sha256": "ad694a5091f60af2f6a3a5f01a39a66e8250a6782bb4b048f7826de813e2381f",
+        "bytes": 15130
+      },
+      {
+        "path": "apps/web/features/work-levels/connections.tsx",
+        "reviewedBlob": "7c49bc6df47da6277931cf0f10874e40cf51c231",
+        "currentBlob": "7c49bc6df47da6277931cf0f10874e40cf51c231",
+        "sha256": "976c6a2f84c08ebea1c2e8aa4cc86a095d1649b2b5b1a3efa4ac310af4993ecb",
+        "bytes": 22180
+      },
+      {
+        "path": "apps/web/features/work-levels/previews.tsx",
+        "reviewedBlob": "d20929232e94dc74c3bdacfc983556e1d36bed46",
+        "currentBlob": "d20929232e94dc74c3bdacfc983556e1d36bed46",
+        "sha256": "f8b95743439d8334dac974d66a44a2709aa09ac0d58979bada17bc79dc8ef697",
+        "bytes": 8505
+      },
+      {
+        "path": "tests/qa/integration/collection-domain-roles.test.ts",
+        "reviewedBlob": "c70b79027c5c91f6a2b62a4e33b29a9364984e4d",
+        "currentBlob": "c70b79027c5c91f6a2b62a4e33b29a9364984e4d",
+        "sha256": "c6d149bc04ca1080c5c2333950615adccc90b3cae6e798ae19ad9a058dee25fa",
+        "bytes": 5335
+      },
+      {
+        "path": "tests/qa/integration/support/catalogue-information.ts",
+        "reviewedBlob": "d757ab29ce4faba937f9abe54b28c3fa7c213c9a",
+        "currentBlob": "d757ab29ce4faba937f9abe54b28c3fa7c213c9a",
+        "sha256": "3fc81eed5c0090521d49a669c25c608b07182a1a2ec23042780193bd4dc7c94f",
+        "bytes": 51981
+      },
+      {
+        "path": "apps/web/tests/catalogue-detail-contract.e2e.ts",
+        "reviewedBlob": "b6045fca00f40afd56dd8ac13148ed929f7d4cd9",
+        "currentBlob": "b6045fca00f40afd56dd8ac13148ed929f7d4cd9",
+        "sha256": "b6889bcde1f06083da74aa0507f85c35a91627a80dea75cb9e3f586b8ebfa2c3",
+        "bytes": 32565
+      }
+    ],
+    "unchangedNativeBindings": [
+      {
+        "path": "generated/openapi/main/public.json",
+        "reviewedBlob": "4bf883008968ad9bdc80b65eefca9b5c1927ef28",
+        "currentBlob": "4bf883008968ad9bdc80b65eefca9b5c1927ef28",
+        "sha256": "63b34a28004ab07e4e1472f378b3229170ae19e2598bb7fe07458ec091ac36f3",
+        "bytes": 42513063
+      },
+      {
+        "path": "apps/web/features/work-levels/types.ts",
+        "reviewedBlob": "22a62804c79bb7c90bcfeea2f58c3d3f65b9f4f2",
+        "currentBlob": "22a62804c79bb7c90bcfeea2f58c3d3f65b9f4f2",
+        "sha256": "be954940d68962ccf2bcd1a4f8f053ce31df10945095f782431055b6be80c0e8",
+        "bytes": 2629
+      },
+      {
+        "path": "services/main/src/modules/wiki/evidence.ts",
+        "reviewedBlob": "d5484dfcd8c18646fa6944fb92482d4d29efa5e2",
+        "currentBlob": "d5484dfcd8c18646fa6944fb92482d4d29efa5e2",
+        "sha256": "a8b97a506398fe5babb0618b0ec2ffce2644f3c5253df59f82a04f01f9068b43",
+        "bytes": 9615
+      }
+    ],
+    "actualCompositionLandingLimits": {
+      "productionAssertionReceipt": {
+        "job": "218413ca-a2fc-43b8-ae6f-9bbaa92f46f3",
+        "step": 6,
+        "qa": "20261020t134557-76f778",
+        "result": "60 pass / 2 fail / 87 expectations",
+        "outcomeAssertionsReached": true,
+        "setupFailure": false,
+        "failedCases": [
+          "production web projection syntax introduces no new violations",
+          "production web page predicates have structural evidence or an explicit API gap"
+        ],
+        "priorMatchingReceipt": "20261020t130226-bd8aa2"
+      },
+      "exactGuardMapBinding": {
+        "sourceCount": 1426,
+        "sourceDigest": "7bac431b71113c9b426a532e7b7b350cb9eabc0a7b6da30cc6fc4fe3208ceca3",
+        "beforeOnCurrentEqualsAfter": true,
+        "retainedMapSha256": "d9fe9745f50ccef90ef16d16a89880e59ccb6c6316cbfa135bcb24258cf30d55"
+      },
+      "productionDeltaCounts": {
+        "scannerEffect": {
+          "continuation": {
+            "introduced": 0,
+            "resolved": 0,
+            "residual": 17
+          },
+          "expressions": {
+            "introduced": 0,
+            "resolved": 0,
+            "residual": 17
+          },
+          "predicates": {
+            "introduced": 0,
+            "resolved": 0,
+            "residual": 3
+          }
+        },
+        "peerBaseEffect": {
+          "continuation": {
+            "introduced": 0,
+            "resolved": 0,
+            "residual": 17
+          },
+          "expressions": {
+            "introduced": 0,
+            "resolved": 0,
+            "residual": 17
+          },
+          "predicates": {
+            "introduced": 0,
+            "resolved": 0,
+            "residual": 3
+          }
+        },
+        "retainedReceiptComparison": {
+          "continuation": {
+            "introduced": 0,
+            "resolved": 0,
+            "residual": 17
+          },
+          "expressions": {
+            "introduced": 0,
+            "resolved": 0,
+            "residual": 17
+          },
+          "predicates": {
+            "introduced": 0,
+            "resolved": 0,
+            "residual": 3
+          }
+        }
+      },
+      "productionInterpretation": "All 17 continuation entries and 3 predicates remain red, identical before/after and to the retained actual map: zero resolved or introduced fingerprints or context-free expressions in this sealed correction. Historical introduced/resolved/residual classifications in the earlier review are preserved, not relabelled inherited.",
+      "existingOwners": "G-2758 retains consumer identityEntries/relationRows and real continuation behavior. Catalogue retains the unchanged readRecipeVisitFrame slice(0,6) disposition; it remains a scanner finding, not a demonstrated runtime defect. Site retains its three Home/Zone entries; Site source/history was not inspected.",
+      "inference": "Retain red/inconclusive nullable-meaning-handoff.md record: Main 27005564 above 26950993.650000002 (stored 25667613 +5%), same on untouched base; candidate Web 38863247, base Web halted on original nine diagnostics and produced no measurements.json. Not rerun or waived.",
+      "gateDisposition": "Actual composed guard and retained absolute inference failures remain landing limits. They neither waive original acceptance nor block this bounded finding-follow-up source verdict. No new inference or broad check was justified."
+    },
+    "originalAcceptanceStillDue": {
+      "api": "All unchanged original A17/six-persona C29/native/non-Work outcomes and original C27/C30/Recipe/API obligations remain with their existing owners. No acceptance assertion was executed or edited here.",
+      "ui": "Original browser, Storybook, axe, screenshots, keyboard/navigation and actual rendered meaning/continuation outcomes remain due.",
+      "retainedApprovals": "All prior approved batches, citation correction verdict 148be90001 and check receipt 3391a82758 stay unchanged and were not rereviewed."
+    },
+    "reviewerChecks": {
+      "readOnlyAnalysis": [
+        "Exact two-file parent/delta/blob/SHA256/size verification",
+        "Original scanner-test prefix and 22 protected dependency/native bindings verified",
+        "All mapped receipt logs and development-failure log hashes verified; original reviewer fixture equals historical local bytes",
+        "Before/after assertion logs, 61/195 controls, focused types/lint/AST and both real red production assertions inspected",
+        "Identical frozen before/after production arrays and zero introduced/resolved deltas checked"
+      ],
+      "focusedProductRerun": "None: no concrete unresolved counterexample emerged; exact owner checks reused as instructed.",
+      "recorded": [
+        {
+          "job": "0f7d7a2b-0300-4bb7-bb13-db64224e66ba",
+          "command": "task --taskfile .temp/goal/projected-output-follow-up/report.Taskfile.yml verify",
+          "exitCode": 201,
+          "result": "REPORT VERIFIER SETUP FAILURE: compared historical after envelope (with pin/count/digest metadata) to current findings-only after. Corrected comparison to exact continuation/predicate arrays and separate count/digest equality; source evidence and report verdict unchanged. Subsequent docs/normal check steps did not start.",
+          "outcomeAssertionReached": false,
+          "reportVerifierAssertionReached": true,
+          "log": ".temp/goal/jobs/0f7d7a2b-0300-4bb7-bb13-db64224e66ba.1.log",
+          "logSha256": "9ae5d3af7bf12a2f7739baf8d50f2f992e85f31f345f04ba4f244320d16356e5"
+        },
+        {
+          "job": "a73056f4-63bb-46c7-805e-325d2eefb003",
+          "step": 1,
+          "command": "task --taskfile .temp/goal/projected-output-follow-up/report.Taskfile.yml verify",
+          "exitCode": 0,
+          "result": "PASS: preserved all 22 historical values/text; sealed blobs, original test prefix, 22 unchanged bindings, map/fixture/log hashes and unchanged red production entries verified.",
+          "log": ".temp/goal/jobs/a73056f4-63bb-46c7-805e-325d2eefb003.1.log",
+          "logSha256": "0bad2d07c8f036b898f1a2ba9d83aa1fd9813428bd4c010a04546c173e9b0926"
+        },
+        {
+          "job": "a73056f4-63bb-46c7-805e-325d2eefb003",
+          "step": 2,
+          "command": "task docs:check",
+          "exitCode": 0,
+          "result": "PASS: 13 documentation-check self-tests and 249 Markdown files; external URLs and runtime behavior excluded.",
+          "log": ".temp/goal/jobs/a73056f4-63bb-46c7-805e-325d2eefb003.2.log",
+          "logSha256": "01dd93d14c0d8e394e2c4e7ac5f7e5b954a2fc3dcdc70269b2b8d50723032e0f"
+        },
+        {
+          "job": "a73056f4-63bb-46c7-805e-325d2eefb003",
+          "step": 3,
+          "command": "task goal -- check",
+          "exitCode": 0,
+          "result": "PASS: report-path AST and selected repository guard 1/44; types/lint have no relevant changed source and no test files named in brief. Historical report paths selected from cumulative ancestry without edits or rereview.",
+          "log": ".temp/goal/jobs/a73056f4-63bb-46c7-805e-325d2eefb003.3.log",
+          "logSha256": "dd48fd2176197d267672259f26531d05a7d7dbf56659789e86a472f420389aaa"
+        }
+      ],
+      "historicalPreservation": {
+        "snapshot": ".temp/goal/projected-output-follow-up/historical-report.json",
+        "priorFileSha256": "d58311514decdd13992d258f81d1c19194d66f38100db0894b50d5e55ba0f3e5",
+        "allPriorParsedValuesUnchanged": true,
+        "priorTextPrefixPreserved": true
+      },
+      "gitDiffCheck": "pass",
+      "localSetupFailure": {
+        "command": "task --taskfile .temp/goal/projected-output-follow-up/report.Taskfile.yml verify",
+        "exitCode": 201,
+        "outcomeAssertionReached": false,
+        "reason": "Task defaulted to its nested Taskfile directory; Python verifier was not found. Set the task directory explicitly to this worktree. No report assertion or product source changed."
+      },
+      "workerCheckOutput": {
+        "path": ".temp/goal/check/run-YQF8hs/output.log",
+        "sha256": "152137173d0e7e7696a153b15d219437a4cf535a29b7c7db6137a5c7b46bc667"
+      },
+      "treeCurrency": "HEAD stayed 3391a827583b39c074ca834d5f7dba5b09c40cbe. Normal Task warned that seven main harness commits are absent, then passed the affected report checks on this cumulative branch. No manual reset, rebase, discard, history rewrite or prepared-tree override. Only this report changed; immutable review base/head remained fixed."
+    },
+    "limitations": [
+      "Only the sealed two-file correction was reviewed; no nested reviewer, account fallback, moving consumer or accepted-source rereview.",
+      "Source inference and executable static controls are distinct from original public API/browser acceptance; production assertion failures are reached outcomes, not setup failures.",
+      "Stored/wrapped output forms deliberately fail closed; no general output-lifetime or interprocedural composition proof is claimed.",
+      "No implementation, inventory, original assertions, runtime/service lifecycle, OAuth/API borrower, browser/Storybook, corpus/prepare/restore/import/reset, lease, publication, landing or class closure."
+    ],
+    "managerNext": "Accept only this bounded native-next-projected-output-overwrite correction. One remaining owner input: G-2758 supplies its sealed consumer correction and exact disposition for the existing identityEntries/relationRows continuation/predicate entries; this review does not inspect that moving work. Existing Catalogue/Recipe/Site owners retain their separate residuals and original acceptance."
   }
 }
