@@ -10508,5 +10508,594 @@
       "resultReportedInWorkerHandoff": true
     },
     "managerNext": "Consume exact CAS11 release plus real shutdown and write qualifier; SAME G-2831 performs guarded semantic restoration. Assess actual original heading failures and persistent Orca other-document context with existing native-support owner. No original AUD-012/class closure or further original run follows from this result."
+  },
+  "aud012HomeCriterionEvidenceMap20261020": {
+    "atUTC": "2026-10-20T15:05:19.946908+00:00",
+    "worker": "G-2847",
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "sameReviewer": true,
+      "fallbackOrNestedAgents": false
+    },
+    "decision": "2026-10-20T14:56:21Z; existing AUD-012 criterion evidence mapping only",
+    "result": "done: additive per-criterion evidence map; original manual Home AT criterion remains partially unproved",
+    "verdict": "Reuse the exact passing production Home/Page interactions, inspected DE390 light/FR390 dark captures, accepted source verdict and matching genuine API receipts for their bounded UI/server criteria. No matching successful actual Home description/status AT receipt was found. Retain one meaningful missing observation with the existing owners; no original class closure.",
+    "reportBaseline": "0b3cc391afb2547cb2b26d07b45277091e0ec99f",
+    "canonicalSource": {
+      "path": "docs/goals/audit-remediation-20261019/site-plan.json",
+      "finding": "AUD-012",
+      "sha256": "4ab008ae2a5144eb71f887daa737f1c5eb1a75b443e084b0f67fa67a0cbec3bc",
+      "acceptanceVerbatim": [
+        "手机导航的辅助名称包含对应可见标签；保留未读数等附加语义，覆盖八种UI语言及登录/匿名状态。重复axe检查并实际用语音或读屏验证；卡片的描述文本和状态不应因aria-label覆盖而不可获得。"
+      ],
+      "regressionAssertionsVerbatim": [
+        {
+          "id": "AUD-012/assertion-1",
+          "assert": "For every supported UI locale, each bottom-navigation accessible name includes its visible label, including Alerts/Notifications equivalents."
+        },
+        {
+          "id": "AUD-012/assertion-2",
+          "assert": "Keep unread context available without replacing the visible label; signed-in/out and keyboard/voice navigation target the same destination."
+        },
+        {
+          "id": "AUD-012/assertion-3",
+          "assert": "Inspect Continue-card accessible descriptions for the same visible-name mismatch class with manual assistive-technology confirmation."
+        }
+      ],
+      "originalAssertionsChanged": false
+    },
+    "procedure": [
+      {
+        "path": "docs/development/storybook.md",
+        "quote": "Storybook browser interactions on the production component are acceptance evidence for UI behavior",
+        "application": "Use the actual assertions on the production HomePage/ContinueStrip. Reuse backend API evidence for server outcomes; do not demand another full backend journey per locale or viewport."
+      },
+      {
+        "path": "docs/goals/method.md",
+        "quote": "Passing Storybook browser interactions establish the UI criteria, combined with API evidence for server behavior.",
+        "application": "Component fixtures support displayed descriptions and keyboard behavior. The explicit original manual AT confirmation still needs actual matching AT output."
+      },
+      {
+        "path": ".agents/skills/product-audit/SKILL.md",
+        "application": "Trace this visible-name/description invariant through bottom navigation, Home continuation and the already accepted Library case within the authorized evidence slice. Preserve source, fixture, genuine API and native AT distinctions; no new journeys or source review."
+      }
+    ],
+    "pinsAndReuse": {
+      "reviewedSource": "28df550060047f93aa8ad0d3f1cf30d3bff6324b",
+      "reviewedTree": "ac4728f62daf1f265c4ce23749ea15e6ad8b6500",
+      "reviewedBase": "49c33b1c0b3333d084d6dd4e5853ccdb7ef10a79",
+      "renderedSource": "ce2283d09e0adb316dc6d56feed4d81d7cb08e7e",
+      "ownerSource": "b8477905da8275b1dffc560c752cb17767b5f46e",
+      "genuineHomeFrontend": "8b8a2c0a97b5662e6283fa7531a8f1c600f37fd0",
+      "backendObserved": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "currentRelevantSources": [
+        {
+          "path": "apps/web/features/home/continue-strip.tsx",
+          "blobs": {
+            "28df550060047f93aa8ad0d3f1cf30d3bff6324b": "980743f17fddc375c41738c8d16ed28b4abe760e",
+            "ce2283d09e0adb316dc6d56feed4d81d7cb08e7e": "980743f17fddc375c41738c8d16ed28b4abe760e",
+            "8b8a2c0a97b5662e6283fa7531a8f1c600f37fd0": "980743f17fddc375c41738c8d16ed28b4abe760e",
+            "HEAD": "980743f17fddc375c41738c8d16ed28b4abe760e"
+          },
+          "allFourEqual": true,
+          "worktreeSHA256": "455dc7eac09a03ea8063c0304101cd5288d0f5581ee8e621abe7d14e644508fb"
+        },
+        {
+          "path": "apps/web/features/home/home-page.stories.tsx",
+          "blobs": {
+            "28df550060047f93aa8ad0d3f1cf30d3bff6324b": "e20f5da1aa212a84eee31961b78a1945a4f4907c",
+            "ce2283d09e0adb316dc6d56feed4d81d7cb08e7e": "e20f5da1aa212a84eee31961b78a1945a4f4907c",
+            "8b8a2c0a97b5662e6283fa7531a8f1c600f37fd0": "e20f5da1aa212a84eee31961b78a1945a4f4907c",
+            "HEAD": "e20f5da1aa212a84eee31961b78a1945a4f4907c"
+          },
+          "allFourEqual": true,
+          "worktreeSHA256": "f30c6a69b8c1497dac400fc2977c46904a2dd1f99a3373596719a9425ffd4843"
+        },
+        {
+          "path": "apps/web/features/home/home-page.tsx",
+          "blobs": {
+            "28df550060047f93aa8ad0d3f1cf30d3bff6324b": "7dfbe62d13d21f523d2a4f815fc3bb71d4b3d35c",
+            "ce2283d09e0adb316dc6d56feed4d81d7cb08e7e": "7dfbe62d13d21f523d2a4f815fc3bb71d4b3d35c",
+            "8b8a2c0a97b5662e6283fa7531a8f1c600f37fd0": "7dfbe62d13d21f523d2a4f815fc3bb71d4b3d35c",
+            "HEAD": "7dfbe62d13d21f523d2a4f815fc3bb71d4b3d35c"
+          },
+          "allFourEqual": true,
+          "worktreeSHA256": "44f8fcf5e373c26ee3b3475909ccbec23c1463a3964c0e890986b6dc080f938c"
+        },
+        {
+          "path": "apps/web/features/home/fixtures.ts",
+          "blobs": {
+            "28df550060047f93aa8ad0d3f1cf30d3bff6324b": "f2c51ee2e36bdb4b4b5cbb971db0f09b622ba276",
+            "ce2283d09e0adb316dc6d56feed4d81d7cb08e7e": "f2c51ee2e36bdb4b4b5cbb971db0f09b622ba276",
+            "8b8a2c0a97b5662e6283fa7531a8f1c600f37fd0": "f2c51ee2e36bdb4b4b5cbb971db0f09b622ba276",
+            "HEAD": "f2c51ee2e36bdb4b4b5cbb971db0f09b622ba276"
+          },
+          "allFourEqual": true,
+          "worktreeSHA256": "6539c1e9f74e03d7c55eaaae3329aafb6175d995d41c329a70155ce1f8a02699"
+        },
+        {
+          "path": "apps/web/features/home/messages.ts",
+          "blobs": {
+            "28df550060047f93aa8ad0d3f1cf30d3bff6324b": "0cf9d4b73c412b0af4d1d0092bfcd4cc4df8bd42",
+            "ce2283d09e0adb316dc6d56feed4d81d7cb08e7e": "0cf9d4b73c412b0af4d1d0092bfcd4cc4df8bd42",
+            "8b8a2c0a97b5662e6283fa7531a8f1c600f37fd0": "0cf9d4b73c412b0af4d1d0092bfcd4cc4df8bd42",
+            "HEAD": "0cf9d4b73c412b0af4d1d0092bfcd4cc4df8bd42"
+          },
+          "allFourEqual": true,
+          "worktreeSHA256": "839d790384b4fbc79b77200c24e9ce917f43ffcc06d62c789f408b35fd3378af"
+        },
+        {
+          "path": "apps/web/features/home/messages/de.ts",
+          "blobs": {
+            "28df550060047f93aa8ad0d3f1cf30d3bff6324b": "35a45e022126ad7d961767f17f744758bef4fea3",
+            "ce2283d09e0adb316dc6d56feed4d81d7cb08e7e": "35a45e022126ad7d961767f17f744758bef4fea3",
+            "8b8a2c0a97b5662e6283fa7531a8f1c600f37fd0": "35a45e022126ad7d961767f17f744758bef4fea3",
+            "HEAD": "35a45e022126ad7d961767f17f744758bef4fea3"
+          },
+          "allFourEqual": true,
+          "worktreeSHA256": "0220fd99b51c8b0b80ecb9d12285b684a6dc286d6f49a1e7c393c87a81080467"
+        },
+        {
+          "path": "apps/web/features/home/messages/fr.ts",
+          "blobs": {
+            "28df550060047f93aa8ad0d3f1cf30d3bff6324b": "1a2ddc54859467976711f516c55c1cba31654377",
+            "ce2283d09e0adb316dc6d56feed4d81d7cb08e7e": "1a2ddc54859467976711f516c55c1cba31654377",
+            "8b8a2c0a97b5662e6283fa7531a8f1c600f37fd0": "1a2ddc54859467976711f516c55c1cba31654377",
+            "HEAD": "1a2ddc54859467976711f516c55c1cba31654377"
+          },
+          "allFourEqual": true,
+          "worktreeSHA256": "9ab3e99645f0e952b833ade946ff84194a680d9172f55451282e94a3f7e60d83"
+        },
+        {
+          "path": "apps/web/features/shell/localized-link.tsx",
+          "blobs": {
+            "28df550060047f93aa8ad0d3f1cf30d3bff6324b": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba",
+            "ce2283d09e0adb316dc6d56feed4d81d7cb08e7e": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba",
+            "8b8a2c0a97b5662e6283fa7531a8f1c600f37fd0": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba",
+            "HEAD": "d9404ab5a2f79e3b01f9fc8311ef40ea1526baba"
+          },
+          "allFourEqual": true,
+          "worktreeSHA256": "2e24fec3a0acd8502950e3d23f60fa304fac7e53a963c665fba24af797eee866"
+        },
+        {
+          "path": "apps/web/features/shell/bottom-nav.tsx",
+          "blobs": {
+            "28df550060047f93aa8ad0d3f1cf30d3bff6324b": "01b5eb673c0fef2555727da9e634606596fb7fd3",
+            "ce2283d09e0adb316dc6d56feed4d81d7cb08e7e": "01b5eb673c0fef2555727da9e634606596fb7fd3",
+            "8b8a2c0a97b5662e6283fa7531a8f1c600f37fd0": "01b5eb673c0fef2555727da9e634606596fb7fd3",
+            "HEAD": "01b5eb673c0fef2555727da9e634606596fb7fd3"
+          },
+          "allFourEqual": true,
+          "worktreeSHA256": "85b6da46b8a0a5d271d80977f454033e2d5501513c131addd967b680b7dfd406"
+        },
+        {
+          "path": "apps/web/features/shell/app-shell.stories.tsx",
+          "blobs": {
+            "28df550060047f93aa8ad0d3f1cf30d3bff6324b": "861b5dbe52b38a1fa2f0767f2fb0d4d3db8607a9",
+            "ce2283d09e0adb316dc6d56feed4d81d7cb08e7e": "66d7b0b9c56a85532c96ad903aad2686d03ebb8c",
+            "8b8a2c0a97b5662e6283fa7531a8f1c600f37fd0": "861b5dbe52b38a1fa2f0767f2fb0d4d3db8607a9",
+            "HEAD": "861b5dbe52b38a1fa2f0767f2fb0d4d3db8607a9"
+          },
+          "allFourEqual": false,
+          "worktreeSHA256": "e46631c3b0f1e64e11f342be08230164c63ddd445a77637155af1e3abad446a1"
+        }
+      ],
+      "sourceEquivalence": "ContinueStrip, HomePage story and parent, fixtures, default/de/fr messages and LocalizedLink all have byte-exact Git blobs across reviewed28df5500, renderedce2283d0, genuine8b8a2c0a and report-baseline0b3cc391. BottomNav is also exact. Shell story file differs at the old rendered Home context; do not claim that file or the complete dependency/runtime contexts are equal.",
+      "acceptedSourceVerdict": {
+        "path": "docs/goals/audit-remediation-20261019/proofs/reading-home.json#homeContinuationDescriptionFirstSourceReview",
+        "verdict": "Source approved for the bounded three-path correction. No source blocker found; genuine German/French Home native callbacks remain due and no class closure is claimed.",
+        "retainedVerdict": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-criterion-evidence-map-20261020/retained-G2831/source-verdict.json",
+          "sha256": "11677c7e50c941169d0756af12c091100baf428cf42d4626eac3031f4a4d9848",
+          "bytes": 13498
+        },
+        "sourceReviewReplayed": false
+      },
+      "storyExecution": {
+        "job": "b0da5c8a-a692-47ba-8699-19899598fab7",
+        "qa": "20261019t163721-5ffb64",
+        "source": "ce2283d09e0adb316dc6d56feed4d81d7cb08e7e",
+        "command": "bun scripts/goal/goalctl.ts test apps/web/features/home/home-page.stories.tsx apps/web/features/home/home-page.test.tsx",
+        "result": "PASS: 57 stories and 6 units / 21 unit expect calls",
+        "storyFile": "apps/web/features/home/home-page.stories.tsx",
+        "productionComponent": "apps/web/features/home/home-page.tsx",
+        "selectedStories": [
+          "Home/Page/ContinueDescriptionsGermanPhone",
+          "Home/Page/ContinueDescriptionsFrenchPhone"
+        ],
+        "log": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-criterion-evidence-map-20261020/retained-G2831/retained-candidate-evidence/owner-proof/evidence/home-qa.log",
+          "sha256": "82cfc832cedf033e7a3d7f23a20bb65e8c6c561b9f56fab89148c75926b988fe",
+          "bytes": 2130
+        },
+        "summary": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-criterion-evidence-map-20261020/retained-G2831/retained-candidate-evidence/owner-proof/evidence/qa-summary.md",
+          "sha256": "83e3b5114ecfd7238f70dd47d37f662ba51b03ee470bdf556da8c77103187421",
+          "bytes": 272
+        },
+        "checksReplayed": false,
+        "qualification": "The two relevant stories share the inspected play callback at lines257-288. Overall count alone is not the criterion proof. In-memory fixtures; no new combined-current-main execution."
+      },
+      "retainedBundle": {
+        "source": ".temp/worktrees/g-2831/.temp/home-continuation-description-first-source-review-G-2831",
+        "ownCopy": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-criterion-evidence-map-20261020/retained-G2831",
+        "verifiedEntries": 44,
+        "verification": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-criterion-evidence-map-20261020/retained-hash-verification.json",
+          "sha256": "239f6883abd23744cb87cf672d01844c8c070a7634cec24715d2efcbc07156a4",
+          "bytes": 14232
+        },
+        "originalSourceEvidenceEdited": false
+      },
+      "otherAcceptedChecks": "Reuse the existing candidate guard and type/source verdict receipts in reading-home.json. No re-execution or new product-source finding is claimed."
+    },
+    "criterionMap": [
+      {
+        "id": "AUD-012/assertion-1",
+        "assertVerbatim": "For every supported UI locale, each bottom-navigation accessible name includes its visible label, including Alerts/Notifications equivalents.",
+        "assessment": "Existing accepted navigation label/name evidence supports this criterion; no new runtime result.",
+        "evidence": [
+          {
+            "reportField": "aud_012_actual_assistive_technology_supplement.reused_automation",
+            "frontend": "196a6f4a98413857dbf3e178d05ef65415035f29",
+            "proofCommit": "271b7e40b3713782eec2148443c0e3b53f65a059",
+            "reportCommit": "aae78d7573c46c0f32d5c79aca348b1b139f6a05",
+            "assertions": "Actual eight-locale anonymous/signed-in caption/accessibility snapshots in development and production, with retained corrected genuine theme cells. Each of the five captions occurs in its accessible name; includes Alerts, Meldungen/Bücher and Alertes/Livres.",
+            "receipt": {
+              "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca/reused-G2825-AUD012.json",
+              "sha256": "404fe4bd2d5ecd27447e7c8c5c678dd5ec586ab7e6fd29767590b01d16a02e64",
+              "bytes": 4769
+            }
+          },
+          {
+            "reportField": "aud_012_signed_in_real_at_transport_continuation.actual_AT_outcomes",
+            "frontend": "716d0f3fb23325df04c283e67eb9d0f38542a3b8",
+            "jobs": [
+              "c5dc5078-6172-4570-a901-f257abbfb53a",
+              "4f1728b7-4edf-4772-8c50-8e64f96decf1"
+            ],
+            "assertions": "81 actual signed-in caption observations across en/de/fr/es/ja/ko/zh-Hans/zh-Hant, with AT-SPI, backend speak and audio-delivery checks; original aggregate failures retain their separate outcomes."
+          },
+          {
+            "source": "apps/web/features/shell/bottom-nav.tsx:24",
+            "lines": [
+              24,
+              35,
+              36
+            ],
+            "blob": "01b5eb673c0fef2555727da9e634606596fb7fd3",
+            "relation": "Same BottomNav blob at historical actual AT frontend, reviewed Home candidate, genuine CAS11 frontend and report baseline. Visible text supplies the name; localized unread suffix augments it."
+          }
+        ],
+        "limits": "Home captures are not navigation screenshots. Axe had zero violations AND zero applicable label-content-name-mismatch nodes; explicit caption/name/AT assertions supply positive evidence. No current-main combined runtime or new navigation matrix."
+      },
+      {
+        "id": "AUD-012/assertion-2",
+        "assertVerbatim": "Keep unread context available without replacing the visible label; signed-in/out and keyboard/voice navigation target the same destination.",
+        "assessment": "Retain the accepted navigation destination and unread-context evidence, with real zero-unread and synthetic nonzero evidence distinguished.",
+        "evidence": [
+          {
+            "reportField": "aud_012_signed_in_real_at_transport_continuation.actual_AT_outcomes",
+            "assertions": "Actual native Enter on Alerts/Library, Meldungen/Bücher, Alertes/Livres reached /en|de|fr/notifications and /en|de|fr/library with localized expected headings. Signed-in actor71473997; eight real notification observations were zero unread. Accepted Settings/Following assertions remain separately pinned."
+          },
+          {
+            "reportField": "aud_012_actual_assistive_technology_supplement.executed_results",
+            "jobs": [
+              "b0556fce-97ea-4b9f-b13b-d34536a45508",
+              "8f66f986-aaee-415d-88d0-cc942c2c2fb7",
+              "ce845034-1a7b-454e-9da9-df60b52d60d9"
+            ],
+            "assertions": "Retained anonymous forward/reverse Tab caption checks and native Enter reach localized Notifications sign-in content or localized Accounts sign-in for Library. First two jobs later failed; final bounded German/French job passed 1 test/33 assertions. No conversion of partial failed jobs to overall passes."
+          },
+          {
+            "reportField": "aud_012_actual_assistive_technology_supplement.reused_automation.unread",
+            "assertions": "Original synthetic unread3/99+ component checks remain accepted separately; actual account was zero unread. BottomNav keeps the localized sr-only unread suffix alongside the visible label at line36. No new nonzero notification prerequisite or fabricated notification."
+          }
+        ],
+        "limits": "Native keyboard/screen-reader activation is evidenced; no separate speech-recognition command test is claimed. Home unread badges below describe chapter counts, not notification unread. No durable hide/Undo write inferred from story callbacks."
+      },
+      {
+        "id": "AUD-012/assertion-3",
+        "assertVerbatim": "Inspect Continue-card accessible descriptions for the same visible-name mismatch class with manual assistive-technology confirmation.",
+        "assessment": "Production-component UI description/name/count/destination/keyboard criteria are supported; genuine matching data is supported; explicit manual Home AT confirmation remains missing.",
+        "uiCriteria": [
+          {
+            "criterion": "Accessible title and full chapter/status description",
+            "assertionPath": "apps/web/features/home/home-page.stories.tsx:267",
+            "assertionLines": [
+              261,
+              262,
+              263,
+              267,
+              268
+            ],
+            "actualAssertion": "Each of three fixture links is found by localized title/resume accessible name and must have the full computed next-chapter/fallback plus exact/lower-bound unread accessible description.",
+            "productionPath": "apps/web/features/home/continue-strip.tsx:56",
+            "productionLines": [
+              52,
+              53,
+              56,
+              57,
+              62,
+              65,
+              66,
+              67
+            ],
+            "sourceRelation": "Original title aria-label retained; aria-describedby references existing full chapter and unread spans. Visual ellipsis does not remove the described text.",
+            "evidence": "Both selected passing DE/FR production Home/Page stories; original reviewed source verdict reused.",
+            "limit": "Computed accessible descriptions are browser component evidence; they do not demonstrate what Orca speaks."
+          },
+          {
+            "criterion": "Exact, lower-bound and fallback counts",
+            "assertionPath": "apps/web/features/home/home-page.stories.tsx:266",
+            "assertionLines": [
+              261,
+              262,
+              263,
+              266,
+              268
+            ],
+            "actualAssertion": "All three unchanged fixtures: exact3, at-least20 and exact1 with null-chapter fallback; localized chapter/unread full descriptions asserted.",
+            "captures": [
+              "german-phone-light.png",
+              "french-phone-dark.png"
+            ],
+            "genuinePair": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-criterion-evidence-map-20261020/matched-CAS11-api-evidence.json",
+            "limit": "Only exact1 / At the harbour is paired with this same-actor genuine continuation200. Fixture exact3, lower-bound20 and null-title are component states, not claimed as actual account API states."
+          },
+          {
+            "criterion": "Localized destination and content language",
+            "assertionPath": "apps/web/features/home/home-page.stories.tsx:269",
+            "assertionLines": [
+              267,
+              269,
+              270
+            ],
+            "actualAssertion": "Each title/resume link preserves localizedPath(item.nextUnread.href, locale) and original item.title.language.",
+            "genuinePair": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-criterion-evidence-map-20261020/matched-CAS11-api-evidence.json",
+            "genuineObservation": "CAS11 original pre-heading assertions passed: visible At the harbour and actual link href contains exact nextUnread5caa0cc4 for same Book01a10aff. Both Home documents returned200.",
+            "limit": "No Home link activation/reader transport or durable progress proof inferred."
+          },
+          {
+            "criterion": "Keyboard hide and Undo feedback",
+            "assertionPath": "apps/web/features/home/home-page.stories.tsx:274",
+            "assertionLines": [
+              274,
+              275,
+              276,
+              277,
+              278,
+              279,
+              280,
+              281,
+              282,
+              283,
+              284,
+              285
+            ],
+            "actualAssertion": "After card focus, native browser Tab focuses separate named hide button; Enter removes it, localized role=status feedback appears; Space activates focused Undo; restored link again has full description; exact in-memory continue:true then continue:false calls asserted.",
+            "productionPath": "apps/web/features/home/continue-strip.tsx:71",
+            "productionLines": [
+              32,
+              37,
+              71,
+              81,
+              83,
+              84
+            ],
+            "limit": "Story interaction supports focus and UI feedback; static PNG shows restored state, not those action/focus steps. In-memory command calls do not establish server authorization, persistence or idempotency. CAS11 did not hide/Undo; no persistence gap is made a new original acceptance blocker."
+          },
+          {
+            "criterion": "Visible DE390 light and FR390 dark state",
+            "assertionPath": "apps/web/features/home/home-page.stories.tsx:286",
+            "assertionLines": [
+              286,
+              287,
+              288,
+              291,
+              292,
+              293,
+              298,
+              299,
+              300
+            ],
+            "actualAssertion": "Fonts settle, scroll returns to0 and document.scrollWidth <= innerWidth; German phone and French dark phone globals.",
+            "captures": [
+              {
+                "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-criterion-evidence-map-20261020/retained-G2831/retained-candidate-evidence/owner-proof/screenshots/german-phone-light.png",
+                "sha256": "1117fbf7295ffec10d99cbb62a4f8fe94709fa43e209c4fc332edba2bc8dcd19",
+                "bytes": 77529,
+                "locale": "de",
+                "theme": "light",
+                "width": 390,
+                "height": 844,
+                "actuallyViewedByThisWorker": true,
+                "newCapture": false,
+                "observation": "Viewed 390x844: Weiterlesen, three continuation titles, visible chapter previews and exact 3 / lower-bound 20+ / exact 1 neue Kapitel badges. Cards fit the strip; long chapter previews intentionally ellipsize. No overlap or document-width clipping observed.",
+                "limits": "Static restored state after the story. This image does not show keyboard focus/hide/Undo steps or establish full accessible text, native speech or backend persistence."
+              },
+              {
+                "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-criterion-evidence-map-20261020/retained-G2831/retained-candidate-evidence/owner-proof/screenshots/french-phone-dark.png",
+                "sha256": "6d5aa04c683f6b24870cb438828a20e05f1560f29a4fdfb34eab6141b9b6dc93",
+                "bytes": 75435,
+                "locale": "fr",
+                "theme": "dark",
+                "width": 390,
+                "height": 844,
+                "actuallyViewedByThisWorker": true,
+                "newCapture": false,
+                "observation": "Viewed 390x844: Reprendre la lecture, the same three continuation titles and chapter previews, 3 nouveaux / 20+ nouveaux / 1 nouveau badges. Readable contrast and spacing in this capture; long previews intentionally ellipsize. No document-width overflow observed.",
+                "limits": "Static restored state after the story. This image does not show keyboard focus/hide/Undo steps or establish full accessible text, native speech or backend persistence."
+              }
+            ],
+            "limit": "Viewed original retained captures, without new render or automated pixel-baseline acceptance."
+          }
+        ],
+        "genuineApiPair": {
+          "job": "0a551447-60bf-4742-b879-056a41428017",
+          "frontend": "8b8a2c0a97b5662e6283fa7531a8f1c600f37fd0",
+          "backendObserved": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+          "actor": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+          "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+          "nextUnread": "https://rezics.com/id/5caa0cc4-f716-876a-8a46-fa048620c48d",
+          "receipt": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-criterion-evidence-map-20261020/matched-CAS11-api-evidence.json",
+            "sha256": "bfcde2a2391f013dc19ee1a26dac33f13173e71edd150948b88c289f8ff780ef",
+            "bytes": 5943
+          },
+          "readOperations": [
+            "GET /v1/works/01a10aff-93e5-7069-b80a-cd33bb6ce57c/reader-state?actingSubject=<same-actor>",
+            "GET /v1/me/continue/01a10aff-93e5-7069-b80a-cd33bb6ce57c?actingSubject=<same-actor>"
+          ],
+          "assertionPath": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/aud012-home-only.test.ts:240",
+          "readbacksAtUTC": [
+            "2026-10-20T13:49:07.866Z",
+            "2026-10-20T13:49:58.493Z"
+          ],
+          "outcome": "Both before/after API pairs200; eligible same actor initially/finally; reading/null dates/CAS11, null progress, empty custom shelves, null global/realm ratings, exact At the harbour/nextUnread5caa0cc4, exact1 unread; complete reader and continuation objects unchanged.",
+          "retainedOwnerEvidence": "G-2831 CAS11 preparation supplied two complete five-API invariant readbacks retained in originalHomeDefrCAS11Callbacks20261020.binding/source-custody. Borrower independently read only reader-state/continuation; no claim of its own five-API replay.",
+          "limits": "Installed75409 consumer evidence at actual recorded times; not current-main native/model/Studio API qualification. No new durable write/readback or story fixture-to-record identity claim."
+        },
+        "manualAT": {
+          "successfulMatchingHomeReceiptFound": false,
+          "originalFailedPin": "716d0f3fb23325df04c283e67eb9d0f38542a3b8",
+          "originalFailedBlob": "ef0f3e5a0f3147c5e8479c906347528010af92e4",
+          "originalFailure": "aud_012_new_CAS5_selected_card_native_continuation: genuine German Home reached original description/status assertion; title spoken but At the harbour and 1 neue Kapitel absent. This is the retained real pre-correction product counterexample. French was setup-unreached.",
+          "laterCAS11": {
+            "job": "0a551447-60bf-4742-b879-056a41428017",
+            "testExit": 201,
+            "reportedExpectCalls": 20,
+            "bothCells": [
+              "card-home-de-390",
+              "card-home-fr-390"
+            ],
+            "headingAssertion": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/aud012-home-only.test.ts:258",
+            "headingReached": false,
+            "descriptionSpeechAssertion": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/aud012-home-only.test.ts:264",
+            "descriptionSpeechReached": false,
+            "screenshotsAndAxeReached": false,
+            "qualification": "Both original heading assertions actually failed. Retained Orca other-document context prevents attributing those failures to the corrected product. No silent assertion repair or missing-browser product finding."
+          },
+          "otherValidATReceipt": "Original German Library title and At the harbour speech/backend proof remains valid on its own surface. It cannot confirm corrected Home aria-describedby speech. Eight-locale navigation AT, native-window offline controls and audio transport likewise do not provide the missing Home-content observation.",
+          "singleMissingObservation": {
+            "observation": "An actual owned-document assistive-technology reading of the corrected genuine Home Continue card that announces its title, full next-chapter text At the harbour and corresponding localized exact-one unread status, correlated to the same actor/work/continuation receipt. This is one original criterion observation, not a new broad phone matrix.",
+            "existingProofOwner": "G-2847; the already assigned card-home-de-390/card-home-fr-390 original callbacks",
+            "existingNativeDocumentSupportOwner": "G-2747",
+            "existingCustodianIfSeparatelyAuthorized": "G-2831; root owns any fresh custody/finite execution authorization",
+            "recommendation": "Leave only this explicit manual Home-description/status confirmation open for manager assessment. Root may choose the smallest meaningful matching observation under later explicit authorization; no replay of passed navigation, identity, backend or full phone coverage is justified by this map."
+          }
+        }
+      }
+    ],
+    "screenshotsInspected": [
+      {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-criterion-evidence-map-20261020/retained-G2831/retained-candidate-evidence/owner-proof/screenshots/german-phone-light.png",
+        "sha256": "1117fbf7295ffec10d99cbb62a4f8fe94709fa43e209c4fc332edba2bc8dcd19",
+        "bytes": 77529,
+        "locale": "de",
+        "theme": "light",
+        "width": 390,
+        "height": 844,
+        "actuallyViewedByThisWorker": true,
+        "newCapture": false,
+        "observation": "Viewed 390x844: Weiterlesen, three continuation titles, visible chapter previews and exact 3 / lower-bound 20+ / exact 1 neue Kapitel badges. Cards fit the strip; long chapter previews intentionally ellipsize. No overlap or document-width clipping observed.",
+        "limits": "Static restored state after the story. This image does not show keyboard focus/hide/Undo steps or establish full accessible text, native speech or backend persistence."
+      },
+      {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-criterion-evidence-map-20261020/retained-G2831/retained-candidate-evidence/owner-proof/screenshots/french-phone-dark.png",
+        "sha256": "6d5aa04c683f6b24870cb438828a20e05f1560f29a4fdfb34eab6141b9b6dc93",
+        "bytes": 75435,
+        "locale": "fr",
+        "theme": "dark",
+        "width": 390,
+        "height": 844,
+        "actuallyViewedByThisWorker": true,
+        "newCapture": false,
+        "observation": "Viewed 390x844: Reprendre la lecture, the same three continuation titles and chapter previews, 3 nouveaux / 20+ nouveaux / 1 nouveau badges. Readable contrast and spacing in this capture; long previews intentionally ellipsize. No document-width overflow observed.",
+        "limits": "Static restored state after the story. This image does not show keyboard focus/hide/Undo steps or establish full accessible text, native speech or backend persistence."
+      }
+    ],
+    "boundedRecommendation": {
+      "assertion1": "Reuse accepted eight-locale name/caption automation and actual navigation AT; source-equivalence limits retained. No new replay needed.",
+      "assertion2": "Reuse real native destinations and zero-unread observations plus separate nonzero component assertions. No live nonzero notification fabrication or new matrix.",
+      "assertion3": "Accept the passing production-component UI evidence and matching actual API data within their stated limits. Keep the one explicit Home manual AT observation open; fixture descriptions, tool labels and another surface do not close it.",
+      "originalAUD012ClassClosed": false,
+      "newProductDefectsEstablished": false,
+      "newReviewOrRuntimeAuthorizedOrPerformed": false
+    },
+    "historyPreservation": {
+      "priorFields": 48,
+      "allPriorFieldsUnchanged": true,
+      "priorReport": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-criterion-evidence-map-20261020/prior-report.json",
+        "sha256": "83bc628eac652edb6219c84162e5b20e5589525024af43b726adb77c6e6e9d4b",
+        "bytes": 576388
+      },
+      "preserved": "All previous source/identity/native-radio approvals; original German Home product failure; Studio400; CAS5/CAS7/CAS9/CAS11 attempts, root-bound releases, actual shutdown and same-owner cleanup dispositions; failed heading assertions, unknown-mode/focus limitations and fixture-free native-input qualifiers remain untouched. No spent lease is reused."
+    },
+    "scopeAndCustody": {
+      "productSourceOrTestsChanged": false,
+      "runtimesOAuthPermissionATStarted": false,
+      "readerWritesOrLeaseActions": false,
+      "backendCorpusPreparationRestoreImport": false,
+      "peerOrMainFilesWritten": false,
+      "externalMessagesSent": false,
+      "newShutdownRequired": false,
+      "privateArtifacts": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-criterion-evidence-map-20261020",
+      "centralCopyDisposition": "Artifacts copied only into the allowed own worktree bundle; manager may copy it centrally. Main and all peer worktrees were read-only."
+    },
+    "documentationValidation": {
+      "atUTC": "2026-10-20T15:06:20.262145+00:00",
+      "job": "f2131abe-e276-4bf8-8cde-ce5f7846bd0d",
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "exitStatus": 0,
+      "docs": {
+        "result": "PASS",
+        "tests": 13,
+        "markdownFiles": 258
+      },
+      "goal": {
+        "result": "PASS",
+        "run": "run-QVJa60",
+        "guards": "PASS; 1/45 selected for the report path",
+        "AST": "PASS",
+        "types": "no TypeScript workspace changed",
+        "lint": "no source file changed",
+        "tests": "no test files named in brief"
+      },
+      "retainedLogs": [
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-criterion-evidence-map-20261020/validation/f2131abe-e276-4bf8-8cde-ce5f7846bd0d.1.log",
+          "bytes": 348,
+          "sha256": "07494159667d2fd4e4a8d9696b9aab6a6b9c98aac7c44526ef9629a3fca606cc"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-criterion-evidence-map-20261020/validation/f2131abe-e276-4bf8-8cde-ce5f7846bd0d.2.log",
+          "bytes": 453,
+          "sha256": "9027835b9455da81dd719f404e7994031937e67548e0588fc8e0219821760326"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-criterion-evidence-map-20261020/validation/f2131abe-e276-4bf8-8cde-ce5f7846bd0d.log",
+          "bytes": 282,
+          "sha256": "09839c6bd9ec3d0fa1d9733b5140dde80c19260f53761e33ccb900cd838b3512"
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-criterion-evidence-map-20261020/validation/goal-check-output.log",
+          "bytes": 2869,
+          "sha256": "16ab3d87141a5dad87b5131a88b748b19d9e58b27c945abf2cd9665a8c95864b"
+        }
+      ],
+      "gitDiffCheck": "PASS",
+      "reportIntegrity": "49 total fields; every original48 field and all original AUD-012 acceptance/assertions remain unchanged",
+      "duplicateProductChecks": false
+    },
+    "managerNext": "Assess the explicit per-criterion map using the current Storybook procedure. Reuse accepted UI and genuine API evidence; retain one meaningful Home manual AT observation with existing G-2847/G-2747 owners. Do not reopen passed matrices or close AUD-012 from this report.",
+    "privateArtifactManifest": {
+      "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-criterion-evidence-map-20261020/artifact-manifest.json",
+      "bytes": 19789,
+      "sha256": "05432e538e5597471f6f86cc3950cc768b03ec59281b94556b09df7ddcac876a"
+    }
   }
 }
