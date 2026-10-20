@@ -1,20 +1,23 @@
 # Product completeness state
 
-Checkpoint 32564370-7361-4618-8df7-e98e0e59168d retains checkpoint 22f35050
-and covers handled event mail:2f13c60b-3f91-42e6-97f3-93c08b5b1779.
-Its decision is committed at 76c5955006; the mail's acknowledgement at
-2026-10-19T17:26:45.956Z was confirmed here. Measures were read at this
-checkpoint and may include later activity; other turns retain their own
-dispositions. This checkpoint changes only this state, no brief or worker
-instruction, and proves no additional product row or original finding.
+Checkpoint 15009e9d-a5a4-4d92-abde-80241b838994 retains checkpoint 32564370
+and covers handled events task:G-2823:43,
+mail:72bcf273-4bc8-4b7c-9295-4bad942cd501 and
+mail:4272b0ee-d929-40ac-b3b1-ad77fd3492a5. Both mail acknowledgements were
+confirmed, at 2026-10-20T04:03:20.026Z and 04:07:33.898Z respectively.
+Measures were read at this checkpoint and may include later activity; other
+turns retain their own dispositions. This checkpoint changes only this state,
+no brief or worker instruction, and proves no additional product row or
+original finding.
 
 Scope remains domain-leading completeness across supported domains, including
 specialist jobs, with API outcomes first and actual rendered/interaction proof.
 Accepted research G-2787/G-2788/G-2792/G-2797 and tooling G-2789/G-2794 remain
 closed verified. Audit accepted original finding D5-006 from composed evidence;
-these events prove zero additional product completeness rows. Audit owns the
-aggregate original61 closure count. The registry's 68/68 rows and 408 cells
-remain a distinct denominator.
+these events prove zero additional product completeness rows. Audit reports
+23/61 canonical original findings accepted in mail 72bcf273 and owns that
+aggregate closure count. The registry's 68/68 rows and 408 cells remain a
+distinct denominator.
 
 Program completed the academic, Wikipedia/Cite and repository-boundary citation
 research; do not reopen or duplicate it. Maintainer-confirmed library/native/
@@ -466,9 +469,55 @@ history/model/readback/stopped-backup/qualified-restore output and released leas
 No new qualified endpoint or lease was published at that decision; the retained
 qualification-r1 report and an active transition establish neither. The manager
 rebased its clean branch with unchanged dependency inputs and resumed attempt 43
-on codex-1/high. Status now reports exited43 with no accepted handoff; its exit
+on codex-1/high. Event task:G-2823:43 classified its missing handoff as a transport
+failure, rebased the worker branch and launched fresh attempt 44 on codex-1/high
+at 2026-10-20T04:01:22.329Z under the unchanged brief. No product assertion,
+accepted handoff or landing follows. Attempt 44 has since exited; its result
 belongs to its own event. Do not duplicate preparation, resume or landing from
 this checkpoint. Original113 topology is no prerequisite.
+
+Mail 72bcf273 was acknowledged as progress without a product brief change,
+worker restart or landing. G-2781's existing owner retains job
+63c5ccc1-e90d-4dc8-815c-b2eddf15769a on f1c42d420130: three Structure cases
+passed, one failed, 61 assertions; cancelled attach resolved rather than rejecting
+before Source commit at source-field-structure.test.ts:182. The reported automatic
+continuation owns classification with unchanged assertions. G-2764's anonymous
+default resource-list-v1/global/all/newest/20 outcome remains unreached. Its exact
+request is retained in the discover-default-source-checkpoint-v2 manifest under
+that worker's `.temp/goal/`; the historical 33rd resource-summary reread proves
+no current defect. Existing owners retain current request/source/native/data/
+read-cut and propagated phase/call/byte trace proof, including any refused
+pre-transport callsite. No global network/quota change or new corpus is authorized.
+
+Mail 4272b0ee reports progress on G-2791's same distinct retained Book/Recipe
+copy: product 76c5955006, unchanged four-file overlay d2f04140fe61 from
+87ea406a6d07, parent data/native product 4a616b079a36 and parent backup SHA-256
+7f6d8d7645e870959b050028d53ed1b7997c243065f236915af13db2720b09ca.
+Job c091b50c-784f-47d3-89a5-305124bd5dae passed supported history replay and
+canonical migrations; model-alignment.json records current alignment. Job
+5457d8d3-9778-4991-a3c5-16058105707d reached native health, canonical readiness,
+an unchanged anonymous default query 200 and genuine Recipe readback with its
+original Structure/revision, eight ingredients and eight step occurrences.
+Retain private receipts under
+`.temp/corpus-transition/book-current-20261020-r1/checkout/.temp/book-transition/`.
+No original outcome body ran. A private receipt filename collision was corrected
+locally; the existing qualification continuation retains its 171,112.931 ms
+work charge, independent genuine chapter/release verification, stopped backup
+and distinct current restore. No released current endpoint/lease or ready backup
+was accepted. KEEP resources, consumers and their leases remain preserved.
+
+Product routed the concrete C28 identity/body-reader discrepancy to Audit's
+existing G-2793 owner in mail 90161ead, acknowledged there at 04:10:44.967Z.
+selectedRevision has the urn:rezics:content:revision prefix while exact Content
+reference.revisionId is bare 8933c22e-e959-435e-ad63-53db33b306d4; the exact body
+is {body:string}, whereas original C28 contentText reads text-node fields.
+Preserve exact bytes SHA-256
+2841b3d9bd65d54f1458b2d8d0dc37f4db38bb2d7bf1e9ca342944963df23891
+and the source paragraph. Audit owns the bounded brief decision and continuation
+to establish the supported contract and correct only the proof binding. A conflict
+requiring an original assertion change returns explicitly; no replacement
+identity/body, weakened assertion, product failure or finding closure is accepted.
+This routine owner coordination requires no new Program ruling or product brief.
 
 The same runtime owner retains a separate exact I1-001/A16 fixture cut alongside
 the independently qualified current-source image handoff. Runtime
@@ -581,10 +630,10 @@ restore isolated copies. Corpus prerequisites do not block independent site
 proof. Small main batches need affected checks and codex-1/xhigh review;
 coordinate publication. Final full regression/confirmation precedes wave merge.
 
-Checkpoint measures: first attempts 9/14 (64%; current day no attempts); landed
-median 4.5 attempts, maximum 43 (G-2823); 101.7M input/888.7k output; tokens per proved
+Checkpoint measures: first attempts 9/15 (60%; current day 0/1); landed
+median 4.5 attempts, maximum 44 (G-2823); 102.54M input/897,435 output; tokens per proved
 row unavailable. Tool counts include job wakes and open partial-landing
-continuations. Seven environment attempts, one step continuation and five fixes;
+continuations. Seven environment attempts, one step continuation and six fixes;
 89 job wakes: 33 passes, 35 assertion failures, two environment failures,
 17 harness failures and two unclassified. The previous day's first-attempt share
 was 3/8 (38%); reviewed G-2842 support on main 4c77554c3b addresses the common
@@ -594,26 +643,28 @@ custody rather than another setup experiment. Event-29's storage-reader harness
 cause was corrected through the existing owner reader in the accepted finite
 comparison. G-2823 owns the isolated backend handoff and causal cleanup repair. The
 unclassified wakes and one retained other-kind refusal still need tooling
-disposition. The successful manager turn for this covered event recorded
-2,051,532 input/12,858 output tokens, including 1,961,856 cached input. These
-exclude this checkpoint and do not establish a comparable manager/worker share.
-Product has no live worker and two open tasks.
-Latest recorded efficiency window remains 2026-10-18T08:36:08Z–20:36:08Z;
-retain its earlier 552.47M input/527.63M cached and 37% other-session reading.
-The preceding checkpoint's same start-time window returned 135 sessions,
-1,232.46M input/1,174.98M cached and 17% other-session input. Reread here it
-returned 135 sessions, 1,263.95M input and 1,204.85M cached: workers 84%,
-landing reviews under 1%, other sessions 16%.
-Continuing sessions change this cumulative reading; the figures omit older-started
-sessions and other-session share cannot establish manager-only share. No
-comparable savings or spending claim follows. Audit owns shared scheduling;
-verified hourly coverage, later full-window comparison and instrumentation
-attribution remain due.
+disposition. The three successful covered manager turns recorded 1,691,394 input/
+14,625 output tokens, including 1,540,480 cached input. These exclude failed
+wrapper attempts with missing usage and this checkpoint, and do not establish
+a comparable manager/worker share. Product has no live worker and two open tasks.
+Latest recorded efficiency window is 2026-10-19T16:16:22Z–2026-10-20T04:16:22Z:
+69 sessions, 167.57M input/159.00M cached, worker input 48%, other sessions 52%
+and no landing-review sessions. The preceding checkpoint's different window,
+2026-10-18T08:36:08Z–20:36:08Z, read 135 sessions, 1,263.95M input/1,204.85M
+cached, workers 84%, landing reviews under 1% and other sessions 16%.
+These windows and continuing sessions do not establish comparable savings;
+figures omit older-started sessions and other-session share is not manager-only
+share. Audit owns shared scheduling; verified hourly coverage, later full-window
+comparison and instrumentation attribution remain due.
 
-Next event owners: G-2791 delivers the actual qualified current copy, recipe and
-released lease under reviewed history support 4c77554c3b. Product consumes
-G-2823 attempt43's exit through its own event for the distinct image/discussion
-qualifications above; no unchanged replay follows. Program's existing lifecycle
+Next event owners: G-2791 finishes the existing charged qualification, stopped
+backup and distinct current restore, then delivers the actual current-copy
+manifest, recipe and released lease under reviewed history support 4c77554c3b.
+Product consumes G-2823 attempt44's exit through its own event for the distinct
+image/discussion qualifications above; no unchanged replay follows. Audit routes
+C28's exact identity/body-reader binding through G-2793 and retains the unchanged
+G-2781 cancellation assertion and G-2764 current default-request proof.
+Program's existing lifecycle
 owner and Audit coordinate the supported original capture only if no retained
 copy qualifies, preserving actual consumers until release. G-2830 retains
 image-persistence acceptance; Site retains the unchanged I1-001/A16 assertions.
