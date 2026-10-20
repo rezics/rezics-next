@@ -264,20 +264,38 @@ export function loadPublicDomainBorrowedBook(corpus: PublicDomainCorpus, selecti
   return endpoints;
 }
 
+function borrowedAuthFailure(persona: string, operation: string, status: number | null,
+  oauthError: string | null = null, accountCode: string | null = null) {
+  return Object.assign(new Error(`Borrowed Book ${persona} ${operation} failed: HTTP ${status ?? 'unavailable'}; `
+    + `OAuth error ${oauthError ?? 'unreported'}; Account code ${accountCode ?? 'unreported'}`),
+  { persona, operation, status, oauthError, accountCode });
+}
+
+async function checkBorrowedAuthCleanup(response: Response, persona: string, operation: string) {
+  if (response.ok) return;
+  // Responses and transport errors can contain credentials. Only known protocol codes leave cleanup.
+  const body: unknown = await response.json().catch(() => null);
+  const fields = body && typeof body === 'object' ? body as Record<string, unknown> : {};
+  const oauthErrors = ['invalid_request', 'invalid_client', 'invalid_grant', 'unauthorized_client',
+    'unsupported_token_type', 'unsupported_grant_type', 'invalid_scope', 'access_denied', 'server_error', 'temporarily_unavailable'];
+  const accountCodes = ['MISSING_OR_NULL_ORIGIN', 'INVALID_ORIGIN', 'UNAUTHORIZED', 'FORBIDDEN', 'TOO_MANY_REQUESTS'];
+  const oauthError = typeof fields.error === 'string' && oauthErrors.includes(fields.error) ? fields.error : null;
+  const accountCode = typeof fields.code === 'string' && accountCodes.includes(fields.code) ? fields.code : null;
+  throw borrowedAuthFailure(persona, operation, response.status, oauthError, accountCode);
+}
+
 /** Fresh normal OAuth handles only. This lifetime owns no applications, restore driver or runtime. */
 export async function attachPublicDomainBook(corpus: PublicDomainCorpus, endpoints: { main: string; account: string }): Promise<PersonaSessions> {
   const started = performance.now(), retained = corpus.personas;
   const resource = borrowedRecord(retained.auth).resource;
   borrowedPremise(typeof resource === 'string' && resource.length > 0, 'retained OAuth resource is missing');
   const cleanups: Array<() => Promise<void>> = [];
-  let closed = false;
-  const close = async () => {
-    if (closed) return;
-    closed = true;
+  let closing: Promise<void> | undefined;
+  const close = () => closing ??= (async () => {
     const results = await Promise.allSettled(cleanups.map(cleanup => cleanup()));
     const failures = results.filter(result => result.status === 'rejected');
     if (failures.length) throw new AggregateError(failures.map(result => result.reason), 'Borrowed Book auth cleanup failed');
-  };
+  })();
   const visitor = personaSession(endpoints.main, endpoints.account, null);
   const people = {} as Record<Exclude<typeof personaNames[number], 'visitor'>, PersonaSession>;
   try {
@@ -289,19 +307,25 @@ export async function attachPublicDomainBook(corpus: PublicDomainCorpus, endpoin
       const cookie = login.headers.getSetCookie().map(value => value.split(';')[0]).join('; ');
       let oauth: LocalOAuthSession | undefined;
       if (cookie) cleanups.push(async () => {
-        try {
-          if (oauth) for (const [token, hint] of [[oauth.refreshToken, 'refresh_token'], [oauth.accessToken, 'access_token']]) {
-            if (!token) continue;
+        const failures: unknown[] = [];
+        if (oauth) for (const [token, hint] of [[oauth.refreshToken, 'refresh_token'], [oauth.accessToken, 'access_token']] as const) {
+          if (!token) continue;
+          const operation = `revoke ${hint}`;
+          try {
             const revoked = await fetch(`${endpoints.account}/api/auth/oauth2/revoke`, { method: 'POST',
               headers: { 'content-type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(30_000),
-              body: new URLSearchParams({ token, token_type_hint: hint!, client_id: retained.auth.clientId }) });
-            if (!revoked.ok) throw new Error('Borrowed Book OAuth revocation failed');
-          }
-        } finally {
-          const signedOut = await fetch(`${endpoints.account}/api/auth/sign-out`, { method: 'POST',
-            headers: { cookie, origin: retained.auth.accountOrigin }, signal: AbortSignal.timeout(30_000) });
-          if (!signedOut.ok) throw new Error('Borrowed Book Account sign-out failed');
+              body: new URLSearchParams({ token, token_type_hint: hint, client_id: retained.auth.clientId }) })
+              .catch(() => { throw borrowedAuthFailure(name, operation, null); });
+            await checkBorrowedAuthCleanup(revoked, name, operation);
+          } catch (error) { failures.push(error); }
         }
+        try {
+          const signedOut = await fetch(`${endpoints.account}/api/auth/sign-out`, { method: 'POST',
+            headers: { cookie, origin: retained.auth.accountOrigin }, signal: AbortSignal.timeout(30_000) })
+            .catch(() => { throw borrowedAuthFailure(name, 'sign-out', null); });
+          await checkBorrowedAuthCleanup(signedOut, name, 'sign-out');
+        } catch (error) { failures.push(error); }
+        if (failures.length) throw new AggregateError(failures, `Borrowed Book ${name} auth cleanup failed`);
       });
       const user = await answer<{ user: { id: string } }>(Promise.resolve(login));
       borrowedPremise(cookie && user.user.id === identity.accountId, `normal sign-in selected a different Account for ${name}`);

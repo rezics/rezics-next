@@ -449,13 +449,16 @@ for (const kind of ['missing', 'self-declared-ready', 'changed-attachment', 'cha
   });
 
 // Exercise the existing OAuth and persona operations with transport-only doubles; no application or storage starts.
-async function borrowTransport(failure?: 'account' | 'oauth' | 'attach' | 'cleanup') {
-  const input = borrowedBook(), requests: Array<{ path: string; cookie: string | null; authorization: string | null; session: string | null }> = [];
+async function borrowTransport(failure?: 'account' | 'oauth' | 'attach' | 'cleanup',
+  cleanup: Partial<Record<'refresh_token' | 'access_token' | 'sign-out', () => Response>> = {}) {
+  const input = borrowedBook(), requests: Array<{ path: string; cookie: string | null; authorization: string | null;
+    session: string | null; tokenType: string | null }> = [];
   let logins = 0, tokens = 0, bindings = 0;
   const previous = globalThis.fetch;
   const fake: typeof fetch = Object.assign(async (url: string | URL | Request, init?: RequestInit) => {
     const parsed = new URL(String(url)), path = parsed.pathname, headers = new Headers(init?.headers);
-    requests.push({ path, cookie: headers.get('cookie'), authorization: headers.get('authorization'), session: headers.get('x-session-key') });
+    const tokenType = init?.body instanceof URLSearchParams ? init.body.get('token_type_hint') : null;
+    requests.push({ path, cookie: headers.get('cookie'), authorization: headers.get('authorization'), session: headers.get('x-session-key'), tokenType });
     if (path === '/api/auth/sign-in/email') {
       logins++;
       const { email } = JSON.parse(String(init?.body)) as { email: string };
@@ -478,8 +481,10 @@ async function borrowTransport(failure?: 'account' | 'oauth' | 'attach' | 'clean
       expect(body).toEqual({ actingSubject: input.manifest.personas.identities[personaNames[bindings]! as 'stranger'].actingSubject, expectedRevision: null });
       return Response.json({}, { status: failure === 'attach' && bindings === 3 ? 403 : 200 });
     }
-    if (path === '/api/auth/sign-out' || path === '/api/auth/oauth2/revoke')
-      return Response.json({}, { status: failure === 'cleanup' && path.endsWith('revoke') ? 503 : 200 });
+    if (path === '/api/auth/sign-out' || path === '/api/auth/oauth2/revoke') {
+      const response = cleanup[path.endsWith('sign-out') ? 'sign-out' : tokenType as 'refresh_token' | 'access_token'];
+      return response ? response() : Response.json({}, { status: failure === 'cleanup' && path.endsWith('revoke') ? 503 : 200 });
+    }
     if (path === '/unit-anonymous') return Response.json({ anonymous: true });
     throw new Error(`Unexpected borrowed transport operation: ${path}`);
   }, { preconnect: previous.preconnect });
@@ -523,6 +528,81 @@ test('borrowed Book cleanup failure is reported after every borrower handle gets
   try {
     const people = await attachPublicDomainBook(input.manifest, input.endpoints);
     await expect(people.close()).rejects.toThrow('auth cleanup failed');
+    expect(input.requests.filter(request => request.path.endsWith('/revoke'))).toHaveLength(10);
     expect(input.requests.filter(request => request.path.endsWith('/sign-out'))).toHaveLength(5);
   } finally { input.restore(); }
 });
+
+function cleanupFailures(error: unknown): Array<Record<string, unknown>> {
+  return error instanceof AggregateError ? error.errors.flatMap(cleanupFailures) : [error as Record<string, unknown>];
+}
+
+test('borrowed Book refresh refusal still revokes each access token and reports only safe status and OAuth error', async () => {
+  const secret = 'unit-private-credential-must-not-leave-cleanup';
+  const input = await borrowTransport(undefined, { refresh_token: () => Response.json({ error: 'invalid_client',
+    error_description: secret, token: secret, cookie: secret }, { status: 401 }) });
+  try {
+    const people = await attachPublicDomainBook(input.manifest, input.endpoints);
+    const error: unknown = await people.close().catch(cause => cause), failures = cleanupFailures(error);
+    expect(failures).toHaveLength(5);
+    expect(failures.map(failure => failure.persona)).toEqual(personaNames.filter(name => name !== 'visitor'));
+    for (const failure of failures) {
+      expect(failure).toMatchObject({ operation: 'revoke refresh_token', status: 401, oauthError: 'invalid_client', accountCode: null });
+      expect(String(failure)).toContain('HTTP 401');
+      expect(String(failure)).toContain('invalid_client');
+      expect(String(failure)).not.toContain(secret);
+      expect(JSON.stringify(failure)).not.toContain(secret);
+    }
+    expect(input.requests.filter(request => request.tokenType === 'refresh_token')).toHaveLength(5);
+    expect(input.requests.filter(request => request.tokenType === 'access_token')).toHaveLength(5);
+    expect(input.requests.filter(request => request.path.endsWith('/sign-out'))).toHaveLength(5);
+  } finally { input.restore(); }
+});
+
+test('borrowed Book sign-out refusal preserves both token failures for all five people', async () => {
+  const input = await borrowTransport(undefined, {
+    refresh_token: () => Response.json({ error: 'invalid_request' }, { status: 400 }),
+    access_token: () => Response.json({ error: 'unsupported_token_type' }, { status: 400 }),
+    'sign-out': () => Response.json({ code: 'INVALID_ORIGIN', message: 'unit-private-response' }, { status: 403 }),
+  });
+  try {
+    const people = await attachPublicDomainBook(input.manifest, input.endpoints);
+    const failures = cleanupFailures(await people.close().catch(cause => cause));
+    expect(failures).toHaveLength(15);
+    for (const name of personaNames.filter(name => name !== 'visitor'))
+      expect(failures.filter(failure => failure.persona === name)).toMatchObject([
+        { operation: 'revoke refresh_token', status: 400, oauthError: 'invalid_request', accountCode: null },
+        { operation: 'revoke access_token', status: 400, oauthError: 'unsupported_token_type', accountCode: null },
+        { operation: 'sign-out', status: 403, oauthError: null, accountCode: 'INVALID_ORIGIN' },
+      ]);
+    expect(JSON.stringify(failures)).not.toContain('unit-private-response');
+  } finally { input.restore(); }
+});
+
+for (const response of ['json', 'text', 'transport'] as const)
+  test(`borrowed Book ${response} cleanup failure redacts unknown response fields and retains the failed close`, async () => {
+    const secret = 'unit-secret-cookie-or-token', input = await borrowTransport(undefined, { refresh_token: () => {
+      if (response === 'transport') throw new Error(secret);
+      return response === 'text' ? new Response(secret, { status: 502 })
+        : Response.json({ error: secret, code: secret, error_description: secret }, { status: 403 });
+    } });
+    try {
+      const people = await attachPublicDomainBook(input.manifest, input.endpoints);
+      const [first, concurrent] = await Promise.all([people.close().catch(cause => cause), people.close().catch(cause => cause)]);
+      expect(first).toBeInstanceOf(AggregateError);
+      expect(concurrent).toBe(first);
+      const failures = cleanupFailures(first);
+      expect(failures).toHaveLength(5);
+      for (const failure of failures) {
+        expect(failure).toMatchObject({ operation: 'revoke refresh_token',
+          status: response === 'transport' ? null : response === 'text' ? 502 : 403, oauthError: null, accountCode: null });
+        expect(String(failure)).not.toContain(secret);
+        expect(JSON.stringify(failure)).not.toContain(secret);
+      }
+      expect(input.requests.filter(request => request.path.endsWith('/revoke'))).toHaveLength(10);
+      expect(input.requests.filter(request => request.path.endsWith('/sign-out'))).toHaveLength(5);
+      const count = input.requests.length;
+      expect(await people.close().catch(cause => cause)).toBe(first);
+      expect(input.requests).toHaveLength(count);
+    } finally { input.restore(); }
+  });
