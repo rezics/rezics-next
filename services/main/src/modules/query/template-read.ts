@@ -273,8 +273,13 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
       const agents=items.flatMap(item=>typeof item.agent==='string'?[item.agent]:[]);
       const attributions=await readCreditAttributionCards(session,agents);
       for(let index=items.length-1;index>=0;index--) {
-        const agent=items[index]!.agent;
-        if(typeof agent==='string' && !attributions.has(agent)) items.splice(index,1);
+        const item=items[index]!,agent=item.agent;
+        if(typeof agent!=='string') continue;
+        const attribution=attributions.get(agent);
+        if(!attribution) items.splice(index,1);
+        // Native names use the admitted attribution. Source-reported fields
+        // retain their selected publication's attribution semantics.
+        else if(item.participantKind==='agent' && item.confirmation!=='source-reported') item.displayName=attribution.displayName;
       }
     }
     const payload={profile:'template-result-v1',query:template.query,revision:template.revision,items,
