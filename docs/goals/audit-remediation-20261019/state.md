@@ -1,6 +1,6 @@
 # Audit remediation state
 
-Checkpoint: 2026-10-20, after recovery from stalled native manager sessions.
+Checkpoint: 2026-10-20, after rechecking original acceptance and fresh execution.
 
 ## Accepted outcomes
 
@@ -31,19 +31,35 @@ decides closure. The old long-running Recipe service and all KEEP runtimes
 remain preserved; output custody was retained before the stalled CLI parents
 were terminated. No shared data or store was reset.
 
+The latest restarted Site and Catalogue turns and the G-2846 independent
+review request still report workspace-routing failures before any completed
+tool action. Those requests have not established resumed product work or a
+new source verdict. No original finding has been accepted since the previous
+23/61 checkpoint. Current execution receipts remain in the recovery directory;
+they must be checked before describing a task as executing.
+
 ## Current work
 
-- G-2791 remains the sole genuine corpus/copy producer: finish the supported
-  history transition, current owner/native alignment, actual readbacks and one
-  distinct qualified stopped-backup restore with a precise consumer manifest.
-- G-2781 owns the existing Structure V2 Source adapter; G-2763 owns the exact
-  current-profile reader counterexample. Their fixes proceed independently.
+- G-2791 delivered the distinct current-native backup/restore copy to G-2823:
+  38 checks and 365 assertions passed, including all five chapter byte hashes.
+  Preparation took 209.887 seconds and restore/readbacks 66.107 seconds. Do not
+  repeat corpus preparation. Original Book admission still compares a revision
+  URN with a UUID and omits a supported body representation. G-2793's targeted
+  handoff goes to original outcome owner G-2773 for a versioned premise
+  correction preserving canonical identity, exact bytes and original outcomes.
+- G-2781 owns the existing Structure V2 Source adapter. G-2763 published its
+  two-file current-profile reader correction at 4bc710fb9430: 32 focused tests
+  and worker checks passed. G-2846 has the committed first-review assignment;
+  its fresh request has not reached execution. Three unchanged native-basis
+  failures still need fixture/classification diagnosis with assertions intact.
 - G-2799 owns the original A17 collection-purpose distinction, retaining
   current authority, null/ambiguity, disclosure and final-fence semantics.
 - Default Discover still needs one current unchanged request with exact
   pre-transport call/byte attribution before the next G-2764 repair.
-- G-2765's published analyzer-readiness correction needs one changed-source
-  review and only the missing original cold/cost/growth proof.
+- G-2765's analyzer-readiness correction passed its independent source review
+  and landed at 8b8a2c0a97. Reuse that approval. Only the missing original
+  cold/cost/growth proof remains; the old restore/model mismatch is a setup
+  failure, not a new source-review requirement or a reached outcome pass.
 - Existing proof owners retain the missing image, identity, authoring, Book,
   Recipe, discussion, search and assistive-technology assertions. Accepted
   proofs are reused; unrelated full-domain or historical all-113 prerequisites
