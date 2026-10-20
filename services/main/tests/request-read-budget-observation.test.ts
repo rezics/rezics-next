@@ -230,6 +230,28 @@ test('observation detaches after completion inside a still-active parent and res
   } finally { await f.stop(); }
 });
 
+test('observer promise assimilation and settlement cannot inherit the request allocation', async () => {
+  const f = fixture(), contexts: unknown[] = [];
+  let settle!: () => void;
+  const pending = new Promise<void>(resolve => { settle = resolve; });
+  const then = pending.then.bind(pending);
+  // Promise assimilation can execute user code, including a then getter.
+  Object.defineProperties(pending, {
+    constructor: { value: undefined },
+    then: { get() { contexts.push(fusekiReadBudget.getStore()); return then; } },
+  });
+  try {
+    const answer = await withFusekiReadRequest(request(), limits, () => f.graph.query('ASK {}'), () => pending);
+    expect(answer).toEqual(result);
+    expect(contexts.length).toBeGreaterThan(0);
+    expect(contexts.every(context => context === undefined)).toBe(true);
+    settle();
+    await pending;
+    expect(contexts.every(context => context === undefined)).toBe(true);
+    expect(f.transports()).toBe(1);
+  } finally { settle(); await f.stop(); }
+});
+
 test.each(['deadline', 'caller'] as const)('observation preserves %s cancellation and an independent fresh retry', async mode => {
   const events: FusekiReadObservation[] = [], retry: FusekiReadObservation[] = [];
   let bodyStarted!: () => void;

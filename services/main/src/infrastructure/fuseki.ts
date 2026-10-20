@@ -312,8 +312,10 @@ function emitReadObservation(call: ObservedReadCall | undefined, stage: FusekiRe
   try {
     // Diagnostics cannot gain the allocation or retain its async context. A
     // broken sink, including an async rejection, must not affect the read.
-    const result = fusekiReadBudget.exit(() => observer(event));
-    if (result) void Promise.resolve(result).catch(() => {});
+    fusekiReadBudget.exit(() => {
+      const result = observer(event);
+      if (result) void Promise.resolve(result).catch(() => {});
+    });
   } catch { /* The private diagnostic sink has no effect on request behavior. */ }
 }
 
