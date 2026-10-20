@@ -9248,5 +9248,591 @@
       }
     },
     "managerNext": "Consume v2 delta/hashes/offline evidence. Only a later finite event may supply fresh SAME G-2831 preparation and NEW root lease before the two original Home callbacks. No runtime, borrow, source review or acceptance action authorized now."
+  },
+  "originalHomeDefrCAS9Callbacks20261020": {
+    "atUTC": "2026-10-20T12:20:00.622323+00:00",
+    "worker": "G-2847",
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "fallbackUsed": false,
+      "nestedAgents": false
+    },
+    "decision": "Execute only committed Decision 2026-10-20T12:07:40Z and its manager note: one finite execution of card-home-de-390 and card-home-fr-390 on NEW HomeDEFR-CAS9-2026-10-20T12:07:03Z custody.",
+    "result": "both-original-callbacks-executed-once-failed-at-heading-assertion-custody-released",
+    "verdict": "Fresh own OAuth, exact actor eligibility, actual matching CAS9 reader-state/continuation and both native owned-document focus/passive Browse-mode premises passed. Both unchanged callbacks failed at their original headingReached assertion. Actual Orca structural navigation instead referenced a pre-existing other Chrome document after Control+Home despite owned-window receipts. No REZICS product defect or original AUD-012 acceptance is established; no source review, correction or replay was undertaken.",
+    "pins": {
+      "reportBase": "607d173cd7a4930f04f86be75622d7a4e31f09dd",
+      "currentMainReportComparedAtUTC": "2026-10-20T12:20:00.622323+00:00",
+      "currentMainAll45TopLevelFieldsEqualBeforeAppend": true,
+      "frontendSource": "8b8a2c0a97b5662e6283fa7531a8f1c600f37fd0",
+      "backendSource": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "backendOrigin": "http://127.0.0.1:3001",
+      "accountsOrigin": "http://127.0.0.1:3004",
+      "actor": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+      "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+      "nextUnread": {
+        "occurrence": "https://rezics.com/id/5caa0cc4-f716-876a-8a46-fa048620c48d",
+        "title": "At the harbour",
+        "href": "/w/01a10aff-93e5-7069-b80a-cd33bb6ce57c/read/5caa0cc4-f716-876a-8a46-fa048620c48d?language=en"
+      },
+      "authorizedAndActualCAS": 9,
+      "rootLeaseVersion": "HomeDEFR-CAS9-2026-10-20T12:07:03Z",
+      "rootLease": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/root-lease.json",
+        "sha256": "7dfe78d5e128434083bc3c8a5be51e85079a66abc0f165d728db2fa6a1073f87",
+        "bytes": 2298
+      },
+      "ready": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/renewed-ready.json",
+        "sha256": "df5ebbab8875848c168d44cc665b28690e1efb78138fe804d4f4c2fa25162c2b",
+        "bytes": 26659
+      },
+      "rootCustodyReceipt": {
+        "path": ".temp/audit-remediation-20261019/recovery-20261020/site-turn022-home-root-binding.json",
+        "sha256": "52326e0a97519a20346f76921469570dade4035c13f0c852381c9614db640601",
+        "bytes": 2920
+      }
+    },
+    "binding": {
+      "selection": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/selection-manifest.json",
+        "sha256": "54c8c4269c92f894b1db7e9ed9cdbbf75c81e55d768ddf385fb8ce3801591278",
+        "bytes": 4325
+      },
+      "ownedSource": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/leased-source-selection.json",
+        "sha256": "89bda12bd29c68b35271682814c0b6ae522effc2d8f8758698edfa3dda6aa277",
+        "bytes": 12294
+      },
+      "materialization": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/CAS9-materialization-receipt.json",
+        "sha256": "265a6e8555e436519ab08f493936005bfba2efadfe8bf2dbd6739adc4426c94f",
+        "bytes": 2682
+      },
+      "actualDependencyAndHelperHashes": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/actual-dependency-hashes.json",
+        "sha256": "72cb4b81ba732d9e277609c998fa2aa55657ff1916768891cb42559dee10886c",
+        "bytes": 20630
+      },
+      "ownedPort": 52181,
+      "outputDirectory": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/CAS9-home-defr-run-20261020T121311Z",
+      "sourceStillClean": true,
+      "packageLockfileAndDependencyVersionsChanged": false,
+      "dependencyPreparation": "Reflink copies from OWN previous exact-pin immutable snapshot with identical dependency trees; no install, package edits or source patches.",
+      "mainOrPeerTreeWrites": false
+    },
+    "executablePreservation": {
+      "frozenTemplate": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/aud012-home-only.test.ts.in",
+        "sha256": "22e5b9c90dc1fd0fce2cf412df44a46ab01bf354b72a9b74f6008a9b830868bc",
+        "bytes": 35206
+      },
+      "materializedExactTemplate": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/aud012-home-only.test.ts",
+        "sha256": "22e5b9c90dc1fd0fce2cf412df44a46ab01bf354b72a9b74f6008a9b830868bc",
+        "bytes": 35206
+      },
+      "originalCallback": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/original-callback-retained.txt",
+        "sha256": "9c56d91f687e9a03a00ce05dc88171ba22d63beab60d7de6b55592d0296aa4e8",
+        "bytes": 3268
+      },
+      "acceptedV2AtSession": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/at-session.ts",
+        "sha256": "57e00c0662c7140b22ea03c2594108af1eec04d587811563365c295bb4728113",
+        "bytes": 12438
+      },
+      "acceptedV2PromptIdentityGuard": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/temporary-native-permission.py",
+        "sha256": "b9c1331df4be36e87feb7a92301e44bd710477476ae3f0cae2e24ab2aa35f437",
+        "bytes": 7595
+      },
+      "passiveModeObserver": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/observe-document-mode.ts",
+        "sha256": "8d53c9c973a20289423f350934ca4c4e86ad8a492bade5d8b2913f0b64c8d604",
+        "bytes": 3468
+      },
+      "preservationVerification": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/CAS9-post-execution-preservation.json",
+        "sha256": "e56cd661c22486b9eed36dd956245f22a11d60d1bcc2f7c80536ee5f1fe9765d",
+        "bytes": 928
+      },
+      "allOldFrozenFilesUnchanged": true,
+      "allAcceptedV2PreparationFilesUnchanged": true,
+      "templateAndOriginalCallbackUnchanged": true,
+      "nativeSpeechDispatcherPulseAtSpiAxeFocusAndCallbackAssertionsPreserved": true,
+      "versionedExecutableByteIdenticalToOldV1Claimed": false,
+      "sourceOrAssertionEdits": false
+    },
+    "execution": {
+      "jobId": "d8d309a0-0c11-442d-9632-2a7f84393f89",
+      "exitStatus": 1,
+      "resultClass": "assertion",
+      "ownerPid": 714336,
+      "executorPid": 714502,
+      "testPid": 715364,
+      "testFile": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/aud012-home-only.test.ts",
+      "normalTaskAdmission": true,
+      "summary": "0 pass / 1 fail / 20 expect calls / 121.03 seconds; both selected cells failed at original headingReached assertion line258",
+      "log": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/CAS9-recorded-job.log",
+        "sha256": "501d5759a946a60e1d6f591ca6b810de89df97ed59246cea4ef7959ae7bb50e1",
+        "bytes": 2371
+      },
+      "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test ./.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/aud012-home-only.test.ts",
+      "qaRunId": null,
+      "qaRunIdQualification": "No separate QA run ID emitted; exact recorded job, Task admission command and retained raw output identify the one finite execution.",
+      "newResult": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/CAS9-home-defr-run-20261020T121311Z/result.json",
+        "sha256": "e6b2af7c62a9e66c24c846169def9d153e537a48b5f9fd9010046d08788cef3f",
+        "bytes": 801325
+      },
+      "onlySelectedCallbacksRan": [
+        "card-home-de-390",
+        "card-home-fr-390"
+      ],
+      "callbacksRerun": false,
+      "broaderChecksOrPriorPassingProofsRun": false
+    },
+    "actualPremises": {
+      "freshSupportedOwnNormalOAuth": true,
+      "sameActorEligibleHTTP200BeforeAndAfter": true,
+      "actorSubstitutionOrFabricatedGrantOrCopiedSession": false,
+      "liveReaderAndContinuationReadbacksHTTP200": [
+        {
+          "label": "borrower before actual AT; NEW renewed current-CAS read-only custody",
+          "atUTC": "2026-10-20T12:14:37.493Z",
+          "readerStatus": 200,
+          "continuationStatus": 200,
+          "status": {
+            "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+            "status": "reading",
+            "startedOn": null,
+            "finishedOn": null,
+            "version": 9,
+            "changedAt": "2026-10-20 11:54:46.223898+00"
+          },
+          "progress": null,
+          "customShelves": [],
+          "rating": {
+            "global": null,
+            "realm": null
+          },
+          "continuation": {
+            "profile": "work-resume-v1",
+            "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+            "sourcePosition": {
+              "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+              "sequence": "11954"
+            },
+            "lastPosition": null,
+            "nextUnread": {
+              "occurrence": "https://rezics.com/id/5caa0cc4-f716-876a-8a46-fa048620c48d",
+              "title": "At the harbour",
+              "href": "/w/01a10aff-93e5-7069-b80a-cd33bb6ce57c/read/5caa0cc4-f716-876a-8a46-fa048620c48d?language=en"
+            },
+            "unreadCount": {
+              "value": 1,
+              "kind": "exact"
+            }
+          }
+        },
+        {
+          "label": "borrower after actual AT",
+          "atUTC": "2026-10-20T12:15:29.089Z",
+          "readerStatus": 200,
+          "continuationStatus": 200,
+          "status": {
+            "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+            "status": "reading",
+            "startedOn": null,
+            "finishedOn": null,
+            "version": 9,
+            "changedAt": "2026-10-20 11:54:46.223898+00"
+          },
+          "progress": null,
+          "customShelves": [],
+          "rating": {
+            "global": null,
+            "realm": null
+          },
+          "continuation": {
+            "profile": "work-resume-v1",
+            "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+            "sourcePosition": {
+              "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+              "sequence": "11954"
+            },
+            "lastPosition": null,
+            "nextUnread": {
+              "occurrence": "https://rezics.com/id/5caa0cc4-f716-876a-8a46-fa048620c48d",
+              "title": "At the harbour",
+              "href": "/w/01a10aff-93e5-7069-b80a-cd33bb6ce57c/read/5caa0cc4-f716-876a-8a46-fa048620c48d?language=en"
+            },
+            "unreadCount": {
+              "value": 1,
+              "kind": "exact"
+            }
+          }
+        }
+      ],
+      "readerAndContinuationBeforeEqualAfter": true,
+      "borrowerReadbackScope": "Unchanged driver reads genuine reader-state and continuation before/after: status/dates/CAS, progress, custom shelves, rating and exact nextUnread are retained. It does not independently repeat custodian five-API preparation or follow-basis qualification.",
+      "ownedFocusAndMode": [
+        {
+          "locale": "de",
+          "qualified": true,
+          "before": "False",
+          "after": "False",
+          "modeObservation": {
+            "mode": "False",
+            "log": "20:14:45.733533 - DOCUMENT PRESENTER: set_presentation_mode. Use focus mode: False, [link: 'Zum Inhalt springen' (0x7f574917c200)]  in [document web: 'REZICS · Startseite' (0x7f574917e480)]  notify user: True",
+            "evidenceKind": "actual-mode-setter",
+            "offset": 298508
+          },
+          "toggleCommands": []
+        },
+        {
+          "locale": "fr",
+          "qualified": true,
+          "before": "False",
+          "after": "False",
+          "modeObservation": {
+            "mode": "False",
+            "log": "20:15:10.868539 - DOCUMENT PRESENTER: set_presentation_mode. Use focus mode: False, [link: 'Aller au contenu' (0x7f57491a45c0)]  in [document web: 'REZICS · Accueil' (0x7f5749025900)]  notify user: True",
+            "evidenceKind": "actual-mode-setter",
+            "offset": 264214
+          },
+          "toggleCommands": []
+        }
+      ],
+      "currentPromptBaselineEmpty": true,
+      "nativeInputActualOrcaControlReceived": true,
+      "nativeQualificationMs": 904.4894510000013,
+      "permissionActions": [],
+      "persistentOptionTouched": false,
+      "actualPromptAndFocusEvidence": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/CAS9-home-defr-run-20261020T121311Z/temporary-native-permission.json",
+        "sha256": "bef84446525f393747f3fa45cab80e582887c08214bc11241e4f0bba1884641f",
+        "bytes": 27606
+      },
+      "actualBaseline": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/CAS9-home-defr-run-20261020T121311Z/prompt-launch-baseline.json",
+        "sha256": "71b7475bfb88ce11eb809c1c11dfd218ff360fd7799c387dd5b22b882addfb92",
+        "bytes": 146
+      },
+      "statusReacquisitionOrReaderStateWrites": false,
+      "frontendAutomaticFollowingWatermarkPUT200": [
+        {
+          "line": 52,
+          "text": "PUT /api/main/v1/me/feed-watermarks/following 200 in 418ms"
+        },
+        {
+          "line": 54,
+          "text": "PUT /api/main/v1/me/feed-watermarks/following 200 in 294ms"
+        },
+        {
+          "line": 58,
+          "text": "PUT /api/main/v1/me/feed-watermarks/following 200 in 142ms"
+        },
+        {
+          "line": 62,
+          "text": "PUT /api/main/v1/me/feed-watermarks/following 200 in 150ms"
+        }
+      ],
+      "zeroHttpWritesClaimed": false,
+      "automaticWriteLimit": "Retain four automatic following-watermark PUT200 entries, two present in callback-window nonGetRequests. Raw borrower-release noBorrowerWrites is the frozen prohibited reader-state matcher result, not a zero-write assertion."
+    },
+    "assertionReach": [
+      {
+        "cell": "card-home-de-390",
+        "outcome": "failed",
+        "callbackAssertionReached": "headingReached",
+        "failedAssertion": "expect(headingReached).toBe(true)",
+        "file": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/aud012-home-only.test.ts",
+        "line": 258,
+        "stack": "Error: expect(received).toBe(expected)\n\nExpected: true\nReceived: false\n\n    at toBe (unknown)\n    at <anonymous> (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/aud012-home-only.test.ts:258:69)\n    at async cell (unknown)\n    at async <anonymous> (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/aud012-home-only.test.ts:247:143)",
+        "heading": "Weiterlesen",
+        "headingReached": false,
+        "nativeControlHomeCount": 1,
+        "nativeHeadingKeyCount": 24,
+        "allNativeKeyFocusReceiptsOwned": true,
+        "ownedDocumentFocusQualifiedBeforeCallback": true,
+        "passiveBrowseModeQualifiedBeforeCallback": true,
+        "expectedSpeechInspection": [
+          {
+            "value": "Weiterlesen",
+            "speechOutputMatches": 0,
+            "speechDispatcherMatches": 0
+          },
+          {
+            "value": "The Lantern Road 8805d7a2",
+            "speechOutputMatches": 0,
+            "speechDispatcherMatches": 0
+          },
+          {
+            "value": "At the harbour",
+            "speechOutputMatches": 0,
+            "speechDispatcherMatches": 0
+          },
+          {
+            "value": "1 neue Kapitel",
+            "speechOutputMatches": 0,
+            "speechDispatcherMatches": 0
+          }
+        ],
+        "foreignDocumentContextLinesAfterControlHome": 723,
+        "inspectedSpeechAndContextLines": [
+          {
+            "line": 6573,
+            "text": "20:14:45.721638 - SPEECH OUTPUT: 'Zum Inhalt springen' {'established': False, 'family': {'name': 'German', 'gender': None, 'lang': 'de', 'dialect': '', 'variant': None}}"
+          },
+          {
+            "line": 6574,
+            "text": "20:14:45.721654 - SPEECH DISPATCHER: Speaking 'Zum Inhalt springen' as string"
+          },
+          {
+            "line": 6614,
+            "text": "20:14:45.735491 - SPEECH OUTPUT: 'Browse mode' {'established': False}"
+          },
+          {
+            "line": 6615,
+            "text": "20:14:45.735503 - SPEECH DISPATCHER: Speaking 'Browse mode' as string"
+          },
+          {
+            "line": 7365,
+            "text": "20:14:46.635634 - SPEECH OUTPUT: 'Skip to content.' {'established': False, 'family': {'name': 'English (Great Britain)', 'gender': None, 'lang': 'en', 'dialect': '', 'variant': None}}"
+          },
+          {
+            "line": 7366,
+            "text": "20:14:46.635651 - SPEECH DISPATCHER: Speaking 'Skip to content.' as string"
+          },
+          {
+            "line": 9344,
+            "text": "20:14:47.826405 - SPEECH OUTPUT: 'Dashboard' {'established': False, 'family': {'name': 'English (Great Britain)', 'gender': None, 'lang': 'en', 'dialect': '', 'variant': None}}"
+          },
+          {
+            "line": 9345,
+            "text": "20:14:47.826427 - SPEECH DISPATCHER: Speaking 'Dashboard' as string"
+          },
+          {
+            "line": 17041,
+            "text": "20:14:55.307894 - SPEECH OUTPUT: 'Dashboard' {'established': False, 'family': {'name': 'English (Great Britain)', 'gender': None, 'lang': 'en', 'dialect': '', 'variant': None}}"
+          },
+          {
+            "line": 17042,
+            "text": "20:14:55.307916 - SPEECH DISPATCHER: Speaking 'Dashboard' as string"
+          },
+          {
+            "line": 24538,
+            "text": "20:15:02.827541 - SPEECH OUTPUT: 'Dashboard' {'established': False, 'family': {'name': 'English (Great Britain)', 'gender': None, 'lang': 'en', 'dialect': '', 'variant': None}}"
+          },
+          {
+            "line": 24539,
+            "text": "20:15:02.827558 - SPEECH DISPATCHER: Speaking 'Dashboard' as string"
+          },
+          {
+            "line": 6727,
+            "text": "20:14:46.476733 - FOCUS MANAGER: Active window is [frame: 'GitHub - Google Chrome - coordinates (坐标)' (0x7f574b366b40)]  <unknown>.<module>:373 > input_event_manager._on_key_pressed:261 > input_event_manager.process_keyboard_event:297 > focus_manager.get_active_window:342"
+          },
+          {
+            "line": 6728,
+            "text": "20:14:46.477352 - AXObject: Clearing AT-SPI cache on [frame: 'GitHub - Google Chrome - coordinates (坐标)' (0x7f574b366b40)]  Recursive: False.  Reason: Checking if window can be the active window"
+          },
+          {
+            "line": 6729,
+            "text": "20:14:46.481951 - AXUtilities: [frame: 'GitHub - Google Chrome - coordinates (坐标)' (0x7f574b366b40)]  from [application: 'Google Chrome' (0x7f574b3473c0)]  can be active window"
+          }
+        ],
+        "originalCardDescriptionStatusAssertionsReached": false,
+        "cardScreenshotStepReached": false,
+        "axeStepReached": false,
+        "interpretation": "Retained Orca structural navigation references a different pre-existing Chrome document after Control+Home despite owned-window receipts. Original callback heading assertion failed; this is not a confirmed REZICS Home heading/content/description defect. No peer process, focus, tab or preference was changed to repair it."
+      },
+      {
+        "cell": "card-home-fr-390",
+        "outcome": "failed",
+        "callbackAssertionReached": "headingReached",
+        "failedAssertion": "expect(headingReached).toBe(true)",
+        "file": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/aud012-home-only.test.ts",
+        "line": 258,
+        "stack": "Error: expect(received).toBe(expected)\n\nExpected: true\nReceived: false\n\n    at toBe (unknown)\n    at <anonymous> (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/aud012-home-only.test.ts:258:69)\n    at async cell (unknown)\n    at async <anonymous> (/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/aud012-home-only.test.ts:247:143)",
+        "heading": "Reprendre la lecture",
+        "headingReached": false,
+        "nativeControlHomeCount": 1,
+        "nativeHeadingKeyCount": 24,
+        "allNativeKeyFocusReceiptsOwned": true,
+        "ownedDocumentFocusQualifiedBeforeCallback": true,
+        "passiveBrowseModeQualifiedBeforeCallback": true,
+        "expectedSpeechInspection": [
+          {
+            "value": "Reprendre la lecture",
+            "speechOutputMatches": 0,
+            "speechDispatcherMatches": 0
+          },
+          {
+            "value": "The Lantern Road 8805d7a2",
+            "speechOutputMatches": 0,
+            "speechDispatcherMatches": 0
+          },
+          {
+            "value": "At the harbour",
+            "speechOutputMatches": 0,
+            "speechDispatcherMatches": 0
+          },
+          {
+            "value": "1 nouveau",
+            "speechOutputMatches": 0,
+            "speechDispatcherMatches": 0
+          }
+        ],
+        "foreignDocumentContextLinesAfterControlHome": 732,
+        "inspectedSpeechAndContextLines": [
+          {
+            "line": 27219,
+            "text": "20:15:10.856624 - SPEECH OUTPUT: 'Aller au contenu' {'established': False, 'family': {'name': 'French (France)', 'gender': None, 'lang': 'fr', 'dialect': '', 'variant': None}}"
+          },
+          {
+            "line": 27220,
+            "text": "20:15:10.856642 - SPEECH DISPATCHER: Speaking 'Aller au contenu' as string"
+          },
+          {
+            "line": 28195,
+            "text": "20:15:11.822975 - SPEECH OUTPUT: 'Skip to content.' {'established': False, 'family': {'name': 'English (Great Britain)', 'gender': None, 'lang': 'en', 'dialect': '', 'variant': None}}"
+          },
+          {
+            "line": 28196,
+            "text": "20:15:11.822990 - SPEECH DISPATCHER: Speaking 'Skip to content.' as string"
+          },
+          {
+            "line": 30211,
+            "text": "20:15:12.975280 - SPEECH OUTPUT: 'Dashboard' {'established': False, 'family': {'name': 'English (Great Britain)', 'gender': None, 'lang': 'en', 'dialect': '', 'variant': None}}"
+          },
+          {
+            "line": 30212,
+            "text": "20:15:12.975293 - SPEECH DISPATCHER: Speaking 'Dashboard' as string"
+          },
+          {
+            "line": 37812,
+            "text": "20:15:20.523179 - SPEECH OUTPUT: 'Dashboard' {'established': False, 'family': {'name': 'English (Great Britain)', 'gender': None, 'lang': 'en', 'dialect': '', 'variant': None}}"
+          },
+          {
+            "line": 37813,
+            "text": "20:15:20.523193 - SPEECH DISPATCHER: Speaking 'Dashboard' as string"
+          },
+          {
+            "line": 45222,
+            "text": "20:15:28.052754 - SPEECH OUTPUT: 'Dashboard' {'established': False, 'family': {'name': 'English (Great Britain)', 'gender': None, 'lang': 'en', 'dialect': '', 'variant': None}}"
+          },
+          {
+            "line": 45223,
+            "text": "20:15:28.052766 - SPEECH DISPATCHER: Speaking 'Dashboard' as string"
+          },
+          {
+            "line": 27533,
+            "text": "20:15:11.660755 - FOCUS MANAGER: Active window is [frame: 'GitHub - Google Chrome - coordinates (坐标)' (0x7f574b366b40)]  <unknown>.<module>:373 > input_event_manager._on_key_pressed:261 > input_event_manager.process_keyboard_event:297 > focus_manager.get_active_window:342"
+          },
+          {
+            "line": 27534,
+            "text": "20:15:11.661349 - AXObject: Clearing AT-SPI cache on [frame: 'GitHub - Google Chrome - coordinates (坐标)' (0x7f574b366b40)]  Recursive: False.  Reason: Checking if window can be the active window"
+          },
+          {
+            "line": 27535,
+            "text": "20:15:11.666694 - AXUtilities: [frame: 'GitHub - Google Chrome - coordinates (坐标)' (0x7f574b366b40)]  from [application: 'Google Chrome' (0x7f574b3473c0)]  can be active window"
+          }
+        ],
+        "originalCardDescriptionStatusAssertionsReached": false,
+        "cardScreenshotStepReached": false,
+        "axeStepReached": false,
+        "interpretation": "Retained Orca structural navigation references a different pre-existing Chrome document after Control+Home despite owned-window receipts. Original callback heading assertion failed; this is not a confirmed REZICS Home heading/content/description defect. No peer process, focus, tab or preference was changed to repair it."
+      }
+    ],
+    "inspectedEvidence": {
+      "passiveInspection": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/CAS9-passive-evidence-inspection.json",
+        "sha256": "b3e06f1b9c07ecdc7713a061cf4f7631bb1bf80707b4fc9b6fab725e12afbb3f",
+        "bytes": 12959
+      },
+      "actualSpeechDebug": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/CAS9-home-defr-run-20261020T121311Z/orca.debug",
+        "sha256": "4464e94195a2b5856067dc4a6b37a34657678edcb06def829ed39e04d649cde8",
+        "bytes": 4542878
+      },
+      "actualSpeechDispatcher": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/CAS9-home-defr-run-20261020T121311Z/speech-logs/speech-dispatcher.log",
+        "sha256": "a37f1872ab210f61668682f9c16f161672f324db1236d96ded0a7d180858f720",
+        "bytes": 3108804
+      },
+      "actualAtSpiEvents": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/CAS9-home-defr-run-20261020T121311Z/atspi.jsonl",
+        "sha256": "94fc0160f526c9fd6175baf793cf4710ea27584b2ec3d7042741b89c3902eec1",
+        "bytes": 14234
+      },
+      "actualAudio": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/CAS9-home-defr-run-20261020T121311Z/speech.wav",
+        "sha256": "0752ffaa3c2bcbddcf313e5f8482e2db844f5e84a5002088e3d4091d4dc4bf45",
+        "bytes": 2414478
+      },
+      "audioInspection": {
+        "channels": 1,
+        "sampleRate": 16000,
+        "sampleWidthBytes": 2,
+        "frames": 1207200,
+        "durationSeconds": 75.45,
+        "nonZeroSamples": 330807,
+        "peakAbsoluteSample": 32768,
+        "rmsSample": 3045.1928367501673
+      },
+      "screenshotsGenerated": [],
+      "screenshotsInspected": [],
+      "screenshotAndAxeLimit": "Unchanged original heading assertion line258 failed before screenshot line263 and axe line265 in each callback. No screenshots exist for this run; neither screenshot inspection nor axe acceptance can be claimed. No replacement DOM proof or new browser capture was run."
+    },
+    "custody": {
+      "borrowerRelease": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/CAS9-home-defr-run-20261020T121311Z/borrower-release.json",
+        "sha256": "fdaaf7c317bdc420fc1ea1ed6c9e700d5f287989dc50cac46cb1cc1b47e61111",
+        "bytes": 4327
+      },
+      "explicitRootBoundRelease": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/CAS9-explicit-root-bound-release.json",
+        "sha256": "0de96d7ab7998b8505fb3c89a6fe6f5f9dc5b39c9a54478dd90aeee8fab1d8d7",
+        "bytes": 6482
+      },
+      "independentActualShutdown": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/CAS9-independent-shutdown-verification.json",
+        "sha256": "647b3da8ba7999e37ad18e400dae38154e59f1e07a22b44840ac30dd7bb1e7ca",
+        "bytes": 1302
+      },
+      "ownedCleanupVerification": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/CAS9-home-defr-run-20261020T121311Z/owned-cleanup-verification.json",
+        "sha256": "46bb47c81f6bce149c635a5e530c31094217d53fb2c3ecb41b38706e7bd1ef93",
+        "bytes": 1236
+      },
+      "thisNewRootBoundBorrowReleased": true,
+      "releaseAtUTC": "2026-10-20T12:15:31.090Z",
+      "ownedFrontendBrowserATInputAudioSocketsSinkAndJobStopped": true,
+      "actualProcessAndPortAbsenceVerified": true,
+      "protectedOrPeerResourceActions": false,
+      "restorationPerformedByBorrower": false,
+      "cleanupStillRequiredOwner": "SAME G-2831 after Root consumes this exact release; guarded fresh actual CAS, original three semantic fields and TWO complete five-API invariant readbacks. Abort intervening changes.",
+      "oldCAS5OrCAS7BindingsReused": false
+    },
+    "limits": [
+      "Both original callbacks were executed exactly once; headingReached failed. Later description/status speech, dispatcher/Pulse, screenshot and axe assertions were not reached.",
+      "Owned X11 focus receipts and qualified initial REZICS document mode do not establish that subsequent Orca structural navigation stayed in the owned document; actual other-document context is retained.",
+      "Installed75409 Web-consumer evidence only; no current-main native/model/Studio qualification, genuine Library/identity/navigation replay or source review.",
+      "Accepted native-radio recovery, source reviews, offline prompt-baseline controls at52dce2ae62, historical Studio400 and all prior failures/owners/dispositions remain unchanged.",
+      "No original audit class closes. AUD-012 acceptance awaits the owning manager assessment of these actual unchanged failed callbacks.",
+      "No backend start/restart, corpus prepare/import/restore, reader-state write, grant/actor change, old spent lease use or G-2823 image/default lease use.",
+      "Private artifacts remain under this worker allowed worktree bundle. Main and peer trees are read-only; manager must copy private bundle to the central main bundle if required."
+    ],
+    "reportValidation": {
+      "command": "task docs:check",
+      "resultReceipt": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/CAS9-docs-check-receipt.json",
+      "resultReportedInWorkerHandoff": true
+    },
+    "managerNext": "Consume explicit NEW CAS9 root-bound release plus real owned shutdown, then ask SAME G-2831 for guarded semantic restoration. Assess the actual heading failures and wrong-document Orca context without product/class closure or silently changing original assertions. No further callback authorized by this execution."
   }
 }
