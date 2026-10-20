@@ -343,6 +343,112 @@ export const UnrenderedIncidencesPreview: Story = {
   },
 };
 
+// Supplied native-contract examples; these snapshots establish no backend persistence or authority.
+const extraCounterpart = fixture.summary(fixture.iri('f51'), 'Companion anthology');
+const withheldCounterpart = { reference: fixture.iri('f52'), status: 'unavailable' as const };
+const semanticIncidence = fixture.relationEntries[1]!;
+const partialIncidence = { ...semanticIncidence,
+  counterparts: [...semanticIncidence.counterparts, extraCounterpart, withheldCounterpart, extraCounterpart] };
+const semanticWithheld: RelationEntry = { ...semanticIncidence, relation: fixture.iri('f53'),
+  rendering: null,
+  counterparts: [fixture.summary(fixture.iri('f54'), 'Side story guide')] };
+const suppliedPartialPage: RelationsPage = { profile: 'resource-relations-v1', resource: fixture.workRef,
+  items: [purposeEntries[0]!, partialIncidence, partialIncidence, semanticWithheld], next: 'partial-next:+/%?=&雪',
+  sourcePosition: { datasetId: 'product', dataEpoch: 'epoch', sequence: '1' } };
+const retainedQuery: ConnectionsQuery = { grain: 'series', relationsAfter: 'relations-current:+/%?=&雪',
+  membersAfter: 'members-current:+/%?=&雪', partsAfter: 'parts-current:+/%?=&雪' };
+
+function RetainedConnections({ locale = 'en', preview = false, empty = false }: {
+  locale?: UiLocale; preview?: boolean; empty?: boolean;
+}) {
+  const relations: Loaded<RelationsPage> = { ok: true, data: empty ? { ...suppliedPartialPage, items: [] } : suppliedPartialPage };
+  const shared = { relations, workRef: fixture.workRef, locale, t: copyOf(locale), pageMessages: pageMessages[locale] };
+  return <div className="mx-auto grid max-w-[46rem] gap-8 px-4 py-8 sm:px-8">
+    {preview ? <ConnectionsPreviewView {...shared} /> : <ConnectionsSection {...shared} franchises={[]}
+      names={fixture.names} current={fixture.current} query={retainedQuery} />}
+  </div>;
+}
+
+async function assertRetainedNavigation(canvasElement: HTMLElement, locale: UiLocale, preview: boolean) {
+  const canvas = within(canvasElement), t = copyOf(locale);
+  const next = preview ? canvas.getByRole('link', { name: t.allConnections })
+    : within(canvas.getByRole('navigation', { name: t.relationsPages })).getByRole('link', { name: t.showMore });
+  await expect(next).toHaveAttribute('href', localizedPath(preview
+    ? `${resourceHref('/w/', fixture.workRef)}/connections#relations`
+    : `${resourceHref('/w/', fixture.workRef)}/connections?relationsAfter=partial-next%3A%2B%2F%25%3F%3D%26%E9%9B%AA&membersAfter=members-current%3A%2B%2F%25%3F%3D%26%E9%9B%AA&partsAfter=parts-current%3A%2B%2F%25%3F%3D%26%E9%9B%AA#relations`, locale));
+  if (!preview) await expect(within(canvas.getByRole('navigation', { name: t.relationsPages }))
+    .getByRole('link', { name: t.firstPage })).toHaveAttribute('href', localizedPath(
+      `${resourceHref('/w/', fixture.workRef)}/connections?membersAfter=members-current%3A%2B%2F%25%3F%3D%26%E9%9B%AA&partsAfter=parts-current%3A%2B%2F%25%3F%3D%26%E9%9B%AA#relations`, locale));
+  next.focus();
+  await expect(next).toHaveFocus();
+  await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+}
+
+export const PartialSemanticIncidences: Story = {
+  parameters: { docs: { description: { story: 'Supplied native-contract example: the readable projection and every additional counterpart survive, including withheld names and repeated occurrences. This is component evidence, not a backend or authority test.' } } },
+  render: (_args, { globals }) => <RetainedConnections locale={globals.locale as UiLocale} />,
+  async play({ canvasElement, globals, args }) {
+    const locale = globals.locale as UiLocale, canvas = within(canvasElement), t = copyOf(locale);
+    await expect(canvas.getByRole('region', { name: t.connections })).toBeVisible();
+    await expect(canvas.getByRole('region', { name: t.collections })).toBeVisible();
+    await expect(canvas.getByText('Reboots of')).toBeVisible();
+    const semanticTarget = semanticIncidence.counterparts[0]!;
+    if (semanticTarget.status !== 'available' || extraCounterpart.status !== 'available') throw new Error('Expected supplied counterpart addresses');
+    await expect(canvas.getAllByRole('link', { name: semanticTarget.name.value })).toHaveLength(2);
+    for (const link of canvas.getAllByRole('link', { name: semanticTarget.name.value })) await expect(link).toHaveAttribute('href',
+      localizedPath(resourceHref('/w/', semanticTarget.address as CanonicalAddress), locale));
+    const rows = canvasElement.querySelectorAll<HTMLElement>('[data-relation]');
+    await expect([...rows].map(row => row.getAttribute('data-relation')))
+      .toEqual([partialIncidence.relation, partialIncidence.relation, semanticWithheld.relation]);
+    for (const row of [...rows].slice(0, 2)) {
+      await expect([...row.children].map(child => child.textContent)).toEqual(['Companion anthology', t.nameNotShown, 'Companion anthology']);
+      const counterparts = within(row);
+      await expect(counterparts.getAllByRole('link', { name: 'Companion anthology' })).toHaveLength(2);
+      for (const link of counterparts.getAllByRole('link')) await expect(link).toHaveAttribute('href',
+        localizedPath(resourceHref('/w/', extraCounterpart.address as CanonicalAddress), locale));
+      await expect(counterparts.getByText(t.nameNotShown)).not.toHaveAttribute('href');
+    }
+    const withheldMeaning = semanticWithheld.counterparts[0]!;
+    if (withheldMeaning.status !== 'available') throw new Error('Expected the supplied fallback address');
+    await expect(within(rows[2]!).getByRole('link', { name: 'Side story guide' })).toHaveAttribute('href',
+      localizedPath(resourceHref('/w/', withheldMeaning.address as CanonicalAddress), locale));
+    await expect(canvasElement.querySelector(`a[href*="${withheldCounterpart.reference.slice(-36)}"]`)).toBeNull();
+    await assertRetainedNavigation(canvasElement, locale, Boolean(args.preview));
+  },
+};
+
+export const PartialSemanticIncidencesPreviewPhoneJapanese: Story = {
+  ...PartialSemanticIncidences,
+  args: { preview: true, locale: 'ja' },
+  render: () => <RetainedConnections locale="ja" preview />,
+  globals: { locale: 'ja', viewport: { value: 'phone' } },
+};
+
+export const EmptyContinuedRelations: Story = {
+  parameters: { docs: { description: { story: 'Supplied native-contract empty continued page: an empty batch retains its opaque continuation and does not claim there are no connections.' } } },
+  render: () => <RetainedConnections empty />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement), t = copyOf('en');
+    await expect(canvas.getByRole('region', { name: t.connections })).toBeVisible();
+    await expect(canvas.queryByText(t.noConnections)).toBeNull();
+    await expect(canvas.queryAllByRole('listitem')).toHaveLength(0);
+    await assertRetainedNavigation(canvasElement, 'en', false);
+  },
+};
+
+export const EmptyContinuedRelationsPreviewPhoneJapanese: Story = {
+  ...EmptyContinuedRelations,
+  render: () => <RetainedConnections locale="ja" preview empty />,
+  globals: { locale: 'ja', viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement), t = copyOf('ja');
+    await expect(canvas.getByRole('region', { name: t.connections })).toBeVisible();
+    await expect(canvas.queryByText(t.noConnections)).toBeNull();
+    await expect(canvas.queryAllByRole('listitem')).toHaveLength(0);
+    await assertRetainedNavigation(canvasElement, 'ja', true);
+  },
+};
+
 export const RefusedCollectionMembers: Story = {
   render: () => <PurposePage refused />,
   async play({ canvasElement }) {

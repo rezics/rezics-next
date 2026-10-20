@@ -3,12 +3,13 @@ import { direction } from '@rezics/main/language';
 import { localizedPath } from '../../i18n/locale.ts';
 import { addressPath, resourceHref } from '../address/path.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, within } from 'storybook/test';
+import { useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { servedTypes } from '../catalogue/type-fixtures.ts';
 import { RelationRows } from '../work-levels/connections.tsx';
 import { iri, relations as relationsPage, summary } from '../work-levels/fixtures.ts';
-import type { RelationEntry } from '../work-levels/types.ts';
+import type { Loaded, RelationEntry, RelationsPage } from '../work-levels/types.ts';
 import { copyOf as levelsCopy } from '../work-levels/messages.ts';
 import { relationRows } from '../work-levels/relation-rows.ts';
 import * as fixture from '../work-page/fixtures.ts';
@@ -20,7 +21,9 @@ import { copyOf } from './messages.ts';
 import { DiscussionView, RelationsView, StatementsView } from './views.tsx';
 import { attributed } from '../rights-mark/fixtures.ts';
 import { appearances, baseSections, componentStatements, noStatements, predicateLabels, projectionFor, statements, withheldCreditAppearance } from './fixtures.ts';
-import { alter, identityEntry } from './identity-fixtures.ts';
+import { alter, identityEntry, saber } from './identity-fixtures.ts';
+import type { IdentityData } from './identity-relations.ts';
+import { IdentitySectionsView } from './identity-views.tsx';
 import { standaloneHrefFor } from './route.ts';
 import type { TargetBase } from './types.ts';
 
@@ -201,6 +204,149 @@ export const CollectionPurposesPhone: Story = {
     await CollectionPurposes.play?.(context);
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
+};
+
+// Supplied native-contract examples, not a backend selection or authority fixture.
+const extraCounterpart = summary(iri('f51'), 'Companion anthology');
+const withheldCounterpart = { reference: iri('f52'), status: 'unavailable' as const };
+const partialIncidence: RelationEntry = { ...identityEntry('work', 'character', alter),
+  counterparts: [alter, extraCounterpart, withheldCounterpart, extraCounterpart] };
+const semanticWithheld: RelationEntry = { ...partialIncidence, relation: iri('f53'),
+  rendering: null,
+  counterparts: [summary(iri('f54'), 'Side story guide')] };
+const partialPage: Loaded<RelationsPage> = { ok: true, data: {
+  profile: 'resource-relations-v1', resource: character.summary.reference,
+  items: [purposeEntries[0]!, partialIncidence, partialIncidence, semanticWithheld], next: 'partial-next:+/%?=&雪',
+  sourcePosition: { datasetId: 'product', dataEpoch: 'epoch', sequence: '1' },
+} };
+
+export const PartialSemanticIncidences: Story = {
+  parameters: { docs: { description: { story: 'Supplied native-contract example: two retained incidences each have a readable projection and additional, withheld and repeated counterparts. No native selection or persistence is exercised.' } } },
+  render: (_args, { globals }) => <Page locale={globals.locale as UiLocale}>
+    <RelationsView page={partialPage} cursor="partial-current:+/%?=&雪" {...common(globals.locale as UiLocale)} />
+  </Page>,
+  async play({ canvasElement, globals }) {
+    const locale = globals.locale as UiLocale, canvas = within(canvasElement), levels = levelsCopy(locale);
+    await expect(canvas.getByRole('region', { name: copyOf(locale).relations })).toBeVisible();
+    await expect(canvas.getByRole('region', { name: levels.collections })).toBeVisible();
+    await expect(canvasElement.querySelectorAll('[data-role-chip]')).toHaveLength(2);
+    for (const chip of canvasElement.querySelectorAll<HTMLElement>('[data-role-chip]')) {
+      await expect(within(chip).getByRole('link', { name: alter.name.value })).toHaveAttribute('href',
+        localizedPath(resourceHref('/e/', alter.address as CanonicalAddress), locale));
+    }
+    const rows = canvasElement.querySelectorAll<HTMLElement>('[data-relation]');
+    await expect([...rows].map(row => row.getAttribute('data-relation')))
+      .toEqual([partialIncidence.relation, partialIncidence.relation, semanticWithheld.relation]);
+    if (extraCounterpart.status !== 'available') throw new Error('Expected the supplied counterpart address');
+    for (const row of [...rows].slice(0, 2)) {
+      const counterparts = within(row);
+      await expect([...row.children].map(child => child.textContent)).toEqual(['Companion anthology', levels.nameNotShown, 'Companion anthology']);
+      await expect(counterparts.getAllByRole('link', { name: 'Companion anthology' })).toHaveLength(2);
+      for (const link of counterparts.getAllByRole('link')) await expect(link).toHaveAttribute('href',
+        localizedPath(resourceHref('/w/', extraCounterpart.address as CanonicalAddress), locale));
+      await expect(counterparts.getByText(levels.nameNotShown)).not.toHaveAttribute('href');
+    }
+    const withheldMeaning = semanticWithheld.counterparts[0]!;
+    if (withheldMeaning.status !== 'available') throw new Error('Expected the supplied fallback address');
+    await expect(within(rows[2]!).getByRole('link', { name: 'Side story guide' })).toHaveAttribute('href',
+      localizedPath(resourceHref('/w/', withheldMeaning.address as CanonicalAddress), locale));
+    await expect(rows[2]!.querySelector('[data-role-chip]')).toBeNull();
+    await expect(canvasElement.querySelector(`a[href*="${withheldCounterpart.reference.slice(-36)}"]`)).toBeNull();
+    const pages = within(canvas.getByRole('navigation', { name: workMessages[locale].pagination }));
+    await expect(pages.getByRole('link', { name: workMessages[locale].firstPage })).toHaveAttribute('href',
+      localizedPath(`${resourceHref('/e/', '0b9e4d2a-6c1f-4e8b-a3d5-7f2c9e1b4a6d')}#relations`, locale));
+    const next = pages.getByRole('link', { name: workMessages[locale].nextPage });
+    await expect(next).toHaveAttribute('href', localizedPath(
+      `${resourceHref('/e/', '0b9e4d2a-6c1f-4e8b-a3d5-7f2c9e1b4a6d')}?relations=partial-next%3A%2B%2F%25%3F%3D%26%E9%9B%AA#relations`, locale));
+    next.focus();
+    await expect(next).toHaveFocus();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+
+export const PartialSemanticIncidencesPhoneJapanese: Story = {
+  ...PartialSemanticIncidences,
+  globals: { locale: 'ja', viewport: { value: 'phone' } },
+};
+
+const ownCurrent = 'own-current:+/%?=&雪', ownNext = 'own-next:+/%?=&雪';
+const familyCurrent = 'family-current:+/%?=&雪', familyNext = 'family-next:+/%?=&雪';
+const familyBase = resourceHref('/e/', alter.address as CanonicalAddress);
+const familyEntries = ['801', '802', '803'].map(id => ({ ...identityEntry('hub', 'variant', alter), relation: iri(id) }));
+const suppliedLateFamily: Loaded<IdentityData> = { ok: true, data: { sections: [{
+  kind: 'family', hub: saber, hidden: false, next: { resource: saber, cursor: familyNext },
+  members: [
+    { summary: saber, entry: null, hub: true, kind: null, applicability: [], ratings: null },
+    ...familyEntries.map(entry => ({ summary: alter, entry, hub: false, kind: null, applicability: [], ratings: null })),
+  ],
+}] } };
+
+/** The two snapshots are supplied reader output; this story does not select a family from mixed native pages. */
+function LateHubPage({ locale }: { locale: UiLocale }) {
+  const [continued, setContinued] = useState(false);
+  const cursors = { family: familyCurrent, ...(continued ? { relations: ownCurrent } : {}) };
+  const links = standaloneHrefFor(cursors, familyBase);
+  const currentHref = `${familyBase}?${new URLSearchParams(cursors)}`;
+  const page: Loaded<RelationsPage> = { ok: true, data: { profile: 'resource-relations-v1',
+    resource: alter.reference, items: [], next: continued ? ownNext : ownCurrent,
+    sourcePosition: { datasetId: 'product', dataEpoch: 'epoch', sequence: '1' } } };
+  // Storybook's next/link stand-in is an anchor. Replace only this supplied
+  // continuation snapshot, without a remote request or a client family selector.
+  return <div className="mx-auto grid max-w-4xl gap-8 px-4 py-6" onClickCapture={event => {
+    const link = event.target instanceof Element ? event.target.closest('a') : null;
+    if (link?.getAttribute('href') === localizedPath(links({ kind: 'continue', section: 'relations', cursor: ownCurrent }), locale)) {
+      event.preventDefault();
+      setContinued(true);
+    }
+  }}>
+      <h1 className="font-semibold text-2xl">{alter.name.value}</h1>
+      <IdentitySectionsView data={continued ? suppliedLateFamily : { ok: true, data: { sections: [] } }} self={alter}
+        locale={locale} t={copyOf(locale)} messages={workMessages[locale]} hrefFor={links} currentHref={currentHref} />
+      <RelationsView page={page} cursor={continued ? ownCurrent : undefined} {...common(locale)} hrefFor={links} />
+  </div>;
+}
+
+export const LateHubRepeatedOccurrences: Story = {
+  parameters: { docs: { description: { story: 'Supplied native-contract reader snapshots: the initial own page has no family; a continued page supplies a late hub and three distinct occurrences naming one target. This tests production components, not completeness of mixed-page family discovery.' } } },
+  render: (_args, { globals }) => <LateHubPage locale={globals.locale as UiLocale} />,
+  async play({ canvasElement, globals }) {
+    const locale = globals.locale as UiLocale, canvas = within(canvasElement), t = copyOf(locale), messages = workMessages[locale];
+    await expect(canvas.queryByRole('region', { name: t.variantFamily })).toBeNull();
+    await expect(canvas.queryByText(t.noRelations)).toBeNull();
+    const next = canvas.getByRole('link', { name: messages.nextPage });
+    await expect(next).toHaveAttribute('href', localizedPath(
+      `${familyBase}?family=family-current%3A%2B%2F%25%3F%3D%26%E9%9B%AA&relations=own-current%3A%2B%2F%25%3F%3D%26%E9%9B%AA#relations`, locale));
+    next.focus();
+    await userEvent.keyboard('{Enter}');
+    const family = await canvas.findByRole('region', { name: t.variantFamily });
+    const members = family.querySelectorAll<HTMLElement>('[data-identity-member]');
+    await expect([...members].map(member => member.getAttribute('data-identity-member')))
+      .toEqual([saber.reference, alter.reference, alter.reference, alter.reference]);
+    await expect(within(family).getByText(t.visibleRelationsOnly)).toBeVisible();
+    for (const member of [...members].slice(1)) {
+      await expect(within(member).getByRole('link', { name: alter.name.value })).toHaveAttribute('href',
+        localizedPath(familyBase, locale));
+      await expect(within(member).getByText(t.unknownVariantKind)).toBeVisible();
+    }
+    const hub = family.querySelector<HTMLElement>('[data-identity-hub]');
+    await expect(hub).toHaveTextContent(t.variantOf);
+    await expect(within(hub!).getByRole('link', { name: saber.name.value })).toHaveAttribute('href',
+      localizedPath(resourceHref('/e/', saber.address as CanonicalAddress), locale));
+    const more = within(family).getByRole('link', { name: t.moreIdentityRelations });
+    await expect(more).toHaveAttribute('href', localizedPath(
+      `${familyBase}?family=family-next%3A%2B%2F%25%3F%3D%26%E9%9B%AA&relations=own-current%3A%2B%2F%25%3F%3D%26%E9%9B%AA#identity-family`, locale));
+    await expect(canvas.getByRole('link', { name: messages.nextPage })).toHaveAttribute('href', localizedPath(
+      `${familyBase}?family=family-current%3A%2B%2F%25%3F%3D%26%E9%9B%AA&relations=own-next%3A%2B%2F%25%3F%3D%26%E9%9B%AA#relations`, locale));
+    await expect(canvas.queryByText(t.noRelations)).toBeNull();
+    more.focus();
+    await expect(more).toHaveFocus();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+
+export const LateHubRepeatedOccurrencesPhoneJapanese: Story = {
+  ...LateHubRepeatedOccurrences,
+  globals: { locale: 'ja', viewport: { value: 'phone' } },
 };
 
 export const Appearances: Story = {
