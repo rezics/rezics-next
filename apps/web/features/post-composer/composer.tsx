@@ -638,8 +638,9 @@ export function PostComposer({
             <div className="grid gap-2 text-sm">
               <p role="status">{words[writeState === 'none' ? 'unwritten' : writeState === 'unknown' ? 'writeUnknown' : 'writeAcknowledged'][locale]}</p>
               {writeState === 'none' ? (
-                <Button type="button" variant="outline" className="justify-self-start" onClick={() => {
+                <Button type="button" variant="outline" className="justify-self-start" onClick={(event) => {
                   change({ progress: null }); setError(null);
+                  event.currentTarget.form?.querySelector<HTMLElement>('[contenteditable="true"]')?.focus();
                 }}>{words.cancelAttempt[locale]}</Button>
               ) : null}
             </div>
@@ -663,8 +664,11 @@ export function PostComposer({
               const link = document.createElement('a'); link.href = url; link.download = 'post-draft.json';
               link.click(); URL.revokeObjectURL(url);
             }}>{words.exportDraft[locale]}</Button> : null}
-            {storageError ? <Button type="button" variant="outline" onClick={() => {
-              try { persist(draft); } catch { setStorageError(true); }
+            {storageError ? <Button type="button" variant="outline" onClick={(event) => {
+              try {
+                persist(draft);
+                event.currentTarget.form?.querySelector<HTMLElement>('[contenteditable="true"]')?.focus();
+              } catch { setStorageError(true); }
             }}>{words.retrySave[locale]}</Button> : null}
             {hydrated && !postedHref ? (
               <span role="status" className="text-muted-foreground text-xs">
