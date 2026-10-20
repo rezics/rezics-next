@@ -3686,6 +3686,1466 @@
       "effect": "Completed only the four-file first source review and additive report; genuine original image verification awaits separate admission. The current user filesystem constraint also prohibits the older brief request to copy artifacts into Main, so manager delivery is explicit."
     },
     "next": "Manager assesses this scoped source verdict, reconciles unchanged inherited guards/canonical inference through normal composition gates, copies the private bundle, then admits the original owner for the outstanding genuine D2-003 image matrix. No automatic landing or finding closure."
+  },
+  "landedOriginGenuineImageProofV1": {
+    "schemaVersion": 1,
+    "recordedAt": "2026-10-20T13:00:33.233644+00:00",
+    "worker": "G-2830",
+    "result": "partial",
+    "engineSelection": "codex-1 / GPT-6.1 Sol / xhigh; no fallback or nested agents",
+    "selection": "Latest 2026-10-20T12:22:48Z decision only: landed saved-origin repair genuine original D2-003 image matrix. No repeat source review, D2-002 replay, broad inventory, source fix or assertion edit.",
+    "conclusion": "Real draft/reserve/byte activation/inference/Use succeeded in all four width/locale selections. Both desktop locales completed current-document recovery, real final CAS/identity/placement and same-operation lost-response retry, followed by authenticated persistence reads. Phone outcomes remain partial. Both aggregate recorded matrix jobs failed; this is not a passing original image matrix and grants no D2-003 closure.",
+    "pins": {
+      "frontendProduct": "3878e8dda94eaff1fa51f4f8e0e58fc14265d1a5",
+      "frontendTree": "6265dd73f7ffbb13387c8eb8236ec0c174e298fd",
+      "reportBase": "cd65abb6a5d746540e2c233334af2d8552431991",
+      "backendProduct": "76c5955006dbea2016e84465d8f3e79fdf4fc979",
+      "backendSupportOverlay": "d2f04140fe615eadef0379a52c26291e6e083217",
+      "testHarness": "New private image-journey.e2e.ts and retained per-attempt .source copies; repository Playwright provider and imported product helpers verified byte-identical to product pin.",
+      "sourceVerification": "post-run-source-verification.json",
+      "sourceArchiveManifest": "source-pin.json",
+      "archivedTrackedFilesVerifiedBeforeAndAfter": 10103,
+      "nineReviewedConsumerHashes": [
+        {
+          "path": "apps/web/features/document-editor/body-editor.tsx",
+          "sha256": "f2892be0a3d27b1b106ff5f5eec30aaf66726c8485f5e95038a3ecb94efc5bd1",
+          "match": true
+        },
+        {
+          "path": "apps/web/features/document-editor/image-target.ts",
+          "sha256": "85dc4172713a28add79854dc86abcd4ab580301a824afdde222bc35eb5da95f9",
+          "match": true
+        },
+        {
+          "path": "apps/web/features/document-editor/image-uses.ts",
+          "sha256": "8ea7f122767522bc7a9a7dfe3fd82dacaeb2f52676a5f452de6730b9d87f288d",
+          "match": true
+        },
+        {
+          "path": "apps/web/features/document-editor/local-image.ts",
+          "sha256": "7c9e72bc5fbfc92b93825c9a21edc4aae5eea8e0c62171a6c8db9e6d533fa8d8",
+          "match": true
+        },
+        {
+          "path": "apps/web/features/document-editor/member-reply-images.test.ts",
+          "sha256": "3e4d9bc0998af6f96a42b851ab7db6c72da510c5d6d104066247e2cf76c5c5c0",
+          "match": true
+        },
+        {
+          "path": "apps/web/features/post-composer/api.ts",
+          "sha256": "142beb054e1033390d874e940a7e1258c11944574ab1ce11bb152d8c0af0b1de",
+          "match": true
+        },
+        {
+          "path": "apps/web/features/post-composer/composer.tsx",
+          "sha256": "8e087e1bd308bf58eb808d4b5ebf099ba7055db28e2414665ab24444a00e2e95",
+          "match": true
+        },
+        {
+          "path": "apps/web/features/post-composer/image-draft.test.ts",
+          "sha256": "0a484a324855ad6e09faa3b055fc40ddf22b63d815aa65bc667fa2f6eaaca779",
+          "match": true
+        },
+        {
+          "path": "apps/web/features/post-composer/image-draft.ts",
+          "sha256": "9a8c4159d467add6e17304d6ebbca81814474d3dbbcc05c02c12ef0c576f48c9",
+          "match": true
+        }
+      ],
+      "fourMainTitleInputRemovals": "Exact composer hash matches reviewed/landed source; titleInput occurrences 0. No old whole blobs copied.",
+      "dependencyIsolation": "Existing installed dependency bytes reused through an independent Btrfs reflink copy inside exact archive; @rezics workspace links resolve within archive. dependency-isolation.json supersedes source-pin.json initial symlink policy.",
+      "reusedChecks": [
+        "Accepted source verdicts 7d3e/f610 and 0766c6321399, unchanged 16 tests/80 assertions, causal 17 tests/90 assertions; not rerun",
+        "Landed manager gate manager-84ffb1e0-2e31-46a5-8830-bef22a8dab60: Web types, affected unit/repository guards, canonical inference, lint and AST PASS; not rerun"
+      ]
+    },
+    "historicalPreservation": {
+      "existingTopLevelFields": 30,
+      "allExistingValuesUnchanged": true,
+      "priorReportSha256": "eaa42c674f1800d9626c77a9393f40d7352c45e8d4bebf238623fd5a7e2d11c4",
+      "priorReportSnapshot": "historical-report-before.json",
+      "originalAssertions": [
+        {
+          "artifact": "original-assertions/additional-recovery.stories.tsx",
+          "sha256": "f4503875b5b2a8ac2ec7ed21dfcf8ce2fbd2f2b87952def16e636321e38acd2b",
+          "matchesExactProductPin": null,
+          "note": "Retained private supplemental story; unchanged"
+        },
+        {
+          "artifact": "original-assertions/apps/web/features/document-editor/draft-recovery.stories.tsx",
+          "sha256": "2bac28fb0151f3a8832b02f02ab3f77e35b8b6b67c1dae235868950bcffdad00",
+          "matchesExactProductPin": true,
+          "note": "Original assertion source unchanged; not reexecuted in this latest runtime selection"
+        },
+        {
+          "artifact": "original-assertions/apps/web/features/post-composer/draft-recovery.stories.tsx",
+          "sha256": "5667342e8c0dfdc81209075ceb23472419b38d67ac7d38d5e57a2aeb6f7d04fc",
+          "matchesExactProductPin": true,
+          "note": "Original assertion source unchanged; not reexecuted in this latest runtime selection"
+        },
+        {
+          "artifact": "original-assertions/apps/web/features/post-composer/snapshot-recovery.stories.tsx",
+          "sha256": "2729295fa4e393156f1147bc6fd6765ec6c494be9ce39355fd8a767e0b555e71",
+          "matchesExactProductPin": true,
+          "note": "Original assertion source unchanged; not reexecuted in this latest runtime selection"
+        },
+        {
+          "artifact": "original-assertions/packages/ui/src/components/rich-text-editor.stories.tsx",
+          "sha256": "b97dbb833abbd175768fe422d2a861f9f5af41733aef6efa67161e50cb45e8d3",
+          "matchesExactProductPin": true,
+          "note": "Original assertion source unchanged; not reexecuted in this latest runtime selection"
+        }
+      ]
+    },
+    "runtimeAndAdmission": {
+      "main": "http://127.0.0.1:42963",
+      "account": "http://127.0.0.1:42701",
+      "ownedFrontend": "http://127.0.0.1:43127",
+      "frontendCommand": "task web:dev -- --port 43127 (cwd exact archived frontend; isolated XDG configuration, delivered Main/Account origins)",
+      "browserCommand": "task web:e2e -- --config <private image.playwright.config.ts> image-journey.e2e.ts",
+      "provider": "Repository browser-test.ts, official Playwright Chromium, repository network-transport and Task web:e2e admission; no Browser MCP",
+      "freshAuthentication": "Each attempt performed real Account email sign-in, consent/PKCE/token exchange through delivered frozen supported LocalOAuthClient, and normal Main session Agent selection 200. Credentials/tokens not logged or retained.",
+      "targetPreselection": {
+        "community": {
+          "id": "https://rezics.com/id/01a15329-8fb1-70b5-ab3e-a07479b4bc0d",
+          "name": "Retained Book realm"
+        },
+        "work": {
+          "id": "https://rezics.com/id/01a15329-a5c8-760d-b1d5-22382dba559b",
+          "title": "Retained Book",
+          "mainVersion": null,
+          "revision": "https://rezics.com/id/01a15329-a5c8-760f-a3ba-d094775a7c6d"
+        },
+        "language": "en",
+        "setup": "existing retained Realm/Work preselection in owned device draft; no picker or unrelated Book acceptance claim"
+      },
+      "selectionBoundary": "Retained existing Realm/Work selection is installed in owned device draft. No unrelated Book/default/Recipe picker proof or community/work reselection journey is claimed.",
+      "lease": {
+        "name": "site-image-book-current-20261020-r1",
+        "packetSha256": "fadc3ed3cc1e9d1a71d211c0af93be207e7735f0bdc3579fb838a507a6c46a7f",
+        "offerIsNotBorrow": "Actual acquisition/release timestamps and cleanup are retained per recorded attempt.",
+        "stopCustody": "G-2823; default lease untouched"
+      },
+      "backendStartStopPrepareRestoreImportOrCorpusChange": false
+    },
+    "commandsAndQa": [
+      {
+        "job": "e6ed47d1-6af8-43a0-920b-cc5e3fbff617",
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/landed-origin-3878e8dda94e/image-journey.test.ts",
+        "recordingPrefix": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --",
+        "result": "FAIL",
+        "exitCode": 1,
+        "disposition": "Rendered readiness failed: Vite denied font outside symlinked dependency root; no image outcome reached.",
+        "started": "2026-10-20T12:28:31.523Z",
+        "finished": "2026-10-20T12:28:49.808Z",
+        "evidence": "setup-font-symlink-failure/actual-product-result.json",
+        "qaRunId": null,
+        "qaRunIdNote": "No separate QA run ID emitted by this private Bun wrapper; recorded job IDs and Task admission logs retained.",
+        "receiptCount": 2,
+        "semanticWriteStatusCounts": [],
+        "droppedSuccessfulPlacementCount": 0,
+        "cleanup": {
+          "leaseAcquired": {
+            "at": "2026-10-20T12:28:31.668Z",
+            "name": "site-image-book-current-20261020-r1",
+            "borrower": "G-2830",
+            "issuedPacketSha256": "fadc3ed3cc1e9d1a71d211c0af93be207e7735f0bdc3579fb838a507a6c46a7f",
+            "custody": "G-2823; default lease untouched"
+          },
+          "borrowedOAuthRevocation": {
+            "status": 200
+          },
+          "borrowedAccountSignOut": {
+            "status": 200
+          },
+          "borrowedBrowserClosed": true,
+          "ownedFrontendStopped": true,
+          "leaseReleased": "site-image-book-current-20261020-r1",
+          "backendStopCustody": "G-2823; default-capture-book-current-20261020-r1 untouched"
+        }
+      },
+      {
+        "job": "c3620754-b094-4d9f-9f4c-244fca7c629f",
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/landed-origin-3878e8dda94e/image-journey.test.ts",
+        "recordingPrefix": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --",
+        "result": "FAIL",
+        "exitCode": 1,
+        "disposition": "Dependency-isolation Task passed; browser failed the supplementary valid-image entry premise before snapshot recovery. Caret/paste had replaced the valid image.",
+        "started": "2026-10-20T12:31:49.770Z",
+        "finished": "2026-10-20T12:33:02.703Z",
+        "evidence": "snapshot-entry-premise-failure/actual-product-result.json",
+        "qaRunId": null,
+        "qaRunIdNote": "No separate QA run ID emitted by this private Bun wrapper; recorded job IDs and Task admission logs retained.",
+        "receiptCount": 28,
+        "semanticWriteStatusCounts": [
+          {
+            "method": "POST",
+            "status": 201,
+            "count": 4
+          },
+          {
+            "method": "PUT",
+            "status": 201,
+            "count": 1
+          }
+        ],
+        "droppedSuccessfulPlacementCount": 0,
+        "cleanup": {
+          "leaseAcquired": {
+            "at": "2026-10-20T12:31:49.999Z",
+            "name": "site-image-book-current-20261020-r1",
+            "borrower": "G-2830",
+            "issuedPacketSha256": "fadc3ed3cc1e9d1a71d211c0af93be207e7735f0bdc3579fb838a507a6c46a7f",
+            "custody": "G-2823; default lease untouched"
+          },
+          "borrowedOAuthRevocation": {
+            "status": 200
+          },
+          "borrowedAccountSignOut": {
+            "status": 200
+          },
+          "borrowedBrowserClosed": true,
+          "ownedFrontendStopped": true,
+          "leaseReleased": "site-image-book-current-20261020-r1",
+          "backendStopCustody": "G-2823; default-capture-book-current-20261020-r1 untouched"
+        }
+      },
+      {
+        "job": "c69230ee-ad14-445d-988d-6ea5a9aeb491",
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/landed-origin-3878e8dda94e/image-journey.test.ts",
+        "recordingPrefix": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --",
+        "result": "FAIL",
+        "exitCode": 1,
+        "disposition": "Genuine English desktop upload/reload/snapshot/export/Retry/Remove passed; additional exact device-failure copy expectation failed. Actual acknowledgement remained truthfully incomplete.",
+        "started": "2026-10-20T12:35:35.520Z",
+        "finished": "2026-10-20T12:36:44.793Z",
+        "evidence": "device-copy-assertion-attempt/actual-product-result.json",
+        "qaRunId": null,
+        "qaRunIdNote": "No separate QA run ID emitted by this private Bun wrapper; recorded job IDs and Task admission logs retained.",
+        "receiptCount": 39,
+        "semanticWriteStatusCounts": [
+          {
+            "method": "POST",
+            "status": 201,
+            "count": 4
+          },
+          {
+            "method": "PUT",
+            "status": 201,
+            "count": 1
+          }
+        ],
+        "droppedSuccessfulPlacementCount": 0,
+        "cleanup": {
+          "leaseAcquired": {
+            "at": "2026-10-20T12:35:35.828Z",
+            "name": "site-image-book-current-20261020-r1",
+            "borrower": "G-2830",
+            "issuedPacketSha256": "fadc3ed3cc1e9d1a71d211c0af93be207e7735f0bdc3579fb838a507a6c46a7f",
+            "custody": "G-2823; default lease untouched"
+          },
+          "borrowedOAuthRevocation": {
+            "status": 200
+          },
+          "borrowedAccountSignOut": {
+            "status": 200
+          },
+          "borrowedBrowserClosed": true,
+          "ownedFrontendStopped": true,
+          "leaseReleased": "site-image-book-current-20261020-r1",
+          "backendStopCustody": "G-2823; default-capture-book-current-20261020-r1 untouched"
+        }
+      },
+      {
+        "job": "53ef3d38-efad-4149-929d-da6bc0aeb4ca",
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/landed-origin-3878e8dda94e/image-journey.test.ts",
+        "recordingPrefix": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --",
+        "result": "FAIL",
+        "exitCode": 1,
+        "disposition": "English desktop reached genuine publication and replay; other three cases failed stable-image restoration assertions with image absent already in the recorded pre-reload document. Supplemental copy and literal-receipt failures retained.",
+        "started": "2026-10-20T12:40:57.456Z",
+        "finished": "2026-10-20T12:43:31.241Z",
+        "evidence": "first-full-matrix/actual-product-result.json",
+        "qaRunId": null,
+        "qaRunIdNote": "No separate QA run ID emitted by this private Bun wrapper; recorded job IDs and Task admission logs retained.",
+        "receiptCount": 105,
+        "semanticWriteStatusCounts": [
+          {
+            "method": "POST",
+            "status": 200,
+            "count": 1
+          },
+          {
+            "method": "POST",
+            "status": 201,
+            "count": 18
+          },
+          {
+            "method": "PUT",
+            "status": 201,
+            "count": 4
+          }
+        ],
+        "droppedSuccessfulPlacementCount": 1,
+        "cleanup": {
+          "leaseAcquired": {
+            "at": "2026-10-20T12:40:57.698Z",
+            "name": "site-image-book-current-20261020-r1",
+            "borrower": "G-2830",
+            "issuedPacketSha256": "fadc3ed3cc1e9d1a71d211c0af93be207e7735f0bdc3579fb838a507a6c46a7f",
+            "custody": "G-2823; default lease untouched"
+          },
+          "borrowedOAuthRevocation": {
+            "status": 200
+          },
+          "borrowedAccountSignOut": {
+            "status": 200
+          },
+          "borrowedBrowserClosed": true,
+          "ownedFrontendStopped": true,
+          "leaseReleased": "site-image-book-current-20261020-r1",
+          "backendStopCustody": "G-2823; default-capture-book-current-20261020-r1 untouched"
+        }
+      },
+      {
+        "job": "4fcb9b70-4898-4685-9346-5539f2e67ade",
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/landed-origin-3878e8dda94e/image-journey.test.ts",
+        "recordingPrefix": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --",
+        "result": "FAIL",
+        "exitCode": 1,
+        "disposition": "Three outstanding cases only; Chinese desktop reached genuine publication and replay, English phone reached recovered reopen and truthful quota failure but failed text-position expectation, Chinese phone failed separate image-entry assertion before reload. Supplemental failures retained.",
+        "started": "2026-10-20T12:47:48.030Z",
+        "finished": "2026-10-20T12:50:24.442Z",
+        "evidence": "remaining-three-matrix/actual-product-result.json",
+        "qaRunId": null,
+        "qaRunIdNote": "No separate QA run ID emitted by this private Bun wrapper; recorded job IDs and Task admission logs retained.",
+        "receiptCount": 101,
+        "semanticWriteStatusCounts": [
+          {
+            "method": "POST",
+            "status": 200,
+            "count": 1
+          },
+          {
+            "method": "POST",
+            "status": 201,
+            "count": 14
+          },
+          {
+            "method": "PUT",
+            "status": 201,
+            "count": 3
+          }
+        ],
+        "droppedSuccessfulPlacementCount": 1,
+        "cleanup": {
+          "leaseAcquired": {
+            "at": "2026-10-20T12:47:49.027Z",
+            "name": "site-image-book-current-20261020-r1",
+            "borrower": "G-2830",
+            "issuedPacketSha256": "fadc3ed3cc1e9d1a71d211c0af93be207e7735f0bdc3579fb838a507a6c46a7f",
+            "custody": "G-2823; default lease untouched"
+          },
+          "borrowedOAuthRevocation": {
+            "status": 200
+          },
+          "borrowedAccountSignOut": {
+            "status": 200
+          },
+          "borrowedBrowserClosed": true,
+          "ownedFrontendStopped": true,
+          "leaseReleased": "site-image-book-current-20261020-r1",
+          "backendStopCustody": "G-2823; default-capture-book-current-20261020-r1 untouched"
+        }
+      }
+    ],
+    "cases": [
+      {
+        "locale": "en",
+        "width": 1440,
+        "input": "keyboard",
+        "inputQualification": "Chromium keyboard controls in the repository Playwright provider",
+        "artifact": "first-full-matrix/actual-product-result.json",
+        "passedAssertions": [
+          "genuineUploadAndUse",
+          "completeDeviceReload",
+          "realReferencesSurviveControlledMetadata503Reload",
+          "rawExportRetainsCurrentTextAndStableReference",
+          "retryRetainsCurrentTextAndEditorFocus",
+          "removeOnlyFailedImageKeepsValidImageTextAndFocus",
+          "recoveredCompleteDocumentReopensExactly",
+          "deviceFailureNoFalseSavedAcknowledgement",
+          "deviceRetryAcknowledgesExactCurrentDocument",
+          "sameImmutablePlacementRequestAndKey",
+          "realPlacementReplayReusesSameIdentityAndRevision",
+          "genuinePublishedRevisionContainsExactTextAndStableImage",
+          "sameOperationRealPlacementLostResponseRetry"
+        ],
+        "failedAssertions": [
+          "literalReceiptBodyEquality"
+        ],
+        "failure": {},
+        "supplementalAssertionFailures": [
+          {
+            "assertion": "exact draftSaveFailed copy after body-storage rejection",
+            "error": "Error: expect(locator).toBeVisible() failed\n\nLocator: getByText('Could not save on this device. Keep this page open or export your draft.', { exact: true })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" getByText('Could not save on this device. Keep this page open or export your draft.', { exact: true }) with timeout 5000ms\n  - waiting for getByText('Could not save on this device. Keep this page open or export your draft.', { exact: true })\n",
+            "actualMain": "Create a post\n\nStart a conversation in a community.\n\nCreate a Work\nCommunity\nRetained Book realm\nChange community\n\nThis community has not published rules yet.\n\nWork\nRetained Book\nChange Work\nTitle\nYour post\nEnglish\n\nImage draft en 1440. Current text after genuine upload.Retained current text. Device edit retained.\n\nContent unavailable\n\nThis change could not be saved. Undo it or reload the document.\n\nRetry\nRemove images\nExport document\nWrite the details, questions or ideas you want to discuss.\nMark as spoiler\nThe post will warn readers before showing its body.\nPost\nRetry saving\nCurrent changes are not saved. Reopening restores the last saved version. Retry or export before leaving.",
+            "boundary": "Existing original DeviceStorageUnavailable injects initial hydration storage failure; this added full-page body-edit path instead shows draftIncomplete. No original assertion edited or marked passing."
+          },
+          {
+            "assertion": "retained full placement receipt body equality",
+            "error": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 1\n+ Received  + 1\n\n  Object {\n    \"placement\": \"https://rezics.com/id/01a15955-6b4d-74e0-a7e4-5efb55246849\",\n    \"profile\": \"realm-reply-placement-v1\",\n    \"realm\": \"https://rezics.com/id/01a15329-8fb1-70b5-ab3e-a07479b4bc0d\",\n-   \"replayed\": true,\n+   \"replayed\": false,\n    \"reply\": \"https://rezics.com/id/25113b47-efeb-45f1-899a-a012137dbf34\",\n    \"reviewDecisionId\": \"e342c614-0b08-4868-9627-4bd058c9f8f6\",\n    \"reviewGeneration\": \"1\",\n    \"revisionId\": \"d64b0eba-cadf-40ac-9f9c-9b96c94ec028\",\n  }",
+            "boundary": "Real contract exposes replayed on retry; immutable request/key/placement/revision are asserted separately. Retained full-body expectation remains failed, not weakened."
+          }
+        ],
+        "acknowledgedImageDraft": {
+          "intent": {
+            "realm": "https://rezics.com/id/01a15329-8fb1-70b5-ab3e-a07479b4bc0d",
+            "work": "https://rezics.com/id/01a15329-a5c8-760d-b1d5-22382dba559b",
+            "mainVersion": null,
+            "revision": "https://rezics.com/id/01a15329-a5c8-760f-a3ba-d094775a7c6d",
+            "title": "Image recovery en 1440",
+            "body": "{\"doc\":{\"content\":[{\"attrs\":{\"dir\":null,\"id\":\"b1d41d17-b2f4-4bf0-916f-6ccccdb11e88\",\"lang\":null,\"textAlign\":null},\"content\":[{\"text\":\"Image draft en 1440.\",\"type\":\"text\"}],\"type\":\"paragraph\"}],\"type\":\"doc\"},\"profile\":\"blocks\",\"version\":\"rezics-document-v1\"}",
+            "spoiler": false,
+            "language": "en",
+            "actingSubject": "https://rezics.com/id/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a"
+          },
+          "progress": {
+            "writeState": "acknowledged",
+            "key": "3f7904ac-52a8-4753-9c82-740fe26dd6c4",
+            "reply": "https://rezics.com/id/25113b47-efeb-45f1-899a-a012137dbf34",
+            "variantId": "urn:rezics:variant:40e03110-3751-4375-baa4-a21159696f5e",
+            "rootRevision": "https://rezics.com/id/01a15329-a5c8-760f-a3ba-d094775a7c6d",
+            "revisionId": "5dfb4aed-fb9c-45d1-a0f7-20722395eb59",
+            "digest": "9cee5080746dce8074934ee26947f34776b0013a259a9109fdf1a7969867107d"
+          }
+        },
+        "stableImageReferences": [
+          {
+            "attrs": {
+              "alt": null,
+              "conceal": false,
+              "dir": null,
+              "height": null,
+              "id": "134806c2-e875-4896-89f7-18756a66ea96",
+              "lang": null,
+              "mediaUseId": "e76be01d-8bba-4ce2-a924-20dfa7881466",
+              "representationId": "e77e1078-9eeb-42a0-a384-168dbecab958",
+              "src": "/api/main/v1/media/representations/e77e1078-9eeb-42a0-a384-168dbecab958/bytes?use=e76be01d-8bba-4ce2-a924-20dfa7881466",
+              "title": null,
+              "width": null
+            },
+            "type": "image"
+          }
+        ],
+        "actualImageWriteStages": [
+          {
+            "method": "POST",
+            "path": "/api/main/v1/member-reply-drafts",
+            "status": 201,
+            "operation": "3f7904ac-52a8-4753-9c82-740fe26dd6c4:draft",
+            "bodyReadable": true
+          },
+          {
+            "method": "POST",
+            "path": "/api/main/v1/media/uploads",
+            "status": 201,
+            "operation": "02671400-6dad-4b7f-91b5-b492d9ec3100:reserve",
+            "bodyReadable": true
+          },
+          {
+            "method": "PUT",
+            "path": "/api/main/v1/media/uploads/861007ea-85c7-4d36-b2cb-0d8c3c1d0443/bytes",
+            "status": 201,
+            "operation": null,
+            "bodyReadable": true
+          },
+          {
+            "method": "POST",
+            "path": "/api/main/v1/media/representations/e77e1078-9eeb-42a0-a384-168dbecab958/inferences",
+            "status": 201,
+            "operation": "02671400-6dad-4b7f-91b5-b492d9ec3100:inference",
+            "bodyReadable": false
+          },
+          {
+            "method": "POST",
+            "path": "/api/main/v1/media/uses",
+            "status": 201,
+            "operation": "02671400-6dad-4b7f-91b5-b492d9ec3100:use",
+            "bodyReadable": true
+          },
+          {
+            "method": "POST",
+            "path": "/api/main/v1/media/metadata",
+            "status": 200,
+            "operation": null,
+            "bodyReadable": true
+          }
+        ],
+        "focusAndOverflow": [
+          {
+            "stage": "genuine-image-saved",
+            "focus": {
+              "tag": "DIV",
+              "label": "Your post",
+              "text": "Image draft en 1440.Content unavailableMask this image"
+            },
+            "horizontalOverflow": false
+          },
+          {
+            "stage": "complete-current-document-reopened",
+            "focus": {
+              "tag": "BODY",
+              "label": null,
+              "text": "Skip to contentREZICS/OOOutcome ownerChoose a handleOOOutcome ownerChoose a handleCreateHome Discover Notifications Library PinnedLoading…Communities and sitesLoading…Manage followsModerationManageCre"
+            },
+            "horizontalOverflow": false
+          },
+          {
+            "stage": "controlled-metadata503-reopened",
+            "focus": {
+              "tag": "BODY",
+              "label": null,
+              "text": "Skip to contentREZICS/OOOutcome ownerChoose a handleOOOutcome ownerChoose a handleCreateHome Discover Notifications Library PinnedLoading…Communities and sitesLoading…Manage followsModerationManageCre"
+            },
+            "horizontalOverflow": false
+          },
+          {
+            "stage": "snapshot-failure-export-retained",
+            "focus": {
+              "tag": "BUTTON",
+              "label": null,
+              "text": "Export document"
+            },
+            "horizontalOverflow": false
+          },
+          {
+            "stage": "retry-retained-focus",
+            "focus": {
+              "tag": "DIV",
+              "label": "Your post",
+              "text": "Image draft en 1440. Current text after genuine upload.Retained current text.Content unavailableLoading content preferences…Mask this image"
+            },
+            "horizontalOverflow": false
+          },
+          {
+            "stage": "remove-current-document-focus",
+            "focus": {
+              "tag": "DIV",
+              "label": "Your post",
+              "text": "Image draft en 1440. Current text after genuine upload.Retained current text.Loading content preferences…Mask this image"
+            },
+            "horizontalOverflow": false
+          },
+          {
+            "stage": "recovered-current-document-reopened",
+            "focus": {
+              "tag": "BODY",
+              "label": null,
+              "text": "Skip to contentREZICS/OOOutcome ownerChoose a handleOOOutcome ownerChoose a handleCreateHome Discover Notifications Library PinnedLoading…Communities and sitesLoading…Manage followsModerationManageCre"
+            },
+            "horizontalOverflow": false
+          },
+          {
+            "stage": "device-storage-failure-truthful",
+            "focus": {
+              "tag": "DIV",
+              "label": "Your post",
+              "text": "Image draft en 1440. Current text after genuine upload.Retained current text. Device edit retained.Content unavailable"
+            },
+            "horizontalOverflow": false
+          },
+          {
+            "stage": "real-placement-response-lost",
+            "focus": {
+              "tag": "BODY",
+              "label": null,
+              "text": "Skip to contentREZICS/OOOutcome ownerChoose a handleOOOutcome ownerChoose a handleCreateHome Discover Notifications Library PinnedPin a followed resource to keep it here.Communities and sitesYour join"
+            },
+            "horizontalOverflow": false
+          },
+          {
+            "stage": "same-operation-placement-acknowledged",
+            "focus": {
+              "tag": "BODY",
+              "label": null,
+              "text": "Skip to contentREZICS/OOOutcome ownerChoose a handleOOOutcome ownerChoose a handleCreateHome Discover Notifications Library PinnedPin a followed resource to keep it here.Communities and sitesYour join"
+            },
+            "horizontalOverflow": false
+          }
+        ],
+        "genuinePersistence": {
+          "reply": "https://rezics.com/id/25113b47-efeb-45f1-899a-a012137dbf34",
+          "placement": "https://rezics.com/id/01a15955-6b4d-74e0-a7e4-5efb55246849",
+          "revisionId": "d64b0eba-cadf-40ac-9f9c-9b96c94ec028",
+          "exactCurrentText": "Image draft en 1440. Current text after genuine upload.Retained current text. Device edit retained.",
+          "threadReadStatus": 200,
+          "threadComplete": true,
+          "threadItemCount": 1,
+          "threadReadPath": "/v1/realms/01a15329-8fb1-70b5-ab3e-a07479b4bc0d/threads/25113b47-efeb-45f1-899a-a012137dbf34?actingSubject=https://rezics.com/id/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a",
+          "nativeHeadChain": [
+            {
+              "operation": "3f7904ac-52a8-4753-9c82-740fe26dd6c4:draft",
+              "status": 201,
+              "requestExpectedHead": null,
+              "originRealm": "https://rezics.com/id/01a15329-8fb1-70b5-ab3e-a07479b4bc0d",
+              "variantId": "urn:rezics:variant:40e03110-3751-4375-baa4-a21159696f5e",
+              "rootTarget": "https://rezics.com/id/01a15329-a5c8-760d-b1d5-22382dba559b",
+              "rootRevision": "https://rezics.com/id/01a15329-a5c8-760f-a3ba-d094775a7c6d",
+              "receiptRevisionId": "5dfb4aed-fb9c-45d1-a0f7-20722395eb59",
+              "receiptDigest": "9cee5080746dce8074934ee26947f34776b0013a259a9109fdf1a7969867107d"
+            },
+            {
+              "operation": "60c39aa9-8f42-468c-8aef-5fc6717e6973:draft",
+              "status": 201,
+              "requestExpectedHead": "5dfb4aed-fb9c-45d1-a0f7-20722395eb59",
+              "originRealm": "https://rezics.com/id/01a15329-8fb1-70b5-ab3e-a07479b4bc0d",
+              "variantId": "urn:rezics:variant:40e03110-3751-4375-baa4-a21159696f5e",
+              "rootTarget": "https://rezics.com/id/01a15329-a5c8-760d-b1d5-22382dba559b",
+              "rootRevision": "https://rezics.com/id/01a15329-a5c8-760f-a3ba-d094775a7c6d",
+              "receiptRevisionId": "d64b0eba-cadf-40ac-9f9c-9b96c94ec028",
+              "receiptDigest": "68402abb9a2defdf621da0fc1aee5a0ef832a0dbd21382c23f69d23ec3e9a2e2"
+            }
+          ],
+          "identityReceipts": [
+            {
+              "at": "2026-10-20T12:42:12.257Z",
+              "method": "POST",
+              "path": "/api/main/v1/realm-replies",
+              "status": 201,
+              "operation": "60c39aa9-8f42-468c-8aef-5fc6717e6973:identity",
+              "requestBody": "{\"profile\":\"realm-reply-identity-v1\",\"reply\":\"https://rezics.com/id/25113b47-efeb-45f1-899a-a012137dbf34\",\"variantId\":\"urn:rezics:variant:40e03110-3751-4375-baa4-a21159696f5e\",\"revisionId\":\"d64b0eba-cadf-40ac-9f9c-9b96c94ec028\",\"author\":\"https://rezics.com/id/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a\",\"rootTarget\":\"https://rezics.com/id/01a15329-a5c8-760d-b1d5-22382dba559b\",\"rootRevision\":\"https://rezics.com/id/01a15329-a5c8-760f-a3ba-d094775a7c6d\",\"parentReply\":null,\"parentRevision\":null,\"contextRevision\":null,\"spoiler\":false}",
+              "body": {
+                "profile": "realm-reply-identity-v1",
+                "reply": "https://rezics.com/id/25113b47-efeb-45f1-899a-a012137dbf34",
+                "spoiler": false,
+                "variantId": "urn:rezics:variant:40e03110-3751-4375-baa4-a21159696f5e",
+                "revisionId": "d64b0eba-cadf-40ac-9f9c-9b96c94ec028",
+                "author": "https://rezics.com/id/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a",
+                "rootTarget": "https://rezics.com/id/01a15329-a5c8-760d-b1d5-22382dba559b",
+                "rootRevision": "https://rezics.com/id/01a15329-a5c8-760f-a3ba-d094775a7c6d",
+                "parentReply": null,
+                "parentRevision": null,
+                "contextRevision": null,
+                "replayed": false
+              }
+            }
+          ],
+          "placementReceipts": [
+            {
+              "status": 201,
+              "operation": "60c39aa9-8f42-468c-8aef-5fc6717e6973:place",
+              "requestBody": "{\"profile\":\"realm-reply-placement-v1\",\"realm\":\"https://rezics.com/id/01a15329-8fb1-70b5-ab3e-a07479b4bc0d\",\"reply\":\"https://rezics.com/id/25113b47-efeb-45f1-899a-a012137dbf34\",\"revisionId\":\"d64b0eba-cadf-40ac-9f9c-9b96c94ec028\",\"revisionDigest\":\"68402abb9a2defdf621da0fc1aee5a0ef832a0dbd21382c23f69d23ec3e9a2e2\",\"reviewDecisionId\":null,\"expectedHead\":null,\"actingSubject\":\"https://rezics.com/id/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a\"}",
+              "body": {
+                "profile": "realm-reply-placement-v1",
+                "placement": "https://rezics.com/id/01a15955-6b4d-74e0-a7e4-5efb55246849",
+                "reply": "https://rezics.com/id/25113b47-efeb-45f1-899a-a012137dbf34",
+                "realm": "https://rezics.com/id/01a15329-8fb1-70b5-ab3e-a07479b4bc0d",
+                "revisionId": "d64b0eba-cadf-40ac-9f9c-9b96c94ec028",
+                "reviewDecisionId": "e342c614-0b08-4868-9627-4bd058c9f8f6",
+                "reviewGeneration": "1",
+                "replayed": false
+              },
+              "dropped": true
+            },
+            {
+              "status": 200,
+              "operation": "60c39aa9-8f42-468c-8aef-5fc6717e6973:place",
+              "requestBody": "{\"profile\":\"realm-reply-placement-v1\",\"realm\":\"https://rezics.com/id/01a15329-8fb1-70b5-ab3e-a07479b4bc0d\",\"reply\":\"https://rezics.com/id/25113b47-efeb-45f1-899a-a012137dbf34\",\"revisionId\":\"d64b0eba-cadf-40ac-9f9c-9b96c94ec028\",\"revisionDigest\":\"68402abb9a2defdf621da0fc1aee5a0ef832a0dbd21382c23f69d23ec3e9a2e2\",\"reviewDecisionId\":null,\"expectedHead\":null,\"actingSubject\":\"https://rezics.com/id/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a\"}",
+              "body": {
+                "profile": "realm-reply-placement-v1",
+                "placement": "https://rezics.com/id/01a15955-6b4d-74e0-a7e4-5efb55246849",
+                "reply": "https://rezics.com/id/25113b47-efeb-45f1-899a-a012137dbf34",
+                "realm": "https://rezics.com/id/01a15329-8fb1-70b5-ab3e-a07479b4bc0d",
+                "revisionId": "d64b0eba-cadf-40ac-9f9c-9b96c94ec028",
+                "reviewDecisionId": "e342c614-0b08-4868-9627-4bd058c9f8f6",
+                "reviewGeneration": "1",
+                "replayed": true
+              },
+              "dropped": false
+            }
+          ],
+          "duplicateWriteBoundary": "Initial real placement 201 was fetched then its browser response aborted. Retry returned 200, replayed=true, using identical operation key/request and placement/revision. One thread item was read. No backend storage inventory or global duplicate-count claim.",
+          "reopenBoundary": "Complete device draft fully reloaded in the same isolated browser context; published document independently read from genuine authenticated thread API. No second-device or reopened published-thread UI claim."
+        },
+        "disposition": "Genuine desktop chain reached; complete suite remains FAIL because two supplemental assertions failed."
+      },
+      {
+        "locale": "en",
+        "width": 390,
+        "input": "touch",
+        "inputQualification": "genuine touch tap in hasTouch Chromium context at 390px",
+        "artifact": "remaining-three-matrix/actual-product-result.json",
+        "passedAssertions": [
+          "genuineUploadAndUse",
+          "imageAndExactTextEntryQualifiedBeforeReload",
+          "completeDeviceReload",
+          "realReferencesSurviveControlledMetadata503Reload",
+          "rawExportRetainsCurrentTextAndStableReference",
+          "retryRetainsCurrentTextAndEditorFocus",
+          "removeOnlyFailedImageKeepsValidImageTextAndFocus",
+          "recoveredCompleteDocumentReopensExactly",
+          "deviceFailureNoFalseSavedAcknowledgement"
+        ],
+        "failedAssertions": [],
+        "failure": {
+          "phase": "en/390 controlled device write failure truthful acknowledgement",
+          "error": "Error: expect(received).toBe(expected) // Object.is equality\n\nExpected: \"Image draft en 390. Current text after genuine upload.Retained current text. Device edit retained.\"\nReceived: \"Image draft en 390. Current text after genuine upload.Retained current  Device edit retained.text.\""
+        },
+        "supplementalAssertionFailures": [
+          {
+            "assertion": "exact draftSaveFailed copy after body-storage rejection",
+            "error": "Error: expect(locator).toBeVisible() failed\n\nLocator: getByText('Could not save on this device. Keep this page open or export your draft.', { exact: true })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" getByText('Could not save on this device. Keep this page open or export your draft.', { exact: true }) with timeout 5000ms\n  - waiting for getByText('Could not save on this device. Keep this page open or export your draft.', { exact: true })\n",
+            "actualMain": "Create a post\n\nStart a conversation in a community.\n\nCreate a Work\nCommunity\nRetained Book realm\nChange community\n\nThis community has not published rules yet.\n\nWork\nRetained Book\nChange Work\nTitle\nYour post\nEnglish\n\nImage draft en 390. Current text after genuine upload.Retained current  Device edit retained.text.\n\nContent unavailable\n\nThis change could not be saved. Undo it or reload the document.\n\nRetry\nRemove images\nExport document\nWrite the details, questions or ideas you want to discuss.\nMark as spoiler\nThe post will warn readers before showing its body.\nPost\nRetry saving\nCurrent changes are not saved. Reopening restores the last saved version. Retry or export before leaving.",
+            "boundary": "Existing original DeviceStorageUnavailable injects initial hydration storage failure; this added full-page body-edit path instead shows draftIncomplete. No original assertion edited or marked passing."
+          }
+        ],
+        "acknowledgedImageDraft": {
+          "intent": {
+            "realm": "https://rezics.com/id/01a15329-8fb1-70b5-ab3e-a07479b4bc0d",
+            "work": "https://rezics.com/id/01a15329-a5c8-760d-b1d5-22382dba559b",
+            "mainVersion": null,
+            "revision": "https://rezics.com/id/01a15329-a5c8-760f-a3ba-d094775a7c6d",
+            "title": "Image recovery en 390",
+            "body": "{\"doc\":{\"content\":[{\"attrs\":{\"dir\":null,\"id\":\"98fd467c-f945-4221-aea0-823ade07c5f9\",\"lang\":null,\"textAlign\":null},\"content\":[{\"text\":\"Image draft en 390.\",\"type\":\"text\"}],\"type\":\"paragraph\"}],\"type\":\"doc\"},\"profile\":\"blocks\",\"version\":\"rezics-document-v1\"}",
+            "spoiler": false,
+            "language": "en",
+            "actingSubject": "https://rezics.com/id/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a"
+          },
+          "progress": {
+            "writeState": "acknowledged",
+            "key": "33fc62d4-410d-4b1e-a854-bb0eb96e9c5d",
+            "reply": "https://rezics.com/id/bceacfcb-7212-40b1-8fe0-2cf359e8e29c",
+            "variantId": "urn:rezics:variant:c84913a6-cef1-4675-99c8-f60f9f85960a",
+            "rootRevision": "https://rezics.com/id/01a15329-a5c8-760f-a3ba-d094775a7c6d",
+            "revisionId": "185dfe32-a153-48e7-aa42-1accda8db3d6",
+            "digest": "a40db31e0a511d140e120b79511d114abefc95b0cd569890b2918c56dfdba0c0"
+          }
+        },
+        "stableImageReferences": [
+          {
+            "attrs": {
+              "alt": null,
+              "conceal": false,
+              "dir": null,
+              "height": null,
+              "id": "4644aed2-c460-4306-b552-6ae4b9521470",
+              "lang": null,
+              "mediaUseId": "aaa3e9f5-a146-4e9f-9085-041781b70081",
+              "representationId": "de7282a1-cd63-40f0-952e-18cdf5fa47db",
+              "src": "/api/main/v1/media/representations/de7282a1-cd63-40f0-952e-18cdf5fa47db/bytes?use=aaa3e9f5-a146-4e9f-9085-041781b70081",
+              "title": null,
+              "width": null
+            },
+            "type": "image"
+          }
+        ],
+        "actualImageWriteStages": [
+          {
+            "method": "POST",
+            "path": "/api/main/v1/member-reply-drafts",
+            "status": 201,
+            "operation": "33fc62d4-410d-4b1e-a854-bb0eb96e9c5d:draft",
+            "bodyReadable": true
+          },
+          {
+            "method": "POST",
+            "path": "/api/main/v1/media/uploads",
+            "status": 201,
+            "operation": "e5ee0333-de2b-4b2f-ad1e-32f232a19b70:reserve",
+            "bodyReadable": true
+          },
+          {
+            "method": "PUT",
+            "path": "/api/main/v1/media/uploads/e7109971-6fe3-4cc3-a543-586b63743a21/bytes",
+            "status": 201,
+            "operation": null,
+            "bodyReadable": true
+          },
+          {
+            "method": "POST",
+            "path": "/api/main/v1/media/representations/de7282a1-cd63-40f0-952e-18cdf5fa47db/inferences",
+            "status": 201,
+            "operation": "e5ee0333-de2b-4b2f-ad1e-32f232a19b70:inference",
+            "bodyReadable": false
+          },
+          {
+            "method": "POST",
+            "path": "/api/main/v1/media/uses",
+            "status": 201,
+            "operation": "e5ee0333-de2b-4b2f-ad1e-32f232a19b70:use",
+            "bodyReadable": true
+          },
+          {
+            "method": "POST",
+            "path": "/api/main/v1/media/metadata",
+            "status": 200,
+            "operation": null,
+            "bodyReadable": true
+          }
+        ],
+        "focusAndOverflow": [
+          {
+            "stage": "genuine-image-saved",
+            "focus": {
+              "tag": "DIV",
+              "label": "Your post",
+              "text": "Image draft en 390.Content unavailableMask this image"
+            },
+            "horizontalOverflow": false
+          },
+          {
+            "stage": "complete-current-document-reopened",
+            "focus": {
+              "tag": "BODY",
+              "label": null,
+              "text": "Skip to contentREZICS/OOOutcome ownerChoose a handleOOOutcome ownerChoose a handleCreateHome Discover Notifications Library PinnedLoading…Communities and sitesLoading…Manage followsModerationManageCre"
+            },
+            "horizontalOverflow": false
+          },
+          {
+            "stage": "controlled-metadata503-reopened",
+            "focus": {
+              "tag": "BODY",
+              "label": null,
+              "text": "Skip to contentREZICS/OOOutcome ownerChoose a handleOOOutcome ownerChoose a handleCreateHome Discover Notifications Library PinnedLoading…Communities and sitesLoading…Manage followsModerationManageCre"
+            },
+            "horizontalOverflow": false
+          },
+          {
+            "stage": "snapshot-failure-export-retained",
+            "focus": {
+              "tag": "BUTTON",
+              "label": null,
+              "text": "Export document"
+            },
+            "horizontalOverflow": false
+          },
+          {
+            "stage": "retry-retained-focus",
+            "focus": {
+              "tag": "DIV",
+              "label": "Your post",
+              "text": "Image draft en 390. Current text after genuine upload.Retained current text.Loading content preferences…Loading content preferences…Mask this image"
+            },
+            "horizontalOverflow": false
+          },
+          {
+            "stage": "remove-current-document-focus",
+            "focus": {
+              "tag": "DIV",
+              "label": "Your post",
+              "text": "Image draft en 390. Current text after genuine upload.Retained current text.Loading content preferences…Mask this image"
+            },
+            "horizontalOverflow": false
+          },
+          {
+            "stage": "recovered-current-document-reopened",
+            "focus": {
+              "tag": "BODY",
+              "label": null,
+              "text": "Skip to contentREZICS/OOOutcome ownerChoose a handleOOOutcome ownerChoose a handleCreateHome Discover Notifications Library PinnedPin a followed resource to keep it here.Communities and sitesYour join"
+            },
+            "horizontalOverflow": false
+          },
+          {
+            "stage": "device-storage-failure-truthful",
+            "focus": {
+              "tag": "DIV",
+              "label": "Your post",
+              "text": "Image draft en 390. Current text after genuine upload.Retained current  Device edit retained.text.Content unavailable"
+            },
+            "horizontalOverflow": false
+          },
+          {
+            "stage": "failed",
+            "focus": {
+              "tag": "DIV",
+              "label": "Your post",
+              "text": "Image draft en 390. Current text after genuine upload.Retained current  Device edit retained.text.Content unavailable"
+            },
+            "horizontalOverflow": false
+          }
+        ],
+        "disposition": "PARTIAL: genuine upload/Use, complete reload, unavailable metadata, raw export, Retry/Remove/focus and recovered reopen passed; publication/replay not reached after text-position failure.",
+        "entryVersusRestoration": "The actual device edit was inserted before the final word text. rather than at paragraph end. The failed expected ordering is retained. This is not isolated character loss or reload loss.",
+        "unexecuted": [
+          "final current-document assertion after device retry",
+          "native final CAS/identity/placement",
+          "lost-response placement replay",
+          "genuine durable thread read"
+        ]
+      },
+      {
+        "locale": "zh-Hans",
+        "width": 1440,
+        "input": "keyboard",
+        "inputQualification": "Chromium keyboard controls in the repository Playwright provider",
+        "artifact": "remaining-three-matrix/actual-product-result.json",
+        "passedAssertions": [
+          "genuineUploadAndUse",
+          "imageAndExactTextEntryQualifiedBeforeReload",
+          "completeDeviceReload",
+          "realReferencesSurviveControlledMetadata503Reload",
+          "rawExportRetainsCurrentTextAndStableReference",
+          "retryRetainsCurrentTextAndEditorFocus",
+          "removeOnlyFailedImageKeepsValidImageTextAndFocus",
+          "recoveredCompleteDocumentReopensExactly",
+          "deviceFailureNoFalseSavedAcknowledgement",
+          "deviceRetryAcknowledgesExactCurrentDocument",
+          "sameImmutablePlacementRequestAndKey",
+          "realPlacementReplayReusesSameIdentityAndRevision",
+          "genuinePublishedRevisionContainsExactTextAndStableImage",
+          "sameOperationRealPlacementLostResponseRetry"
+        ],
+        "failedAssertions": [
+          "literalReceiptBodyEquality"
+        ],
+        "failure": {},
+        "supplementalAssertionFailures": [
+          {
+            "assertion": "exact draftSaveFailed copy after body-storage rejection",
+            "error": "Error: expect(locator).toBeVisible() failed\n\nLocator: getByText('无法保存到此设备。请保持页面打开或导出草稿。', { exact: true })\nExpected: visible\nTimeout: 5000ms\nError: element(s) not found\n\nCall log:\n  - Expect \"toBeVisible\" getByText('无法保存到此设备。请保持页面打开或导出草稿。', { exact: true }) with timeout 5000ms\n  - waiting for getByText('无法保存到此设备。请保持页面打开或导出草稿。', { exact: true })\n",
+            "actualMain": "发布帖子\n\n在社区里发起讨论。\n\n创建作品\n社区\nRetained Book realm\n更换社区\n\n这个社区尚未发布规则。\n\n作品\nRetained Book\n更换作品\n标题\n帖子内容\n简体中文\n\nImage draft zh-Hans 1440. Current text after genuine upload.Retained current text. Device edit retained.\n\n内容无法显示\n\n无法保存这项更改。请撤销，或重新加载文档。\n\n重试\n移除图片\n导出文档\n写下你想讨论的细节、问题或想法。\n标记剧透\n读者在查看正文前会看到剧透提示。\n发布\n重试保存\n当前更改尚未保存。重新打开会恢复上次保存的版本。离开前请重试或导出。",
+            "boundary": "Existing original DeviceStorageUnavailable injects initial hydration storage failure; this added full-page body-edit path instead shows draftIncomplete. No original assertion edited or marked passing."
+          },
+          {
+            "assertion": "retained full placement receipt body equality",
+            "error": "Error: expect(received).toEqual(expected) // deep equality\n\n- Expected  - 1\n+ Received  + 1\n\n  Object {\n    \"placement\": \"https://rezics.com/id/01a1595c-70cb-72d8-9650-83798cfa5491\",\n    \"profile\": \"realm-reply-placement-v1\",\n    \"realm\": \"https://rezics.com/id/01a15329-8fb1-70b5-ab3e-a07479b4bc0d\",\n-   \"replayed\": true,\n+   \"replayed\": false,\n    \"reply\": \"https://rezics.com/id/a672439d-a363-494d-a320-d8b8177cd8a0\",\n    \"reviewDecisionId\": \"25da990e-0be6-447b-a028-6ec10b1c0aaf\",\n    \"reviewGeneration\": \"1\",\n    \"revisionId\": \"ca13ea75-4bf7-42d7-a0d9-c9b2ade4823c\",\n  }",
+            "boundary": "Real contract exposes replayed on retry; immutable request/key/placement/revision are asserted separately. Retained full-body expectation remains failed, not weakened."
+          }
+        ],
+        "acknowledgedImageDraft": {
+          "intent": {
+            "realm": "https://rezics.com/id/01a15329-8fb1-70b5-ab3e-a07479b4bc0d",
+            "work": "https://rezics.com/id/01a15329-a5c8-760d-b1d5-22382dba559b",
+            "mainVersion": null,
+            "revision": "https://rezics.com/id/01a15329-a5c8-760f-a3ba-d094775a7c6d",
+            "title": "Image recovery zh-Hans 1440",
+            "body": "{\"doc\":{\"content\":[{\"attrs\":{\"dir\":null,\"id\":\"ae143409-3fc6-4cd9-91ea-845ef2e36059\",\"lang\":null,\"textAlign\":null},\"content\":[{\"text\":\"Image draft zh-Hans 1440.\",\"type\":\"text\"}],\"type\":\"paragraph\"}],\"type\":\"doc\"},\"profile\":\"blocks\",\"version\":\"rezics-document-v1\"}",
+            "spoiler": false,
+            "language": "zh-Hans",
+            "actingSubject": "https://rezics.com/id/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a"
+          },
+          "progress": {
+            "writeState": "acknowledged",
+            "key": "1a18f5d3-fb56-43d4-bc15-5752c94d805c",
+            "reply": "https://rezics.com/id/a672439d-a363-494d-a320-d8b8177cd8a0",
+            "variantId": "urn:rezics:variant:f7334fe4-9458-4623-8a9d-da3d2281e532",
+            "rootRevision": "https://rezics.com/id/01a15329-a5c8-760f-a3ba-d094775a7c6d",
+            "revisionId": "cee06756-b309-4b81-8599-76f50062aa71",
+            "digest": "b08c8c8ae41afa4474fd50c81630b89b6e89d6203546559edbf542ca7d39908d"
+          }
+        },
+        "stableImageReferences": [
+          {
+            "attrs": {
+              "alt": null,
+              "conceal": false,
+              "dir": null,
+              "height": null,
+              "id": "1eddbcdd-06e9-4990-bee5-fe0476b0e716",
+              "lang": null,
+              "mediaUseId": "dab14f19-18b9-4598-8d5a-6f3ce330d33d",
+              "representationId": "3b514f26-f417-4dd7-9b05-f722ba1bcc10",
+              "src": "/api/main/v1/media/representations/3b514f26-f417-4dd7-9b05-f722ba1bcc10/bytes?use=dab14f19-18b9-4598-8d5a-6f3ce330d33d",
+              "title": null,
+              "width": null
+            },
+            "type": "image"
+          }
+        ],
+        "actualImageWriteStages": [
+          {
+            "method": "POST",
+            "path": "/api/main/v1/member-reply-drafts",
+            "status": 201,
+            "operation": "1a18f5d3-fb56-43d4-bc15-5752c94d805c:draft",
+            "bodyReadable": true
+          },
+          {
+            "method": "POST",
+            "path": "/api/main/v1/media/uploads",
+            "status": 201,
+            "operation": "7dac2c2a-d701-4361-8e79-fed4e8ee09be:reserve",
+            "bodyReadable": true
+          },
+          {
+            "method": "PUT",
+            "path": "/api/main/v1/media/uploads/8210bd7b-12a0-4bd8-bf03-fd7d10bc4bf5/bytes",
+            "status": 201,
+            "operation": null,
+            "bodyReadable": true
+          },
+          {
+            "method": "POST",
+            "path": "/api/main/v1/media/representations/3b514f26-f417-4dd7-9b05-f722ba1bcc10/inferences",
+            "status": 201,
+            "operation": "7dac2c2a-d701-4361-8e79-fed4e8ee09be:inference",
+            "bodyReadable": false
+          },
+          {
+            "method": "POST",
+            "path": "/api/main/v1/media/uses",
+            "status": 201,
+            "operation": "7dac2c2a-d701-4361-8e79-fed4e8ee09be:use",
+            "bodyReadable": true
+          },
+          {
+            "method": "POST",
+            "path": "/api/main/v1/media/metadata",
+            "status": 200,
+            "operation": null,
+            "bodyReadable": true
+          }
+        ],
+        "focusAndOverflow": [
+          {
+            "stage": "genuine-image-saved",
+            "focus": {
+              "tag": "DIV",
+              "label": "帖子内容",
+              "text": "Image draft zh-Hans 1440.内容无法显示遮罩这张图片"
+            },
+            "horizontalOverflow": false
+          },
+          {
+            "stage": "complete-current-document-reopened",
+            "focus": {
+              "tag": "BODY",
+              "label": null,
+              "text": "跳到主要内容REZICS/OOOutcome owner选择用户名OOOutcome owner选择用户名创作首页 探索 通知 书架 置顶将关注的资源置顶，即可在此快速找到。社区与网站已加入和关注的社区会显示在此。管理关注管理管理中心发布帖子在社区里发起讨论。创建作品社区Retained Book realm更换社区作品Retained Book更换作品标题帖子内容简体中文Image draft "
+            },
+            "horizontalOverflow": false
+          },
+          {
+            "stage": "controlled-metadata503-reopened",
+            "focus": {
+              "tag": "BODY",
+              "label": null,
+              "text": "跳到主要内容REZICS/OOOutcome owner选择用户名OOOutcome owner选择用户名创作首页 探索 通知 书架 置顶将关注的资源置顶，即可在此快速找到。社区与网站已加入和关注的社区会显示在此。管理关注管理管理中心发布帖子在社区里发起讨论。创建作品社区Retained Book realm更换社区这个社区尚未发布规则。作品Retained Book更换作品标题帖子内容简体中文I"
+            },
+            "horizontalOverflow": false
+          },
+          {
+            "stage": "snapshot-failure-export-retained",
+            "focus": {
+              "tag": "BUTTON",
+              "label": null,
+              "text": "导出文档"
+            },
+            "horizontalOverflow": false
+          },
+          {
+            "stage": "retry-retained-focus",
+            "focus": {
+              "tag": "DIV",
+              "label": "帖子内容",
+              "text": "Image draft zh-Hans 1440. Current text after genuine upload.Retained current text.内容无法显示内容无法显示遮罩这张图片"
+            },
+            "horizontalOverflow": false
+          },
+          {
+            "stage": "remove-current-document-focus",
+            "focus": {
+              "tag": "DIV",
+              "label": "帖子内容",
+              "text": "Image draft zh-Hans 1440. Current text after genuine upload.Retained current text.内容无法显示遮罩这张图片"
+            },
+            "horizontalOverflow": false
+          },
+          {
+            "stage": "recovered-current-document-reopened",
+            "focus": {
+              "tag": "BODY",
+              "label": null,
+              "text": "跳到主要内容REZICS/OOOutcome owner选择用户名OOOutcome owner选择用户名创作首页 探索 通知 书架 置顶加载中…社区与网站加载中…管理关注管理管理中心发布帖子在社区里发起讨论。创建作品社区Retained Book realm更换社区作品Retained Book更换作品标题帖子内容简体中文Image draft zh-Hans 1440. Current tex"
+            },
+            "horizontalOverflow": false
+          },
+          {
+            "stage": "device-storage-failure-truthful",
+            "focus": {
+              "tag": "DIV",
+              "label": "帖子内容",
+              "text": "Image draft zh-Hans 1440. Current text after genuine upload.Retained current text. Device edit retained.内容无法显示"
+            },
+            "horizontalOverflow": false
+          },
+          {
+            "stage": "real-placement-response-lost",
+            "focus": {
+              "tag": "BODY",
+              "label": null,
+              "text": "跳到主要内容REZICS/OOOutcome owner选择用户名OOOutcome owner选择用户名创作首页 探索 通知 书架 置顶将关注的资源置顶，即可在此快速找到。社区与网站已加入和关注的社区会显示在此。管理关注管理管理中心发布帖子在社区里发起讨论。创建作品社区Retained Book realm这个社区尚未发布规则。作品Retained Book标题帖子内容简体中文Image dra"
+            },
+            "horizontalOverflow": false
+          },
+          {
+            "stage": "same-operation-placement-acknowledged",
+            "focus": {
+              "tag": "BODY",
+              "label": null,
+              "text": "跳到主要内容REZICS/OOOutcome owner选择用户名OOOutcome owner选择用户名创作首页 探索 通知 书架 置顶将关注的资源置顶，即可在此快速找到。社区与网站已加入和关注的社区会显示在此。管理关注管理管理中心发布帖子在社区里发起讨论。创建作品社区Retained Book realm这个社区尚未发布规则。作品Retained Book标题帖子内容未指定语言写下你想讨论的细"
+            },
+            "horizontalOverflow": false
+          }
+        ],
+        "genuinePersistence": {
+          "reply": "https://rezics.com/id/a672439d-a363-494d-a320-d8b8177cd8a0",
+          "placement": "https://rezics.com/id/01a1595c-70cb-72d8-9650-83798cfa5491",
+          "revisionId": "ca13ea75-4bf7-42d7-a0d9-c9b2ade4823c",
+          "exactCurrentText": "Image draft zh-Hans 1440. Current text after genuine upload.Retained current text. Device edit retained.",
+          "threadReadStatus": 200,
+          "threadComplete": true,
+          "threadItemCount": 1,
+          "threadReadPath": "/v1/realms/01a15329-8fb1-70b5-ab3e-a07479b4bc0d/threads/a672439d-a363-494d-a320-d8b8177cd8a0?actingSubject=https://rezics.com/id/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a",
+          "nativeHeadChain": [
+            {
+              "operation": "1a18f5d3-fb56-43d4-bc15-5752c94d805c:draft",
+              "status": 201,
+              "requestExpectedHead": null,
+              "originRealm": "https://rezics.com/id/01a15329-8fb1-70b5-ab3e-a07479b4bc0d",
+              "variantId": "urn:rezics:variant:f7334fe4-9458-4623-8a9d-da3d2281e532",
+              "rootTarget": "https://rezics.com/id/01a15329-a5c8-760d-b1d5-22382dba559b",
+              "rootRevision": "https://rezics.com/id/01a15329-a5c8-760f-a3ba-d094775a7c6d",
+              "receiptRevisionId": "cee06756-b309-4b81-8599-76f50062aa71",
+              "receiptDigest": "b08c8c8ae41afa4474fd50c81630b89b6e89d6203546559edbf542ca7d39908d"
+            },
+            {
+              "operation": "60d23b91-553a-4f4c-bedb-3c58dde11275:draft",
+              "status": 201,
+              "requestExpectedHead": "cee06756-b309-4b81-8599-76f50062aa71",
+              "originRealm": "https://rezics.com/id/01a15329-8fb1-70b5-ab3e-a07479b4bc0d",
+              "variantId": "urn:rezics:variant:f7334fe4-9458-4623-8a9d-da3d2281e532",
+              "rootTarget": "https://rezics.com/id/01a15329-a5c8-760d-b1d5-22382dba559b",
+              "rootRevision": "https://rezics.com/id/01a15329-a5c8-760f-a3ba-d094775a7c6d",
+              "receiptRevisionId": "ca13ea75-4bf7-42d7-a0d9-c9b2ade4823c",
+              "receiptDigest": "8b26240ee911d9c7806fb03ac4f9c739f62263ba07346791a01e7026e9452d6a"
+            }
+          ],
+          "identityReceipts": [
+            {
+              "at": "2026-10-20T12:49:52.354Z",
+              "method": "POST",
+              "path": "/api/main/v1/realm-replies",
+              "status": 201,
+              "operation": "60d23b91-553a-4f4c-bedb-3c58dde11275:identity",
+              "requestBody": "{\"profile\":\"realm-reply-identity-v1\",\"reply\":\"https://rezics.com/id/a672439d-a363-494d-a320-d8b8177cd8a0\",\"variantId\":\"urn:rezics:variant:f7334fe4-9458-4623-8a9d-da3d2281e532\",\"revisionId\":\"ca13ea75-4bf7-42d7-a0d9-c9b2ade4823c\",\"author\":\"https://rezics.com/id/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a\",\"rootTarget\":\"https://rezics.com/id/01a15329-a5c8-760d-b1d5-22382dba559b\",\"rootRevision\":\"https://rezics.com/id/01a15329-a5c8-760f-a3ba-d094775a7c6d\",\"parentReply\":null,\"parentRevision\":null,\"contextRevision\":null,\"spoiler\":false}",
+              "body": {
+                "profile": "realm-reply-identity-v1",
+                "reply": "https://rezics.com/id/a672439d-a363-494d-a320-d8b8177cd8a0",
+                "spoiler": false,
+                "variantId": "urn:rezics:variant:f7334fe4-9458-4623-8a9d-da3d2281e532",
+                "revisionId": "ca13ea75-4bf7-42d7-a0d9-c9b2ade4823c",
+                "author": "https://rezics.com/id/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a",
+                "rootTarget": "https://rezics.com/id/01a15329-a5c8-760d-b1d5-22382dba559b",
+                "rootRevision": "https://rezics.com/id/01a15329-a5c8-760f-a3ba-d094775a7c6d",
+                "parentReply": null,
+                "parentRevision": null,
+                "contextRevision": null,
+                "replayed": false
+              }
+            }
+          ],
+          "placementReceipts": [
+            {
+              "status": 201,
+              "operation": "60d23b91-553a-4f4c-bedb-3c58dde11275:place",
+              "requestBody": "{\"profile\":\"realm-reply-placement-v1\",\"realm\":\"https://rezics.com/id/01a15329-8fb1-70b5-ab3e-a07479b4bc0d\",\"reply\":\"https://rezics.com/id/a672439d-a363-494d-a320-d8b8177cd8a0\",\"revisionId\":\"ca13ea75-4bf7-42d7-a0d9-c9b2ade4823c\",\"revisionDigest\":\"8b26240ee911d9c7806fb03ac4f9c739f62263ba07346791a01e7026e9452d6a\",\"reviewDecisionId\":null,\"expectedHead\":null,\"actingSubject\":\"https://rezics.com/id/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a\"}",
+              "body": {
+                "profile": "realm-reply-placement-v1",
+                "placement": "https://rezics.com/id/01a1595c-70cb-72d8-9650-83798cfa5491",
+                "reply": "https://rezics.com/id/a672439d-a363-494d-a320-d8b8177cd8a0",
+                "realm": "https://rezics.com/id/01a15329-8fb1-70b5-ab3e-a07479b4bc0d",
+                "revisionId": "ca13ea75-4bf7-42d7-a0d9-c9b2ade4823c",
+                "reviewDecisionId": "25da990e-0be6-447b-a028-6ec10b1c0aaf",
+                "reviewGeneration": "1",
+                "replayed": false
+              },
+              "dropped": true
+            },
+            {
+              "status": 200,
+              "operation": "60d23b91-553a-4f4c-bedb-3c58dde11275:place",
+              "requestBody": "{\"profile\":\"realm-reply-placement-v1\",\"realm\":\"https://rezics.com/id/01a15329-8fb1-70b5-ab3e-a07479b4bc0d\",\"reply\":\"https://rezics.com/id/a672439d-a363-494d-a320-d8b8177cd8a0\",\"revisionId\":\"ca13ea75-4bf7-42d7-a0d9-c9b2ade4823c\",\"revisionDigest\":\"8b26240ee911d9c7806fb03ac4f9c739f62263ba07346791a01e7026e9452d6a\",\"reviewDecisionId\":null,\"expectedHead\":null,\"actingSubject\":\"https://rezics.com/id/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a\"}",
+              "body": {
+                "profile": "realm-reply-placement-v1",
+                "placement": "https://rezics.com/id/01a1595c-70cb-72d8-9650-83798cfa5491",
+                "reply": "https://rezics.com/id/a672439d-a363-494d-a320-d8b8177cd8a0",
+                "realm": "https://rezics.com/id/01a15329-8fb1-70b5-ab3e-a07479b4bc0d",
+                "revisionId": "ca13ea75-4bf7-42d7-a0d9-c9b2ade4823c",
+                "reviewDecisionId": "25da990e-0be6-447b-a028-6ec10b1c0aaf",
+                "reviewGeneration": "1",
+                "replayed": true
+              },
+              "dropped": false
+            }
+          ],
+          "duplicateWriteBoundary": "Initial real placement 201 was fetched then its browser response aborted. Retry returned 200, replayed=true, using identical operation key/request and placement/revision. One thread item was read. No backend storage inventory or global duplicate-count claim.",
+          "reopenBoundary": "Complete device draft fully reloaded in the same isolated browser context; published document independently read from genuine authenticated thread API. No second-device or reopened published-thread UI claim."
+        },
+        "disposition": "Genuine desktop chain reached; complete suite remains FAIL because two supplemental assertions failed."
+      },
+      {
+        "locale": "zh-Hans",
+        "width": 390,
+        "input": "touch",
+        "inputQualification": "genuine touch tap in hasTouch Chromium context at 390px",
+        "artifact": "remaining-three-matrix/actual-product-result.json",
+        "passedAssertions": [
+          "genuineUploadAndUse"
+        ],
+        "failedAssertions": [],
+        "failure": {
+          "phase": "zh-Hans/390 native reply draft/reserve/byte activation/inference/Use",
+          "error": "Error: stable image independently present before reload\n\nexpect(received).toEqual(expected) // deep equality\n\n- Expected  - 18\n+ Received  +  1\n\n- Array [\n-   Object {\n-     \"attrs\": Object {\n-       \"alt\": null,\n-       \"conceal\": false,\n-       \"dir\": null,\n-       \"height\": null,\n-       \"id\": \"82788ede-57ec-4f9c-9b26-09162e0e48f9\",\n-       \"lang\": null,\n-       \"mediaUseId\": \"85eb3b64-c001-4549-9ba9-645dbcc8af6e\",\n-       \"representationId\": \"77c946b6-3a75-4d6a-a26c-29c2368c0953\",\n-       \"src\": \"/api/main/v1/media/representations/77c946b6-3a75-4d6a-a26c-29c2368c0953/bytes?use=85eb3b64-c001-4549-9ba9-645dbcc8af6e\",\n-       \"title\": null,\n-       \"width\": null,\n-     },\n-     \"type\": \"image\",\n-   },\n- ]\n+ Array []"
+        },
+        "supplementalAssertionFailures": [],
+        "acknowledgedImageDraft": {
+          "intent": {
+            "realm": "https://rezics.com/id/01a15329-8fb1-70b5-ab3e-a07479b4bc0d",
+            "work": "https://rezics.com/id/01a15329-a5c8-760d-b1d5-22382dba559b",
+            "mainVersion": null,
+            "revision": "https://rezics.com/id/01a15329-a5c8-760f-a3ba-d094775a7c6d",
+            "title": "Image recovery zh-Hans 390",
+            "body": "{\"doc\":{\"content\":[{\"attrs\":{\"dir\":null,\"id\":\"be0e2f5e-dd1b-4aec-bb6d-a3fc73d5c173\",\"lang\":null,\"textAlign\":null},\"content\":[{\"text\":\"Image draft zh-Hans 390.\",\"type\":\"text\"}],\"type\":\"paragraph\"}],\"type\":\"doc\"},\"profile\":\"blocks\",\"version\":\"rezics-document-v1\"}",
+            "spoiler": false,
+            "language": "zh-Hans",
+            "actingSubject": "https://rezics.com/id/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a"
+          },
+          "progress": {
+            "writeState": "acknowledged",
+            "key": "d65dd260-ccce-4146-a17e-3f6f348c5d18",
+            "reply": "https://rezics.com/id/76e4c4a1-e82a-4817-a7b2-d63262991c0c",
+            "variantId": "urn:rezics:variant:f954ffde-413a-446a-9416-851be6a0fd44",
+            "rootRevision": "https://rezics.com/id/01a15329-a5c8-760f-a3ba-d094775a7c6d",
+            "revisionId": "747f160f-5377-410c-92f8-bc1f25599eef",
+            "digest": "7720ef3d5e9b17025f834e6a73885eb189a0fca59b96d6a4b93aafe7ad0db94e"
+          }
+        },
+        "stableImageReferences": [
+          {
+            "attrs": {
+              "alt": null,
+              "conceal": false,
+              "dir": null,
+              "height": null,
+              "id": "82788ede-57ec-4f9c-9b26-09162e0e48f9",
+              "lang": null,
+              "mediaUseId": "85eb3b64-c001-4549-9ba9-645dbcc8af6e",
+              "representationId": "77c946b6-3a75-4d6a-a26c-29c2368c0953",
+              "src": "/api/main/v1/media/representations/77c946b6-3a75-4d6a-a26c-29c2368c0953/bytes?use=85eb3b64-c001-4549-9ba9-645dbcc8af6e",
+              "title": null,
+              "width": null
+            },
+            "type": "image"
+          }
+        ],
+        "actualImageWriteStages": [
+          {
+            "method": "POST",
+            "path": "/api/main/v1/member-reply-drafts",
+            "status": 201,
+            "operation": "d65dd260-ccce-4146-a17e-3f6f348c5d18:draft",
+            "bodyReadable": true
+          },
+          {
+            "method": "POST",
+            "path": "/api/main/v1/media/uploads",
+            "status": 201,
+            "operation": "f565309a-21cb-4f7d-a3ec-df2edd6916e4:reserve",
+            "bodyReadable": true
+          },
+          {
+            "method": "PUT",
+            "path": "/api/main/v1/media/uploads/44553f4e-3f1a-4ba7-a007-3d6aac50f8a8/bytes",
+            "status": 201,
+            "operation": null,
+            "bodyReadable": true
+          },
+          {
+            "method": "POST",
+            "path": "/api/main/v1/media/representations/77c946b6-3a75-4d6a-a26c-29c2368c0953/inferences",
+            "status": 201,
+            "operation": "f565309a-21cb-4f7d-a3ec-df2edd6916e4:inference",
+            "bodyReadable": false
+          },
+          {
+            "method": "POST",
+            "path": "/api/main/v1/media/uses",
+            "status": 201,
+            "operation": "f565309a-21cb-4f7d-a3ec-df2edd6916e4:use",
+            "bodyReadable": true
+          },
+          {
+            "method": "POST",
+            "path": "/api/main/v1/media/metadata",
+            "status": 200,
+            "operation": null,
+            "bodyReadable": true
+          }
+        ],
+        "focusAndOverflow": [
+          {
+            "stage": "genuine-image-saved",
+            "focus": {
+              "tag": "DIV",
+              "label": "帖子内容",
+              "text": "Image draft zh-Hans 390.内容无法显示遮罩这张图片"
+            },
+            "horizontalOverflow": false
+          },
+          {
+            "stage": "failed",
+            "focus": {
+              "tag": "DIV",
+              "label": "帖子内容",
+              "text": "Image draft zh-Hans 390. Current text after genuine upload."
+            },
+            "horizontalOverflow": false
+          }
+        ],
+        "disposition": "PARTIAL: genuine upload/Use acknowledged, then independent image-presence assertion failed before reload.",
+        "entryVersusRestoration": "After first paragraph click, End and sequential current-text entry, recorded entered document has zero image occurrences. No reload occurred after that entry. Input/selection versus product editing cause is unisolated; this is not evidence of reload loss.",
+        "unexecuted": [
+          "complete document reload",
+          "unavailable metadata reload",
+          "snapshot export/Retry/Remove/focus",
+          "device failure/retry",
+          "final publication/replay/durable thread read"
+        ]
+      }
+    ],
+    "actualWritesAndReceipts": {
+      "ledger": "operation-ledger.json",
+      "scope": "All five attempts retain every captured semantic write, including successful but browser-dropped placement 201 receipts. Repeated verification attempts created distinct real image drafts/uploads; no rollback/delete or shared reset was attempted.",
+      "readMetadataGenuineOutcome": "Real metadata POST returned HTTP 200 with items[].status=unavailable and genuine representation/use IDs; preview showed Content unavailable/内容无法显示. Stable references remained through the qualified reload and desktop publication.",
+      "inferenceLimit": "Inference HTTP 201 and exact request retained; some response bodies hit bounded unreadable deadline. No exception class is inferred from an unreadable body.",
+      "noHistoricalAttribution": "Historical Use403 owner/exception attribution remains UNCONFIRMED and was not reinvestigated."
+    },
+    "controlledFailures": [
+      {
+        "kind": "metadata HTTP 503",
+        "mechanism": "Browser route fulfills unavailable response; genuine uploaded representation/use IDs already exist. Distinct from real HTTP200 unavailable-item receipts."
+      },
+      {
+        "kind": "snapshot/binding failure",
+        "mechanism": "Existing invalid-image HTML paste with live bold text; real invalid metadata request returns 400. Raw export retains live document, stable valid image and failed node. Retry/Remove exercise product recovery; no fake upload success."
+      },
+      {
+        "kind": "device acknowledgement failure",
+        "mechanism": "Owned-context Storage.prototype.setItem rejects only current actor draft key with QuotaExceededError after body edit. Product shows draftIncomplete and no saved acknowledgement; original initial-hydration device story not replayed."
+      },
+      {
+        "kind": "lost placement response",
+        "mechanism": "Browser route.fetch executes real placement write, retains 201 receipt, then aborts browser response. Product Retry post resends identical key/request; real server returns 200/replayed=true. No synthetic successful receipt."
+      }
+    ],
+    "failedAssertionsAndPremises": {
+      "deviceCopy": "Additional full-page exact draftSaveFailed sentence expectation fails; actual draftIncomplete copy truthfully warns current changes are not saved and exposes retry/export. Original DeviceStorageUnavailable has a different initial-hydration injection. Failure retained, not marked passing.",
+      "literalPlacementReceiptEquality": "Retained additional full-body equality fails only because replayed changes false to true. Same key/request/placement/revision pass independently. Literal equality stays failed.",
+      "englishPhoneCurrentText": "Exact expected append-at-end text fails after device edit; actual insertion is before final text. word. Both strings retain the same text characters in a different order; no restoration-loss or one-character-loss diagnosis.",
+      "chinesePhoneImageEntry": "Stronger pre-reload image-presence assertion fails after click/End/text entry. It prevents a false reload-loss claim. Exact sequence, entered document and PNG retained; no source cause established.",
+      "originalStories": "Five original image stories and SlashMenu historical setup failures remain preserved before outcome assertions. No original story/independent assertion edited, erased, rerun or claimed passing here.",
+      "originalLowLevelException": "Unresolved historical exception remains unisolated; not required for this saved-origin proof and not claimed diagnosed.",
+      "historicalSingleCharacterDiscrepancy": "Still unconfirmed. Latest phone entry issues do not isolate it.",
+      "firstUnavailableRequiredApiPremise": null,
+      "wrapperPhaseWarning": "Top-level catch phase is stale after collected cases. Read each case.failure and supplementalAssertionFailures; final wrapper phase alone does not identify an API failure.",
+      "englishPhoneCharacterMultiset": "Locally compared expected and recorded beforePublish current text character counts: equal. This is bounded evidence of insertion-position discrepancy, not proof of the historical missing-character cause."
+    },
+    "visualReview": {
+      "method": "Viewed actual PNG files with view_image; manually assessed text, recovery feedback, focus outlines and responsive controls. Focus/overflow also captured from real DOM.",
+      "screenshotsViewed": [
+        "first-full-matrix/en-1440-genuine-image-saved.png",
+        "first-full-matrix/en-1440-controlled-metadata503-reopened.png",
+        "first-full-matrix/en-1440-snapshot-failure-export-retained.png",
+        "first-full-matrix/en-1440-retry-retained-focus.png",
+        "first-full-matrix/en-1440-remove-current-document-focus.png",
+        "first-full-matrix/en-1440-recovered-current-document-reopened.png",
+        "first-full-matrix/en-1440-device-storage-failure-truthful.png",
+        "first-full-matrix/en-1440-real-placement-response-lost.png",
+        "first-full-matrix/en-1440-same-operation-placement-acknowledged.png",
+        "remaining-three-matrix/en-390-genuine-image-saved.png",
+        "remaining-three-matrix/en-390-controlled-metadata503-reopened.png",
+        "remaining-three-matrix/en-390-snapshot-failure-export-retained.png",
+        "remaining-three-matrix/en-390-retry-retained-focus.png",
+        "remaining-three-matrix/en-390-remove-current-document-focus.png",
+        "remaining-three-matrix/en-390-recovered-current-document-reopened.png",
+        "remaining-three-matrix/en-390-device-storage-failure-truthful.png",
+        "remaining-three-matrix/en-390-failed.png",
+        "remaining-three-matrix/zh-Hans-1440-genuine-image-saved.png",
+        "remaining-three-matrix/zh-Hans-1440-controlled-metadata503-reopened.png",
+        "remaining-three-matrix/zh-Hans-1440-snapshot-failure-export-retained.png",
+        "remaining-three-matrix/zh-Hans-1440-retry-retained-focus.png",
+        "remaining-three-matrix/zh-Hans-1440-remove-current-document-focus.png",
+        "remaining-three-matrix/zh-Hans-1440-recovered-current-document-reopened.png",
+        "remaining-three-matrix/zh-Hans-1440-device-storage-failure-truthful.png",
+        "remaining-three-matrix/zh-Hans-1440-real-placement-response-lost.png",
+        "remaining-three-matrix/zh-Hans-1440-same-operation-placement-acknowledged.png",
+        "remaining-three-matrix/zh-Hans-390-genuine-image-saved.png",
+        "remaining-three-matrix/zh-Hans-390-failed.png"
+      ],
+      "observations": [
+        "Desktop English and Chinese recovery text and actions are readable; Retry/Remove place activeElement on labelled editor DIV and blue focus outline remains visible.",
+        "Raw export state retains current bold text plus valid/failed image placeholders. Remove leaves one genuine stable image; saved acknowledgement returns only after complete current document persists.",
+        "Lost-response page states unconfirmed write and offers Retry post/重试发布; same-operation acknowledgement displays posted state and clears composer.",
+        "Phone screenshots show touch-sized recovery controls and editor focus; fixed header/bottom navigation overlays portions of full-page captures. No horizontal document overflow was measured.",
+        "Some captures still show loading content preferences; baseline genuine metadata also returns unavailable. These PNGs do not prove successful image byte preview, settled preference loading, or a completed phone matrix."
+      ],
+      "a11y": "No new automated a11y scan in this genuine runtime selection. Accepted earlier story/a11y evidence remains at its historical pins; no claim of a fresh full-page a11y pass."
+    },
+    "cleanup": {
+      "allAttemptCleanupReceipts": "commandsAndQa[].cleanup",
+      "postRunVerification": "post-run-cleanup-verification.json",
+      "ownedFrontend43127Stopped": true,
+      "borrowedBrowsersClosed": true,
+      "freshRefreshGrantRevocationsAndAccountSignOuts": "HTTP200 per attempt",
+      "imageLeaseReleased": "site-image-book-current-20261020-r1",
+      "backendAndDefaultLeaseCustody": "G-2823 unchanged; backend custodian process still exists; no backend stop/probe was performed after run.",
+      "revocationBoundary": "Fresh attempt refresh-token revocation and Account sign-out were observed. No claim that historical OAuth grants were revoked or that previously issued access JWTs expire immediately.",
+      "imageLeaseReleaseReceipt": "lease-release.json"
+    },
+    "acceptanceByFinding": {
+      "D2-002": "ACCEPTED, prior disposition and evidence preserved; not replayed",
+      "D2-003": "OPEN: two desktop genuine chains now have receipt-backed recovery/publication/replay evidence; phone original matrix incomplete, aggregate QA FAIL, manager acceptance still required. No class closure."
+    },
+    "concreteSourceDefects": [],
+    "unexecutedLimits": [
+      "Remaining English/Chinese phone publication/dedup/final durable-read outcomes",
+      "Chinese phone recovery/reopen/device-failure outcomes after unqualified image entry",
+      "Reopened published-thread browser UI, another device, backend physical write-count inventory",
+      "Fresh full-page automated a11y scan or historical setup-failing stories",
+      "Historical low-level upload exception isolation or historical Use403 attribution"
+    ],
+    "artifactDelivery": {
+      "privateRoot": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/landed-origin-3878e8dda94e",
+      "managerDestination": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/landed-origin-3878e8dda94e/",
+      "workerCopiedIntoMain": false,
+      "reason": "Current maintainer instruction makes main and other worktrees read-only except goalctl bookkeeping. Manager must copy the retained private bundle; worker did not write main.",
+      "manifest": "artifact-manifest.json",
+      "transferArchive": "proof-bundle.tar.gz (excludes runtime frontend/dependencies/XDG; exact tracked source manifest and original assertions retained)"
+    },
+    "administrativeChecks": {
+      "recordedJob": "e8e477af-d30a-452c-9064-5fd2fd356227",
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "taskDocsCheck": {
+        "result": "PASS",
+        "exitCode": 0,
+        "markdownFiles": 259,
+        "checkerTests": 13,
+        "log": "recorded-jobs/e8e477af-d30a-452c-9064-5fd2fd356227.1.log"
+      },
+      "taskGoalCheck": {
+        "result": "PASS",
+        "exitCode": 0,
+        "scope": "Report-only changed paths; types/lint need no TypeScript/source work, AST and 1/45 selected repository guards pass; no test files named in brief.",
+        "run": "run-1kS4Nd",
+        "log": "recorded-jobs/e8e477af-d30a-452c-9064-5fd2fd356227.2.log",
+        "detail": "administrative-check-output.log"
+      },
+      "runtimeQaBoundary": "Administrative PASS does not change the five failed browser QA records or establish full matrix acceptance."
+    },
+    "next": "Manager copy private bundle, assess desktop evidence, retain D2-003 OPEN, and return the two exact mobile input/selection premises and supplemental expectation mismatches to existing proof/product owners. No new runtime, API investigation or source fix was performed after this result."
   }
-
 }
