@@ -2947,5 +2947,593 @@
       ],
       "finalization": "Receipt metadata appended after the passing sequence. Final Task report-integrity and docs:check run before commit and are reported in the worker handoff. Only this new review key changes; all earlier report values, test-source bytes and historical failures are preserved."
     }
+  },
+  "structureV2AdapterWindowFenceCorrectionReview": {
+    "schema": "retained-source-structure-window-fence-correction-review-v1",
+    "review": {
+      "task": "G-2859",
+      "goal": "audit-remediation-20261019",
+      "reviewer": "codex-1/GPT-6.1 Sol/xhigh",
+      "reviewKind": "same-reviewer-correction-only-follow-up",
+      "reviewedAt": "2026-10-20T13:08:55.846015Z",
+      "reportBase": "f4338e449cdb9a94ab82f813a70753e76d0573e1",
+      "priorReportSha256": "7ddcb981e793b3c8375ceb11286d2459f26392bd7b5cf4bbb282637b4a3e5541",
+      "priorReviewKey": "structureV2AdapterFirstSourceReview",
+      "finding": "SOURCE-STRUCTURE-FENCE-1",
+      "scopeDecision": "Only the committed 2026-10-20T12:59:04Z Decision: exact three-file parent -> correction. No rebase, advancing wave-tip review or accepted-batch re-review.",
+      "reviewOnly": true,
+      "productEdits": false,
+      "originalClassClosure": false
+    },
+    "candidate": {
+      "parent": "3901af375a54edcb86a4e75807351806ff234ce0",
+      "candidate": "3e559731c478c493e02bac7e0589f1bca5fd6eba",
+      "exactFirstParentVerified": true,
+      "changedFileCount": 3,
+      "files": [
+        {
+          "path": "services/main/src/modules/source/field-support-retained.ts",
+          "sha256": "caca982e96adef42aec495766a8755927e8f76699db3e92671b77d62e422e0da",
+          "gitBlob": "de1142173cd4829d34045999647f513e52065f37",
+          "parentBlob": "892248a6d607727f531b85398d707f34e0d85113",
+          "change": "modified",
+          "parentSha256": "983fc402b50c2a12fbb0346176b66b84048aa7f65de0ec84ed564cfd0debc7d4"
+        },
+        {
+          "path": "services/main/tests/source-field-evidence-window.test.ts",
+          "sha256": "b5b7ce00f0e77b00457722c03b694eb68e1bb19f6be0aa8a2f3aacfdb8042df5",
+          "gitBlob": "98793ec15f6e65c1dbf58110aad2d9a806b21b9f",
+          "parentBlob": null,
+          "change": "added"
+        },
+        {
+          "path": "services/main/tests/source-field-structure-fixture.ts",
+          "sha256": "bc08fe6ccac8c2da618cf08306e8d8d01882b3a81a8e81654c59dc08d03ce985",
+          "gitBlob": "76f7a32fea58ef164529fdf7828619e5e14ca36b",
+          "parentBlob": "0220fe805d1db2c428329f146bac3d701eb82767",
+          "change": "modified",
+          "parentSha256": "c3edd2afe3083724363bb44b70bce61cac95219e809d49992f46dd3b18189bd9"
+        }
+      ],
+      "publicationSource": ".temp/worktrees/g-2781/.temp/goal/source-structure-fence-publication.json",
+      "publicationSha256": "2f12433be5f41d20df34aadfb72e5fe401fbe2ba946ad1f168bcbb17fe533bd0",
+      "publicationSnapshot": ".temp/review/source-structure-fence/source-structure-fence-publication.json",
+      "handoffSha256": "5d80a17773c0afd61b11908e22975695bb01aea8aac8c2b22313dc531fb30cc1",
+      "authorship": "Edge-coordinates <Edgecoordinates@gmail.com>",
+      "manifestMeaning": "Independently matched the complete git diff to exactly these three files and verified every candidate Git blob/SHA-256. The unchanged test body and cited producer logs were also hashed. Producer proof was reused, not executed in this review."
+    },
+    "disposition": {
+      "accepted": true,
+      "decision": "accept-bounded-source-window-fence-correction",
+      "findingDisposition": "SOURCE-STRUCTURE-FENCE-1 is corrected at this exact pin; its original confirmed finding, failing outcome assertion and every prior report value remain historical evidence.",
+      "blockingFindings": [],
+      "summary": "The window reread uses the same private projection and WorkReadSession without recursively invoking the full session fence. Native/Source/rights dependencies and the enclosing final dependency/authority fences remain. Direct reads retain immediate fences. Source fixture changes answer the already published current-target head query without changing the six original Structure cases.",
+      "headGuarantee": "verified-before-commit",
+      "atomicCrossOwnerTransaction": false,
+      "landingPerformed": false,
+      "originalClassClosure": false
+    },
+    "actionableFindings": [],
+    "acceptedObservations": [
+      {
+        "id": "SOURCE-STRUCTURE-FENCE-1-correction",
+        "locations": [
+          "services/main/src/modules/source/field-support-retained.ts:254",
+          "services/main/src/modules/source/field-support-retained.ts:289",
+          "services/main/src/modules/source/field-support-retained.ts:358"
+        ],
+        "finding": "read() delegates to private readProjection(..., direct); readEvidenceWindow loads through readProjection(..., window). Only direct mode executes the immediate fenceDependencies/fenceAuthority pair. The window callback performs no full session fence. Its same-session native dependency registration, Source support-row/withdrawal reread, rights/custody/evidence reread and deadline check are outside the mode condition and remain live even for null/withheld public evidence."
+      },
+      {
+        "id": "same-session-and-final-emission",
+        "finding": "readEvidenceWindow still rejects a session different from currentWorkReadSession and passes the caller session, its principal and actingSubject to the unchanged Structure verifier. No substitute/probe session is introduced by this correction. The existing session dependency retains the whole current window; re-observation compares against opening tokens. WorkRead still runs its dependency fence followed by authority in finally and a deadline check before completion, including any graph closing-fence retry. New regression proof exercises the full window -> final fence for both current and withheld evidence."
+      },
+      {
+        "id": "native-current-and-source-dependencies-retained",
+        "finding": "The correction changes no acknowledgement, receipt/child/profile/revision/ancestry, Source adoption/identity, current target or current-subject validator. Exact native/session dependencies were consulted only to verify composition. The parent already contains the native target-disclosure/current semantic-head query; this correction adds no current-head guarantee or native API. Custody, retained normalization and digest verification still run on every projection, and Source support/rights dependencies still register on the same session."
+      },
+      {
+        "id": "direct-and-other-branches-preserved",
+        "finding": "Direct current Structure reads keep the prior immediate dependency and authority fences. Attachment settlement still performs custody/reuse reread, dependency/authority fences and deadline before Source COMMIT. Exact replay and new stale-intent paths are untouched. The shared read body is otherwise identical; V1, non-Structure V2 and independently withdrawable historical certificates are unchanged. No native/session/schema/route/generator/migration/converter change is present."
+      },
+      {
+        "id": "fixture-only-published-query-compatibility",
+        "finding": "Source fixture now supplies a target semantic head/version on target-state preparation, exposes that head through the existing Work summary and SELECT DISTINCT ?target ?head batch, and keeps the native guard consistent with head presence. These responses match the existing Structure native fixture and currentEpisodeTargets disclosure query at the exact dependency blobs below. Only fixture transport changed: no native implementation or assertion was weakened. source-field-structure.test.ts is byte-identical to the first reviewed pin; all six original cases/83 assertions subsequently pass."
+      },
+      {
+        "id": "window-regression-evidence",
+        "finding": "Seventeen focused tests/45 assertions cover stable withheld/current windows, direct read in the same session, native/generation/withdrawal/rights/custody/evidence/denial changes, principal/recovery revocation, abort and deadline. Controlled native ports explicitly register a selected head on the actual session. They exercise Source/session composition, not real native admission, quotation grants or installed public API positives."
+      },
+      {
+        "id": "bounded-class-audit",
+        "finding": "Within the three-file correction the only two full Source fence sites are attachment settlement and direct projection. The enclosing window reread reaches neither. Null evidence and current evidence use the same non-reentrant path. The physical frontier, hidden positions, generation/after, 1..16 limit and full-window dependency token are unchanged. The prior confirmed counterexample passes unchanged with exactly two window loads/two native reads and no final-fence error."
+      }
+    ],
+    "exactDependenciesConsulted": {
+      "scope": "Static dependency inspection needed for the bounded correction and fixture adaptation only; unchanged accepted native/query/Source batches are not independently reviewed again.",
+      "files": [
+        {
+          "path": "services/main/src/modules/work/read-session.ts",
+          "gitBlob": "85381184a0704f74645f97e0b0327a2b13d0d27d",
+          "sha256": "1e057f09ae28386be2ee2a737826a5060bf67aabe3dd4ce8abe105183659b4db",
+          "parentBlob": "85381184a0704f74645f97e0b0327a2b13d0d27d",
+          "unchangedFromParent": true,
+          "unchangedFromFirstAdapterReview": true
+        },
+        {
+          "path": "services/main/src/modules/source/field-support-native.ts",
+          "gitBlob": "c023ce1030e0586b23b5e77a3d76f2a38c6069c2",
+          "sha256": "441fc3ff107f2b5578d46ed6e2d2f4e5138ac40035d46a9d7e4f407bbc562b93",
+          "parentBlob": "c023ce1030e0586b23b5e77a3d76f2a38c6069c2",
+          "unchangedFromParent": true,
+          "unchangedFromFirstAdapterReview": true
+        },
+        {
+          "path": "services/main/src/modules/source/field-support-structure.ts",
+          "gitBlob": "461daf0da0f9ac0a450ff56439c9fec246663649",
+          "sha256": "5f02be29cf4c18a1336ec11dcebe45b86ed9890bb464e6c2026a9a3cbb1c4c07",
+          "parentBlob": "461daf0da0f9ac0a450ff56439c9fec246663649",
+          "unchangedFromParent": true,
+          "unchangedFromFirstAdapterReview": true
+        },
+        {
+          "path": "services/main/src/modules/source/retained-evidence.ts",
+          "gitBlob": "15d1e6e6f90f1be63a902d51fa01e7a8bb4682b0",
+          "sha256": "8c48b69b75ba7abef233b36c20a08001f2ec4bc3b70f1cca9bb9dcac67a89ff6",
+          "parentBlob": "15d1e6e6f90f1be63a902d51fa01e7a8bb4682b0",
+          "unchangedFromParent": true,
+          "unchangedFromFirstAdapterReview": true
+        },
+        {
+          "path": "services/main/src/modules/source/native-work-adoption.ts",
+          "gitBlob": "3e0946319e8a4d8415aa5cb3f3162e40e086313e",
+          "sha256": "3d964e805c9f33a9b4a586593b9aeca0e45a79f689cc941ecb633710ef1fc1d0",
+          "parentBlob": "3e0946319e8a4d8415aa5cb3f3162e40e086313e",
+          "unchangedFromParent": true,
+          "unchangedFromFirstAdapterReview": true
+        },
+        {
+          "path": "services/main/src/modules/structure/native-basis.ts",
+          "gitBlob": "15f0721bdceaeb72c39b7e12ea52ec6bbe7b8d72",
+          "sha256": "f9341859e63991ebe9d52a408198965eb29e30daee445a031cb531fb1acd90e5",
+          "parentBlob": "15f0721bdceaeb72c39b7e12ea52ec6bbe7b8d72",
+          "unchangedFromParent": true,
+          "unchangedFromFirstAdapterReview": false
+        },
+        {
+          "path": "services/main/src/modules/composition/disclosure-read.ts",
+          "gitBlob": "95c50887b23ceeb4f8251d8dbaf727d5f812cba6",
+          "sha256": "40a1bb305c342bf8d2cb340c9f3ca8bf5db86ff2bf2b78f5bccc1dbc92ea8d8c",
+          "parentBlob": "95c50887b23ceeb4f8251d8dbaf727d5f812cba6",
+          "unchangedFromParent": true,
+          "unchangedFromFirstAdapterReview": false
+        },
+        {
+          "path": "services/main/tests/structure-native-basis.test.ts",
+          "gitBlob": "d06e6ffa578e2648e30dd43534047251df0cd047",
+          "sha256": "dac62babab1d7f5ee7d591cb4dd7d67655496affea22f9103dc3522925a70347",
+          "parentBlob": "d06e6ffa578e2648e30dd43534047251df0cd047",
+          "unchangedFromParent": true,
+          "unchangedFromFirstAdapterReview": false
+        }
+      ]
+    },
+    "checksActuallyExecuted": [
+      {
+        "kind": "read-only-pin-blob-and-evidence-verification",
+        "result": "passed",
+        "details": "Verified first parent and exact three-file union; all candidate Git/SHA-256 blobs; publication and all listed proof-log hashes; original unchanged counterexample bytes; unchanged original tests, authored contracts/mapping and Source OpenAPI operations (the inherited full generated blob is distinguished below); current producer runtime link/Source/session bytes; and preserved report bytes. Static inspection establishes no product acceptance."
+      },
+      {
+        "kind": "temporary-report-preparation-setup",
+        "command": "task --taskfile .temp/review/source-structure-fence/Taskfile.yml prepare-report",
+        "initialResult": "failed before report creation: Task defaulted to the temporary Taskfile directory and could not locate the root-relative script",
+        "correction": "The temporary Taskfile now explicitly uses USER_WORKING_DIR; the same report preparation and integrity check then passed. No product test or outcome assertion was involved."
+      },
+      {
+        "kind": "temporary-report-preparation-identity-check",
+        "initialResult": "Report preparation stopped before writing: its broad prior-file identity assumption encountered the inherited full OpenAPI change.",
+        "correction": "Record the ten byte-identical prior adapter files separately. The full OpenAPI blob differs from the first adapter pin, is unchanged across this correction, and all 41 Source operation paths remain structurally identical to that earlier pin. No inherited API change is reviewed or certified here."
+      }
+    ],
+    "reusedEvidence": {
+      "scope": "No product test, service or whole-tier rerun executed by this correction review. Exact completed targeted proof is reused as directed.",
+      "producerChecks": [
+        {
+          "job": "56fbe6b9-7f8d-4861-b890-0ef3c49a63ae",
+          "step": 1,
+          "command": "bun scripts/goal/goalctl.ts test ./.temp/review/structure-v2/structure-evidence-reentrancy.original.test.ts",
+          "result": "pass",
+          "tests": 1,
+          "assertions": 3,
+          "windowLoads": 2,
+          "nativeReads": 2,
+          "finalFenceError": null,
+          "testSha256": "aea95a3641e309f8059f717d6c133cbc87cd3845a6efd07596e24c915818c264"
+        },
+        {
+          "job": "56fbe6b9-7f8d-4861-b890-0ef3c49a63ae",
+          "step": 2,
+          "command": "bun scripts/goal/goalctl.ts test services/main/tests/source-field-structure.test.ts",
+          "result": "pass",
+          "qa": "20261020t123825-1feb5a",
+          "stableSource": true,
+          "sourceFingerprint": "61437c2bec0b",
+          "tests": 6,
+          "assertions": 83,
+          "includes": "0.5/0/1 correspondence, wrong identity/value/receipt/head/occurrence/ancestor/profile/scheme, settlement/emission movement, replay and independent withdrawal; original assertions unchanged"
+        },
+        {
+          "job": "ddce7a6e-359e-49ce-b78a-4e1bd283f506",
+          "step": 1,
+          "command": "bun scripts/goal/goalctl.ts test services/main/tests/source-field-evidence-window.test.ts",
+          "result": "pass",
+          "qa": "20261020t124507-efdcc7",
+          "stableSource": true,
+          "sourceFingerprint": "66fda566b4c2",
+          "tests": 17,
+          "assertions": 45,
+          "includes": "stable withheld/current evidence with complete window then outer final fence, direct read in same session, native/support generation/withdrawal/rights/custody/evidence/denial movement, principal/recovery revocation, cancellation and deadline"
+        },
+        {
+          "job": "ddce7a6e-359e-49ce-b78a-4e1bd283f506",
+          "step": 2,
+          "command": "task goal -- check --only types,lint",
+          "result": "pass",
+          "checks": [
+            "affected types",
+            "lint",
+            "AST",
+            "inference delta vs current base"
+          ],
+          "inference": {
+            "comparisonBase": "ccb4cc8f5bb0c7bc20793a52f9c961453768f2a1",
+            "mainHead": 27139170,
+            "mainBase": 27163414,
+            "mainDelta": -24244,
+            "webHead": 38808962,
+            "webBase": 38867483,
+            "edenHead": 17470913,
+            "edenBase": 19054964,
+            "absoluteMainLimit": 26950993.650000002,
+            "absoluteMainGate": "inherited baseline failure persists; merge still requires recorded baseline; limit unchanged"
+          }
+        },
+        {
+          "result": "reused matching publication evidence; no repeated batch",
+          "job": "2035e24c-f7d6-47ce-b086-85bb82ed9a34",
+          "qa": "20261020t113825-940361",
+          "tests": 48,
+          "assertions": 1255,
+          "scope": "prior Source/native/archive/field-mapping/value/conversion coverage, generation, web types and inference/type checks; historical evidence, not new public proof",
+          "details": ".temp/goal/source-structure-publication.json"
+        },
+        {
+          "result": "13 existing non-Structure tests passed inside otherwise failed 36-test selection",
+          "job": "c3281f5a-6c96-4d39-9a24-aaa8f4f2c860",
+          "qa": "20261020t123541-b57bcc",
+          "files": [
+            "services/main/tests/source-field-native-basis.test.ts",
+            "services/main/tests/source-retained-record.test.ts"
+          ],
+          "tests": 13,
+          "note": "Entire selection remained failed; do not relabel it as passing."
+        }
+      ],
+      "originalCounterexample": {
+        "sha256": "aea95a3641e309f8059f717d6c133cbc87cd3845a6efd07596e24c915818c264",
+        "unchangedFromFirstReview": true,
+        "originalFailingJob": "01b8fe8d-e7f0-43b8-93b1-ab0e00f20599",
+        "passingJob": "56fbe6b9-7f8d-4861-b890-0ef3c49a63ae",
+        "step": 1,
+        "tests": 1,
+        "assertions": 3,
+        "windowLoads": 2,
+        "nativeReads": 2,
+        "finalFenceError": null,
+        "runtime": "Producer runtime is a symlink to its worktree. The unchanged test bytes and current imported Source, adapter and session bytes independently match the immutable correction pin; the hashed receipt records the actual earlier passing run. This review does not claim a newly executed test."
+      },
+      "qaReceipts": [
+        {
+          "qa": "20261020t123825-1feb5a",
+          "tests": 6,
+          "assertions": 83,
+          "source": {
+            "head": "3901af375a54edcb86a4e75807351806ff234ce0",
+            "fingerprint": "61437c2bec0b3e0ddaff6e6c1d1650413d203b14c5b05e90a21c48f10461046a",
+            "clean": false
+          },
+          "sourceStable": true,
+          "certifiesFull": false,
+          "acceptanceCounts": {
+            "uncovered": 292,
+            "partial-pass": 0,
+            "passed": 0,
+            "failed": 0
+          }
+        },
+        {
+          "qa": "20261020t124507-efdcc7",
+          "tests": 17,
+          "assertions": 45,
+          "source": {
+            "head": "3901af375a54edcb86a4e75807351806ff234ce0",
+            "fingerprint": "66fda566b4c29bff89c7b8194d1feee993ae324fbea845b603d79f7dbcab72e4",
+            "clean": false
+          },
+          "sourceStable": true,
+          "certifiesFull": false,
+          "acceptanceCounts": {
+            "uncovered": 292,
+            "partial-pass": 0,
+            "passed": 0,
+            "failed": 0
+          }
+        }
+      ],
+      "originalTestsUnchanged": [
+        {
+          "path": "services/main/tests/source-field-structure.test.ts",
+          "sha256": "30341054ad669bc17bc190277f5bc7b1a83f83796c5a29b232e69fa23a2b4e37",
+          "unchangedFromReviewedCandidate": true
+        },
+        {
+          "path": "services/main/tests/source-field-native-basis.test.ts",
+          "sha256": "00ec2d9b973515deb7f4e2b1ab255783f53c4b43d3930bdef7adbf1a33fa4cc8",
+          "unchangedFromReviewedCandidate": true
+        },
+        {
+          "path": "services/main/tests/source-retained-record.test.ts",
+          "sha256": "ef43ecf42bdb58e00c6a605d71cdc9b9c57ab3ace0e67deef5c0d6d9c5789e6c",
+          "unchangedFromReviewedCandidate": true
+        }
+      ],
+      "prior48TestEvidence": {
+        "job": "2035e24c-f7d6-47ce-b086-85bb82ed9a34",
+        "qa": "20261020t113825-940361",
+        "tests": 48,
+        "assertions": 1255,
+        "reuseLimit": "Historical proof for matching blobs only. Ten files of the first 13-file adapter cut match exactly, including authored schemas and dataset mapping. The changed retained projection and fixture are evaluated here using the later exact counterexample, six unchanged cases and seventeen new regressions. The full OpenAPI and later native dependencies differ from the first adapter pin; the older receipt is not a fresh qualification of those inherited changes or of this correction.",
+        "matchingFirstAdapterFiles": [
+          {
+            "path": "scripts/datasets/native/fields.ts",
+            "gitBlob": "81ffea26b8da449ff6de0bec86b1f65d689b98b3",
+            "sha256": "84720ed24307eafc5ecccf90d6cc4d5f2d4effceef0fdbc8924d674d75e12713"
+          },
+          {
+            "path": "services/main/src/modules/source/field-support-contract.ts",
+            "gitBlob": "359e3b9b8699365421ce2d1ef67553c88ae0294b",
+            "sha256": "b6dd07f3f86e2f66f058f948665349aee1add75f636914699c836a5ea09a8b40"
+          },
+          {
+            "path": "services/main/src/modules/source/field-support-episode.ts",
+            "gitBlob": "5b1db55e5e40320fecffd314f8a2912c1a51e440",
+            "sha256": "45b021f2d8a2286e35317036023b731f2f7024f1840156296d32d93972a20bf0"
+          },
+          {
+            "path": "services/main/src/modules/source/field-support-evidence.ts",
+            "gitBlob": "d60a0748b45db7677fab68e995a0e9ce447cb666",
+            "sha256": "aa63e00ed401eeb212b276b6bc23b67818c51c7ae7d04e69b73aef8e529eaf9d"
+          },
+          {
+            "path": "services/main/src/modules/source/field-support-native.ts",
+            "gitBlob": "c023ce1030e0586b23b5e77a3d76f2a38c6069c2",
+            "sha256": "441fc3ff107f2b5578d46ed6e2d2f4e5138ac40035d46a9d7e4f407bbc562b93"
+          },
+          {
+            "path": "services/main/src/modules/source/field-support-schema.ts",
+            "gitBlob": "c09f90af16a07b1a5ef1c7c7d27bbb95494cab6d",
+            "sha256": "3e65b8b98ff352c1b83001f8736e758298aff72289ff390296a7da4072e09ca9"
+          },
+          {
+            "path": "services/main/src/modules/source/field-support-structure.ts",
+            "gitBlob": "461daf0da0f9ac0a450ff56439c9fec246663649",
+            "sha256": "5f02be29cf4c18a1336ec11dcebe45b86ed9890bb464e6c2026a9a3cbb1c4c07"
+          },
+          {
+            "path": "services/main/src/routes/source-supports.ts",
+            "gitBlob": "f5d418ee664ededa60f79f72e7c16fb9ac57501d",
+            "sha256": "2e47cbf791657207a20280b5d9803a5984d8ab54bfccc66b298c03c476be26e7"
+          },
+          {
+            "path": "services/main/tests/source-field-structure.test.ts",
+            "gitBlob": "274f5dab3acf11007fa18806d72fefcb5f534377",
+            "sha256": "30341054ad669bc17bc190277f5bc7b1a83f83796c5a29b232e69fa23a2b4e37"
+          },
+          {
+            "path": "tests/qa/unit/dataset-field-mapping.test.ts",
+            "gitBlob": "8fd2cb36440683c631e66ef9f72dcdac8f54bd4a",
+            "sha256": "cda97201b4e4e70c698a252da1b8adfc80e4ac48766f88b627f50c9fa3bd6a9f"
+          }
+        ],
+        "generatedIdentity": {
+          "path": "generated/openapi/main/public.json",
+          "gitBlob": "dd2743341174a1c423835b6a0db63b40673847c1",
+          "sha256": "9fffdfb010e1d3aa660412fce03cee78f0d587b9d42dbeaa2f4da9c3cc64d6e1",
+          "parentBlob": "dd2743341174a1c423835b6a0db63b40673847c1",
+          "unchangedFromParent": true,
+          "unchangedFromFirstAdapterReview": false,
+          "sourceOperationPathCount": 41,
+          "allSourceOperationsEqualFirstAdapterReview": true,
+          "sourceOperationsCanonicalSha256": "aedad5ef8abf8e20da87144bcb90eb1bf07182af13ba004cc78b5f12a5a1cb13"
+        },
+        "generationAndWebTypes": "No authored contract or generated blob changes across this three-file correction. Identity-only comparison confirms all 41 Source OpenAPI paths equal the first adapter pin, including its nine Structure acknowledgement branches; retain the prior Source generation/web type proof for matching content only. Other inherited generated API changes are not re-reviewed. No regeneration is required for this correction."
+      },
+      "producerArtifactBase": ".temp/worktrees/g-2781",
+      "artifacts": [
+        {
+          "path": ".temp/goal/jobs/c3281f5a-6c96-4d39-9a24-aaa8f4f2c860.1.log",
+          "sha256": "7578436d87ebb06a9b956034e77e01a9c2cbf3470857b783335000c5af9c4290"
+        },
+        {
+          "path": ".temp/goal/jobs/56fbe6b9-7f8d-4861-b890-0ef3c49a63ae.1.log",
+          "sha256": "5ebcf14ae2fe7b80accf9215a150941b5010ecd2841aa2a2901fe713b0be7a4a"
+        },
+        {
+          "path": ".temp/goal/jobs/56fbe6b9-7f8d-4861-b890-0ef3c49a63ae.2.log",
+          "sha256": "0537912c13e1b8fafc89d0dc2ee0562c0e28ebddd383fb3d92ce0f4f395a52d7"
+        },
+        {
+          "path": ".temp/goal/jobs/56fbe6b9-7f8d-4861-b890-0ef3c49a63ae.3.log",
+          "sha256": "1690892494679279a14fe341aa1db6cb422f8c215dae2f28b905b6bfc7d7a77f"
+        },
+        {
+          "path": ".temp/goal/jobs/ddce7a6e-359e-49ce-b78a-4e1bd283f506.1.log",
+          "sha256": "cb9fcf226ca3b3a88665e0f37cff1775ef4994a0200031b7379ae613b727dd8a"
+        },
+        {
+          "path": ".temp/goal/jobs/ddce7a6e-359e-49ce-b78a-4e1bd283f506.2.log",
+          "sha256": "8600b50449ee2edd5aadc05178131dc7ed6a32f9d5837c03393465cd575fffaa"
+        },
+        {
+          "path": ".temp/goal/check/run-7r7VFg/output.log",
+          "sha256": "65f4da28794eb49588bfa4afc32c80bed7870ba81fb97698c7fcb55a8a669b4d"
+        },
+        {
+          "path": ".temp/goal/check/run-01IoP7/output.log",
+          "sha256": "e14c257199d65f2ee04d0527c03f9492016711621d11e9cb4bd5822615fda1a7"
+        },
+        {
+          "path": ".temp/goal/check/run-01IoP7/guards-0.log",
+          "sha256": "d9ced3c97b00a3b6276e665548acea3a221d14abb188cc800b77ba658f0559e6"
+        },
+        {
+          "path": ".temp/goal/check/run-01IoP7/guards-0-retry-6.log",
+          "sha256": "cfd848bc26cd83fa88ed82df04da735e24cb3f7318b168553da8b47365a68d05"
+        },
+        {
+          "path": ".temp/goal/check/run-01IoP7/guards-0-retry-14.log",
+          "sha256": "bf6e0523710f183a43c58a9fbe7e8d3094d09a471df9ba89488a65ff7c34f24e"
+        },
+        {
+          "path": ".artifacts/qa/20261020t123825-1feb5a/acceptance.json",
+          "sha256": "ed0e2cac8bfdd1d1827a37535719c18b3baedff94e9a61c67465881bbefa3f31"
+        },
+        {
+          "path": ".artifacts/qa/20261020t123825-1feb5a/owner.xml",
+          "sha256": "7355f4eb81a595a07ec14c88c596b6b79833b3f76367e3c7c1903c312c20c8de"
+        },
+        {
+          "path": ".artifacts/qa/20261020t123825-1feb5a/logs/owner.log",
+          "sha256": "53e608632df9013a46d5b2dfbaaf780fd8a1709214038cfea5769757fa4d0067"
+        },
+        {
+          "path": ".artifacts/qa/20261020t124507-efdcc7/acceptance.json",
+          "sha256": "ab7037da29533174dcbb0dd503a44370fafa147172be6a0bc2e8ae996c6eb480"
+        },
+        {
+          "path": ".artifacts/qa/20261020t124507-efdcc7/owner.xml",
+          "sha256": "f7b169a63c228cb1bff14bece7b3997514c338cdb9e25a58d03d34c8a031307a"
+        },
+        {
+          "path": ".artifacts/qa/20261020t124507-efdcc7/logs/owner.log",
+          "sha256": "0df8c6f1bfd16868a5b0ab03b4c4ed56f6e0f35dda1b61014c554079fdaeb213"
+        }
+      ]
+    },
+    "preservedNegativeEvidence": [
+      {
+        "finding": "SOURCE-STRUCTURE-FENCE-1",
+        "reviewCommit": "f4338e449cdb9a94ab82f813a70753e76d0573e1",
+        "priorValuePreserved": true,
+        "details": "Original first-review verdict and failing outcome assertion, prior setup/source-loading failures, exact test source/SHA-256 and original 13-file review remain unchanged. The correction verdict supersedes only this finding at its three-file pin; it does not rewrite the first review as passing."
+      },
+      {
+        "job": "c3281f5a-6c96-4d39-9a24-aaa8f4f2c860",
+        "qa": "20261020t123541-b57bcc",
+        "result": "30 pass/6 fail; whole selection remains failed",
+        "cause": "Six original Structure cases reached unavailable results before the Source fixture answered the already published native current-target query. The mixed-path run also did not select the dot-directory counterexample. Later exact counterexample and all six unchanged Structure cases passed separately; no assertion was removed.",
+        "passingCorrectionReceipt": "56fbe6b9-7f8d-4861-b890-0ef3c49a63ae steps 1 and 2"
+      },
+      {
+        "job": "56fbe6b9-7f8d-4861-b890-0ef3c49a63ae",
+        "step": 3,
+        "result": "types/inference and selected guards failed",
+        "cause": "TS2769 in the new window fixture: certificate profile inferred as string. The immutable correction includes the literal annotation; later affected types/lint/AST/inference delta passed in ddce7a6e step 2. Preserve this earlier failure.",
+        "guardHistory": "access-fixture-writes and web-accepted-commands timeout guards passed their automatic 30s retries; web-continuations and web-page-filtering assertions remain failures on unchanged web/static inputs under G-2758."
+      },
+      {
+        "kind": "absolute-inference-integration-gate",
+        "details": "The later delta gate passes relative to base ccb4cc8f5bb0c7bc20793a52f9c961453768f2a1: Main 27,139,170 versus 27,163,414 (-24,244); web 38,808,962 versus 38,867,483; Eden 17,470,913 versus 19,054,964. The unchanged absolute Main limit 26,950,993.65 is still exceeded. Delta success does not make the absolute composed gate green."
+      },
+      {
+        "kind": "earlier-accepted-report-history",
+        "details": "All existing report values, accepted Source87/refusal, native/query/A19/library reports and original SQL2201B/CONV-REFUSAL-1 and other negative receipts remain preserved without re-review. The producer also recorded successful commit with automatic pack-refs housekeeping refused by the main-forward-only hook; no hook repair or main movement is claimed."
+      }
+    ],
+    "preservedReportFiles": [
+      {
+        "path": "docs/goals/audit-remediation-20261019/proofs/catalogue-A19-nutrition-absence-review.json",
+        "gitBlob": "f314de0649d2b20ff09a550c7a880b44950f6929",
+        "sha256": "62b8d0a00a19e82cb5bdaf2baae36ad5962d454a268316d1725940dc28e9bcc3"
+      },
+      {
+        "path": "docs/goals/audit-remediation-20261019/proofs/catalogue-conversion-library-review.json",
+        "gitBlob": "a5b1e8d3aad1b99e09456656bd6a8780e42376c9",
+        "sha256": "02c5d961af18f0fa43befcd49657bfb7c7a84537d5d72a0d891adffd52919826"
+      }
+    ],
+    "unexecutedLimits": [
+      "No new counterexample or remaining correction concern warranted an additional product test. Only report integrity/docs/affected report checks run in this review; producer tests are explicitly reused.",
+      "Controlled SQL/custody/native/rights/access ports and null Structure public evidence establish owner/session behavior only. The new QA leaves all 292 acceptance IDs uncovered; original A01/all113 and current installed public/native positives remain due.",
+      "No product edits, installs, services, runtime/browser/lease/corpus/import/restore/capture/account/shared-data work, landing or main/other-worktree writes were performed.",
+      "Manual citations and Source annotations remain independently usable without mandatory conversion IDs, converter proofs, captured bytes or reconversion. This correction adds no auto-conversion, mapping framework or owner API and revisits no citation research.",
+      "The verified-before-commit guarantee remains; no atomic cross-owner transaction or stronger current-head promise is inferred.",
+      "The accepted strict Map-based library namespace refusal must remain on composition. Parent library content and accepted library/A19/Source/native/query batches are outside this correction review.",
+      "Unchanged G-2758 web guards and the absolute inference baseline are independent of this Source verdict and remain gates on actual composed landing, along with normal integration checks. No original class closes."
+    ],
+    "reportValidation": {
+      "status": "passed",
+      "commands": [
+        "task --taskfile .temp/review/source-structure-fence/Taskfile.yml report-integrity",
+        "task docs:check",
+        "task goal -- check"
+      ],
+      "scope": "JSON/report preservation, documentation and affected report-only worker checks. No implementation suite rerun is authorized or required.",
+      "recordedSequence": "5d47ecc2-b2e8-4749-94d9-3c7d057698b6",
+      "results": [
+        {
+          "kind": "report-integrity",
+          "job": "5d47ecc2-b2e8-4749-94d9-3c7d057698b6",
+          "step": 1,
+          "command": "task --taskfile .temp/review/source-structure-fence/Taskfile.yml report-integrity",
+          "result": "passed",
+          "exitCode": 0,
+          "log": {
+            "path": ".temp/goal/jobs/5d47ecc2-b2e8-4749-94d9-3c7d057698b6.1.log",
+            "sha256": "fa01797bf47e2a5d088f165f606624ed53bbce5d55f0c1f9671afd4d74d62b46"
+          }
+        },
+        {
+          "kind": "report-documentation-check",
+          "job": "5d47ecc2-b2e8-4749-94d9-3c7d057698b6",
+          "step": 2,
+          "command": "task docs:check",
+          "result": "passed",
+          "exitCode": 0,
+          "log": {
+            "path": ".temp/goal/jobs/5d47ecc2-b2e8-4749-94d9-3c7d057698b6.2.log",
+            "sha256": "6856b67f7b662ef7ddfca2abb62abee136ae4e8871d21953cae9cf0e9fb3a0f3"
+          },
+          "markdownFiles": 259,
+          "checks": 13
+        },
+        {
+          "kind": "affected-report-worker-gate",
+          "job": "5d47ecc2-b2e8-4749-94d9-3c7d057698b6",
+          "step": 3,
+          "command": "task goal -- check",
+          "result": "passed",
+          "exitCode": 0,
+          "log": {
+            "path": ".temp/goal/jobs/5d47ecc2-b2e8-4749-94d9-3c7d057698b6.3.log",
+            "sha256": "eb92beea0d9b7bb41818bf554c8490f2ea2d3c07c851c91644590496b617c161"
+          },
+          "details": "AST and the 1/45 selected repository guards passed. Types: no TypeScript workspace changed; tests: no files named in brief; lint: no source file changed. The inherited path union mentions the accepted library report, whose bytes remain unchanged. This is an affected report-only gate, not product/integration qualification."
+        }
+      ],
+      "finalization": "Receipt metadata appended after the passing required sequence. A final Task report-integrity and docs:check sequence is required before commit and reported in the worker handoff. Only this correction-review key is appended; every prior value and failure is preserved."
+    },
+    "next": "Manager may compose this exact correction with the prior Source adapter under normal unchanged gates, preserving authored history, accepted reports and strict library refusal. The original installed/public and A01/all113 acceptance work remains open."
   }
 }
