@@ -3,6 +3,7 @@ import { Parser } from 'n3';
 import { canonicalRecipeQualifier, hydrateRecipeFacts, projectRecipeFacts, projectRecipeMeasures, recipeNumberTerm } from '../src/modules/recipe/fact-projection.ts';
 import { GRAPHS, RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import type { PlacementState } from '../src/modules/structure/graph.ts';
+import { InvalidStructureObject, type RecipeMeasure } from '../src/modules/structure/format.ts';
 
 const id = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
 const state: PlacementState = { placement: id, occurrence: id, active: true, parent: id,
@@ -58,4 +59,23 @@ test('exact revision measures use Recipe, Duration and nutrition terms with expl
   expect(triples.filter(q => q.predicate.value === `${RV}basis`)).toHaveLength(6);
   expect(triples.some(q => q.object.value === `${RV}RecipeMeasure`)).toBe(false);
   expect(GRAPHS.revisions).toBeDefined();
+});
+
+test('measure RDF preserves absolute reference identities and rejects terms that could escape an IRI', () => {
+  const measure: RecipeMeasure = { kind: 'nutrient', value: { numerator: 1, denominator: 3 },
+    nutrient: 'urn:recipe:nutrient/energy?panel=1#row', unit: 'qudt:KiloCAL', basis: 'per-serving',
+    coverage: 'unknown', provenance: 'source-stated', evidence: 'doi:10.1000/182' };
+  for (const evidence of ['doi:10.1000/182', 'mailto:author@example.test',
+    'tag:example.test,2026:panel/é?part=2#row', 'https://example.test/panel%20one#row']) {
+    const triples = quads(projectRecipeMeasures([{ ...measure, evidence }], id, id));
+    for (const [predicate, value] of [['http://www.w3.org/ns/prov#wasDerivedFrom', evidence],
+      ['https://schema.org/unitCode', measure.unit], ['https://schema.org/propertyID', measure.nutrient]]) {
+      expect(triples.filter(q => q.predicate.value === predicate).map(q => ({ kind: q.object.termType, value: q.object.value })))
+        .toEqual([{ kind: 'NamedNode', value }]);
+    }
+  }
+  for (const evidence of ['relative', 'doi:10.1000/182>', 'doi:10.1000/"182',
+    'doi:10.1000/\\u003e', 'doi:10.1000/\u0000', 'doi:10.1000/%ZZ', 'doi:10.1000/\ud800']) {
+    expect(() => projectRecipeMeasures([{ ...measure, evidence }], id, id)).toThrow(InvalidStructureObject);
+  }
 });

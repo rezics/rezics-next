@@ -15,12 +15,22 @@ const RDF = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
 type Qualifier = NonNullable<OccurrenceRecord['qualifier']>;
 type Rational = { numerator: number; denominator: number };
 
-/** Facts include standard vocabulary and unit IRIs, beyond native resource identities. */
+/** Preserve absolute reference IRIs without admitting RDF delimiters or escape sequences. */
 function iri(value: string): string {
-  if (!/^(?:https?:\/\/[^\s<>"{}|\\^`]+|urn:[A-Za-z0-9][A-Za-z0-9:._-]*)$/.test(value)) {
+  if (!/^[a-z][a-z0-9+.-]*:[^\s<>"{}|\\^`\p{Cc}\p{Cs}]+$/u.test(value)
+    || /%(?![a-fA-F0-9]{2})/.test(value)) {
     throw new InvalidStructureObject('Recipe fact contains an invalid RDF IRI');
   }
   return `<${value}>`;
+}
+
+/** Public measure writers check the same RDF references before registering an admission. */
+export function checkRecipeMeasureReferences(measures: readonly RecipeMeasure[]): void {
+  for (const measure of measures) {
+    for (const reference of [measure.nutrient, measure.unit, measure.evidence]) {
+      if (reference !== undefined) iri(reference);
+    }
+  }
 }
 
 export function recipeFactId(placement: string): string {
@@ -177,6 +187,7 @@ export async function recipeFactValidations(env: WorkActivationEnvironment, stat
 
 /** An immutable fact snapshot belongs to the exact Structure revision, never a moving draft Work. */
 export function projectRecipeMeasures(measures: readonly RecipeMeasure[], revision: string, owner: string): string {
+  checkRecipeMeasureReferences(measures);
   const id = `${revision}/recipe-facts`, nutrition = `${id}/nutrition`;
   const triples = [triple(revision, `${SCHEMA}about`, iri(id)), type(id, `${SCHEMA}Recipe`), marker(id),
     triple(id, `${PROV}specializationOf`, iri(owner))];

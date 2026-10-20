@@ -248,6 +248,76 @@ test('omission preserves native nutrients, explicit empty clears, and timing edi
   expect((await f.measures()).some(item => item.kind === 'preparation-duration')).toBe(true);
 });
 
+test('absolute citation IRIs finish one native command and retain exact rows through replay and both reads', async () => {
+  const f = await fixture(), key = randomUUID();
+  const row = { ...nutrients[0]!, nutrient: 'urn:recipe:nutrient/energy#panel', unit: 'qudt:KiloCAL',
+    evidence: 'doi:10.1000/182' };
+  const intent = f.body({ nutrients: [row, { ...row, evidence: 'tag:example.test,2026:panel/é?part=2#row' }] });
+  const response = await f.post(intent, key);
+  expect(response.status).toBe(200);
+  const written = await response.json();
+  expect(written.receipt).toMatch(/^urn:rezics:receipt:/);
+  expect(written.revision).toBe(f.state.head);
+  expect(f.state.admissions).toBe(1);
+  expect(f.state.dispatches).toBe(1);
+  expect(f.state.writes).toBe(1);
+  expect(f.receipts.size).toBe(1);
+  expect(f.versions.size).toBe(2);
+  const stored = await f.measures();
+  expect(stored.filter(item => item.kind === 'nutrient')).toEqual(intent.nutrients);
+  for (const path of [`/v1/recipes/${structure.slice(-36)}/measures`, `/v1/recipes/works/${work.slice(-36)}`]) {
+    const read = await f.get(`${path}?actingSubject=${actor}&revision=${written.revision}`);
+    expect(read.status).toBe(200);
+    expect((await read.json()).measures).toEqual(stored);
+  }
+  const replay = await f.post(intent, key);
+  expect(replay.status).toBe(200);
+  expect(await replay.json()).toMatchObject({ receipt: written.receipt, revision: written.revision, replayed: true });
+  expect(f.state.admissions).toBe(1);
+  expect(f.state.dispatches).toBe(1);
+  expect(f.state.writes).toBe(1);
+  expect(f.receipts.size).toBe(1);
+  expect(f.versions.size).toBe(2);
+});
+
+test('unsafe RDF references refuse before admission and leave the request key available for valid input', async () => {
+  const f = await fixture(), key = randomUUID();
+  for (const field of ['nutrient', 'unit', 'evidence'] as const) {
+    for (const reference of ['doi:10.1000/182>', 'doi:10.1000/"182', 'doi:10.1000/{182}',
+      'doi:10.1000/\\u003e', 'doi:10.1000/\u0000', 'doi:10.1000/%ZZ', 'doi:10.1000/\ud800']) {
+      const response = await f.post(f.body({ nutrients: [{ ...nutrients[0], [field]: reference }] }), key);
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ code: 'invalid_recipe_change' });
+      expect(f.state.admissions).toBe(0);
+      expect(f.state.dispatches).toBe(0);
+      expect(f.state.writes).toBe(0);
+      expect(f.state.head).toBe(initialHead);
+      expect(f.receipts.size).toBe(0);
+      expect(f.versions.size).toBe(1);
+    }
+  }
+  expect((await f.post(f.body({ nutrients: [{ ...nutrients[0], evidence: 'doi:10.1000/182' }] }), key)).status).toBe(200);
+  expect(f.state.admissions).toBe(1);
+  expect(f.state.writes).toBe(1);
+});
+
+test('yield and timing reference refusals also happen before admission', async () => {
+  const f = await fixture();
+  for (const unit of ['doi:10.1000/182>', 'doi:10.1000/\\u003e']) {
+    for (const response of [await f.post(f.body({ yield: { ...yieldInput, unit } })),
+      await f.post({ expectedHead: initialHead, actingSubject: actor,
+        cooking: { ...yieldInput, unit } }, randomUUID(), 'timings')]) {
+      expect(response.status).toBe(422);
+      expect(f.state.admissions).toBe(0);
+      expect(f.state.dispatches).toBe(0);
+      expect(f.state.writes).toBe(0);
+      expect(f.state.head).toBe(initialHead);
+      expect(f.receipts.size).toBe(0);
+      expect(f.versions.size).toBe(1);
+    }
+  }
+});
+
 test('existing calculation requests and the explicit calculator retain exact aggregation and truthful coverage', async () => {
   const f = await fixture();
   expect((await f.post(f.body({ nutrients }))).status).toBe(200);

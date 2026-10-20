@@ -15,8 +15,9 @@ import { CompositionCorrupt, CompositionUnavailable, NATIVE_ID, readCompositionH
 import { readCompositionPage, readStructureMeasures, selectWorkCompositionRevision } from '../modules/structure/read.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable }
   from '../modules/structure/tree.ts';
-import { ingredientTextParts, RecipeMeasure, STRUCTURE_LIMITS, OccurrenceRecord }
+import { ingredientTextParts, InvalidStructureObject, RecipeMeasure, STRUCTURE_LIMITS, OccurrenceRecord }
   from '../modules/structure/format.ts';
+import { checkRecipeMeasureReferences } from '../modules/recipe/fact-projection.ts';
 import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { AdmissionDenied, type VerifiedPrincipal } from '../modules/access/admission.ts';
 import { DisclosureUnavailable } from '../modules/disclosure/read.ts';
@@ -214,6 +215,14 @@ function key(request: Request): string | null {
 }
 
 class RecipeImportPending extends Error {}
+
+function checkMeasureReferences(measures: readonly RecipeMeasure[]): void {
+  try { checkRecipeMeasureReferences(measures); }
+  catch (error) {
+    if (error instanceof InvalidStructureObject) throw new InvalidCompositionChange(error.message);
+    throw error;
+  }
+}
 
 function routeError(error: unknown): Response {
   if (error instanceof RecipeImportPending) {
@@ -521,6 +530,7 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         if (measures.length > STRUCTURE_LIMITS.measures) {
           return problem(400, 'invalid_recipe_measure', 'Recipe has too many distinct measures');
         }
+        checkMeasureReferences(measures);
         const result = await changeAdmittedStructureMeasures(work.environment, work.account, work.access,
           request, { structure, expectedHead: body.expectedHead,
             actingSubject: body.actingSubject, idempotencyKey, measures });
@@ -562,6 +572,7 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         if (measures.length > STRUCTURE_LIMITS.measures) {
           return problem(400, 'invalid_recipe_measure', 'Recipe has too many distinct measures');
         }
+        checkMeasureReferences(measures);
         const result = await changeAdmittedStructureMeasures(work.environment, work.account, work.access,
           request, { structure, expectedHead: body.expectedHead,
             actingSubject: body.actingSubject, idempotencyKey, measures });
