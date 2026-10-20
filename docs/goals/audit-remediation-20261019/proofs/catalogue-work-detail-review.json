@@ -15060,6 +15060,434 @@
       "otherWorktrees": "Read-only source/evidence access. Isolated source/dependency setup and artifacts were confined to this worker .temp.",
       "reportOnlyTrackedChange": "docs/goals/audit-remediation-20261019/proofs/catalogue-work-detail-review.json"
     },
-    "managerNext": "Consume this correction-only source approval once, preserving current Main report summaries/custody through normal Task reconciliation. Treat the owner component receipts as qualified dirty-composition evidence, and both reviewer attempts as setup failures. The one missing immutable dependency installation is for the same filtered component proof only. SITE/root retains the inherited frame disposition; G-2774 retains original completed-RSC/native-attempt proof after separately authorized compatible composition. No class closure or candidate landing by this reviewer."
+    "managerNext": "Consume this correction-only source approval once, preserving current Main report summaries/custody through normal Task reconciliation. Treat the owner component receipts as qualified dirty-composition evidence, and both reviewer attempts as setup failures. The one missing immutable dependency installation is for the same filtered component proof only. SITE/root retains the inherited frame disposition; G-2774 retains original completed-RSC/native-attempt proof after separately authorized compatible composition. No class closure or candidate landing by this reviewer.",
+    "independentFilteredComponentProof": {
+      "observedAt": "2026-10-20T15:28:54.892459+00:00",
+      "authority": {
+        "decision": "2026-10-20T15:20:56Z",
+        "scope": "Append-only production-component proof. Accepted source verdict is not repeated. No original outcome, product source, runtime or shared-frame disposition change."
+      },
+      "reviewer": {
+        "worker": "G-2841",
+        "account": "codex-1",
+        "model": "GPT-6.1 Sol",
+        "effort": "xhigh",
+        "independentFromAuthor": "G-2757 / codex-2 / max",
+        "fallbackUsed": false,
+        "nestedAgents": false
+      },
+      "result": "PASS_EXACT_FILTERED_PRODUCTION_COMPONENT_INTERACTIONS",
+      "priorValuesAreHistoricalSnapshots": "All pre-existing verdict, limitations, missing-input description and managerNext values remain verbatim as historical source-review snapshots. This new proof records the later supplied dependency input and successful execution; it does not rewrite history.",
+      "sourceVerdictReopened": false,
+      "originalClassClosed": false,
+      "pins": {
+        "candidate": "368baa7a7eddfef22b4647c32d83884715f08321",
+        "base": "e2995bcd839f886c2420c924e9d6a0020ce71d89",
+        "reportBase": "82a38aabd52e6195422a5fee56675c1429c45cf5",
+        "isolatedCandidate": ".temp/catalogue-work-review/recipe-transport-correction/candidate-run",
+        "trackedCandidateStatusBeforeAndAfter": "clean",
+        "changedFiles": [
+          {
+            "path": "apps/web/features/work-page/recipe-reading-recorded-page.ts",
+            "blob": "0744c1ec32a82825d67eeffd1f2167777e9c03e4",
+            "sha256": "4447d7ef2f9f8a1572326b10979ebee62eb673719620f6f7372d4b7ce5475598"
+          },
+          {
+            "path": "apps/web/features/work-page/recipe-reading-recorded-page.test.ts",
+            "blob": "0e7d761f3d0e6c5162319297dd3c46011dcdaf35",
+            "sha256": "e646f3ade22c80035112d7f198421ab160df2ca203f3590ceaa714239a66a57c"
+          },
+          {
+            "path": "apps/web/features/work-page/recipe-recovery.stories.tsx",
+            "blob": "9a2398965cd0ba5868a1ddd13d154e1295f19496",
+            "sha256": "258500a4a5d5b44c8cc83ef3f54201ec54ccde9c52123667224a296dc9ce8a08"
+          }
+        ],
+        "materialDependencyBindings": [
+          {
+            "path": "apps/web/features/api/browser.ts",
+            "blob": "5b8c2d862068a9152b77de410bfefb247f047112",
+            "sha256": "9dcb73313b2edb43fe8dfeddefe14301c00e5054b7fba5d1e081a546e92aac01"
+          },
+          {
+            "path": "apps/web/features/api/main.ts",
+            "blob": "32a5c7d149b4052d1cbb17d48d6db7972a69430e",
+            "sha256": "ef54b96effed0c784f0b8483787e27e16c7bdad554e732f5ee763268e587c170"
+          },
+          {
+            "path": "apps/web/features/api/server-fetch.ts",
+            "blob": "5dc162e45643cf34d789e24c56af204ac1d95b93",
+            "sha256": "9de290653ae8f200a6799ed1864870da2fda0ec632994d1aa402b9f60db5a8ef"
+          },
+          {
+            "path": "apps/web/features/work-page/recipe-reading-recorded-page.tsx",
+            "blob": "a218056c0d80098968969453988c76bde833087e",
+            "sha256": "c398545da8f50ffc493a4dc8b7536fd9d536b207397f37326650ae5d989e27dd"
+          },
+          {
+            "path": "apps/web/features/work-page/work-frame.tsx",
+            "blob": "e37a1cc6e224d42825cabf6a6b670c0b7a851879",
+            "sha256": "7564b24a3c5bd526234af1303f375b51f737f669bbd23d97a76c74bedf5552fd"
+          },
+          {
+            "path": "apps/web/features/work-page/types/recipe.tsx",
+            "blob": "093137939ab3ff24b2b7d84a4be4bd4804bb487f",
+            "sha256": "104aea0e2ccf65c19026872ad6c2dbe2f6283e3ab9a8c0aa0d42693d143cc097"
+          },
+          {
+            "path": "apps/web/features/work-page/types/actions.tsx",
+            "blob": "28de595a8b64092721295f00fdaac9a37566f72c",
+            "sha256": "fed931416455739e84d5d467f65ae9923d0d0febecd06e5d2d7c11d4ef15f73e"
+          },
+          {
+            "path": "apps/web/features/work-page/work-views.tsx",
+            "blob": "cd1e3094b6f005ed54daf30857e7068e50c693fd",
+            "sha256": "1e65dd739a5247d8961824c262aa0fd880d8839d0323982afeb5da3c50481092"
+          },
+          {
+            "path": "apps/web/features/work-page/retry-button.tsx",
+            "blob": "fdce17cfa966a582ded3179753f2b5a546b36174",
+            "sha256": "fa3ccf6b30c00d924caf78b4401aa902b80262bf2ac0f206c325363f4378006e"
+          },
+          {
+            "path": "apps/web/features/recipe-editor/instructions.ts",
+            "blob": "206eaf6f163ad30a478988c57608e6228cb892f5",
+            "sha256": "0d3dbb42e69a7dd28889600a6ced41ac5e6516fe4a28dc67ffa96d265e2995de"
+          },
+          {
+            "path": "apps/web/features/recipe-editor/instruction-recorded-fixture.ts",
+            "blob": "35478b2b83dccc6aac9695bc11a6ca518ad095f5",
+            "sha256": "9a19f9b4b206d902e6ff6dc9ee8cc07f5336d5c41554621caa17b0a63b51ae5a"
+          },
+          {
+            "path": "tests/qa/fixtures/outcomes/recipes/read-a-recipe.json",
+            "blob": "11d2a4aa4db81ed1d2fde2f7b89497b834caa8c0",
+            "sha256": "cf1f7464f1072741d5178dcd5c88978c28bd9e4c5a89e217562d2946fb095893"
+          },
+          {
+            "path": "tests/qa/fixtures/outcomes/recipes/instructions-in-any-form.json",
+            "blob": "2f2e3cc46a6f4c4d1409863bc636627f8b7e59ea",
+            "sha256": "4cc931bc1ceff0f764642b2ee5c135dabb6c01469a47fa3f985b8cedeb338930"
+          },
+          {
+            "path": "tests/fixtures/recipes/original-tomato-method.wav",
+            "blob": "7aa50e47f53680fc0b0bf480c9b3693582b1f378",
+            "sha256": "9c611d37e4fad860192b9e2ad1b2627a1e56746b5b003d6fb056271f276d6ead"
+          },
+          {
+            "path": "yarn.lock",
+            "blob": "e70dcbe4159d3fcab2585962a1cf3688937eb0e5",
+            "sha256": "026c93ddc3085e43b1ff6727a42f7c55b03a03cc1aa4c11cbf57438ce5b9d391"
+          }
+        ],
+        "dependencyBinding": "All 15 previously listed committed dependency blobs match the clean candidate, including the original Recipe region and WorkFrame. No inherited dirty owner proposal was substituted. Verification compares hashes only; no source rereview.",
+        "yarnLockSha256": "026c93ddc3085e43b1ff6727a42f7c55b03a03cc1aa4c11cbf57438ce5b9d391",
+        "installationStatePresent": true
+      },
+      "suppliedInputResolution": {
+        "input": "The existing normal-cache installed dependency tree rooted in candidate-run.",
+        "previousInputKey": "oneMissingInputForIndependentComponentProof",
+        "resolved": true,
+        "evidence": "Exact candidate/three source hashes, lock hash, clean tracked tree, installed Yarn state and successful addon-vitest interaction execution. No YARN_GLOBAL_FOLDER/YARN_CACHE_FOLDER override or install retry.",
+        "existingOwner": "Goal manager / existing Task dependency setup ownership"
+      },
+      "execution": {
+        "recordedJob": "e55e80c0-16fb-4f57-b66a-748718fa8bbc",
+        "recordedFromWorkerWorktree": true,
+        "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- /bin/sh -c 'cd .temp/catalogue-work-review/recipe-transport-correction/candidate-run && task goal -- test apps/web/features/work-page/recipe-recovery.stories.tsx -t \"Network|Refused\"'",
+        "componentCommand": "task goal -- test apps/web/features/work-page/recipe-recovery.stories.tsx -t \"Network|Refused\"",
+        "exit": 0,
+        "qa": "20261020t152500-36194c",
+        "assertionsReached": true,
+        "filesPassed": 1,
+        "testsPassed": 2,
+        "testsSkipped": 3,
+        "runDurationSeconds": 15.52,
+        "log": ".temp/goal/jobs/e55e80c0-16fb-4f57-b66a-748718fa8bbc.log",
+        "logSha256": "85c3a951133411d17a0459c4faab42e5ee3364e011066b76210fbc80ce8143eb",
+        "summary": ".temp/catalogue-work-review/recipe-transport-correction/candidate-run/.artifacts/qa/20261020t152500-36194c/summary.md",
+        "summarySha256": "a3accbbfb6a4a566df8f5d69355ff5d491a5709a85221f6e7d43dca1d442bc07",
+        "stories": [
+          "NetworkRetryBounded",
+          "RefusedRetryThenRecovery"
+        ],
+        "skipped": "The three already accepted method stories were filtered out. The clean candidate contains five stories; the dirty owner composition contained seven. No claim for the two inherited frame proposal stories.",
+        "nonfatalDiagnostics": [
+          "Vite native config-loader future-compatibility warnings.",
+          "Failed to resolve @storybook/react-dom-shim optimizeDeps diagnostic; both selected interactions nevertheless reached their assertions and passed."
+        ],
+        "admissionCorrection": {
+          "initialInvocation": "Recording directly from nested candidate-run was rejected before a job or test started: job must run in its worker worktree with GOAL_TASK_ID.",
+          "resolution": "Record from G-2841 root and execute the unchanged Task command in candidate-run via /bin/sh -c.",
+          "classification": "Job ownership invocation error before test input; not a product assertion failure or another dependency setup attempt."
+        }
+      },
+      "screenshotsActuallyViewed": [
+        {
+          "story": "NetworkRetryBounded",
+          "path": ".temp/catalogue-work-review/recipe-transport-correction/candidate-run/.artifacts/qa/20261020t152500-36194c/story-screenshots/apps-web-features-work-page-recipe-recovery.stories.tsx/NetworkRetryBounded.png",
+          "sha256": "6982e7aa9f8f56c0e00b446426f31e565949fcd1cfd40cab92368f86b85cd8e6",
+          "bytes": 74778,
+          "width": 1280,
+          "height": 860,
+          "actuallyViewed": true,
+          "state": "Recovered method; Cook focused after closing the real Cook dialog with Escape."
+        },
+        {
+          "story": "RefusedRetryThenRecovery",
+          "path": ".temp/catalogue-work-review/recipe-transport-correction/candidate-run/.artifacts/qa/20261020t152500-36194c/story-screenshots/apps-web-features-work-page-recipe-recovery.stories.tsx/RefusedRetryThenRecovery.png",
+          "sha256": "6982e7aa9f8f56c0e00b446426f31e565949fcd1cfd40cab92368f86b85cd8e6",
+          "bytes": 74778,
+          "width": 1280,
+          "height": 860,
+          "actuallyViewed": true,
+          "state": "Recovered method; Cook focused after closing the real Cook dialog with Escape."
+        }
+      ],
+      "visualObservations": {
+        "scope": "Two actual final-state 1280x860 desktop English captures; no new phone or locale matrix.",
+        "observed": "Readable recovered tomato instruction beside ingredients; the title, cover and Want to cook remain visible. Cook is enabled with a clear focus ring after dialog close. No overlap or horizontal clipping is visible in the captured area; both stories also assert document width <= viewport + 1.",
+        "matchingImages": "The two separately captured final states have identical bytes; their preceding interaction traces differ.",
+        "limits": "Final captures do not independently depict the transient refusal or open dialog; passing interaction assertions cover those states. No separate screen-reader or quantified a11y result is claimed."
+      },
+      "componentCriteriaSatisfied": {
+        "NetworkRetryBounded": [
+          "Real method error alert, Retry enabled and Cook disabled after two injected connection losses.",
+          "Explicit Retry renders captured method, removes alert, keeps title and Want to cook DOM nodes, enables Cook.",
+          "Exactly three controlled sender calls total and one distinct request pathname/query.",
+          "Actual Cook dialog includes Stir content; Escape closes and Cook regains focus; no replay miss or horizontal overflow."
+        ],
+        "RefusedRetryThenRecovery": [
+          "Initial received 503 remains a truthful method failure; first explicit Retry also refuses with Cook disabled and Retry focused.",
+          "Title and Want to cook DOM nodes persist through refusal and subsequent recovery.",
+          "Next explicit Retry renders captured method and enables Cook; exactly three controlled sender calls and one distinct request pathname/query.",
+          "Same real Cook dialog open/close, method content, focus-return and overflow assertions pass."
+        ]
+      },
+      "originalOutcomeEvidenceMap": {
+        "callbackSha256": "17989f3e7941a56341c979670e02741de12c064664af7fc15ec849957a95321e",
+        "assertionCount": 18,
+        "deadlineMs": 5000,
+        "atMostFailedNativeAttempts": 3,
+        "originalAssertionsModified": false,
+        "fourHistoricalCellFailuresPreserved": true,
+        "originalFourCellRerun": false,
+        "capturedComponentSubject": "https://rezics.com/id/01a13d60-adfd-761b-bb89-f633331319c8; Original tomato adoption slice; captured method is a Stir instruction, not the retained catalogue method.",
+        "retainedOriginalSubject": {
+          "id": "https://rezics.com/id/01a1532a-2e60-7260-9f3a-d6aa69f61c4b",
+          "href": "/en/w/01a1532a-2e60-7260-9f3a-d6aa69f61c4b",
+          "title": "21. Minestra di passatelli di carne",
+          "semanticType": "https://schema.org/Recipe"
+        },
+        "assertions": [
+          {
+            "number": 1,
+            "originalAssertion": "expect(route.request().method(), 'fault injection applies only to reads').toBe('GET')",
+            "retainedOriginalResultAllFourCells": "passed",
+            "componentResult": "CONTROLLED_GET_COUNTERPART",
+            "observedEvidenceAndLimit": "Production browser client uses the captured Recipe endpoint; no genuine native relay was exercised.",
+            "originalFourCellResultChanged": false
+          },
+          {
+            "number": 2,
+            "originalAssertion": "expect(region.getByRole('alert')).toContainText(fault.unavailableText)",
+            "retainedOriginalResultAllFourCells": "passed",
+            "componentResult": "PASS_COMPONENT_UI",
+            "observedEvidenceAndLimit": "Both selected stories assert the real method failure alert before Retry; the refusal story repeats it after the refused Retry.",
+            "originalFourCellResultChanged": false
+          },
+          {
+            "number": 3,
+            "originalAssertion": "expect(aborted, 'the actual failing API read must be observed; SSR-only faults need an owner-provided fault seam').toBeGreaterThan(0)",
+            "retainedOriginalResultAllFourCells": "passed",
+            "componentResult": "CONTROLLED_CLIENT_COUNTERPART",
+            "observedEvidenceAndLimit": "Actual production-client fetch calls are counted through injected transport; not original native/RSC observations.",
+            "originalFourCellResultChanged": false
+          },
+          {
+            "number": 4,
+            "originalAssertion": "expect(header(page)).toHaveAttribute('data-resource', fault.subject.id)",
+            "retainedOriginalResultAllFourCells": "passed",
+            "componentResult": "SOURCE_BOUND_IDENTITY_ONLY",
+            "observedEvidenceAndLimit": "The supplied captured Work/projection is used; exact original data-resource attribute is not asserted by these interactions.",
+            "originalFourCellResultChanged": false
+          },
+          {
+            "number": 5,
+            "originalAssertion": "expect(header(page)).toHaveAttribute('data-semantic-type', fault.subject.semanticType)",
+            "retainedOriginalResultAllFourCells": "passed",
+            "componentResult": "SOURCE_BOUND_TYPE_ONLY",
+            "observedEvidenceAndLimit": "The captured Recipe projection supplies the type; exact original semantic-type attribute is not newly asserted.",
+            "originalFourCellResultChanged": false
+          },
+          {
+            "number": 6,
+            "originalAssertion": "expect(header(page).getByRole('heading', { level: 1 })).toHaveText(fault.subject.title)",
+            "retainedOriginalResultAllFourCells": "passed",
+            "componentResult": "PASS_COMPONENT_UI_COUNTERPART",
+            "observedEvidenceAndLimit": "The same captured heading DOM node persists through recovery and the additional refusal; the original catalogue title is a different subject.",
+            "originalFourCellResultChanged": false
+          },
+          {
+            "number": 7,
+            "originalAssertion": "expect(region).not.toContainText(/Not found|Unnamed|No ingredients|No chapters/i)",
+            "retainedOriginalResultAllFourCells": "passed",
+            "componentResult": "PASS_COMPONENT_UI",
+            "observedEvidenceAndLimit": "Failure rejects an unstructured/no-method replacement, and recovery renders the captured Stir method without a replay-miss marker.",
+            "originalFourCellResultChanged": false
+          },
+          {
+            "number": 8,
+            "originalAssertion": "expect(retry).toBeEnabled()",
+            "retainedOriginalResultAllFourCells": "passed",
+            "componentResult": "PASS_COMPONENT_UI",
+            "observedEvidenceAndLimit": "Enabled Retry is clicked in both stories; refusal exercises another explicit Retry.",
+            "originalFourCellResultChanged": false
+          },
+          {
+            "number": 9,
+            "originalAssertion": "expect(header(page).getByRole('button', { name: 'Cook', exact: true })).toBeDisabled()",
+            "retainedOriginalResultAllFourCells": "passed",
+            "componentResult": "PASS_COMPONENT_UI",
+            "observedEvidenceAndLimit": "Cook is disabled during method failure, including after a refused Retry.",
+            "originalFourCellResultChanged": false
+          },
+          {
+            "number": 10,
+            "originalAssertion": "expect(page.getByRole('button', { name: /Want to read/ })).toHaveCount(0)",
+            "retainedOriginalResultAllFourCells": "passed",
+            "componentResult": "PASS_COMPONENT_UI",
+            "observedEvidenceAndLimit": "No Want to read is rendered; the Want to cook DOM node remains stable through refusal/recovery.",
+            "originalFourCellResultChanged": false
+          },
+          {
+            "number": 11,
+            "originalAssertion": "expect(region).toContainText(fault.recoveredText)",
+            "retainedOriginalResultAllFourCells": "failed",
+            "componentResult": "PASS_CAPTURED_COMPONENT_COUNTERPART_ORIGINAL_OPEN",
+            "observedEvidenceAndLimit": "Stir content becomes visible after Retry in both stories. These do not render the exact original Italian method through a completed RSC response or measure its unchanged 5000ms deadline.",
+            "originalFourCellResultChanged": false
+          },
+          {
+            "number": 12,
+            "originalAssertion": "expect(region.getByRole('alert')).toHaveCount(0)",
+            "retainedOriginalResultAllFourCells": "not-reached",
+            "componentResult": "PASS_COMPONENT_UI",
+            "observedEvidenceAndLimit": "Both stories assert that the method failure alert is removed after captured recovery.",
+            "originalFourCellResultChanged": false
+          },
+          {
+            "number": 13,
+            "originalAssertion": "expect(recovered).toBeGreaterThan(0)",
+            "retainedOriginalResultAllFourCells": "not-reached",
+            "componentResult": "CAPTURED_READ_ONLY_ORIGINAL_OPEN",
+            "observedEvidenceAndLimit": "The captured method read succeeds; no new genuine native API bytes or completed recovered RSC body were obtained.",
+            "originalFourCellResultChanged": false
+          },
+          {
+            "number": 14,
+            "originalAssertion": "expect(aborted, 'automatic retries remain bounded').toBeLessThanOrEqual(3)",
+            "retainedOriginalResultAllFourCells": "not-reached",
+            "componentResult": "PASS_CONTROLLED_TRACES_ORIGINAL_OPEN",
+            "observedEvidenceAndLimit": "Network observes two failed sender calls before Retry and three total afterward. Refusal observes one initial, one refused explicit Retry, and a third successful call. These are bounded captured traces, not an original native-attempt observation or a universal mixed-fault guarantee.",
+            "originalFourCellResultChanged": false
+          },
+          {
+            "number": 15,
+            "originalAssertion": "expect(header(page)).toHaveAttribute('data-resource', fault.subject.id)",
+            "retainedOriginalResultAllFourCells": "not-reached",
+            "componentResult": "PASS_COMPONENT_STABILITY_COUNTERPART",
+            "observedEvidenceAndLimit": "Captured title and Want to cook nodes persist; the exact original post-recovery Work marker is not asserted.",
+            "originalFourCellResultChanged": false
+          },
+          {
+            "number": 16,
+            "originalAssertion": "expect(header(page)).toHaveAttribute('data-semantic-type', fault.subject.semanticType)",
+            "retainedOriginalResultAllFourCells": "not-reached",
+            "componentResult": "SOURCE_BOUND_TYPE_ONLY",
+            "observedEvidenceAndLimit": "No exact post-recovery semantic-type DOM assertion is added; the original remains unproved.",
+            "originalFourCellResultChanged": false
+          },
+          {
+            "number": 17,
+            "originalAssertion": "expect(cook).toBeEnabled()",
+            "retainedOriginalResultAllFourCells": "not-reached",
+            "componentResult": "PASS_COMPONENT_UI",
+            "observedEvidenceAndLimit": "Cook becomes enabled after the captured method is rendered.",
+            "originalFourCellResultChanged": false
+          },
+          {
+            "number": 18,
+            "originalAssertion": "expect(page.getByRole('dialog', { name: 'Cook', exact: true })).toContainText(corpus.recipe.steps[0]!.text)",
+            "retainedOriginalResultAllFourCells": "not-reached",
+            "componentResult": "PASS_COMPONENT_UI_COUNTERPART",
+            "observedEvidenceAndLimit": "Both stories open the real Cook dialog and find Stir content; Escape closes it and returns focus to Cook. The exact original catalogue instruction/dialog remains unproved.",
+            "originalFourCellResultChanged": false
+          }
+        ],
+        "evidenceClasses": {
+          "retainedApiBytes": "Existing original Work GET and Recipe GET receipts are unchanged; no API call/requalification in this continuation.",
+          "controlledClientTests": "Previously accepted 25 tests/421 assertions remain reused; they were not rerun or relabelled as native observations.",
+          "productionComponentInteractions": "This new exact clean-candidate two-story run plus actual screenshots establishes the UI criteria explicitly listed above for the captured visitor Work.",
+          "originalRscNativeOutcomes": "All four original exact-method assertions remain failed historically. Original assertions 12-18 remain unreached; the retained phone-unavailable native 200 alone does not prove completed RSC delivery/rendering. Native attempts <=3 for the original cells remain unproved."
+        },
+        "remainingOriginalProof": "A completed method-bearing recovered RSC response plus observed exact original Work/selection UI within 5000ms, real post-recovery Cook state/dialog and actual native failed-attempt count <=3 remain unproved. A retained phone-unavailable native 200 and successful RSC response headers with unfinished body do not close those requirements. Healthy-before-fault 503 and outer WorkFrame auxiliary gating stay separate historical limits; no completed-payload UI defect is inferred."
+      },
+      "ownerDependenciesUnchanged": [
+        {
+          "owner": "SITE/root normal Task reconciliation",
+          "item": "Disposition of inherited shared WorkFrame optional-slot/WorkIdentity source and corresponding Recipe auxiliary proposal; no loan substituted or owner dispatched here. This is distinct from the missing install input and is not indispensable to the two focused candidate stories."
+        },
+        {
+          "owner": "G-2757 / normal composed gates",
+          "item": "Any correction source fix remains with its author. Dirty readShowcase dropped-continuation guard remains failed and needs ordinary source/inventory disposition; no guard waiver or new global gate is introduced."
+        },
+        {
+          "owner": "G-2774 / manager separate finite runtime admission",
+          "item": "Unchanged original four-cell completed-RSC/native-attempt and Cook acceptance. No runtime/OAuth/API lease is borrowed by this review."
+        }
+      ],
+      "preservation": {
+        "reportBeforeSha256": "e757c950f69489c15313d0a0cb0ed23aaf2efbeebd5d06baccf306eb73d981bd",
+        "priorRootKeyCount": 40,
+        "allPriorValuesPreserved": true,
+        "bothHistoricalPreAssertionSetupFailuresPreserved": [
+          "db51ded5-8ff1-49cc-96e6-a5f0bf5e7acd",
+          "7361698b-15f0-49f0-92e1-b4a3ac380016"
+        ],
+        "sourceApprovalRetained": "19448acda65fdd8aa48c787c30e975c3bfb282e6",
+        "noProductChanges": true
+      },
+      "next": "Consume this bounded component pass once. SITE retains shared-frame disposition and normal composed gates; G-2774 retains the genuinely missing original RSC/native criteria under separate finite runtime admission. No class closure.",
+      "immutableProofReceipt": {
+        "path": ".temp/catalogue-work-review/recipe-transport-correction/component-proof/proof-receipt.json",
+        "sha256": "cf271fae533c0f8e17d371ce3eaaa03c842d0e53dea457eb72870fef40c79132",
+        "scope": "Immutable execution, binding, screenshot and assertion-map receipt. Report-only validation is appended separately after checks."
+      },
+      "reportValidation": {
+        "recordedJob": "d4585fd9-68d2-4e0d-958d-2199059cd3bd",
+        "exit": 0,
+        "result": "pass",
+        "steps": [
+          {
+            "command": "task docs:check",
+            "exit": 0,
+            "log": ".temp/goal/jobs/d4585fd9-68d2-4e0d-958d-2199059cd3bd.1.log",
+            "sha256": "86cb44260fc8ff7fa33cf250132d4dfffbec509b5c0e906133a32ae51e2b834d"
+          },
+          {
+            "command": "task goal -- check",
+            "exit": 0,
+            "log": ".temp/goal/jobs/d4585fd9-68d2-4e0d-958d-2199059cd3bd.2.log",
+            "sha256": "0ec6052d706d51576c5fe1c6d731f52dd62c51852fc1d67589e40366b781c2a2"
+          }
+        ],
+        "docs": "13 tests passed; 258 Markdown files checked for local links, fragments and design navigation. No external URL or runtime acceptance.",
+        "goalCheck": "AST and affected report guard passed (1/45 selected). Types/lint selected no product source; no tests were named in the brief. Task refreshed worker-root dependencies automatically; no tracked dependency file changed.",
+        "fullGoalCheckOutput": ".temp/goal/check/run-c29eU2/output.log",
+        "limits": "Report-only checks do not certify composed product gates, shared-frame proposals or original native/RSC outcomes. Only completion metadata was appended after passing checks.",
+        "historyPreservation": "Removing only independentFilteredComponentProof yields the exact prior parsed report, including every historical failure and current Main summary/custody value."
+      }
+    }
   }
 }
