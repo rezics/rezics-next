@@ -1,0 +1,319 @@
+{
+  "profile": "reply-image-origin-context-correction-v1",
+  "worker": "G-2748",
+  "goal": "audit-remediation-20261019",
+  "recordedAt": "2026-10-20T11:57:01.909046+00:00",
+  "scope": "Small consumer correction of the established immutable origin Realm mismatch; no historical Use403 attribution or original finding closure",
+  "pins": {
+    "diagnosis": "3a771978a30fdf53eaeeed8dae714193a11a9ce0",
+    "testsFirst": "d1d6d042a77a89287756292071cb1f0775bcf647",
+    "product": "714a38bcbc5e4d486cbb037fcc2cdbcf13053d14",
+    "currentMainActualBytes": "8c7c7853725f498379ce4ee21e0d61cb5dea4170",
+    "backendProduct": "76c5955006dbea2016e84465d8f3e79fdf4fc979",
+    "backendSupport": "d2f04140fe615eadef0379a52c26291e6e083217",
+    "acceptedConsumerReviews": [
+      "7d3e19b7d37ee7dfcd57d55dbe9bcdc07aaa5488",
+      "f610f1da0061bb7dda9b05552e715daf15a5411f"
+    ],
+    "acceptedSourceReports": [
+      "fa812c2e9df7",
+      "32d5e97f0d89"
+    ],
+    "retainedGenuineImageReport": "e1d976585c"
+  },
+  "change": {
+    "requiredInvariant": "Media Use context equals the immutable origin Realm sent by the acknowledged member-reply draft write",
+    "draftBasis": "ReplyImageDraft requires a non-null originRealm from the typed public DraftInput; preparePostImageDraft supplies record.intent.realm in its common fresh/reused/replayed acknowledged basis",
+    "sharedBinding": "imageUseTarget sends context: draft.originRealm for both storedImageUpload and imageUseReconciler",
+    "contextChange": "Existing sameImageDraftContext and composer fences remain intact: a different UI Realm or actor starts a separate draft, while returning to the saved draft reuses its saved basis",
+    "ordinaryWork": "The string target branch still returns only target; ordinary upload and copied-image reconciliation request bodies are unchanged",
+    "preserved": [
+      "acknowledged reply/variant/head/root identity",
+      "exact uncertain draft request and idempotency-key replay",
+      "device receipt before dispatch and truthful no-write/acknowledged/unknown states",
+      "current complete document and stable representation/Use/occurrence references",
+      "existing Media/Access contracts, grants, actors and fencing"
+    ],
+    "productionDelta": {
+      "files": 2,
+      "insertions": 5,
+      "deletions": 2
+    },
+    "testDelta": {
+      "files": 2,
+      "insertions": 37,
+      "deletions": 11
+    },
+    "sharedTypeOrFixtureDependency": "None outside the two existing owning tests and two product files",
+    "materialIntegrationChangeBeyondTheseHunks": "None; all nine actual current-main files match the worker base before the four-file delta"
+  },
+  "composition": {
+    "method": "Read actual main-checkout file bytes without writing there; compare to pinned main tree and worker base; retain SHA256 for each of the nine reviewed files",
+    "manifest": [
+      {
+        "path": "apps/web/features/document-editor/body-editor.tsx",
+        "currentMainSha256": "f2892be0a3d27b1b106ff5f5eec30aaf66726c8485f5e95038a3ecb94efc5bd1",
+        "currentMainMatchesPinnedTree": true,
+        "currentMainMatchesWorkerBase": true,
+        "productSha256": "f2892be0a3d27b1b106ff5f5eec30aaf66726c8485f5e95038a3ecb94efc5bd1",
+        "changed": false,
+        "unchangedPeerBytesPreserved": true
+      },
+      {
+        "path": "apps/web/features/document-editor/image-target.ts",
+        "currentMainSha256": "a668c9edea2bdd2c9632c9c92dea29c281a397e4580f100fad2b4e4b586a16b7",
+        "currentMainMatchesPinnedTree": true,
+        "currentMainMatchesWorkerBase": true,
+        "productSha256": "85dc4172713a28add79854dc86abcd4ab580301a824afdde222bc35eb5da95f9",
+        "changed": true,
+        "unchangedPeerBytesPreserved": true
+      },
+      {
+        "path": "apps/web/features/document-editor/image-uses.ts",
+        "currentMainSha256": "8ea7f122767522bc7a9a7dfe3fd82dacaeb2f52676a5f452de6730b9d87f288d",
+        "currentMainMatchesPinnedTree": true,
+        "currentMainMatchesWorkerBase": true,
+        "productSha256": "8ea7f122767522bc7a9a7dfe3fd82dacaeb2f52676a5f452de6730b9d87f288d",
+        "changed": false,
+        "unchangedPeerBytesPreserved": true
+      },
+      {
+        "path": "apps/web/features/document-editor/local-image.ts",
+        "currentMainSha256": "7c9e72bc5fbfc92b93825c9a21edc4aae5eea8e0c62171a6c8db9e6d533fa8d8",
+        "currentMainMatchesPinnedTree": true,
+        "currentMainMatchesWorkerBase": true,
+        "productSha256": "7c9e72bc5fbfc92b93825c9a21edc4aae5eea8e0c62171a6c8db9e6d533fa8d8",
+        "changed": false,
+        "unchangedPeerBytesPreserved": true
+      },
+      {
+        "path": "apps/web/features/document-editor/member-reply-images.test.ts",
+        "currentMainSha256": "96550aae909aa523e7b4f7c277e961d14f88cd399204b9e9025579f6610e5777",
+        "currentMainMatchesPinnedTree": true,
+        "currentMainMatchesWorkerBase": true,
+        "productSha256": "3e4d9bc0998af6f96a42b851ab7db6c72da510c5d6d104066247e2cf76c5c5c0",
+        "changed": true,
+        "unchangedPeerBytesPreserved": true
+      },
+      {
+        "path": "apps/web/features/post-composer/api.ts",
+        "currentMainSha256": "142beb054e1033390d874e940a7e1258c11944574ab1ce11bb152d8c0af0b1de",
+        "currentMainMatchesPinnedTree": true,
+        "currentMainMatchesWorkerBase": true,
+        "productSha256": "142beb054e1033390d874e940a7e1258c11944574ab1ce11bb152d8c0af0b1de",
+        "changed": false,
+        "unchangedPeerBytesPreserved": true
+      },
+      {
+        "path": "apps/web/features/post-composer/composer.tsx",
+        "currentMainSha256": "8e087e1bd308bf58eb808d4b5ebf099ba7055db28e2414665ab24444a00e2e95",
+        "currentMainMatchesPinnedTree": true,
+        "currentMainMatchesWorkerBase": true,
+        "productSha256": "8e087e1bd308bf58eb808d4b5ebf099ba7055db28e2414665ab24444a00e2e95",
+        "changed": false,
+        "unchangedPeerBytesPreserved": true
+      },
+      {
+        "path": "apps/web/features/post-composer/image-draft.test.ts",
+        "currentMainSha256": "381dfa8471788392afb41119eee02845d604e3af2b805d0778e0491c8a3664f3",
+        "currentMainMatchesPinnedTree": true,
+        "currentMainMatchesWorkerBase": true,
+        "productSha256": "0a484a324855ad6e09faa3b055fc40ddf22b63d815aa65bc667fa2f6eaaca779",
+        "changed": true,
+        "unchangedPeerBytesPreserved": true
+      },
+      {
+        "path": "apps/web/features/post-composer/image-draft.ts",
+        "currentMainSha256": "c72500e78933551aa0ee5b5210293901722acfc99a9fbadf5a8c7bae27e203e2",
+        "currentMainMatchesPinnedTree": true,
+        "currentMainMatchesWorkerBase": true,
+        "productSha256": "9a8c4159d467add6e17304d6ebbca81814474d3dbbcc05c02c12ef0c576f48c9",
+        "changed": true,
+        "unchangedPeerBytesPreserved": true
+      }
+    ],
+    "changedPaths": [
+      "apps/web/features/document-editor/image-target.ts",
+      "apps/web/features/document-editor/member-reply-images.test.ts",
+      "apps/web/features/post-composer/image-draft.test.ts",
+      "apps/web/features/post-composer/image-draft.ts"
+    ],
+    "patch": {
+      "path": ".temp/goal/reply-image-origin-context/current-main.patch",
+      "sha256": "29741f36827545131dc1ffc5693a87dc1dc36d58e7e7879a53936436f6f757a8",
+      "bytes": 11498,
+      "reproduceArgv": [
+        "git",
+        "diff",
+        "--binary",
+        "--full-index",
+        "3a771978a30fdf53eaeeed8dae714193a11a9ce0",
+        "714a38bcbc5e4d486cbb037fcc2cdbcf13053d14",
+        "--",
+        "apps/web/features/document-editor/image-target.ts",
+        "apps/web/features/document-editor/member-reply-images.test.ts",
+        "apps/web/features/post-composer/image-draft.test.ts",
+        "apps/web/features/post-composer/image-draft.ts"
+      ]
+    },
+    "applicationCheck": "PASS: git apply --check --directory=.temp/goal/reply-image-origin-context/current-main-files .temp/goal/reply-image-origin-context/current-main.patch; destination is an isolated copy of the actual current-main bytes",
+    "mainTitleInputFocusRemovals": "All FOUR preserved: composer.tsx is untouched and byte-identical to actual current main, SHA256 8e087e1bd308bf58eb808d4b5ebf099ba7055db28e2414665ab24444a00e2e95",
+    "publication": "Tests-first commit and compiling product commit fast-forwarded wave/audit-20261019 from 3a771978a30fdf53eaeeed8dae714193a11a9ce0 to 714a38bcbc5e4d486cbb037fcc2cdbcf13053d14; no manual rebase or main mutation"
+  },
+  "causalChecks": {
+    "command": [
+      "bun",
+      "scripts/goal/goalctl.ts",
+      "test",
+      "apps/web/features/post-composer/image-draft.test.ts",
+      "apps/web/features/document-editor/member-reply-images.test.ts"
+    ],
+    "recordingRunner": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job, invoked from this worktree",
+    "failingBefore": {
+      "job": "d8d70b1b-8c11-4f47-922b-b44e34abdcdd",
+      "productSource": "3a771978a30fdf53eaeeed8dae714193a11a9ce0",
+      "testBytesNowCommittedAt": "d1d6d042a77a89287756292071cb1f0775bcf647",
+      "exit": 1,
+      "tests": 17,
+      "passed": 8,
+      "failed": 9,
+      "assertions": 69,
+      "causes": "Origin missing from fresh/reused/replayed image basis and from upload/reconciliation/retry Uses. Test transport enforces the frozen origin/context equality for reply Uses; ordinary Work controls pass.",
+      "log": {
+        "path": ".temp/goal/jobs/d8d70b1b-8c11-4f47-922b-b44e34abdcdd.log",
+        "sha256": "5b9b15beea931a887b75e3c96e9e2186bc2ef389ec15d7d6f596c222e62d3553"
+      }
+    },
+    "passingAfter": {
+      "job": "fc2ec726-96f1-4a1d-a197-dadef5d328f3",
+      "step": 1,
+      "pin": "714a38bcbc5e4d486cbb037fcc2cdbcf13053d14",
+      "exit": 0,
+      "tests": 17,
+      "passed": 17,
+      "failed": 0,
+      "assertions": 90,
+      "log": {
+        "path": ".temp/goal/jobs/fc2ec726-96f1-4a1d-a197-dadef5d328f3.1.log",
+        "sha256": "168bbe9b0af08614aea8f011438f466a71c73caa5aa1b371b92eec2cc6be7a70"
+      }
+    },
+    "coverage": [
+      "fresh draft origin from acknowledged write",
+      "reused acknowledged draft keeps its persisted origin",
+      "mismatched current Realm and actor create a distinct reply rather than rebind the saved reply",
+      "uncertain write and lost-device-ack replay keep request/key and return the saved origin",
+      "local upload and image Use reconciliation send origin as context",
+      "403/503 recovery retains current complete image/text through retry and serialized reopen",
+      "retained Uses need no rebind or metadata read",
+      "ordinary Work upload and reconciliation stay unchanged"
+    ],
+    "acceptedReceiptPreserved": "Prior 16 tests / 80 assertions at f610f1da0061bb7dda9b05552e715daf15a5411f remain historical evidence; only the two now-affected files were rerun"
+  },
+  "staticChecks": {
+    "job": "fc2ec726-96f1-4a1d-a197-dadef5d328f3",
+    "step": 2,
+    "pin": "714a38bcbc5e4d486cbb037fcc2cdbcf13053d14",
+    "command": "task goal -- check --only types,lint,guards",
+    "exit": 201,
+    "log": {
+      "path": ".temp/goal/jobs/fc2ec726-96f1-4a1d-a197-dadef5d328f3.2.log",
+      "sha256": "4bd4c361a94e712502b1ae5872c5410be0dab2b08303b78250e38df55ef342f3"
+    },
+    "detail": {
+      "path": ".temp/goal/check/run-tDMFgB/output.log",
+      "sha256": "7b6f607536cef4b3ec3a2a29dad74b05901d4208edf2d7a1b01aebd2bb275c67"
+    },
+    "types": "PASS; no type errors in 3,032 selected files",
+    "lint": "PASS",
+    "ast": "PASS",
+    "guards": {
+      "result": "FAIL; 127/129 tests pass in 10 selected guard files; two outcome assertions fail",
+      "cases": [
+        {
+          "file": "scripts/static/web-continuations.test.ts",
+          "case": "production web projection syntax introduces no new violations"
+        },
+        {
+          "file": "scripts/static/web-page-filtering.test.ts",
+          "case": "production web page predicates have structural evidence or an explicit API gap"
+        }
+      ],
+      "observedFiles": [
+        "apps/web/features/entity-page/identity-read.ts",
+        "apps/web/features/entity-page/identity-relations.ts",
+        "apps/web/features/entity-page/sections.tsx",
+        "apps/web/features/home/continue-strip.tsx",
+        "apps/web/features/tracking/series-progress-panel.tsx",
+        "apps/web/features/work-levels/relation-rows.ts",
+        "apps/web/features/zones/site-route.tsx",
+        "scripts/static/web-continuations.test.ts",
+        "scripts/static/web-continuations.inventory.json",
+        "scripts/static/web-page-filtering.test.ts",
+        "scripts/static/web-page-filtering.inventory.json"
+      ],
+      "classification": "Reported production paths, guard implementations and inventories are unchanged between worker base and product pin and outside this delta. No baseline rerun, inventory relaxation or unrelated fix performed."
+    },
+    "inference": {
+      "scopedDelta": "PASS within margins over worker base; this does not satisfy the canonical merge baseline",
+      "absoluteCanonicalResult": "FAIL inherited: main.instantiations 27163414 exceeds 26950993.650000002 (recorded baseline 25667613, +5%)",
+      "base": {
+        "main": 27163414,
+        "web": 38864296,
+        "eden": 19054964,
+        "appBytes": 1160026,
+        "routesBytes": 1177185
+      },
+      "head": {
+        "main": 27163414,
+        "web": 38864336,
+        "eden": 19054964,
+        "appBytes": 1160067,
+        "routesBytes": 1177185
+      },
+      "delta": {
+        "mainInstantiations": 0,
+        "webInstantiations": 40,
+        "edenInstantiations": 0,
+        "appBytes": 41,
+        "routesBytes": 0
+      },
+      "baselineChanged": false
+    },
+    "noBroadCheckReplay": "No static rerun after these unaffected failures; the final manifest only adds documentation"
+  },
+  "remainingProof": {
+    "D2-002": "Accepted evidence retained; unchanged",
+    "D2-003": "OPEN; this source correction closes no original finding",
+    "historicalUse403Boundary": "UNCONFIRMED; unreadable body and owner exception not inferred",
+    "ownerObservation": "Manager separately asks G-2823 for already retained evidence for c02ed85c-27b4-45f6-8e57-4f1b8ae2f856:use, or explicit not-retained; no runtime observation requested here",
+    "originalUploadException": "Unresolved",
+    "singleCharacterRestorationMismatch": "Unconfirmed; no repair claimed",
+    "independentAssertionsChanged": false,
+    "nextReview": "ONE existing codex-1/xhigh changed-delta review of the four changed source/test paths at product pin 714a38bcbc5e4d486cbb037fcc2cdbcf13053d14",
+    "nextGenuineProof": "After admitted correction/composition and runtime admission, G-2830 runs unchanged original image use/save/reopen, preview/metadata failure, Retry/Remove/export and recovery-action focus at 1440/390 x en/zh-Hans",
+    "focusedOriginalFiles": [
+      "apps/web/features/post-composer/draft-recovery.stories.tsx",
+      "apps/web/features/document-editor/draft-recovery.stories.tsx"
+    ],
+    "retainedPrivateHarnessBasis": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/current-main-e9cf1b02b6d9/actual-product-proof-record.json",
+    "setupLimits": "Original Image toolbar and SlashMenu setup failures remain unconfirmed setup premises; original assertions unchanged"
+  },
+  "custody": {
+    "backendAuthenticationAndStop": "G-2823",
+    "imageLease": "Released; not assumed reacquired",
+    "defaultLease": "Protected",
+    "finalOAuthRevocation": "Unconfirmed",
+    "serverBrowserOrStackStarted": false,
+    "apiOrOAuthOperations": false,
+    "restoreImportOrSharedDataWrites": false,
+    "acceptedReviewsReplayed": false,
+    "nestedAgents": false
+  },
+  "instructionEffect": {
+    "file": "docs/goals/audit-remediation-20261019/tasks/G-2748.md at 8c7c7853725f498379ce4ee21e0d61cb5dea4170",
+    "decision": "2026-10-20T11:40:36Z",
+    "quote": "Return the new delta, causal failing/fixed checks and remaining original assertions, then exit.",
+    "effect": "Delivered this bounded source delta and its causal affected checks; independent review and genuine image proof remain manager-owned. Historical reports and assertions are untouched."
+  }
+}
