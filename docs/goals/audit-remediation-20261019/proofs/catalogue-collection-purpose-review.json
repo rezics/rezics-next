@@ -1466,5 +1466,996 @@
       "Keep existing G-2758 and Site ownership of the base-matching web guard debt and the separate absolute inference correction. Do not waive guards or raise inventories/baselines for this slice.",
       "After the bounded correction, run only affected evidence needed for its review. Keep original public-command fixture/publication, C27/C30 and retained source acceptance with the existing proof owners; do not infer acceptance or land this wave slice from source review."
     ]
+  },
+  "retainedPageConsumerCorrectionFirstSourceReview": {
+    "profile": "retained-page-consumer-correction-first-source-review-v1",
+    "reviewedAt": "2026-10-20T13:31:08.910474Z",
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "independentFirstSourceReview": true,
+      "delegation": false,
+      "fallback": false
+    },
+    "decision": {
+      "sourceVerdict": "changes-requested",
+      "reason": "One introduced scanner false-negative class is reproduced in three controls: the candidate certifies a native page projection whose returned next is subsequently overwritten to null. The exact parent reports each loss. No new native/API/browser outcome failure is asserted.",
+      "identityConsumerVerdict": "No additional introduced loss identified in this bounded source/caller inspection; counted suppression is conservative against the actual specialized members. This is not rendered or original outcome acceptance.",
+      "scannerVerdict": "changes-requested: the new stable-native-envelope exception checks the input envelope, but not the lifetime of the projected output object.",
+      "scope": "Only 973118e300b32527c479e3afb39d33f181779da9..79a25d53831590dcfd6501a2fbf2e05d2bc0d4b8, exactly nine changed files; no accepted batch was rereviewed.",
+      "acceptance": "A17, G-2758, original C29/native/browser/Storybook and actual-composition landing gates remain open. This review does not land or close any class.",
+      "historicalPreservation": "Append only this top-level key; all previous parsed values and every raw historical failure reference remain intact. The earlier Recipe citation finding is owned by G-2799, without a re-review here."
+    },
+    "pins": {
+      "parent": "973118e300b32527c479e3afb39d33f181779da9",
+      "candidate": "79a25d53831590dcfd6501a2fbf2e05d2bc0d4b8",
+      "candidateDirectParentVerified": "973118e300b32527c479e3afb39d33f181779da9",
+      "reviewBranch": "goal/g-2849",
+      "reviewWorktreeHeadBeforeReport": "1096981ad148e94af43c819a26fe9c9ced67c2d6",
+      "changedPaths": 9,
+      "additions": 320,
+      "deletions": 25,
+      "changedBlobs": [
+        {
+          "path": "apps/web/features/entity-page/entity-page.tsx",
+          "initial": {
+            "blob": "a31f218fe1bba02c5bd0224d9ec3ab2f5624f14b",
+            "bytes": 16264,
+            "sha256": "ea48a12981f75b8146fbdb9f024589386719a8bbc2071ceb35760fc350b4fe36"
+          },
+          "parent": {
+            "blob": "a31f218fe1bba02c5bd0224d9ec3ab2f5624f14b",
+            "bytes": 16264,
+            "sha256": "ea48a12981f75b8146fbdb9f024589386719a8bbc2071ceb35760fc350b4fe36"
+          },
+          "published": {
+            "blob": "c8213dba9e79177300de284c1cc1fbd079f19b1b",
+            "bytes": 16490,
+            "sha256": "01f76819634506016c58e52c052edabc767d20d12bd6b8c3b8878ee3c2c3536e"
+          },
+          "additions": 12,
+          "deletions": 7
+        },
+        {
+          "path": "apps/web/features/entity-page/identity-read.ts",
+          "initial": {
+            "blob": "8905a39ef12b098aefd94a33a6c5cf9c6e110cb3",
+            "bytes": 10559,
+            "sha256": "c2175b79cc0b1f029775ab79fca8182fd0812bd4260771910eeed69156d208d3"
+          },
+          "parent": {
+            "blob": "8905a39ef12b098aefd94a33a6c5cf9c6e110cb3",
+            "bytes": 10559,
+            "sha256": "c2175b79cc0b1f029775ab79fca8182fd0812bd4260771910eeed69156d208d3"
+          },
+          "published": {
+            "blob": "c4e2e1c8f544695e0b1c4d0aa660d4b977c7941a",
+            "bytes": 10586,
+            "sha256": "26bb5c98cd31db8b8aa37f6dda8809011b21f8ebe730accfeb131a8bc9200e0e"
+          },
+          "additions": 1,
+          "deletions": 0
+        },
+        {
+          "path": "apps/web/features/entity-page/identity-reads.test.ts",
+          "initial": {
+            "blob": "053ab656638d85832097e2a2bd1bcba15a97c00a",
+            "bytes": 10637,
+            "sha256": "f8a5bb452209bd7ab6e3194d3a6543928ca43c74131173ce19ebedc14b636fe0"
+          },
+          "parent": {
+            "blob": "053ab656638d85832097e2a2bd1bcba15a97c00a",
+            "bytes": 10637,
+            "sha256": "f8a5bb452209bd7ab6e3194d3a6543928ca43c74131173ce19ebedc14b636fe0"
+          },
+          "published": {
+            "blob": "9c656b37ac430bc88734bcf58eb8c06888500a7b",
+            "bytes": 12979,
+            "sha256": "c2aae69f4865f3563ed5a6672642e9ac59a14c0c5002ba0a622f73ff05f9fd34"
+          },
+          "additions": 35,
+          "deletions": 4
+        },
+        {
+          "path": "apps/web/features/entity-page/identity-relations.test.ts",
+          "initial": {
+            "blob": "87c45d88172661a3541e4b56c45c7ce9c76b7cbd",
+            "bytes": 12822,
+            "sha256": "083117cbc179cfe1d9d7a0650de048db59b4123d145e1c0795815c83181cd67d"
+          },
+          "parent": {
+            "blob": "87c45d88172661a3541e4b56c45c7ce9c76b7cbd",
+            "bytes": 12822,
+            "sha256": "083117cbc179cfe1d9d7a0650de048db59b4123d145e1c0795815c83181cd67d"
+          },
+          "published": {
+            "blob": "afeac4cde8291bbec18ed2847e8c55c840ab0d58",
+            "bytes": 15740,
+            "sha256": "0c8360045bfc04cf47489a768b3d0fb164840de462eceef3262862618ca0970a"
+          },
+          "additions": 40,
+          "deletions": 0
+        },
+        {
+          "path": "apps/web/features/entity-page/identity-relations.ts",
+          "initial": {
+            "blob": "ee29f5b07cd6c1c3c01bfa16603a8982a5447f0c",
+            "bytes": 2837,
+            "sha256": "eef95080035ad2d80ccd5c2b421445a673ac8d3309cce8cc74d214bec337b34d"
+          },
+          "parent": {
+            "blob": "ee29f5b07cd6c1c3c01bfa16603a8982a5447f0c",
+            "bytes": 2837,
+            "sha256": "eef95080035ad2d80ccd5c2b421445a673ac8d3309cce8cc74d214bec337b34d"
+          },
+          "published": {
+            "blob": "05d34bcfff4d84611bdc2f1266f4532ca83651c2",
+            "bytes": 4126,
+            "sha256": "8b7ddcbf222dd9aee9420f30031fbb5752c303bb211e8e28868c6eb739f4435e"
+          },
+          "additions": 25,
+          "deletions": 1
+        },
+        {
+          "path": "apps/web/features/entity-page/sections.tsx",
+          "initial": {
+            "blob": "9c89547e46dca6cebf0d43940d4ed4ac159793f4",
+            "bytes": 7304,
+            "sha256": "653265ea3162934c53b95463267e65b1db640dad4fd04ca9d31c79f6ad88527b"
+          },
+          "parent": {
+            "blob": "9c89547e46dca6cebf0d43940d4ed4ac159793f4",
+            "bytes": 7304,
+            "sha256": "653265ea3162934c53b95463267e65b1db640dad4fd04ca9d31c79f6ad88527b"
+          },
+          "published": {
+            "blob": "c82579bf3c6c5fe1bb78049f0ed9d249d5c36f23",
+            "bytes": 7251,
+            "sha256": "27af956d9ee5fc2e4c80e3efbf3f905ce1a2a539a620b7633cc5aa915e218890"
+          },
+          "additions": 8,
+          "deletions": 10
+        },
+        {
+          "path": "scripts/static/web-continuations.ts",
+          "initial": {
+            "blob": "9a43358d96cab92b1663b41a24c9ad39e43dfd89",
+            "bytes": 12885,
+            "sha256": "1cfb8628466b5aad14e8c247e614fe17a17c586e78d9b21cd83b2a3b16994fd0"
+          },
+          "parent": {
+            "blob": "9a43358d96cab92b1663b41a24c9ad39e43dfd89",
+            "bytes": 12885,
+            "sha256": "1cfb8628466b5aad14e8c247e614fe17a17c586e78d9b21cd83b2a3b16994fd0"
+          },
+          "published": {
+            "blob": "113e12dc6c2c2f61a70b41ab1e8075cc11619f2b",
+            "bytes": 20912,
+            "sha256": "b91622183cbc98cc0885432a1bae711ca0cd8b42ef83daf1df748be4d69b5aa5"
+          },
+          "additions": 104,
+          "deletions": 2
+        },
+        {
+          "path": "scripts/static/web-page-filtering.ts",
+          "initial": {
+            "blob": "0b373638abc33ce6a1528e1e8f33057a8b409466",
+            "bytes": 14589,
+            "sha256": "b4e893ed6f7d6e2ea5b7254179cf465101fefe235877e63a5f317a4eeeef450d"
+          },
+          "parent": {
+            "blob": "0b373638abc33ce6a1528e1e8f33057a8b409466",
+            "bytes": 14589,
+            "sha256": "b4e893ed6f7d6e2ea5b7254179cf465101fefe235877e63a5f317a4eeeef450d"
+          },
+          "published": {
+            "blob": "c3ab827628a4ec16deecf402b4cf59f05c198b46",
+            "bytes": 15106,
+            "sha256": "6ccaec3dd8163784a0eb566959ed9f2f32537d7ebfe51bf43bf22df2c3be436d"
+          },
+          "additions": 6,
+          "deletions": 1
+        },
+        {
+          "path": "scripts/static/web-relations-page.test.ts",
+          "initial": null,
+          "parent": null,
+          "published": {
+            "blob": "5b044468271a4cde05ecadba3227ab1902cbb6a3",
+            "bytes": 5208,
+            "sha256": "36278b65162b93671162f73e0945dc32056b2863a5439b0f7af62e52f0e98d9b"
+          },
+          "additions": 89,
+          "deletions": 0
+        }
+      ],
+      "unchangedMappedDependencies": [
+        {
+          "path": "scripts/static/web-continuations.test.ts",
+          "beforeBlob": "6b235b24fdb2a486a2e51c7bc25ef653444ff8d3",
+          "currentBlob": "6b235b24fdb2a486a2e51c7bc25ef653444ff8d3",
+          "sha256": "01cf9f4d023c941bc3246a24246ba3daa8b11900ff3257a292cffc4ff0dec0ba",
+          "bytes": 11245
+        },
+        {
+          "path": "scripts/static/web-page-filtering.test.ts",
+          "beforeBlob": "93efd32140c4befe6fa3a8586986c0e1a2e7a9d4",
+          "currentBlob": "93efd32140c4befe6fa3a8586986c0e1a2e7a9d4",
+          "sha256": "b7b2be8b461241b1cd82cbffb4665930799b70e86c37cb5ee47d7588e9e9f4fe",
+          "bytes": 5454
+        },
+        {
+          "path": "scripts/static/web-continuations.inventory.json",
+          "beforeBlob": "657afcd915946269c48897559453b25b334d7496",
+          "currentBlob": "657afcd915946269c48897559453b25b334d7496",
+          "sha256": "64a2a39920b1eaaf86bd89d8dbe40f6c9a2a876a317ab87f707804bfaf1241de",
+          "bytes": 305371
+        },
+        {
+          "path": "scripts/static/web-page-filtering.inventory.json",
+          "beforeBlob": "0b483885106d15b3a5822296f9a2bf354aba2209",
+          "currentBlob": "0b483885106d15b3a5822296f9a2bf354aba2209",
+          "sha256": "7afb8219d982f85921ee5e658fc6c251b5776d9df397d44ab8f2c24dafa9b9fc",
+          "bytes": 58548
+        },
+        {
+          "path": "scripts/static/web-source-scan.ts",
+          "beforeBlob": "ceb9d00d758ec1f2033d5ab53fb7b1af8569a697",
+          "currentBlob": "ceb9d00d758ec1f2033d5ab53fb7b1af8569a697",
+          "sha256": "993a7b51346ba84d79f67e6b6ee7ae4c5f31aaf672d7c8d696ca0f8f8c9f3b2b",
+          "bytes": 2931
+        },
+        {
+          "path": "tests/qa/integration/collection-domain-roles.test.ts",
+          "beforeBlob": "c70b79027c5c91f6a2b62a4e33b29a9364984e4d",
+          "currentBlob": "c70b79027c5c91f6a2b62a4e33b29a9364984e4d",
+          "sha256": "c6d149bc04ca1080c5c2333950615adccc90b3cae6e798ae19ad9a058dee25fa",
+          "bytes": 5335
+        },
+        {
+          "path": "tests/qa/integration/support/catalogue-information.ts",
+          "beforeBlob": "d757ab29ce4faba937f9abe54b28c3fa7c213c9a",
+          "currentBlob": "d757ab29ce4faba937f9abe54b28c3fa7c213c9a",
+          "sha256": "3fc81eed5c0090521d49a669c25c608b07182a1a2ec23042780193bd4dc7c94f",
+          "bytes": 51981
+        },
+        {
+          "path": "apps/web/tests/catalogue-detail-contract.e2e.ts",
+          "beforeBlob": "b6045fca00f40afd56dd8ac13148ed929f7d4cd9",
+          "currentBlob": "b6045fca00f40afd56dd8ac13148ed929f7d4cd9",
+          "sha256": "b6889bcde1f06083da74aa0507f85c35a91627a80dea75cb9e3f586b8ebfa2c3",
+          "bytes": 32565
+        },
+        {
+          "path": "apps/web/features/work-levels/relation-rows.ts",
+          "beforeBlob": "4d00b26b6088dd2cba54369302e0cf263ef8cb82",
+          "currentBlob": "4d00b26b6088dd2cba54369302e0cf263ef8cb82",
+          "sha256": "4a048151d43774b65c2cd3c2571673d97cbbe1891aaa3926ff59f62953982cc4",
+          "bytes": 11988
+        },
+        {
+          "path": "apps/web/features/entity-page/views.tsx",
+          "beforeBlob": "af1852178ed48456d78b962f2c2e7d429f446233",
+          "currentBlob": "af1852178ed48456d78b962f2c2e7d429f446233",
+          "sha256": "ad694a5091f60af2f6a3a5f01a39a66e8250a6782bb4b048f7826de813e2381f",
+          "bytes": 15130
+        },
+        {
+          "path": "apps/web/features/work-levels/connections.tsx",
+          "beforeBlob": "7c49bc6df47da6277931cf0f10874e40cf51c231",
+          "currentBlob": "7c49bc6df47da6277931cf0f10874e40cf51c231",
+          "sha256": "976c6a2f84c08ebea1c2e8aa4cc86a095d1649b2b5b1a3efa4ac310af4993ecb",
+          "bytes": 22180
+        },
+        {
+          "path": "apps/web/features/work-levels/previews.tsx",
+          "beforeBlob": "d20929232e94dc74c3bdacfc983556e1d36bed46",
+          "currentBlob": "d20929232e94dc74c3bdacfc983556e1d36bed46",
+          "sha256": "f8b95743439d8334dac974d66a44a2709aa09ac0d58979bada17bc79dc8ef697",
+          "bytes": 8505
+        },
+        {
+          "path": "apps/web/tests/g-837-work-levels.test.ts",
+          "beforeBlob": "a7db55df805a93a5a153e1aa5b283141332bcfbe",
+          "currentBlob": "a7db55df805a93a5a153e1aa5b283141332bcfbe",
+          "sha256": "6628898d6c22b4d7634842a692ea6a923baaf3060290b18950b10a1e431f0462",
+          "bytes": 28558
+        },
+        {
+          "path": "apps/web/features/work-levels/connections.stories.tsx",
+          "beforeBlob": "935d1f38863b8c12be2817870fee39866071f2b3",
+          "currentBlob": "935d1f38863b8c12be2817870fee39866071f2b3",
+          "sha256": "5fa26a6dcb07e24d101cb762985a3c67b3cd593c184b51cbe8083eb395b25169",
+          "bytes": 19896
+        }
+      ],
+      "unchangedNativeDependencies": [
+        {
+          "path": "generated/openapi/main/public.json",
+          "delivery": "27560115bb7c270ab3cb91b8012c8fcbdd363f4b",
+          "deliveryBlob": "292255e7dcdd586988b19fec69c596e0be7354de",
+          "retainedBlob": "292255e7dcdd586988b19fec69c596e0be7354de",
+          "beforeBlob": "292255e7dcdd586988b19fec69c596e0be7354de",
+          "currentBlob": "4bf883008968ad9bdc80b65eefca9b5c1927ef28",
+          "sha256": "63b34a28004ab07e4e1472f378b3229170ae19e2598bb7fe07458ec091ac36f3",
+          "bytes": 42513063
+        },
+        {
+          "path": "services/main/src/modules/wiki/evidence.ts",
+          "delivery": "27560115bb7c270ab3cb91b8012c8fcbdd363f4b",
+          "deliveryBlob": "d5484dfcd8c18646fa6944fb92482d4d29efa5e2",
+          "retainedBlob": "d5484dfcd8c18646fa6944fb92482d4d29efa5e2",
+          "beforeBlob": "d5484dfcd8c18646fa6944fb92482d4d29efa5e2",
+          "currentBlob": "d5484dfcd8c18646fa6944fb92482d4d29efa5e2",
+          "sha256": "a8b97a506398fe5babb0618b0ec2ffce2644f3c5253df59f82a04f01f9068b43",
+          "bytes": 9615
+        },
+        {
+          "path": "apps/web/features/work-levels/types.ts",
+          "delivery": "27560115bb7c270ab3cb91b8012c8fcbdd363f4b",
+          "deliveryBlob": "22a62804c79bb7c90bcfeea2f58c3d3f65b9f4f2",
+          "retainedBlob": "22a62804c79bb7c90bcfeea2f58c3d3f65b9f4f2",
+          "beforeBlob": "22a62804c79bb7c90bcfeea2f58c3d3f65b9f4f2",
+          "currentBlob": "22a62804c79bb7c90bcfeea2f58c3d3f65b9f4f2",
+          "sha256": "be954940d68962ccf2bcd1a4f8f053ce31df10945095f782431055b6be80c0e8",
+          "bytes": 2629
+        }
+      ],
+      "additionalInspectedDependencies": [
+        {
+          "pin": "79a25d53831590dcfd6501a2fbf2e05d2bc0d4b8",
+          "path": "apps/web/features/entity-page/views.tsx",
+          "blob": "af1852178ed48456d78b962f2c2e7d429f446233",
+          "sha256": "ad694a5091f60af2f6a3a5f01a39a66e8250a6782bb4b048f7826de813e2381f",
+          "bytes": 15130
+        },
+        {
+          "pin": "79a25d53831590dcfd6501a2fbf2e05d2bc0d4b8",
+          "path": "apps/web/features/entity-page/identity-views.tsx",
+          "blob": "338fc7f4de8f00c3ed5538723fa01380cb75f1c6",
+          "sha256": "42336a3df6fe1dd8904161bb592b6ad93d8f46755c7548401358d772aeeb122a",
+          "bytes": 8639
+        },
+        {
+          "pin": "79a25d53831590dcfd6501a2fbf2e05d2bc0d4b8",
+          "path": "apps/web/features/entity-page/read.ts",
+          "blob": "15c9ec836695c91f7dd1cb6a0708a45c46d793b2",
+          "sha256": "c656827b541ae78ee74cf3c940623caed52a7d25b731647587947e13a213a8f6",
+          "bytes": 5221
+        }
+      ],
+      "scannerInfrastructure": [
+        {
+          "pin": "973118e300b32527c479e3afb39d33f181779da9",
+          "path": "scripts/lib/repository-files.ts",
+          "sha256": "e82f7bee9602acfb60bfd9bf120c99d62a6091e1f09865491270d58494c654b0",
+          "blob": "f473044a9b8e72515454a37bfc3f3d7f47cf7e92"
+        },
+        {
+          "pin": "79a25d53831590dcfd6501a2fbf2e05d2bc0d4b8",
+          "path": "scripts/lib/repository-files.ts",
+          "sha256": "e82f7bee9602acfb60bfd9bf120c99d62a6091e1f09865491270d58494c654b0",
+          "blob": "f473044a9b8e72515454a37bfc3f3d7f47cf7e92"
+        }
+      ],
+      "allNineAndFourteenDependencyHashesIndependentlyVerified": true,
+      "generatedPublicSchemaDisposition": "No generated bytes are changed in this nine-file delta. Parent and candidate both use public.json Git blob 4bf883008968ad9bdc80b65eefca9b5c1927ef28; the older 292255e7 schema is not silently substituted. The retained native types and wiki evidence blobs are also identical parent/candidate."
+    },
+    "inputs": [
+      {
+        "path": ".temp/goal/retained-page-review-inputs/collection-purpose-native-handoff.md",
+        "sha256": "95c99bdbe9444ab56035008ec837a900b31b0ea685fe2a0bd8302a2d3d4f4297",
+        "bytes": 20900
+      },
+      {
+        "path": ".temp/goal/retained-page-review-inputs/collection-purpose-native-source-map.json",
+        "sha256": "8baa39c95e40aaae82001ff7f6bf437e6f966539434cc685b4f53d1ecc3d817a",
+        "bytes": 29357
+      },
+      {
+        "path": ".temp/goal/retained-page-review-inputs/collection-purpose-native-guard-map.json",
+        "sha256": "d9fe9745f50ccef90ef16d16a89880e59ccb6c6316cbfa135bcb24258cf30d55",
+        "bytes": 106047
+      }
+    ],
+    "inputProvenance": {
+      "readOnlyOrigin": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2758/.temp/goal",
+      "method": "Only the three named handoff/map inputs and their directly referenced check logs were read from G-2758. Immutable parent/candidate source was extracted with git show into this worktree .temp; all writes remained in G-2849. No moving-wave checkout, service or corpus was used.",
+      "requiredGuardMapSha256Matched": "d9fe9745f50ccef90ef16d16a89880e59ccb6c6316cbfa135bcb24258cf30d55",
+      "manifest": {
+        "path": ".temp/goal/retained-page-review-inputs/verified-manifest.json",
+        "sha256": "830d0d657558525b89c1d634d8097eb41a1ac5c65cd25a1d364d3c1fc2c88df8",
+        "bytes": 15940
+      },
+      "ownerLogsIndependentlyHashVerified": [
+        {
+          "path": ".temp/goal/jobs/bbcc2701-ef81-4b23-b53c-33aefdbdd814.4.log",
+          "bytes": 1490,
+          "sha256": "47625183f3835eb9fdbad60765a23b551a39c6493bbc13162612e9595181e0a5"
+        },
+        {
+          "path": ".artifacts/qa/20261020t125816-95ca30/logs/unit.log",
+          "bytes": 3097,
+          "sha256": "95511e531fdcfcea3d2260fe37496e510fc879aaeb61ddd5b0a470821bee261c"
+        },
+        {
+          "path": ".artifacts/qa/20261020t125816-95ca30/logs/owner.log",
+          "bytes": 9230,
+          "sha256": "abbcefc5033fdab7bee1ec3da37efe29a4be1740a06c58f16babfa850b526b5f"
+        },
+        {
+          "path": ".temp/goal/jobs/abf53bc3-53c8-4a83-be8e-84731d0e876e.1.log",
+          "bytes": 1287,
+          "sha256": "0eb4043436f63fde384bd8b65a9a5afc94276df1598878aa29f0890f3ce4ab75"
+        },
+        {
+          "path": ".temp/goal/jobs/abf53bc3-53c8-4a83-be8e-84731d0e876e.2.log",
+          "bytes": 713,
+          "sha256": "ebc427f9ce1fd43c99b1e6835f4641aba5d0829ca5916ef1335d4f0812de7ae6"
+        },
+        {
+          "path": ".temp/goal/check/run-mNZF8f/output.log",
+          "bytes": 2702,
+          "sha256": "3b632776dfcd09b8562b9763c1fc66700fbacbaa9c7da362f9bfd514c080e245"
+        },
+        {
+          "path": ".temp/goal/jobs/c52c431c-bd3c-4eff-ba20-c82d61076e8a.2.log",
+          "bytes": 1017,
+          "sha256": "b981d600f081240785a0800dd8c08c689540f6e0dd8fcff6aca1ac5a7be74551"
+        },
+        {
+          "path": ".artifacts/qa/20261020t130226-bd8aa2/logs/owner.log",
+          "bytes": 19135,
+          "sha256": "81bcd44627632c9121a929cdfe2511332ddb9cf9f8e61a777dab182ac1350402"
+        },
+        {
+          "path": ".temp/goal/jobs/c52c431c-bd3c-4eff-ba20-c82d61076e8a.1.log",
+          "bytes": 9942,
+          "sha256": "0152ef3c848bdcc59af158e52782e3e71c4bf9f9140093973a929ce056f1d725"
+        }
+      ],
+      "originalAssertions": "No assertion line was removed from either changed identity regression file. The shared guard test files and inventories, original Collection integration/support/browser specification and mapped retained helper/render paths are exact unchanged blobs."
+    },
+    "actualSourceReview": {
+      "identitySuppression": {
+        "paths": [
+          "apps/web/features/entity-page/entity-page.tsx:120",
+          "apps/web/features/entity-page/identity-read.ts:251",
+          "apps/web/features/entity-page/identity-relations.ts:44",
+          "apps/web/features/entity-page/sections.tsx:42"
+        ],
+        "review": "EntityPage starts one readIdentitySections promise and passes that same result to both IdentitySections and RelationsSection. The specialized read retains its complete own RelationsPage. Generic suppression requires a successful result and JSON equality of the complete native page, including resource, items, sourcePosition and next. Each matched member index can consume only one exact relation/revision/full-entry occurrence; the available counterpart references must all match the displayed member summary. The filter retains the relative order and object identities of all surviving native occurrences.",
+        "failureStates": "Absent/refused/failed specialized data and mismatched complete pages return the original items. Unknown viewing roles, unavailable counterparts and null meaning produce no usable specialized member in the inspected reader; they survive the generic path. Compound counterparts with another reference fail the matching condition. Deduplicated family members cannot consume additional repeated entries. Re-oriented family entries conservatively remain generic if their full entry differs.",
+        "actualViewComposition": "IdentitySectionsView maps every returned section; nonempty sections map every member to Member/SummaryLink, without another member filter. RelationsView retains the native projection page, uses relationPageGroups rows/collections/unrendered fallback, and passes projection.page.next plus the supplied current cursor to Pages. Generic Relations is omitted only when there are no remaining items, next or current cursor. Empty continued pages retain navigation.",
+        "authorityAndPrivacy": "The delta removes Definition-wide suppression; it adds no remote read, authority, type/title-purpose inference, converter or provider mapping. Existing actingSubject/position/frame-aware reads remain the source of disclosed data. A page mismatch is conservative and can show duplicates rather than suppress an unmatched row; rendered duplicate/focus/accessibility behavior is unproved.",
+        "evidenceBoundary": "Source and controlled reader/component props evidence only. No runtime disclosure revocation, DOM, real rights, opaque-link navigation, screenshot or browser outcome was executed."
+      },
+      "scanners": {
+        "nativeForwarding": "The new next sibling exception requires a direct matching envelope, unique literal properties, no spread or __proto__ in that object, and stableNativeEnvelope input binding checks. It rejects the existing planted input mutation/alias/shadow and same-object override cases; it does not inspect the later projected-object lifecycle, as reproduced below.",
+        "partition": "nativePagePartition supports only the direct four-statement function: two fresh const arrays, exhaustive branches pushing the unchanged loop entry once to distinct arrays, and shorthand return of both arrays and the unchanged parameter page. It refuses unsupported parameters, extra statements, impure tests, missing branches, replaced/capped/filtered output and same-object overrides in that form. Other Map/helper/React forms are not thereby proved.",
+        "pageFiltering": "web-page-filtering calls the same partition recognizer and adds a direct for-of page.items.slice control. This discovers readRecipeVisitFrame on unchanged source. No path whitelist, inventory increase, accepted context addition, syntax disguise or shared-test weakening occurs in the diff.",
+        "controls": "The additive file has 44 controls. Its native alias cases mutate or escape page itself; none follows the newly built projection binding or an enclosing overwrite. This is the coverage hole exercised by the focused review check.",
+        "finiteProofLimit": "The local structural recognizer is not an interprocedural alias/cardinality/navigation proof of production Map grouping, imported helpers or React consumers; the actual production failures remain red."
+      }
+    },
+    "findings": [
+      {
+        "id": "native-next-projected-output-overwrite",
+        "priority": "P2",
+        "classification": "reproduced introduced static-guard false negative; not a native API or browser outcome finding",
+        "title": "The native next exception accepts output mutations that discard the continuation",
+        "introducedPaths": [
+          {
+            "path": "scripts/static/web-continuations.ts",
+            "lines": {
+              "start": 181,
+              "end": 215
+            }
+          },
+          {
+            "path": "scripts/static/web-continuations.ts",
+            "lines": {
+              "start": 251,
+              "end": 259
+            }
+          }
+        ],
+        "trigger": "Build {items: page.items, next: page.next}, then mutate projected.next, overwrite the enclosing spread next, or use Object.assign to replace next. The input page stays untouched.",
+        "expected": "A lossy projected next must retain a dropped-continuation finding. A safe local proof may conservatively refuse an unverified output lifetime.",
+        "actual": "All three programs return the original items with next=null despite a non-null opaque input token. The parent scanner reports dropped-continuation for each page.items; the candidate returns an empty inventory for all three. Each candidate case reaches and fails the guard outcome assertion.",
+        "cause": "stableNativeEnvelope traverses uses rooted at the input identifier page and treats the inner object property values as forwarded. The exemption checks only that inner literal. Neither the projected binding mutation nor an outer spread/Object.assign overwrite is a page-rooted use, and next is not included in the existing continuations set that independently flags assignments. Keeping the input envelope stable does not prove the returned projection keeps its continuation.",
+        "classScope": "Three output-lifetime variants were checked together against the exact same scanner blobs. No new current production instance or native data-loss journey is claimed.",
+        "requestedFix": "G-2758 should keep the exception conservative unless the projected output itself is proven to escape intact; cover binding mutation/alias and enclosing overrides with additive controls. Preserve all original planted refusals, inventories and actual red production assertions. Do not broaden acceptance by helper/type/path name.",
+        "counterexample": {
+          "test": {
+            "path": ".temp/goal/retained-page-review-inputs/native-projection-override.test.ts",
+            "sha256": "f5a80373f86eaf6cac7c5a66a5847ddf8df829dc85f87a6280e514e90c58504c",
+            "bytes": 1924
+          },
+          "source": "import { expect, test } from 'bun:test';\nimport { continuationInventory as parentInventory } from './parent/scripts/static/web-continuations.ts';\nimport { continuationInventory as candidateInventory } from './published/scripts/static/web-continuations.ts';\n\nconst examples = [\n  ['projection binding mutation', `export function project(page) {\n    const projected = { items: page.items, next: page.next };\n    projected.next = null;\n    return projected;\n  }`],\n  ['outer object override', `export function project(page) {\n    return { ...{ items: page.items, next: page.next }, next: null };\n  }`],\n  ['Object.assign override', `export function project(page) {\n    return Object.assign({ items: page.items, next: page.next }, { next: null });\n  }`],\n] as const;\n\nfor (const [label, inventory] of [['parent', parentInventory], ['candidate', candidateInventory]] as const) {\n  for (const [name, source] of examples) {\n    test(`${label}: ${name} must not certify a lost native continuation`, () => {\n      const project = new Function(`${source.replace('export ', '')}; return project;`)();\n      const page = { items: [{ relation: 'one' }], next: 'opaque:+/%?=&雪' };\n      const answer = project(page);\n      expect(answer.items).toBe(page.items);\n      expect(page.next).toBe('opaque:+/%?=&雪');\n      expect(answer.next).toBeNull();\n      const findings = inventory([{ path: 'apps/web/features/example/native.ts', source }]);\n      console.log(JSON.stringify({ label, name, source, inputNext: page.next, outputNext: answer.next, findings }));\n      expect(findings.some(row => row.rule === 'dropped-continuation')).toBe(true);\n    });\n  }\n}\n\ntest('candidate still accepts the unchanged direct native page projection', () => {\n  expect(candidateInventory([{ path: 'apps/web/features/example/native.ts',\n    source: 'export function project(page) { return { items: page.items, next: page.next }; }' }])).toEqual([]);\n});\n",
+          "command": "bun scripts/goal/goalctl.ts test ./.temp/goal/retained-page-review-inputs/native-projection-override.test.ts",
+          "job": "2250ad7d-7598-41cc-8cf0-12c080bfd64f",
+          "exitCode": 1,
+          "assertion": "expect(findings.some(row => row.rule === 'dropped-continuation')).toBe(true)",
+          "assertionLine": 30,
+          "outcomeAssertionReached": true,
+          "actual": "4 pass / 3 fail / 25 expect calls; three exact-parent loss refusals and candidate unchanged-forwarding positive control pass; three candidate loss refusals fail with findings=[].",
+          "log": {
+            "path": ".temp/goal/jobs/2250ad7d-7598-41cc-8cf0-12c080bfd64f.log",
+            "sha256": "b5cf8e65a8d8ebde0d386dd71db70e9e305f092b7dca8131077a24fd7846b2dc",
+            "bytes": 5328
+          },
+          "execution": "One local recorded goalctl test of exact extracted scanners and identical immutable scanner infrastructure. No QA-stack acceptance ID or public-runtime/browser evidence.",
+          "setupHistory": [
+            {
+              "job": "0825b24c-3b66-4d3e-b71a-e6b01e0d6c67",
+              "exitCode": 1,
+              "outcomeAssertionReached": false,
+              "failure": "Bun treated the hidden .temp argument as a filter and found no tests. Corrected once by adding ./; no assertion or implementation changed.",
+              "log": {
+                "path": ".temp/goal/jobs/0825b24c-3b66-4d3e-b71a-e6b01e0d6c67.log",
+                "sha256": "b8cb4112a61d3ab79e1d1fec202a3841eb4e2210409d084f6145d9979cc30720",
+                "bytes": 916
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "reusedChecks": [
+      {
+        "kind": "focused-units-and-new-scanner-controls",
+        "job": "bbcc2701-ef81-4b23-b53c-33aefdbdd814",
+        "command": "bun scripts/goal/goalctl.ts test scripts/static/web-relations-page.test.ts apps/web/features/entity-page/identity-relations.test.ts apps/web/features/entity-page/identity-reads.test.ts",
+        "qa": "20261020t125816-95ca30",
+        "result": "pass",
+        "cases": 66,
+        "expectations": 194,
+        "binding": "pre-commit a5ace9d plus exact nine published file blobs; no product byte changes after passing run",
+        "logs": [
+          ".temp/goal/jobs/bbcc2701-ef81-4b23-b53c-33aefdbdd814.4.log",
+          ".artifacts/qa/20261020t125816-95ca30/logs/unit.log",
+          ".artifacts/qa/20261020t125816-95ca30/logs/owner.log"
+        ],
+        "logBytes": [
+          {
+            "path": ".temp/goal/jobs/bbcc2701-ef81-4b23-b53c-33aefdbdd814.4.log",
+            "bytes": 1490,
+            "sha256": "47625183f3835eb9fdbad60765a23b551a39c6493bbc13162612e9595181e0a5"
+          },
+          {
+            "path": ".artifacts/qa/20261020t125816-95ca30/logs/unit.log",
+            "bytes": 3097,
+            "sha256": "95511e531fdcfcea3d2260fe37496e510fc879aaeb61ddd5b0a470821bee261c"
+          },
+          {
+            "path": ".artifacts/qa/20261020t125816-95ca30/logs/owner.log",
+            "bytes": 9230,
+            "sha256": "abbcefc5033fdab7bee1ec3da37efe29a4be1740a06c58f16babfa850b526b5f"
+          }
+        ]
+      },
+      {
+        "kind": "focused-web-types",
+        "job": "abf53bc3-53c8-4a83-be8e-84731d0e876e",
+        "pin": "79a25d53831590dcfd6501a2fbf2e05d2bc0d4b8",
+        "command": "task goal:type-files -- --project apps/web/tsconfig.json apps/web/features/entity-page/entity-page.tsx apps/web/features/entity-page/identity-read.ts apps/web/features/entity-page/identity-relations.ts apps/web/features/entity-page/sections.tsx apps/web/features/entity-page/identity-relations.test.ts apps/web/features/entity-page/identity-reads.test.ts apps/web/next-env.d.ts apps/web/globals.d.ts apps/web/zones/env.d.ts apps/web/features/showcase/assets.d.ts",
+        "result": "pass",
+        "files": 1916,
+        "logs": [
+          ".temp/goal/jobs/abf53bc3-53c8-4a83-be8e-84731d0e876e.1.log"
+        ],
+        "logBytes": [
+          {
+            "path": ".temp/goal/jobs/abf53bc3-53c8-4a83-be8e-84731d0e876e.1.log",
+            "bytes": 1287,
+            "sha256": "0eb4043436f63fde384bd8b65a9a5afc94276df1598878aa29f0890f3ce4ab75"
+          }
+        ]
+      },
+      {
+        "kind": "focused-scanner-types",
+        "job": "abf53bc3-53c8-4a83-be8e-84731d0e876e",
+        "pin": "79a25d53831590dcfd6501a2fbf2e05d2bc0d4b8",
+        "command": "task goal:type-files -- --project scripts/tsconfig.json scripts/static/web-continuations.ts scripts/static/web-page-filtering.ts scripts/static/web-relations-page.test.ts",
+        "result": "pass",
+        "files": 6,
+        "logs": [
+          ".temp/goal/jobs/abf53bc3-53c8-4a83-be8e-84731d0e876e.2.log"
+        ],
+        "logBytes": [
+          {
+            "path": ".temp/goal/jobs/abf53bc3-53c8-4a83-be8e-84731d0e876e.2.log",
+            "bytes": 713,
+            "sha256": "ebc427f9ce1fd43c99b1e6835f4641aba5d0829ca5916ef1335d4f0812de7ae6"
+          }
+        ]
+      },
+      {
+        "kind": "normal-focused-lint-and-ast",
+        "job": "bbcc2701-ef81-4b23-b53c-33aefdbdd814",
+        "command": "task goal -- check --only lint",
+        "result": "pass",
+        "files": 9,
+        "binding": "exact nine published file blobs",
+        "logs": [
+          ".temp/goal/check/run-mNZF8f/output.log"
+        ],
+        "logBytes": [
+          {
+            "path": ".temp/goal/check/run-mNZF8f/output.log",
+            "bytes": 2702,
+            "sha256": "3b632776dfcd09b8562b9763c1fc66700fbacbaa9c7da362f9bfd514c080e245"
+          }
+        ]
+      },
+      {
+        "kind": "both-unchanged-actual-production-guards",
+        "job": "c52c431c-bd3c-4eff-ba20-c82d61076e8a",
+        "pin": "79a25d53831590dcfd6501a2fbf2e05d2bc0d4b8",
+        "command": "bun scripts/goal/goalctl.ts test scripts/static/web-continuations.test.ts scripts/static/web-page-filtering.test.ts",
+        "qa": "20261020t130226-bd8aa2",
+        "result": "fail",
+        "passedCases": 60,
+        "failedCases": 2,
+        "expectations": 87,
+        "assertionsReached": true,
+        "continuationFindings": 17,
+        "predicateFindings": 3,
+        "logs": [
+          ".temp/goal/jobs/c52c431c-bd3c-4eff-ba20-c82d61076e8a.2.log",
+          ".artifacts/qa/20261020t130226-bd8aa2/logs/owner.log"
+        ],
+        "logBytes": [
+          {
+            "path": ".temp/goal/jobs/c52c431c-bd3c-4eff-ba20-c82d61076e8a.2.log",
+            "bytes": 1017,
+            "sha256": "b981d600f081240785a0800dd8c08c689540f6e0dd8fcff6aca1ac5a7be74551"
+          },
+          {
+            "path": ".artifacts/qa/20261020t130226-bd8aa2/logs/owner.log",
+            "bytes": 19135,
+            "sha256": "81bcd44627632c9121a929cdfe2511332ddb9cf9f8e61a777dab182ac1350402"
+          }
+        ]
+      },
+      {
+        "kind": "guard-byte-comparison-diagnostic",
+        "job": "c52c431c-bd3c-4eff-ba20-c82d61076e8a",
+        "pin": "79a25d53831590dcfd6501a2fbf2e05d2bc0d4b8",
+        "command": "task --taskfile .temp/goal/collection-purpose-native.Taskfile.yml guard-map",
+        "result": "pass-diagnostic-only",
+        "logs": [
+          ".temp/goal/jobs/c52c431c-bd3c-4eff-ba20-c82d61076e8a.1.log"
+        ],
+        "logBytes": [
+          {
+            "path": ".temp/goal/jobs/c52c431c-bd3c-4eff-ba20-c82d61076e8a.1.log",
+            "bytes": 9942,
+            "sha256": "0152ef3c848bdcc59af158e52782e3e71c4bf9f9140093973a929ce056f1d725"
+          }
+        ]
+      }
+    ],
+    "receiptReuseBoundary": {
+      "focusedPass": "66 cases / 194 expectations reused for exact changed blobs: 22 identity cases / 128 expectations and 44 additive scanner cases / 66 expectations. No accepted suite rerun.",
+      "typesLintAst": "Published focused Web types (1916 files), scanner types (6 files), lint/AST (9 files) logs independently hash-checked. They establish finite compatibility, not product acceptance or scanner soundness beyond cases tested.",
+      "retainedUnits": "50 cases / 1293 assertions in fa708501-d974-4687-9ee7-f70d8c49497f, retained continuation handoff. Unchanged g-837 helper/render portion reused; original identity assertions rerun in current focused selection.",
+      "historicalDevelopmentFailures": "Retained handoff records f21efe28 new negative-control failures repaired before pass; ed48d6c8/02af7547/53f5ff4b fixture/AST typing setup; and abf53bc3 metadata buffer overflow after passing types. These are not original product assertion passes or newly run failures.",
+      "inference": "Unchanged retained red Main 27005564 > 26950993.650000002; candidate Web 38863247; base Web did not finish nine nullable diagnostics. No new full inference run."
+    },
+    "actualCompositionLandingLimits": {
+      "productionComparison": {
+        "qa": "20261020t130226-bd8aa2",
+        "job": "c52c431c-bd3c-4eff-ba20-c82d61076e8a",
+        "result": "60 pass / 2 fail / 87 expectations; 17 continuation entries and 3 predicates remain red.",
+        "assertionReachability": [
+          {
+            "test": "scripts/static/web-continuations.test.ts",
+            "case": "production web projection syntax introduces no new violations",
+            "assertionLine": 14,
+            "outcomeAssertionReached": true
+          },
+          {
+            "test": "scripts/static/web-page-filtering.test.ts",
+            "case": "production web page predicates have structural evidence or an explicit API gap",
+            "assertionLine": 17,
+            "outcomeAssertionReached": true
+          }
+        ],
+        "scope": "Static production guard assertions, not demonstrated failures of original C29/native/browser product outcomes. Every original planted refusal passed in the reused run."
+      },
+      "exactComparison": {
+        "baseline": "a5ace9dae13cdc667e5e27be408f215241a63bbb equals the exact parent for all nine changed-before files and mapped unchanged dependencies; parent/candidate dependency hashes were checked separately.",
+        "counts": [
+          {
+            "sources": "initial",
+            "scanner": "parent",
+            "continuations": 16,
+            "predicates": 2
+          },
+          {
+            "sources": "same initial",
+            "scanner": "candidate",
+            "continuations": 16,
+            "predicates": 3
+          },
+          {
+            "sources": "candidate",
+            "scanner": "candidate",
+            "continuations": 17,
+            "predicates": 3
+          }
+        ],
+        "rawContinuationDelta": {
+          "introduced": 6,
+          "resolved": 5,
+          "residual": 17
+        },
+        "contextFreeDelta": {
+          "introduced": [
+            {
+              "path": "apps/web/features/entity-page/entity-page.tsx",
+              "consumer": "IdentitySections",
+              "operation": "<syntax>",
+              "rule": "invented-continuation",
+              "expression": "cursor:{\"type\":\"LogicalExpression\",\"left\":{\"type\":\"MemberExpression\",\"object\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"cursors\",\"optional\":false,\"typeAnnotation\":null},\"property\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"relations\",\"optional\":false,\"typeAnnotation\":null},\"optional\":false,\"computed\":false},\"operator\":\"??\",\"right\":{\"type\":\"Literal\",\"value\":null}}"
+            },
+            {
+              "path": "apps/web/features/entity-page/identity-relations.ts",
+              "consumer": "remainingIdentityRelations",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "page.items"
+            }
+          ],
+          "resolved": [
+            {
+              "path": "apps/web/features/entity-page/sections.tsx",
+              "consumer": "RelationsSection",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "page.data.items"
+            }
+          ],
+          "residual": [
+            {
+              "path": "apps/web/features/entity-page/entity-page.tsx",
+              "consumer": "IdentitySections",
+              "operation": "<syntax>",
+              "rule": "invented-continuation",
+              "expression": "cursor:{\"type\":\"LogicalExpression\",\"left\":{\"type\":\"MemberExpression\",\"object\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"cursors\",\"optional\":false,\"typeAnnotation\":null},\"property\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"relations\",\"optional\":false,\"typeAnnotation\":null},\"optional\":false,\"computed\":false},\"operator\":\"??\",\"right\":{\"type\":\"Literal\",\"value\":null}}"
+            },
+            {
+              "path": "apps/web/features/entity-page/identity-read.ts",
+              "consumer": "readIdentitySections",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "family.data.items"
+            },
+            {
+              "path": "apps/web/features/entity-page/identity-read.ts",
+              "consumer": "readIdentitySections",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "head.data.items"
+            },
+            {
+              "path": "apps/web/features/entity-page/identity-read.ts",
+              "consumer": "readIdentitySections",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "own.data.items"
+            },
+            {
+              "path": "apps/web/features/entity-page/identity-read.ts",
+              "consumer": "readIdentitySections",
+              "operation": "<syntax>",
+              "rule": "invented-continuation",
+              "expression": "{\"type\":\"VariableDeclarator\",\"id\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"continuation\",\"optional\":false,\"typeAnnotation\":null},\"init\":{\"type\":\"ArrowFunctionExpression\",\"expression\":true,\"async\":false,\"typeParameters\":null,\"params\":[{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"source\",\"optional\":false,\"typeAnnotation\":{\"type\":\"TSTypeAnnotation\",\"typeAnnotation\":{\"type\":\"TSTypeReference\",\"typeName\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"AvailableSummary\",\"optional\":false,\"typeAnnotation\":null},\"typeArguments\":null}}},{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"cursor\",\"optional\":false,\"typeAnnotation\":{\"type\":\"TSTypeAnnotation\",\"typeAnnotation\":{\"type\":\"TSUnionType\",\"types\":[{\"type\":\"TSStringKeyword\"},{\"type\":\"TSNullKeyword\"}]}}}],\"returnType\":null,\"body\":{\"type\":\"ConditionalExpression\",\"test\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"cursor\",\"optional\":false,\"typeAnnotation\":null},\"consequent\":{\"type\":\"ObjectExpression\",\"properties\":[{\"type\":\"Property\",\"kind\":\"init\",\"key\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"resource\",\"optional\":false,\"typeAnnotation\":null},\"value\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"source\",\"optional\":false,\"typeAnnotation\":null},\"method\":false,\"shorthand\":false,\"computed\":false,\"optional\":false},{\"type\":\"Property\",\"kind\":\"init\",\"key\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"cursor\",\"optional\":false,\"typeAnnotation\":null},\"value\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"cursor\",\"optional\":false,\"typeAnnotation\":null},\"method\":false,\"shorthand\":true,\"computed\":false,\"optional\":false}]},\"alternate\":{\"type\":\"Literal\",\"value\":null}},\"id\":null,\"generator\":false},\"definite\":false}"
+            },
+            {
+              "path": "apps/web/features/entity-page/identity-relations.ts",
+              "consumer": "remainingIdentityRelations",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "page.items"
+            },
+            {
+              "path": "apps/web/features/entity-page/views.tsx",
+              "consumer": "RelationsView",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "group.items"
+            },
+            {
+              "path": "apps/web/features/home/continue-strip.tsx",
+              "consumer": "ContinueStrip",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "{items:items,locale:locale,messages:messages}"
+            },
+            {
+              "path": "apps/web/features/tracking/series-progress-panel.tsx",
+              "consumer": "equivalentCounterparts",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "relations.items"
+            },
+            {
+              "path": "apps/web/features/work-levels/connections.tsx",
+              "consumer": "Collections",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "group.items"
+            },
+            {
+              "path": "apps/web/features/work-levels/previews.tsx",
+              "consumer": "ConnectionsPreviewView",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "group.items"
+            },
+            {
+              "path": "apps/web/features/work-levels/relation-rows.ts",
+              "consumer": "groupRelations",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "group.items"
+            },
+            {
+              "path": "apps/web/features/work-levels/relation-rows.ts",
+              "consumer": "relationPageGroups",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "page.items"
+            },
+            {
+              "path": "apps/web/features/work-levels/relation-rows.ts",
+              "consumer": "relationPageGroups",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "row.items"
+            },
+            {
+              "path": "apps/web/features/work-levels/relation-rows.ts",
+              "consumer": "relationRows",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "group.items"
+            },
+            {
+              "path": "apps/web/features/zones/site-route.tsx",
+              "consumer": "ZoneSiteRoute",
+              "operation": "<syntax>",
+              "rule": "dropped-continuation",
+              "expression": "route.items"
+            },
+            {
+              "path": "apps/web/features/zones/site-route.tsx",
+              "consumer": "ZoneSiteRoute",
+              "operation": "<syntax>",
+              "rule": "invented-continuation",
+              "expression": "{\"type\":\"VariableDeclarator\",\"id\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"cursor\",\"optional\":false,\"typeAnnotation\":null},\"init\":{\"type\":\"CallExpression\",\"callee\":{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"routeCursor\",\"optional\":false,\"typeAnnotation\":null},\"typeArguments\":null,\"arguments\":[{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"path\",\"optional\":false,\"typeAnnotation\":null},{\"type\":\"Identifier\",\"decorators\":[],\"name\":\"search\",\"optional\":false,\"typeAnnotation\":null}],\"optional\":false},\"definite\":false}"
+            }
+          ]
+        },
+        "predicateDelta": {
+          "introduced": [
+            {
+              "path": "apps/web/features/recipe-editor/recipe-authoring-recorded-page.ts",
+              "consumer": "readRecipeVisitFrame",
+              "operation": "readRecipeVisitFrame",
+              "predicate": "(zones.data.items)[\"slice\"](zones.data.items.slice(0, 6))"
+            }
+          ],
+          "resolved": [],
+          "residual": [
+            {
+              "path": "apps/web/features/entity-page/identity-relations.ts",
+              "consumer": "identityEntries",
+              "operation": "identityEntries",
+              "predicate": "(entries)[\"filter\"]((entry) => entry.rendering?.meaning?.definition === definition)"
+            },
+            {
+              "path": "apps/web/features/recipe-editor/recipe-authoring-recorded-page.ts",
+              "consumer": "readRecipeVisitFrame",
+              "operation": "readRecipeVisitFrame",
+              "predicate": "(zones.data.items)[\"slice\"](zones.data.items.slice(0, 6))"
+            },
+            {
+              "path": "apps/web/features/work-levels/relation-rows.ts",
+              "consumer": "relationRows",
+              "operation": "relationRows",
+              "predicate": "(entries)[\"continue\"](entry.kind === 'collection' || !rendering?.meaning)"
+            }
+          ]
+        },
+        "displayBaseDeltaCounts": {
+          "continuation": {
+            "introduced": 12,
+            "resolved": 5,
+            "residual": 17
+          },
+          "expressions": {
+            "introduced": 8,
+            "resolved": 1,
+            "residual": 17
+          },
+          "predicates": {
+            "introduced": 1,
+            "resolved": 0,
+            "residual": 3
+          }
+        },
+        "interpretation": "Raw delta has 6 introduced / 5 resolved fingerprints; context-free delta has 2 introduced / 1 resolved expression. Moving old blanket selection into remainingIdentityRelations does not prove its continuation. IdentitySections existing cursor expression reappears because its enclosing function context changed. Against the original display base there are 8 introduced / 1 resolved context-free expressions; do not relabel every residual as inherited."
+      },
+      "recipeFindingDisposition": {
+        "path": "apps/web/features/recipe-editor/recipe-authoring-recorded-page.ts",
+        "consumer": "readRecipeVisitFrame",
+        "expression": "zones.data.items.slice(0, 6)",
+        "status": "New scanner finding on unchanged source, already returned to Catalogue for one existing-owner disposition. No runtime defect proved and no implementation edit authorized here."
+      },
+      "site": "ContinueStrip and Zone source/history are outside this review. Their three reported production entries remain with Site; no source/history inspection or edit of those owners occurred.",
+      "inference": "Retain red inference and original proof limits. Focused types and this source verdict neither waive composed gates nor require a new unrelated whole-web/full-corpus run."
+    },
+    "originalAcceptanceStillDue": {
+      "api": "All original six-persona C29/A17 Collection-purpose, authority/CAS/replay/privacy, nullable structural-basis and original native outcomes remain due and unchanged.",
+      "ui": "Original C29 browser case, CollectionPurposes desktop/phone and retained identity/connections/fallback stories, real axe, screenshots and keyboard/navigation proof remain due. No browser/Storybook or rendered acceptance was run here.",
+      "retainedSource": "All approved Source/query/registry/credit/native f45b/1be686/Collection/nullable 85109555588b/citation/library and historical reports stay unchanged; Recipe DOI repair remains separate. No annotation/conversion authority or publication/citation ownership changes."
+    },
+    "reviewerChecks": {
+      "readOnlyAnalysis": [
+        "Exact parent and nine-file delta/manifest verified by Git blob, SHA256, byte count and parent relation",
+        "Fourteen mapped dependencies and three native bindings verified against immutable source",
+        "Actual reader/specialized view/generic view/cursor composition inspected",
+        "Original assertion removals absent; shared tests/inventories unchanged",
+        "Nine owner log hashes/sizes verified",
+        "One focused unresolved scanner counterexample run with exact parent and candidate modules"
+      ],
+      "recordedReportChecks": [
+        {
+          "job": "cc8d175f-0172-4fd9-bd67-4431a5034ed9",
+          "command": "task --taskfile .temp/goal/retained-page-review-inputs/report.Taskfile.yml verify",
+          "exitCode": 0,
+          "result": "PASS: append-only historical values/bytes, nine exact changed blobs, map hashes, counterexample source and retained-red/verdict distinction.",
+          "log": ".temp/goal/jobs/cc8d175f-0172-4fd9-bd67-4431a5034ed9.1.log",
+          "logSha256": "b018b3cea6344a6b71c7b5e4d77cdb316fddb908b3ec1992d452316d412fc57d"
+        },
+        {
+          "job": "cc8d175f-0172-4fd9-bd67-4431a5034ed9",
+          "command": "task docs:check",
+          "exitCode": 0,
+          "result": "PASS: 13 documentation-check self-tests and 249 Markdown files; external URLs and runtime behavior excluded.",
+          "log": ".temp/goal/jobs/cc8d175f-0172-4fd9-bd67-4431a5034ed9.2.log",
+          "logSha256": "ca9864781f68d92ec992ca96f19fc6a3b16876a47313107745d449db066dd30b"
+        },
+        {
+          "job": "cc8d175f-0172-4fd9-bd67-4431a5034ed9",
+          "command": "task goal -- check",
+          "exitCode": 0,
+          "result": "PASS: AST and selected repository guard 1/44; types/lint skipped with no relevant source; no test files named in brief.",
+          "log": ".temp/goal/jobs/cc8d175f-0172-4fd9-bd67-4431a5034ed9.3.log",
+          "logSha256": "9dc858fd6c02d922111a7d3a5356e29bc1dcfe959b2a86633f42fada73084ae3"
+        }
+      ],
+      "historicalReport": {
+        "path": ".temp/goal/retained-page-review-inputs/historical-report.json",
+        "sha256": "9053b4b4c063e5fa70eaf04acb86e0b2b407f9c0fdcf8f1349be2aa24833f811",
+        "bytes": 84925
+      },
+      "historicalParsedValuesPreserved": true,
+      "gitDiffCheck": "pass",
+      "workerCheckOutput": ".temp/goal/check/run-tihMSe/output.log",
+      "treeCurrency": "Worktree remained at 1096981ad148e94af43c819a26fe9c9ced67c2d6 throughout the source/check work. Normal check warned of seven missing main harness commits and selected cumulative historical report paths; no manual reset/rebase/history rewrite or other report edit occurred."
+    },
+    "limitations": [
+      "One bounded first source review; no nested reviewer, fallback, re-review or changing-wave candidate.",
+      "The reproduced finding is scanner behavior on planted loss, not an actual native API/browser data-loss outcome. Production guard failures are preserved separately from source inference and setup failures.",
+      "Exact-page equality may leave conservative duplicate presentation; original rendering/rights/accessibility/continuation journeys remain unproved.",
+      "No implementation, inventory, assertions, native schema, runtime, OAuth/API borrower, service lifecycle, corpus/prepare/restore/import/reset, publication, landing or acceptance/class closure."
+    ],
+    "managerNext": "Return native-next-projected-output-overwrite to existing G-2758 for a narrow conservative scanner correction and additive controls. Preserve the finite identity repair evidence, all 17/3 actual red gates, existing Recipe scanner disposition and inference limits; schedule the unchanged original acceptance separately. Keep A17 and G-2758 open."
   }
 }
