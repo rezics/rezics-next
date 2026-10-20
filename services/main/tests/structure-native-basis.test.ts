@@ -39,8 +39,10 @@ async function fixture(profile = 'recipe-composition') {
   let header: CompositionHeader;
   let writes = 0, active = true, readable = true, disclosed = true, terminalAvailable = true, sequence = 0;
   let ownerReads = 0, withdrawOwnerOnRead = Infinity;
+  let ownerRead: ((count: number) => void | Promise<void>) | undefined;
   let objectRead: (() => void) | undefined;
   let targetTypes = ['https://schema.org/TVEpisode'], targetManifest = '', targetChecks = 0;
+  let targetHead: string | undefined, targetVersion = 0, targetReadable = true;
   let targetCheck: ((count: number) => void) | undefined, targetUnavailable = false;
   const objects: ImmutableObjects = {
     async put(body) { writes++; const digest = sha256(body); bytes.set(digest, new Uint8Array(body)); return digest; },
@@ -60,7 +62,13 @@ async function fixture(profile = 'recipe-composition') {
       targetCheck?.(targetChecks);
       if (targetUnavailable) throw new Error('Native target owner unavailable');
       rows = targetTypes.includes('https://schema.org/TVEpisode')
-        && !targetTypes.includes('https://schema.org/CreativeWork') ? [] : [row({ target: episode })];
+        && !!targetHead && !targetTypes.includes('https://schema.org/CreativeWork') ? [] : [row({ target: episode })];
+    } else if (body.includes('SELECT DISTINCT ?target ?head')) {
+      const values = body.match(/VALUES \?target \{([^}]*)\}/)?.[1] ?? '';
+      rows = [...new Set([...values.matchAll(/<([^>]+)>/g)].map(match => match[1]!))].map(target => ({
+        target: { type: 'uri', value: target },
+        ...(target === episode && targetHead ? { head: { type: 'uri', value: targetHead } } : {}),
+      }));
     } else if (body.includes('SELECT ?epoch ?sequence ?hold ?r ?type')) {
       rows = [row({ epoch: 'structure-epoch', sequence: String(sequence), r: episode,
         type: 'resource', public: 'false', erased: 'false' })];
@@ -69,7 +77,7 @@ async function fixture(profile = 'recipe-composition') {
     } else if (body.includes('SELECT ?main ?public ?structuredDecision')) {
       rows = body.includes(`<${owner}>`) ? [row({ main: component, public: 'false' })] : [];
     } else if (body.includes('SELECT ?work ?head ?owningWork ?owningHead')) {
-      rows = body.includes(`<${episode}>`) ? [row({ work: episode })]
+      rows = body.includes(`<${episode}>`) ? [row({ work: episode, ...(targetHead ? { head: targetHead } : {}) })]
         : [row({ work: owner, head: derivedId('ack-work-head'), owningWork: owner,
           owningHead: derivedId('ack-work-head') })];
     } else if (body.includes('SELECT ?component ?profile ?head ?generation ?count ?manifest')) {
@@ -111,8 +119,8 @@ async function fixture(profile = 'recipe-composition') {
   const dependencies = { environment, access: {
     activePrincipalId: async () => active ? 'principal-1' : null,
     assertRecoveryOpen: async () => {},
-    canReadWork: async () => { ownerReads++; return readable && ownerReads < withdrawOwnerOnRead; },
-    canReadSemanticResource: async (_principal: unknown, _actor: string, resource: string) => resource === episode,
+    canReadWork: async () => { ownerReads++; await ownerRead?.(ownerReads); return readable && ownerReads < withdrawOwnerOnRead; },
+    canReadSemanticResource: async (_principal: unknown, _actor: string, resource: string) => resource === episode && targetReadable,
   } } as unknown as MainWorkDependencies;
   const session = () => {
     const result = new WorkReadSession(dependencies, new Request('https://main.test/private-owner-read'),
@@ -159,6 +167,7 @@ async function fixture(profile = 'recipe-composition') {
         value: { kind: 'language-string', lexical: 'Retained episode', language: 'en' } }] });
     const digest = await prepareWorkComponent(objects, episode, state, PROFILES.resource);
     targetManifest = `urn:rezics:sha256:${digest}`;
+    targetHead = derivedId(`ack-target-revision-${++targetVersion}`);
   };
   if (profile === 'episode-list-v1') await setTargetTypes(targetTypes);
   const records: OccurrenceRecord[] = profile === 'recipe-composition' ? [
@@ -184,11 +193,14 @@ async function fixture(profile = 'recipe-composition') {
     header: () => header, writes: () => writes, episode, setTargetTypes,
     targetChecks: () => targetChecks, onTargetCheck: (fn: (count: number) => void) => { targetCheck = fn; },
     targetTypes: (types: string[]) => { targetTypes = [...types]; },
+    targetHead: (head: string | undefined) => { targetHead = head; },
+    targetReadable: (value: boolean) => { targetReadable = value; },
     targetUnavailable: (value: boolean) => { targetUnavailable = value; },
     active: (value: boolean) => { active = value; }, readable: (value: boolean) => { readable = value; },
     disclosed: (value: boolean) => { disclosed = value; },
     terminalAvailable: (value: boolean) => { terminalAvailable = value; },
     withdrawOwnerAtCompletion: () => { ownerReads = 0; withdrawOwnerOnRead = 2; },
+    onOwnerRead: (fn: (count: number) => void | Promise<void>) => { ownerRead = fn; },
     onObjectRead: (fn: () => void) => { objectRead = fn; } };
 }
 
@@ -283,6 +295,94 @@ test('a missing current target owner remains unavailable and an undisclosed revi
   f.disclosed(false);
   await refused(readAcknowledgedStructureOccurrence(f.session(), f.basis), 'structure_basis_denied', 403);
   expect(f.targetChecks()).toBe(checks);
+  expect(f.receipts.size).toBe(1);
+  expect(f.writes()).toBe(writes);
+});
+
+test('a disclosed target without a semantic head still reaches the independent native grain guard', async () => {
+  const f = await fixture('episode-list-v1');
+  f.targetTypes(['https://schema.org/TVEpisode', 'https://schema.org/CreativeWork']);
+  f.targetHead(undefined);
+  const writes = f.writes(), receipt = structuredClone(f.receipts.get(f.basis.receipt));
+  await refused(readAcknowledgedStructureOccurrence(f.session(), f.basis), 'structure_target_mismatch', 422);
+  expect(f.targetChecks()).toBe(1);
+  const probes = f.queries.filter(query => query.includes('SELECT DISTINCT ?target ?head'));
+  expect(probes).toHaveLength(1);
+  expect(probes[0]).toContain(`VALUES ?target { <${f.episode}> }`);
+  expect(probes[0]).toContain('OPTIONAL { GRAPH');
+  expect(probes[0]!.trim()).toEndWith('LIMIT 2');
+  expect(f.receipts.get(f.basis.receipt)).toEqual(receipt);
+  expect(f.receipts.size).toBe(1);
+  expect(f.writes()).toBe(writes);
+});
+
+for (const movement of ['summary', 'head', 'absent-head'] as const) {
+  test(`closing ${movement} movement preserves a currently disclosed native profile mismatch`, async () => {
+    const f = await fixture('episode-list-v1'), receipt = structuredClone(f.receipts.get(f.basis.receipt));
+    let writes = f.writes();
+    f.onOwnerRead(async count => {
+      if (count !== 2) return;
+      if (movement === 'summary') await f.setTargetTypes(['https://schema.org/Movie']);
+      else {
+        f.targetTypes(['https://schema.org/Movie']);
+        f.targetHead(movement === 'head' ? derivedId('changed-target-head') : undefined);
+      }
+      writes = f.writes();
+    });
+    await refused(readAcknowledgedStructureOccurrence(f.session(), f.basis), 'structure_target_mismatch', 422);
+    expect(f.targetChecks()).toBe(2);
+    expect(f.header().head).toBe(f.basis.revision);
+    expect(f.receipts.get(f.basis.receipt)).toEqual(receipt);
+    expect(f.receipts.size).toBe(1);
+    expect(f.writes()).toBe(writes);
+  });
+}
+
+test('target withdrawal during a moved closing read refuses disclosure before reporting its invalid profile', async () => {
+  const f = await fixture('episode-list-v1'), writes = f.writes();
+  f.onOwnerRead(count => {
+    if (count !== 2) return;
+    f.targetReadable(false);
+    f.targetTypes(['https://schema.org/Movie']);
+    f.targetHead(derivedId('withheld-target-head'));
+  });
+  await refused(readAcknowledgedStructureOccurrence(f.session(), f.basis), 'structure_basis_denied', 403);
+  expect(f.targetChecks()).toBe(1);
+  expect(f.receipts.size).toBe(1);
+  expect(f.writes()).toBe(writes);
+});
+
+test('a valid moved target cannot replace the opening acknowledgement selection', async () => {
+  const f = await fixture('episode-list-v1'), writes = f.writes();
+  f.onOwnerRead(count => { if (count === 2) f.targetHead(derivedId('new-valid-target-head')); });
+  await expect(readAcknowledgedStructureOccurrence(f.session(), f.basis)).rejects.toMatchObject({
+    status: 503, code: 'structure_basis_unavailable', cause: expect.any(WorkReadMoved),
+  });
+  expect(f.targetChecks()).toBe(2);
+  expect(f.receipts.size).toBe(1);
+  expect(f.writes()).toBe(writes);
+});
+
+test('unavailable native evidence after closing target movement cannot become a profile mismatch', async () => {
+  const f = await fixture('episode-list-v1'), writes = f.writes();
+  f.onOwnerRead(count => {
+    if (count !== 2) return;
+    f.targetHead(derivedId('unavailable-target-head'));
+    f.targetUnavailable(true);
+  });
+  await refused(readAcknowledgedStructureOccurrence(f.session(), f.basis), 'structure_basis_unavailable', 503);
+  expect(f.targetChecks()).toBe(2);
+  expect(f.receipts.size).toBe(1);
+  expect(f.writes()).toBe(writes);
+});
+
+test('the caller final fence retains the exact selected target head as well as its native profile', async () => {
+  const f = await fixture('episode-list-v1'), session = f.session(), writes = f.writes();
+  const original = await readAcknowledgedStructureOccurrence(session, f.basis);
+  await session.fenceDependencies();
+  f.targetHead(derivedId('post-acknowledgement-target-head'));
+  await expect(session.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
+  expect(f.receipts.get(f.basis.receipt)).toEqual(original.commandReceipt);
   expect(f.receipts.size).toBe(1);
   expect(f.writes()).toBe(writes);
 });

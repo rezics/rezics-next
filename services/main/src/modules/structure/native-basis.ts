@@ -1,8 +1,8 @@
 import { isDeepStrictEqual } from 'node:util';
-import { canReadCompositionWork, compositionTargetBatchReader } from '../composition/disclosure-read.ts';
+import { canReadCompositionWork, compositionTargetDisclosureBatchReader } from '../composition/disclosure-read.ts';
 import { discloseInventory, type DisclosureTarget } from '../disclosure/read.ts';
 import { GRAPHS, RV, iri } from '../work/activate.ts';
-import type { WorkReadSession } from '../work/read-session.ts';
+import { WorkReadMoved, type WorkReadSession } from '../work/read-session.ts';
 import { compositionReceiptIri, orderTree, readCompositionReceipt, recordTree,
   type CompositionTerminal } from './change.ts';
 import { checkOccurrenceRecord, STRUCTURE_LIMITS, type OccurrenceRecord } from './format.ts';
@@ -163,17 +163,43 @@ async function readAcknowledgedOccurrence(session: WorkReadSession,
     parent = ancestor.parent;
   }
   const targets = [...new Set([record, ...path].flatMap(item => item.target ? [item.target] : []))];
-  const readTargets = compositionTargetBatchReader(session, profile);
-  const targetsReadable = async () => {
-    const readable = await readTargets(targets);
-    return targets.every(target => readable.has(target));
-  };
+  const readTargets = compositionTargetDisclosureBatchReader(session, profile);
   const nativeTargets = targets.filter(target => !isCatalogTarget(profile, target));
   // A historical command proves its admitted revision, not that independently
   // editable targets still satisfy this owner's grain and topology invariants.
   const targetsValid = async () => {
     session.checkDeadline();
     return !(await profile.targetGuard?.(env, header.owner, nativeTargets))?.invalid;
+  };
+  const targetsReadable = async (): Promise<boolean> => {
+    try {
+      const readable = await readTargets(targets);
+      return targets.every(target => readable.has(target));
+    } catch (error) {
+      if (!(error instanceof WorkReadMoved)) throw error;
+      // A repeated summary/head read can move before the native guard runs.
+      // Re-establish current disclosure only to classify a refusal; a valid
+      // target still throws the original movement and cannot replace its basis.
+      return session.selection(`structure-acknowledgement-refusal:${basis.structure}:${basis.occurrence}`, async probe => {
+        const decisions = await readDisclosure();
+        if (!await session.deps.access.activePrincipalId(principal)
+          || !await canReadCompositionWork(probe, basis.target)
+          || decisions.length !== 1 || decisions[0] !== 'visible') {
+          return refuse('structure_basis_denied', 'Native owner authority changed during verification');
+        }
+        const readable = await compositionTargetDisclosureBatchReader(probe, profile)(targets);
+        if (!targets.every(target => readable.has(target))) {
+          return refuse('structure_basis_denied', 'The exact occurrence target is unavailable to this principal');
+        }
+        if (!isDeepStrictEqual(header, await readHead())) {
+          return refuse('structure_head_mismatch', 'The native Structure changed during acknowledgement verification');
+        }
+        if (!await targetsValid()) {
+          return refuse('structure_target_mismatch', 'The exact occurrence target no longer satisfies its native profile');
+        }
+        throw error;
+      });
+    }
   };
   if (!await targetsReadable()) return refuse('structure_basis_denied', 'The exact occurrence target is unavailable to this principal');
   if (!await targetsValid()) return refuse('structure_target_mismatch', 'The exact occurrence target no longer satisfies its native profile');
