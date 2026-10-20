@@ -103,6 +103,9 @@ export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDepen
     .get('/v1/resources/:resource/relations', {
       params: t.Object({ resource: groupUuid }),
       query: t.Object({ actingSubject: t.Optional(native), position: readingPositionQuery, frame: frameQuery, languages: t.Optional(t.String({ maxLength: 8192 })),
+        definition: t.Optional({ ...native, description: 'Exact relation Definition identity; supply viewingRole with it. Selects authored occurrences before paging.' }),
+        viewingRole: t.Optional(t.String({ pattern: '^[a-z][a-z0-9-]{0,31}$',
+          description: 'Authored role key held by the viewed resource, paired with definition.' })),
         limit: t.Optional(t.Integer({ minimum: 1, maximum: RELATION_PAGE_COST.pageLimit })),
         after: t.Optional(t.String({ maxLength: 2048 })) }, { additionalProperties: false }),
       response: transportResponses(openApiOperations["/v1/resources/{resource}/relations"].get, { 200: t.Object({ profile: t.Literal('resource-relations-v1'), resource: native,
@@ -142,6 +145,7 @@ export function resourceRelationRoutes(fuseki: FusekiClient, work: MainWorkDepen
             AbortSignal.timeout(RELATION_PAGE_COST.deadlineMs)]), callsLeft: RELATION_PAGE_COST.graphCalls,
             bytesLeft: RELATION_PAGE_COST.graphBytes }, async () => readResourceRelations(work.environment, {
             resource: `https://rezics.com/id/${params.resource}`, languages, limit: query.limit ?? 20, after: query.after,
+            definition: query.definition, viewingRole: query.viewingRole,
             frames,
             canRead,
             disclose: referenceDisclosure(work.environment,
