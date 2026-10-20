@@ -96,12 +96,15 @@ export async function readStudioWork(session: WorkReadSession, agent: string, wo
   const typeRows = await session.query(`SELECT ?type WHERE { GRAPH ${iri(GRAPHS.current)} {
     ${iri(work)} a ?type . FILTER(?type IN (${types.map(type => `<${type}>`).join(', ')}))
   } } LIMIT ${types.length + 1}`, types.length + 1);
+  // The selected draft must remain optional within this contribution's publication
+  // edge; a separate OPTIONAL can bind an unrelated publication to an unpublished text.
   const textRows = await session.query(`SELECT ?contribution ?language ?draft ?publication ?selected WHERE {
     GRAPH ${iri(GRAPHS.current)} { ?contribution a rv:TextContribution ; rv:work ${iri(work)} ;
-      rv:author ${iri(agent)} ; rv:language ?language ; rv:draftHead ?draft .
-      OPTIONAL { ?contribution rv:publicationHead ?publication } }
-    OPTIONAL { FILTER(BOUND(?publication)) GRAPH ${iri(GRAPHS.revisions)} {
-      ?publication rv:selectedDraft ?selected . } }
+      rv:author ${iri(agent)} ; rv:language ?language ; rv:draftHead ?draft . }
+    OPTIONAL {
+      GRAPH ${iri(GRAPHS.current)} { ?contribution rv:publicationHead ?publication . }
+      OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?publication rv:selectedDraft ?selected . } }
+    }
   } LIMIT ${STUDIO_WORK_DETAIL_COST.texts + 1}`, STUDIO_WORK_DETAIL_COST.texts + 1);
   if (textRows.length > STUDIO_WORK_DETAIL_COST.texts) throw new WorkReadLimit('Studio texts exceed Work budget');
   const texts = textRows.map(row => {
@@ -228,10 +231,11 @@ export async function readStudioWorks(session: WorkReadSession, agent: string,
     VALUES ?work { ${workIds.map(iri).join(' ')} }
     GRAPH ${iri(GRAPHS.current)} { ?contribution a rv:TextContribution ; rv:work ?work ;
       rv:author ${iri(agent)} ; rv:language ?language ; rv:draftHead ?draft .
-      OPTIONAL { ?contribution rv:publicationHead ?publication }
     }
-    OPTIONAL { FILTER(BOUND(?publication)) GRAPH ${iri(GRAPHS.revisions)} {
-      ?publication rv:selectedDraft ?selected . } }
+    OPTIONAL {
+      GRAPH ${iri(GRAPHS.current)} { ?contribution rv:publicationHead ?publication . }
+      OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?publication rv:selectedDraft ?selected . } }
+    }
   } LIMIT ${STUDIO_WORK_COST.textsPerPage + 1}`, STUDIO_WORK_COST.textsPerPage + 1) : [];
   if (textRows.length > STUDIO_WORK_COST.textsPerPage) {
     throw new WorkReadLimit('Studio texts exceed page budget');
