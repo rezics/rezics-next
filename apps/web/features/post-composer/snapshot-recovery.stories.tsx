@@ -4,6 +4,7 @@ import { parseStoredDocument } from '@rezics/document';
 import recoveryMeta from './draft-recovery.stories.tsx';
 import { postText } from './messages.ts';
 import { messages as editorMessages } from '../document-editor/messages.ts';
+import { mediaMessages } from '../document-editor/media-messages.ts';
 
 const meta = { ...recoveryMeta, title: 'Compose/Snapshot recovery' };
 export default meta;
@@ -98,6 +99,7 @@ const arrangedRecovery: Story = {
     await expect(reopened).toHaveFocus();
     await expect(reopened).toHaveTextContent('Retained current text.');
     await expect(reopened.querySelectorAll('figure')).toHaveLength(1);
+    await expect(await canvas.findByText(mediaMessages[locale].unavailable)).toBeVisible();
     await expect(canvas.queryByRole('button', { name: t.removeImages })).toBeNull();
     const stored = JSON.parse(localStorage.getItem(draftKey)!);
     await expect(stored.recoveryBody).toBeUndefined();

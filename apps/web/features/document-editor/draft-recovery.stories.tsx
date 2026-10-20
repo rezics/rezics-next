@@ -7,6 +7,8 @@ import { BodyEditor } from './body-editor.tsx';
 import { messages } from './messages.ts';
 import type { DocumentSaveState } from './publication.ts';
 import type { UiLocale } from '../../i18n/define.ts';
+import { MediaImageProvider } from '@rezics/ui/media-image';
+import { mediaMessages } from './media-messages.ts';
 
 const key = 'rezics:story:complete-image-draft';
 const representationId = '11111111-1111-4111-8111-111111111111';
@@ -53,6 +55,9 @@ function CompleteDraft({ locale = 'en', bind = false, failUpload = false, arrang
 
 const meta = {
   title: 'Post Composer/Complete image drafts', component: CompleteDraft,
+  decorators: [(Story, context) => <MediaImageProvider
+    viewer={{ ready: true, signedIn: true, age: 'adult', optIns: { general: true, r15: false, sexual: false, grotesque: false } }}
+    labels={mediaMessages[context.args.locale ?? 'en']}><Story /></MediaImageProvider>],
   beforeEach() {
     localStorage.removeItem(key);
     let refused = false;
@@ -139,6 +144,7 @@ const retryRecovery: Story = {
     const editor = canvas.getByRole('textbox', { name: 'Complete draft' });
     await expect(editor).toHaveTextContent('Current text and both images.');
     await expect(editor.querySelectorAll('figure')).toHaveLength(2);
+    await expect(await canvas.findAllByText(mediaMessages[args.locale ?? 'en'].unavailable)).toHaveLength(2);
     await expect(canvas.getByLabelText('Saved image count')).toHaveTextContent('1');
     const retained = JSON.parse(localStorage.getItem(key)!).recoveryBody;
     await expect(retained).toContain('Current text and both images.');

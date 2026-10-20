@@ -11,6 +11,8 @@ import { messages as shellMessages } from '../shell/messages.ts';
 import { forgetReadingLanguages } from '../content-language/use-reading-languages.ts';
 import { messages as editorMessages } from '../document-editor/messages.ts';
 import { newPostProgress } from './api.ts';
+import { MediaImageProvider } from '@rezics/ui/media-image';
+import { mediaMessages } from '../document-editor/media-messages.ts';
 
 const actor = 'https://rezics.com/id/a2d4f6e8-1c3b-4a5d-9e7f-0b2c4d6e8f1a';
 const realm = 'https://rezics.com/id/7c3e9a1d-2b4f-4d6e-8a0c-5e7f9b1d3c2a';
@@ -39,7 +41,10 @@ const meta = {
   args: { locale: 'en', actingSubject: actor },
   render: args => <ReopenComposer {...args} />,
   decorators: [(Story, context) => <ShellProvider locale={context.args.locale} messages={shellMessages}
-    initialTheme="light" initialCollapsed={false} signedIn><Story /></ShellProvider>],
+    initialTheme="light" initialCollapsed={false} signedIn>
+      <MediaImageProvider viewer={{ ready: true, signedIn: true, age: 'adult', optIns: { general: true, r15: false, sexual: false, grotesque: false } }}
+        labels={mediaMessages[context.args.locale]}><Story /></MediaImageProvider>
+    </ShellProvider>],
   beforeEach({ parameters }) {
     forgetReadingLanguages();
     const snapshot = parameters.recovery === 'snapshot';
