@@ -1,14 +1,48 @@
 # Product completeness state
 
-Checkpoint f16b0424-5230-4f91-b8d1-93dc8ee012e1 retains checkpoint cc2e0861
-and covers handled events task:G-2823:50 and task:G-2823:51.
-The preceding checkpoint confirmed the original Studio and Recipe mail
-acknowledgements, at
-2026-10-20T12:41:41.241Z and 13:02:58.354Z respectively.
+Checkpoint ae3edb54-d561-4448-b34f-c5a34a1ba0f3 retains checkpoint f16b0424
+and covers handled event mail:bde714aa-282c-4ff8-bd65-2e27cdd943e1.
+Program's reviewed-design mail was acknowledged at 2026-10-20T15:22:48.624Z;
+this checkpoint confirmed that acknowledgement. Its handled turn changed no
+Product brief and selected no worker execution, review, landing or tooling slice.
 Measures were read at this checkpoint and may include later activity; other
 turns retain their own dispositions. This checkpoint changes only this state,
 no brief or worker instruction, and proves no additional product row or
 original finding.
+
+Program accepted both interaction/verification and delivery designs after one
+independent review and scoped corrections; their final reviews match the
+reviewed proposals. Retain the summary at
+`.temp/audit-remediation-20261019/design-20261020/DESIGN.md` and the adjacent
+verification/delivery proposals and final reviews. This is accepted design
+direction for current authorized work, not product acceptance or implemented
+tooling, and needs no repeated broad research or full design review.
+
+Meaningful passing Storybook interactions establish their actual UI criteria;
+compose them with applicable owner/API and retained real desktop/persistence
+evidence, preserving failures and coverage limits. Fixture success alone proves
+neither server authority nor persistence. A changed, missing or invalidated
+necessary app connection gets only its smallest smoke. Ordinary small edits
+require proportionate affected checks, not new research, OAuth/corpus setup,
+full matrices or acceptance reports. Existing independent source/API/business
+criteria and original authority, rights and data outcomes remain required.
+
+The current existing-owner path is Site/G-2830 consuming G-2748's actual
+contract-calibrated recovery stories against original D2-003 criteria;
+Catalogue executing the positive C28 successor in registered G-2793 context,
+without treating historical test.failing green as acceptance; and consumers
+using landed Source a118810692 with its gate receipts. Site alone dispatches
+G-2763's remaining wiring handoff; Catalogue owns A01 closure and G-2781
+publication. This reconciles historical Source assignments once: do not rebuild
+an old candidate or duplicate ownership.
+
+R role/event hardening, P proof-semantic helpers and U usage accounting remain
+independently optional proposals. No slice is enabled by this design acceptance;
+Program's existing tooling owner owes scoped implementation and recovery replay
+before R activation. Product repairs/proof/landing do not wait for all tooling.
+Keep current single-owner cooperation, job intents, admission, leases, fallback
+health checks and account/model/effort pins. No framework, queue/DAG, global
+state store, extra library, recovery guarantee or 30% efficiency gain is accepted.
 
 Scope remains domain-leading completeness across supported domains, including
 specialist jobs, with API outcomes first and actual rendered/interaction proof.
@@ -1030,9 +1064,9 @@ restore isolated copies. Corpus prerequisites do not block independent site
 proof. Small main batches need affected checks and codex-1/xhigh review;
 coordinate publication. Final full regression/confirmation precedes wave merge.
 
-Checkpoint measures: scope remains 68/68 rows and 408 cells; these events add
-zero proved rows. First attempts are 9/21 (43%; current day 0/7), including
-the additional scoped G-2823 Recipe qualification. Landed median is 4.5 attempts,
+Checkpoint measures: scope remains 68/68 rows and 408 cells; this event adds
+zero proved rows. First attempts remain 9/21 (43%; current day 0/7), including
+the previously accepted scoped G-2823 Recipe qualification. Landed median is 4.5 attempts,
 maximum 51 (G-2823); the current worker-token reading is 114.8M input/992.8k
 output, and tokens per proved row remain unavailable. Tool counts include job
 wakes and open partial-landing continuations. Eight environment attempts, one
@@ -1047,9 +1081,9 @@ custody rather than another setup experiment. Event-29's storage-reader harness
 cause was corrected through the existing owner reader in the accepted finite
 comparison. G-2823 owns the isolated backend handoff and causal cleanup repair. The
 unclassified wakes and one retained other-kind refusal still need tooling
-disposition. The two successful covered manager turns recorded 2,613,252 input/
-19,404 output tokens, including 2,481,280 cached input. No failed wrapper attempt
-was recorded for these two event keys; the earlier checkpoint's 18 failed wrapper
+disposition. The successful covered manager turn recorded 1,405,275 input/
+5,671 output tokens, including 1,319,040 cached input. No failed wrapper attempt
+was recorded for this event key; the earlier checkpoint's 18 failed wrapper
 attempts remain historical. This checkpoint and other events are excluded from
 the covered-turn total, which establishes no comparable manager/worker share.
 The status measure read reports no live Product worker and two open tasks;
@@ -1062,7 +1096,16 @@ than another retained-input inventory; no unchanged replay is due.
 Deferred source/control bindings and governance release/custody remain with
 their existing owners; repeated runtime inspection cannot supply them.
 
-The current full 12-hour read, 2026-10-20T02:01:25Z–2026-10-20T14:01:25Z,
+The current full 12-hour read, 2026-10-20T03:56:17Z–2026-10-20T15:56:17Z,
+contains 369 sessions, 1,020.49M input/970.16M cached, worker input 66%,
+landing-review input 1% and other input 34% (rounded), 15 landing-review
+sessions and 20% no-decision share. It includes continuing sessions and does
+not isolate this event or manager-only tokens; other-role share is not a
+manager share. Compared with the preceding overlapping reading, this establishes
+no causal savings or 30% gain. No monitor, researcher, worker or landing was
+started by this checkpoint.
+
+The preceding full 12-hour read, 2026-10-20T02:01:25Z–2026-10-20T14:01:25Z,
 contains 294 sessions, 908.99M input/865.97M cached, worker input 60%, other
 roles 40%, six landing-review sessions and 21% no-decision share. It includes
 continuing sessions and does not isolate these two events or manager-only
@@ -1124,8 +1167,10 @@ through its offered lease. G-2830's exact image lease is released; its original
 image journeys remain open for the independently corrected, admitted composition.
 Preserve the endpoint, default borrower and G-2823's stop custody; no new image
 lease or stop authority is inferred, and final OAuth revocation is unconfirmed.
-Audit retains G-2793's exact C28 binding, G-2781's unchanged
-cancellation assertion and the G-2799/Site consumer gate coordination.
+Catalogue retains the positive C28 successor in registered G-2793 context;
+historical expected-failure green closes no criterion. G-2781's unchanged
+cancellation assertion and the G-2799/Site consumer gate coordination retain
+their existing owners.
 Program's existing lifecycle owner and Audit retain the separately due original
 discussion capture, conditioned on explicit sharedMain3001 borrower releases
 and cleanup; a closed unrelated lease does not release that runtime. Site
@@ -1133,8 +1178,10 @@ retains unchanged I1-001/A16 assertions and exact tuple/callback custody.
 After that handoff, product requires demonstrated cleanup repair and reviewed
 follow-up landing, then executes delegated normal refresh and runtime proof.
 Existing Work/Recipe, G-2762/Book and A16 owners retain their bounded fixes,
-pending gates and original proof without duplicate execution. Audit retains
-Source/importer selected-blob verification and G-2785's finite Parts correction
+pending gates and original proof without duplicate execution. Consume landed
+Source a118810692 and its gate receipts; Site alone dispatches G-2763's remaining
+wiring handoff, and Catalogue owns A01 closure/G-2781 publication. Retain
+importer custody and G-2785's finite Parts correction
 and proof through the existing composition/first-review owner. Audit consumes
 G-2825's landed report and fixture through G-2829's separate Settings repair
 prerequisite and routes residual site acceptance to existing owners. An execution
