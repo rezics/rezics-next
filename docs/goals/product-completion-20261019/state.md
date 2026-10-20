@@ -1,9 +1,10 @@
 # Product completeness state
 
-Checkpoint 9804fceb-9b59-4c24-8892-7e7cf013ddfb retains checkpoint a51c9bf3
-and covers handled events mail:519938d3-b1ae-4a37-84f9-91bde317a3a7 and
-mail:a78319f9-3282-4d44-bb8a-d36d47892362. Both original mail acknowledgements
-were confirmed, at 2026-10-20T11:02:45.025Z and 11:15:01.068Z respectively.
+Checkpoint e803665b-db29-44de-b717-c31c23855107 retains checkpoint 9804fceb
+and covers handled events mail:fba0815a-d3f3-4116-b7de-aec79cf4b170,
+task:G-2823:47 and mail:811ab8e8-170e-46cc-b3a0-889a7d96e1e4.
+Both original mail acknowledgements were confirmed, at
+2026-10-20T11:47:17.703Z and 12:01:02.433Z respectively.
 Measures were read at this checkpoint and may include later activity; other
 turns retain their own dispositions. This checkpoint changes only this state,
 no brief or worker instruction, and proves no additional product row or
@@ -14,7 +15,7 @@ specialist jobs, with API outcomes first and actual rendered/interaction proof.
 Accepted research G-2787/G-2788/G-2792/G-2797 and tooling G-2789/G-2794 remain
 closed verified. Audit accepted original finding D5-006 from composed evidence;
 these events prove zero additional product completeness rows. Audit confirms
-23/61 canonical original findings accepted and 38 open in handled Site turn 017,
+23/61 canonical original findings accepted and 38 open in handled Site turn 021,
 with Site 20/45 and Catalogue 3/18; Audit owns those closure counts.
 The registry's 68/68 rows and 408 cells remain a distinct denominator.
 
@@ -128,9 +129,11 @@ Preserve independent assertions, actual authority, exact retained bytes/values/
 rights and real receipts. G-2786 must scope refusal to affected cuts, preserving
 revocation and availability.
 
-Product accepted G-2823's finite image/backend handoff; the remaining
-request-budget runtime handoff is blocked on existing-owner inputs below, before
-host repair and runtime acceptance. G-2825 is closed verified for its report
+Product accepted G-2823's finite image/backend handoff and retained Media Use
+inspection. The remaining request-budget runtime handoff needs actual source/
+control binding and governance custody; its executable source inputs are now
+supplied below. Host repair and runtime acceptance remain due.
+G-2825 is closed verified for its report
 and fixture handoff;
 audit owns residual finding
 acceptance. Site retains G-2826's supported continuation under existing delegated
@@ -664,10 +667,10 @@ G-2791's actual compatible governance manifest and identified stopped-copy
 custody still precede G-2823 qualification and any G-2762 runtime command.
 Verify the admitted existing corpus binding first: the unchanged helper would
 otherwise prepare a fallback corpus, which is not authorized. The image/default
-Book runtime supplies no qualifying governance population. The handoff explicitly
-supplies no callable original full authenticated cross-hop or mixed 1/2/4/8-reader
-bodies; G-2750 retains those gaps through Audit's next bounded disposition,
-preserving every original obligation. Product routed that executable ownership
+Book runtime supplies no qualifying governance population. That earlier handoff
+supplied no callable original full authenticated cross-hop or mixed 1/2/4/8-reader
+bodies; the later full-v1 packet below supersedes those missing-source statements
+only, preserving every original obligation. Product routed that executable ownership
 in mail 3b2cfe30; handled Site turn 017 retained it for its next disposition.
 No Program ruling or unchanged G-2823 inspection resume was required.
 
@@ -687,12 +690,77 @@ owner actions, not checkpoint resumes or new acceptance. Existing diagnostic,
 Book, image and exact 100-byte default-query owners, both named image/default
 leases and G-2823's sole stop custody remain unchanged.
 
-G-2762 executes the missing proof; G-2765 retains separate finite cold/growth
-proof. G-2823 can qualify the remaining runtime only after those inputs arrive.
-Do not repeat the unchanged inspection or image/default startup, prepare another
-copy, resume for missing inputs or add a catalogue-completeness prerequisite.
-Both image/default borrowers and G-2823's stop custody remain preserved. These
-events accept no cleanup repair, shared refresh, telemetry or original finding.
+Mail fba0815a produced committed G-2823 decision e171c18f67 and an actual
+sameScope resume of attempt 47 on its existing codex-1/high worker after manager
+rebase. It selected only retained owner evidence for POST /api/main/v1/media/uses,
+idempotency c02ed85c-27b4-45f6-8e57-4f1b8ae2f856:use, at 11:00:51.051Z on
+the frozen 76c5955006/d2f04140 backend/support composition. G-2748's diagnosis
+3a771978a30fdf53eaeeed8dae714193a11a9ce0 establishes omitted Use context versus
+immutable acknowledged origin Realm as a consumer contract mismatch. Its
+separately admitted same-owner correction proceeds independently; source
+predicates do not identify the historical throwing boundary.
+
+Event task:G-2823:47 accepted that finite inspection: rejecting owner boundary
+and exception class are **not retained** in the scoped evidence. Its sanitized
+report `.temp/worktrees/g-2823/.temp/lifecycle/media-use-retained-owner-evidence-20261020.md`
+has SHA-256 7417a72068e2338bc97cfbe269edd660327b8a7ce813dcfc932ce3b8aa056764;
+all 11 retained input hashes were verified. Exact actor/native reply/head/root/
+revision match the diagnosis. The retained response is unreadable 403; owner
+stdout/stderr were ignored and console suppressed. This is a bounded retention
+limit, not a global telemetry-absence claim or historical Account/Access/Media
+attribution. No HTTP/API/OAuth, write replay, instrumentation or runtime operation
+ran. Audit/G-2748 received the accepted negative result. Attempt 47 has no
+tracked delta or commit to land; five older cleanup candidate commits remain
+unaccepted. G-2823 stays open and exited, without another brief change, resume
+or landing for this inspection.
+
+Mail 811ab8e8 produced committed G-2823 decision 089d4941946c. G-2750 attempt
+30's immutable MAIN packet `.temp/original-read-cancellation-full-v1/handoff.json`
+has SHA-256 a15fe9f6c270cde6acc832ababda992d04636dbda139c6984a9e59ea76a04dc8,
+matrix commit ff039f1971597b1b61517324ee792549cd514983 and compiling pin
+ea5582f1b9245c17e4166561453ed4ac06df13de. The handoff and every declared
+payload hash were verified. Accept lanes.authenticated.selection and
+lanes.mixed.selection as executable source inputs: 70 IAM02/IAM10 authenticated
+support cases and four mixed notification/Work/discovery/body-search cases at
+1/2/4/8 readers. Reuse the immutable packet, accepted registration/bundle/types/
+docs checks and prior five-persona notification packet without restaging or
+replay. These inputs replace missing-source statements only: zero original
+assertions/runtime executed, no independent source review or finding acceptance.
+
+G-2762 alone binds runtime.ts::bindOriginalCancellation to actual supported
+shared-JWKS/introspection/final-currentAssertion/native-active controls, real
+Request/principal/one-use handoff captures, complete owner release/pending
+transitions and unchanged source-bound cost allocations. Missing, unknown or
+incomplete captures fail as prerequisites; no synthetic fallback, new owner API
+or G-2823 transport instrumentation follows. Preserve diagnostic job
+9d519b33-b11a-4d49-8ded-4392998199e4 and its automatic continuation. Product
+relayed the source-input receipt to Audit without another worker resume.
+G-2764 retains the exact unchanged 100-byte 49d9dabe capture after admitted
+composition; G-2765 retains separate finite cold/growth proof.
+
+G-2791's actual compatible governance release/custody still needs five real
+normal-OAuth recipients, each with at least 24 visible non-null acknowledged
+realm_role_change subjects. Full execution needs genuine compatible Web/Main/
+Account/corpus inputs and separate finite admission, preserving 100 ms grace,
+300 ms without later/active/pending work, enclosing allocations, authority,
+disclosure, unaffected waiter and fresh retry. Delivered Book readiness supplies
+no governance population; do not prepare, restore or import it again. No new
+G-2823 runtime cut or unchanged missing-input inspection resume is authorized.
+
+The image borrower released exactly site-image-book-current-20261020-r1.
+Preserve Main42963/Account42701, default-capture-book-current-20261020-r1,
+Task1677097, hosts77717/78038, all KEEP/peer resources and G-2823's sole supported
+stop custody. The release grants no new lease or stop authorization; final
+OAuth revocation remains unconfirmed. Original G-2830 genuine image proof at
+1440/390 in en/zh-Hans remains open for an admitted repaired composition.
+These events accept no cleanup repair, refresh, telemetry or original finding.
+
+Site turn 021 also reported G-2831's same-owner preparation 39 after 8c7c785372,
+retaining corrected baseline preparation and spent CAS7 history. Studio's approved
+08f385a2 two-file repair was passing manager composition gates; original G-2848
+proof still needs G-2776's compatible same lawful actor custody. Its old Studio
+runtime was disposed. These are existing-owner progress receipts, with no
+product brief change, duplicate runtime, review or new acceptance.
 
 Product routed the concrete C28 identity/body-reader discrepancy to Audit's
 existing G-2793 owner in mail 90161ead, acknowledged there at 04:10:44.967Z.
@@ -819,12 +887,12 @@ proof. Small main batches need affected checks and codex-1/xhigh review;
 coordinate publication. Final full regression/confirmation precedes wave merge.
 
 Checkpoint measures: scope remains 68/68 rows and 408 cells; these events add
-zero proved rows. First attempts remain 9/16 (56%; current day 0/2), retaining
-attempt 46's sameScope fix round. Landed median is 4.5 attempts,
-maximum 46 (G-2823); the current worker-token reading is 106.7M input/932.4k
+zero proved rows. First attempts are 9/17 (53%; current day 0/3), retaining
+attempt 47's sameScope fix round. Landed median is 4.5 attempts,
+maximum 47 (G-2823); the current worker-token reading is 107.4M input/938.6k
 output, and tokens per proved row remain unavailable. Tool counts include job
 wakes and open partial-landing continuations. Eight environment attempts, one
-step continuation and seven fixes;
+step continuation and eight fixes;
 89 job wakes: 33 passes, 35 assertion failures, two environment failures,
 17 harness failures and two unclassified. The previous day's first-attempt share
 was 3/8 (38%); reviewed G-2842 support on main 4c77554c3b addresses the common
@@ -835,26 +903,33 @@ custody rather than another setup experiment. Event-29's storage-reader harness
 cause was corrected through the existing owner reader in the accepted finite
 comparison. G-2823 owns the isolated backend handoff and causal cleanup repair. The
 unclassified wakes and one retained other-kind refusal still need tooling
-disposition. The two successful covered manager turns recorded 1,524,429 input/
-12,058 output tokens, including 1,381,760 cached input. No failed wrapper attempt
-was recorded for these two event keys; the prior checkpoint's 18 failed wrapper
+disposition. The three successful covered manager turns recorded 3,230,158 input/
+26,094 output tokens, including 3,002,368 cached input. No failed wrapper attempt
+was recorded for these three event keys; the earlier checkpoint's 18 failed wrapper
 attempts remain historical. This checkpoint and other events are excluded from
 the covered-turn total, which establishes no comparable manager/worker share.
-Product has no live worker and two open tasks; G-2823 attempt 46 and
-G-2826 attempt 32 are exited. The former needs the three actual owner handoffs;
+Product has no live worker and two open tasks; G-2823 attempt 47 and
+G-2826 attempt 32 are exited. The former needs actual source/control bindings
+and governance release/custody, with its executable source packets now supplied;
 the latter retains its separate composed-landing execution event. Repeated
-runtime inspection cannot resolve the missing selectors or fixture; existing
+runtime inspection cannot supply actual owner bindings or governance custody; existing
 owners retain those concrete operations without another worker loop.
 
-The current full 12-hour read, 2026-10-19T23:36:34Z–2026-10-20T11:36:34Z,
+The current full 12-hour read, 2026-10-20T00:22:12Z–2026-10-20T12:22:12Z,
+contains 211 sessions, 744.85M input/710.76M cached, worker input 51%, other
+sessions 49%, zero landing-review sessions and 22% no-decision share. It includes
+continuing sessions and does not isolate these three events or manager-only
+tokens; other-session share is not a manager share. These overlapping readings
+establish no causal savings. No monitor or research task was started.
+
+The preceding full 12-hour read, 2026-10-19T23:36:34Z–2026-10-20T11:36:34Z,
 contains 183 sessions, 676.49M input/646.00M cached, worker input 46%, other
 sessions 54%, zero landing-review sessions and 22% no-decision share. The
 largest recorded worker totals are G-2791 94.09M and G-2823 70.97M input.
 The preceding 2026-10-19T22:50:34Z–2026-10-20T10:50:34Z read contained
 119 sessions, 483.05M input/461.98M cached, worker input 43%, other 57% and
 24% no-decision share.
-These aggregates do not isolate these two events or manager-only tokens.
-No new monitor or research task was started by this checkpoint.
+These aggregates do not isolate covered events or manager-only tokens.
 
 The measured full 12-hour window 2026-10-19T22:16:24Z–2026-10-20T10:16:24Z
 contains 65 sessions, 293.71M input/281.64M cached, worker input 54%, other
@@ -868,16 +943,19 @@ share. Audit owns shared scheduling; verified hourly coverage, later full-window
 comparison and instrumentation attribution remain due.
 
 Next event owners: G-2823 attempt 45's finite image/authentication handoff is
-accepted; attempt 46 remains exited. Its exact five-case cancellation selector
-is accepted as source only under c874e147c9. Audit routes G-2791's compatible
-governance manifest/stopped-copy custody and G-2750's callable full authenticated
-cross-hop and mixed-reader bodies under mail 3b2cfe30 before Product
-qualifies those lanes. G-2791 remains sole custodian of the delivered qualified
+accepted; attempt 47's bounded negative Media Use retention result is accepted,
+with no tracked delta to land or inspection to repeat. Its five-case selector
+under c874e147c9 and authenticated/mixed source inputs under 089d4941946c are
+accepted as source only. Audit routes G-2762's actual source/control bindings
+and G-2791's compatible governance manifest/stopped-copy custody before Product
+qualifies those lanes under separate admission. G-2791 remains sole custodian of the delivered qualified
 Book copy, with no repeated preparation/restore. Audit routes the supported
 diagnostic observation through G-2762 and G-2764's exact single-request proof
-through its offered lease. G-2830 retains the original image journeys through its separate
-offered lease. Preserve the endpoint and G-2823's stop custody until both actual
-borrowers release. Audit retains G-2793's exact C28 binding, G-2781's unchanged
+through its offered lease. G-2830's exact image lease is released; its original
+image journeys remain open for the independently corrected, admitted composition.
+Preserve the endpoint, default borrower and G-2823's stop custody; no new image
+lease or stop authority is inferred, and final OAuth revocation is unconfirmed.
+Audit retains G-2793's exact C28 binding, G-2781's unchanged
 cancellation assertion and the G-2799/Site consumer gate coordination.
 Program's existing lifecycle owner and Audit retain the separately due original
 discussion capture, conditioned on explicit sharedMain3001 borrower releases
