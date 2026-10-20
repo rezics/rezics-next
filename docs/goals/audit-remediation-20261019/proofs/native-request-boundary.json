@@ -3317,5 +3317,410 @@
       "currency": "Used the supported prepared-tree option to honor the explicit no-rebase/no-repin scope. Worker head remains bbf178022089f82ebabfe6711c24eb91a18509ee and the reviewed source remains the separate sealed 19e9747d4cb23d6d8aa8ec6fe4bab7d129ea78cb snapshot."
     },
     "landingDisposition": "Source verdict ready now for the exact 19e9747d4cb23d6d8aa8ec6fe4bab7d129ea78cb delta. Manager may accept this report-only commit and return the stated attachment/composition conditions to G-2762; no separate review chain, individual product landing or original outcome closure. G-2762 remains the sole binder/implementation owner; G-2823 retains lifecycle/stop/lease custody."
+  },
+  "sqlLifecycleDeltaReviewV1": {
+    "schemaVersion": 1,
+    "reviewId": "G2822-SQL-LIFECYCLE-DELTA-V1",
+    "reviewedAtUtc": "2026-10-20T16:28:48.370282+00:00",
+    "reviewer": {
+      "worker": "G-2822",
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "independentSourceReview": true,
+      "nestedAgents": false
+    },
+    "scope": {
+      "decision": "2026-10-20T16:19:41Z",
+      "source": {
+        "head": "89541ed8e1c675d1d44276a15249ba64580b50f2",
+        "tree": "a2322a1c7ca79d7e2dfc5dd4c07cf397d52e694e",
+        "parent": "19e9747d4cb23d6d8aa8ec6fe4bab7d129ea78cb",
+        "frozenProduct": "76c5955006dbea2016e84465d8f3e79fdf4fc979",
+        "privateSnapshot": ".temp/sql-lifecycle-review-v1/snapshot",
+        "fixedDuringReviewAndCounterexample": true,
+        "inspectedBlobs": [
+          {
+            "path": "services/main/src/infrastructure/pg-pool.ts",
+            "before": {
+              "mode": "100644",
+              "blob": "2e739d75725bd908d72c15c9ec0eace7f622e250",
+              "bytes": 15326,
+              "sha256": "5134b955ae0402291def51256d2ecb2046a60a25beb0685be55a29c5334ec3fc"
+            },
+            "after": {
+              "mode": "100644",
+              "blob": "e1a27f9ce99befbc2918678b77de0366e2905f94",
+              "bytes": 23062,
+              "sha256": "93baeaf82f75fb220b777792638b166058f1eb4c6deac4f118ddf8d30ca6dc49"
+            }
+          },
+          {
+            "path": "services/main/tests/sql-lifecycle-observation.test.ts",
+            "before": null,
+            "after": {
+              "mode": "100644",
+              "blob": "ea3c0e99a2d7fe5106a898b5f6073d84067a4a07",
+              "bytes": 19082,
+              "sha256": "33ec79e61f4e2c5c3af056052f68f7c2df80563664031232c98f995a5ae40039"
+            }
+          }
+        ],
+        "consumerAttachment": {
+          "path": ".temp/sql-lifecycle-observation-v1/attach-sql-work.ts",
+          "resolved": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2762/.temp/sql-lifecycle-observation-v1/candidate/.temp/sql-lifecycle-observation-v1/attach-sql-work.ts",
+          "bytes": 399,
+          "sha256": "7180580efd421cb96181bc7602c2bafd6fdce4ea9918c9a9e65e64d907dedb68",
+          "export": "attachSqlWork",
+          "signature": "(actualPool: pg.Pool, observer: SqlWorkObserver) => SqlPoolObservation"
+        }
+      },
+      "workerSource": {
+        "dispatchHead": "bdb380d1384f0a91f89fe718e2d8eb128e56d5b0",
+        "initiallyClean": true,
+        "sourceRepinOrRebase": false
+      },
+      "newPaths": [
+        "services/main/src/infrastructure/pg-pool.ts",
+        "services/main/tests/sql-lifecycle-observation.test.ts"
+      ],
+      "inheritedPaths": {
+        "count": 7,
+        "disposition": "Exact tree/blob comparison only; accepted Account/Main/Fuseki changes and earlier request/shared-key/diagnostic/readiness/default/native evidence reused without another source review or execution."
+      },
+      "packetInputsInspected": [
+        "handoff.json",
+        "consumer-handoff.md",
+        "observer-input.json",
+        "manifest.json",
+        "module-resolution.json",
+        "affected-input-comparison.json",
+        "checks.json",
+        "candidate/.temp/sql-lifecycle-observation-v1/attach-sql-work.ts"
+      ],
+      "externalProtocolIntegration": "Inspected byte-pinned pg 8.23.1 Client ready/query/end handling and pg-pool 3.14.0 callback delivery/release. Worktree external driver bytes match all five driver pins. No app, runtime or ignored consumer attachment was activated; the independent test attaches only to its disposable protocol-fixture pool."
+    },
+    "sourceVerdict": {
+      "approved": false,
+      "status": "changes-required",
+      "blockingFinding": "G2822-SQL-01",
+      "reason": "Fresh callback checkout released before initial pg readyForQuery processing completes never retires while the pool remains idle. The observation reports complete coverage with stale active=1/released=0. This is incorrect lifetime accounting and prevents accepting this SQL owner prerequisite; it is not evidence of real continuing SQL or an original public outcome failure."
+    },
+    "reviewedSemantics": {
+      "acquisitionAndContext": "beginSqlCheckout records attempts before the unchanged nested-checkout guard and driver. It captures the requesting OpenTelemetry trace once. Callback delivery preserves the entire AsyncLocalStorage snapshot; promise adoption remains in its caller context. Refused/nested/failed attempts retire from pending. No Request, SQL text/parameters, credentials or connection configuration enters an event.",
+      "realWireWork": "The release wrapper preserves the pg release call/error, then waits for pinned readyForQuery, no active query, empty queued/sent queues and non-ending connection, or actual ended state. drain/end listeners retain early-release, query-timeout and delayed-close work; unknown/custom state stays active. That conservative path is correct for tested wire cases, but it misses the first callback/no-query ready transition (finding G2822-SQL-01).",
+      "conservationAndTime": "Frozen per-pool events/totals conserve starts=released+active+pending. lastStartAt and zeroSince use actual owner transition timestamps. Conservation can still hold with the stale active lifetime in the finding; it alone does not validate real idle.",
+      "privateDelivery": "At most eight additive subscribers per actual bounded pool and 64 unsettled returned promises per subscriber. Events and totals are frozen. Delivery is synchronous but not awaited; throws/rejections increment failure status, overflow increments dropped, and future complete/status becomes false. Source stores no event history; trace clears on retirement. Consumer must check final status after drain and independently verify sink I/O.",
+      "detachAndCoverage": "detach stops delivery/removes its observer; final subscriber removal drops the pool observation. drain waits only returned observer promises. Late/restarted coverage remains incomplete; missing history cannot establish idle. Outstanding released/held checkouts can retain their closures until actual retirement; the finding also prolongs that lifetime unnecessarily.",
+      "preservedBehavior": "No change to connection options/bounds, SQL query/callback/promise overloads, statements, transaction operations, nested authority mode, costs, request budgets, signals, deadlines or final authority/publication fences. statement-cost.ts and every other accepted parent tree entry are unchanged. Disabled observation records only owner.started; it creates no event history or SQL release wrapper."
+    },
+    "affectedInputComparison": {
+      "producerFile": ".temp/sql-lifecycle-review-v1/packet/affected-input-comparison.json",
+      "newDeltaPaths": 2,
+      "inheritedDeltaPaths": 7,
+      "otherAcceptedEntriesUnchanged": 10101,
+      "otherFrozenEntriesUnchanged": 10094,
+      "unrelatedWaveChangesImported": false,
+      "statementCostUnchanged": true,
+      "preservedCallbacks": {
+        ".temp/request-budget-diagnostic/observe-main.ts": "ae8ebf644cf2f7f117f86f02ee63d9a104a41f6efe72433eb9a9b5fabd0f6e17",
+        ".temp/account-shared-key-observation-v1/bind-shared-key-wait.ts": "899fc593d7b35daceb9b761abdfdf31d73e01a2458c7c55c27ac199f3a72af24",
+        ".temp/account-request-lifecycle-observation-v1/attach-account-work.ts": "af23daf087b930ab3339dd07a3a0a78af0d5eae898e3d0b03e1b99c84ff00823"
+      },
+      "verification": "Independent private Git tree/blob/byte comparison, sealed 80-file length/SHA256 validation and module dependency pin validation; full metadata in snapshot-verification.json."
+    },
+    "reusedChecks": {
+      "owner": {
+        "qaRunId": "20261020t160229-b74370",
+        "source": "89541ed8e1c675d1d44276a15249ba64580b50f2",
+        "recordedJob": "5ccb86e6-fddb-4d55-a0a2-3218d53e63f5",
+        "command": "task -t .temp/sql-lifecycle-observation-v1/Taskfile.yml test",
+        "innerCommand": "bun scripts/goal/goalctl.ts test services/main/tests/sql-lifecycle-observation.test.ts",
+        "tests": 19,
+        "passed": 19,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 0,
+        "assertions": 947,
+        "junit": ".temp/sql-lifecycle-review-v1/packet/retained/qa/20261020t160229-b74370/owner.xml",
+        "method": "Parsed all 19 testcase names/assertion counts against checks.json and suite totals. Reused producer execution; not relabelled as independent reviewer execution."
+      },
+      "source": {
+        "job": "5ccb86e6-fddb-4d55-a0a2-3218d53e63f5",
+        "types": "passed; seven affected workspace graphs",
+        "inference": "passed",
+        "lint": "passed",
+        "ast": "passed",
+        "log": "retained/checks/run-xj7V2g/output.log"
+      },
+      "attachment": {
+        "job": "e36b00b7-790d-4cb4-bb9d-348b3fd30a6e",
+        "guards": "passed process",
+        "guardFiles": 24,
+        "guardTestsReported": 172,
+        "guardRenderedTestcases": 168,
+        "guardXmlLimitation": "mismatched tag: line 220, column 2",
+        "types": "passed; five files",
+        "composition": "passed"
+      },
+      "initialFailuresPreserved": [
+        {
+          "job": "445be534-9378-41b0-bcf8-285a7226e6fe",
+          "class": "stack-free SQL fixture/implementation failures, not original outcomes",
+          "disposition": "fixed: recognize newly idle pg activeQuery undefined; isolate simulated request async scopes; avoid repeated pool end cleanup",
+          "reported": "11 passed, 7 failed, 3 unhandled errors; see retained original log"
+        },
+        {
+          "job": "a5d1c29d-3a30-485b-a374-e6b45269bb29",
+          "class": "source/test typing and inference measurement failure",
+          "disposition": "fixed: pg release overload variance, two possibly undefined client uses, explicit this type",
+          "ownerTests": "18 passed / 920 assertions before typing repair; lint/AST and guard process passed"
+        }
+      ],
+      "packagingFailurePreserved": {
+        "job": "63f73779-af53-4f5c-93fc-7209b496dd44",
+        "reason": "Git refused an unnamed raw-SHA range as an empty bundle",
+        "disposition": "use the existing detached HEAD name after verifying its exact source pin; no source/test change"
+      },
+      "guardReporting": {
+        "recordedGateExit": 0,
+        "selectedFiles": 24,
+        "reportedPasses": 172,
+        "renderedTestcaseTags": 168,
+        "xmlParseError": "mismatched tag: line 220, column 2",
+        "junit": ".temp/sql-lifecycle-review-v1/packet/retained/checks/run-AdsNyK/guards-0-artifacts/unit.xml",
+        "limitation": "Process success and 172-header summary do not supply four missing rendered records. New SQL receipt limitation and earlier malformed shared-key guard limitation are both retained; prior Account lifecycle 111 passes/four skips remain separately unchanged."
+      },
+      "inferenceMergeConditionRetained": true,
+      "unchangedPoolTestsNotReplayed": [
+        "services/main/src/infrastructure/pg-pool.test.ts",
+        "services/main/src/infrastructure/pg-deadlock.test.ts"
+      ]
+    },
+    "independentCounterexample": {
+      "source": "89541ed8e1c675d1d44276a15249ba64580b50f2",
+      "recordedJob": "9564518b-829d-4153-8660-a6c97959099b",
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task -t .temp/sql-lifecycle-review-v1/Taskfile.yml counterexample",
+      "innerCommand": "bun scripts/goal/goalctl.ts test ./.temp/sql-lifecycle-review-v1/initial-callback-release.test.ts --result-file .temp/sql-lifecycle-review-v1/counterexample-admission.json --reporter=junit --reporter-outfile=.temp/sql-lifecycle-review-v1/counterexample.xml",
+      "test": ".temp/sql-lifecycle-review-v1/initial-callback-release.test.ts",
+      "testSha256": "4de674d4daf3d81d8b55b7a154886e396cc4fb85c0b8296f31d4bc3483e9a970",
+      "case": "fresh callback checkout released without SQL reaches observed idle before pool shutdown",
+      "outcomeAssertion": {
+        "reached": true,
+        "line": 48,
+        "column": 35
+      },
+      "counts": {
+        "executed": 1,
+        "passed": 0,
+        "failed": 1,
+        "errors": 0,
+        "skipped": 0,
+        "assertions": 8
+      },
+      "exitCodes": {
+        "test": 1,
+        "taskAndRecordedJob": 201
+      },
+      "qaAdmission": {
+        "code": 1,
+        "queuedAt": 1792513492930,
+        "startedAt": 1792513493048,
+        "finishedAt": 1792513495078,
+        "queueMs": 118,
+        "testMs": 2030,
+        "totalMs": 2148,
+        "artifactPaths": []
+      },
+      "junit": ".temp/sql-lifecycle-review-v1/counterexample.xml",
+      "log": ".temp/sql-lifecycle-review-v1/review-jobs/9564518b-829d-4153-8660-a6c97959099b.log",
+      "classification": "Reached JUnit outcome assertion; stack-free actual pg Pool/Client with controlled external protocol, not a setup/compile/container failure and not an original runtime SQL/cancellation assertion.",
+      "initialSetupFailure": {
+        "recordedJob": "6c455b91-8af0-4825-8715-155d24d30aa3",
+        "executed": 0,
+        "assertionReached": false,
+        "reason": "Bun interpreted the hidden .temp path without ./ as a discovery filter; no test matched. Corrected only the Task selector to ./.temp/...; source and test assertions were unchanged.",
+        "retainedLog": ".temp/sql-lifecycle-review-v1/review-jobs/6c455b91-8af0-4825-8715-155d24d30aa3.log"
+      },
+      "cleanup": "Detached/drained the owned observer and ended only the local fixture pool in finally. No socket, service, sink, runtime or shared resource started."
+    },
+    "executableFindings": [
+      {
+        "id": "G2822-SQL-01",
+        "priority": "P2",
+        "owner": "G-2762",
+        "blocking": true,
+        "title": "A fresh callback checkout can stay active after successful idle release",
+        "sourcePath": "services/main/src/infrastructure/pg-pool.ts",
+        "sourceLines": [
+          359,
+          381
+        ],
+        "trigger": "On a new bounded pool, call pool.connect((error, client, done) => { done(); resolve(); }) without a SQL statement; observe after setImmediate while the pool stays open.",
+        "expected": {
+          "poolTotal": 1,
+          "poolIdle": 1,
+          "poolWaiters": 0,
+          "observerStarts": 1,
+          "observerReleased": 1,
+          "observerActive": 0,
+          "observerPending": 0
+        },
+        "actual": {
+          "poolTotal": 1,
+          "poolIdle": 1,
+          "poolWaiters": 0,
+          "driverReadyForQuery": true,
+          "queryQueue": 0,
+          "sentQueryQueue": 0,
+          "observerStarts": 1,
+          "observerReleased": 0,
+          "observerActive": 1,
+          "observerPending": 0,
+          "observerZeroSince": null,
+          "observerComplete": true,
+          "observerFailures": 0,
+          "observerDrops": 0
+        },
+        "cause": "Pinned pg Client._handleReadyForQuery calls the initial connection callback before setting readyForQuery=true. pg-pool delivers this new client synchronously there. release therefore sees wasIdle=false and settled() sees idle=false. Only drain/end are watched; pg _pulseQueryQueue emits no drain when no query has executed. No later reevaluation occurs until unrelated work or connection shutdown.",
+        "impact": "The complete observation retains a false active checkout and null zeroSince although the actual pool/client is idle, blocking faithful SQL pending-zero/lifetime reduction and unnecessarily retaining the checkout trace/listeners. It does not demonstrate hidden work or a false known-zero.",
+        "reproduce": "task -t .temp/sql-lifecycle-review-v1/Taskfile.yml counterexample (through the recorded job/QA command above)",
+        "testPath": ".temp/sql-lifecycle-review-v1/initial-callback-release.test.ts",
+        "assertionReached": true,
+        "assertionLine": 48,
+        "correctionRequired": "Cover the initial callback release/ready transition without retiring query_timeout, early-release, queued/sent SQL or delayed termination before their real protocol fence. Preserve original overload/error/context/authority behavior; retain this focused regression in the owner correction. No source or original assertion was edited by this review."
+      }
+    ],
+    "consumerObligations": [
+      "G-2762 must correct G2822-SQL-01 before composing this SQL observer as an accepted owner prerequisite. Reuse the existing review/fix route; do not substitute polling/counter resets, pool shutdown or a fabricated zero for a genuine released lifetime.",
+      "Attach the exact pinned attachSqlWork/observeSqlPool module to every actual participating boundedPool before its first checkout (including bootstrap/authority work) and before initial idle/serving. Preserve existing subscribers and real connection options, authority, statements, budgets, deadlines, signals and fences; do not proxy/replace pools or load a duplicate owner module. Late attachment is permanently incomplete.",
+      "Use a stable private pool label plus checkout ID. Reduce each selected lawful trace from actual pending/active/released transitions, independently of whole-pool totals. Keep unmatched traffic in whole-runtime accounting, never fabricate selected trace attribution, and do not derive selected timestamps from global totals. Cover all participating pools and require complete source status, conservation and real latest start/zero transitions; unknown coverage or missing events cannot establish zero.",
+      "Bound event/trace/checkout retention and asynchronous sink work. Serialize no Request, headers, tokens, SQL, parameters or configuration. Invalidate capture for source failure/drop, overflow, unmatched required identity, timeout or unknown work. No activated private sink or written count/bytes/hash/flush/close result exists in this source packet.",
+      "After the entire required observation window, detach all sources, drain each already returned promise under bounded cleanup, read final source status, independently drain accepted sink work, inspect explicit I/O errors/drop/overflow, verify written event count/bytes/hash and flush/close, then clear owned references. Source detach/drain cannot certify sink I/O; swallowed sink errors or absent events are inconclusive.",
+      "G-2762 supplies the separately released complete original Runtime and exact actual Request/control/trace bindings after the source correction. G-2823 alone retains lifecycle/startup/stop/lease custody. This packet, module-resolution receipt and attachment are source inputs only; no source approval substitutes for matched runtime admission and original assertions."
+    ],
+    "preservation": {
+      "priorFieldCount": 20,
+      "priorReportSha256": "2c560b9facfac1e779c429f85cbbf24024bb2eff2a227c59f54d6e620ec2129d",
+      "allPriorFieldsAndHistoricalFailuresUnchanged": true,
+      "historicalNative571AndArtifacts": "All original fields, failure evidence and both artifact locations preserved exactly.",
+      "acceptedNative566AndOtherReviews": "Reused unchanged; no original request/shared-key/pre-debit/Account/readiness/default source review, capture or full-tier/native execution repeated.",
+      "productOrOriginalAssertionEdits": false,
+      "nestedAgents": false,
+      "runtimeListenerSinkControlActivation": false,
+      "oauthDataLeaseNativeCorpusPreparationOrOriginalCommandAction": false,
+      "wholeWaveOrIndividualProductLanding": false
+    },
+    "remainingProof": {
+      "originalAcceptance": "Unchanged by this review; producer packet reports 24/61 overall and Site 21/45. Zero original findings/persona cells closed here.",
+      "outcomes": "Unchanged original 70 authenticated/four mixed cases; IAM02/IAM10; actual lawful authority/current session/assertion/consent/scope/privacy and departures; unaffected waiter; readers 1/2/4/8; 100 ms transport grace then 300 ms without new/active/pending work; SQL/native pending-zero and fresh independent retry. Complete released Runtime, verified sink I/O and separately scoped execution remain required.",
+      "frozenRequest": {
+        "product": "76c5955006dbea2016e84465d8f3e79fdf4fc979",
+        "bytes": 100,
+        "sha256": "49d9dabeefeedbd562209a078d92873c8ca56cada2841d75abb76cadd0db0c24",
+        "calls": 72,
+        "bytesLimit": 8388608,
+        "deadlineMs": 10000,
+        "allTighterEnclosingLimits": "unchanged"
+      },
+      "privateSink": {
+        "activated": false,
+        "writtenEvents": null,
+        "bytes": null,
+        "sha256": null,
+        "flushCloseAndIOVerified": false
+      }
+    },
+    "artifacts": {
+      "root": ".temp/sql-lifecycle-review-v1",
+      "producerOriginal": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2762/.temp/sql-lifecycle-observation-v1",
+      "localSealedPacket": ".temp/sql-lifecycle-review-v1/packet",
+      "sourceDiff": ".temp/sql-lifecycle-review-v1/reviewed-delta.patch",
+      "originalReport": ".temp/sql-lifecycle-review-v1/original-report.json",
+      "snapshotVerification": ".temp/sql-lifecycle-review-v1/snapshot-verification.json",
+      "validation": ".temp/sql-lifecycle-review-v1/validation.json",
+      "manifestSha256": "4d9b45d4d2c73700cbe11dc9fb022a61147258044ce2d6b0ff00c8037986ebff",
+      "retention": "Original producer packet and independent local 80-file packet/source/counterexample/log copies retained; no owned disposable resource remains."
+    },
+    "checks": {
+      "status": "passed",
+      "recordedJob": "7bd232cf-e7d9-43e4-8423-bf0e9757cc1c",
+      "steps": [
+        {
+          "command": "task -t .temp/sql-lifecycle-review-v1/Taskfile.yml report:validate",
+          "exit": 0,
+          "log": ".temp/goal/jobs/7bd232cf-e7d9-43e4-8423-bf0e9757cc1c.1.log",
+          "retainedLog": ".temp/sql-lifecycle-review-v1/report-checks/7bd232cf-e7d9-43e4-8423-bf0e9757cc1c.1.log",
+          "logSha256": "f0b633958e66629c15e1807edac00d9d1e72142274de9e2af83bacceacc8fb41"
+        },
+        {
+          "command": "task docs:check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/7bd232cf-e7d9-43e4-8423-bf0e9757cc1c.2.log",
+          "retainedLog": ".temp/sql-lifecycle-review-v1/report-checks/7bd232cf-e7d9-43e4-8423-bf0e9757cc1c.2.log",
+          "logSha256": "623d98fd5e7f079c3f976a39ae58164446b2bc667e65fbe696baa24830609456"
+        },
+        {
+          "command": "env GOAL_CHECK_PREPARED_TREE=/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2822 task goal -- check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/7bd232cf-e7d9-43e4-8423-bf0e9757cc1c.3.log",
+          "retainedLog": ".temp/sql-lifecycle-review-v1/report-checks/7bd232cf-e7d9-43e4-8423-bf0e9757cc1c.3.log",
+          "logSha256": "8d839a546e882237e9772e0d9925ab24de0ced250b88c76eb7aa5897b97685b1"
+        }
+      ],
+      "documentation": {
+        "status": "passed",
+        "markdownFiles": 257,
+        "checkerTests": 13
+      },
+      "workerCheck": {
+        "status": "passed",
+        "types": "not selected; no TypeScript workspace changed",
+        "tests": "not selected; no test files in brief",
+        "lint": "not selected; no source changed",
+        "ast": "passed",
+        "guards": "passed; 1/45 selected for report-only change",
+        "output": ".temp/goal/check/run-vArf0P/output.log"
+      },
+      "reportValidation": {
+        "status": "passed",
+        "source": "89541ed8e1c675d1d44276a15249ba64580b50f2",
+        "tree": "a2322a1c7ca79d7e2dfc5dd4c07cf397d52e694e",
+        "parent": "19e9747d4cb23d6d8aa8ec6fe4bab7d129ea78cb",
+        "frozenProduct": "76c5955006dbea2016e84465d8f3e79fdf4fc979",
+        "sourceTreeEntries": 10103,
+        "sealedFiles": 80,
+        "comparisonEntries": 9,
+        "unchangedParentEntries": 10101,
+        "unchangedFrozenEntries": 10094,
+        "newDeltaPaths": [
+          "services/main/src/infrastructure/pg-pool.ts",
+          "services/main/tests/sql-lifecycle-observation.test.ts"
+        ],
+        "inheritedPaths": 7,
+        "reusedOwnerTests": 19,
+        "reusedOwnerAssertions": 947,
+        "guardReportedTests": 172,
+        "guardRenderedTestcases": 168,
+        "guardXmlLimitation": "mismatched tag: line 220, column 2",
+        "independentExecuted": 1,
+        "independentFailures": 1,
+        "independentAssertions": 8,
+        "priorFieldsPreserved": 20,
+        "reportOnlyChangeSinceDispatch": true
+      },
+      "independentSourceCounterexample": "One reached JUnit failure, G2822-SQL-01, intentionally preserved; not a passing source gate. The initial selector/setup failure executed no test.",
+      "sourceTierReplay": false,
+      "fullNativeOrRuntimeExecution": false,
+      "reportOnlyChangeSinceDispatch": true,
+      "currency": {
+        "workerHead": "bdb380d1384f0a91f89fe718e2d8eb128e56d5b0",
+        "mainObservedAfterChecks": "619aeaf64f39c0583ac00ddecc4de4716fbbcdf9",
+        "preparedTree": true,
+        "reason": "Retained the dispatch worker pin and separate immutable SQL source without rebase/repin. Main advanced concurrently in unrelated G-2799/G-2859 task documents; these were not edited or reverted. Only this report differs from dispatch head and will be committed."
+      }
+    },
+    "landingDisposition": "Review delivered with one reached-assertion source finding. Manager may accept the additive report-only commit and return G2822-SQL-01 plus the consumer conditions to the existing G-2762 owner. This exact SQL candidate is not approved for diagnostic/Runtime composition until corrected; do not activate it or close any original finding. No new review chain or individual product landing is requested."
   }
+
 }
