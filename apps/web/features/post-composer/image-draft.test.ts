@@ -77,7 +77,7 @@ test('first image preparation durably records an actual reply authoring receipt 
   const result = await preparePostImageDraft(intent, null, owner.persist, owner.main);
   const record = owner.restored();
   expect(result).toEqual({ reply: record.progress.reply, variantId: record.progress.variantId,
-    revisionId: head, rootTarget: root, rootRevision });
+    revisionId: head, rootTarget: root, rootRevision, originRealm: intent.realm });
   expect(owner.requests[0]?.input).toMatchObject({ profile: 'member-reply-draft-v1',
     reply: result.reply, variantId: result.variantId, expectedHead: null, rootTarget: root,
     rootRevision, originRealm: intent.realm, actingSubject: intent.actingSubject });
@@ -89,17 +89,36 @@ test('first image preparation durably records an actual reply authoring receipt 
   expect(owner.requests).toHaveLength(1);
 });
 
+test('a different current Realm and actor create a separate draft without rebinding the saved image origin', async () => {
+  const owner = authoringApi();
+  const acknowledged = await preparePostImageDraft(intent, null, owner.persist, owner.main);
+  const saved = owner.restored();
+  const current = { ...intent, realm: native('99999999-9999-4999-8999-999999999999'),
+    actingSubject: native('88888888-8888-4888-8888-888888888888'), body: 'Text in another Realm' };
+  const fresh = await preparePostImageDraft(current, saved, owner.persist, owner.main);
+  expect(fresh).toMatchObject({ originRealm: current.realm, rootTarget: root, rootRevision });
+  expect(fresh.reply).not.toBe(acknowledged.reply);
+  expect(owner.requests[1]?.input).toMatchObject({ originRealm: current.realm, actingSubject: current.actingSubject });
+  // Returning to the saved draft uses its persisted intent, not the newer UI's Realm or actor.
+  const reused = await preparePostImageDraft({ ...saved.intent, body: current.body }, saved, owner.persist, owner.main);
+  expect(reused).toEqual({ ...acknowledged, originRealm: saved.intent.realm });
+  expect(saved.intent).toEqual(intent);
+  expect(owner.requests).toHaveLength(2);
+});
+
 test('an unknown image authoring write retries its exact immutable request while the current editor text stays independent', async () => {
   const owner = authoringApi(); owner.status(0);
   await expect(preparePostImageDraft(intent, null, owner.persist, owner.main)).rejects.toThrow('lost-response');
   const pending = owner.restored();
   expect(pending.progress.writeState).toBe('unknown');
   owner.status(201);
-  await preparePostImageDraft({ ...intent, title: 'Later title', body: 'Later text' }, pending, owner.persist, owner.main);
+  const result = await preparePostImageDraft({ ...intent, title: 'Later title', body: 'Later text' }, pending, owner.persist, owner.main);
   expect(owner.requests).toHaveLength(2);
   expect(owner.requests[1]).toEqual(owner.requests[0]);
   expect(owner.restored().intent).toEqual(intent);
   expect(owner.restored().progress.writeState).toBe('acknowledged');
+  expect(result).toMatchObject({ reply: pending.progress.reply, variantId: pending.progress.variantId,
+    revisionId: head, rootTarget: root, rootRevision, originRealm: pending.intent.realm });
 });
 
 test('a pending image authoring request never leaves the device when its recovery record cannot be saved', async () => {
@@ -116,9 +135,10 @@ test('losing the device acknowledgement keeps the pending request recoverable wi
   }, owner.main)).rejects.toThrow('device-full');
   const pending = owner.restored();
   expect(pending.progress.writeState).toBe('unknown');
-  await preparePostImageDraft(intent, pending, owner.persist, owner.main);
+  const result = await preparePostImageDraft(intent, pending, owner.persist, owner.main);
   expect(owner.requests[1]).toEqual(owner.requests[0]);
   expect(owner.restored().progress.writeState).toBe('acknowledged');
+  expect(result).toMatchObject({ originRealm: pending.intent.realm });
 });
 
 for (const status of [403, 503]) test(`authoring ${status} retains a truthful write state and safe retry`, async () => {
