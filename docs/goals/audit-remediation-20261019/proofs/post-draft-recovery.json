@@ -2835,5 +2835,463 @@
       "manifestFormat": "SHA256 and byte count of every private correction-bundle file except the manifest itself; generated after final report copy.",
       "historicalBundle": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/image-consumer-7d3e19b7d37e"
     }
+  },
+  "currentMainImageVerification": {
+    "recordedAt": "2026-10-20T11:11:26.807752+00:00",
+    "result": "blocked on first genuine Media Use denial; original image outcome assertions not reached",
+    "selection": "Latest 2026-10-20T10:49:04Z cut: only missing original D2-003 image matrix. D2-002 accepted cases, prior source verdicts, 16-test/80-assertion receipt and source/static checks reused without replay.",
+    "pins": {
+      "frontendPin": "e9cf1b02b6d941e6dfab82272c24b3716b786774",
+      "frontendTree": "92f014675dbf1db2b98e5e25cdb65b47a2887b32",
+      "cleanTrackedSource": true,
+      "manifestSha256": "e1277855013cc7a5ad0668fc79c253cbab522649b1cd33b3645fee20894e5aac",
+      "fileChecks": [
+        {
+          "path": "apps/web/features/document-editor/body-editor.tsx",
+          "sha256": "f2892be0a3d27b1b106ff5f5eec30aaf66726c8485f5e95038a3ecb94efc5bd1",
+          "gitBlob": "f3c54cd091b144d026cf303cbd9ffbca6e33c538",
+          "matchesDelivered": true
+        },
+        {
+          "path": "apps/web/features/document-editor/image-target.ts",
+          "sha256": "a668c9edea2bdd2c9632c9c92dea29c281a397e4580f100fad2b4e4b586a16b7",
+          "gitBlob": "131241010ff90926142ffa7058011e1cd2ada425",
+          "matchesDelivered": true
+        },
+        {
+          "path": "apps/web/features/document-editor/image-uses.ts",
+          "sha256": "8ea7f122767522bc7a9a7dfe3fd82dacaeb2f52676a5f452de6730b9d87f288d",
+          "gitBlob": "4b24ce613851e11a925e138f736aa9cdb977b83e",
+          "matchesDelivered": true
+        },
+        {
+          "path": "apps/web/features/document-editor/local-image.ts",
+          "sha256": "7c9e72bc5fbfc92b93825c9a21edc4aae5eea8e0c62171a6c8db9e6d533fa8d8",
+          "gitBlob": "fa7e6bc008731ab723da40a9c76caedbee0afffd",
+          "matchesDelivered": true
+        },
+        {
+          "path": "apps/web/features/document-editor/member-reply-images.test.ts",
+          "sha256": "96550aae909aa523e7b4f7c277e961d14f88cd399204b9e9025579f6610e5777",
+          "gitBlob": "f0e90b10269247b7d0affa11521b95aadf4c4c32",
+          "matchesDelivered": true
+        },
+        {
+          "path": "apps/web/features/post-composer/api.ts",
+          "sha256": "142beb054e1033390d874e940a7e1258c11944574ab1ce11bb152d8c0af0b1de",
+          "gitBlob": "339bcbd0c833ac41d3daac8a8b98e1dc4550ad64",
+          "matchesDelivered": true
+        },
+        {
+          "path": "apps/web/features/post-composer/composer.tsx",
+          "sha256": "8e087e1bd308bf58eb808d4b5ebf099ba7055db28e2414665ab24444a00e2e95",
+          "gitBlob": "f145e549ca618d07fdb27cabc6c0e28f5f51c5c3",
+          "matchesDelivered": true
+        },
+        {
+          "path": "apps/web/features/post-composer/image-draft.test.ts",
+          "sha256": "381dfa8471788392afb41119eee02845d604e3af2b805d0778e0491c8a3664f3",
+          "gitBlob": "e814f68b12d9dc50741e94b934eaccf810e08dc4",
+          "matchesDelivered": true
+        },
+        {
+          "path": "apps/web/features/post-composer/image-draft.ts",
+          "sha256": "c72500e78933551aa0ee5b5210293901722acfc99a9fbadf5a8c7bae27e203e2",
+          "gitBlob": "300192b373f2cc605de16af8052c93d1937d4e82",
+          "matchesDelivered": true
+        }
+      ],
+      "staticReceiptReused": "e2751930-9bb3-48a5-922e-bbf4732b20ad at 15914e4a00",
+      "unitReceiptReused": "69f2a482-a3b3-4ae7-9d5b-fd060fa9f156; 16 tests / 80 assertions",
+      "backendProduct": "76c5955006dbea2016e84465d8f3e79fdf4fc979",
+      "backendSupport": "d2f04140fe615eadef0379a52c26291e6e083217",
+      "lease": "site-image-book-current-20261020-r1",
+      "main": "http://127.0.0.1:42963",
+      "account": "http://127.0.0.1:42701",
+      "imageSha256": "70247ff82e10fbacdc785b6b391ebbaf5fee5d01b37539cb4cda8d4a6f3c2a5f",
+      "reviewRepeated": false,
+      "newCorpus": false,
+      "changesSinceStaticCheckedPin": [
+        "docs/goals/audit-remediation-20261019/tasks/G-2750.md",
+        "docs/goals/audit-remediation-20261019/tasks/G-2763.md",
+        "docs/goals/audit-remediation-20261019/tasks/G-2773.md",
+        "docs/goals/audit-remediation-20261019/tasks/G-2781.md",
+        "docs/goals/audit-remediation-20261019/tasks/G-2791.md",
+        "docs/goals/audit-remediation-20261019/tasks/G-2799.md",
+        "docs/goals/audit-remediation-20261019/tasks/G-2830.md",
+        "docs/goals/audit-remediation-20261019/tasks/G-2847.md"
+      ],
+      "changesSinceStaticCheckedPinAreDocumentationOnly": true,
+      "nineHashesReverifiedAfterExecution": true,
+      "originalStoryAssertionsUnchangedAfterExecution": true
+    },
+    "isolation": {
+      "cwd": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2830",
+      "sourceEdits": 0,
+      "originalAssertionEdits": 0,
+      "backendStarts": 0,
+      "preparationRestoreImport": 0,
+      "newCorpus": 0,
+      "liveStack": "delivered Main42963/Account42701 borrowed normal OAuth; no shared development stack used",
+      "frontend": "owned exact-source Task web:dev on43127; stopped",
+      "fixture": "delivered retained normal owner Account and Book Realm/Work; exact revision obtained by authenticated GET. Owned localStorage target preselection, not picker acceptance."
+    },
+    "commands": {
+      "recordedJobPrefix": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --",
+      "qaSelector": "bun scripts/goal/goalctl.ts test ./.temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/current-main-e9cf1b02b6d9/image-journey.test.ts",
+      "browserTask": "task web:e2e -- --config /home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2830/.temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/current-main-e9cf1b02b6d9/image.playwright.config.ts image-journey.e2e.ts",
+      "frontendTask": "task web:dev -- --port 43127",
+      "qaAdmission": "Normal goalctl test admission and inherited Task web:e2e admission; explicit temporary selector and repository browser-test/network-transport/loopback Chromium provider. Stack-free borrowed-runtime run, no hosted-tier QA run ID.",
+      "substantiveJob": "4124543b-79f9-4eb9-bf8c-997a7d95070a",
+      "jobs": [
+        {
+          "id": "c9f9ef60-c641-433b-b919-b8549ec2c9a7",
+          "result": "harness module setup failure before any runtime/API use",
+          "detail": "Added private type=module metadata to temporary harness."
+        },
+        {
+          "id": "b1321124-40ab-42cf-bf4c-d74be5b70959",
+          "result": "harness OAuth navigation premise failed; sign-in200/authorization200; no composer/image write",
+          "detail": "Frozen helper expects302. Node fetch defaults sec-fetch-mode=cors; installed provider returns JSON redirect for cors. Supported fetch hook uses same-origin mode to obtain real navigation302. Authorization body was not retained; this attempt establishes no API product defect. Borrowed Account signed out200."
+        },
+        {
+          "id": "d4690951-0955-40d0-986d-754a5ec57e36",
+          "result": "harness archived-source discovery failure before API use",
+          "detail": "Archived the first harness as .ts.source to exclude it from Playwright collection."
+        },
+        {
+          "id": "c749560c-2244-4b5d-85e2-ae8d891bd198",
+          "result": "harness Main session selection400 before any composer/image request",
+          "detail": "Temporary driver omitted idempotency-key; corrected to match the frozen personaSession supported mutating request. Normal OAuth revoke200 and Account sign-out200 retained."
+        },
+        {
+          "id": "4124543b-79f9-4eb9-bf8c-997a7d95070a",
+          "result": "genuine Media Use403; then evidence-capture timeout540000ms; outer Bun wrapper fails on Task exit1",
+          "detail": "Original stable-image assertion not reached. No replay after the substantive403. Capture/cleanup shortfall is separate from the actual response."
+        }
+      ]
+    },
+    "authenticatedJourney": {
+      "account": {
+        "status": 200,
+        "expectedAccount": "dDlG0fQ9UK3CKu6XB342VxNbPraY64wC",
+        "returnedAccount": "dDlG0fQ9UK3CKu6XB342VxNbPraY64wC",
+        "credentialsRetained": false,
+        "normalPKCE": true,
+        "method": "delivered frozen LocalOAuthClient; genuine retained Account, normal sign-in/consent/PKCE/token exchange; product sessionCookies installed in isolated browser, no Accounts frontend",
+        "sessionAgent": {
+          "profile": "session-agent-v1",
+          "actingSubject": "https://rezics.com/id/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a",
+          "revision": "7dba1527-b556-428b-859e-39bea0c55e4a",
+          "replayed": false
+        }
+      },
+      "oauthTransport": [
+        {
+          "path": "/api/auth/oauth2/authorize",
+          "status": 302,
+          "locationPath": "/auth/callback",
+          "mode": "same-origin"
+        },
+        {
+          "path": "/api/auth/oauth2/token",
+          "status": 200,
+          "locationPath": null,
+          "mode": "same-origin"
+        }
+      ],
+      "target": {
+        "community": {
+          "id": "https://rezics.com/id/01a15329-8fb1-70b5-ab3e-a07479b4bc0d",
+          "name": "Retained Book realm"
+        },
+        "work": {
+          "id": "https://rezics.com/id/01a15329-a5c8-760d-b1d5-22382dba559b",
+          "title": "Retained Book",
+          "mainVersion": null,
+          "revision": "https://rezics.com/id/01a15329-a5c8-760f-a3ba-d094775a7c6d"
+        },
+        "language": "en",
+        "setup": "existing retained Realm/Work preselection in owned device draft; no picker or unrelated Book acceptance claim"
+      },
+      "frontend": {
+        "command": "task web:dev -- --port 43127",
+        "cwd": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2830",
+        "pin": "e9cf1b02b6d941e6dfab82272c24b3716b786774",
+        "pid": 4086213,
+        "ready": true
+      },
+      "signedInPageRendered": true,
+      "keyboardImageButtonFocusedAndActivated": true,
+      "enteredCurrentText": "Image draft en 1440.",
+      "enteredTitle": "Image recovery en 1440",
+      "qualification": "Real normal Account login/consent-PKCE/token exchange and Main selection; product sessionCookies populated in an isolated browser. This is not a public Accounts frontend OAuth redirect UI proof."
+    },
+    "actualApi": {
+      "mutatingRequestCount": 6,
+      "sessionSelectionsAcknowledged": 1,
+      "nativeDraftCreationsAcknowledged": 1,
+      "uploadReservationsAcknowledged": 1,
+      "byteActivationsAcknowledged": 1,
+      "inferenceHTTP201": 1,
+      "inferenceBody": "unreadable in Playwright response.json",
+      "mediaUseSuccessful": 0,
+      "mediaUseDenied": 1,
+      "publicationRequests": 0,
+      "realWrites": [
+        {
+          "at": "2026-10-20T10:59:54.057Z",
+          "method": "PUT",
+          "path": "/v1/me/session-agent",
+          "status": 200,
+          "body": {
+            "profile": "session-agent-v1",
+            "actingSubject": "https://rezics.com/id/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a",
+            "revision": "7dba1527-b556-428b-859e-39bea0c55e4a",
+            "replayed": false
+          },
+          "requestBody": {
+            "actingSubject": "https://rezics.com/id/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a",
+            "expectedRevision": null
+          },
+          "operation": "c9a7ac93-ad44-4971-9741-4e7fad82fbe0"
+        },
+        {
+          "at": "2026-10-20T11:00:43.852Z",
+          "method": "POST",
+          "path": "/api/main/v1/member-reply-drafts",
+          "status": 201,
+          "operation": "3d2bb9c3-6511-4cb8-8e2e-dcfe87f32a37:draft",
+          "requestBody": "{\"profile\":\"member-reply-draft-v1\",\"reply\":\"https://rezics.com/id/50a491a1-9281-40dd-ac73-6b500d9fc6da\",\"variantId\":\"urn:rezics:variant:59b62618-5a98-4f0a-9714-ded084194f9e\",\"rootTarget\":\"https://rezics.com/id/01a15329-a5c8-760d-b1d5-22382dba559b\",\"rootRevision\":\"https://rezics.com/id/01a15329-a5c8-760f-a3ba-d094775a7c6d\",\"originRealm\":\"https://rezics.com/id/01a15329-8fb1-70b5-ab3e-a07479b4bc0d\",\"language\":\"en\",\"direction\":\"ltr\",\"spoiler\":false,\"expectedHead\":null,\"document\":{\"version\":\"rezics-document-v1\",\"profile\":\"blocks\",\"doc\":{\"type\":\"doc\",\"content\":[{\"type\":\"heading\",\"attrs\":{\"level\":1,\"textAlign\":null,\"id\":\"3d2bb9c3-6511-4cb8-8e2e-dcfe87f32a37-title\",\"lang\":null,\"dir\":null},\"content\":[{\"type\":\"text\",\"text\":\"Image recovery en 1440\"}]},{\"type\":\"paragraph\",\"attrs\":{\"textAlign\":null,\"id\":\"fef97c93-a429-4223-b617-11f0739b0dca\",\"lang\":null,\"dir\":null},\"content\":[{\"type\":\"text\",\"text\":\"Image draft en 1440.\"}]}]}},\"actingSubject\":\"https://rezics.com/id/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a\"}",
+          "body": {
+            "reply": "https://rezics.com/id/50a491a1-9281-40dd-ac73-6b500d9fc6da",
+            "variantId": "urn:rezics:variant:59b62618-5a98-4f0a-9714-ded084194f9e",
+            "revisionId": "276f7cbe-c882-4362-a8ba-59943327dc7b",
+            "revisionDigest": "e23524f3ba7afd9db14fa94c309dee4d9b56e7c1feae815fb880b8429c5c478c",
+            "predecessor": null,
+            "deleted": false,
+            "sourcePosition": {
+              "owner": "content",
+              "dataEpoch": "72ce9c5d-d988-4aa2-b94c-61e357cb1608",
+              "sequence": "21"
+            },
+            "replayed": false
+          }
+        },
+        {
+          "at": "2026-10-20T11:00:44.098Z",
+          "method": "POST",
+          "path": "/api/main/v1/media/uploads",
+          "status": 201,
+          "operation": "c02ed85c-27b4-45f6-8e57-4f1b8ae2f856:reserve",
+          "requestBody": "{\"profile\":\"media-image-upload-v1\",\"asset\":null,\"actingSubject\":\"https://rezics.com/id/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a\",\"mediaType\":\"image/png\",\"byteLength\":3134,\"sha256\":\"70247ff82e10fbacdc785b6b391ebbaf5fee5d01b37539cb4cda8d4a6f3c2a5f\",\"disclosure\":\"public\"}",
+          "body": {
+            "asset": "fc074cdc-1f90-4793-ba10-29212b2d7842",
+            "upload": "dfe148d5-4265-4467-9a30-2a30e546e599",
+            "quarantineKey": "media-quarantine/dfe148d5-4265-4467-9a30-2a30e546e599",
+            "objectNamespace": "media/asset/fc074cdc-1f90-4793-ba10-29212b2d7842/",
+            "expiresAt": "2026-10-20T12:00:44.059Z",
+            "stateHead": "e41661f0-862e-43e8-a483-7167a8598690",
+            "replayed": false,
+            "position": {
+              "owner": "content",
+              "dataEpoch": "72ce9c5d-d988-4aa2-b94c-61e357cb1608",
+              "sequence": "22"
+            },
+            "admission": "01a158f8-836a-7724-9e72-1d698e47e4c1",
+            "uploadUrl": "/v1/media/uploads/dfe148d5-4265-4467-9a30-2a30e546e599/bytes"
+          }
+        },
+        {
+          "at": "2026-10-20T11:00:45.088Z",
+          "method": "PUT",
+          "path": "/api/main/v1/media/uploads/dfe148d5-4265-4467-9a30-2a30e546e599/bytes",
+          "status": 201,
+          "operation": null,
+          "body": {
+            "asset": "fc074cdc-1f90-4793-ba10-29212b2d7842",
+            "upload": "dfe148d5-4265-4467-9a30-2a30e546e599",
+            "status": "activated",
+            "reason": null,
+            "clearance": "cleared",
+            "clearanceReason": null,
+            "representation": "9951f037-3f84-44a0-b9e8-f1e439b7d63b",
+            "revision": "9cc7956e-7d09-4d46-af78-6b139fba2254",
+            "replayed": false
+          }
+        },
+        {
+          "at": "2026-10-20T11:00:50.563Z",
+          "method": "POST",
+          "path": "/api/main/v1/media/representations/9951f037-3f84-44a0-b9e8-f1e439b7d63b/inferences",
+          "status": 201,
+          "operation": "c02ed85c-27b4-45f6-8e57-4f1b8ae2f856:inference",
+          "requestBody": "{\"actingSubject\":\"https://rezics.com/id/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a\",\"sha256\":\"70247ff82e10fbacdc785b6b391ebbaf5fee5d01b37539cb4cda8d4a6f3c2a5f\",\"model\":\"MobileNetV2\",\"modelVersion\":\"nsfwjs-4.4.0/tfjs-4.22.0\",\"weightsDigest\":\"8e7dddbb16acacc1bf1601b1b8a761e730ff934b7f2d7771312b2f000e5f5f13\",\"policyVersion\":\"image-nsfw-v1\",\"status\":\"completed\",\"result\":\"sfw\",\"scores\":{\"Neutral\":0.9190097451210022,\"Drawing\":0.07782857865095139,\"Hentai\":0.00264060590416193,\"Porn\":0.0004397367883939296,\"Sexy\":0.00008133820665534586}}",
+          "body": "unreadable"
+        },
+        {
+          "at": "2026-10-20T11:00:51.051Z",
+          "method": "POST",
+          "path": "/api/main/v1/media/uses",
+          "status": 403,
+          "operation": "c02ed85c-27b4-45f6-8e57-4f1b8ae2f856:use",
+          "requestBody": "{\"actingSubject\":\"https://rezics.com/id/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a\",\"target\":\"https://rezics.com/id/50a491a1-9281-40dd-ac73-6b500d9fc6da\",\"memberReplyDraft\":{\"profile\":\"member-reply-draft-image-v1\",\"variantId\":\"urn:rezics:variant:59b62618-5a98-4f0a-9714-ded084194f9e\",\"expectedHead\":\"276f7cbe-c882-4362-a8ba-59943327dc7b\",\"rootTarget\":\"https://rezics.com/id/01a15329-a5c8-760d-b1d5-22382dba559b\",\"rootRevision\":\"https://rezics.com/id/01a15329-a5c8-760f-a3ba-d094775a7c6d\"},\"representation\":\"9951f037-3f84-44a0-b9e8-f1e439b7d63b\",\"occurrence\":\"51170971-a226-447f-b414-cbbe54322ed7\",\"conceal\":false}",
+          "body": "unreadable"
+        }
+      ],
+      "operationContextMatchesActualNativeDraftReceipt": true,
+      "firstUnavailablePremise": {
+        "phase": "en/1440 native reply draft/reserve/byte activation/inference/Use",
+        "response": {
+          "at": "2026-10-20T11:00:51.051Z",
+          "method": "POST",
+          "path": "/api/main/v1/media/uses",
+          "status": 403,
+          "operation": "c02ed85c-27b4-45f6-8e57-4f1b8ae2f856:use",
+          "requestBody": "{\"actingSubject\":\"https://rezics.com/id/5c4e27f1-4e3d-40da-89e6-e248d38fdf0a\",\"target\":\"https://rezics.com/id/50a491a1-9281-40dd-ac73-6b500d9fc6da\",\"memberReplyDraft\":{\"profile\":\"member-reply-draft-image-v1\",\"variantId\":\"urn:rezics:variant:59b62618-5a98-4f0a-9714-ded084194f9e\",\"expectedHead\":\"276f7cbe-c882-4362-a8ba-59943327dc7b\",\"rootTarget\":\"https://rezics.com/id/01a15329-a5c8-760d-b1d5-22382dba559b\",\"rootRevision\":\"https://rezics.com/id/01a15329-a5c8-760f-a3ba-d094775a7c6d\"},\"representation\":\"9951f037-3f84-44a0-b9e8-f1e439b7d63b\",\"occurrence\":\"51170971-a226-447f-b414-cbbe54322ed7\",\"conceal\":false}",
+          "body": "unreadable"
+        },
+        "outcomeAssertionReached": false
+      },
+      "responseLimits": "Use status403 and exact request retained. JSON response body was not readable before timeout. No denial reason, policy cause or durable binding inferred. Native draft/upload activation receipts do not establish complete-document final CAS, identity, placement or publication."
+    },
+    "matrix": [
+      {
+        "locale": "en",
+        "width": 1440,
+        "input": "keyboard",
+        "result": "entered exact text, focused Image and activated via Enter, genuine upload proceeded through201 draft/reserve/bytes/inference; Use403 prevents stable-image outcome",
+        "outcomeAssertionReached": false
+      },
+      {
+        "locale": "en",
+        "width": 390,
+        "input": "touch",
+        "result": "not executed after first actual API premise failure",
+        "outcomeAssertionReached": false
+      },
+      {
+        "locale": "zh-Hans",
+        "width": 1440,
+        "input": "keyboard",
+        "result": "not executed after first actual API premise failure",
+        "outcomeAssertionReached": false
+      },
+      {
+        "locale": "zh-Hans",
+        "width": 390,
+        "input": "touch",
+        "result": "not executed after first actual API premise failure",
+        "outcomeAssertionReached": false
+      }
+    ],
+    "assertionDisposition": {
+      "passedPrerequisites": [
+        "frozen clean source and all nine delivered hashes",
+        "retained Account200 and matching identity",
+        "real OAuth authorize302/token200 after Node navigation-mode correction",
+        "Main session selection200",
+        "retained Work200 with exact revision",
+        "owned /en/submit rendered200",
+        "initial editor exact text assertion",
+        "Image keyboard focus assertion and Enter activation",
+        "native draft201 with actual revision/digest",
+        "reserve201 and bytes201 activated/cleared"
+      ],
+      "blockedOriginalOutcomes": [
+        "successful native Media Use and stable image reference",
+        "current text after upload independently asserted and complete final revision/digest persisted",
+        "durable full-page image reload/reopen",
+        "unavailable preview/metadata with stable references",
+        "snapshot/binding failure Retry/Remove/raw export and editor focus",
+        "truthful device acknowledgement under storage failure",
+        "same-operation lost-response retry and no duplicate publication"
+      ],
+      "unchangedOriginalAssertions": true,
+      "controlsExecuted": [],
+      "a11y": "No axe or Storybook a11y pass in this continuation; original outcome state unavailable. Existing accepted rendered/a11y history unchanged.",
+      "causalSourceVerdicts": "Accepted source reviews and static/unit receipts unchanged; no repeated review and no new source counterexample asserted."
+    },
+    "renderedEvidence": {
+      "actualRenderedPNGs": [],
+      "screenshotsViewed": [],
+      "inputFixturePNG": "audit-avatar.png is upload input only, not a rendered screenshot.",
+      "domSnapshot": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/current-main-e9cf1b02b6d9/browser-results/image-journey.e2e.ts-genui-00f08-n-recovery-and-focus-matrix-desktop-chrome/error-context.md",
+      "observations": [
+        "exact title and initial current text remain in the mounted composer",
+        "Your post textbox marked active in timeout snapshot",
+        "The image could not be uploaded. appears in editor and upload dialog",
+        "Retry, Cancel and Export document are present",
+        "Post disabled",
+        "Current changes are not saved. Reopening restores the last saved version. Retry or export before leaving."
+      ],
+      "captureFailure": "No PNG was produced. The driver awaited document.fonts.ready before capture; timeout interrupted page evaluation. The retained evidence does not isolate which awaited capture step failed. Browser was closed at test timeout; after that page.evaluate failure is a harness consequence. No screenshot/a11y/focus-outcome pass is claimed from DOM text."
+    },
+    "acceptanceByFinding": {
+      "D2-002": "Accepted earlier; unchanged and not replayed.",
+      "D2-003": "OPEN. Current native image Use403 blocks the first genuine image case before its outcome assertions; no original finding closure. Manager acceptance still required.",
+      "originalLowLevelUploadException": "Still unresolved/unisolated. This native Use403 is not a diagnosis or reproduction of the original low-level exception.",
+      "supplementalSingleCharacterDiscrepancy": "Unconfirmed and untouched. No post-upload entry/restoration occurred.",
+      "historicalImageAndSlashMenuPremises": "Original setup failures and all previous overlays/artifacts retained unchanged; not worker repair rounds."
+    },
+    "ownerReturn": {
+      "existingOwners": [
+        "G-2748 native image consumer; actual request and native draft acknowledgement available for its inspection",
+        "G-2823 delivered runtime/auth custody; Main/Media/Access denial must be routed through existing owner by manager"
+      ],
+      "counterexample": "On the exact frozen approved consumer and delivered backend, native draft201/activated image201 precede Media Use403 with matching acknowledged variant/head/root. Cause remains unconfirmed without the denied response body.",
+      "stopRule": "Latest committed task decision: If a required API premise fails, retain its exact stage/response/assertion reach and return it to the existing owner without another runtime or repeated probes. No further substantive run followed403.",
+      "instructionFile": "docs/goals/audit-remediation-20261019/tasks/G-2830.md:128",
+      "instructionQuote": "If a required API premise fails, retain its exact stage/response/assertion reach and return it to the existing owner without another runtime or repeated probes.",
+      "instructionEffect": "Stopped substantive execution after the first real Media Use403; remaining matrix outcomes remain unexecuted."
+    },
+    "cleanupAndLease": {
+      "ownedPid": 4086213,
+      "frontendCommand": "task web:dev -- --port 43127",
+      "borrowedBrowser": "Playwright worker terminated after 540000ms timeout; original context cannot be reused",
+      "oauthRevocation": "unconfirmed: timeout killed worker before finally completed; credentials were not written to disk",
+      "accountSignOut": "unconfirmed for final attempt; earlier setup-attempt sessions closed with HTTP200",
+      "backendStopAttempted": false,
+      "otherLeaseTouched": false,
+      "verifiedCommand": "task web:dev -- --port 43127 ",
+      "verifiedCwd": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2830",
+      "verifiedPgid": 4086213,
+      "ownedFrontendStopped": true,
+      "leaseReleased": "site-image-book-current-20261020-r1",
+      "backendStopCustody": "G-2823; default-capture-book-current-20261020-r1 retained",
+      "at": "2026-10-20T11:09:55Z"
+    },
+    "administrativeChecks": {
+      "recordedJob": "8b1b9970-9848-421e-9e2e-e1e098bb49e2",
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "docs": {
+        "result": "passed",
+        "command": "task docs:check",
+        "tests": 13,
+        "markdownFiles": 259,
+        "exit": 0
+      },
+      "affectedReportChecks": {
+        "result": "passed",
+        "command": "task goal -- check",
+        "exit": 0,
+        "selectedGuards": "1/45 guard files; 2 tests, 6 assertions passed",
+        "ast": "passed",
+        "types": "no TypeScript workspace changed",
+        "lint": "no source file changed",
+        "tests": "no test files named in brief",
+        "artifact": "checks/goal-check-output.log"
+      },
+      "productAffectedChecks": "Reused exact15914 current-main receipt e2751930; diff15914..frontend consists only of documentation, and nine hashes match. No product test/source rerun.",
+      "reportValidation": "All 28 historical top-level fields preserved unchanged; nine delivered hashes and original story assertions retained; git diff --check passed."
+    },
+    "artifacts": {
+      "privateBundle": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/current-main-e9cf1b02b6d9",
+      "manifest": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/current-main-e9cf1b02b6d9/artifact-manifest.json",
+      "historicalFieldsPreserved": 28,
+      "historicalFieldsChanged": 0,
+      "mainBundleCopy": "Manager must copy this additive directory to main .temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/. Maintainer confines worker writes to own worktree and /tmp; no main or peer write attempted.",
+      "mainCopyPerformedByWorker": false
+    }
   }
 }

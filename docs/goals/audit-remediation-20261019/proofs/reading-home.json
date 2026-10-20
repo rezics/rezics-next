@@ -3118,5 +3118,370 @@
       "worktreeAfterCheck": "Clean on goal/g-2831; no manual main rebase or conflict resolution attempted.",
       "remaining": "Manager integrates only this appended review field while preserving cumulative proof, then reruns normal Goal checks. The source approval remains bounded; no native callback acceptance is added."
     }
+  },
+  "cas7StatusDateSemanticRestoration": {
+    "atUTC": "2026-10-20T11:14:28.025540+00:00",
+    "worker": "G-2831",
+    "scope": "Only Decision 2026-10-20T11:05:51Z: same-owner semantic restoration after actual CAS7 reserved borrow release",
+    "result": "Restored original null status/startedOn/finishedOn with supported fresh current-CAS PUT200 and two complete five-API invariant readback sets; owned frontend/browser/job stopped. No original finding closure.",
+    "restorationSucceeded": true,
+    "cleanupNeeded": false,
+    "leaseReleasedByOwner": true,
+    "lawfulActor": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+    "book": {
+      "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+      "title": "The Lantern Road 8805d7a2"
+    },
+    "custody": {
+      "rootLeaseSHA256": "46c81cbb3acb4917eca288f6ebcc058abe4ee8c15626011143cc2668a12fb700",
+      "readySHA256": "ee99a15d363567cc897bede9c260205828512c225fc5139c1cdb79088fefca42",
+      "privateBeforeSHA256": "b3d7071da627350307e804841f072f07f22928c4e787c8a6549384c5811d9313",
+      "privateBefore": ".temp/reading-home-HomeDEFR-preparation-G-2831-20261020T0410Z/private/before-backup.json",
+      "actualCAS7ReleaseSHA256": "bd11f655cbaa59cb11a3f0406e9411b8031d8e4c4187449c8b58916e9193ef98",
+      "actualCAS7ReleaseAtUTC": "2026-10-20T10:58:30.510Z",
+      "borrowerAttempt": 63,
+      "borrowerReadbacksAndAcquisitionReached": false,
+      "borrowerReservedRootBoundBorrowReleased": true,
+      "borrowerSetupFailure": "Frozen passive prompt IDs absent from actual empty launch baseline",
+      "actualReleaseEvidenceLocation": "Read-only G-2847 worktree CAS7 evidence; the similarly named main evidence directory lacked these CAS7 files. Local byte copies and hashes retained.",
+      "retainedExactPriorCleanupCallbackSHA256": "d70ca992e19b4bfd773b36065f92aaeeb992d2bfb475950284e92911b79ef08b",
+      "callbackAdaptation": "Reused retained callback semantics for this backup, CAS7 release and shutdown hashes, borrower attempt63 and current frontend binding. Original callback retained unchanged; new callback is private cleanup evidence. No original test edited."
+    },
+    "sourceAndRuntime": {
+      "reportBranchPinBeforeAppend": "676bec963698ac63cbeecacccd0d4ab0cd0f7f3b",
+      "frontendProductAndTestPin": "8b8a2c0a97b5662e6283fa7531a8f1c600f37fd0",
+      "backendServedPin": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "mainOrigin": "http://127.0.0.1:3001",
+      "accountsOrigin": "http://127.0.0.1:3004",
+      "temporaryFrontend": "http://127.0.0.1:43131",
+      "runtimeReceipt": ".temp/reading-home-CAS7-cleanup-G-2831-20261020T1111Z/source/backend-served-revision.json",
+      "mainProcessCwd": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "freshSupportedOwnOAuth": true,
+      "eligibleSessionAgentAndBookIdentity200": true,
+      "copiedSession": false,
+      "apiMocking": false,
+      "newPreparation": false,
+      "runtimeRestartOrRefresh": false,
+      "scopeLimit": "Main3001/Account3004 are only this old status-only binding. No compatible current Studio, durable Book transfer, native acceptance or integration/regression result is established."
+    },
+    "supportedCommand": {
+      "method": "PUT",
+      "url": "http://127.0.0.1:43131/api/main/v1/works/01a10aff-93e5-7069-b80a-cd33bb6ce57c/reader-status",
+      "requestBody": {
+        "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+        "expectedVersion": 7,
+        "status": null,
+        "startedOn": null,
+        "finishedOn": null
+      },
+      "idempotencyKey": "a75f39b2-14a3-46a3-a5dd-f53b1112cc05",
+      "attemptedAtUTC": "2026-10-20T11:12:42.191Z",
+      "response": {
+        "status": 200,
+        "body": {
+          "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+          "status": null,
+          "startedOn": null,
+          "finishedOn": null,
+          "version": 8,
+          "changedAt": "2026-10-20 11:12:42.643923+00",
+          "replayed": false
+        },
+        "receivedAtUTC": "2026-10-20T11:12:42.673Z"
+      }
+    },
+    "preWriteQualification": {
+      "twoCompleteFiveAPIReadSets": true,
+      "bothFreshStatusesMatchRetainedPreparation": true,
+      "observedCurrentVersion": 7,
+      "expectedVersionDerivedFromFreshRead": true,
+      "forcedCAS": false,
+      "allGuardedSemanticFieldsMatched": true,
+      "originalStatusDates": {
+        "status": null,
+        "startedOn": null,
+        "finishedOn": null
+      },
+      "preCleanupBackup": ".temp/reading-home-CAS7-cleanup-G-2831-20261020T1111Z/private/pre-cleanup-backup.json",
+      "preCleanupBackupSHA256": "5005be399b338360b59150b1de38d04ece53e0b1569a551382c07300362a0911"
+    },
+    "postWriteVerification": {
+      "actualFiveAPIReadbackSets": 2,
+      "successfulGETs": 10,
+      "answers": [
+        {
+          "label": "cleanup readback A reader",
+          "status": 200,
+          "receivedAtUTC": "2026-10-20T11:12:43.213Z",
+          "path": "/v1/works/01a10aff-93e5-7069-b80a-cd33bb6ce57c/reader-state?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839"
+        },
+        {
+          "label": "cleanup readback A directory",
+          "status": 200,
+          "receivedAtUTC": "2026-10-20T11:12:43.457Z",
+          "path": "/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839&limit=20"
+        },
+        {
+          "label": "cleanup readback A reading",
+          "status": 200,
+          "receivedAtUTC": "2026-10-20T11:12:43.639Z",
+          "path": "/v1/me/shelves/status/reading/works?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839&sort=last-read&order=desc&limit=3"
+        },
+        {
+          "label": "cleanup readback A follow",
+          "status": 200,
+          "receivedAtUTC": "2026-10-20T11:12:44.074Z",
+          "path": "/v1/me/follow-state?target=https%3A%2F%2Frezics.com%2Fid%2F01a10aff-93e5-7069-b80a-cd33bb6ce57c&kind=work&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839"
+        },
+        {
+          "label": "cleanup readback A continuation",
+          "status": 200,
+          "receivedAtUTC": "2026-10-20T11:12:44.706Z",
+          "path": "/v1/me/continue/01a10aff-93e5-7069-b80a-cd33bb6ce57c?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839"
+        },
+        {
+          "label": "cleanup readback B reader",
+          "status": 200,
+          "receivedAtUTC": "2026-10-20T11:12:45.035Z",
+          "path": "/v1/works/01a10aff-93e5-7069-b80a-cd33bb6ce57c/reader-state?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839"
+        },
+        {
+          "label": "cleanup readback B directory",
+          "status": 200,
+          "receivedAtUTC": "2026-10-20T11:12:45.205Z",
+          "path": "/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839&limit=20"
+        },
+        {
+          "label": "cleanup readback B reading",
+          "status": 200,
+          "receivedAtUTC": "2026-10-20T11:12:45.410Z",
+          "path": "/v1/me/shelves/status/reading/works?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839&sort=last-read&order=desc&limit=3"
+        },
+        {
+          "label": "cleanup readback B follow",
+          "status": 200,
+          "receivedAtUTC": "2026-10-20T11:12:45.831Z",
+          "path": "/v1/me/follow-state?target=https%3A%2F%2Frezics.com%2Fid%2F01a10aff-93e5-7069-b80a-cd33bb6ce57c&kind=work&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839"
+        },
+        {
+          "label": "cleanup readback B continuation",
+          "status": 200,
+          "receivedAtUTC": "2026-10-20T11:12:46.239Z",
+          "path": "/v1/me/continue/01a10aff-93e5-7069-b80a-cd33bb6ce57c?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839"
+        }
+      ],
+      "finalStatus": {
+        "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+        "status": null,
+        "startedOn": null,
+        "finishedOn": null,
+        "version": 8,
+        "changedAt": "2026-10-20 11:12:42.643923+00"
+      },
+      "invariants": {
+        "originalStatusRestored": true,
+        "originalDatesRestored": true,
+        "progressUnchanged": true,
+        "customShelvesUnchanged": true,
+        "ratingUnchanged": true,
+        "statusShelfCountsRestored": true,
+        "readingItemsRestored": true,
+        "followBasisUnchanged": true,
+        "continuationLastPositionNextUnreadAndCountUnchanged": true,
+        "versionHistoryPreserved": true,
+        "changedAtHistoryPreserved": true,
+        "byteExactRollbackClaimed": false
+      },
+      "rawActualAnswers": ".temp/reading-home-CAS7-cleanup-G-2831-20261020T1111Z/private/cleanup-result.json",
+      "rawActualAnswersSHA256": "ffe65b5c7b2ddf2f73eb4f3ff0918c3620319b262194b4e197af2eb93e7961c7",
+      "crossStoreAtomicSnapshotClaimed": false,
+      "durableVersionAndChangedAtHistoryRetained": true,
+      "byteExactRollbackOrHistoryDeletionClaimed": false,
+      "observedCurrent": {
+        "status": {
+          "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+          "status": null,
+          "startedOn": null,
+          "finishedOn": null,
+          "version": 8,
+          "changedAt": "2026-10-20 11:12:42.643923+00"
+        },
+        "progress": null,
+        "customShelves": [],
+        "rating": {
+          "global": null,
+          "realm": null
+        },
+        "directoryItems": [],
+        "statusShelfCounts": {
+          "want-to-read": 0,
+          "reading": 0,
+          "read": 0
+        },
+        "readingItems": [],
+        "readingCount": {
+          "value": 0,
+          "kind": "exact-page",
+          "total": null
+        },
+        "followBasis": {
+          "following": false,
+          "revision": null,
+          "source": null,
+          "level": null,
+          "pinPosition": null
+        },
+        "continuation": {
+          "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+          "lastPosition": null,
+          "nextUnread": {
+            "occurrence": "https://rezics.com/id/5caa0cc4-f716-876a-8a46-fa048620c48d",
+            "title": "At the harbour",
+            "href": "/w/01a10aff-93e5-7069-b80a-cd33bb6ce57c/read/5caa0cc4-f716-876a-8a46-fa048620c48d?language=en"
+          },
+          "unreadCount": {
+            "value": 1,
+            "kind": "exact"
+          }
+        }
+      }
+    },
+    "writeAccounting": {
+      "statusWriteAttempts": 1,
+      "progressWrites": 0,
+      "otherDirectDataWrites": 0,
+      "browserMainNonGetRequests": []
+    },
+    "execution": {
+      "recordedJob": "06083712-3d07-490c-b65b-6fa88d3f9ca0",
+      "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test ./.temp/reading-home-CAS7-cleanup-G-2831-20261020T1111Z/capture.test.ts",
+      "taskBrowserCommand": "task web:e2e -- --config .temp/reading-home-CAS7-cleanup-G-2831-20261020T1111Z/playwright.config.ts cleanup.spec.ts",
+      "normalTaskAdmission": true,
+      "qaId": null,
+      "qaIdQualification": "No standalone QA run ID emitted; exact recorded job/Task command and logs retained.",
+      "exitStatus": 0,
+      "bunWrapper": {
+        "passed": 1,
+        "failed": 0,
+        "expectations": 8
+      },
+      "playwrightCleanup": {
+        "passed": 1,
+        "failed": 0
+      },
+      "assertionReach": [
+        "Root release, original private backup hash, fresh own eligible OAuth, consistent current held status/version and all guarded invariants",
+        "One supported current-CAS/idempotent cleanup PUT200; version increment and durable changedAt retained",
+        "Two actual successful readbacks restore original null status/dates and empty directory/status shelves; progress/custom shelves/rating/continuation/follow basis unchanged"
+      ],
+      "recordedLog": ".temp/reading-home-CAS7-cleanup-G-2831-20261020T1111Z/recorded-job.log",
+      "lifecycle": {
+        "startedAtUTC": "2026-10-20T11:11:50.412Z",
+        "source": "8b8a2c0a97b5662e6283fa7531a8f1c600f37fd0",
+        "normalTaskAdmission": true,
+        "qaRunId": null,
+        "jobId": null,
+        "browserExited": true,
+        "browserExit": 0,
+        "browserError": null,
+        "ownedWebStopExit": 0,
+        "ownedWebStopError": null,
+        "reportBranchReturned": true,
+        "returnError": null,
+        "endedAtUTC": "2026-10-20T11:12:49.628Z"
+      }
+    },
+    "ownedShutdown": {
+      "atUTC": "2026-10-20T11:14:28.025540+00:00",
+      "ownedAndJobPids": [
+        39556,
+        39700,
+        40657,
+        43687
+      ],
+      "remainingOwnedAndJobPids": [],
+      "ownedProcessGroup": 40657,
+      "remainingGroupMembers": [],
+      "borrowerAndJobPids": [
+        4065419,
+        4065669,
+        4065675,
+        4051523,
+        4049505,
+        4049831
+      ],
+      "remainingBorrowerAndJobPids": [],
+      "portsListening": {
+        "43131": false,
+        "35645": false,
+        "3001": true,
+        "3004": true,
+        "42963": true,
+        "42701": true
+      },
+      "protectedTask1677097": {
+        "exists": true,
+        "startTime": "10065363",
+        "sameAsBefore": true
+      },
+      "mainProcess": {
+        "pid": 1372265,
+        "cwd": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "startTime": "6976859"
+      },
+      "actions": [],
+      "readOnlyVerification": true,
+      "browserClosedBasis": "Playwright completed one test and browser-test fixtures drained/closed context and browser; Task runner exited 0. No saved/copied session.",
+      "frontendStopBasis": {
+        "ownedWebStopped": true,
+        "pid": 40657,
+        "origin": "http://127.0.0.1:43131",
+        "stoppedAtUTC": "2026-10-20T11:12:48.550Z",
+        "onlyOwnedProcessGroupTouched": true
+      },
+      "jobShutdownBasis": "Recorded completion wake exit0 and actual owner39556/executor39700 absence; no signal to jobs or peers."
+    },
+    "preservation": {
+      "priorReportTopLevelFieldsUnchanged": true,
+      "priorReportSHA256": "f7134da992edd07e3a668a3d877ad152fe0c71367b6e79417a5e62e28a7265c9",
+      "originalBeforeBackupUnchanged": true,
+      "preparationLeaseStateUnchanged": true,
+      "allHistoricalEvidenceAndFailuresRetained": true,
+      "sourceReviewRepeated": false,
+      "nativeCallbacksExecuted": false,
+      "originalTestsOrProductFilesChanged": false,
+      "mainOtherWorktreesOrSharedControlFilesWritten": false,
+      "corpusImportRestoreResetOrSharedRefresh": false,
+      "protectedTask1677097Preserved": true,
+      "allKEEPAndPeerResourcesUntouched": true,
+      "imageDefaultLeasesAndStorageUntouched": true,
+      "currentFindingAcceptanceChanged": false,
+      "originalFindingOrClassClosed": false
+    },
+    "evidence": {
+      "bundle": ".temp/reading-home-CAS7-cleanup-G-2831-20261020T1111Z",
+      "sanitizedReceipt": ".temp/reading-home-CAS7-cleanup-G-2831-20261020T1111Z/sanitized-CAS7-cleanup-receipt.json",
+      "ownedShutdownVerification": ".temp/reading-home-CAS7-cleanup-G-2831-20261020T1111Z/owned-shutdown-verification.json",
+      "artifactManifest": ".temp/reading-home-CAS7-cleanup-G-2831-20261020T1111Z/artifact-manifest.json",
+      "mainCopy": "Not performed: latest user boundary permits writes only in this worktree and /tmp. Manager may retain/copy the private bundle."
+    },
+    "administrativeChecks": {
+      "scope": "Documentation/report only; no product integration or original acceptance result. Latest same-owner restoration decision authorizes no new source review, native callback, preparation or runtime restart.",
+      "docsCheck": {
+        "command": "task docs:check",
+        "recordedJob": "6e71129e-6a3b-4383-8f57-b3eb0abcfa80",
+        "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task docs:check",
+        "checkedReportCommit": "873d2e48e",
+        "exitStatus": 0,
+        "result": "passed",
+        "testsPassed": 13,
+        "markdownFilesChecked": 258,
+        "log": ".temp/reading-home-CAS7-cleanup-G-2831-20261020T1111Z/docs-check.log",
+        "logSHA256": "b479e3212a3cdd9951a3c31d49d7e9d3aec23f6c4fd49901b686add58b820a3b"
+      },
+      "wholeGoalCheckRerun": false,
+      "wholeGoalCheckReason": "Latest decision is status/date cleanup only; product/original tests remain unchanged. Prior administrative auto-rebase conflict remains retained; no rebase, broad gate or source fixes attempted.",
+      "reportCommitMaintenanceMessage": "The report commit succeeded with exit0 at873d2e48e. Automatic pack-refs maintenance emitted a reference-transaction hook rejection (main only moves forward). No main ref change, retry, reset or corrective repository maintenance was attempted."
+    }
   }
 }
