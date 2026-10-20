@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { namespaces } from '@rezics/model';
 import { resourceHref } from '../address/path.ts';
 import { namesOf } from '../work-levels/read.ts';
-import type { RelationEntry } from '../work-levels/types.ts';
+import type { RelationEntry, RelationsPage } from '../work-levels/types.ts';
 import { messages as workMessages } from '../work-page/messages.ts';
 import { readIdentitySections } from './identity-read.ts';
 import { readEventParticipants } from './event-participants.tsx';
@@ -22,8 +22,8 @@ const definitions: Record<string, string> = {
   represents: identityEntry('unit', 'character', alter).rendering!.meaning!.definition,
   'holds-title': identityEntry('holder', 'title', title).rendering!.meaning!.definition,
 };
-const position = { datasetId: 'product', dataEpoch: 'epoch', sequence: '1' };
-const relationsPage = (resource: string, items: unknown[], next: string | null = null) =>
+const position: RelationsPage['sourcePosition'] = { datasetId: 'product', dataEpoch: 'epoch', sequence: '1' };
+const relationsPage = (resource: string, items: RelationEntry[], next: string | null = null): RelationsPage =>
   ({ profile: 'resource-relations-v1', resource, items, next, sourcePosition: position });
 
 /** The page of a Character or its variant, as far as the identity sections read it. */
@@ -31,6 +31,37 @@ const pageOf = (self: typeof saber) =>
   ({ summary: self, target: { types: [`${namespaces.rv}Character`] } }) as unknown as EntityProjection;
 
 describe('Identity sections on a page that is not the whole list', () => {
+  test('unknown roles and unavailable identity targets survive the actual specialized/generic composition', async () => {
+    const shown = identityEntry('holder', 'title', title);
+    const unknown = { ...shown, relation: `${shown.relation}-unknown`,
+      rendering: { ...shown.rendering!, viewingRole: 'unrecognized' } };
+    const withheld: RelationEntry = { ...shown, relation: `${shown.relation}-withheld`,
+      counterparts: [{ reference: title.reference, status: 'unavailable' }] };
+    const semanticWithheld: RelationEntry = { ...shown, relation: `${shown.relation}-meaning`, rendering: null };
+    const items = [shown, unknown, withheld, semanticWithheld];
+    double = mainDouble(url => {
+      const key = url.pathname.match(/\/lexicon\/definitions\/(.+)$/)?.[1];
+      if (key) return { definition: definitions[key] };
+      if (url.pathname === `/v1/resources/${idOf(saber.reference)}/relations`)
+        return relationsPage(saber.reference, items, 'opaque:+/%?=&雪');
+      return 404;
+    });
+    const identity = await pageRequest(() => readIdentitySections(pageOf(saber), { relations: 'current:+/%' }, { scope: 'global' }));
+    expect(identity.ok).toBe(true);
+    if (!identity.ok) throw new Error('Identity sections unavailable');
+    expect(identity.data.sections.flatMap(section => section.members.flatMap(member => member.entry ?? []))).toEqual([shown]);
+    expect(identity.data.relations).toEqual(relationsPage(saber.reference, items, 'opaque:+/%?=&雪'));
+    const generic = await pageRequest(() => RelationsSection({
+      section: { id: 'relations', href: `/v1/resources/${idOf(saber.reference)}/relations`, actions: [] },
+      hideIdentity: true, identity, cursor: 'current:+/%', locale: 'en', t: copyOf('en'), messages: workMessages.en,
+      hrefFor: standaloneHrefFor({}, resourceHref('/e/', saber.reference)),
+    }));
+    expect(generic?.props.page).toEqual({ ok: true, data: relationsPage(saber.reference, [unknown, withheld, semanticWithheld], 'opaque:+/%?=&雪') });
+    expect(generic?.props.cursor).toBe('current:+/%');
+    expect(double.calls.filter(call => call.url.pathname.endsWith('/relations')).map(call => call.url.searchParams.get('after')))
+      .toEqual(['current:+/%', null, 'current:+/%']);
+  });
+
   test('hiding semantic identity keeps structural membership and its continuation in Connections', async () => {
     const collection = { ...identitySummary('520', 'Collection'), type: 'collection' as const };
     const entry = identityEntry('member', 'collection', collection);
@@ -61,7 +92,7 @@ describe('Identity sections on a page that is not the whole list', () => {
     expect(titles?.members.map((member) => member.applicability)).toEqual([[]]);
     const section = await pageRequest(() => RelationsSection({
       section: { id: 'relations', href: `/v1/resources/${idOf(saber.reference)}/relations`, actions: [] },
-      hideIdentity: true, cursor: 'current-page', position: at,
+      hideIdentity: true, identity: read, cursor: 'current-page', position: at,
       locale: 'en', t: copyOf('en'), messages: workMessages.en,
       hrefFor: standaloneHrefFor({}, resourceHref('/e/', saber.reference)),
     }));

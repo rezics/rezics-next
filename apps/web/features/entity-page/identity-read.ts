@@ -248,6 +248,7 @@ export async function readIdentitySections(
   return {
     ok: true,
     data: {
+      relations: own.data,
       sections,
       ...(is('Character') || is('GameUnit') ? { ratings: await ratingsFor(self.reference) } : {}),
     },

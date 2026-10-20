@@ -10,6 +10,7 @@ import Link from '../shell/localized-link.tsx';
 import { RelationshipControl } from '../relationships/control.tsx';
 import { PageContainer } from '../shell/page.tsx';
 import type { WorkPageMessages } from '../work-page/messages.ts';
+import type { Loaded } from '../work-page/types.ts';
 import { reader, readingAgent } from '../work-page/read.ts';
 import { Region, RegionSkeleton } from '../work-page/region.tsx';
 import { RetryButton } from '../work-page/retry-button.tsx';
@@ -33,6 +34,7 @@ import { drawnSections } from './views.tsx';
 import type { EntityProjection, EntitySection, HrefFor, SectionId } from './types.ts';
 import { readIdentitySections, type IdentityRatingScope } from './identity-read.ts';
 import { IdentitySectionsView } from './identity-views.tsx';
+import type { IdentityData } from './identity-relations.ts';
 import { entryLabel } from '../catalogue/types.ts';
 import { zoneText } from '../realm/adapt.ts';
 import { namesOf } from '../work-levels/read.ts';
@@ -115,6 +117,8 @@ export async function EntityPage({ resource, locale, hrefFor, frame = true, curs
   const ownName = page.summary.name.value;
   const isPlace = page.target.base === 'projection';
   const frames = pageFrame(continuity, isPlace);
+  const identity = identitySections && page.target.base === 'resource'
+    ? readIdentitySections(page, cursors, ratingScope, position, frames[0]) : undefined;
   const draw = page.sections.filter(section => drawnSections.includes(section.id)
     && (!only || only.includes(section.id)));
   const common = { hrefFor: address, locale, t, messages };
@@ -152,7 +156,7 @@ export async function EntityPage({ resource, locale, hrefFor, frame = true, curs
             projection={isPlace} ownName={ownName} pageEndSources {...common} /></Suspense>;
         case 'relations': return <Suspense key={section.id} fallback={loading(section, t.relations)}>
           <RelationsSection section={section} cursor={cursors.relations} position={position} frame={frames}
-            hideIdentity={identitySections && page.target.base === 'resource'} {...common} /></Suspense>;
+            hideIdentity={identitySections && page.target.base === 'resource'} identity={identity} {...common} /></Suspense>;
         case 'ratings': return scoped
           // A place is rated where it is read: its questions, figures and the person's own rating, with its reviews and discussion below.
           ? <Region key={section.id} id={RATINGS_REGION} title={messages.ratings}>
@@ -179,10 +183,10 @@ export async function EntityPage({ resource, locale, hrefFor, frame = true, curs
     <UsefulContent enabled={header}>
     {continuitySwitch && page.target.base === 'resource'
       ? <Suspense fallback={null}><ContinuityBar id={id} position={position} here={here} current={continuity} locale={locale} /></Suspense> : null}
-    {identitySections && page.target.base === 'resource' ? <Suspense fallback={
+    {identity ? <Suspense fallback={
       <RegionSkeleton id="identity-loading" title={t.relations} label={messages.loadingRegion} lines={3} />}>
-      <IdentitySections page={page} cursors={cursors} ratingScope={ratingScope} position={position}
-        frame={frames[0]} here={here} actingSubject={actingSubject ?? null}
+      <IdentitySections page={page} cursors={cursors} ratingScope={ratingScope} position={position} identity={identity}
+        here={here} actingSubject={actingSubject ?? null}
         avatarQuery={avatarQuery} {...common} /></Suspense> : null}
     {page.target.base === 'resource' && page.registry.frameDimension === 'event'
       ? <Suspense fallback={null}><EventRankingSection page={page} ratingScope={ratingScope} position={position}
@@ -217,13 +221,14 @@ async function ContinuityBar({ id, position, here, current, locale }: {
     messages={await getMessages('scopedRating', locale)} />;
 }
 
-async function IdentitySections({ page, cursors, ratingScope, position, frame, here, actingSubject, ...props }: {
-  page: EntityProjection; cursors: EntityCursors; ratingScope: IdentityRatingScope; position?: string; frame?: string;
+async function IdentitySections({ page, cursors, ratingScope, position, identity, here, actingSubject, ...props }: {
+  page: EntityProjection; cursors: EntityCursors; ratingScope: IdentityRatingScope; position?: string;
+  identity: Promise<Loaded<IdentityData>>;
   here: string; actingSubject: string | null;
   avatarQuery: string; hrefFor: HrefFor; locale: UiLocale; t: Copy; messages: WorkPageMessages;
 }) {
   if (page.summary.status !== 'available') return null;
-  const data = await readIdentitySections(page, cursors, ratingScope, position, frame);
+  const data = await identity;
   const signals = await judgmentSignals(page.summary.reference, ratingScope.scope === 'realm' ? ratingScope.realm : null);
   const judged = signals.questions || signals.places;
   return <>

@@ -1,7 +1,7 @@
 import { dirname, join, normalize } from 'node:path';
 import { parseSync, type Node } from 'oxc-parser';
 import { isWebDataModule, webChildren as children, webProgram } from './web-source-scan.ts';
-import type { WebSource } from './web-continuations.ts';
+import { nativePagePartition, type WebSource } from './web-continuations.ts';
 
 export interface PageSelection { path: string; consumer: string; operation: string; predicate: string }
 interface Unit { file: WebSource; name: string; nodes: Node[]; variables: Map<string, Node> }
@@ -212,6 +212,11 @@ export function pageSelections(sources: readonly WebSource[], paged = new Set<st
         report(node.callee.object, node.arguments[0], name(node.callee.property));
       }
       if (node.type === 'ForOfStatement') {
+        const partition = nativePagePartition(node, parents);
+        if (partition && !partition.preserved) report(node.right, partition.predicate, 'partition');
+        if (node.right.type === 'CallExpression' && node.right.callee.type === 'MemberExpression'
+          && name(node.right.callee.property) === 'slice' && node.right.callee.object.type === 'MemberExpression'
+          && name(node.right.callee.object.property) === 'items') report(node.right.callee.object, node.right, 'slice');
         // Include imperative eligibility predicates, including join lookups assigned to aliases.
         for (const branch of descendants(node.body)) if (branch.type === 'IfStatement'
           && descendants(branch.consequent).some(child => child.type === 'ContinueStatement')

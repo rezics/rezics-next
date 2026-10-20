@@ -24,7 +24,9 @@ import {
   bindingSummary,
   fromRole,
   identityEntries,
+  remainingIdentityRelations,
   resourceBinding,
+  type IdentityData,
 } from './identity-relations.ts';
 import { identityContinuation, IdentitySectionsView } from './identity-views.tsx';
 import { messages, copyOf } from './messages.ts';
@@ -36,6 +38,44 @@ const renderToStaticMarkup = (element: ReactElement) =>
   renderMarkup(createElement(AppRouterContext.Provider, { value: router }, element));
 
 describe('Identity relations', () => {
+  test('only actually displayed occurrences leave the generic page, with repetitions and the complete native page retained', () => {
+    const shown = identityEntry('unit', 'character', alter);
+    const unknownRole = identityEntry('unrecognized', 'character', saber);
+    const withheld: RelationEntry = { ...shown, relation: `${shown.relation}-withheld`,
+      counterparts: [{ reference: alter.reference, status: 'unavailable' }] };
+    const structural: RelationEntry = { ...shown, kind: 'collection', collectionPurpose: null, rendering: null };
+    const items = [shown, unknownRole, shown, withheld, structural];
+    const page: RelationsPage = { profile: 'resource-relations-v1', resource: saber.reference, items,
+      next: 'opaque:+/%?=&雪', sourcePosition: { datasetId: 'product', dataEpoch: 'epoch', sequence: '1' } };
+    const data: IdentityData = { relations: page, sections: [{ kind: 'represents', hub: null, next: null,
+      members: [{ summary: alter, entry: shown, hub: false, kind: null, ratings: null, applicability: [] }] }] };
+    const rest = remainingIdentityRelations(page, { ok: true, data });
+    expect(rest).toEqual([unknownRole, shown, withheld, structural]);
+    expect(rest[1]).toBe(shown);
+    expect(data.relations).toBe(page);
+    expect(page.items).toBe(items);
+    expect(page.items).toEqual([shown, unknownRole, shown, withheld, structural]);
+    expect(page.next).toBe('opaque:+/%?=&雪');
+
+    const extra = { ...shown, counterparts: [alter, persona] };
+    const compound = { ...page, items: [extra] };
+    expect(remainingIdentityRelations(compound, { ok: true, data: { ...data, relations: compound } })).toEqual([extra]);
+  });
+
+  test('a refused, absent, mismatched or empty specialized read cannot narrow the generic native page', () => {
+    const entry = identityEntry('unit', 'character', alter);
+    const page: RelationsPage = { profile: 'resource-relations-v1', resource: saber.reference, items: [entry], next: null,
+      sourcePosition: { datasetId: 'product', dataEpoch: 'epoch', sequence: '1' } };
+    expect(remainingIdentityRelations(page, undefined)).toBe(page.items);
+    for (const failure of ['identity', 'unavailable', 'missing'] as const)
+      expect(remainingIdentityRelations(page, { ok: false, failure })).toBe(page.items);
+    expect(remainingIdentityRelations(page, { ok: true, data: { sections: [] } })).toBe(page.items);
+    expect(remainingIdentityRelations(page, { ok: true, data: { relations: page, sections: [] } })).toEqual(page.items);
+    const changed = { ...page, sourcePosition: { ...page.sourcePosition, sequence: '2' } };
+    expect(remainingIdentityRelations(page, { ok: true, data: { relations: changed, sections: [] } })).toBe(page.items);
+    expect(remainingIdentityRelations({ ...page, items: [] }, { ok: true, data: { relations: page, sections: [] } })).toEqual([]);
+  });
+
   test('structural membership retains its Collection binding without becoming identity or equivalent progress', () => {
     const collection = { ...identitySummary('520', 'Collection'), type: 'collection' as const };
     const entry = identityEntry('member', 'collection', collection);

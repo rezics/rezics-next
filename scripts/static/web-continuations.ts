@@ -119,6 +119,100 @@ function completeIteration(node: Node, parent: Node | undefined, parents: WeakMa
     || exit.type === 'ContinueStatement' && !exit.label);
 }
 
+/** A deliberately small proof: two local arrays receive the unchanged incidence
+ * in exhaustive branches, and both arrays and the unchanged native page escape
+ * together. Unknown helpers, callbacks, mutations and extra statements fail closed. */
+export function nativePagePartition(loop: Node, parents: WeakMap<Node, Node>): { preserved: boolean; predicate: Node } | null {
+  if (loop.type !== 'ForOfStatement' || loop.await || loop.left.type !== 'VariableDeclaration'
+    || loop.left.kind !== 'const' || loop.left.declarations.length !== 1
+    || loop.left.declarations[0]?.id.type !== 'Identifier'
+    || loop.right.type !== 'MemberExpression' || loop.right.computed || loop.right.optional
+    || name(loop.right.property) !== 'items' || loop.right.object.type !== 'Identifier'
+    || loop.body.type !== 'BlockStatement' || loop.body.body.length < 1
+    || loop.body.body.slice(1).some(node => node.type !== 'EmptyStatement')) return null;
+  const branch = loop.body.body[0];
+  if (branch?.type !== 'IfStatement') return null;
+  const item = name(loop.left.declarations[0].id);
+  const push = (node: Node | null): string | null => {
+    if (node?.type === 'BlockStatement') return node.body.length === 1 ? push(node.body[0]!) : null;
+    if (node?.type !== 'ExpressionStatement' || node.expression.type !== 'CallExpression') return null;
+    const call = node.expression;
+    return !call.optional && call.callee.type === 'MemberExpression' && !call.callee.computed && !call.callee.optional
+      && call.callee.object.type === 'Identifier' && name(call.callee.property) === 'push'
+      && call.arguments.length === 1 && call.arguments[0]?.type === 'Identifier' && call.arguments[0].name === item
+      ? call.callee.object.name : null;
+  };
+  const yes = push(branch.consequent), no = push(branch.alternate);
+  // Only inspect this direct partition form. Other algorithms retain their existing findings.
+  if ((!yes && branch.consequent.type !== 'EmptyStatement') || branch.alternate && !no
+    && branch.alternate.type !== 'EmptyStatement') return null;
+  if (!yes && !no) return null;
+  const answer = { preserved: false, predicate: branch.test };
+  const body = parents.get(loop), fn = body && parents.get(body);
+  if (body?.type !== 'BlockStatement' || !fn || !('params' in fn)
+    || !['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'].includes(fn.type)
+    || body.body.length !== 4 || body.body[2] !== loop || loop.body.body.length !== 1 || !yes || !no || yes === no) return answer;
+  const page = loop.right.object.name;
+  if (new Set([page, item, yes, no]).size !== 4
+    || fn.params.filter(parameter => parameter.type === 'Identifier' && parameter.name === page).length !== 1
+    || fn.params.some(parameter => parameter.type !== 'Identifier' || [item, yes, no].includes(parameter.name))) return answer;
+  const allocation = (node: Node, identifier: string) => node.type === 'VariableDeclaration' && node.kind === 'const'
+    && node.declarations.length === 1 && node.declarations[0]?.id.type === 'Identifier'
+    && node.declarations[0].id.name === identifier && node.declarations[0].init?.type === 'ArrayExpression'
+    && node.declarations[0].init.elements.length === 0;
+  if (!allocation(body.body[0]!, yes) || !allocation(body.body[1]!, no)) return answer;
+  const pure = (node: Node): boolean => node.type === 'Identifier' ? [item, page].includes(node.name)
+    : node.type === 'Literal' ? true
+      : node.type === 'MemberExpression' ? !node.computed && pure(node.object)
+        : node.type === 'BinaryExpression' ? ['===', '!=='].includes(node.operator) && pure(node.left) && pure(node.right)
+          : node.type === 'LogicalExpression' ? pure(node.left) && pure(node.right)
+          : node.type === 'UnaryExpression' && ['!', 'typeof', 'void'].includes(node.operator) && pure(node.argument);
+  if (!pure(branch.test)) return answer;
+  const returned = body.body[3];
+  if (returned?.type !== 'ReturnStatement' || returned.argument?.type !== 'ObjectExpression') return answer;
+  const properties = returned.argument.properties;
+  if (properties.length !== 3 || properties.some(property => property.type !== 'Property' || property.computed
+    || property.kind !== 'init' || property.method || !property.shorthand || property.value.type !== 'Identifier'
+    || name(property.key) !== name(property.value))) return answer;
+  const keys = properties.map(property => property.type === 'Property' ? name(property.key) : '');
+  const values = properties.map(property => property.type === 'Property' ? name(property.value) : '');
+  answer.preserved = !keys.includes('__proto__') && new Set(keys).size === 3 && new Set(values).size === 3
+    && [page, yes, no].every(value => values.includes(value));
+  return answer;
+}
+
+/** The new native `next` form is admitted only without writes, escapes or shadowed
+ * envelope bindings in this function. A matching property name is not a proof. */
+function stableNativeEnvelope(node: Node, parents: WeakMap<Node, Node>): boolean {
+  if (node.type !== 'MemberExpression' || node.object.type !== 'Identifier') return false;
+  const envelope = node.object.name;
+  let scope: Node | undefined = node;
+  while (scope && !['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'].includes(scope.type)) scope = parents.get(scope);
+  if (!scope) return false;
+  const property = parents.get(node), container = property && parents.get(property);
+  if (container?.type !== 'ObjectExpression') return false;
+  const forwarded = new Set(container.properties.flatMap(property => property.type === 'Property' ? [property.value] : []));
+  let bindings = 0, stable = true;
+  const rooted = (value: Node): boolean => value.type === 'Identifier' ? value.name === envelope
+    : value.type === 'MemberExpression' ? rooted(value.object) : false;
+  const visit = (value: Node, parent?: Node) => {
+    if (value.type === 'MemberExpression' && rooted(value) && !forwarded.has(value)) stable = false;
+    if (value.type === 'Identifier' && value.name === envelope && !(parent?.type === 'MemberExpression' && parent.object === value)
+      && !(parent?.type === 'VariableDeclarator' && parent.id === value)
+      && !(parent && 'params' in parent && parent.params.some(parameter => parameter === value))) stable = false;
+    if (value.type === 'VariableDeclarator' && name(value.id) === envelope) bindings++;
+    if ('params' in value) for (const parameter of value.params) if (name(parameter) === envelope) bindings++;
+    if ((value.type === 'FunctionDeclaration' || value.type === 'ClassDeclaration') && name(value.id) === envelope) bindings++;
+    if (value.type === 'AssignmentExpression' && rooted(value.left)
+      || (value.type === 'UpdateExpression' || value.type === 'UnaryExpression' && value.operator === 'delete') && rooted(value.argument)
+      || value.type === 'CallExpression' && (value.arguments.some(argument => rooted(argument))
+        || value.callee.type === 'MemberExpression' && rooted(value.callee.object))) stable = false;
+    for (const child of children(value)) visit(child, value);
+  };
+  visit(scope);
+  return stable && bindings === 1;
+}
+
 /** Conservative syntax guard. Projecting items requires an explicit sibling
  * continuation from the same envelope, either directly or through the tested
  * browse URL encoder. A complete batch can reject its remainder before iteration.
@@ -152,10 +246,18 @@ export function continuationInventory(sources: readonly WebSource[]): Continuati
             && property.value.type === 'MemberExpression' && continuations.has(name(property.value.property))
             && syntax(property.value.object) === envelope;
           const link = name(property.key) === 'next' && forwardsBrowseLink(property.value, envelope, linkBuilders);
-          return (direct || link) && container.properties.slice(index + 1).every(later =>
+          const native = name(property.key) === 'next' && property.value.type === 'MemberExpression'
+            && !property.value.computed && !property.value.optional && name(property.value.property) === 'next'
+            && syntax(property.value.object) === envelope && stableNativeEnvelope(node, objectParents)
+            && container.properties.every(item => item.type === 'Property' && !item.computed && item.kind === 'init' && !item.method)
+            && !container.properties.some(item => item.type === 'Property' && name(item.key) === '__proto__')
+            && new Set(container.properties.map(item => item.type === 'Property' ? name(item.key) : '')).size === container.properties.length;
+          return (direct || link || native) && container.properties.slice(index + 1).every(later =>
             later.type === 'Property' && !later.computed && name(later.key) !== name(property.key));
         });
-        if (!forwarded && !completeIteration(node, parent, objectParents)) report('dropped-continuation');
+        const partition = parent?.type === 'ForOfStatement' && parent.right === node
+          && nativePagePartition(parent, objectParents)?.preserved;
+        if (!forwarded && !partition && !completeIteration(node, parent, objectParents)) report('dropped-continuation');
       }
       if (node.type === 'ObjectPattern' && node.properties.some(property =>
         property.type === 'Property' && name(property.key) === 'items')) report('dropped-continuation');
