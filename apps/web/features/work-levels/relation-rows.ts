@@ -204,8 +204,20 @@ export function relationPageGroups(page: RelationsPage, options: { together?: bo
   const unrendered: RelationEntry[] = [];
   for (const entry of groups.relations) {
     const rows = relationRows([entry], options);
-    if (rows.some(row => row.items.length > 0)) rendered.push(entry);
-    else unrendered.push(entry);
+    const items = rows.flatMap(row => row.items);
+    if (items.length) {
+      rendered.push(entry);
+      // A readable projection need not cover every participant Main supplied.
+      // Keep the rest as neutral counterparts, including repetitions and refusals.
+      const shown = new Set<string>();
+      for (const item of items) {
+        const targets = [item.target, ...item.appearance?.alongside.map(part => part.target) ?? []];
+        for (const target of targets) if (target.kind === 'resource') shown.add(target.reference);
+      }
+      const counterparts: Summary[] = [];
+      for (const summary of entry.counterparts) if (!shown.has(summary.reference)) counterparts.push(summary);
+      if (counterparts.length) unrendered.push({ ...entry, counterparts });
+    } else unrendered.push(entry);
   }
   return { page, collections: groups.collections, rows: relationRows(rendered, options), unrendered };
 }

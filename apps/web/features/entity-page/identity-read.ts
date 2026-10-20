@@ -152,16 +152,20 @@ export async function readIdentitySections(
   });
   const continuation = (source: AvailableSummary, cursor: string | null) =>
     cursor ? { resource: source, cursor } : null;
-  // A continuation page lists later relations only: the variant-of relation that names the hub, and whether the page has
-  // any variants at all, are read from the first page, or a later page would lose the hub row.
+  // A continuation can reveal the hub for the first time. Keep its occurrences;
+  // the first page only recovers a hub that was already named on an earlier page.
   const head = cursors.relations
     ? await readIdentityRelations(self.reference, undefined, position, frame)
     : own;
-  const variants = identityEntries(head.ok ? head.data.items : entries, definitions.data, 'variant-of');
-  const asVariant = variants.find((entry) => entry.rendering?.viewingRole === 'variant');
+  const variants = identityEntries(entries, definitions.data, 'variant-of');
+  const initialVariants = head.ok && head !== own
+    ? identityEntries(head.data.items, definitions.data, 'variant-of') : [];
+  const hasFamily = variants.length > 0 || initialVariants.length > 0;
+  const asVariant = variants.find((entry) => entry.rendering?.viewingRole === 'variant')
+    ?? initialVariants.find((entry) => entry.rendering?.viewingRole === 'variant');
   const hubSummary = asVariant ? bindingSummary(asVariant, 'hub', self) : self;
   const is = (type: string) => page.target.types.includes(`${namespaces.rv}${type}`);
-  if (variants.length || is('Character')) {
+  if (hasFamily || is('Character')) {
     let family: Loaded<RelationsPage> = own;
     if (asVariant && hubSummary) {
       // Require the hub's own position-aware projection before following its incidence list.
@@ -199,17 +203,15 @@ export async function readIdentitySections(
           if (kind.name.value === 'Counterpart') kindKeys.set(kind.reference, 'counterpart');
         }
     }
-    const members = hubSummary && variants.length ? [await member(hubSummary, null, true)] : [];
-    const seen = new Set(members.map((item) => item.summary.reference));
+    const members = hubSummary && hasFamily ? [await member(hubSummary, null, true)] : [];
     for (const entry of familyEntries) {
       const variant = bindingSummary(entry, 'variant', hubSummary ?? self);
-      if (!variant || seen.has(variant.reference)) continue;
-      seen.add(variant.reference);
+      if (!variant) continue;
       members.push(await member(variant, fromRole(entry, 'hub')));
     }
     sections.push({
       kind: 'family',
-      hub: variants.length ? hubSummary : null,
+      hub: hasFamily ? hubSummary : null,
       members,
       next: hubSummary ? continuation(hubSummary, family.data.next) : null,
     });

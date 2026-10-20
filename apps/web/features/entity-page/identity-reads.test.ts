@@ -31,6 +31,45 @@ const pageOf = (self: typeof saber) =>
   ({ summary: self, target: { types: [`${namespaces.rv}Character`] } }) as unknown as EntityProjection;
 
 describe('Identity sections on a page that is not the whole list', () => {
+  test('a variant occurrence on the current page finds its hub even when the first page has no variant occurrence', async () => {
+    const late = identityEntry('variant', 'hub', saber, persona);
+    late.rendering!.bindings[0]!.participant = { kind: 'resource', ref: alter.reference };
+    const first = identityEntry('hub', 'variant', alter, persona);
+    const second = { ...first, relation: 'https://rezics.com/id/01944100-0000-7000-8000-000000000802' };
+    const third = { ...first, relation: 'https://rezics.com/id/01944100-0000-7000-8000-000000000803' };
+    const next = 'hub-next:+/%?=&雪';
+    double = mainDouble(url => {
+      const key = url.pathname.match(/\/lexicon\/definitions\/(.+)$/)?.[1];
+      if (key) return { definition: definitions[key] };
+      if (url.pathname === `/v1/resources/${idOf(alter.reference)}/relations`)
+        return relationsPage(alter.reference, url.searchParams.has('after') ? [late] : [], 'own-next:+/%');
+      if (url.pathname === `/v1/resources/${idOf(saber.reference)}/page`) return { summary: saber };
+      if (url.pathname === `/v1/resources/${idOf(saber.reference)}/relations`)
+        return relationsPage(saber.reference, [first, second, third], next);
+      return 404;
+    });
+    const read = await pageRequest(() => readIdentitySections(pageOf(alter), {
+      relations: 'own-current:+/%', family: 'hub-current:+/%',
+    }, { scope: 'global' }));
+    expect(read.ok).toBe(true);
+    if (!read.ok) throw new Error('Identity sections unavailable');
+    const family = read.data.sections.find(section => section.kind === 'family');
+    expect(family?.hub).toEqual(saber);
+    expect(family?.members.map(member => member.summary.reference))
+      .toEqual([saber.reference, alter.reference, alter.reference, alter.reference]);
+    expect(family?.members.flatMap(member => member.entry?.relation ?? []))
+      .toEqual([first.relation, second.relation, third.relation]);
+    expect(family?.next).toEqual({ resource: saber, cursor: next });
+    expect(read.data.relations).toEqual(relationsPage(alter.reference, [late], 'own-next:+/%'));
+    expect(double.calls.filter(call => call.url.pathname.endsWith('/relations')).map(call => [
+      call.url.pathname, call.url.searchParams.get('after'),
+    ])).toEqual([
+      [`/v1/resources/${idOf(alter.reference)}/relations`, 'own-current:+/%'],
+      [`/v1/resources/${idOf(alter.reference)}/relations`, null],
+      [`/v1/resources/${idOf(saber.reference)}/relations`, 'hub-current:+/%'],
+    ]);
+  });
+
   test('unknown roles and unavailable identity targets survive the actual specialized/generic composition', async () => {
     const shown = identityEntry('holder', 'title', title);
     const unknown = { ...shown, relation: `${shown.relation}-unknown`,

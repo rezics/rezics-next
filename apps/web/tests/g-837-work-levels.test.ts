@@ -247,6 +247,38 @@ describe('explicit Collection purposes across Relations and Connections', () => 
     for (const [, , heading] of cases) expect(html).toContain(`>${heading}</h3>`);
     expect(html).toContain(t.allConnections);
   });
+
+  test('a partially rendered incidence keeps all additional supplied counterparts in the fallback on every surface', () => {
+    if (!relations.ok) throw new Error('Expected the relation page');
+    const semantic = fixture.relationEntries[1]!;
+    const extra = fixture.summary(fixture.iri('f51'), 'A supplied counterpart outside the readable projection');
+    if (extra.status !== 'available') throw new Error('Expected the counterpart address');
+    const withheld = { reference: fixture.iri('f52'), status: 'unavailable' as const };
+    const partial = { ...semantic, counterparts: [...semantic.counterparts, extra, withheld, extra] };
+    const page = { ...relations.data, items: [entries[0]!, partial, partial], next: 'partial-next:+/%?=&雪' };
+    const projection = relationPageGroups(page);
+    expect(projection.page).toBe(page);
+    expect(projection.page.items).toBe(page.items);
+    expect(projection.page.sourcePosition).toBe(page.sourcePosition);
+    expect(projection.rows).toEqual(relationRows([semantic, semantic]));
+    expect(projection.unrendered).toEqual([
+      { ...partial, counterparts: [extra, withheld, extra] },
+      { ...partial, counterparts: [extra, withheld, extra] },
+    ]);
+    expect(page.items).toEqual([entries[0]!, partial, partial]);
+    for (const html of [generic({ ok: true, data: page }), preview({ ok: true, data: page }), full([], { ok: true, data: page })]) {
+      expect(html.split(linkAttribute(resourceHref('/w/', extra.address as CanonicalAddress))).length - 1).toBe(4);
+      expect(html.match(/data-name-state="undisclosed"/g)).toHaveLength(2);
+      expect([...html.matchAll(/data-relation="([^"]+)"/g)].map(match => match[1]))
+        .toEqual([partial.relation, partial.relation]);
+      expect(html).toContain('Reboots of');
+      expect(html).toContain('Collections');
+      expect(html).not.toContain(resourceHref('/e/', withheld.reference));
+    }
+    expect(preview({ ok: true, data: page })).toContain(t.allConnections);
+    expect(generic({ ok: true, data: page })).toContain('relations=partial-next%3A%2B%2F%25%3F%3D%26%E9%9B%AA');
+    expect(full([], { ok: true, data: page })).toContain('relationsAfter=partial-next%3A%2B%2F%25%3F%3D%26%E9%9B%AA');
+  });
 });
 
 describe('independent Work reads preserve disclosed results', () => {
