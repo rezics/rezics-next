@@ -6536,5 +6536,2001 @@
       "checkRun": "run-wRWRHS",
       "harnessNotice": "Check reported harness 1 commit behind main; no harness failure occurred. No rebase or repeated source checks."
     }
+  },
+  "aud_012_new_CAS5_selected_card_native_continuation": {
+    "atUTC": "2026-10-19T16:07:19.424191+00:00",
+    "reviewer": {
+      "worker": "G-2847",
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "fallback": false,
+      "nestedAgents": false
+    },
+    "scope": "One authorized NEW CAS5 selected3 original AUD-012 card AT attempt. No rerun, broad matrix, product/assertion change, new source approval or class closure.",
+    "verdict": "PARTIAL / original AT failure: German Home reached and failed description/unread speech assertions; French Home stopped at mode qualification before callback; German Library passed the unchanged original callback.",
+    "historyPreservation": {
+      "reportParent": "a3080f11c45f5aef6c24b4f8fcf3a9ad46501dcb",
+      "priorTopLevelFields": 39,
+      "priorReportSHA256": "fc3d0fa20ef040fdc23d57171b4383d47086fd09b9689a866fd297b0824c6222",
+      "priorFieldsRetainedExactly": true,
+      "currentMainFieldsRetainedExactly": true,
+      "allEarlierFailuresAndApprovalsRetained": true
+    },
+    "execution": {
+      "job": "job:bd461861-2957-431b-b6b9-d1e73c95e8d7",
+      "command": "bun scripts/goal/goalctl.ts test ./.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-CAS5-selected3-native/aud012-card-only.test.ts",
+      "recordedVia": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- <command>",
+      "exitStatus": 1,
+      "resultClass": "assertion",
+      "testPass": 0,
+      "testFail": 1,
+      "expectCalls": 25,
+      "testMilliseconds": 166770.51,
+      "startedAtUTC": "2026-10-19T15:58:55.534Z",
+      "originalOutcomeCollectionFinishedAtUTC": "2026-10-19T16:01:40.005Z",
+      "settledBeforeThisReport": true,
+      "selectedCasesPassed": 1,
+      "selectedCasesFailed": 2,
+      "log": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-CAS5-selected3-native/recorded-job.log"
+    },
+    "source": {
+      "pin": "716d0f3fb23325df04c283e67eb9d0f38542a3b8",
+      "origin": "http://127.0.0.1:41305",
+      "clean": true,
+      "base": "53f4ec6709f31bfb0cf7eca934e25b796644fa88",
+      "mechanicalSelectedBlobs": {
+        "apps/web/features/shell/bottom-nav.tsx": "01b5eb673c0fef2555727da9e634606596fb7fd3",
+        "apps/web/features/shell/side-nav.tsx": "0b22ec801aed87b52740d88a58a25138b8e57895"
+      },
+      "retainedSourceSelection": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-CAS5-selected3-native/leased-source-selection.json",
+      "selectionManifest": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-CAS5-selected3-native/selection-manifest.json",
+      "runtime": [
+        {
+          "package": "vinext",
+          "version": "1.0.0-beta.13",
+          "manifestSHA256": "0c2a580d880166b94bbad71bdee9e35b418c8804152ca7c0cc28355a509b7082",
+          "realpath": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-transport/leased-source/node_modules/vinext/package.json"
+        },
+        {
+          "package": "@vitejs/plugin-rsc",
+          "version": "0.5.38",
+          "manifestSHA256": "c8284b323d4c00f69a0dca1da722797a3c71eb2a93ceff939486385787a124ec",
+          "realpath": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-transport/leased-source/node_modules/@vitejs/plugin-rsc/package.json"
+        },
+        {
+          "package": "vite",
+          "version": "8.3.4",
+          "manifestSHA256": "260a0a7a96a35e1b657480014c0f3b592b70061e42099edefc8fe97972f05fd4",
+          "realpath": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-transport/leased-source/node_modules/vite/package.json"
+        },
+        {
+          "package": "react",
+          "version": "19.3.1",
+          "manifestSHA256": "9cc9c3de5441a2eea7f41f52f3f2a15a4fc51f90c0b72741f0d7638643a85e67",
+          "realpath": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-transport/leased-source/node_modules/react/package.json"
+        },
+        {
+          "package": "react-dom",
+          "version": "19.3.1",
+          "manifestSHA256": "89d54f11575c9b0f7819962d9d72a31970dfb4d103f07e8b1d1b37e6d1fc3258",
+          "realpath": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-orca-transport/leased-source/node_modules/react-dom/package.json"
+        }
+      ],
+      "frontend": {
+        "command": [
+          "task",
+          "web:dev",
+          "--",
+          "--port",
+          "41305"
+        ],
+        "pid": 3223830,
+        "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-CAS5-selected3-native/leased-source",
+        "sourceClean": true,
+        "warmupStatus": 200
+      },
+      "currentMainEquivalenceNotClaimed": true,
+      "originalAuthoredSourcePreserved": true
+    },
+    "driverIntegrity": {
+      "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-CAS5-selected3-native/aud012-card-only.test.ts",
+      "sha256": "839ce5a56a5e6f8829a9cd92dc3b3d131fe0acdc4258ab0a932dcb28724d482b",
+      "originalCallbackBytes": 3268,
+      "originalCallbackSHA256": "9c56d91f687e9a03a00ce05dc88171ba22d63beab60d7de6b55592d0296aa4e8",
+      "originalCallbackByteIdentical": true,
+      "focusBrowseSHA256": "2839be25a015bbed9b4735394ab6291645bc060121efe6744a7f47afc59c75a9",
+      "focusBrowseByteIdentical": true,
+      "assetTransportLinesUnchanged": true,
+      "setupOnlyPatch": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-CAS5-selected3-native/setup-only.patch",
+      "freshOwnedPortProfileConnection": true,
+      "productEdits": false
+    },
+    "backend": {
+      "refreshRevision": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "source": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "observedAt": "2026-10-19T15:58:55.651Z",
+      "provenanceLimit": "Current shared refresh and source directory, not immutable historical runtime identity",
+      "processes": [
+        {
+          "pid": 1372265,
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+          "checkoutHead": "75409ac3c379a9f84212e48a8abdc6540c5c44a2"
+        }
+      ],
+      "readiness": {
+        "origin": "http://127.0.0.1:3001",
+        "status": 200
+      }
+    },
+    "identity": {
+      "method": "Unchanged exact-pin signInAtAccounts normal OAuth PKCE using existing configured same fixture member; no saved/peer refresh state",
+      "freshOwnOAuth": true,
+      "sessionAgent": {
+        "at": "2026-10-19T16:00:04.142Z",
+        "status": 200,
+        "eligible": true,
+        "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839"
+      },
+      "finalIdentity": {
+        "status": 200,
+        "eligible": true,
+        "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839"
+      },
+      "noBorrowedAuthState": true,
+      "credentialsTokensStorageNotPublished": true
+    },
+    "custody": {
+      "readyPath": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-CAS5-selected3-native/renewed-ready.json",
+      "readySHA256": "bb940ca2951bd16b6da9fdea913c38de0653e352fb11fdaf79f9ef304e6730e4",
+      "rootNEWCAS5Lease": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-CAS5-selected3-native/root-NEW-CAS5-lease.json",
+      "rootLeaseSHA256": "4ed5d8dba6d015258fd50a998785e64b1544a08ab691ac2c541a910520dfe3e7",
+      "rootAuthorization": {
+        "authorizedAt": "2026-10-19T15:54:18.758406Z",
+        "borrower": "G-2847",
+        "scope": [
+          "HomeDE390",
+          "HomeFR390",
+          "LibraryDE390"
+        ],
+        "readOnly": true,
+        "readySha256": "bb940ca2951bd16b6da9fdea913c38de0653e352fb11fdaf79f9ef304e6730e4",
+        "preparedVersion": 5,
+        "resumeFile": "G-2847-after50-native-qualified-CAS5-selected3-sameScope-resume.txt",
+        "cleanupAfterExplicitBorrowerRelease": "G-2831 fresh-CAS original semantic restoration with two full readback sets"
+      },
+      "actor": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+      "book": "01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+      "acquisitionRequestedAtUTC": "2026-10-19T15:58:55.534Z",
+      "acquiredAtUTC": "2026-10-19T16:00:15.036Z",
+      "beforeAfterExactEquivalent": true,
+      "borrowerReleased": true,
+      "releaseAtUTC": "2026-10-19T16:01:42.285Z",
+      "durableRelease": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-CAS5-selected3-native/card-CAS5-selected3-at-1/borrower-release.json",
+      "releaseQualification": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-CAS5-selected3-native/borrower-release-qualification.json",
+      "cleanupNeeded": true,
+      "cleanupOwner": "G-2831",
+      "borrowerRestoration": false,
+      "noFurtherBorrow": true,
+      "readbackEvidence": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-CAS5-selected3-native/card-CAS5-selected3-at-1/result.json",
+        "beforeAtUTC": "2026-10-19T16:00:15.030Z",
+        "afterAtUTC": "2026-10-19T16:01:39.861Z",
+        "readerHTTPStatuses": [
+          200,
+          200
+        ],
+        "continuationHTTPStatuses": [
+          200,
+          200
+        ],
+        "unchangedReaderState": {
+          "profile": "reader-work-state-v1",
+          "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+          "status": {
+            "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+            "status": "reading",
+            "startedOn": null,
+            "finishedOn": null,
+            "version": 5,
+            "changedAt": "2026-10-19 15:41:45.000961+00"
+          },
+          "customShelves": [],
+          "rating": {
+            "global": null,
+            "realm": null
+          },
+          "progress": null,
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          }
+        },
+        "unchangedContinuation": {
+          "profile": "work-resume-v1",
+          "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+          "sourcePosition": {
+            "dataEpoch": "8c483e38-59e7-4d95-b27b-de9cd6742a3e",
+            "sequence": "11954"
+          },
+          "lastPosition": null,
+          "nextUnread": {
+            "occurrence": "https://rezics.com/id/5caa0cc4-f716-876a-8a46-fa048620c48d",
+            "title": "At the harbour",
+            "href": "/w/01a10aff-93e5-7069-b80a-cd33bb6ce57c/read/5caa0cc4-f716-876a-8a46-fa048620c48d?language=en"
+          },
+          "unreadCount": {
+            "value": 1,
+            "kind": "exact"
+          }
+        }
+      }
+    },
+    "nativePermission": {
+      "reusedQualifierJob": "job:86f40d52-7522-4abd-acc5-e867eaba1e06",
+      "qualifierReceiptSHA256": "6411b998c774382dbd71a2bb98df4779b9af3e55fe5b9a6002a248ca183c3ee1",
+      "newPermissionAndConnectionRequiredAndReached": true,
+      "browserPID": 3237419,
+      "inputConnectionPID": 3238328,
+      "budgetMs": 6100,
+      "elapsedMs": 3243.7988250000053,
+      "outcome": "qualified",
+      "baselinePrompterPIDs": [
+        1397419,
+        1439206,
+        2262723
+      ],
+      "selectedFreshDialog": {
+        "allowActions": [
+          {
+            "index": 0,
+            "name": "Press",
+            "description": "Triggers the action",
+            "keybinding": ""
+          },
+          {
+            "index": 1,
+            "name": "SetFocus",
+            "description": "Sets the focus",
+            "keybinding": "Enter"
+          }
+        ],
+        "dialog": {
+          "identity": {
+            "pid": 3248942,
+            "path": [
+              0
+            ],
+            "role": "dialog",
+            "name": "Remote Control"
+          },
+          "visible": true,
+          "showing": true,
+          "active": true,
+          "focused": false
+        },
+        "checkboxPath": [
+          0,
+          2
+        ],
+        "allowPath": [
+          0,
+          4,
+          0
+        ],
+        "checked": false,
+        "allowEnabled": true,
+        "allowShowing": true
+      },
+      "observedActivation": "Press (unique activation); distinct SetFocus was not selected",
+      "dialogGoneAtUTC": "2026-10-19T16:00:24.815Z",
+      "newActualControlDeliveryAtUTC": "2026-10-19T16:00:25.455Z",
+      "actualOrcaNativeKeyReceived": true,
+      "persistentOptionTouched": false,
+      "attributionLimit": "Root-authorized isolated single-request qualifier; temporal sole-fresh-dialog attribution only. Legacy X11 python3 identity is not OS-verified.",
+      "evidence": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-CAS5-selected3-native/card-CAS5-selected3-at-1/temporary-native-permission.json"
+    },
+    "documentFocus": [
+      {
+        "locale": "de",
+        "path": "",
+        "atUTC": "2026-10-19T16:00:27.463Z",
+        "qualified": true,
+        "nativeTabCount": 1,
+        "documentHasFocus": true,
+        "ownedFocusEvents": [
+          {
+            "pid": 3237419,
+            "name": "Navigation öffnen",
+            "role": "button"
+          }
+        ]
+      },
+      {
+        "locale": "fr",
+        "path": "",
+        "atUTC": "2026-10-19T16:00:53.278Z",
+        "qualified": true,
+        "nativeTabCount": 1,
+        "documentHasFocus": true,
+        "ownedFocusEvents": [
+          {
+            "pid": 3237419,
+            "name": "Aller au contenu",
+            "role": "link"
+          }
+        ]
+      },
+      {
+        "locale": "de",
+        "path": "/library",
+        "atUTC": "2026-10-19T16:01:20.900Z",
+        "qualified": true,
+        "nativeTabCount": 1,
+        "documentHasFocus": true,
+        "ownedFocusEvents": [
+          {
+            "pid": 3237419,
+            "name": "Navigation öffnen",
+            "role": "button"
+          }
+        ]
+      }
+    ],
+    "conditionalBrowseQualification": [
+      {
+        "at": "2026-10-19T16:00:28.285Z",
+        "locale": "de",
+        "path": "",
+        "ownedDocumentFocusQualified": true,
+        "before": "True",
+        "nativeCommands": [
+          {
+            "at": 1792425628.3347988,
+            "browserPid": 3237419,
+            "command": "Insert+a",
+            "focusBefore": 44040196,
+            "focusAfter": 44040196,
+            "ownedAfter": true,
+            "target": null,
+            "inputConnectionPid": 3238328
+          }
+        ],
+        "toggleOnlyIfActualFocusMode": true,
+        "after": "False",
+        "browseAnnounced": true,
+        "browseDispatcher": true,
+        "backendDelivery": true,
+        "qualified": true
+      },
+      {
+        "at": "2026-10-19T16:01:04.587Z",
+        "locale": "fr",
+        "path": "",
+        "ownedDocumentFocusQualified": true,
+        "nativeCommands": [],
+        "toggleOnlyIfActualFocusMode": true
+      },
+      {
+        "at": "2026-10-19T16:01:21.741Z",
+        "locale": "de",
+        "path": "/library",
+        "ownedDocumentFocusQualified": true,
+        "before": "True",
+        "nativeCommands": [
+          {
+            "at": 1792425681.8024886,
+            "browserPid": 3237419,
+            "command": "Insert+a",
+            "focusBefore": 44040196,
+            "focusAfter": 44040196,
+            "ownedAfter": true,
+            "target": null,
+            "inputConnectionPid": 3238328
+          }
+        ],
+        "toggleOnlyIfActualFocusMode": true,
+        "after": "False",
+        "browseAnnounced": true,
+        "browseDispatcher": true,
+        "backendDelivery": true,
+        "qualified": true
+      }
+    ],
+    "outcomes": [
+      {
+        "id": "card-home-de-390",
+        "outcomeAssertionReached": true,
+        "outcome": "FAILED original speech/dispatcher expectation at aud012-card-only.test.ts:259:74",
+        "qualifiedOwnedNativeBrowse": true,
+        "headingReached": true,
+        "nativeReading": "Control+Home, 2 heading commands to Weiterlesen, 16 Down commands; own Chrome/AT-SPI/speech backend delivered.",
+        "expectedAnnouncement": [
+          {
+            "value": "The Lantern Road 8805d7a2",
+            "speech": true,
+            "backend": true
+          },
+          {
+            "value": "At the harbour",
+            "speech": false,
+            "backend": false
+          },
+          {
+            "value": "1 neue Kapitel",
+            "speech": false,
+            "backend": false
+          }
+        ],
+        "backendDelivered": true,
+        "actualAtSpiEvents": 32,
+        "finding": "Visible next chapter At the harbour and exact unread badge 1 neue Kapitel were absent from both Orca speech output and dispatcher Speaking during the original reading sequence. The title/resume label was spoken, followed by hide button and leaving the list.",
+        "location": {
+          "path": "apps/web/features/home/continue-strip.tsx",
+          "line": 54,
+          "blob": "ef0f3e5a0f3147c5e8479c906347528010af92e4",
+          "sourcePin": "716d0f3fb23325df04c283e67eb9d0f38542a3b8",
+          "badgeLines": "59-60",
+          "descriptionLines": "63-64"
+        },
+        "causalAssessment": "The explicit title-only aria-label is consistent with the missing nested description/status. This executed outcome is a real Home card counterexample at this pin; it is not a claim about every AT command/browser or current main.",
+        "axe": "Not reached after failed original outcome; not waived."
+      },
+      {
+        "id": "card-home-fr-390",
+        "outcomeAssertionReached": false,
+        "outcome": "UNREACHED / setup qualification failure",
+        "failure": "Actual owned-document Orca presentation mode was not observed; refuse blind toggle",
+        "driverLine": 135,
+        "ownedDocumentFocusQualified": true,
+        "nativeTabCount": 1,
+        "actualFocusedNode": "Aller au contenu link",
+        "modeWait": "Existing 40x250ms; no actual new DOCUMENT PRESENTER mode was observed",
+        "insertToggleSent": false,
+        "cardSpeechAcceptanceInferred": false,
+        "screenshot": null,
+        "axe": "Unreached"
+      },
+      {
+        "id": "card-library-de-390",
+        "outcomeAssertionReached": true,
+        "outcome": "PASS unchanged original callback",
+        "qualifiedOwnedNativeBrowse": true,
+        "headingReached": true,
+        "expectedAnnouncement": [
+          {
+            "value": "The Lantern Road 8805d7a2",
+            "speech": true,
+            "backend": true
+          },
+          {
+            "value": "At the harbour",
+            "speech": true,
+            "backend": true
+          }
+        ],
+        "backendDelivered": true,
+        "actualAtSpiEvents": 36,
+        "additionalActualSpeech": "Nächstes Kapitel: At the harbour · 1 Kapitel übri. followed by g. (separate utterance)",
+        "assertionLimit": "Original Library expectations assert title and next title; no invented extra badge assertion. Unread semantic is an additional retained actual spoken observation.",
+        "axe": {
+          "violations": 0,
+          "passRules": 15,
+          "incomplete": [
+            {
+              "id": "color-contrast",
+              "impact": "serious"
+            }
+          ],
+          "labelContentNameMismatchApplicableNodes": 0,
+          "zeroApplicableNodesNotReportedAsApplicableRulePass": true
+        }
+      }
+    ],
+    "actualATDelivery": {
+      "audio": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-CAS5-selected3-native/card-CAS5-selected3-at-1/speech.wav",
+      "inspection": {
+        "channels": 1,
+        "sampleWidth": 2,
+        "sampleRate": 16000,
+        "frames": 1959200,
+        "durationSeconds": 122.45,
+        "peak": 32768,
+        "rms": 2947.9010604883847,
+        "nonzeroSamples": 372588,
+        "pulseWroteDataLines": 221,
+        "method": "Owned Orca speechdispatcherfactory -> owned Speech Dispatcher/espeak-ng -> owned Pulse sink monitor recording. No DOM-to-TTS; delivery evidenced by per-cell new Pulse writes and actual WAV samples. No independent human-listening claim."
+      },
+      "orcaSpeechBackend": "Actual speechdispatcherfactory.SpeechServer observed; per-cell SPEECH OUTPUT and SPEECH DISPATCHER Speaking backed by new Pulse writes and captured audio.",
+      "shutdownConnectionErrorPreserved": "orca.debug 00:01:40.691126 logs one failed Speech Dispatcher reconnect during shutdown after outcomes finished at 16:01:40.005Z. It is retained; no claim of zero connection errors.",
+      "domToTTS": false,
+      "audioNotAnAccessibilityTreeSnapshot": true
+    },
+    "screenshotsViewed": [
+      {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-CAS5-selected3-native/card-CAS5-selected3-at-1/card-home-de-390.png",
+        "sha256": "33c49e1043256ac2054316d0938dcac4d00460d3b5779a43d237b5d53716df1b",
+        "viewed": true,
+        "observation": "Post-reading screenshot: Home card title and 1 neue Kapitel badge are visible; next-chapter line is visually truncated. Reader traversal has scrolled the document, with fixed header covering the card top and mobile navigation present. This is not an initial-layout/focus-ring acceptance capture."
+      },
+      {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-CAS5-selected3-native/card-CAS5-selected3-at-1/card-library-de-390.png",
+        "sha256": "5e26c78d91f551e08090e558daac9c3d854411c063efb908ae5f5a2b3f49db2b",
+        "viewed": true,
+        "observation": "Post-reading screenshot: genuine Library reading card, title, Weiterlesen and Dein Fortschritt are present. Description line is visually clipped at its start; actual reader speech retained the full next chapter and unread semantic. No new layout approval is inferred."
+      }
+    ],
+    "browserObservations": {
+      "console": [],
+      "pageErrors": [],
+      "requestFailures": [
+        {
+          "at": "2026-10-19T16:00:10.879Z",
+          "url": "http://127.0.0.1:41305/en",
+          "method": "GET",
+          "type": "fetch",
+          "error": "net::ERR_ABORTED"
+        }
+      ],
+      "cancelFailurePreserved": true,
+      "zeroRequestFailureGateAdded": false
+    },
+    "writeQualification": {
+      "atUTC": "2026-10-19T16:07:19.424191+00:00",
+      "originalRelease": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-CAS5-selected3-native/card-CAS5-selected3-at-1/borrower-release.json",
+      "originalReleaseSHA256": "236b46fe835c2511d8fb22342f2d63926c65bb4502334b33b02c6a570a28237f",
+      "borrowerReleased": true,
+      "releaseAtUTC": "2026-10-19T16:01:42.285Z",
+      "frozenReadySHA256": "bb940ca2951bd16b6da9fdea913c38de0653e352fb11fdaf79f9ef304e6730e4",
+      "currentCAS": 5,
+      "originalNoBorrowerWritesFlag": true,
+      "flagScope": "Exact driver predicate: (reader-status|reading-positions|progress|preferences|shelves|follows|continue/hide) followed by slash, query or end. It does not flag feed-watermarks/following, grants or all API writes. Its true flag establishes zero observed matching requests, not zero API writes.",
+      "observedAutomaticMainNonGETRequests": [
+        {
+          "at": "2026-10-19T16:00:21.529Z",
+          "method": "PUT",
+          "url": "http://127.0.0.1:41305/api/main/v1/me/feed-watermarks/following",
+          "prohibited": false
+        },
+        {
+          "at": "2026-10-19T16:00:50.853Z",
+          "method": "PUT",
+          "url": "http://127.0.0.1:41305/api/main/v1/me/feed-watermarks/following",
+          "prohibited": false
+        }
+      ],
+      "requestOutcomeLimit": "Two automatic Home PUT requests were observed; their HTTP responses/persistence were not captured by this request-only list. Do not infer that they were blocked or had no effect.",
+      "directBorrowerReaderOrOtherMutationCalls": false,
+      "readerAndContinuationBeforeAfterEquivalent": true,
+      "cleanupNeeded": true,
+      "cleanupOwner": "G-2831",
+      "restorationPerformedByBorrower": false,
+      "next": "Root may now serialize G-2831 fresh-current-CAS restoration and two full invariant readback sets. No further borrow authorized by this report."
+    },
+    "cleanup": {
+      "evidence": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-CAS5-selected3-native/card-CAS5-selected3-at-1/owned-cleanup-verification.json",
+      "atUTC": "2026-10-19T16:01:42.276188+00:00",
+      "remainingOwnedRecordedPIDs": [],
+      "remainingOwnedProcessGroupMembers": [],
+      "ownedFrontendStopped": true,
+      "ownedBrowserStopped": true,
+      "ownedATStopped": true,
+      "ownedInputStopped": true,
+      "ownedPortListening": false,
+      "ownedSinkRemoved": true,
+      "ownedModuleRemoved": true,
+      "ownedSocketsRemoved": true,
+      "baselinePrompts": [
+        {
+          "pid": 1397419,
+          "unchangedIdentityLabelsButtonsCheckboxes": true,
+          "persistentOptionsRemainUnchecked": true
+        },
+        {
+          "pid": 1439206,
+          "unchangedIdentityLabelsButtonsCheckboxes": true,
+          "persistentOptionsRemainUnchecked": true
+        },
+        {
+          "pid": 2262723,
+          "unchangedIdentityLabelsButtonsCheckboxes": true,
+          "persistentOptionsRemainUnchecked": true
+        }
+      ],
+      "baselinePromptActionsPerformed": false,
+      "persistentOptionTouched": false,
+      "peerProcessActions": false,
+      "backendLifecycleChanges": false
+    },
+    "productAudit": {
+      "principle": "Original AUD-012: an overriding accessible label must retain the card description and state for actual reader navigation.",
+      "boundedAffectedOwners": [
+        "Home ContinueStrip: reached German counterexample",
+        "Home ContinueStrip French: original callback unreached; no product verdict",
+        "Library reading owner German: unchanged original callback passed"
+      ],
+      "noBroaderReplay": true,
+      "priorNav81SixActivationsSettingsFollowingAnonymous22AndEarlier14ExpectProofRetained": true,
+      "priorZeroUnreadAndSynthetic3And99EvidenceUnchanged": true,
+      "currentMainOrWholeClassClosure": false
+    },
+    "remainingOriginalGaps": [
+      "Home German description/unread actual speech failed at the original outcome assertion; return the concrete counterexample to the existing owner/manager without changing assertions.",
+      "French Home original card reading remains unproved because actual mode qualification failed; preserve it as setup failure.",
+      "Root must complete G-2831 fresh-current-CAS semantic prior-state restoration and two full invariant readback sets after this settled job/release."
+    ],
+    "managerNext": "Job is settled, owned processes are stopped and NEW CAS5 borrower release is durable. Serialize existing G-2831 restoration now, retain the Home counterexample and French setup gap, and decide original-class acceptance. No worker class closure or further borrow.",
+    "artifacts": {
+      "directory": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-CAS5-selected3-native",
+      "manifest": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-CAS5-selected3-native/artifact-manifest.json",
+      "manifestSHA256": "4ff65de4a2c65fb3267a048e07972caf2baf80303073098f2aa4de0119085ad2",
+      "fileCount": 45
+    },
+    "reportValidation": {
+      "atUTC": "2026-10-19T16:09:18.552969+00:00",
+      "job": "job:6bc62805-4ae1-4750-9f0b-2fc0bed6fe9a",
+      "exitStatus": 0,
+      "docs": {
+        "command": "task docs:check",
+        "tests": 13,
+        "markdownFiles": 259,
+        "result": "PASS"
+      },
+      "goal": {
+        "command": "task goal -- check",
+        "run": "run-mGKY8p",
+        "result": "PASS",
+        "ast": "PASS",
+        "guards": "1/45 selected PASS",
+        "types": "No TypeScript workspace changed",
+        "lint": "No source file changed",
+        "tests": "No test files named in brief; original AT failure was not rerun or converted to pass"
+      },
+      "diffCheck": "PASS"
+    }
+  },
+  "originalPrivateIdentityRecoveryContinuation": {
+    "recordedAtUtc": "2026-10-20T04:02:20.555377+00:00",
+    "worker": "G-2847",
+    "reviewer": "codex-1 / GPT-6.1 Sol / xhigh; same independent reviewer; no fallback or nested agents",
+    "result": "blocked",
+    "verdict": "Consumed completed attempts 56/57 without replay. Original eligible identity and relationship assertions partly reached; Studio is blocked by the selected old backend contract, and final recovery return is not reached after a native-radio observation premise fails. No current-main product defect or original class closure inferred.",
+    "scope": "Original same-scope identity/private-reader continuation only. This append neither repeats source review nor changes any original assertion or acceptance.",
+    "sourceAndDependencyPins": {
+      "executedWeb": "c9699dcef53ce0109404228efe15e24118fa63e0",
+      "dispatchMain": "76c5955006dbea2016e84465d8f3e79fdf4fc979",
+      "observedMain": "2f235a8fb4437beff602e0a4c2eb3f1ba0d62ffe",
+      "reportBranchBeforeAppend": "80373d9469d054fd26739c6923f6a10eb86c8c99",
+      "affectedBlobComparison": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-recovery-consumed-20261020/affected-dependency-comparison.json",
+        "sha256": "f6938ddf0df7983ceecc17724c427a38559b6f3e4dd95abd552af94dc1494d1b",
+        "bytes": 17733
+      },
+      "unchangedAffectedInputs": 41,
+      "reusedPrivateSource": {
+        "landed": "0b8dec18d7d5ff1f2fdeafd83498e4b33ad3b448",
+        "independentApproval": "fa6e2e5be7f82faf7cbc0c0b4480d0d0fdab8d48",
+        "composedSource": "41229b6f19f3db8e209400b69d9085ded88f376e",
+        "originalReviewedBlobsStillExact": 13,
+        "laterChangesPreserved": 6,
+        "limit": "Do not claim all nineteen match 41229. All nineteen do match from executed c969 through both compared later main pins; no later source was restored or reviewed again."
+      },
+      "dependencies": [
+        {
+          "path": "package.json",
+          "sha256": "487061c605dc753c9e60c657ecaa4dd7cf417a213ac65c2e906380367b98acaf",
+          "installedMainBytesEqual": true
+        },
+        {
+          "path": "yarn.lock",
+          "sha256": "026c93ddc3085e43b1ff6727a42f7c55b03a03cc1aa4c11cbf57438ce5b9d391",
+          "installedMainBytesEqual": true
+        },
+        {
+          "path": "apps/web/package.json",
+          "sha256": "f0b29308365ed08148f73ba83b3c5f6c5b5e890c1df2d547ece26b541ad7965f",
+          "installedMainBytesEqual": true
+        },
+        {
+          "path": "packages/ui/package.json",
+          "sha256": "918f010f3942a38f238055257a22b226046a1fd0d43b4e99574f495854d1abe4",
+          "installedMainBytesEqual": true
+        },
+        {
+          "path": "node_modules/vinext/package.json",
+          "sha256": "0c2a580d880166b94bbad71bdee9e35b418c8804152ca7c0cc28355a509b7082",
+          "version": "1.0.0-beta.13"
+        }
+      ],
+      "nativeRuntime": {
+        "observedAt": "2026-10-19T17:24:22.812Z",
+        "sourcePointer": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "refreshRevision": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "limit": "observed shared live binding; not immutable historical backend identity"
+      },
+      "nativeCurrentSourceNotInstalledOrCertified": true
+    },
+    "completedJobsConsumed": [
+      {
+        "id": "f9bf41d5-d605-4475-85ad-49f8be853567",
+        "attempt": 56,
+        "command": "task --taskfile .temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969/Taskfile.yml stage",
+        "exitCode": 0,
+        "result": "passed preparation only",
+        "record": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-recovery-consumed-20261020/f9bf41d5-d605-4475-85ad-49f8be853567.json",
+          "sha256": "9d1e5473771822ade8a16488ce5b1977b2ebbfa8a59c344eb48f3b84e6a26776",
+          "bytes": 970
+        },
+        "log": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-recovery-consumed-20261020/f9bf41d5-d605-4475-85ad-49f8be853567.log",
+          "sha256": "2784008983ec2d2980a718d9e30c66ed62f961d98a8a0e6efc2dc60d2c1a36b1",
+          "bytes": 2011
+        }
+      },
+      {
+        "id": "9aa2e67c-0b95-4636-baad-fe020d90f327",
+        "attempt": 57,
+        "command": "env PLAYWRIGHT_BROWSERS_PATH=/home/edge/.cache/ms-playwright bun scripts/goal/goalctl.ts test ./.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969/identity-recovery.test.ts",
+        "exitCode": 1,
+        "resultClass": "assertion",
+        "testsPassed": 0,
+        "testsFailed": 1,
+        "expectCalls": 44,
+        "durationMs": 136310,
+        "cells": [
+          {
+            "id": "missing-acting-contexts-work-create",
+            "outcome": "passed"
+          },
+          {
+            "id": "missing-library-studio-direct-refresh-history",
+            "outcome": "failed"
+          },
+          {
+            "id": "identity-only-503-repeated-retry-and-same-next-recovery",
+            "outcome": "failed"
+          },
+          {
+            "id": "actual-pinned-and-communities-sites-known-vs-unknown",
+            "outcome": "passed"
+          }
+        ],
+        "record": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-recovery-consumed-20261020/9aa2e67c-0b95-4636-baad-fe020d90f327.json",
+          "sha256": "6d254c1453bed9901ff4e13d07b663a633640c8598c02289e1b99320789c7498",
+          "bytes": 1074
+        },
+        "log": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-recovery-consumed-20261020/9aa2e67c-0b95-4636-baad-fe020d90f327.log",
+          "sha256": "f7debc5cf94a2ebb141dbbdd8fff5295d595364ab807f8ceb6886cc61ee8e390",
+          "bytes": 3877
+        },
+        "admission": "Existing goalctl test recorded job. No separate QA-stack run ID was emitted; none fabricated."
+      }
+    ],
+    "transportHistory": {
+      "attempt55": "80373d9469 source approval and report job 5758c787 passed; preserved.",
+      "attempt58": "Empty transport exit after completed assertion failure; not a new product failure.",
+      "thisRecovery": "Read-only evidence/dependency inspection and report-only append; no runtime job repeated or new server started."
+    },
+    "runtimeDataAndSession": {
+      "runtime": {
+        "origin": "http://127.0.0.1:45445",
+        "mainForwarder": "http://127.0.0.1:33191",
+        "genuineUpstream": "http://127.0.0.1:3001",
+        "command": [
+          "task",
+          "web:dev",
+          "--",
+          "--port",
+          "45445"
+        ],
+        "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969/source",
+        "pid": 722857,
+        "warmup": 200,
+        "browser": {
+          "version": "153.0.8010.12",
+          "executable": "/home/edge/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome",
+          "installedOfficialBrowser": true
+        }
+      },
+      "accountsOrigin": "http://127.0.0.1:3004",
+      "actor": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+      "authentication": {
+        "method": "fresh own signInAtAccounts supported OAuth; existing member only; no transferred storage/cookies",
+        "stage": "genuine eligible exact actor qualified through Web BFF",
+        "returnedTo": "http://127.0.0.1:45445/en"
+      },
+      "sessionBinding": "One fresh supported normal OAuth session; actual session key held only in memory. All six entry/history observations and retry/restoration/relationship observations record sameSession=true. No transferable cookie or session ID is retained.",
+      "dataPinLimit": "Genuine existing shared Main3001 data at 2026-10-19T17:24:22Z..17:26:25Z, runtime source pointer/refresh 75409ac3. No immutable dataset snapshot/hash was captured; data can change. No account, corpus, grant, Collection or reader fixture was created.",
+      "observedAutomaticWrites": [
+        {
+          "at": "2026-10-19T17:25:29.513Z",
+          "phase": "setup",
+          "method": "POST",
+          "url": "http://127.0.0.1:3001/v1/me/onboarding",
+          "controlled": false,
+          "status": 200,
+          "requestId": null,
+          "contentType": "application/json;charset=utf-8",
+          "elapsedMs": 248
+        },
+        {
+          "at": "2026-10-19T17:25:35.928Z",
+          "phase": "setup",
+          "method": "PUT",
+          "url": "http://127.0.0.1:3001/v1/me/feed-watermarks/following",
+          "controlled": false,
+          "status": 200,
+          "requestId": null,
+          "contentType": "application/json;charset=utf-8",
+          "elapsedMs": 84
+        }
+      ],
+      "writeQualifier": "Original scope/cleanup says no domain writes by driver, but the forwarding receipt records normal product POST /v1/me/onboarding and PUT /v1/me/feed-watermarks/following, both genuine 200 during sign-in/Home. These are disclosed; no reader/status or grant writes occurred.",
+      "readerCustody": {
+        "acquired": false,
+        "historicalCas5Restored": true,
+        "noReaderWrite": true
+      },
+      "cleanup": {
+        "startedAt": "2026-10-19T17:26:25.624Z",
+        "readerBorrow": false,
+        "noReaderLeaseAcquired": true,
+        "domainWritesByDriver": false,
+        "processesOwnedOnly": true,
+        "contextClosed": true,
+        "browserClosed": true,
+        "frontend": {
+          "pid": 722857,
+          "exitCode": 201,
+          "signal": null,
+          "port": 45445,
+          "stillListening": false
+        },
+        "forwarderStopped": true,
+        "finishedAt": "2026-10-19T17:26:26.123Z"
+      },
+      "cleanupEvidence": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969/run-2026-10-19T17-24-11-812Z-718636/owned-cleanup.json",
+        "sha256": "5a9df9f304f38306d1b635512011ed443dc30dde5d836f89f04cb19f54474014",
+        "bytes": 417
+      },
+      "sourceCleanAfterOriginalRun": true,
+      "recoveryCustody": {
+        "protected": [
+          "suspended prior manager PIDs 75367/75370 and children",
+          "Task1677097 and output keeper316679",
+          "code hosts77717/78038",
+          "all retained stores/endpoints, real AT/status leases and exact owned cleanup callbacks"
+        ],
+        "readReceipts": [
+          {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-recovery-consumed-20261020/inputs/stalled-owner-custody.json",
+            "sha256": "ab6baf52de86699f882d4c6690d5779cfec8b9bd0e0548d1d6721b45a60b00c5",
+            "bytes": 617
+          },
+          {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-recovery-consumed-20261020/inputs/runtime-custody-after-recovery.json",
+            "sha256": "6687f043543b08b7b1dfd2e241510ac6ec816d0af75dfbdec3b9530075448686",
+            "bytes": 486
+          },
+          {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-recovery-consumed-20261020/inputs/runtime-output-custody-ready.json",
+            "sha256": "9dbc4a0e568ecdc8aacf0c19db632e51cc0f24b65a7065227e498a1060e4f6d9",
+            "bytes": 377
+          },
+          {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-recovery-consumed-20261020/inputs/site-cpu-retained-endpoint-dispositions-20261019T1525Z.json",
+            "sha256": "e5d8f404030323a787b2dd4733c44e632f0f6ee8a69b783e20df51d975df92c1",
+            "bytes": 13206
+          },
+          {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-recovery-consumed-20261020/inputs/site-G2764-current-readonly-backend-custody-1529.txt",
+            "sha256": "02ed145a4b95af7b6336c0f5f726ec462dd19111e7b1da7b7b89ae91f04f365e",
+            "bytes": 1695
+          },
+          {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-recovery-consumed-20261020/inputs/site-catalogue-runtime-borrower-disposition-1524.txt",
+            "sha256": "fcaaaf3a839a0d723dce7edac4baf8c38a504da033b43da68f5bb98330f14594",
+            "bytes": 1388
+          }
+        ],
+        "actions": "No process, endpoint, cookie, data, lease, proxy, network or admission setting touched. Historical KEEP and later release facts retained; no task exit treated as authority to stop a runtime."
+      }
+    },
+    "originalAssertionReach": {
+      "eligibleThreeReads": {
+        "result": "reached original missing work.create read; reused compatible other reads with fresh qualification",
+        "actingContexts": {
+          "at": "2026-10-19T17:25:36.535Z",
+          "path": "/v1/me/acting-contexts?task=work.create",
+          "kind": "original missing exact endpoint",
+          "status": 200,
+          "bodySha256": "216256d1ebccf696c1cfc46c43f02238825a91137a0fd0e1679ba5822867ede6",
+          "byteLength": 4739,
+          "keys": [
+            "profile",
+            "task",
+            "scope",
+            "authorityEpoch",
+            "contexts",
+            "directContexts",
+            "preferredActingSubject",
+            "savedPreference",
+            "preferenceRevision",
+            "complete"
+          ]
+        },
+        "eligibleActorIncluded": true,
+        "returnedContexts": 29,
+        "directContexts": [],
+        "freshSessionAgent": {
+          "at": "2026-10-19T17:25:36.035Z",
+          "path": "/v1/me/session-agent",
+          "kind": "fresh own eligibility qualification; prior200 reused as historical evidence",
+          "status": 200,
+          "bodySha256": "9999b6557b62e01746f8b5abc35d0ce469ea1a192fa12c340479080311d112b2",
+          "byteLength": 286,
+          "keys": [
+            "profile",
+            "sessionAgent",
+            "mainAgent",
+            "initialActingSubject"
+          ],
+          "sessionAgent": {
+            "eligible": true,
+            "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839"
+          }
+        },
+        "agents": {
+          "at": "2026-10-19T17:25:29.980Z",
+          "phase": "setup",
+          "method": "GET",
+          "url": "http://127.0.0.1:3001/v1/me/agents?languages=en",
+          "controlled": false,
+          "status": 200,
+          "requestId": null,
+          "contentType": "application/json;charset=utf-8",
+          "elapsedMs": 103
+        },
+        "assertionLines": [
+          149,
+          150
+        ],
+        "limit": "Genuine Web-consumer HTTP success at the old runtime; does not prove current native internal-cause or foreign-session controls."
+      },
+      "libraryStudioEntryHistory": {
+        "originalAssertionReached": true,
+        "assertionLine": 168,
+        "navigationAndSameSessionReached": true,
+        "sixStates": [
+          {
+            "action": "Library direct",
+            "url": "http://127.0.0.1:45445/en/library?shelf=reading&view=grid",
+            "headings": [
+              "Library"
+            ],
+            "sameSession": true
+          },
+          {
+            "action": "Library refresh",
+            "url": "http://127.0.0.1:45445/en/library?shelf=reading&view=grid",
+            "headings": [
+              "Library"
+            ],
+            "sameSession": true
+          },
+          {
+            "action": "Studio direct",
+            "url": "http://127.0.0.1:45445/en/studio/@agent-71473997-6e2e-4e59-9044-01627a79e839",
+            "headings": [
+              "Studio"
+            ],
+            "sameSession": true
+          },
+          {
+            "action": "Studio refresh",
+            "url": "http://127.0.0.1:45445/en/studio/@agent-71473997-6e2e-4e59-9044-01627a79e839",
+            "headings": [
+              "Studio"
+            ],
+            "sameSession": true
+          },
+          {
+            "action": "back to Library",
+            "url": "http://127.0.0.1:45445/en/library?shelf=reading&view=grid",
+            "headings": [
+              "Library"
+            ],
+            "sameSession": true
+          },
+          {
+            "action": "forward to Studio",
+            "url": "http://127.0.0.1:45445/en/studio/@agent-71473997-6e2e-4e59-9044-01627a79e839",
+            "headings": [
+              "Studio"
+            ],
+            "sameSession": true
+          }
+        ],
+        "library": "Direct, refresh and back preserve /en/library?shelf=reading&view=grid and own eligible session. Screenshot renders reading-shelf 0 works; genuine shelves/status/reading/works returned 200 three times. Bodies/completeness were not retained, so no broader empty-data or populated-library conclusion.",
+        "studio": "Direct, refresh and forward reach the correct Local author Studio with same session, but all show Couldn’t load your works. Genuine selected works endpoint returns 400 each time.",
+        "taskReadsCollectorLimit": "Original taskReads regex missed /v1/me/shelves/status/reading/works and /v1/me/agents/:id/works; its [] is not evidence that no task requests occurred. Full requests remain unchanged."
+      },
+      "identity503RepeatedRetry": {
+        "originalUnavailableAssertionsReached": true,
+        "endpoint": "GET /v1/me/session-agent",
+        "injectionTier": "Previously authorized bounded forwarding observer only. Every success/data/authority response forwarded from genuine Main. Explicit observer 503 is not a genuine native outage/cause proof.",
+        "initial503s": [
+          {
+            "at": "2026-10-19T17:26:15.737Z",
+            "phase": "identity-only-503-repeated-retry-and-same-next-recovery",
+            "method": "GET",
+            "url": "http://127.0.0.1:3001/v1/me/session-agent",
+            "controlled": true,
+            "status": 503,
+            "cause": "explicit selected identity-read observer fault",
+            "requestId": "G2847-identity-436",
+            "elapsedMs": 0
+          },
+          {
+            "at": "2026-10-19T17:26:15.739Z",
+            "phase": "identity-only-503-repeated-retry-and-same-next-recovery",
+            "method": "GET",
+            "url": "http://127.0.0.1:3001/v1/me/session-agent",
+            "controlled": true,
+            "status": 503,
+            "cause": "explicit selected identity-read observer fault",
+            "requestId": "G2847-identity-437",
+            "elapsedMs": 0
+          },
+          {
+            "at": "2026-10-19T17:26:15.741Z",
+            "phase": "identity-only-503-repeated-retry-and-same-next-recovery",
+            "method": "GET",
+            "url": "http://127.0.0.1:3001/v1/me/session-agent",
+            "controlled": true,
+            "status": 503,
+            "cause": "explicit selected identity-read observer fault",
+            "requestId": "G2847-identity-438",
+            "elapsedMs": 0
+          },
+          {
+            "at": "2026-10-19T17:26:15.743Z",
+            "phase": "identity-only-503-repeated-retry-and-same-next-recovery",
+            "method": "GET",
+            "url": "http://127.0.0.1:3001/v1/me/session-agent",
+            "controlled": true,
+            "status": 503,
+            "cause": "explicit selected identity-read observer fault",
+            "requestId": "G2847-identity-440",
+            "elapsedMs": 0
+          },
+          {
+            "at": "2026-10-19T17:26:15.963Z",
+            "phase": "identity-only-503-repeated-retry-and-same-next-recovery",
+            "method": "GET",
+            "url": "http://127.0.0.1:3001/v1/me/session-agent",
+            "controlled": true,
+            "status": 503,
+            "cause": "explicit selected identity-read observer fault",
+            "requestId": "G2847-identity-443",
+            "elapsedMs": 0
+          },
+          {
+            "at": "2026-10-19T17:26:15.978Z",
+            "phase": "identity-only-503-repeated-retry-and-same-next-recovery",
+            "method": "GET",
+            "url": "http://127.0.0.1:3001/v1/me/session-agent",
+            "controlled": true,
+            "status": 503,
+            "cause": "explicit selected identity-read observer fault",
+            "requestId": "G2847-identity-445",
+            "elapsedMs": 0
+          },
+          {
+            "at": "2026-10-19T17:26:17.744Z",
+            "phase": "identity-only-503-repeated-retry-and-same-next-recovery",
+            "method": "GET",
+            "url": "http://127.0.0.1:3001/v1/me/session-agent",
+            "controlled": true,
+            "status": 503,
+            "cause": "explicit selected identity-read observer fault",
+            "requestId": "G2847-identity-454",
+            "elapsedMs": 0
+          }
+        ],
+        "next": "/en/library?shelf=reading&view=grid",
+        "repeatOutcomes": [
+          {
+            "repeat": 1,
+            "newFaultRequests": 6,
+            "state": {
+              "url": "http://127.0.0.1:45445/en/identity?next=%2Fen%2Flibrary%3Fshelf%3Dreading%26view%3Dgrid",
+              "headings": [
+                "Choose who you act as"
+              ],
+              "mainText": "Choose who you act as\n\nYour account can act as these Agents. The one you choose is shown as signed in across REZICS and proposed for what you do there. Each action is still checked when you take it.\n\nYour Agents cannot be listed right now. Try again in a moment.\nRetry",
+              "sameSession": true
+            },
+            "alert": [
+              "Your Agents cannot be listed right now. Try again in a moment."
+            ]
+          },
+          {
+            "repeat": 2,
+            "newFaultRequests": 6,
+            "state": {
+              "url": "http://127.0.0.1:45445/en/identity?next=%2Fen%2Flibrary%3Fshelf%3Dreading%26view%3Dgrid",
+              "headings": [
+                "Choose who you act as"
+              ],
+              "mainText": "Choose who you act as\n\nYour account can act as these Agents. The one you choose is shown as signed in across REZICS and proposed for what you do there. Each action is still checked when you take it.\n\nYour Agents cannot be listed right now. Try again in a moment.\nRetry",
+              "sameSession": true
+            },
+            "alert": [
+              "Your Agents cannot be listed right now. Try again in a moment."
+            ]
+          }
+        ],
+        "pending": [
+          {
+            "at": 1792430778621,
+            "busy": "true",
+            "buttons": [
+              {
+                "text": "Retrying…",
+                "disabled": true
+              }
+            ]
+          },
+          {
+            "at": 1792430779658,
+            "busy": "false",
+            "buttons": [
+              {
+                "text": "Retry",
+                "disabled": false
+              }
+            ]
+          },
+          {
+            "at": 1792430780063,
+            "busy": "true",
+            "buttons": [
+              {
+                "text": "Retrying…",
+                "disabled": true
+              }
+            ]
+          },
+          {
+            "at": 1792430781017,
+            "busy": "false",
+            "buttons": [
+              {
+                "text": "Retry",
+                "disabled": false
+              }
+            ]
+          }
+        ],
+        "unknownRelationships": [
+          {
+            "label": "Pinned",
+            "text": "PinnedCouldn’t load relationships.Retry"
+          },
+          {
+            "label": "Communities and sites",
+            "text": "Communities and sitesCouldn’t load relationships.RetryManage follows"
+          }
+        ],
+        "afterFaultRemoval": {
+          "removedAt": "2026-10-19T17:26:21.477Z",
+          "sameSession": true,
+          "originalNextPreserved": "/en/library?shelf=reading&view=grid",
+          "checkedRoleValue": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+          "alerts": [],
+          "genuineSession200": {
+            "at": "2026-10-19T17:26:21.677Z",
+            "phase": "identity-only-503-repeated-retry-and-same-next-recovery",
+            "method": "GET",
+            "url": "http://127.0.0.1:3001/v1/me/session-agent",
+            "controlled": false,
+            "status": 200,
+            "requestId": null,
+            "contentType": "application/json;charset=utf-8",
+            "elapsedMs": 105
+          }
+        },
+        "remaining": "Lines 212..215 were not reached: explicit same-session eligible response assertion and final task return. Agent submission /identity/select was never exercised by this driver. No end-to-end recovery completion claimed."
+      },
+      "restoredRelationships": {
+        "originalCellResult": "passed",
+        "pages": [
+          {
+            "name": "Pinned",
+            "http": {
+              "at": "2026-10-19T17:26:24.962Z",
+              "path": "/v1/me/follows?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839&limit=20&order=pinned&include=newSince",
+              "kind": "Pinned",
+              "status": 200,
+              "bodySha256": "9537f17f1624ed217dce08b74da59a3a550c33c96f01a6797bdbb17d5bc6f826",
+              "byteLength": 2674,
+              "keys": [
+                "profile",
+                "items",
+                "nextCursor",
+                "sourcePosition",
+                "count",
+                "complete"
+              ]
+            },
+            "count": 4,
+            "complete": true,
+            "nextCursor": null,
+            "disclosedKinds": [
+              "space",
+              "space",
+              "space",
+              "space"
+            ],
+            "state": "disclosed actual relations"
+          },
+          {
+            "name": "Communities and sites",
+            "http": {
+              "at": "2026-10-19T17:26:25.523Z",
+              "path": "/v1/me/follows?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839&limit=20&kind=space&order=recent&include=newSince",
+              "kind": "Communities and sites",
+              "status": 200,
+              "bodySha256": "cf38b42e836d186f1040767f14a333df490075331f6cc9027e21dbf7bcb9aded",
+              "byteLength": 2674,
+              "keys": [
+                "profile",
+                "items",
+                "nextCursor",
+                "sourcePosition",
+                "count",
+                "complete"
+              ]
+            },
+            "count": 4,
+            "complete": true,
+            "nextCursor": null,
+            "disclosedKinds": [
+              "space",
+              "space",
+              "space",
+              "space"
+            ],
+            "state": "disclosed actual relations"
+          }
+        ],
+        "shell": [
+          {
+            "label": "Pinned",
+            "text": "PinnedPin a followed resource to keep it here."
+          },
+          {
+            "label": "Communities and sites",
+            "text": "Communities and sitesDDirection 9 312b3ffb58 community 06DDirection 9 312b3ffb58 community 05DDirection 9 312b3ffb58 community 04DDirection 9 312b3ffb58 community 03Manage follows"
+          }
+        ],
+        "sameSession": true,
+        "limit": "Both raw genuine pages have four space relations, complete=true and nextCursor=null. order=pinned sorts the page, not four proven pins; UI shows an empty pinned section and four community links. Raw pin flags were not retained. No nonzero pin/follow prerequisite added."
+      }
+    },
+    "remainingFailuresAndOwners": [
+      {
+        "id": "original-Studio-selected-runtime-contract",
+        "classification": "Confirmed original visible load assertion failure on selected backend; source/runtime compatibility prerequisite. Not a new current-main product source finding.",
+        "assertion": "identity-recovery.test.ts:168 (aggregated at 233..234)",
+        "assertionReached": true,
+        "endpoint": "/v1/me/agents/71473997-6e2e-4e59-9044-01627a79e839/works?view=authored&sort=recent&limit=20",
+        "observed": [
+          {
+            "at": "2026-10-19T17:25:56.849Z",
+            "status": 400,
+            "elapsedMs": 3,
+            "requestId": null,
+            "contentType": "application/problem+json"
+          },
+          {
+            "at": "2026-10-19T17:26:01.741Z",
+            "status": 400,
+            "elapsedMs": 2,
+            "requestId": null,
+            "contentType": "application/problem+json"
+          },
+          {
+            "at": "2026-10-19T17:26:13.094Z",
+            "status": 400,
+            "elapsedMs": 1,
+            "requestId": null,
+            "contentType": "application/problem+json"
+          }
+        ],
+        "sourceEvidence": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-recovery-consumed-20261020/source-seam.json",
+          "sha256": "99c4219b582057149b344a0cfd4bb022bc39e96f516a7ca8a2d7e42890da0ec7",
+          "bytes": 1139
+        },
+        "inference": "Web read.ts:134..152 sends sort. Installed Main754 route studio.ts:55..62 omits sort and rejects additionalProperties. Current native route:57..67 accepts sort/q. Original 400 problem body is absent; schema explains the compatibility failure but is not a retained body/cause trace.",
+        "owner": "Site/runtime custodian supplies a genuinely compatible already-owned Main endpoint for this same legitimate actor; existing Studio owner G-2785 / native G-2790 as applicable. G-2847 has no shared-runtime lifecycle authority.",
+        "next": "Resolve the exact endpoint contract/custody prerequisite, then only the originally missing Studio load/return assertion. No fallback fixture, proxy rewrite, refresh/reset or new corpus."
+      },
+      {
+        "id": "original-identity-recovery-native-radio-premise",
+        "classification": "Confirmed observation premise failure; current product defect unconfirmed.",
+        "assertion": "identity-recovery.test.ts:207 collects aria-checked; line210 requires string true.",
+        "assertionReached": true,
+        "evidence": "All 29 native input aria-checked values are null, while line206 getByRole(radio, checked=true) succeeds for the original eligible actor. UI radio-group.tsx:64 renders ItemHiddenInput; native checked state is not required to be an aria-checked attribute.",
+        "originalTestUnchanged": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969/identity-recovery.test.ts",
+          "sha256": "0f27922dadb34a63ae124bad6b74deeed537d032a67540f750e7ea8b704db319",
+          "bytes": 24531
+        },
+        "remainingAssertionReached": false,
+        "owner": "Existing G-2847 proof owner / Site manager; preserve original failed executable and receipt. Manager may authorize a separate bounded native checked-state observation and only missing final original recovery assertions after endpoint compatibility is supplied.",
+        "notClaimed": "No assertion was repaired, no failure relabeled as pass, no product edit or rerun occurred."
+      }
+    ],
+    "reusedEvidenceAndLimits": {
+      "privateTypedReader": {
+        "job": "7ed0226f-c914-4a7f-a7f9-6654e06620db",
+        "pin": "500c85e728312b8e8a49f02b898b6e62fe0f22e9",
+        "result": "132 tests / 1302 assertions; unchanged real HTTP production-reader 401/403/503 counterexample",
+        "approval": "fa6e2e5be7f82faf7cbc0c0b4480d0d0fdab8d48",
+        "reexecuted": false
+      },
+      "historicalNavigation": "G-2825 55+55 navigation, G-2831 populated Library and G-2753 Studio evidence retain original pins/actors/data. This recovery does not transplant the separate Studio fixture to member7147.",
+      "sourceApprovals": "NativePost0d2c3, Home56c3, localnames5c8e, Browse2e022 and author requeste3b98 already main; no relanding or review repeated.",
+      "separateOriginalOwners": [
+        "G-2775/G-2790: D4-007 genuine native same-request internal503 cause/trace and original foreign-session/account/moderator/operator controls.",
+        "G-2784: original AUD-002 six public Sites/admission and AUD-003 public Lists/host/member/continuation acceptance.",
+        "G-2784/G-2785/G-2790: genuine refusal destination or task failure only if reached; no 401/403 acceptance inferred from successful identity reads.",
+        "Existing G-2784 owns the five unchanged common Web findings reused from G-2804; not fixed or re-reviewed here."
+      ],
+      "acceptanceNotAdded": "No privateCollection200, nonzero relationship, new account/corpus, all-domain journey, full native catalogue, notification count, all32AT, strict zero-console/network or document-status criterion.",
+      "noClassClosure": true
+    },
+    "productAudit": {
+      "method": "Applied product-audit only to reported failures in the authorized identity/Library/Studio/relationship slice.",
+      "runtimeContractClass": "Traced all three observed Studio surfaces (direct/refresh/forward) to the same genuine400, contrasted Library direct/refresh/back200 entry and the exact old/native-current query seam. No unrelated surface review.",
+      "unknownVersusEmptyClass": "Both Pinned and Communities/sites show unavailable under the identity fault; genuine complete relation responses and populated community UI return after it. Source/source-data limitations stated above.",
+      "proofPremiseClass": "Only aria-checked assumption is at line207/210 in this finite driver. Existing role checked query already locates the actor. Original assertion retained; later task assertions unexecuted."
+    },
+    "screenshotsInspected": {
+      "inspectedAt": "2026-10-20T04:00:14.321453+00:00",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "originalResultNotEdited": true,
+      "screenshots": [
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969/run-2026-10-19T17-24-11-812Z-718636/library-direct.png",
+          "sha256": "523747b8356d965cfa969a0e12d407b14e3e72731c6be6d97afaece73b84ac6b",
+          "bytes": 101426,
+          "name": "library-direct",
+          "inspected": true,
+          "observation": "Local author signed in; Library selected; 0 works on the reading shelf; Communities list populated. Not immutable-data or whole-Library completeness proof."
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969/run-2026-10-19T17-24-11-812Z-718636/studio-direct.png",
+          "sha256": "3a919d7cbb6e18224e1ee020c694516ecc6a1da6aa493e380b4729acddb1db7b",
+          "bytes": 70492,
+          "name": "studio-direct",
+          "inspected": true,
+          "observation": "Correct Local author Studio route and identity; visible Couldn’t load your works and Retry. Shell relationship areas still loading in this frame."
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969/run-2026-10-19T17-24-11-812Z-718636/identity-unavailable.png",
+          "sha256": "6bf8cc8b05319c76414ef35e55ff6d42bdf3e53ef4caa2bfe673608c90b676d1",
+          "bytes": 60916,
+          "name": "identity-unavailable",
+          "inspected": true,
+          "observation": "Agent not checked; localized identity unavailable alert with Retry; both relationship sections truthfully unavailable, not empty."
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969/run-2026-10-19T17-24-11-812Z-718636/actual-relationships-restored.png",
+          "sha256": "69881157549b59e668f2f501ba7c96cd444dd5102da00844e63a9f7eddafe7b6",
+          "bytes": 130807,
+          "name": "actual-relationships-restored",
+          "inspected": true,
+          "observation": "Local author restored in shell, actual community links visible, no identity alert; picker displayed. Selected native input is below screenshot viewport, evidenced separately by the original role checked=true query."
+        }
+      ]
+    },
+    "originalArtifacts": [
+      {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969/run-2026-10-19T17-24-11-812Z-718636/result.json",
+        "sha256": "a32aa2e1033f0770ff3349b5217864a08d3a05010a614469e7d42537f20451de",
+        "bytes": 373271
+      },
+      {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969/run-2026-10-19T17-24-11-812Z-718636/artifact-hashes.json",
+        "sha256": "727fabe66d49b46c4463ce941cd788e87ada1881993d26f298ab503ed5879640",
+        "bytes": 1843
+      },
+      {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969/run-2026-10-19T17-24-11-812Z-718636/owned-cleanup.json",
+        "sha256": "5a9df9f304f38306d1b635512011ed443dc30dde5d836f89f04cb19f54474014",
+        "bytes": 417
+      },
+      {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969/identity-recovery.test.ts",
+        "sha256": "0f27922dadb34a63ae124bad6b74deeed537d032a67540f750e7ea8b704db319",
+        "bytes": 24531
+      },
+      {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969/source-selection.json",
+        "sha256": "8d418a1851c1075fe84a01918b292d6aef88c6d56fa6505fb2a00df823e52d11",
+        "bytes": 1356
+      },
+      {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969/stage.py",
+        "sha256": "ce7f96f69497437e328f3864723221e10fbffc4df84e230bee08cfbb2e0d069e",
+        "bytes": 1723
+      },
+      {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969/Taskfile.yml",
+        "sha256": "c1de30ce294a768c67cb561f8c57243f6e6347ec1875f85b3a4dc0b940cfbb73",
+        "bytes": 82
+      }
+    ],
+    "consumptionManifest": {
+      "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-recovery-consumed-20261020/consumption-manifest.json",
+      "sha256": "970565505d6245c61734353da338f22940e806c010209b094e7b1c466837a40a",
+      "bytes": 7352
+    },
+    "preservation": {
+      "allPreviousBranchFields": 41,
+      "allCurrentMainFields": 40,
+      "unchangedPriorFields": true,
+      "originalExecutableAndReceiptsUnchanged": true,
+      "method": "Append exactly this key; no old verdict, failure, screenshot, native-input qualifier, CAS5 record, coldHome review or common-boundary finding changed."
+    },
+    "reportChecks": {
+      "job": "c549e59f-6039-4c95-8a30-3520f4b67c82",
+      "exitCode": 0,
+      "result": "passed",
+      "commands": [
+        {
+          "command": "task docs:check",
+          "exitCode": 0,
+          "log": ".temp/goal/jobs/c549e59f-6039-4c95-8a30-3520f4b67c82.1.log",
+          "result": "13 docs-check tests; 259 Markdown files; no runtime claim"
+        },
+        {
+          "command": "task goal -- check",
+          "exitCode": 0,
+          "log": ".temp/goal/jobs/c549e59f-6039-4c95-8a30-3520f4b67c82.2.log",
+          "checkRun": "run-J9SzMc",
+          "result": "1/45 guard selected for report; ast and guards passed; no changed TypeScript/source/test workspace"
+        }
+      ],
+      "scope": "Report checks only; original runtime assertion failure and unexecuted acceptance remain unchanged.",
+      "harnessNotice": "Harness 3 commits behind main; check succeeded. No rebase or source/runtime replay."
+    },
+    "managerNext": "Receive one Site/Program notification, preserve protected custody, resolve selected Studio runtime contract and recovery observation premise, then dispatch only truly absent original assertions. Do not replay accepted proofs or close original classes from this append."
+  },
+  "nativeRadioObservationMissingRecovery20261020": {
+    "recordedAtUtc": "2026-10-20T10:47:15.550325+00:00",
+    "worker": "G-2847; same original codex-1 / GPT-6.1 Sol / xhigh reviewer; no fallback or nested agent",
+    "result": "passed: only original identity-only-503-repeated-retry-and-same-next-recovery",
+    "verdict": "The versioned native-radio observation reaches the missing same-session genuine eligibility and final Library task-return assertions. This is a Web-consumer recovery proof at c969 with installed75409, not a current-main API or original class closure.",
+    "scope": "Latest 2026-10-20T10:38:35Z decision only. One finite missing-only recorded QA proof. No source review, other original cell body, Studio call, broad check or product edit.",
+    "authorization": {
+      "programMail": "mail:cdbf9a90-da56-4c8c-bef2-96d987ad578e",
+      "evidence": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969-native-radio-v1/program-authorization.json",
+        "sha256": "79c5f4692e0a4a86187d3d8c756072de78ac7838426d50890be04362a5c4a02e",
+        "bytes": 2186
+      },
+      "decision": "One explicitly versioned selected-state observation correction; preserve exact actor/session/next/task assertions and original failed evidence."
+    },
+    "sourceAndDependencyPins": {
+      "frontend": "c9699dcef53ce0109404228efe15e24118fa63e0",
+      "snapshot": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969-native-radio-v1/source",
+      "snapshotMethod": "Reuse exact clean own retained c969 snapshot through a sibling source symlink; no product bytes or dependencies changed.",
+      "trackedSourceCleanBeforeAndAfter": true,
+      "backend": {
+        "observedAt": "2026-10-20T10:42:59.909Z",
+        "sourcePointer": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "refreshRevision": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "limit": "observed shared live binding; not immutable historical backend identity"
+      },
+      "backendLimit": "Installed live shared source pointer and refresh revision were observed. No immutable data snapshot or current-main native/model/API qualification is inferred.",
+      "dependencies": [
+        {
+          "path": "package.json",
+          "sha256": "487061c605dc753c9e60c657ecaa4dd7cf417a213ac65c2e906380367b98acaf"
+        },
+        {
+          "path": "yarn.lock",
+          "sha256": "026c93ddc3085e43b1ff6727a42f7c55b03a03cc1aa4c11cbf57438ce5b9d391"
+        },
+        {
+          "path": "apps/web/package.json",
+          "sha256": "f0b29308365ed08148f73ba83b3c5f6c5b5e890c1df2d547ece26b541ad7965f"
+        },
+        {
+          "path": "packages/ui/package.json",
+          "sha256": "918f010f3942a38f238055257a22b226046a1fd0d43b4e99574f495854d1abe4"
+        },
+        {
+          "path": "node_modules/vinext/package.json",
+          "sha256": "0c2a580d880166b94bbad71bdee9e35b418c8804152ca7c0cc28355a509b7082"
+        },
+        {
+          "path": "apps/web/tests/account-sign-in.ts",
+          "sha256": "a52d9c42a7fb4599a4b54bf7170f8f2747772a04506bcaa29537553135c3befb"
+        }
+      ],
+      "allFrozenDependencyHashesEqual": true,
+      "preflightEvidence": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969-native-radio-v1/premises.json",
+        "sha256": "ff6fa414caf0a936339117c046242b556540768696f9356a2b90f95663c2c659",
+        "bytes": 3137
+      },
+      "reportBase": "bbbf51f9689b7203b8ac072103c0d838885deec9",
+      "mainReportComparisonPin": "c9e02043f0068e81e68a945a93695bf8f0ce5ce6"
+    },
+    "versionedExecutable": {
+      "original": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969/identity-recovery.test.ts",
+        "sha256": "0f27922dadb34a63ae124bad6b74deeed537d032a67540f750e7ea8b704db319",
+        "bytes": 24531
+      },
+      "versioned": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969-native-radio-v1/identity-recovery.test.ts",
+        "sha256": "024e66be43bb23761b8f634b34cac9f456eb8ed8c8ad6075d58cb1adc22c17e6",
+        "bytes": 24687
+      },
+      "executableByteIdentical": false,
+      "helperDelta": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969-native-radio-v1/helper-delta.patch",
+        "sha256": "a3a1604d275b67a6ed500d266c2f13974d95bc73babf57d1ae6c257596c9e0f5",
+        "bytes": 1949
+      },
+      "versionRecord": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969-native-radio-v1/versioned-observation.json",
+        "sha256": "17c97f8f98443b7ad7d945acb1b3e186032dd8367fb6197dfbad306975e8aa17",
+        "bytes": 2144
+      },
+      "onlyEdits": [
+        "Skip other cell bodies using exact id at existing cell dispatcher; all original bodies retained",
+        "Read String(HTMLInputElement.checked) for native type=radio; retain aria-checked for custom-role controls; retain existing checked===true string predicate"
+      ],
+      "reverseBothEditsExactlyRestoresFrozenDriver": true,
+      "originalBodiesAndAssertionsPreserved": true,
+      "selectedActorPredicate": "getByRole('radio', { checked: true }).getAttribute('value')",
+      "selectedStatePredicate": "c.radios.some((x: any) => x.checked === 'true') remains unchanged; native checked is normalized to its original string domain, custom-role controls retain aria-checked.",
+      "customRoleLimit": "This actual run observed native radios. The custom-role aria fallback was retained; no separate custom-control acceptance is claimed.",
+      "skippedCellBodies": [
+        "missing-acting-contexts-work-create",
+        "missing-library-studio-direct-refresh-history",
+        "actual-pinned-and-communities-sites-known-vs-unknown"
+      ]
+    },
+    "recordedProof": {
+      "job": "b77c2d73-37a4-4d4f-8947-f10898dab68b",
+      "jobEvidence": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969-native-radio-v1/recorded-job.json",
+        "sha256": "33fa247b71dfad6e82f9953cfdffcaae4a8501a55677547ebc0f2871e421e878",
+        "bytes": 1089
+      },
+      "launcher": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- <command>; cwd is G-2847 worktree",
+      "command": [
+        "env",
+        "PLAYWRIGHT_BROWSERS_PATH=/home/edge/.cache/ms-playwright",
+        "bun",
+        "scripts/goal/goalctl.ts",
+        "test",
+        "./.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969-native-radio-v1/identity-recovery.test.ts"
+      ],
+      "normalQaAdmission": "bun scripts/goal/goalctl.ts test selected explicit file; one admitted run, no bypass, retries or duplicate cells",
+      "exitCode": 0,
+      "resultClass": "passed",
+      "summary": "1 test passed, 0 failed, 31 expect() calls; 59.15 seconds",
+      "log": {
+        "path": ".temp/goal/jobs/b77c2d73-37a4-4d4f-8947-f10898dab68b.log",
+        "sha256": "aadfcd4df2dfec5cc9cd998efce11a6555aee381c194e28331d5d754a69851a3",
+        "bytes": 451
+      },
+      "harnessNotice": "Harness was 3 commits behind main; actual selected run passed. No harness refresh or broad replay performed.",
+      "startedAt": "2026-10-20T10:42:59.883Z",
+      "finishedAt": "2026-10-20T10:43:57.265Z",
+      "resultEvidence": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969-native-radio-v1/run-2026-10-20T10-42-59-883Z-3862536/result.json",
+        "sha256": "afb8c9f9fd48dd060a71506e12465eb3c33d354f1ddb6549d54e734827118d6c",
+        "bytes": 185723
+      },
+      "artifactManifest": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969-native-radio-v1/artifact-manifest.json",
+        "sha256": "86373c7c9961bc96116b9a3a905d2a6ec6f81a94ba6830491a1201861205aa62",
+        "bytes": 6014
+      }
+    },
+    "sessionAndEndpointPremises": {
+      "accounts": "http://127.0.0.1:3004",
+      "main": "http://127.0.0.1:3001",
+      "actor": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+      "auth": {
+        "method": "fresh own signInAtAccounts supported OAuth; existing member only; no transferred storage/cookies",
+        "stage": "genuine eligible exact actor qualified through Web BFF",
+        "returnedTo": "http://127.0.0.1:33747/en"
+      },
+      "session": "Fresh own normal Accounts OAuth with existing member. No transferred cookies, browser storage, actor substitution, new account or fabricated grants. Session key held in memory; recorded sameSession observations compare that key.",
+      "browser": {
+        "version": "153.0.8010.12",
+        "executable": "/home/edge/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome",
+        "installedOfficialBrowser": true
+      },
+      "qualification": {
+        "at": "2026-10-20T10:43:42.874Z",
+        "path": "/v1/me/session-agent",
+        "kind": "fresh own eligibility qualification; prior200 reused as historical evidence",
+        "status": 200,
+        "bodySha256": "ad183cc3a02282f714f634847b0e8b4e980cc5c0bcf43d3bd35c350fa582cdf1",
+        "byteLength": 286,
+        "keys": [
+          "profile",
+          "sessionAgent",
+          "mainAgent",
+          "initialActingSubject"
+        ],
+        "sessionAgent": {
+          "eligible": true,
+          "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839"
+        }
+      },
+      "genuineRecovery": {
+        "at": "2026-10-20T10:43:50.762Z",
+        "path": "/v1/me/session-agent",
+        "kind": "genuine same-session recovery",
+        "status": 200,
+        "bodySha256": "ad183cc3a02282f714f634847b0e8b4e980cc5c0bcf43d3bd35c350fa582cdf1",
+        "byteLength": 286,
+        "keys": [
+          "profile",
+          "sessionAgent",
+          "mainAgent",
+          "initialActingSubject"
+        ],
+        "selected": {
+          "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+          "revision": "22380973-d848-4eb3-8043-45b4da0849eb",
+          "eligible": true
+        }
+      },
+      "requestIdLimit": "Genuine upstream responses did not supply x-request-id. Their body hashes, statuses and times are retained. Controlled request IDs belong only to the observer."
+    },
+    "originalAssertionReach": {
+      "cell": "identity-only-503-repeated-retry-and-same-next-recovery",
+      "outcome": "passed",
+      "assertionReached": true,
+      "next": "/en/library?shelf=reading&view=grid",
+      "initialSameSession": true,
+      "initialNext": "/en/library?shelf=reading&view=grid",
+      "unknownRelationships": [
+        {
+          "label": "Pinned",
+          "text": "PinnedCouldn’t load relationships.Retry"
+        },
+        {
+          "label": "Communities and sites",
+          "text": "Communities and sitesCouldn’t load relationships.RetryManage follows"
+        }
+      ],
+      "fault": {
+        "endpoint": "GET /v1/me/session-agent",
+        "kind": "controlled forwarding observer 503 only; all success/authority/data responses genuine Main"
+      },
+      "faultLimit": "Only identity GET is deliberately answered503 by a local forwarding observer. All successful authority/data responses are genuine Main. This is controlled transport failure, not a naturally observed outage.",
+      "controlledIdentity503Count": 22,
+      "initial503Count": 10,
+      "firstControlledRequest": {
+        "at": "2026-10-20T10:43:42.985Z",
+        "phase": "identity-only-503-repeated-retry-and-same-next-recovery",
+        "method": "GET",
+        "url": "http://127.0.0.1:3001/v1/me/session-agent",
+        "controlled": true,
+        "status": 503,
+        "cause": "explicit selected identity-read observer fault",
+        "requestId": "G2847-identity-91",
+        "elapsedMs": 0
+      },
+      "repeatOutcomes": [
+        {
+          "repeat": 1,
+          "newFaultRequests": 6,
+          "sameSession": true,
+          "url": "http://127.0.0.1:33747/en/identity?next=%2Fen%2Flibrary%3Fshelf%3Dreading%26view%3Dgrid",
+          "alert": [
+            "Your Agents cannot be listed right now. Try again in a moment."
+          ]
+        },
+        {
+          "repeat": 2,
+          "newFaultRequests": 6,
+          "sameSession": true,
+          "url": "http://127.0.0.1:33747/en/identity?next=%2Fen%2Flibrary%3Fshelf%3Dreading%26view%3Dgrid",
+          "alert": [
+            "Your Agents cannot be listed right now. Try again in a moment."
+          ]
+        }
+      ],
+      "pending": [
+        {
+          "at": 1792493026288,
+          "busy": "true",
+          "buttons": [
+            {
+              "text": "Retrying…",
+              "disabled": true
+            }
+          ]
+        },
+        {
+          "at": 1792493027074,
+          "busy": "false",
+          "buttons": [
+            {
+              "text": "Retry",
+              "disabled": false
+            }
+          ]
+        },
+        {
+          "at": 1792493027201,
+          "busy": "true",
+          "buttons": [
+            {
+              "text": "Retrying…",
+              "disabled": true
+            }
+          ]
+        },
+        {
+          "at": 1792493027958,
+          "busy": "false",
+          "buttons": [
+            {
+              "text": "Retry",
+              "disabled": false
+            }
+          ]
+        }
+      ],
+      "recoveredSameSession": true,
+      "recoveredNext": "/en/library?shelf=reading&view=grid",
+      "selectedAgent": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+      "checkedRadio": [
+        {
+          "value": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+          "checked": "true",
+          "disabled": null
+        }
+      ],
+      "radioCount": 29,
+      "alertsAfterRecovery": [],
+      "genuineRecoveryStatus": 200,
+      "genuineSelectedIdentity": {
+        "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+        "revision": "22380973-d848-4eb3-8043-45b4da0849eb",
+        "eligible": true
+      },
+      "returnedTask": {
+        "url": "http://127.0.0.1:33747/en/library?shelf=reading&view=grid",
+        "headings": [
+          "Library"
+        ],
+        "mainText": "Library\n\n1 work\n\nShelves: Only you\n\nOnly you can see them. Each shelf you make keeps its own setting.\n\nAll\n1\nCurrently reading\n1\nWant to read\n0\nRead\n0\nLoans\nYOUR SHELVES\nNew shelf\nCurrently reading\n1\nSort: Date added\nSelect\n\nThe Lantern Road 8805d7a2\n\nThe Lantern Road 8805d7a2\nYour progress\n— The Lantern Road 8805d7a2\nGoals, stats, import and export",
+        "sameSession": true
+      },
+      "assertionLimits": "Original final task assertions check exact URL and same session after normal settle. They do not explicitly assert Library content success. The retained screenshot independently shows the actual populated reading shelf and grid. No added or weakened product assertion.",
+      "studioRequests": 0,
+      "selectedCellNonReadRequests": []
+    },
+    "observedLimitsAndSideEffects": {
+      "automaticSetupWrites": [
+        {
+          "at": "2026-10-20T10:43:37.863Z",
+          "phase": "setup",
+          "method": "POST",
+          "url": "http://127.0.0.1:3001/v1/me/onboarding",
+          "controlled": false,
+          "status": 200,
+          "requestId": null,
+          "contentType": "application/json;charset=utf-8",
+          "elapsedMs": 204
+        },
+        {
+          "at": "2026-10-20T10:43:42.458Z",
+          "phase": "setup",
+          "method": "PUT",
+          "url": "http://127.0.0.1:3001/v1/me/feed-watermarks/following",
+          "controlled": false,
+          "status": 200,
+          "requestId": null,
+          "contentType": "application/json;charset=utf-8",
+          "elapsedMs": 57
+        }
+      ],
+      "writeQualifier": "The unchanged OAuth/Home setup automatically issued POST /v1/me/onboarding200 and PUT /v1/me/feed-watermarks/following200 to shared Main. Thus this run cannot support a literal no-shared-write claim. The raw cleanup domainWritesByDriver=false records driver intent, not absence of requests. Request bodies and before/after stored values were not captured, so actual mutation/no-op effects are unknown. No rollback or further shared write was attempted. Selected recovery-cell requests were GET-only.",
+      "uncontrolledNon200Requests": [
+        {
+          "at": "2026-10-20T10:43:12.006Z",
+          "phase": "setup",
+          "method": "GET",
+          "url": "http://127.0.0.1:3001/v1/onboarding/suggested-follows",
+          "controlled": false,
+          "status": 503,
+          "requestId": null,
+          "contentType": "application/problem+json",
+          "elapsedMs": 417
+        },
+        {
+          "at": "2026-10-20T10:43:39.603Z",
+          "phase": "setup",
+          "method": "GET",
+          "url": "http://127.0.0.1:3001/v1/onboarding/suggested-follows?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839",
+          "controlled": false,
+          "status": 503,
+          "requestId": null,
+          "contentType": "application/problem+json",
+          "elapsedMs": 423
+        },
+        {
+          "at": "2026-10-20T10:43:44.056Z",
+          "phase": "identity-only-503-repeated-retry-and-same-next-recovery",
+          "method": "GET",
+          "url": "http://127.0.0.1:3001/v1/onboarding/suggested-follows",
+          "controlled": false,
+          "status": 503,
+          "requestId": null,
+          "contentType": "application/problem+json",
+          "elapsedMs": 296
+        }
+      ],
+      "non200Qualifier": "Three genuine suggested-follows503 responses are retained, two during setup and one during the selected cell. They are separate from controlled identity503s; no new current-main finding or closure is inferred.",
+      "browserErrors": [],
+      "browserRequestFailures": [
+        {
+          "at": "2026-10-20T10:43:45.511Z",
+          "url": "http://127.0.0.1:33747/api/main/v1/me/notifications/unread-count",
+          "method": "GET",
+          "kind": "fetch",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "at": "2026-10-20T10:43:47.044Z",
+          "url": "http://127.0.0.1:33747/en/identity?next=%2Fen%2Flibrary%3Fshelf%3Dreading%26view%3Dgrid",
+          "method": "GET",
+          "kind": "fetch",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "at": "2026-10-20T10:43:47.937Z",
+          "url": "http://127.0.0.1:33747/en/identity?next=%2Fen%2Flibrary%3Fshelf%3Dreading%26view%3Dgrid",
+          "method": "GET",
+          "kind": "fetch",
+          "error": "net::ERR_ABORTED"
+        },
+        {
+          "at": "2026-10-20T10:43:50.226Z",
+          "url": "http://127.0.0.1:33747/en/identity?next=%2Fen%2Flibrary%3Fshelf%3Dreading%26view%3Dgrid",
+          "method": "GET",
+          "kind": "fetch",
+          "error": "net::ERR_ABORTED"
+        }
+      ],
+      "requestFailureQualifier": "Four ERR_ABORTED requests are retained in the actual browser receipt; no additional test/retry or defect classification performed.",
+      "readerStatusOrGrantWriteObserved": false,
+      "dataset": "Existing shared mutable data only; no corpus preparation, import, restore, account fabrication or immutable data snapshot."
+    },
+    "screenshotsInspected": {
+      "at": "2026-10-20T10:45:53.383712+00:00",
+      "method": "All three original PNG files opened with view_image; raw result viewed=false flags retained unchanged. No browser rerun, focus mutation, scroll or replacement screenshot.",
+      "screenshots": [
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969-native-radio-v1/run-2026-10-20T10-42-59-883Z-3862536/identity-unavailable.png",
+          "sha256": "6bf8cc8b05319c76414ef35e55ff6d42bdf3e53ef4caa2bfe673608c90b676d1",
+          "bytes": 60916,
+          "name": "identity-unavailable",
+          "inspected": true,
+          "observation": "Inspected 1440x1000 screenshot: Agent not checked; Choose who you act as; unavailable alert and Retry; Pinned and Communities and sites explicitly show Couldn’t load relationships."
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969-native-radio-v1/run-2026-10-20T10-42-59-883Z-3862536/identity-recovered.png",
+          "sha256": "f736ec2f0b88bed33db2ff41d55000c31d90eb9a76067d244b3da4221d53348c",
+          "bytes": 117352,
+          "name": "identity-recovered",
+          "inspected": true,
+          "observation": "Inspected 1440x1000 screenshot: Local author in shell; unavailable alert absent; actual Agent radio options loaded. The selected Local author row is below the viewport, so its checked state is established by the retained native property/role observations, not this screenshot. Relationship sections are still Loading in this frame; no settled relationship claim from it."
+        },
+        {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969-native-radio-v1/run-2026-10-20T10-42-59-883Z-3862536/library-recovered-same-task.png",
+          "sha256": "ffd2a4ae05976462ea876809360894d0d11dfd48d4eb15a02b31cfbdcef21c98",
+          "bytes": 99144,
+          "name": "library-recovered-same-task",
+          "inspected": true,
+          "observation": "Inspected 1440x1000 screenshot: Local author in shell; Library selected in navigation; Currently reading shelf selected; grid view selected; one actual The Lantern Road 8805d7a2 card and progress control visible. Pinned truthfully empty; actual followed community rows visible."
+        }
+      ]
+    },
+    "shutdown": {
+      "cleanup": {
+        "startedAt": "2026-10-20T10:43:57.266Z",
+        "readerBorrow": false,
+        "noReaderLeaseAcquired": true,
+        "domainWritesByDriver": false,
+        "processesOwnedOnly": true,
+        "contextClosed": true,
+        "browserClosed": true,
+        "frontend": {
+          "pid": 3863253,
+          "exitCode": 201,
+          "signal": null,
+          "port": 33747,
+          "stillListening": false
+        },
+        "forwarderStopped": true,
+        "finishedAt": "2026-10-20T10:43:57.744Z"
+      },
+      "cleanupEvidence": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969-native-radio-v1/run-2026-10-20T10-42-59-883Z-3862536/owned-cleanup.json",
+        "sha256": "3cc60900e253782077d7ba23b303ecb2d76bd4cc4d126d70e3debbbfdbd0b0c3",
+        "bytes": 418
+      },
+      "independentVerification": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969-native-radio-v1/shutdown-verification.json",
+        "sha256": "f09a773d008a0ee953a9c5185453fcbf5607482f4c506d6e8fdb12ae5dff7295",
+        "bytes": 1005
+      },
+      "boundary": "Owned browser/context and frontend process group stopped; owned33747 and forwarding44257 ports closed. Main3001 and Accounts3004 remain available and were not restarted/stopped. No G-2823 endpoints, G-2831 status lease, G-2762/G-2748/G-2846 attempt or other runtime custody was touched."
+    },
+    "preservation": {
+      "allPreviousBranchFields": 42,
+      "allCurrentMainFields": 40,
+      "allPriorFieldsUnchanged": true,
+      "allFrozenEvidenceHashesUnchanged": true,
+      "frozenEvidenceManifest": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969-native-radio-v1/frozen-evidence-manifest.json",
+        "sha256": "aab099f21c0429ec4331264013ba755a23b7799623a43f0369c79548ff568310",
+        "bytes": 1601
+      },
+      "originalFailedJob": "9aa2e67c-0b95-4636-baad-fe020d90f327 retains exit1, Studio400 assertions, native aria observation failure and all raw receipts. This append does not relabel that run as passing.",
+      "nativeInputHistory": "Existing fixture-free native-input qualifiers, CAS5 records, accepted source reviews, historical failures, screenshots and previous verdicts are retained unchanged."
+    },
+    "remainingGenuineAcceptance": [
+      "Historical Studio sort=recent400 remains open at installed75409. Existing Site/runtime custodians G-2791/G-2785/G-2790 own compatibility and only its missing original Studio assertion. This independent Library cell does not call or depend on Studio.",
+      "No current-main native API qualification, production readiness, original AUD-006 closure, D3-001 transport resolution or original AUD-012 signed-in/AT class closure follows. Existing owners and historical dispositions remain.",
+      "G-2825 retains genuine signed-in browser acceptance ownership; HomeDE390/HomeFR390 actual AT and same-owner cleanup remain separate. No G-2831 NEW HomeCAS7 or G-2823 image/default borrow was consumed.",
+      "G-2804 common Web review and its five G-2784 dependency findings retain exact prior pins and owner. No unrelated Discover/whole-wave review or product landing."
+    ],
+    "reportValidation": {
+      "command": "task docs:check",
+      "job": "63a39e69-3837-464a-a39a-b89dbf22940f",
+      "exitCode": 0,
+      "result": "passed: 13 tests; 259 Markdown files; local links, fragments and design navigation",
+      "jobEvidence": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/identity-http-recovery-c969-native-radio-v1/docs-check-job.json",
+        "sha256": "9d0960d9b47ed98a646446a312bdc48b26828924e9ff849fd66d79b9236a6345",
+        "bytes": 817
+      },
+      "log": {
+        "path": ".temp/goal/jobs/63a39e69-3837-464a-a39a-b89dbf22940f.log",
+        "sha256": "a011137e0870e4c7c7faf0b51614fb0bd0d0fb185ea29176997e3a2310cb3e24",
+        "bytes": 517
+      },
+      "scope": "Report-only required Task check. External URLs/runtime behavior not tested. Latest decision excludes broad/source checks and review repeats."
+    },
+    "managerNext": "Consume this missing Library recovery proof and explicit setup-write qualification. Preserve original failed run and separate Studio400 ownership. Integrate only the additive report; no class closure or further runtime replay is requested."
   }
 }
