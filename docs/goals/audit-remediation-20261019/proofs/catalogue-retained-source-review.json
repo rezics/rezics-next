@@ -3535,5 +3535,685 @@
       "finalization": "Receipt metadata appended after the passing required sequence. A final Task report-integrity and docs:check sequence is required before commit and reported in the worker handoff. Only this correction-review key is appended; every prior value and failure is preserved."
     },
     "next": "Manager may compose this exact correction with the prior Source adapter under normal unchanged gates, preserving authored history, accepted reports and strict library refusal. The original installed/public and A01/all113 acceptance work remains open."
+  },
+  "manualCitationPublicationFirstSourceReview": {
+    "review": {
+      "worker": "G-2859",
+      "goal": "audit-remediation-20261019",
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "kind": "first independent source review of complete manual-citation publication slice",
+      "reviewedAt": "2026-10-20T16:29:41.240820+00:00",
+      "reviewerHeadBeforeAppend": "d5c2fa85bbc17dfabbb00aa3fd2926408f988696",
+      "verdict": "ACCEPT",
+      "summary": "Accept only the sealed 17-path publication delta, including the common-reader Rights repair. No new actionable counterexample found; normal composed gates and original product acceptance remain open."
+    },
+    "candidate": {
+      "parent": "f34478b2c81b0496a843451d690d12837861531c",
+      "head": "2c2c3e5d1f61d14e3f65aef6bd5fdba3efd4e9ed",
+      "repairParent": "8f41ecc4dd1dc5f19e3495f6e2b0f98f4011d0c4",
+      "changedPathCount": 17,
+      "manifestSha256": "89164aa1f7726aa4e6c32757f714b8c1fe5c98b6eff12a0d77e8aa74fccd7c67",
+      "producerArtifactDirectory": ".temp/worktrees/g-2781/.temp/goal/manual-native-publication/rights-repair-delivery",
+      "artifactsRead": [
+        {
+          "path": ".temp/goal/manual-native-publication/rights-repair-delivery/HANDOFF.txt",
+          "sha256": "0abdec1c4a5cd4bfa4d267122e64dba8945d1e0b504758d6784b791f2842c91f",
+          "bytes": 5782
+        },
+        {
+          "path": ".temp/goal/manual-native-publication/rights-repair-delivery/delivery.json",
+          "sha256": "7f0606984c51dd77df4260e3a2c601860dc3ef8e6e87596f3172a465055f84fb",
+          "bytes": 29196
+        },
+        {
+          "path": ".temp/goal/manual-native-publication/rights-repair-delivery/tested-blobs.json",
+          "sha256": "180af544f017a39fe31fe9ae49149a45b4ab8fcc62e29677143bd79b12e03f6e",
+          "bytes": 8463
+        }
+      ],
+      "allChangedBaseAndHeadBlobsAndSha256Verified": true,
+      "testedBlobMapEqualsDeliveryFiles": true,
+      "files": [
+        {
+          "path": "generated/model/contexts/work-structure-publication-v2.jsonld",
+          "kind": "derived",
+          "baseBlob": "5ddf723724f9ef341ec2d0d134be7dee6ac90b92",
+          "baseSha256": "dddc07f65ea505e2cdeb45f671b4ec24147e831f94510f6b0d0a12d41529e054",
+          "repairParentBlob": "d6c3a4e7de3dc2819ac0b7ce2604d1e61ffa89f3",
+          "headBlob": "d6c3a4e7de3dc2819ac0b7ce2604d1e61ffa89f3",
+          "headSha256": "a8306062b3d1adf5349cdd186781c59459d8b4547988c2f241c7c145b73e41cf",
+          "sameAsPreservedPublication": true
+        },
+        {
+          "path": "generated/model/manifest.json",
+          "kind": "derived",
+          "baseBlob": "e857699823639514b957b3e802dee16eea98e8ca",
+          "baseSha256": "4a9bb21ae5940dc18295b0f17d60aa8890a6094d8832e5a10aadbc2efa9281e7",
+          "repairParentBlob": "b5b8e174fdb18a5262e479f1ac13bb979e116c6a",
+          "headBlob": "b5b8e174fdb18a5262e479f1ac13bb979e116c6a",
+          "headSha256": "4a7d466399ae1baff82d9874beaab972e654830e44ecbaf7a309471f72fc73ba",
+          "sameAsPreservedPublication": true
+        },
+        {
+          "path": "generated/model/shapes/work-structure-publication-v2.ttl",
+          "kind": "derived",
+          "baseBlob": "58a20ea91c41e8455af4b32900cc6e82883dc3d9",
+          "baseSha256": "2148417cd96941148902cfcbb4afcd16578fab7a6fefc3e1c3c5819cfd89399d",
+          "repairParentBlob": "10724f5bc9a0b120da106ce4a50111a3b41aca9b",
+          "headBlob": "10724f5bc9a0b120da106ce4a50111a3b41aca9b",
+          "headSha256": "f54150c72db8a4511385924a5ad3016c0cb47a27da79052e16436d854fa3a2a6",
+          "sameAsPreservedPublication": true
+        },
+        {
+          "path": "generated/openapi/main/public.json",
+          "kind": "derived",
+          "baseBlob": "c5c800caadc05101e6760ee4a02fc2ccf16fa251",
+          "baseSha256": "8a16f777f483600d210c02b00f9f6e9e5f98bb57f28909e5f794f53a894e5402",
+          "repairParentBlob": "b0304aac872a03ab478d42c2f31b843b95fe52f7",
+          "headBlob": "b0304aac872a03ab478d42c2f31b843b95fe52f7",
+          "headSha256": "28d9ab1d97c2adca41873b99ee625e0ce639b24e58ca91979e6d155a991b2713",
+          "sameAsPreservedPublication": true
+        },
+        {
+          "path": "model/definitions/work-structure-publication-v2.ttl",
+          "kind": "authored",
+          "baseBlob": "58a20ea91c41e8455af4b32900cc6e82883dc3d9",
+          "baseSha256": "2148417cd96941148902cfcbb4afcd16578fab7a6fefc3e1c3c5819cfd89399d",
+          "repairParentBlob": "10724f5bc9a0b120da106ce4a50111a3b41aca9b",
+          "headBlob": "10724f5bc9a0b120da106ce4a50111a3b41aca9b",
+          "headSha256": "f54150c72db8a4511385924a5ad3016c0cb47a27da79052e16436d854fa3a2a6",
+          "sameAsPreservedPublication": true
+        },
+        {
+          "path": "packages/model/src/generated/profiles.ts",
+          "kind": "derived",
+          "baseBlob": "4223913958a2c959fc68b941ad1256413577a301",
+          "baseSha256": "0d9cd42e0b354429cef8c42197b3ca50eb5baf9932e2ed422100cffcc19b660b",
+          "repairParentBlob": "72cac472eaeba38a6acd1a37bc609c420516df0e",
+          "headBlob": "72cac472eaeba38a6acd1a37bc609c420516df0e",
+          "headSha256": "1c83805b43c88b14ac32d3bf4c781f27e855b7f3f7e88440baa39e5540084527",
+          "sameAsPreservedPublication": true
+        },
+        {
+          "path": "packages/model/src/generated/schemas.ts",
+          "kind": "derived",
+          "baseBlob": "242239ce919f54b62b307229f22e6dd178f99033",
+          "baseSha256": "4836b832e7a41b19dfcc705ae864f313c5467b875e702fac13e832408787fd12",
+          "repairParentBlob": "c6100545bc875416567985043125c9d0f8756145",
+          "headBlob": "c6100545bc875416567985043125c9d0f8756145",
+          "headSha256": "346bc9f222ecaf41c9f0ee48d8f45b8539e2f07b6a779202e325469ee20e3bf2",
+          "sameAsPreservedPublication": true
+        },
+        {
+          "path": "services/main/src/modules/work/public-patterns.ts",
+          "kind": "authored",
+          "baseBlob": "1bdfaa8feb997a02b1d8301fd78d873c916317dc",
+          "baseSha256": "dc5d128b954a1b83f760395b926946304395e5a487d246ee29160e9e78096cd5",
+          "repairParentBlob": "0c2852deb137dba3509838a106ba1ffbd2d914e6",
+          "headBlob": "0c2852deb137dba3509838a106ba1ffbd2d914e6",
+          "headSha256": "bd1e0ee67fc28c67706547217554959636d4c458749247f9beaa4aed4f2ca343",
+          "sameAsPreservedPublication": true
+        },
+        {
+          "path": "services/main/src/modules/work/read-contract.ts",
+          "kind": "authored",
+          "baseBlob": "d1aca76967ca4a564f0fd5908042ab99c7383a48",
+          "baseSha256": "98b6f6e424dfc743f7f5a3d3a584270a46793861373bf0c77d29e471c5ec06f6",
+          "repairParentBlob": "bb5defc7067b87d4af4f8e6cd5902a7967321aad",
+          "headBlob": "bb5defc7067b87d4af4f8e6cd5902a7967321aad",
+          "headSha256": "6f0c4de28558796cc2243f99a93b7cf9f553530a8cbbe78ec8b1ecbc0dda1aaf",
+          "sameAsPreservedPublication": true
+        },
+        {
+          "path": "services/main/src/modules/work/read-header.ts",
+          "kind": "authored",
+          "baseBlob": "4b27e5eb7644b880212fb0be54f6046ce8d64849",
+          "baseSha256": "8f90c0e94c94356c3371625d25a181e96a9252d620c5225fd1707c5e6f0a03f4",
+          "repairParentBlob": "4b27e5eb7644b880212fb0be54f6046ce8d64849",
+          "headBlob": "bee6205c83162c1b4d58d9a5fa5ed6e7495528ea",
+          "headSha256": "0f5b76240d5cf81ad45f0572a1bc61328e4132920cdd1c8c03648d91468d4fd7",
+          "sameAsPreservedPublication": false
+        },
+        {
+          "path": "services/main/src/modules/work/sourced-publication-credits.ts",
+          "kind": "authored",
+          "baseBlob": "2faaf80eac35cb1100d5b2c1c77ec098fd05f9c6",
+          "baseSha256": "527eb7cf8e96a0d5c65a643e8afc40529f4fbd0cf32e67ed6f972f344aea61e0",
+          "repairParentBlob": "c0e9cd80045bc9ee1d14949fd4dc9e86161b66f1",
+          "headBlob": "c0e9cd80045bc9ee1d14949fd4dc9e86161b66f1",
+          "headSha256": "4e52cd202f80dc80d40b7cc84bd35a559f1a816b74730c7e05a2c2c4b74a3bdc",
+          "sameAsPreservedPublication": true
+        },
+        {
+          "path": "services/main/src/modules/work/sourced-structure-publication.ts",
+          "kind": "authored",
+          "baseBlob": "7f0d0b2b80462968273208bc772662d4b78e96fc",
+          "baseSha256": "631e5c52ed9e6c405e1bb43a098f20f8a125c1db70f1aac8a1b84739d72abe46",
+          "repairParentBlob": "3f53226beb5f95bef37c23c9aeeb83f33630e014",
+          "headBlob": "3f53226beb5f95bef37c23c9aeeb83f33630e014",
+          "headSha256": "3113d71694138465c8c38e0447568e753439e972acbafd4f09a6d1596a042b24",
+          "sameAsPreservedPublication": true
+        },
+        {
+          "path": "services/main/src/modules/work/structured-publication-admitted.ts",
+          "kind": "authored",
+          "baseBlob": "7775dafac94c4c7c8429a7a9aada63bd674b2793",
+          "baseSha256": "0a85644853b39be7cc9eb266063a9cddee0728614dd78e8dae14c8e08d2ff4c1",
+          "repairParentBlob": "351e100bc6685115ec284ab5fd70842aad938bf2",
+          "headBlob": "351e100bc6685115ec284ab5fd70842aad938bf2",
+          "headSha256": "0533e390977e4affb5114c12afdf73643644cb842fef699400304f0c849989c9",
+          "sameAsPreservedPublication": true
+        },
+        {
+          "path": "services/main/src/modules/work/structured-publication.ts",
+          "kind": "authored",
+          "baseBlob": "b062512030cfb34f54bfed8cd6c2f31d8845884a",
+          "baseSha256": "1318c78a8452d6ebc47adcbbf915d0d90500b37284583c73fba3163d119352c9",
+          "repairParentBlob": "fb1e36a898540f8e61b794fe2a7b31f1ff66c5f9",
+          "headBlob": "fb1e36a898540f8e61b794fe2a7b31f1ff66c5f9",
+          "headSha256": "1df552fd7259a5f56de359e5ce40adba35e7d0f2a70d00c1dea3d12df6eeeb1d",
+          "sameAsPreservedPublication": true
+        },
+        {
+          "path": "services/main/src/routes/publication.ts",
+          "kind": "authored",
+          "baseBlob": "64bfbdf3611bff3ded643065170faf0dee32f6c2",
+          "baseSha256": "163ef08fc905d3f350ff51bf73264fb52e433283d5f835053387e037b9138783",
+          "repairParentBlob": "adb1dc3f4ffb07214c5b07a161fb4b4f8bb80145",
+          "headBlob": "adb1dc3f4ffb07214c5b07a161fb4b4f8bb80145",
+          "headSha256": "b360e41298fea3f126e1a8a94c5262845ac12ca5078b64259074c34259c671ce",
+          "sameAsPreservedPublication": true
+        },
+        {
+          "path": "services/main/tests/recipe-publication-dependencies.test.ts",
+          "kind": "authored",
+          "baseBlob": "4334733f2248bbc844845bd3436e2af01060a57b",
+          "baseSha256": "ba908c36de9db980dd65a25a2b2b684060c001340a7f9f434ec85eb1e4b9f798",
+          "repairParentBlob": "e308545ed14cdfff41de615d102a60a264166c26",
+          "headBlob": "e308545ed14cdfff41de615d102a60a264166c26",
+          "headSha256": "ab99f53c237c637eaef6b271769692fe29615bdfe69f505ab2a19f9b70792fc9",
+          "sameAsPreservedPublication": true
+        },
+        {
+          "path": "services/main/tests/structured-work-publication.test.ts",
+          "kind": "authored",
+          "baseBlob": "a2fe2293875aae3b947c1e7238016ebefa090e6b",
+          "baseSha256": "9a73b185dcde1f4ca3f5b058ae8637bc246aee31dce24557c4dd1ec2225d8ef5",
+          "repairParentBlob": "1bf3a29a3c81320481ee8bb8843a097b1ea2dfcd",
+          "headBlob": "1bf3a29a3c81320481ee8bb8843a097b1ea2dfcd",
+          "headSha256": "340e5e2f7950dcbec21427c659b98bfa3b9cd8e02016ec45bc407db48f6d8127",
+          "sameAsPreservedPublication": true
+        }
+      ],
+      "authorshipPreserved": [
+        {
+          "commit": "8f41ecc4dd1dc5f19e3495f6e2b0f98f4011d0c4",
+          "parents": "f34478b2c81b0496a843451d690d12837861531c",
+          "authorName": "Edge-coordinates",
+          "authorEmail": "Edgecoordinates@gmail.com",
+          "authorDate": "2026-10-20T23:30:42+08:00",
+          "committerName": "Edge-coordinates",
+          "committerEmail": "Edgecoordinates@gmail.com",
+          "committerDate": "2026-10-21T00:11:22+08:00",
+          "subject": "feat(publication): admit independently cited public-domain native sources"
+        },
+        {
+          "commit": "2c2c3e5d1f61d14e3f65aef6bd5fdba3efd4e9ed",
+          "parents": "8f41ecc4dd1dc5f19e3495f6e2b0f98f4011d0c4",
+          "authorName": "Edge-coordinates",
+          "authorEmail": "Edgecoordinates@gmail.com",
+          "authorDate": "2026-10-21T00:17:47+08:00",
+          "committerName": "Edge-coordinates",
+          "committerEmail": "Edgecoordinates@gmail.com",
+          "committerDate": "2026-10-21T00:17:47+08:00",
+          "subject": "fix(publication): fence manual citation Rights in common Work reads"
+        }
+      ],
+      "preservedOriginalPublication": {
+        "parent": "d506b4d482921001c524dc3e776e1b8f81313430",
+        "head": "b2d664e0564a469e8b77488c845f2dddef90d791",
+        "rebasedEquivalent": "8f41ecc4dd1dc5f19e3495f6e2b0f98f4011d0c4",
+        "allSixteenCandidateBlobsUnchanged": true
+      },
+      "scope": "Exactly f34478b2..2c2c3e5d. No accepted Source87/refusal/native/query/A19/library or Structure-fence batch is reviewed again."
+    },
+    "inspectedUnchangedDependencies": [
+      {
+        "path": "services/main/src/modules/rights/store.ts",
+        "candidateBlob": "9f67ad4f035741468371c102c5bad36c381edc98",
+        "sha256": "a5d390ed524a91cdcae03ec305a21d5e9497ded7aa037156497c483075696f7c",
+        "inspection": "publicDomainAssessmentSelection, supportedPublicDomainHead, currentPublicDomainAssessment; retained structuredPublicationRights inspected only for branch preservation",
+        "unchangedAcrossReviewRange": true
+      },
+      {
+        "path": "services/main/src/modules/work/read-session.ts",
+        "candidateBlob": "85381184a0704f74645f97e0b0327a2b13d0d27d",
+        "sha256": "1e057f09ae28386be2ee2a737826a5060bf67aabe3dd4ce8abe105183659b4db",
+        "inspection": "retained, observeDependency, fenceDependencies, selection and final dependency/authority ordering",
+        "unchangedAcrossReviewRange": true
+      },
+      {
+        "path": "services/main/src/modules/structure/graph.ts",
+        "candidateBlob": "ca6f9bdba18c0331e940b73c7406ac1b9e22e69b",
+        "sha256": "23467f889e786f734cee745e6eddaba122209075db52c2bdf828854a7cc99382",
+        "inspection": "readCompositionHeader exact native owner/component/profile/revision/generation/manifest validation",
+        "unchangedAcrossReviewRange": true
+      },
+      {
+        "path": "services/main/src/modules/structure/profiles.ts",
+        "candidateBlob": "45f69189d58e0a788ead420643fbaa89211d5249",
+        "sha256": "be3f0e6a6f71c5c9ada5456eae0dbe4c178a700c1ae2b7cd0020d3c5a1abe0c7",
+        "inspection": "workPublicationProfileFor existing publication capability gate",
+        "unchangedAcrossReviewRange": true
+      },
+      {
+        "path": "services/main/src/infrastructure/invalid-receipt.ts",
+        "candidateBlob": "71c5bb75e22c3a02612a4479a763126382cc6dc4",
+        "sha256": "839bd7e6a3802de1a000e4f93dac4bdf3284f40219049716ce66ff43f2ab3723",
+        "inspection": "validatedCommand existing command transport and invalid-profile receipt behavior",
+        "unchangedAcrossReviewRange": true
+      }
+    ],
+    "actionableFindings": [],
+    "counterexample": {
+      "newConfirmedCounterexample": null,
+      "disposition": "Static inspection and the matching supplied owner evidence leave no concrete unresolved concern requiring another implementation run. Original failing assertions and all existing review findings remain preserved; the producer common-reader failure is retained below with its passing correction."
+    },
+    "acceptedObservations": [
+      {
+        "id": "MANUAL-PUBLICATION-INDEPENDENCE",
+        "paths": [
+          "services/main/src/modules/work/structured-publication.ts",
+          "services/main/src/modules/work/sourced-structure-publication.ts",
+          "services/main/src/routes/publication.ts"
+        ],
+        "finding": "The existing explicit POST /v1/work-publications admits three disjoint typed intents: original contribution, explicitly retained-derived public domain, or independently manually cited public domain. checkInput and digest reject mixed retained/manual fields and bind citation URL/license/author and assessment ID. Manual preparation never reads Source intake, requires no conversion or mapper, and preserves native Work/MainVersion/Structure/head identities. Citation supplies attribution, not authority or a Rights basis.",
+        "concreteCases": "manualInput without sourceObservation reaches publication; adding a retained observation or removing citation/assessment is refused before dispatch. The owner fixture throws if manual preparation attempts Source intake."
+      },
+      {
+        "id": "MANUAL-PUBLICATION-CURRENT-RIGHTS",
+        "paths": [
+          "services/main/src/modules/work/sourced-structure-publication.ts",
+          "services/main/src/modules/work/structured-publication-admitted.ts",
+          "services/main/src/modules/work/structured-publication.ts"
+        ],
+        "finding": "The new branch uses the real existing RightsStore currentPublicDomainAssessment(work,id). Its indexed SQL requires the same Work body/expression material and current redistribution/rezics:public-text data_rights head with exact assessment ID, public_domain basis and supported outcome. Missing/unavailable owner fails closed. Preparation, immediate pre-CAS verification and successful new-result verification stay inside the existing publication dispatch.",
+        "concreteCases": "A false assessment or revocation before commit refuses without a replacement source. Revocation after graph commit refuses the fresh response while leaving the committed receipt for exact historical replay. A citation URL cannot substitute for the assessment."
+      },
+      {
+        "id": "MANUAL-PUBLICATION-AUTHORITY-AND-CAS",
+        "paths": [
+          "services/main/src/modules/work/structured-publication-admitted.ts",
+          "services/main/src/modules/work/structured-publication.ts",
+          "services/main/src/routes/publication.ts"
+        ],
+        "finding": "Verified account, explicit Work-publication grant, acting subject, graph admission/lineage, existing governance publication fence and registered/claimed admission remain authoritative. Native header ownership/profile/component/revision/generation/root are verified separately from citation preparation. One validated graph command still binds expected Work/MainVersion/Structure/publication heads, routing/data epoch, restore hold, receipt, decision, outbox and predecessor; citation transcriber must equal the admitted actingSubject. No new owner API or authority-granting citation path appears.",
+        "concreteCases": "Denied grants/governance and stale Structure heads refuse. The graph WHERE retains exact current native heads/generation and prior-publication CAS, so a new stale intent cannot replace a newer publication. This reading preserves the existing command boundary; the fixtures do not prove installed native enforcement."
+      },
+      {
+        "id": "MANUAL-PUBLICATION-EXACT-REPLAY",
+        "paths": [
+          "services/main/src/modules/work/structured-publication.ts",
+          "services/main/src/modules/work/structured-publication-admitted.ts"
+        ],
+        "finding": "Canonical digest includes the new manual citation fields and exact assessment while preserving the old original/retained digest branches. Receipt checking binds admission/action/digest/authority epoch/scope/work/actor/predecessor and exact published native identities. An already committed receipt is resolved before preparation or new Rights admission.",
+        "concreteCases": "Reordered citation object keys retain the digest; changing author or assessment changes it. Exact replay after Rights revocation returns the prior receipt without another claim, Rights read or graph update; it is historical command output, not a current delivery authorization."
+      },
+      {
+        "id": "MANUAL-PUBLICATION-SAME-SESSION-READ-FENCES",
+        "paths": [
+          "services/main/src/modules/work/public-patterns.ts",
+          "services/main/src/modules/work/sourced-structure-publication.ts",
+          "services/main/src/modules/work/read-header.ts"
+        ],
+        "finding": "The exact publication selector binds matching decision/source Rights assessment, citation and absence of retained observation, and rejects malformed/mixed assessment references. Manual stored attribution must carry the matching ID, native transcriber and valid URL/license/author, and cannot fabricate record/observation/provider/externalId. readWorkBasis now invokes selectedPublicationAttribution for rightsAssessmentId as well as sourceObservation. It checks Rights live, then registers structured-publication-rights on the SAME WorkReadSession; immutable attribution hydration alone is cached. Existing exact publication/profile, Structure disclosure, selected-input and final authority fences remain.",
+        "concreteCases": "Current Rights refusal raises WorkReadMissing at common-basis admission; Rights movement after selection raises WorkReadMoved at fenceDependencies even for Recipe/native readers without attribution output. Header Rights/disclosure/publication movement cases also refuse. The repair is exactly the supplied single condition extension; both originally failing test bodies are unchanged."
+      },
+      {
+        "id": "MANUAL-PUBLICATION-RETAINED-AND-CREDITS",
+        "paths": [
+          "services/main/src/modules/work/sourced-structure-publication.ts",
+          "services/main/src/modules/work/sourced-publication-credits.ts",
+          "services/main/tests/recipe-publication-dependencies.test.ts"
+        ],
+        "finding": "Selecting explicit sourceObservation still invokes the retained intake, retained bytes/complete coverage, exact profile correspondence, Source disclosure and retained Rights checks. Manual sources emit truthful manual-citation attribution and are excluded from retained-provider author/transcriber credit references by the record discriminant. Existing retained credit construction and original contribution verification remain. Native instruction custody preparation still applies independently of the citation mode.",
+        "concreteCases": "The four retained negative cases (missing bytes, incomplete coverage, wrong observation, native-only noncorrespondence) refuse before Rights reads. Manual citations do not invent a retained provider/author row. No second citation model, converter requirement or auto-conversion is introduced."
+      },
+      {
+        "id": "MANUAL-PUBLICATION-GENERATED-COMPATIBILITY",
+        "paths": [
+          "model/definitions/work-structure-publication-v2.ttl",
+          "generated/model/shapes/work-structure-publication-v2.ttl",
+          "generated/model/contexts/work-structure-publication-v2.jsonld",
+          "generated/model/manifest.json",
+          "packages/model/src/generated/profiles.ts",
+          "packages/model/src/generated/schemas.ts",
+          "generated/openapi/main/public.json",
+          "services/main/src/modules/work/read-contract.ts"
+        ],
+        "finding": "The authored V2 model and byte-identical generated shape add the assessment branch without requiring conversion or retained observation for manual citation. Retained and original decision alternatives remain, V1 and withdrawal behavior remain outside the semantic extension. Context, registry, schema and manifest hashes correspond to the changed model. OpenAPI changes only WorkHeader, its two embedded resource-page projections, and the publication request projection (three MIME representations); the old retained output branch is preserved and the manual branch exposes only truthful citation fields. Common required source keys preserve existing URL/license/author/transcriber consumers. No migration or native/schema-owner file changes occur.",
+        "concreteCases": "The manual response satisfies workHeader; old retained source properties remain one unchanged union arm. Full model/live native generation is not independently rerun; current client compatibility rests on supplied matching model proof and final types, with the known native-contract response fingerprint remaining a composed gate."
+      }
+    ],
+    "generatedOutputInspection": {
+      "regeneratedByReviewer": false,
+      "secondSchemaWriter": false,
+      "authoredShapeEqualsGeneratedShape": true,
+      "allListedChangedArtifactHashesChecked": true,
+      "openApiChangedProjectionGroups": [
+        "components.schemas.WorkHeader",
+        "GET /v1/resources/{resource}/page response 200 mergedFacts.origins[].work.rights.source",
+        "GET /v1/resources/{resource}/page response 200 work.rights.source",
+        "POST /v1/work-publications publish request in application/json, application/x-www-form-urlencoded and multipart/form-data"
+      ],
+      "otherOpenApiContentPreserved": true,
+      "noMigrationsChanged": true,
+      "validation": "The report integrity Task independently compares the full parent/head OpenAPI trees after removing only those projection nodes and verifies preserved retained union arms and model/manifest hashes."
+    },
+    "checksActuallyExecuted": [
+      {
+        "command": "git diff --name-status f34478b2c81b0496a843451d690d12837861531c 2c2c3e5d1f61d14e3f65aef6bd5fdba3efd4e9ed",
+        "result": "Exactly the sealed 17 paths"
+      },
+      {
+        "command": "Read-only SHA256/git-object verification of the four authorized handoff artifacts and every changed base/head file",
+        "result": "Manifest pin, three contained artifact hashes, tested map and all 34 base/head blob hashes match"
+      },
+      {
+        "command": "git diff --check f34478b2c81b0496a843451d690d12837861531c 2c2c3e5d1f61d14e3f65aef6bd5fdba3efd4e9ed",
+        "result": "passed"
+      }
+    ],
+    "reusedEvidence": {
+      "source": "Only the four authorized sealed artifacts were read from G-2781; check/QA claims below are producer receipts from delivery.json, not new reviewer executions or independent installed-stack proof. Reuse is limited to the matching blobs and stated scope.",
+      "finalChecks": [
+        {
+          "job": "486e7f79-a432-44cb-a2ca-3ab576726f94",
+          "step": 1,
+          "command": "task goal -- test services/main/tests/structured-work-publication.test.ts services/main/tests/recipe-publication-dependencies.test.ts",
+          "exitCode": 0,
+          "qa": "20261020t161308-150502",
+          "result": "43 pass, 0 fail, 301 assertions",
+          "tier": "owner",
+          "sourceReported": "8f41ecc4dd1dc5f19e3495f6e2b0f98f4011d0c4",
+          "sourceFingerprint": "13418cd3b550",
+          "sourceStable": true,
+          "testedBlobsMatchHead": true,
+          "testsUnchangedFromPreservedPublication": true,
+          "fullQualification": false,
+          "acceptance": {
+            "passed": 0,
+            "partialPass": 3,
+            "failed": 0,
+            "uncovered": 289
+          }
+        },
+        {
+          "job": "486e7f79-a432-44cb-a2ca-3ab576726f94",
+          "step": 2,
+          "command": "task goal -- check --only types,lint",
+          "exitCode": 0,
+          "types": "passed (38.5s)",
+          "lint": "passed (1.7s)",
+          "ast": "passed (0.3s)",
+          "inferenceDelta": "passed (178.4s)",
+          "sourceBlobsMatchHead": true,
+          "inferenceBase": "adeffff02b6f9782c98c4eb991ffe00ea24adfd3",
+          "mainInstantiations": 27009315,
+          "baseMainInstantiations": 26991733,
+          "webInstantiations": 38848410,
+          "baseWebInstantiations": 38885534,
+          "edenInstantiations": 18709499,
+          "baseEdenInstantiations": 17315082,
+          "absoluteMainLimit": 26950993.650000002,
+          "absoluteMainPassed": false,
+          "absoluteBaseMainPassed": false,
+          "limitUnchanged": true,
+          "guardDisposition": "Previous unrelated guard failures retained; not rerun by this affected-only check."
+        },
+        {
+          "command": "git diff --check f34478b2c81b0496a843451d690d12837861531c 2c2c3e5d1f61d14e3f65aef6bd5fdba3efd4e9ed",
+          "exitCode": 0,
+          "scopeProof": "Exact loaned single-line reader replacement; all sixteen preserved publication blobs and both test files unchanged."
+        }
+      ],
+      "earlierMatchingChecks": [
+        {
+          "job": "65340e12-e37b-466a-ace8-0816cf0d2b4a",
+          "qa": "20261020t151822-ce1473",
+          "command": "bun scripts/goal/goalctl.ts test services/main/tests/structured-work-publication.test.ts services/main/tests/recipe-publication-dependencies.test.ts",
+          "result": "fail: 41 pass, 2 fail, 287 assertions; both common-basis Rights assertions reached",
+          "sourceStable": true,
+          "sourceFingerprint": "dd215336763c"
+        },
+        {
+          "job": "df47e7e7-b7a1-4a91-b583-d3f73555dd56",
+          "command": "task goal -- check",
+          "result": "exit 201: types/lint/AST/inference task-delta pass; guards fail in unchanged frontend paths",
+          "inference": {
+            "main": 26993788,
+            "web": 38846723,
+            "eden": 18708489,
+            "base": "9749a085bb4de7f164f1410face7375f71306abf",
+            "baseMain": 27024319,
+            "baseWeb": 38883847,
+            "baseEden": 17314067,
+            "absoluteMainLimit": 26950993.650000002,
+            "absoluteMainPassed": false
+          },
+          "guards": {
+            "proofContractCurrent": true,
+            "frontendContinuation": "failed",
+            "frontendPagePredicates": "failed",
+            "acceptedCommandsTimeout": "initial 5000ms timeout; automatic retry passed in 3.248s"
+          },
+          "noTestFilesInBrief": true
+        },
+        {
+          "job": "40af1caf-1ff5-4bff-aae7-494ca0127913",
+          "qa": "20261020t151529-fb3e26",
+          "result": "44 pass, 4 fail; three header fixture failures fixed and pass in final QA; unmodified native-contract fingerprint assertion remains",
+          "contractFingerprint": {
+            "path": "services/main/tests/fixtures/native-contract-invariants.json",
+            "test": "services/main/tests/native-contract-pilot.test.ts:237",
+            "assertionReached": true,
+            "operation": "GET /v1/works/{id} response 200",
+            "before": "a21109f9c18409337ab64a6341a85a33269750dd0a53664bdfbd8c9b4952820d",
+            "after": "2180682be0d13f54fe7ca9121763f6025add6c4b2159dea12d2f671ea195895c",
+            "disposition": "existing contract baseline owner must reconcile the explicitly authorized truthful WorkHeader source union; assertion and fixture unchanged"
+          }
+        },
+        {
+          "job": "acf10f09-66f4-4f87-a872-68108bc2fb22",
+          "qa": "20261020t150902-78ea17",
+          "result": "38 pass / 216 assertions before added final reader controls; model 8 pass / 1518 assertions and web types 4065 files pass",
+          "modelCommand": "task model:test -- tests/generated.test.ts",
+          "webCommand": "task web:typecheck",
+          "laterChanges": "common required source keys preserve existing native schema consumer; header fixture and new basis regression added; final task types cover current source"
+        },
+        {
+          "job": "d6bb863a-c70e-4f3a-aff5-140481578163",
+          "qa": "20261020t145821-d509ca",
+          "result": "initial owner assertion failures and unstable source retained; model passed",
+          "sideEffect": "model-tier QA unexpectedly stamped two Fuseki image pins; exact generated mutation backed up, then only those pin bytes restored; no further model-tier QA",
+          "restoration": ".temp/goal/manual-native-publication/qa-image-stamp/restoration.json"
+        }
+      ],
+      "earlierProofQualification": "The model check covers unchanged model artifacts; the earlier explicit web type run predates the common required-source compatibility adjustment. The final matching types/inference-delta receipt covers the candidate; no claim of a fresh full web/client or native run is made. No accepted-batch tests or reviews were repeated."
+    },
+    "preservedNegativeEvidence": {
+      "producerHistory": [
+        {
+          "job": "65340e12-e37b-466a-ace8-0816cf0d2b4a",
+          "qa": "20261020t151822-ce1473",
+          "command": "bun scripts/goal/goalctl.ts test services/main/tests/structured-work-publication.test.ts services/main/tests/recipe-publication-dependencies.test.ts",
+          "result": "fail: 41 pass, 2 fail, 287 assertions; both common-basis Rights assertions reached",
+          "sourceStable": true,
+          "sourceFingerprint": "dd215336763c"
+        },
+        {
+          "job": "df47e7e7-b7a1-4a91-b583-d3f73555dd56",
+          "command": "task goal -- check",
+          "result": "exit 201: types/lint/AST/inference task-delta pass; guards fail in unchanged frontend paths",
+          "inference": {
+            "main": 26993788,
+            "web": 38846723,
+            "eden": 18708489,
+            "base": "9749a085bb4de7f164f1410face7375f71306abf",
+            "baseMain": 27024319,
+            "baseWeb": 38883847,
+            "baseEden": 17314067,
+            "absoluteMainLimit": 26950993.650000002,
+            "absoluteMainPassed": false
+          },
+          "guards": {
+            "proofContractCurrent": true,
+            "frontendContinuation": "failed",
+            "frontendPagePredicates": "failed",
+            "acceptedCommandsTimeout": "initial 5000ms timeout; automatic retry passed in 3.248s"
+          },
+          "noTestFilesInBrief": true
+        },
+        {
+          "job": "40af1caf-1ff5-4bff-aae7-494ca0127913",
+          "qa": "20261020t151529-fb3e26",
+          "result": "44 pass, 4 fail; three header fixture failures fixed and pass in final QA; unmodified native-contract fingerprint assertion remains",
+          "contractFingerprint": {
+            "path": "services/main/tests/fixtures/native-contract-invariants.json",
+            "test": "services/main/tests/native-contract-pilot.test.ts:237",
+            "assertionReached": true,
+            "operation": "GET /v1/works/{id} response 200",
+            "before": "a21109f9c18409337ab64a6341a85a33269750dd0a53664bdfbd8c9b4952820d",
+            "after": "2180682be0d13f54fe7ca9121763f6025add6c4b2159dea12d2f671ea195895c",
+            "disposition": "existing contract baseline owner must reconcile the explicitly authorized truthful WorkHeader source union; assertion and fixture unchanged"
+          }
+        },
+        {
+          "job": "acf10f09-66f4-4f87-a872-68108bc2fb22",
+          "qa": "20261020t150902-78ea17",
+          "result": "38 pass / 216 assertions before added final reader controls; model 8 pass / 1518 assertions and web types 4065 files pass",
+          "modelCommand": "task model:test -- tests/generated.test.ts",
+          "webCommand": "task web:typecheck",
+          "laterChanges": "common required source keys preserve existing native schema consumer; header fixture and new basis regression added; final task types cover current source"
+        },
+        {
+          "job": "d6bb863a-c70e-4f3a-aff5-140481578163",
+          "qa": "20261020t145821-d509ca",
+          "result": "initial owner assertion failures and unstable source retained; model passed",
+          "sideEffect": "model-tier QA unexpectedly stamped two Fuseki image pins; exact generated mutation backed up, then only those pin bytes restored; no further model-tier QA",
+          "restoration": ".temp/goal/manual-native-publication/qa-image-stamp/restoration.json"
+        }
+      ],
+      "commonReaderFailure": {
+        "job": "65340e12-e37b-466a-ace8-0816cf0d2b4a",
+        "qa": "20261020t151822-ce1473",
+        "result": "41 pass / 2 fail / 287 assertions; common-reader Rights admission/final assertions reached and failed before the repair",
+        "correction": "486e7f79-a432-44cb-a2ca-3ab576726f94; QA 20261020t161308-150502: unchanged 43 tests / 301 assertions pass including those two bodies"
+      },
+      "priorReportValues": "All pre-existing report values, findings, original SQL2201B, CONV-REFUSAL-1, Structure recursion/fixture/type failures and subsequent correction receipts remain byte-preserved as the prefix of this append. A19/library reports remain unchanged.",
+      "normalIntegrationResiduals": [
+        {
+          "condition": "Unmodified native-contract WorkHeader response fingerprint mismatch",
+          "owner": "Existing native-contract/generation owner G-2799 through manager custody",
+          "qa": "20261020t151529-fb3e26",
+          "job": "40af1caf-1ff5-4bff-aae7-494ca0127913",
+          "test": "services/main/tests/native-contract-pilot.test.ts:237",
+          "assertionReached": true,
+          "fixture": "services/main/tests/fixtures/native-contract-invariants.json",
+          "before": "a21109f9c18409337ab64a6341a85a33269750dd0a53664bdfbd8c9b4952820d",
+          "after": "2180682be0d13f54fe7ca9121763f6025add6c4b2159dea12d2f671ea195895c",
+          "disposition": "No assertion/baseline edits and no rerun without the existing owner disposition."
+        },
+        {
+          "condition": "Absolute inference limit",
+          "headMain": 27009315,
+          "baseMain": 26991733,
+          "limit": 26950993.650000002,
+          "disposition": "Delta passed; normal composed landing retains the absolute gate. No waiver or limit change."
+        },
+        {
+          "condition": "Existing frontend consumer continuation/page-predicate and projection syntax guard failures",
+          "owner": "Existing G-2758 consumer lane and relevant frontend custodian via manager",
+          "job": "df47e7e7-b7a1-4a91-b583-d3f73555dd56",
+          "disposition": "Historical failures retained in the preserved partial delivery; no peer fixes, inventory changes or guard skips authored. Current composed gate remains due."
+        },
+        {
+          "condition": "Installed public API, original A01/all113/C27/C30 and genuine corpus/importer acceptance",
+          "disposition": "Unproved; no runtime/OAuth/browser/corpus/import/prepare/restore/reset/lease or original outcome proof run."
+        }
+      ]
+    },
+    "preservedReportFiles": [
+      {
+        "path": "docs/goals/audit-remediation-20261019/proofs/catalogue-A19-nutrition-absence-review.json",
+        "gitBlob": "f314de0649d2b20ff09a550c7a880b44950f6929",
+        "sha256": "62b8d0a00a19e82cb5bdaf2baae36ad5962d454a268316d1725940dc28e9bcc3"
+      },
+      {
+        "path": "docs/goals/audit-remediation-20261019/proofs/catalogue-conversion-library-review.json",
+        "gitBlob": "a5b1e8d3aad1b99e09456656bd6a8780e42376c9",
+        "sha256": "02c5d961af18f0fa43befcd49657bfb7c7a84537d5d72a0d891adffd52919826"
+      }
+    ],
+    "unexecutedLimits": [
+      "No product edits, install, services, runtime/browser/account/corpus/capture/import/prepare/restore/reset/lease/shared-data work or landing. No main or other-worktree edits. No worker rebase, merge, advancing-tip review or accepted-review repeat.",
+      "The 43-test owner proof runs actual route/command/read owners with controlled graph, Rights and authority transports. It establishes no installed API/native admission, real PostgreSQL Rights transition, producer/importer adoption, public positive journey or class closure. Reused proof records 0 acceptance passes, 3 partial and 289 uncovered.",
+      "Rights is verified before graph commit and before a new successful result/final reader response. Graph CAS/receipt/outbox atomicity belongs to the existing command owner. No atomic cross-owner Rights/Access transaction or new current-head guarantee is inferred; movement after a verification remains outside that guarantee.",
+      "Exact committed replay can succeed after revocation without reopening Rights or Source intake. Current public delivery is independently admitted and fenced; replay is not proof of current delivery authorization.",
+      "No new product test was necessary for a concrete remaining concern. Only report integrity, docs:check and affected report-only worker checks are required here; no whole-tier rerun, generation or native golden repair was performed.",
+      "Main absolute inference remains red: 27009315 versus fixed 26950993.65; base 26991733 also exceeds. Task-relative delta success does not clear the absolute composed gate. Native-contract response fingerprint and G-2758 frontend continuation/page-predicate/projection guards remain integration gates without assertion, inventory or limit changes.",
+      "A01/all113/C27/C30, actual Source/native product acceptance and genuine retained/public corpus/importer proof stay open. Accepted strict Map-based namespace refusal and all authored histories/reports must survive composition; the parent unsafe library and accepted library are not reviewed again."
+    ],
+    "reportValidation": {
+      "status": "passed",
+      "commands": [
+        "task --taskfile .temp/review/manual-citation-publication/Taskfile.yml report-integrity",
+        "task docs:check",
+        "task goal -- check"
+      ],
+      "scope": "Only append preservation, exact artifact/blob identity, generated projection correspondence, documentation and affected report-only gates.",
+      "recordedSequence": "28f0a5e5-f812-445a-b2b2-e9e6f2ece236",
+      "results": [
+        {
+          "step": 1,
+          "command": "task --taskfile .temp/review/manual-citation-publication/Taskfile.yml report-integrity",
+          "exitCode": 0,
+          "result": "passed",
+          "log": {
+            "path": ".temp/goal/jobs/28f0a5e5-f812-445a-b2b2-e9e6f2ece236.1.log",
+            "sha256": "32a023987c9edc6418db53bd89380be8cd75d15eaa9f24eef0bf6974d950f51d"
+          }
+        },
+        {
+          "step": 2,
+          "command": "task docs:check",
+          "exitCode": 0,
+          "result": "passed",
+          "log": {
+            "path": ".temp/goal/jobs/28f0a5e5-f812-445a-b2b2-e9e6f2ece236.2.log",
+            "sha256": "5ed4b760a53d0ad82d137178c0eaa9efe823a42c84e21040683378e8eb92658f"
+          }
+        },
+        {
+          "step": 3,
+          "command": "task goal -- check",
+          "exitCode": 0,
+          "result": "passed",
+          "log": {
+            "path": ".temp/goal/jobs/28f0a5e5-f812-445a-b2b2-e9e6f2ece236.3.log",
+            "sha256": "77c12b1aa90e1c1250fb4688e266d41cfa2ea3dc2ea9475064cea61290129602"
+          }
+        }
+      ],
+      "docs": {
+        "markdownFiles": 259,
+        "checkerTests": 13
+      },
+      "affectedReportGate": "AST and 1/45 selected repository guards passed. No TypeScript workspace, source lint input or named product test changed. The inherited report claim mentions the accepted library review, whose bytes remain unchanged. This is not product/native/integration qualification.",
+      "finalization": "Receipt metadata appended after the passing required sequence. A final Task report-integrity and docs:check sequence is run before commit and identified in the worker handoff; no implementation rerun is needed for receipt-only edits."
+    },
+    "next": "Manager may compose this exact accepted 17-path slice with preserved accepted history and strict library refusal under normal unchanged integration gates. Obtain the existing native-contract/fingerprint, absolute inference and frontend-owner dispositions before composed landing; no original class closes."
   }
 }
