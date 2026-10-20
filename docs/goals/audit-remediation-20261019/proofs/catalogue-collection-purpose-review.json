@@ -789,5 +789,682 @@
     "Route the exact nullable patch to existing G-2758 and complete purpose-aware grouping with the existing UI owner.",
     "Use existing public-command fixture/proof owners for the untouched six-persona C29 API case and browser assertion. Preserve original corpus epochs, identities and all assertions.",
     "Keep the four evidenced base failures and earlier setup failures separate from new public outcome failures; do not make unrelated full-wave/runtime checks prerequisites for this source report."
-  ]
+  ],
+  "publicRecipeMeasureAuthoringFirstSourceReview": {
+    "profile": "bounded-public-native-recipe-measure-first-source-review-v1",
+    "reviewedAt": "2026-10-20T13:07:51.795096+00:00",
+    "reviewer": {
+      "worker": "G-2849",
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "independentFirstSourceReview": true,
+      "nestedReviewer": false
+    },
+    "decision": {
+      "sourceVerdict": "changes-requested",
+      "reason": "One newly exposed input/projection mismatch is reproduced at the route outcome assertion: a schema-valid doi: citation returns an undispatchable 202 reconciling response after admission.",
+      "scope": "Only a5ace9dae13cdc667e5e27be408f215241a63bbb..ebc8848b8cfd128aa7acc6165cae9b058b931508, exactly four files. This first source review adds no original C27/C30, nutrition, A17, native/runtime, browser, landing or class acceptance.",
+      "priorReviews": "All existing report values and accepted f45b/1be686/Source/query/Collection/native/credit/citation/library reviews are preserved and were not rerun or rereviewed."
+    },
+    "pins": {
+      "candidate": "ebc8848b8cfd128aa7acc6165cae9b058b931508",
+      "exactParent": "a5ace9dae13cdc667e5e27be408f215241a63bbb",
+      "workerHeadAtReview": "85109555588bcc2904105de06182bac128e993f2",
+      "priorReportSha256": "3d3d800002a93cc7d2e7abea17464565c0164181f7a85d8252d8db07e9e9b329",
+      "changedPaths": {
+        "generated/openapi/main/public.json": {
+          "base": {
+            "gitBlob": "292255e7dcdd586988b19fec69c596e0be7354de",
+            "sha256": "d58ba906b8019d0d04429ad86df4ccdd7ce30538c879d9e27bae0e7abfb16b2f"
+          },
+          "candidate": {
+            "gitBlob": "4bf883008968ad9bdc80b65eefca9b5c1927ef28",
+            "sha256": "63b34a28004ab07e4e1472f378b3229170ae19e2598bb7fe07458ec091ac36f3"
+          }
+        },
+        "services/main/src/modules/recipe/work-page.ts": {
+          "base": {
+            "gitBlob": "ab5fd1044a4a45b2fdc962c17a8bd4533048af14",
+            "sha256": "4b04f4525bf74a4483ac214660a0327240662e44221a6b15ad5f6fe20c06ee10"
+          },
+          "candidate": {
+            "gitBlob": "4557bb82ba6a0eb7afafd75307dd9ba0b5400bf9",
+            "sha256": "dbf020f93923928b2cb0070ca685c79a593474cb00a2cba740bbd703f3c666a6"
+          }
+        },
+        "services/main/src/routes/recipes.ts": {
+          "base": {
+            "gitBlob": "b5dadc6b09dcc5e1b0362703d1d65f0b716d31e2",
+            "sha256": "3bb77fd67aa855e5ba5642870ae3b31b0c6aa37f384822b608d13e807d63d055"
+          },
+          "candidate": {
+            "gitBlob": "3f108d3d7a33559c44df4e18c31b9c26ad982671",
+            "sha256": "a28a100f5161a6975b0d4877b0e1082e83d1e39d54dab556b602b671b5af01c8"
+          }
+        },
+        "services/main/tests/recipe-measure-authoring.test.ts": {
+          "base": null,
+          "candidate": {
+            "gitBlob": "f8af3c3477d43d725cbcedc5e0666f5859f6f47f",
+            "sha256": "217cc1b61dd480dda0cf0fe1d55e06c9d23c2f2dde1f43c25a9975dc26fb82a0"
+          }
+        }
+      },
+      "inspectedUnchangedDependencyPins": {
+        "services/main/src/modules/structure/format.ts": {
+          "gitBlob": "dc711a071113453d58eead2f100a8e4eca657e8f",
+          "sha256": "a2877cebe0d50541b8c3c1afc3869f9b6c34f5e5cf8907838b1d768003558344",
+          "unchangedFromBase": true
+        },
+        "services/main/src/modules/structure/change-admitted.ts": {
+          "gitBlob": "d22d4c77d670074acc3ba3d1a54e927803e2ac8b",
+          "sha256": "80f9f47287cfac7dd3f14255e72c505f7572c0f28307ce194b43293e49f48c1c",
+          "unchangedFromBase": true
+        },
+        "services/main/src/modules/structure/change.ts": {
+          "gitBlob": "e5528b9e7f6c48b1992f62a863ef41d0522c7b12",
+          "sha256": "f8483561e9b96759df2f309eb64224463569b6562bf73c3f2194fe1969edcc01",
+          "unchangedFromBase": true
+        },
+        "services/main/src/modules/structure/read.ts": {
+          "gitBlob": "67093e29eb9bb4196a48f4fe2bd4ec2f70b87814",
+          "sha256": "2a533d4da3e1b0e453bd36d2ab2f22e06ef06a78dc1249efa4befb987f5c9413",
+          "unchangedFromBase": true
+        },
+        "services/main/src/modules/recipe/fact-projection.ts": {
+          "gitBlob": "13785b5c1b550813238a54af3c913176089dc25a",
+          "sha256": "fd42fc5ff5ef54afd3c14fd22f71445f9660c4e99f58ca389ad0cab1ca81e217",
+          "unchangedFromBase": true
+        },
+        "services/main/src/modules/recipe/structure-profile.ts": {
+          "gitBlob": "93136604862a4ee397493883b8c29ee174c0f331",
+          "sha256": "df2ae44936328c2852fae311efd8841808b9b7c41758ac3dfd96d2162963eb70",
+          "unchangedFromBase": true
+        },
+        "services/main/src/modules/recipe/quantity.ts": {
+          "gitBlob": "507c717a193f9d85e3403412b26283661c5533cd",
+          "sha256": "73f6c73b1d3e0f103893a21a1df17e3ed841734e40b0c9a8ee34cb18769934d6",
+          "unchangedFromBase": true
+        },
+        "services/main/src/modules/recipe/operations.ts": {
+          "gitBlob": "f12f917c13b18a65218f59662eec55fb9c2aa2bc",
+          "sha256": "655c5f99e88f4ec2a7b147b4085aec30d52dbd7a3eac778d0c35c6b0cd015045",
+          "unchangedFromBase": true
+        },
+        "services/main/src/modules/work/read-session.ts": {
+          "gitBlob": "85381184a0704f74645f97e0b0327a2b13d0d27d",
+          "sha256": "1e057f09ae28386be2ee2a737826a5060bf67aabe3dd4ce8abe105183659b4db",
+          "unchangedFromBase": true
+        },
+        "services/main/src/modules/work/read-header.ts": {
+          "gitBlob": "4b27e5eb7644b880212fb0be54f6046ce8d64849",
+          "sha256": "8f90c0e94c94356c3371625d25a181e96a9252d620c5225fd1707c5e6f0a03f4",
+          "unchangedFromBase": true
+        },
+        "services/main/src/modules/access/admission.ts": {
+          "gitBlob": "aef348515d8573ec066c9c765af01139151d719c",
+          "sha256": "38249c3dc3e91bb26c1ec36c06aa2bbeadfae9ad64450f78f4b5615636068a4b",
+          "unchangedFromBase": true
+        },
+        "services/main/src/infrastructure/invalid-receipt.ts": {
+          "gitBlob": "71c5bb75e22c3a02612a4479a763126382cc6dc4",
+          "sha256": "839bd7e6a3802de1a000e4f93dac4bdf3284f40219049716ce66ff43f2ab3723",
+          "unchangedFromBase": true
+        },
+        "services/main/tests/support/disclosure-ancestry.ts": {
+          "gitBlob": "4d0987d318a418016867dec57a1691e39183048b",
+          "sha256": "e7d174f495a27c6885ae92a6809c7450e79cc16641aed2f134eb384ea89bf791",
+          "unchangedFromBase": true
+        }
+      }
+    },
+    "inputs": [
+      {
+        "path": ".temp/recipe-measure-first-review/recipe-measure-authoring-handoff.md",
+        "sha256": "6d052164a17b093e9f31a4298bf4e580957f8c7e6f849393bd08bd42944d3446"
+      },
+      {
+        "path": ".temp/recipe-measure-first-review/recipe-measure-authoring-receipt.json",
+        "sha256": "26eecd1a584791838fd6fbece9a7793bc3e03bd253bfac6dad04bcf770d96c0e"
+      },
+      {
+        "path": ".temp/recipe-measure-first-review/recipe-measures-openapi-receipt.json",
+        "sha256": "b1b7dc08436a750f5827af9a8dd450da59d182fbc5dfe8f4d7d2c9b3b098d9bd"
+      }
+    ],
+    "inputProvenance": "Read the exact G-2799 .temp/goal handoff and two receipts from its read-only worktree, then copied them under this worktree for immutable evidence. Git blobs and protected-file hashes were independently compared, not inferred from the handoff.",
+    "actualSourceReview": [
+      {
+        "paths": [
+          "services/main/src/routes/recipes.ts:65",
+          "services/main/src/routes/recipes.ts:88",
+          "services/main/src/modules/structure/format.ts:266"
+        ],
+        "result": "The new array reuses RecipeMeasure, fixes kind=nutrient and requires nutrient/unit. It retains rational and valueLexical, unitText, per-row basis, coverage, provenance and optional evidence, including repeated rows in input order. It does not aggregate native rows or fabricate complete/computed facts. The inherited broad reference pattern exposes the finding below."
+      },
+      {
+        "paths": [
+          "services/main/src/routes/recipes.ts:480",
+          "services/main/src/routes/recipes.ts:498",
+          "services/main/src/routes/recipes.ts:540"
+        ],
+        "result": "Both defined forms, including nutrients=[] with nutrition.inputs=[], refuse 400 before owner reads/admission. Omitted nutrients preserves stored nutrient rows; [] clears them. Calculated inputs still aggregate through calculateNutrition and replace nutrients with computed coverage. Existing required yield/optional servings behavior and timings are retained, and timing edits carry native nutrients through. Final bound includes all yield/servings/timing/nutrient rows, not merely the native array."
+      },
+      {
+        "paths": [
+          "services/main/src/routes/recipes.ts:419",
+          "services/main/src/modules/structure/change-admitted.ts:51",
+          "services/main/src/modules/structure/change-admitted.ts:170"
+        ],
+        "result": "Exact-head measure hydration follows Account work:edit and assertAuthority(recipe.edit, work:edit:<owner>, actingSubject); the existing admitted command re-verifies Account and registers/claims the same owner authority. Evidence is independent descriptive citation information; it is not used for an Access grant, provider role, converter, Source settlement or publication change."
+      },
+      {
+        "paths": [
+          "services/main/src/modules/structure/change.ts:310",
+          "services/main/src/modules/structure/change.ts:1764",
+          "services/main/src/infrastructure/invalid-receipt.ts:68"
+        ],
+        "result": "The ordered complete measure array and expectedHead enter the existing digest. Original receipts are consulted before a new write; exact retry preserves the original receipt/revision, changed digest conflicts, and stale new intent seals StaleHead. The immutable manifest replacement preserves record/order roots and ancestors. One graph update guards expected head, selected generation, placement count, lineage/restore hold, absent receipt/revision, and emits revision/receipt/outbox atomically. Validation-graph refusal remains with the existing owner. Cancelled/non-dispatchable or expired intent creates no revision in the controlled tests. This is source composition plus owner-test evidence, not a new live concurrency proof."
+      },
+      {
+        "paths": [
+          "services/main/src/modules/structure/read.ts:277",
+          "services/main/src/routes/recipes.ts:246",
+          "services/main/src/routes/recipes.ts:576",
+          "services/main/src/modules/recipe/work-page.ts:255",
+          "services/main/src/modules/work/read-session.ts:576"
+        ],
+        "result": "Both reads use the exact immutable measure manifest. GET measures surrounds the selected revision with live disclosure; Work binds owning Work/main component, selected public Structure revision or live private preview and closes Work/Structure/authority fences. Native measure edits leave occurrence trees and cross-reference targets untouched. The existing selection and final fences remain responsible for private edits, publication pins and current target disclosure; no new evidence resolver or bypass is introduced."
+      },
+      {
+        "paths": [
+          "services/main/src/modules/recipe/work-page.ts:138",
+          "services/main/src/modules/recipe/work-page.ts:218"
+        ],
+        "result": "Identity serving factor returns the original rows, preserving unreduced source fractions and lexical data exactly. Per-serving observations stay unchanged at every serving choice. Only whole-recipe nutrient numeric values scale for a nonidentity factor; occurrence identities/order and stored rows are not rewritten. Source lexical text remains retained. The final clean 9-case owner receipt covers pinned GET measures/Work equality and a changed serving factor."
+      }
+    ],
+    "generatedPublicProjection": {
+      "operation": "POST /v1/recipes/{id}/measures",
+      "onlyRequestBodyChanged": true,
+      "unrelatedBytesIdenticalAfterReplacingOnlyRequestBodyWithParent": true,
+      "exposureUnchanged": true,
+      "exposurePin": {
+        "gitBlob": "76e836dbeb1295d002256c4c4aa40876ac9e5588",
+        "sha256": "fc26f357c6224a468ded07401c84eee7ad317d0b8036d67171230d7f7b049508"
+      },
+      "verification": "Parsed both full OpenAPI documents and replaced only this requestBody: objects matched. Replaced the exact indented requestBody bytes as well: the entire candidate artifact then matched parent bytes. Existing calculation input stays present; nutrients is optional, bounded at 64, with required kind/nutrient/value/unit/basis/coverage/provenance and inherited reference patterns. The doi: example matches the published pattern.",
+      "generationReceipt": "Reused owner selective/full generation equality and exact clean-head selective check; no fresh unrelated generation was run."
+    },
+    "findings": [
+      {
+        "id": "native-recipe-measure-citation-iri-pending",
+        "priority": "P2",
+        "classification": "reproduced controlled route outcome assertion; new exposure of an existing projector/format mismatch",
+        "title": "A schema-valid native citation IRI strands the measure command before dispatch",
+        "introducedPaths": [
+          "services/main/src/routes/recipes.ts:65",
+          "services/main/src/routes/recipes.ts:88",
+          "services/main/src/routes/recipes.ts:518",
+          "generated/openapi/main/public.json#/paths/~1v1~1recipes~1{id}~1measures/post/requestBody"
+        ],
+        "unchangedComposition": [
+          "services/main/src/modules/structure/format.ts:106",
+          "services/main/src/modules/recipe/fact-projection.ts:19",
+          "services/main/src/modules/recipe/fact-projection.ts:194",
+          "services/main/src/modules/structure/change-admitted.ts:83"
+        ],
+        "trigger": "Authorized POST measures with the existing required yield/servings and one otherwise-valid source-stated/unknown per-serving native row whose optional evidence is doi:10.1000/182.",
+        "expected": "The published RecipeMeasure reference grammar accepts this absolute IRI. Author it faithfully through the admitted command; if a documented owner constraint forbids it, return a deterministic refusal before admission instead of reporting an operation that cannot dispatch.",
+        "actual": "202 status=reconciling, phase=work-edit, one admission, zero dispatches, receipts or child revisions. The route outcome assertion expected 200 and received 202. Parent rejects /nutrients at schema validation with 422 and zero admissions.",
+        "cause": "Native rows inherit reference pattern ^[a-z][a-z0-9+.-]*:\\S+$ from RecipeMeasure. projectRecipeMeasures passes evidence to its narrower HTTP(S)/urn-only iri() helper, which throws InvalidStructureObject while building revision triples after Access admission. admitted() does not classify that exception as a terminal input refusal and wraps it as PendingAdmittedWork. This request cannot progress to graph dispatch with these unchanged bytes.",
+        "classScope": "The same narrower iri() is used for native nutrient and unit references; these two new-field variants are source-inferred, not separately reproduced. Yield/timing/calculation paths already had related reference exposure before this delta and are not counted as newly introduced here.",
+        "requestedFix": "Have the existing RecipeMeasure/Recipe fact owners align accepted references and projection safely; preserve optional independent citation meaning and reject any genuinely unsupported input before admission. Add a focused DOI/native-reference case without changing the original outcome assertions or manufacturing Source facts.",
+        "acceptanceBoundary": "This establishes a local controlled route contract failure. It does not establish failure or completion of any original retained six-persona public-stack or browser outcome.",
+        "counterexample": {
+          "test": {
+            "path": ".temp/recipe-measure-first-review/candidate/services/main/tests/public-recipe-measure-uri-review.test.ts",
+            "sha256": "a66d2c18703fddec85407c84e031dff918b6aefd615191d0ba0b9a1e0580244b"
+          },
+          "case": "schema-valid native citation IRI completes authoring instead of stranding an admission",
+          "fixture": "Exact candidate services/main/tests/recipe-measure-authoring.test.ts bytes through line 206, followed by the isolated case below. Original nine cases and assertions were not edited or rerun.",
+          "caseSource": "test('schema-valid native citation IRI completes authoring instead of stranding an admission', async () => {\n  const f = await fixture();\n  const row = { ...nutrients[0]!, evidence: 'doi:10.1000/182' };\n  const response = await f.post(f.body({ nutrients: [row] }));\n  const payload = await response.text();\n  console.log(JSON.stringify({ status: response.status, payload, writes: f.state.writes,\n    admissions: f.state.admissions, dispatches: f.state.dispatches,\n    receipts: f.receipts.size, versions: f.versions.size }));\n  expect(response.status).toBe(200);\n  expect((await f.measures()).filter(item => item.kind === 'nutrient')).toEqual([row]);\n});\n",
+          "assertion": "expect(response.status).toBe(200)",
+          "candidate": {
+            "job": "f3709dc3-cb00-4950-bc37-7d0814ae5eb4",
+            "exitCode": 1,
+            "outcomeAssertionReached": true,
+            "assertionLine": 216,
+            "actual": {
+              "status": 202,
+              "operationStatus": "reconciling",
+              "phase": "work-edit",
+              "writes": 0,
+              "admissions": 1,
+              "dispatches": 0,
+              "receipts": 0,
+              "versions": 1
+            },
+            "result": "0 pass / 1 fail / 4 expect calls; the schema-valid citation was admitted, then projection failed before dispatch.",
+            "log": {
+              "path": ".temp/goal/jobs/f3709dc3-cb00-4950-bc37-7d0814ae5eb4.log",
+              "sha256": "6afc61c8801ad3cf766a33888bc5067381a12c5baa6c4fba84bf7d09364853a1"
+            }
+          },
+          "base": {
+            "job": "4d8b0ba2-5811-4322-a325-c36cb8cb36c5",
+            "exitCode": 1,
+            "outcomeAssertionReached": true,
+            "actual": {
+              "status": 422,
+              "property": "/nutrients",
+              "writes": 0,
+              "admissions": 0,
+              "dispatches": 0,
+              "receipts": 0,
+              "versions": 1
+            },
+            "result": "The identical new-capability expectation fails on the parent because nutrients is not a parent input. This is a refusal baseline, not evidence that parent supported native row authoring.",
+            "log": {
+              "path": ".temp/goal/jobs/4d8b0ba2-5811-4322-a325-c36cb8cb36c5.log",
+              "sha256": "bdb2ac96d8e749d468ac587b95516a583a43f0ad9327df43d6db77daa7587c60"
+            }
+          },
+          "setupHistory": [
+            {
+              "job": "93b9969d-9841-4a55-a79f-6f7a39b90d30",
+              "assertionReached": false,
+              "failure": "Bun treated the hidden .temp relative path as a filter and found no tests; corrected by supplying the absolute in-worktree path.",
+              "log": {
+                "path": ".temp/goal/jobs/93b9969d-9841-4a55-a79f-6f7a39b90d30.log",
+                "sha256": "919790956bcefcda76d8607f13c0b2b9dde5fa9445419d91e5d5356e4ed4056b"
+              }
+            },
+            {
+              "job": "422bef8a-0392-41d8-a0fb-c5406aa98a89",
+              "assertionReached": false,
+              "failure": "Partial review snapshot omitted services/content/src/connection.ts; import failed before tests.",
+              "log": {
+                "path": ".temp/goal/jobs/422bef8a-0392-41d8-a0fb-c5406aa98a89.log",
+                "sha256": "c78d533ec084c5ca1be5b105907472e4697f6da698a8f81b965fd11eb0818ba7"
+              }
+            },
+            {
+              "job": "78d1cb38-6cf8-4fc0-a14f-38cc47cc3903",
+              "assertionReached": false,
+              "failure": "Partial review snapshot omitted generated/openapi/main/exposure.ts; import failed before tests. Frozen relative dependency closure was then extracted without changing implementation or fixture assertions.",
+              "log": {
+                "path": ".temp/goal/jobs/78d1cb38-6cf8-4fc0-a14f-38cc47cc3903.log",
+                "sha256": "c2ee3766e7b935c71cb0bc1e78d064ad460eaac472aaa730fcb2bf013ff1335a"
+              }
+            }
+          ],
+          "snapshotProvenance": {
+            "candidateTrackedFilesVerifiedAgainstGit": 2639,
+            "base": "Parent recipes.ts and work-page.ts replace their candidate counterparts in an isolated hard-linked snapshot; all other production dependencies are unchanged between parent and candidate. Replaced files were unlinked before writing; candidate source bytes were preserved.",
+            "execution": "Recorded local goalctl test, loose Bun file under .temp, with controlled graph/Access ports. No QA acceptance ID or genuine stack/public HTTP/browser proof is claimed."
+          }
+        }
+      }
+    ],
+    "reusedChecks": {
+      "finalCleanHead": {
+        "run": "20261020t123828-7469f6",
+        "job": "d365c399-4c4f-4ef0-b0c5-c05ce598dc58",
+        "source": {
+          "head": "ebc8848b8cfd128aa7acc6165cae9b058b931508",
+          "fingerprint": "5826f323f86290e23bbf3dee3a47cd3fe18b1de6ed8464da4f235876372ea36d",
+          "clean": true
+        },
+        "sourceStable": true,
+        "certifiesFull": false,
+        "tests": 9,
+        "assertions": 287,
+        "failures": 0,
+        "files": [
+          "services/main/tests/recipe-measure-authoring.test.ts"
+        ],
+        "evidence": [
+          {
+            "path": ".artifacts/qa/20261020t123828-7469f6/acceptance.json",
+            "sha256": "91cb3166c173eaf39f65f2894c5b63b38500079f22b828289fb3830aee7a41f7"
+          },
+          {
+            "path": ".artifacts/qa/20261020t123828-7469f6/owner.xml",
+            "sha256": "3d8864a80f83558fdc0132e69a46a1ad8069ddd0435b128d36325652974dcea4"
+          },
+          {
+            "path": ".artifacts/qa/20261020t123828-7469f6/logs/owner.log",
+            "sha256": "d0237ce66c8a413f4fe9e97e2159e1caa33f885530433a587f00fab63ea99c82"
+          }
+        ]
+      },
+      "affectedRecipe": {
+        "run": "20261020t123524-5ad206",
+        "job": "11a81098-12aa-40c4-88e3-79db815b40d9",
+        "source": {
+          "head": "da0dbbb27f63a81b05f83417c9589eddd1a28a59",
+          "fingerprint": "6fc7f90effa37f00e9858f575ca1f4a81b32478cf8c748cd546bc19763ab85c5",
+          "clean": false
+        },
+        "sourceStable": true,
+        "certifiesFull": false,
+        "tests": 38,
+        "assertions": 2218,
+        "failures": 0,
+        "files": [
+          "services/main/tests/recipe-facts.test.ts",
+          "services/main/tests/recipe-update.test.ts",
+          "services/main/tests/recipe-work-page.test.ts",
+          "services/main/tests/recipe-measure-authoring.test.ts"
+        ],
+        "evidence": [
+          {
+            "path": ".artifacts/qa/20261020t123524-5ad206/acceptance.json",
+            "sha256": "accc96665407f08478f8065bd0f97dd96a1243fedda242dc9b209cfd1e3cc768"
+          },
+          {
+            "path": ".artifacts/qa/20261020t123524-5ad206/owner.xml",
+            "sha256": "28408828fb1640589ade12c6f132510fb5265a8a7416abfb1744a1271c8dffd1"
+          },
+          {
+            "path": ".artifacts/qa/20261020t123524-5ad206/logs/owner.log",
+            "sha256": "346384bcdbf6b506301795cb388b244d81fd297973e1191e63da0a2c3bc9b19b"
+          }
+        ]
+      },
+      "reuseLimit": "The final 9 tests/287 assertions identify the exact clean candidate and stable fingerprint 5826f323f86290e23bbf3dee3a47cd3fe18b1de6ed8464da4f235876372ea36d. The broader 38 tests/2218 assertions identify stable dirty da0dbbb27f63a81b05f83417c9589eddd1a28a59 with fingerprint 6fc7f90effa37f00e9858f575ca1f4a81b32478cf8c748cd546bc19763ab85c5. The latter is retained affected evidence, not relabelled a clean candidate full-tree run; no per-file dirty-snapshot manifest was supplied. No accepted suite was rerun.",
+      "static": {
+        "mainTypecheck": "PASS, 2845 files, job 11a81098-12aa-40c4-88e3-79db815b40d9",
+        "finalJob": "d365c399-4c4f-4ef0-b0c5-c05ce598dc58",
+        "affectedTypes": "PASS, seven workspaces",
+        "lint": "PASS",
+        "ast": "PASS",
+        "selectiveGeneration": "PASS; owner full generation matched selected result",
+        "evidence": [
+          {
+            "path": ".temp/goal/check/run-768vWl/output.log",
+            "sha256": "6f91550a0415dd1b0c291636d89efb9fc4626e7008102ae3a60d0b0e5d619c0f"
+          },
+          {
+            "path": ".temp/goal/jobs/d365c399-4c4f-4ef0-b0c5-c05ce598dc58.2.log",
+            "sha256": "ccf630f99320da5193cd0b3a23b59643e2472e45e1975b4627008b6301122ad1"
+          }
+        ]
+      }
+    },
+    "retainedRawFailures": [
+      {
+        "run": "20261020t122913-fdd374",
+        "assertionReached": true,
+        "reachability": "GET measures positive status assertion: expected 200, got 503 due to omitted controlled disclosure-head query. Later Work parity assertion was not reached. This was fixture setup, not the final product defect.",
+        "evidence": {
+          "path": ".artifacts/qa/20261020t122913-fdd374/owner.xml",
+          "sha256": "62246417c75d093e5fe56160440a64a88302586bfbd95bfdf9d27b989dc0cd41"
+        }
+      },
+      {
+        "run": "20261020t123002-0166fb",
+        "assertionReached": true,
+        "reachability": "GET Work measures parity assertion reached: expected original whole-recipe 1352/2, got 676/1. The authored identity-factor change fixes this exact source-fraction preservation failure.",
+        "evidence": {
+          "path": ".artifacts/qa/20261020t123002-0166fb/owner.xml",
+          "sha256": "5403824575d4f3eca6624bd751e0cc9d4705b9ea8570a78314ecf0ef08e71229"
+        }
+      },
+      {
+        "run": "20261020t123126-5db773",
+        "assertionReached": true,
+        "reachability": "Closing disclosure fence assertion reached: fixture expected 404, owner returned 503. The final fixture expectation was corrected to the existing refusal; the original independent public assertions were untouched.",
+        "evidence": {
+          "path": ".artifacts/qa/20261020t123126-5db773/owner.xml",
+          "sha256": "0e34fc3f4d1a78a54db51fc1c167f4014361d1906520317e8771283977133314"
+        }
+      },
+      {
+        "job": "0307ac45-f0a8-4f06-9697-193ff050e097",
+        "reachability": "Owner handoff reports nine cases passed, then Main type setup caught two missing CommandPosition fixture fields. The final clean typed fixture and 9-case receipt supersede that fixture state without erasing the raw failure.",
+        "evidence": {
+          "path": ".temp/goal/jobs/0307ac45-f0a8-4f06-9697-193ff050e097.2.log",
+          "sha256": "73e3c4c4e7601f2ad5caeaad60c32b6a44d93bc06482bba8aa51a0a867186212"
+        }
+      }
+    ],
+    "actualCompositionLandingLimits": {
+      "guards": {
+        "candidateJob": "d365c399-4c4f-4ef0-b0c5-c05ce598dc58",
+        "candidateGuardResult": "32 files / 267 tests; initial 4 failing files include 2 timeouts. Exact automatic retries passed web-accepted-commands (19 cases) and platform-exposure (15 cases). Two original assertion failures remain.",
+        "cases": [
+          {
+            "file": "scripts/static/web-continuations.test.ts:14",
+            "case": "production web projection syntax introduces no new violations",
+            "assertionReachedOnBaseAndCandidate": true,
+            "scope": "Identity/entity/work-level/tracking continuations plus Home continue-strip and Zone site-route; existing G-2758 owns its projections/continuations, Site owns Home/Zone."
+          },
+          {
+            "file": "scripts/static/web-page-filtering.test.ts:17",
+            "case": "production web page predicates have structural evidence or an explicit API gap",
+            "assertionReachedOnBaseAndCandidate": true,
+            "scope": "identityEntries in identity-relations.ts and relationRows in work-levels/relation-rows.ts; existing owner G-2758."
+          }
+        ],
+        "base": {
+          "pin": "a5ace9dae13cdc667e5e27be408f215241a63bbb",
+          "job": "f73f89e2-04ce-4cad-bd22-5d959e169e5c",
+          "run": "20261020t124544-e7026e",
+          "pass": 60,
+          "fail": 2,
+          "assertions": 87,
+          "evidence": {
+            "path": ".temp/goal/recipe-measures-guard-base/.artifacts/qa/20261020t124544-e7026e/owner.xml",
+            "sha256": "f7f200696c60ea24a9fc206a1d7b5e893dc45583789dab0f2c67d2e8c61fe3c0"
+          }
+        },
+        "headEvidence": {
+          "path": ".temp/goal/check/run-768vWl/guards-0.log",
+          "sha256": "63cda778b83629adf9b4d8021dd1463103fd5c8bbf08cb2f34afe25fd0e85fe2"
+        },
+        "disposition": "Actual reached assertions on base and head, not setup failures and not waived. They remain composition landing limits; neither their rerun nor unrelated whole-web repair is a prerequisite to this bounded source finding."
+      },
+      "inference": {
+        "mainHeadInstantiations": 27020040,
+        "mainBaseInstantiations": 27168744,
+        "recordedMainBaseline": 25667613,
+        "maximumAtFivePercent": 26950993.650000002,
+        "absoluteMainBudget": "FAIL on both exact base and candidate",
+        "affectedDeltaComparison": "PASS within base margins; not a waiver or baseline increase",
+        "evidence": {
+          "path": ".temp/goal/check/run-768vWl/inference-0.log",
+          "sha256": "c02b3f18ac7060f9b6179c33cc46b1dd1693f9adc863d5e6dfaf8c9b49b4b551"
+        }
+      },
+      "missingRuntimeSourceDependencies": "None demonstrated in the delivered frozen source. The reviewer snapshot import failures were omissions in the partial review setup; the cited dependencies exist at the pin and were extracted unchanged. No live runtime compatibility claim is made."
+    },
+    "preservedOriginalSpecifications": {
+      "exactFilePinsAndEquality": {
+        "tests/qa/integration/outcomes/recipes/nutrition-and-substitutions.test.ts": {
+          "candidate": {
+            "gitBlob": "852fd5b1ba1a92d1c2bcbd516249cc391005a7b4",
+            "sha256": "f75e92cfa4f0ec88cc787acbf28d01536b73083cb3c50a8a4d33481a88a4e8bc"
+          },
+          "unchangedFromBase": true,
+          "unchangedFromInitial": true
+        },
+        "tests/qa/integration/catalogue-public-recipe.test.ts": {
+          "candidate": {
+            "gitBlob": "021b34e6be0b8aba9410a23a163276657fbbfaa3",
+            "sha256": "f2e36b4d4063e2e47c08b6233927201ce1515c852e901bd5e008ce085b34d10a"
+          },
+          "unchangedFromBase": true,
+          "unchangedFromInitial": true
+        },
+        "tests/qa/fixtures/catalogue-public-domain.ts": {
+          "candidate": {
+            "gitBlob": "005d710cf30cdd5b561a0cd38c9a0c13898fe6c7",
+            "sha256": "ab3bcd6e0a02970e1755a8551d516fb6bd166fbb6a6e0cdae1262ead06ea6da9"
+          },
+          "unchangedFromBase": true,
+          "unchangedFromInitial": true
+        },
+        "tests/qa/support/catalogue-public-domain.ts": {
+          "candidate": {
+            "gitBlob": "38da201bd331b26f10fbc33ade5f5703b97a5eb2",
+            "sha256": "41552dba562f1eb2b181b1ca2e6a926566f6c1910cb539c7ae4ebbcb55223fb1"
+          },
+          "unchangedFromBase": true,
+          "unchangedFromInitial": true
+        },
+        "apps/web/tests/catalogue-detail-contract.e2e.ts": {
+          "candidate": {
+            "gitBlob": "b6045fca00f40afd56dd8ac13148ed929f7d4cd9",
+            "sha256": "b6889bcde1f06083da74aa0507f85c35a91627a80dea75cb9e3f586b8ebfa2c3"
+          },
+          "unchangedFromBase": true,
+          "unchangedFromInitial": true
+        },
+        "tests/qa/integration/outcomes/catalogue/import-fidelity.test.ts": {
+          "candidate": {
+            "gitBlob": "dd3c33169cefd2a3e6ad0eec84e0e0631e7adf3c",
+            "sha256": "b2c08e0e7e48f11f79c4185cb4f43ab6ebdfda1215895184160cc47b8c785de3"
+          },
+          "unchangedFromBase": true,
+          "unchangedFromInitial": true
+        },
+        "tests/qa/integration/outcomes/catalogue/contextual-associations.test.ts": {
+          "candidate": {
+            "gitBlob": "b0872022752ca38ba208738af7cfc3618494da2f",
+            "sha256": "ae80ce136f59af544487eaf2c9c2b6609d85a857b9a09ed4040a565c7ff8ce04"
+          },
+          "unchangedFromBase": true,
+          "unchangedFromInitial": true
+        },
+        "tests/qa/integration/outcomes/catalogue/credits-and-inverse.test.ts": {
+          "candidate": {
+            "gitBlob": "5805f53b27158264ecd6e9e903526231943f60f0",
+            "sha256": "0727e00509157e112d96a2a90bb35e6a2540b37f61cea0c936a59705b400ef6d"
+          },
+          "unchangedFromBase": true,
+          "unchangedFromInitial": true
+        },
+        "tests/qa/integration/outcomes/catalogue/supporting-information.test.ts": {
+          "candidate": {
+            "gitBlob": "04d74fc91c3ebdd1b1a2e0d30be0163c8008f8be",
+            "sha256": "d9070ef332648b933592c46339bcf39053f96ff6134d80ccfdde9880784eac5a"
+          },
+          "unchangedFromBase": true,
+          "unchangedFromInitial": true
+        },
+        "tests/qa/integration/outcomes/catalogue/ordered-domain-read.test.ts": {
+          "candidate": {
+            "gitBlob": "97c72bf19b2491a813b65eae3b25f22f70e539a9",
+            "sha256": "6d7460fe110436244365fdbb0a0248093ead87581a5f02fa0de294a8c280f6d6"
+          },
+          "unchangedFromBase": true,
+          "unchangedFromInitial": true
+        },
+        "model/definitions/native-agent-credit-v1.ts": {
+          "candidate": {
+            "gitBlob": "eb7f6b532a648492ba0cf65fc2b358d0dc2f9f3f",
+            "sha256": "ce525b4d5e81cb3bde1613d9b5b4603a1df1df451b90c868fd491d475c5c40f8"
+          },
+          "unchangedFromBase": true,
+          "unchangedFromInitial": true
+        },
+        "model/definitions/native-agent-credit-v1.ttl": {
+          "candidate": {
+            "gitBlob": "066d2fe73d16d499edd02414044a56cbfbfe4f79",
+            "sha256": "307be7d1ac523958e6b5e9c83210288214ce2bf53a2046202b8c2f7e35d3c0de"
+          },
+          "unchangedFromBase": true,
+          "unchangedFromInitial": true
+        },
+        "model/definitions/work-author-credit-v1.ts": {
+          "candidate": {
+            "gitBlob": "22eb745f329a329c7e2af3d7f079d23bf785bd9f",
+            "sha256": "44a0a0cdf7cb5c1f279234b9c16160acfab59deba9d6ed4ac9bc742949b272f0"
+          },
+          "unchangedFromBase": true,
+          "unchangedFromInitial": true
+        },
+        "model/definitions/work-author-credit-v1.ttl": {
+          "candidate": {
+            "gitBlob": "7b2f0efa6cb709b4a55945c0245bf98c6b042b27",
+            "sha256": "c24cb44e45b1b096f5a26862e4fe6ecd1aa862db2af26c33f1a6cb624bf1e732"
+          },
+          "unchangedFromBase": true,
+          "unchangedFromInitial": true
+        }
+      },
+      "sixPersonas": [
+        "visitor",
+        "stranger",
+        "member",
+        "owner",
+        "moderator",
+        "operator"
+      ],
+      "nutrition": {
+        "file": "tests/qa/integration/outcomes/recipes/nutrition-and-substitutions.test.ts",
+        "pending": "Every selected original Recipe, including stated and absent nutrition; exact row equality on every continuation, whole-recipe/per-serving scaling, all complete/partial/unknown coverage and declared/source-stated/computed provenance with evidence preserved; original repeated ingredient/substitution targets, rights/source/transcriber, visitor 401/unrelated person 403 for edit/publication and each persona own Cook return."
+      },
+      "c27": {
+        "file": "tests/qa/integration/catalogue-public-recipe.test.ts",
+        "pending": "All six existing test.failing cases remain unchanged. Ordered original ingredients/steps and qualifier/substitution identities, exact rational/range scaling, rights, published revision selection after private edits and each persona own return. A test.failing registration is not a passing original outcome."
+      },
+      "browser": {
+        "file": "apps/web/tests/catalogue-detail-contract.e2e.ts",
+        "cases": [
+          "C27 / visitor / the retained public Recipe scales exact ingredients and completes Cook steps",
+          "C30 / visitor / declared nutrition exact substitutions and unknown coverage remain truthful"
+        ],
+        "pending": "Original rendered ingredient/step order, serving selection and Cook completion/return; Nutrition basis/coverage/provenance/source-key and exact values; independent evidence in Sources and licenses, exact author-declared occurrence substitutions and truthful absent Nutrition with no invented healthy/zero-calorie facts."
+      },
+      "execution": "Reviewer read the frozen original specifications and byte-compared every protected path against parent and initial pins. No original public/API/browser proof, NHLBI/USDA source-handoff acceptance, genuine native fixture/publication or runtime acceptance was run or claimed."
+    },
+    "reviewerChecks": {
+      "recorded": [
+        {
+          "job": "834c6875-f2e6-4276-b015-6e0fde4c3eb0",
+          "command": "task docs:check",
+          "exitCode": 0,
+          "result": "PASS: 13 documentation-check self-tests and 249 Markdown files; external URLs/runtime excluded.",
+          "log": ".temp/goal/jobs/834c6875-f2e6-4276-b015-6e0fde4c3eb0.1.log",
+          "logSha256": "33ed35f14508290de93ec31ee638e2f422cc2938408f70907986b39fbed890cf"
+        },
+        {
+          "job": "834c6875-f2e6-4276-b015-6e0fde4c3eb0",
+          "command": "task goal -- check",
+          "exitCode": 0,
+          "result": "PASS: AST and selected repository guard 1/44; types/lint skipped with no relevant source; no test files named in brief.",
+          "log": ".temp/goal/jobs/834c6875-f2e6-4276-b015-6e0fde4c3eb0.2.log",
+          "logSha256": "200dd5f62643666ed9c1900f33577902759a5850868974748164e96a3c0111e1"
+        }
+      ],
+      "focusedRerunSelection": "Only the newly identified citation-IRI counterexample and its exact-parent refusal comparison; no accepted test suite or live runtime was rerun.",
+      "readOnlyAnalysis": [
+        "Four changed blob/SHA-256 pins match the supplied receipt",
+        "All 2639 extracted tracked snapshot files match immutable candidate Git blobs",
+        "Unrelated generated bytes/exposure identical to parent",
+        "Fourteen protected original specification/model paths unchanged from initial/base",
+        "Candidate and base counterexample use unchanged controlled fixture and dependencies"
+      ],
+      "historicalPreservation": "Only this new top-level key is appended. Every prior parsed key/value and all earlier raw failure references are retained.",
+      "gitDiffCheck": "pass",
+      "workerCheckOutput": ".temp/goal/check/run-kfvpoq/output.log",
+      "treeCurrency": "Worker stayed at 85109555588bcc2904105de06182bac128e993f2; check warned of seven missing main harness commits. No manual reset/rebase/history rewrite occurred. Historical report paths were selected from cumulative ancestry, without editing or rereviewing them."
+    },
+    "limitations": [
+      "One first independent review of the frozen public-native RecipeMeasure delta; dependencies were inspected for actual caller composition, without rereviewing accepted batches.",
+      "The DOI failure is reproduced through actual route/admitted-command composition with controlled graph/Access ports. Other IRI slots and indefinitely repeated pending responses are source inference, not extra executed assertions.",
+      "The local probe has no outcome/acceptance ID and uses synthetic data; it neither certifies nor closes original public nutrition/C27/C30 outcomes.",
+      "No implementation, original assertion, provider identity, fixture corpus, publication/citation owner or prior report value changed; no service, OAuth borrower, corpus preparation/restore/import, browser, lifecycle, landing or nested worker was started.",
+      "The original six-persona/native public outcomes and browser evidence remain due through their existing proof owners. A17 remains open. Existing web guard and absolute inference limits remain actual composition landing gates."
+    ],
+    "managerNext": [
+      "Return the single citation-IRI contract failure and exact counterexample to existing G-2799; settle it with the existing format/fact owner without changing original assertions or adding mandatory conversion/evidence authority.",
+      "Keep existing G-2758 and Site ownership of the base-matching web guard debt and the separate absolute inference correction. Do not waive guards or raise inventories/baselines for this slice.",
+      "After the bounded correction, run only affected evidence needed for its review. Keep original public-command fixture/publication, C27/C30 and retained source acceptance with the existing proof owners; do not infer acceptance or land this wave slice from source review."
+    ]
+  }
 }
