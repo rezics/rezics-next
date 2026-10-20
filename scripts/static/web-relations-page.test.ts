@@ -87,3 +87,63 @@ test('page/function/type names and unverified helper output cannot establish pre
   expect(continuationInventory([source(unknown)]).length).toBeGreaterThan(0);
   expect(continuationInventory([source(unknown.replace('groupRelations(page.items)', 'page.items.filter(eligible)'))]).length).toBeGreaterThan(0);
 });
+
+const directProjections = [
+  native,
+  native.replace('return { items: page.items, next: page.next }', 'return (({ items: page.items, next: page.next }))'),
+  'export const project = page => ({ items: page.items, next: page.next });',
+  'export const project = page => { return { items: page.items, next: page.next }; };',
+  'export const project = function(page) { return { items: page.items, next: page.next }; };',
+];
+
+test.each(directProjections)('direct returned projections retain empty pages, repeated incidences and opaque next: %s', text => {
+  const project = new Function(`${text.replace('export ', '')}; return project;`)();
+  const repeated = { relation: 'repeat' };
+  for (const items of [[], [repeated, { relation: 'other' }, repeated]]) {
+    for (const next of ['opaque:+/%?=&雪', '0', '', null]) {
+      const page = { items, next };
+      const answer = project(page);
+      expect(answer.items).toBe(items);
+      expect(answer.next).toBe(next);
+    }
+  }
+  expect(continuationInventory([source(text)])).toEqual([]);
+});
+
+test.each([
+  ['binding mutation', `const projected = { items: page.items, next: page.next };
+    projected.next = null; return projected;`],
+  ['binding alias mutation', `const projected = { items: page.items, next: page.next };
+    const alias = projected; alias.next = null; return projected;`],
+  ['nested alias mutation', `const projected = { items: page.items, next: page.next };
+    const holder = { projected }; holder.projected.next = null; return projected;`],
+  ['binding replacement', `let projected = { items: page.items, next: page.next };
+    projected = { ...projected, next: null }; return projected;`],
+  ['escaped binding mutation', `const projected = { items: page.items, next: page.next };
+    function change(output) { output.next = null; } change(projected); return projected;`],
+  ['enclosing spread override', `return { ...{ items: page.items, next: page.next }, next: null };`],
+  ['Object.assign target override', `return Object.assign({ items: page.items, next: page.next }, { next: null });`],
+  ['Object.assign source override', `return Object.assign({}, { items: page.items, next: page.next }, { next: null });`],
+])('native forwarding refuses output lifetime loss even when the input stays intact: %s', (_label, body) => {
+  const text = `export function project(page) { ${body} }`;
+  const project = new Function(`${text.replace('export ', '')}; return project;`)();
+  const repeated = { relation: 'repeat' };
+  const page = { items: [repeated, repeated], next: 'opaque:+/%?=&雪' };
+  const answer = project(page);
+  expect(answer.items).toBe(page.items);
+  expect(page.items).toEqual([repeated, repeated]);
+  expect(page.next).toBe('opaque:+/%?=&雪');
+  expect(answer.next).toBeNull();
+  expect(continuationInventory([source(text)]).some(row =>
+    row.rule === 'dropped-continuation' && row.expression === 'page.items')).toBe(true);
+});
+
+test.each([
+  'const projected = { items: page.items, next: page.next }; return projected;',
+  'return { ...{ items: page.items, next: page.next } };',
+  'return Object.assign({}, { items: page.items, next: page.next });',
+  'return { nested: { items: page.items, next: page.next } };',
+])('stored and wrapped projections require a separate output-lifetime proof: %s', body => {
+  expect(continuationInventory([source(`export function project(page) { ${body} }`)]).some(row =>
+    row.rule === 'dropped-continuation')).toBe(true);
+});

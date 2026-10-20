@@ -181,8 +181,9 @@ export function nativePagePartition(loop: Node, parents: WeakMap<Node, Node>): {
   return answer;
 }
 
-/** The new native `next` form is admitted only without writes, escapes or shadowed
- * envelope bindings in this function. A matching property name is not a proof. */
+/** The native `next` form requires a directly returned literal and no writes,
+ * escapes or shadowed input bindings. A stored or wrapped projection needs an
+ * output-lifetime proof; input stability alone cannot rule out later overrides. */
 function stableNativeEnvelope(node: Node, parents: WeakMap<Node, Node>): boolean {
   if (node.type !== 'MemberExpression' || node.object.type !== 'Identifier') return false;
   const envelope = node.object.name;
@@ -191,6 +192,13 @@ function stableNativeEnvelope(node: Node, parents: WeakMap<Node, Node>): boolean
   if (!scope) return false;
   const property = parents.get(node), container = property && parents.get(property);
   if (container?.type !== 'ObjectExpression') return false;
+  let projected: Node = container, output = parents.get(projected);
+  while (output?.type === 'ParenthesizedExpression') {
+    projected = output;
+    output = parents.get(projected);
+  }
+  if (!(output?.type === 'ReturnStatement' && output.argument === projected
+    || output?.type === 'ArrowFunctionExpression' && output.body === projected)) return false;
   const forwarded = new Set(container.properties.flatMap(property => property.type === 'Property' ? [property.value] : []));
   let bindings = 0, stable = true;
   const rooted = (value: Node): boolean => value.type === 'Identifier' ? value.name === envelope
