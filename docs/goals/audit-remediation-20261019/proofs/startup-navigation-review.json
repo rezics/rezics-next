@@ -8532,5 +8532,721 @@
       "scope": "Report-only required Task check. External URLs/runtime behavior not tested. Latest decision excludes broad/source checks and review repeats."
     },
     "managerNext": "Consume this missing Library recovery proof and explicit setup-write qualification. Preserve original failed run and separate Studio400 ownership. Integrate only the additive report; no class closure or further runtime replay is requested."
+  },
+  "originalHomeDefrCAS7Callbacks20261020": {
+    "atUTC": "2026-10-20T11:01:47.372991+00:00",
+    "worker": "G-2847",
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "fallbackUsed": false,
+      "nestedAgents": false
+    },
+    "decision": "2026-10-20T10:52:44Z: card-home-de-390 and card-home-fr-390 only on THIS root-bound CAS7 lease; one recorded execution, no source review or class closure.",
+    "result": "blocked-before-original-callbacks",
+    "verdict": "Both original Home AT callbacks remain unexecuted. Frozen passive prompt baseline failed during owned browser setup; no product assertion, OAuth identity qualification or live reader-status/continuation readback was reached. Preserve the assertion failure as a setup premise failure.",
+    "pins": {
+      "reportBase": "b4af54809ebf6fd051331abf21510660c74f4d80",
+      "currentMainCompared": "0343945fb9a75c2d1f6ac5991135f292a9791009",
+      "frontendSource": "8b8a2c0a97b5662e6283fa7531a8f1c600f37fd0",
+      "backendSource": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "backendOrigin": "http://127.0.0.1:3001",
+      "accountsOrigin": "http://127.0.0.1:3004",
+      "actor": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+      "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+      "rootLeaseVersion": "HomeDEFR-CAS7-2026-10-20T10:52:44Z",
+      "authorizedPreparedCAS": 7,
+      "nextUnread": "https://rezics.com/id/5caa0cc4-f716-876a-8a46-fa048620c48d",
+      "liveCASQualified": false,
+      "rootLease": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/root-lease-CAS7.json",
+        "sha256": "46c81cbb3acb4917eca288f6ebcc058abe4ee8c15626011143cc2668a12fb700",
+        "bytes": 1761
+      },
+      "ready": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/renewed-ready.json",
+        "sha256": "ee99a15d363567cc897bede9c260205828512c225fc5139c1cdb79088fefca42",
+        "bytes": 22851
+      }
+    },
+    "binding": {
+      "selection": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/selection-manifest.json",
+        "sha256": "24cd19522120702b3e498ffa4e3f9857c8c90fffe592843f18336af857871e37",
+        "bytes": 4107
+      },
+      "ownedSource": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/leased-source-selection.json",
+        "sha256": "fc46e685dea6047db8f01b831c8ab3375c59ab81008d0105b7bb44072ab4085e",
+        "bytes": 8101
+      },
+      "sourceStillClean": true,
+      "ownedPort": 35645,
+      "installedRuntime": [
+        {
+          "package": "vinext",
+          "version": "1.0.0-beta.13",
+          "manifestSHA256": "0c2a580d880166b94bbad71bdee9e35b418c8804152ca7c0cc28355a509b7082",
+          "realpath": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/leased-source/node_modules/vinext/package.json"
+        },
+        {
+          "package": "@vitejs/plugin-rsc",
+          "version": "0.5.38",
+          "manifestSHA256": "c8284b323d4c00f69a0dca1da722797a3c71eb2a93ceff939486385787a124ec",
+          "realpath": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/leased-source/node_modules/@vitejs/plugin-rsc/package.json"
+        },
+        {
+          "package": "vite",
+          "version": "8.3.4",
+          "manifestSHA256": "260a0a7a96a35e1b657480014c0f3b592b70061e42099edefc8fe97972f05fd4",
+          "realpath": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/leased-source/node_modules/vite/package.json"
+        },
+        {
+          "package": "react",
+          "version": "19.3.1",
+          "manifestSHA256": "9cc9c3de5441a2eea7f41f52f3f2a15a4fc51f90c0b72741f0d7638643a85e67",
+          "realpath": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/leased-source/node_modules/react/package.json"
+        },
+        {
+          "package": "react-dom",
+          "version": "19.3.1",
+          "manifestSHA256": "89d54f11575c9b0f7819962d9d72a31970dfb4d103f07e8b1d1b37e6d1fc3258",
+          "realpath": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/leased-source/node_modules/react-dom/package.json"
+        },
+        {
+          "package": "@cloudflare/vite-plugin",
+          "version": "1.64.0",
+          "manifestSHA256": "af6ce02f554c2f4eb772e854d63e82b7360cb54631a63d78e8ef90c067b41f94",
+          "realpath": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/leased-source/node_modules/@cloudflare/vite-plugin/package.json"
+        },
+        {
+          "package": "playwright",
+          "version": "1.63.0",
+          "manifestSHA256": "8bc2ddebe8d9b051b9ecb87d62c6c63877e59d08617f32c3215681ca8bb70998",
+          "realpath": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/leased-source/node_modules/playwright/package.json"
+        },
+        {
+          "package": "axe-core",
+          "version": "4.14.0",
+          "manifestSHA256": "486715407f3c8c7d1de882bacc2622acb0adf1ec0f21807fc1251aed64bf9001",
+          "realpath": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/leased-source/node_modules/axe-core/package.json"
+        }
+      ],
+      "actualDependencyTreeHashes": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/CAS7-actual-dependency-hashes.json",
+        "sha256": "5dc621b4d60be274586e50eff03825ed763e439ed84d516b3106835133f11d51",
+        "bytes": 9083
+      },
+      "dependencyPreparation": "Reflink copy from own worktree existing same-lockfile dependencies; workspace symlinks relative to this snapshot; Vite caches removed; no install.",
+      "TaskAutomaticInstall": "Normal goalctl test admission printed Dependencies changed; running task install in this worker worktree. No manual install or dependency-version edit was requested; the already copied frontend dependencies were isolated. Actual frontend and runner hashes are retained separately."
+    },
+    "executablePreservation": {
+      "template": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/aud012-home-only.test.ts.in",
+        "sha256": "22e5b9c90dc1fd0fce2cf412df44a46ab01bf354b72a9b74f6008a9b830868bc",
+        "bytes": 35206
+      },
+      "materialized": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/aud012-home-only.test.ts",
+        "sha256": "22e5b9c90dc1fd0fce2cf412df44a46ab01bf354b72a9b74f6008a9b830868bc",
+        "bytes": 35206
+      },
+      "exactTemplateCopy": true,
+      "originalCallback": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/original-callback-retained.txt",
+        "sha256": "9c56d91f687e9a03a00ce05dc88171ba22d63beab60d7de6b55592d0296aa4e8",
+        "bytes": 3268
+      },
+      "unchangedOriginalCallback": true,
+      "atSession": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/at-session.ts",
+        "sha256": "51e9bbd812f91a879e91e39c101f8d4b77d5f06b27f9f8f2e576e9d9cbaf917d",
+        "bytes": 12457
+      },
+      "passiveModeObserver": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/observe-document-mode.ts",
+        "sha256": "8d53c9c973a20289423f350934ca4c4e86ad8a492bade5d8b2913f0b64c8d604",
+        "bytes": 3468
+      },
+      "preparedArtifactManifestStillMatches": true,
+      "assertionsModified": false,
+      "baselineRewritten": false,
+      "nativeSpeechDispatcherPulseAtSpiAxeFocusAndCallbackAssertionsPreserved": true
+    },
+    "execution": {
+      "recordedJob": "62ade1f1-4c51-44e8-9d52-47d1bf454a21",
+      "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test ./.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/aud012-home-only.test.ts",
+      "normalTaskAdmission": true,
+      "exitStatus": 1,
+      "resultClass": "assertion",
+      "summary": "0 pass / 1 fail / 6 expect calls; 52.83 seconds. Setup error before both original callbacks.",
+      "qaRunId": null,
+      "qaRunIdQualifier": "No separate QA run ID was emitted; exact recorded job, command and raw log retained.",
+      "log": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/CAS7-recorded-job.log",
+        "sha256": "edfbceed5fb7d95f1a8895feee564f63482febcb0eada7efc8da86cd3f051139",
+        "bytes": 1951
+      },
+      "rawResult": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/CAS7-home-defr-run-20261020T105719Z/result.json",
+        "sha256": "2b8db724ed2c69a5ed11566733324ae770cdf3205a498aba27324aef4fb52216",
+        "bytes": 7677
+      },
+      "selectedCallbacks": [
+        {
+          "id": "card-home-de-390",
+          "reached": false,
+          "outcome": "not executed"
+        },
+        {
+          "id": "card-home-fr-390",
+          "reached": false,
+          "outcome": "not executed"
+        }
+      ],
+      "repeatedPassedCells": [],
+      "reruns": 0
+    },
+    "testPremise": {
+      "file": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/at-session.ts",
+      "line": 54,
+      "callerFile": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/aud012-home-only.test.ts",
+      "callerLine": 66,
+      "case": "AUD-012 only remaining original genuine card actual Orca assertions under renewed current-CAS custody",
+      "assertionReached": false,
+      "cause": "Passively observed baseline prompt disappeared; preserve external prompt state and stop",
+      "expectedFrozenPromptPids": [
+        1397419,
+        1439206,
+        2262723
+      ],
+      "actualLaunchBaseline": [],
+      "premiseComparison": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/CAS7-prompt-premise-comparison.json",
+        "sha256": "1d1f59974d2e52ebc256b592c4ee94aa80ed4284b935c4fe3f99f006984e420d",
+        "bytes": 522
+      },
+      "qualification": "All three frozen historical prompt PIDs were absent. The helper correctly refused external prompt actions. No missing browser or product defect is inferred; headed browser launch occurred, then setup stopped.",
+      "freshOwnOAuthReached": false,
+      "eligibleActorVerified": false,
+      "liveInvariantReadbacksReached": false,
+      "borrowAcquired": false,
+      "newConsumerAcceptance": false
+    },
+    "observations": {
+      "backend": {
+        "refreshRevision": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "source": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "observedAt": "2026-10-20T10:57:38.528Z",
+        "provenanceLimit": "Current shared refresh and source directory, not immutable historical runtime identity",
+        "processes": [
+          {
+            "pid": 1372265,
+            "source": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+            "checkoutHead": "75409ac3c379a9f84212e48a8abdc6540c5c44a2"
+          }
+        ],
+        "readiness": {
+          "origin": "http://127.0.0.1:3001",
+          "status": 200
+        }
+      },
+      "frontend": {
+        "command": [
+          "task",
+          "web:dev",
+          "--",
+          "--port",
+          "35645"
+        ],
+        "pid": 4051523,
+        "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2847/.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/leased-source",
+        "sourceClean": true,
+        "warmupStatus": 200
+      },
+      "actualRequestsRetained": [
+        {
+          "method": "GET",
+          "url": "http://127.0.0.1:3001/health/ready",
+          "status": 200
+        },
+        {
+          "method": "GET",
+          "url": "http://127.0.0.1:35645/en",
+          "status": 200
+        }
+      ],
+      "requestQualifier": "Only the anonymous readiness/warmup statuses were reached. No authenticated Home, status or continuation response is claimed.",
+      "screenshotsProduced": [],
+      "screenshotsInspected": [],
+      "speechInspection": {
+        "orcaDebugCreated": false,
+        "originalSpeechAssertionsReached": false,
+        "speechWav": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/CAS7-home-defr-run-20261020T105719Z/speech.wav",
+          "sha256": "ea8812dea1a823c2ee285026e04d3b8d93e16a07718fce26b4fcc0c1e77d3073",
+          "bytes": 128078
+        },
+        "dispatcherLog": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/CAS7-home-defr-run-20261020T105719Z/speech-logs/speech-dispatcher.log",
+          "sha256": "c4a9bea29e43580b95a29f1a7d23e0b8c00a71c1d3b24f534709842962366902",
+          "bytes": 2745031
+        },
+        "description": "Inspected retained dispatcher startup/teardown log. It also contains module configuration/server-audio and teardown broken-pipe messages; no original Orca utterance, dispatcher/Pulse delivery or AT-SPI assertion was reached. The WAV is retained as startup evidence, not accepted speech."
+      }
+    },
+    "shutdown": {
+      "rawBorrowerRelease": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/CAS7-home-defr-run-20261020T105719Z/borrower-release.json",
+        "sha256": "f6a831df87fececd95c0fde1ec3fdbc6f744cb1533b491927a89b6dc2e67f85b",
+        "bytes": 1070
+      },
+      "explicitThisLeaseRelease": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/CAS7-explicit-root-bound-borrow-release.json",
+        "sha256": "bd11f655cbaa59cb11a3f0406e9411b8031d8e4c4187449c8b58916e9193ef98",
+        "bytes": 1947
+      },
+      "ownedCleanup": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/CAS7-home-defr-run-20261020T105719Z/owned-cleanup-verification.json",
+        "sha256": "4f0098cec6ccf3324b08a50e9360b46001777d93a1eed04cd8a5b0beefd75ead",
+        "bytes": 1172
+      },
+      "independentVerification": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/CAS7-independent-shutdown-verification.json",
+        "sha256": "be6e306b5a80e01c53806a812fc0ea3554211c4747215a7ee0859d1ef8058c76",
+        "bytes": 881
+      },
+      "allOwnedProcessesAndJobOwnerExecutorStopped": true,
+      "ownedPortClosed": true,
+      "ownedSinkModuleAndSocketsRemoved": true,
+      "borrowReleased": true,
+      "releaseAtUTC": "2026-10-20T10:58:30.510Z",
+      "borrowerRestoredState": false,
+      "liveAfterReadback": null,
+      "noReaderWrites": true,
+      "protectedTask1677097SameStartTime": true,
+      "hosts77717And78038": "Already absent before this attempt and still absent; no action performed.",
+      "sharedMain3001Accounts3004AndG2823Ports42963_42701": "Still listening after shutdown; untouched.",
+      "cleanupOwner": "SAME G-2831 after Root observes THIS explicit root-bound release; fresh current CAS and two complete genuine invariant readbacks remain mandatory."
+    },
+    "privateBundle": {
+      "directory": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation",
+      "runDirectory": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/CAS7-home-defr-run-20261020T105719Z",
+      "manifest": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/CAS7-private-artifact-manifest.json",
+        "sha256": "923e60afd9afa0f58e28926308d6407c21b52d1d1eaf95a0a91c0b6f1590e8b2",
+        "bytes": 23195
+      },
+      "historicalEvidenceOverwritten": false
+    },
+    "preservation": {
+      "allPreviousBranchFields": 43,
+      "allCurrentMainFields": 43,
+      "allPriorFieldsUnchanged": true,
+      "priorNativeRadioRecovery": "Accepted ae884123c3 result at c969/installed75409 is reused. All prior failed runs, Studio400, fixture-free native-input qualifiers, CAS5 dispositions and accepted source reviews remain unchanged.",
+      "noProductSourceOrTrackedTestEdits": true,
+      "noSourceReviewOrBroaderChecks": true,
+      "noSharedStatusCorpusGrantOrBackendWrites": true
+    },
+    "remainingGenuineAcceptance": [
+      "Original card-home-de-390 and card-home-fr-390 actual native speech/dispatcher/Pulse/AT-SPI, axe and focus callbacks remain pending; neither reached its outcome assertion.",
+      "SAME G-2831 owns CAS7 prior semantic status/dates restoration after this exact release, using fresh current CAS and two complete invariant readbacks. Borrower must not restore.",
+      "Original AUD-012 acceptance remains pending manager assessment; no class closure, production readiness, AUD-006 closure or D3-001 resolution follows. G-2825 retains genuine signed-in browser acceptance.",
+      "Historical Studio sort=recent400, G-2804 unchanged common Web review and five G-2784 dependency findings retain their existing owners and dispositions."
+    ],
+    "reportValidation": {
+      "command": "task docs:check",
+      "recordedJob": "812af604-9c21-468b-be78-a4e4e1007747",
+      "exitCode": 0,
+      "result": "Passed: 13 tests; 259 Markdown files; local links, fragments and design navigation.",
+      "log": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/CAS7-docs-check.log",
+        "sha256": "5114ece21c7ea79a6914fafd78fe07751d0ab79e167931606edfa85f772bb6a1",
+        "bytes": 517
+      },
+      "scope": "Only the report-required Task docs check. Latest decision excludes new source review, broad checks or callback rerun."
+    },
+    "managerNext": "Consume THIS CAS7 release and shutdown promptly and route same-owner restoration to G-2831. Adjudicate the stale frozen prompt-baseline premise before any separately authorized future AT run; do not recreate old prompts or relabel these unexecuted callbacks as product failures. No rerun, source repair or extra review was performed."
+  },
+  "historicalPromptPidPremiseStackFreePreparation20261020": {
+    "atUTC": "2026-10-20T11:38:34.564298+00:00",
+    "worker": "G-2847",
+    "executor": {
+      "engine": "codex-1",
+      "requestedModel": "GPT-6.1 Sol",
+      "requestedEffort": "xhigh",
+      "fallbackOrNestedAgentsUsed": false
+    },
+    "decision": "2026-10-20T11:26:32Z — split obsolete historical prompt-PID launch premise from original Home AT proof",
+    "result": "prepared-offline-controls-passed-no-live-execution",
+    "scope": "Distinct ignored v2 preparation copy correcting historical prompt-PID launch membership only. Record actual current process/prompt identity including empty baseline; retain native permission, speech, focus, axe, cleanup and original callback assertions.",
+    "pins": {
+      "reportBranchBase": "181100d6d613bad298a6df877b39c99dba885091",
+      "mainReportComparedAt": "54221463f1fdcd0e0c45456afc0441158b26a363",
+      "branchReportBeforeSHA256": "d9c1bb4e51672132d56012b2dd271600562410baaffb66b7310c5ea679408e13",
+      "mainReportBeforeSHA256": "b5a48876918bb636185fc2584f72579f663623be4b74d992e5b573697857ddc3",
+      "productSourceReviewedOrChangedThisCut": false,
+      "historicalFrontendOnly": "8b8a2c0a97b5662e6283fa7531a8f1c600f37fd0",
+      "historicalRuntimeOnly": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "newFrontendSnapshotOrRuntimeBinding": null,
+      "newReadyOrRootLease": null
+    },
+    "historicalFailurePreserved": {
+      "proofField": "originalHomeDefrCAS7Callbacks20261020",
+      "failurePath": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/at-session.ts:54",
+      "originalAssertionReached": false,
+      "historicalPromptPids": [
+        1397419,
+        1439206,
+        2262723
+      ],
+      "actualCAS7LaunchBaseline": [],
+      "comparison": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/CAS7-prompt-premise-comparison.json",
+        "sha256": "1d1f59974d2e52ebc256b592c4ee94aa80ed4284b935c4fe3f99f006984e420d",
+        "bytes": 522
+      },
+      "release": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/CAS7-explicit-root-bound-borrow-release.json",
+        "sha256": "bd11f655cbaa59cb11a3f0406e9411b8031d8e4c4187449c8b58916e9193ef98",
+        "bytes": 1947
+      },
+      "independentShutdown": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/CAS7-independent-shutdown-verification.json",
+        "sha256": "be6e306b5a80e01c53806a812fc0ea3554211c4747215a7ee0859d1ef8058c76",
+        "bytes": 881
+      },
+      "disposition": "Attempt63 reached neither callback, OAuth nor borrow. Preserve setup failure as such; no product or missing-browser failure inferred.",
+      "sameOwnerCleanupReusedFromManagerDecision": {
+        "owner": "G-2831",
+        "commits": [
+          "873d2e48e6",
+          "43a5f54487"
+        ],
+        "supportedStatusPUT": 200,
+        "versionChange": "CAS7 to CAS8",
+        "semanticFields": "status, startedOn and finishedOn all restored to prior null",
+        "readbacks": "TWO complete five-API invariant readbacks",
+        "ownedShutdown": true,
+        "independentlyRerunHere": false
+      },
+      "CAS7ReadyAndRootLeaseSpent": true,
+      "spentBindings": [
+        {
+          "name": "CAS5",
+          "readySHA256": "bb940ca2951bd16b6da9fdea913c38de0653e352fb11fdaf79f9ef304e6730e4"
+        },
+        {
+          "name": "CAS7",
+          "readySHA256": "ee99a15d363567cc897bede9c260205828512c225fc5139c1cdb79088fefca42",
+          "rootLeaseSHA256": "46c81cbb3acb4917eca288f6ebcc058abe4ee8c15626011143cc2668a12fb700",
+          "rootLeaseVersion": "HomeDEFR-CAS7-2026-10-20T10:52:44Z",
+          "statusVersion": 7
+        }
+      ]
+    },
+    "versionedPreparation": {
+      "directory": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline",
+      "frozenOriginalDirectory": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation",
+      "deltaAndHashes": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/versioned-delta-and-hashes.json",
+        "sha256": "8a7a10009e96aa48951c2b9ceeff8767a551e50f81077e87c9e79d5d07caeca0",
+        "bytes": 3009
+      },
+      "exactPatch": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/helper-change.patch",
+        "sha256": "3c79512d47f5e24feff46cf159e3e13beadd1bdcdeb5e3825e3dde30afcb9c5e",
+        "bytes": 4857
+      },
+      "changedHelperBytes": [
+        {
+          "path": "at-session.ts",
+          "before": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/at-session.ts",
+            "sha256": "51e9bbd812f91a879e91e39c101f8d4b77d5f06b27f9f8f2e576e9d9cbaf917d",
+            "bytes": 12457
+          },
+          "after": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/at-session.ts",
+            "sha256": "57e00c0662c7140b22ea03c2594108af1eec04d587811563365c295bb4728113",
+            "bytes": 12438
+          }
+        },
+        {
+          "path": "temporary-native-permission.py",
+          "before": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/temporary-native-permission.py",
+            "sha256": "9d50d47480adb8d3d027b1d4a34a28eeac614557bc047ff54526c6bee669da0e",
+            "bytes": 6788
+          },
+          "after": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/temporary-native-permission.py",
+            "sha256": "b9c1331df4be36e87feb7a92301e44bd710477476ae3f0cae2e24ab2aa35f437",
+            "bytes": 7595
+          }
+        },
+        {
+          "path": "verify-owned-cleanup.py",
+          "before": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation/verify-owned-cleanup.py",
+            "sha256": "905b7d8fd37d580ec6cbb3b21220764c017ff99b29e654fbdf9747ffc82112fa",
+            "bytes": 4346
+          },
+          "after": {
+            "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/verify-owned-cleanup.py",
+            "sha256": "541030c8fb94a6045d5d2f1be57728498c178196b62c8f9d6e78437354851e1f",
+            "bytes": 4387
+          }
+        }
+      ],
+      "executableByteIdentical": false,
+      "explanation": [
+        "at-session.ts:53-54 replaces historical PID-membership rejection with an evidence save of the actual newly captured baseline, including []. Historical passive-allow-actions.json remains unchanged.",
+        "temporary-native-permission.py captures boot ID, PID, process start ticks, executable and command line from /proc before/after each prompt-tree snapshot, and adds that identity to the existing baseline fingerprint. Missing/changed identity fails closed.",
+        "verify-owned-cleanup.py compares the same live process identity in its existing passive baseline fingerprint. Owned-process/socket/sink protections and action boundaries are unchanged."
+      ],
+      "immutableTemplate": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/aud012-home-only.test.ts.in",
+        "sha256": "22e5b9c90dc1fd0fce2cf412df44a46ab01bf354b72a9b74f6008a9b830868bc",
+        "bytes": 35206
+      },
+      "originalCallback": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/original-callback-retained.txt",
+        "sha256": "9c56d91f687e9a03a00ce05dc88171ba22d63beab60d7de6b55592d0296aa4e8",
+        "bytes": 3268
+      },
+      "passiveModeObserver": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/observe-document-mode.ts",
+        "sha256": "8d53c9c973a20289423f350934ca4c4e86ad8a492bade5d8b2913f0b64c8d604",
+        "bytes": 3468
+      },
+      "unchangedNativeSpeechQualificationAndCloseMethods": true,
+      "acceptedNativeRadioCorrectionReused": "ae884123c3; c9699dcef53ce0109404228efe15e24118fa63e0 / installed75409; accepted recovery test / 31 assertions. No identity replay."
+    },
+    "offlineChecks": {
+      "admission": "Recorded jobs use main goalctl job code from this worktree; checks use bun scripts/goal/goalctl.ts test. No live stack or AT admission requested.",
+      "failedFirstRun": {
+        "job": "1707af4c-f252-4dc0-b614-c5fac90e5373",
+        "exitCode": 1,
+        "passed": 24,
+        "failed": 1,
+        "expectCalls": 130,
+        "case": "permission helper offline: immediate-checkbox-change",
+        "failureType": "offline boundary-stub type error",
+        "outcomeAssertionReached": true,
+        "liveOrProductFailure": false,
+        "diagnosis": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/offline-first-failure-diagnosis.json",
+          "sha256": "fd472a6974e5b3a7c395c9e82de2fbd1aed788db012f1c9e8a92c2df9097cab1",
+          "bytes": 646
+        },
+        "log": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/offline-controls-first-failure.log",
+          "sha256": "5076cd6d96583bee78775ebd1d5b2fbf28ced0a3ed41ac2dc15bfe44e111c885",
+          "bytes": 1932
+        },
+        "partialEvidence": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/offline-controls-first-partial-evidence.json",
+          "sha256": "198247fee6b1f4c36639efb6b96fb606e7dfdf4d0c3a92e72af7c9d0746de52c",
+          "bytes": 99908
+        },
+        "exactFixtureCorrection": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/offline-fixture-bool-correction.patch",
+          "sha256": "428404f6407ae0734b76d2cfeed222406dec9aa2241a31c8de06b7a1a3bb476b",
+          "bytes": 563
+        },
+        "assertionsOrTestedHelperChangedToPass": false
+      },
+      "passing25": {
+        "job": "762b56d9-cec6-4ed7-9837-51ba76dd17a0",
+        "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test ./.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/prompt-baseline-offline.test.ts",
+        "exitCode": 0,
+        "passed": 25,
+        "failed": 0,
+        "expectCalls": 132,
+        "log": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/offline-controls-passing-25.log",
+          "sha256": "1cec8931ba0eea59b84824fce03ce2af86acaa8a392b108603c9667557884e19",
+          "bytes": 291
+        },
+        "evidence": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/offline-controls-passing-25-evidence.json",
+          "sha256": "b1b09780ca32c91a9307d9066dae26dd487458a8326bc51fc913c8b5278b0f6a",
+          "bytes": 105962
+        },
+        "retainedTestBytes": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/prompt-baseline-offline-passing-25.test.ts.retained",
+          "sha256": "82b4d4522905057d247a6e37fb0a8cd2016c69fd0b129e82ec241876317ab150",
+          "bytes": 11295
+        },
+        "retainedFixtureBytes": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/permission-offline-control-passing-25.py",
+          "sha256": "c57d8ab7384559c6b17602ea68cd8ca84f847902d034a184b1d9d1d36811564b",
+          "bytes": 8307
+        },
+        "retainedBytesNote": "Pre-addition test bytes reconstructed by removing only the later two controls from the final file; fixture bytes reconstructed with the recorded bool-only correction. Tested helper hashes are unchanged across successful jobs."
+      },
+      "passingRealCurrentProcessControls": {
+        "job": "da590eae-c6bf-4dcb-92c4-9703c6ae10c5",
+        "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test ./.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/prompt-baseline-offline.test.ts --test-name-pattern=real-current-process",
+        "exitCode": 0,
+        "passed": 2,
+        "filteredOut": 25,
+        "failed": 0,
+        "expectCalls": 6,
+        "log": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/offline-controls-real-process-2.log",
+          "sha256": "64dadede59b64a4ce30317ac94cf67fa550b569466441bad4a5ae892bbc9b578",
+          "bytes": 303
+        },
+        "evidence": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/offline-controls-real-process-2-evidence.json",
+          "sha256": "d1deb4ed6499a8ad6f74679b786b5ef98c346449c1219b2de1d50d952a7956bf",
+          "bytes": 8165
+        },
+        "finalTestBytes": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/prompt-baseline-offline.test.ts",
+          "sha256": "51e603b150d3834472d757f531f50dd13cffd145c57af8ae6dc5ec91905de4e2",
+          "bytes": 11382
+        },
+        "finalFixtureBytes": {
+          "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/permission-offline-control.py",
+          "sha256": "8ace72fd937a5adbac191af09f391130d36f072caefe87cbea09f7a467270d3d",
+          "bytes": 9293
+        },
+        "qualification": "Read only this offline Python process actual /proc identity; prompt tree is in memory. Disappearance/mutation were simulated against that captured live identity. No actual permission prompt was observed, modified or created."
+      },
+      "allControls": [
+        "historical-absent-and-empty-current",
+        "actual-current-baseline-captured",
+        "permission-empty-current-baseline",
+        "permission-capture-live-process-identity",
+        "permission-baseline-disappeared",
+        "permission-baseline-tree-mutated",
+        "permission-baseline-pid-reused",
+        "permission-ambiguous-fresh-requests",
+        "permission-checked-persistence",
+        "permission-selected-prompt-mutated",
+        "permission-immediate-checkbox-change",
+        "permission-unknown-activation",
+        "permission-process-missing-during-snapshot",
+        "permission-process-mutated-during-snapshot",
+        "permission-sole-fresh-temporary-positive-control",
+        "permission-live-baseline-untouched-positive-control",
+        "session-refusal-current-baseline-changed",
+        "session-refusal-ambiguous-request",
+        "session-refusal-checked-persistence",
+        "session-refusal-owned-focus-lost",
+        "session-refusal-absolute-deadline",
+        "temporary-attribution-positive-control",
+        "owned-cleanup-only",
+        "passive-mode-and-unknown-refusal",
+        "frozen-preservation",
+        "permission-real-current-process-baseline-disappeared",
+        "permission-real-current-process-baseline-mutated"
+      ],
+      "totalPassingControls": 27,
+      "totalPassingExpectCalls": 138,
+      "coverage": [
+        "Absent historical PIDs and empty launch baseline: frozen launch still fails; versioned launch continues and saves [].",
+        "Current process/prompt identity capture, disappearance/mutation refusals, same-PID start-time reuse and change during snapshot.",
+        "Ambiguous requests, selected-prompt mutation, checked persistence, immediate checkbox change and unknown activation refuse action.",
+        "Owned-focus loss and 6100ms absolute deadline refuse action; sole-fresh temporary action and one resend remain bounded in offline positive control.",
+        "Owned-group/browser/module cleanup only; passive document-mode observation and unknown-mode no-toggle refusal.",
+        "Frozen template/callback/all 36 original top-level files and native qualification/speech/close methods preserved."
+      ],
+      "boundaryLimits": "ATSession executes only in a VM with fake OS/browser/filesystem boundaries. Python helper executes with an in-memory pyatspi module; actions are memory counters. Two controls read only their own process /proc identity. These are offline controls, not live native-input/AT or product acceptance."
+    },
+    "preservation": {
+      "priorBranchReportTopLevelFields": 44,
+      "comparedMainReportTopLevelFields": 43,
+      "allPriorBranchAndComparedMainFieldsUnchanged": true,
+      "branchOnlyPriorFieldsRetained": [
+        "originalHomeDefrCAS7Callbacks20261020"
+      ],
+      "originalFileVerification": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/frozen-after-verification.json",
+        "sha256": "8c70c054a84d481fb8ff219274e75bf661d862eb51c058657953eca8726bcd0e",
+        "bytes": 5473
+      },
+      "beforeManifest": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/frozen-before-manifest.json",
+        "sha256": "71628fabd32f5532e11d9ae96ea86e6a073e312f3a1a7bd0d9c6a4b1dda8ea4a",
+        "bytes": 10033
+      },
+      "oldFailuresAndVerdictsRetained": true,
+      "fixtureFreeNativeInputQualifiersRetained": true,
+      "priorSourceReviewsAndAcceptedRecoveryReusedWithoutReplay": true,
+      "noTrackedProductOrTestChanges": true,
+      "postCheckVerification": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/post-check-verification.json",
+        "sha256": "36ec871d3fa1abddc969a50983098fe69bfe604475794c7bb08169e1645dbad7",
+        "bytes": 520
+      }
+    },
+    "futureBindingRequirements": {
+      "artifact": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/binding-requirements.json",
+        "sha256": "ae9d59e8cba041703d837d9a90e1fdb8a0d101623b4444cdca49a5fe770dee07",
+        "bytes": 6524
+      },
+      "executionAuthorizedNow": false,
+      "freshSameOwnerPreparationAndNewRootLeaseRequired": true,
+      "spentCAS7MustNotBeReused": true,
+      "ownFreshNormalOAuthOnlyAfterFutureEvent": true,
+      "actualSourceDependencyCASContinuationAndInvariantVerificationRequired": true,
+      "sourceOrStateOrExecutableCallbackMaterialized": false,
+      "selectedOriginalCallbacks": [
+        "card-home-de-390",
+        "card-home-fr-390"
+      ],
+      "futureMaterializationCommand": "cp -- .temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/aud012-home-only.test.ts.in .temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/aud012-home-only.test.ts",
+      "futureRecordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test ./.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/aud012-home-only.test.ts",
+      "executionHandoff": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/execution-handoff.json",
+        "sha256": "276181955f3de02d40c88d4b16378ba4e8c57ffffdd6f880686a111b0110005c",
+        "bytes": 1952
+      }
+    },
+    "privateBundle": {
+      "directory": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline",
+      "manifest": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/private-artifact-manifest.json",
+        "sha256": "67d35ae04a0955728bdd9992b237597bd5a7617da08b9c5605a8f99d9a0d5f9a",
+        "bytes": 10735
+      },
+      "historicalArtifactsOverwritten": false
+    },
+    "shutdown": {
+      "liveFrontendBrowserATOrPermissionActions": false,
+      "oauthOrBorrowOrReaderWrites": false,
+      "backendLifecycleOrCorpusActions": false,
+      "liveProcessesStartedOrStopped": false,
+      "offlineSubprocessesExited": true,
+      "newBorrowToRelease": false,
+      "protectedTask1677097Hosts77717_78038KEEPAndPeerAttempts": "No live process/network/permission inspection or lifecycle action; untouched by this stack-free cut."
+    },
+    "screenshotsInspectedThisCut": [],
+    "speechInspectedThisCut": [],
+    "remainingAcceptance": [
+      "Original card-home-de-390/card-home-fr-390 native speech/dispatcher/Pulse/AT-SPI, axe and focus callbacks await a later finite manager event with fresh SAME G-2831 preparation and a NEW root lease. No live callback ran here.",
+      "CAS7 is consumed and restored; do not reuse READY ee99a15d... or root lease 46c81cbb... . SAME G-2831 owns future preparation and restoration.",
+      "No original class closure, AUD-012 acceptance, AUD-006 closure, D3-001 resolution or production readiness follows. Historical Studio400, five G-2784 common Web dependency findings and prior dispositions/owners remain."
+    ],
+    "reportValidation": {
+      "command": "task docs:check",
+      "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task docs:check",
+      "job": "dc6f571e-03f3-4bc5-a7b1-b09a06bb3338",
+      "exitCode": 0,
+      "result": "Passed: 13 tests; 259 Markdown files; local links, fragments and design navigation.",
+      "scope": "Latest decision requires report docs check and focused offline controls only; no source review, broad checks or original callback execution.",
+      "log": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v2-current-prompt-baseline/docs-check.log",
+        "sha256": "5a531928d56227642380004d63e83173f52834ef1f18527b8a4197583394c725",
+        "bytes": 515
+      }
+    },
+    "managerNext": "Consume v2 delta/hashes/offline evidence. Only a later finite event may supply fresh SAME G-2831 preparation and NEW root lease before the two original Home callbacks. No runtime, borrow, source review or acceptance action authorized now."
   }
 }
