@@ -7,7 +7,7 @@ import { figuresOfRating } from '../scoped-rating/score.ts';
 import { equivalentCounterparts } from '../tracking/series-progress-panel.tsx';
 import { RelationRows } from '../work-levels/connections.tsx';
 import { copyOf as levelsCopy } from '../work-levels/messages.ts';
-import { franchisesOf, relationRows } from '../work-levels/relation-rows.ts';
+import { franchisesOf, relationPageGroups, relationRows } from '../work-levels/relation-rows.ts';
 import type { RelationEntry, RelationsPage } from '../work-levels/types.ts';
 import { Distribution, Mean } from '../work-page/ratings.tsx';
 import { messages as workMessages } from '../work-page/messages.ts';
@@ -73,6 +73,13 @@ describe('Identity relations', () => {
     });
     expect(structural.collectionPurpose).toBeNull();
     expect(relations.next).toBe('next-page');
+    const grouped = relationPageGroups(relations, { together: true });
+    expect(grouped.page).toBe(relations);
+    expect(grouped.page.next).toBe('next-page');
+    expect(grouped.collections[0]!.purpose).toBeNull();
+    expect(grouped.collections[0]!.items).toEqual([{ relation: structural.relation, summary: collection }]);
+    expect(grouped.rows).toEqual(relationRows([counterpart], { together: true }));
+    expect(grouped.unrendered).toEqual([]);
   });
 
   test('exact definition and role select a variant; display labels cannot retarget the relation', () => {

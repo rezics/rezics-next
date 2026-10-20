@@ -303,6 +303,46 @@ export const CollectionPurposesPreview: Story = {
   },
 };
 
+const unrenderedEntry: RelationEntry = { ...fixture.relationEntries[1]!, relation: fixture.iri('f11'), rendering: null,
+  counterparts: [fixture.summary(fixture.iri('f10'), 'A supplied counterpart without a readable role')] };
+const partiallyRendered: Loaded<RelationsPage> = purposeRelations.ok
+  ? { ok: true, data: { ...purposeRelations.data, items: [...purposeEntries, unrenderedEntry, unrenderedEntry,
+    { ...unrenderedEntry, relation: fixture.iri('f12'), counterparts: [{ reference: fixture.iri('f13'), status: 'unavailable' }] }],
+    next: 'opaque:+/%?=&雪' } }
+  : purposeRelations;
+
+/** Missing semantic rendering does not erase a public incidence or pretend the page is complete. */
+export const UnrenderedIncidences: Story = {
+  args: { relations: partiallyRendered },
+  async play({ canvasElement }) {
+    await assertPurposeLinks(canvasElement, 'en');
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('heading', { name: copyOf('en').relatedFallback })).toBeVisible();
+    const links = canvas.getAllByRole('link', { name: 'A supplied counterpart without a readable role' });
+    await expect(links).toHaveLength(2);
+    const summary = unrenderedEntry.counterparts[0]!;
+    if (summary.status !== 'available') throw new Error('Expected the public counterpart');
+    for (const link of links) await expect(link).toHaveAttribute('href', localizedPath(resourceHref('/w/', summary.address as CanonicalAddress), 'en'));
+    await expect([...canvasElement.querySelectorAll('[data-relation]')].map(item => item.getAttribute('data-relation')))
+      .toEqual([unrenderedEntry.relation, unrenderedEntry.relation, fixture.iri('f12')]);
+    await expect(canvas.getByText(copyOf('en').nameNotShown)).toBeVisible();
+    await expect(within(canvas.getByRole('navigation', { name: 'Relations pages' })).getByRole('link', { name: 'Show more' }))
+      .toHaveAttribute('href', localizedPath(`${resourceHref('/w/', fixture.workRef)}/connections?relationsAfter=opaque%3A%2B%2F%25%3F%3D%26%E9%9B%AA#relations`, 'en'));
+  },
+};
+
+export const UnrenderedIncidencesPreview: Story = {
+  args: { relations: partiallyRendered, preview: true },
+  async play({ canvasElement }) {
+    await assertPurposeLinks(canvasElement, 'en');
+    const canvas = within(canvasElement);
+    await expect(canvas.getAllByRole('link', { name: 'A supplied counterpart without a readable role' })).toHaveLength(2);
+    await expect(canvas.getByText(copyOf('en').nameNotShown)).toBeVisible();
+    await expect(canvas.getByRole('link', { name: 'All connections' })).toHaveAttribute('href',
+      localizedPath(`${resourceHref('/w/', fixture.workRef)}/connections#relations`, 'en'));
+  },
+};
+
 export const RefusedCollectionMembers: Story = {
   render: () => <PurposePage refused />,
   async play({ canvasElement }) {

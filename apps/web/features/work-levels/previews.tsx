@@ -8,12 +8,12 @@ import { contentText } from '../language/untagged.ts';
 import Link from '../shell/localized-link.tsx';
 import type { WorkPageMessages } from '../work-page/messages.ts';
 import { Region, RegionFailure } from '../work-page/region.tsx';
-import { RelationRows } from './connections.tsx';
+import { RelationRows, UnrenderedRelations } from './connections.tsx';
 import { LanguageName } from './editions.tsx';
 import type { Copy } from './messages.ts';
 import { NameLink, SummaryLink } from './names.tsx';
 import { WholesLines } from './parts.tsx';
-import { collectionGroups, relationRows } from './relation-rows.ts';
+import { relationPageGroups } from './relation-rows.ts';
 import { anchors, connectionsHref, editionsHref, releaseHref } from './route.ts';
 import type {
   Loaded,
@@ -135,9 +135,9 @@ export function ConnectionsPreviewView({
       </Region>
     );
   }
-  const rows = relationRows(relations.data.items).slice(0, PREVIEW_COUNTS.relations);
-  const collections = collectionGroups(relations.data.items);
-  if (!rows.length && !collections.length && !relations.data.next) return null;
+  const projection = relationPageGroups(relations.data);
+  const { rows, collections, unrendered } = projection;
+  if (!rows.length && !collections.length && !unrendered.length && !projection.page.next) return null;
   return (
     <Region id="connections-preview" title={t.connections}>
       {collections.map(group => (
@@ -154,6 +154,7 @@ export function ConnectionsPreviewView({
         </section>
       ))}
       {rows.length ? <RelationRows rows={rows} locale={locale} t={t} people={people} /> : null}
+      <UnrenderedRelations entries={unrendered} t={t} />
       <ViewAll href={connectionsHref(workRef, {}, anchors.relations)} label={t.allConnections} />
     </Region>
   );

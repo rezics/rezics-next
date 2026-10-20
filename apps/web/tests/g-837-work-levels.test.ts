@@ -14,7 +14,7 @@ import { PartsSection } from '../features/work-levels/parts.tsx';
 import { ConnectionsPreviewView, EditionsPreviewView, PartsPreviewView } from '../features/work-levels/previews.tsx';
 import * as fixture from '../features/work-levels/fixtures.ts';
 import { copyOf, englishMessages, messages } from '../features/work-levels/messages.ts';
-import { collectionGroups, franchisesOf, labelFor, relationRows } from '../features/work-levels/relation-rows.ts';
+import { collectionGroups, franchisesOf, labelFor, relationPageGroups, relationRows } from '../features/work-levels/relation-rows.ts';
 import { copyOf as entityCopy } from '../features/entity-page/messages.ts';
 import { standaloneHrefFor } from '../features/entity-page/route.ts';
 import { RelationsView } from '../features/entity-page/views.tsx';
@@ -176,6 +176,76 @@ describe('explicit Collection purposes across Relations and Connections', () => 
     expect(render(createElement(ConnectionsSection, { relations: { ok: true, data: { ...empty.data, next: null } },
       franchises: [], names: fixture.names, workRef: fixture.workRef, current: fixture.current, query: { grain: 'series' },
       locale: 'en', t, pageMessages: pageMessages.en }))).toContain(t.noConnections);
+  });
+
+  test('one page retains every Collection, semantic and unrendered incidence together with the native continuation', () => {
+    if (!relations.ok) throw new Error('Expected the relation page');
+    const semantic = fixture.relationEntries[1]!;
+    const absent: RelationEntry = { ...semantic, relation: fixture.iri('f01'), rendering: null };
+    const noProjection: RelationEntry = { ...semantic, relation: fixture.iri('f02'), rendering: semantic.rendering
+      ? { ...semantic.rendering, projections: [] } : null };
+    const page = { ...relations.data, items: [entries[0]!, absent, semantic, entries[1]!, absent, noProjection],
+      next: 'opaque:+/%?=&雪' };
+    const grouped = relationPageGroups(page);
+    expect(grouped.page).toBe(page);
+    expect(grouped.page.items).toBe(page.items);
+    expect(grouped.page.sourcePosition).toBe(page.sourcePosition);
+    expect(grouped.page.next).toBe('opaque:+/%?=&雪');
+    expect(grouped.collections.map(group => group.purpose)).toEqual([null, 'reading-list']);
+    expect(grouped.collections.flatMap(group => group.items.map(item => item.relation)))
+      .toEqual([entries[0]!.relation, entries[1]!.relation]);
+    expect(grouped.rows).toEqual(relationRows([semantic]));
+    expect(grouped.unrendered).toEqual([absent, absent, noProjection]);
+    expect(absent.rendering).toBeNull();
+    expect(entries[0]!.rendering?.meaning).toBeNull();
+    expect(relationPageGroups({ ...page, items: [] })).toEqual({
+      page: { ...page, items: [] }, rows: [], collections: [], unrendered: [],
+    });
+  });
+
+  test('missing semantic rendering retains exact counterpart links and repeated incidences rather than false emptiness', () => {
+    if (!relations.ok) throw new Error('Expected the relation page');
+    const semantic = fixture.relationEntries[1]!;
+    const summary = fixture.summary(fixture.iri('f10'), 'A supplied counterpart without a readable role');
+    if (summary.status !== 'available') throw new Error('Expected the counterpart address');
+    const absent: RelationEntry = { ...semantic, relation: fixture.iri('f11'), rendering: null, counterparts: [summary] };
+    const withheld: RelationEntry = { ...absent, relation: fixture.iri('f12'), counterparts: [
+      { reference: fixture.iri('f13'), status: 'unavailable' },
+    ] };
+    const empty: RelationEntry = { ...absent, relation: fixture.iri('f14'), counterparts: [] };
+    const selected: Loaded<RelationsPage> = { ok: true, data: { ...relations.data,
+      items: [absent, withheld, absent, empty], next: 'opaque:+/%?=&雪' } };
+    for (const html of [generic(selected), preview(selected), full([], selected)]) {
+      expect(html).toContain(t.relatedFallback);
+      expect(html.split(linkAttribute(resourceHref('/w/', summary.address as CanonicalAddress))).length - 1).toBe(2);
+      expect([...html.matchAll(/data-relation="([^"]+)"/g)].map(match => match[1]))
+        .toEqual([absent.relation, withheld.relation, absent.relation, empty.relation]);
+      expect(html).toContain(t.nameNotShown);
+      expect(html).toContain(t.unavailable);
+      expect(html).not.toContain('Reboot of');
+      expect(html).not.toContain(t.noConnections);
+      expect(html).not.toContain(entityCopy('en').noRelations);
+      expect(html).not.toContain(resourceHref('/e/', fixture.iri('f13')));
+    }
+    expect(preview(selected)).toContain(t.allConnections);
+    expect(generic(selected)).toContain('relations=opaque%3A%2B%2F%25%3F%3D%26%E9%9B%AA');
+    expect(full([], selected)).toContain('relationsAfter=opaque%3A%2B%2F%25%3F%3D%26%E9%9B%AA');
+  });
+
+  test('preview retains every supplied semantic row instead of applying a second page cap', () => {
+    if (!relations.ok) throw new Error('Expected the relation page');
+    const semantic = fixture.relationEntries[1]!;
+    if (!semantic.rendering?.meaning) throw new Error('Expected semantic rendering');
+    const rendered = semantic.rendering;
+    const nine: RelationEntry[] = Array.from({ length: 9 }, (_, index) => ({ ...semantic,
+      relation: fixture.iri(`f2${index}`), rendering: { ...rendered, meaning: { ...rendered.meaning!, revision: fixture.iri(`f3${index}`) },
+        projections: rendered.projections.map(projection => ({ ...projection, labels: { noun: `Supplied role ${index}`,
+          heading: `Supplied role ${index}`, plurals: { other: `Supplied role ${index}` }, grammaticalForms: [] } })) } }));
+    const selected: Loaded<RelationsPage> = { ok: true, data: { ...relations.data, items: [...entries, ...nine], next: null } };
+    const html = preview(selected);
+    for (let index = 0; index < 9; index++) expect(html).toContain(`Supplied role ${index}`);
+    for (const [, , heading] of cases) expect(html).toContain(`>${heading}</h3>`);
+    expect(html).toContain(t.allConnections);
   });
 });
 

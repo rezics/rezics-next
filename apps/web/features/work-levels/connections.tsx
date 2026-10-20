@@ -14,9 +14,9 @@ import type { WorkPageMessages } from '../work-page/messages.ts';
 import { Region, RegionFailure } from '../work-page/region.tsx';
 import type { Copy } from './messages.ts';
 import { namedWorkHref, NameLink, SummaryLink, type SummaryHref, summaryWorkHref } from './names.tsx';
-import { type Appearance, type CollectionGroup, collectionGroups, type CreditedName, labelFor, type RelationItem, type RelationRow, relationRows } from './relation-rows.ts';
+import { type Appearance, type CollectionGroup, type CreditedName, labelFor, type RelationItem, type RelationPageGroups, type RelationRow, relationPageGroups } from './relation-rows.ts';
 import { anchors, connectionsHref, type ConnectionsQuery, type Grain, grains } from './route.ts';
-import type { CollectionMembers, Loaded, Names, PartsPage, People, RelationsPage, Summary } from './types.ts';
+import type { CollectionMembers, Loaded, Names, PartsPage, People, RelationEntry, RelationsPage, Summary } from './types.ts';
 import type { PublicCollectionPage as CollectionRead } from './read.ts';
 import { PageContainer, PageHeader } from '../shell/page.tsx';
 import { browseMessages } from '../discover/browse-messages.ts';
@@ -266,10 +266,30 @@ function Members({ franchise, current, names, workRef, query, t, purpose, pageMe
   </div>;
 }
 
-function Collections({ groups, franchises, names, workRef, current, query, t, pageMessages }: {
-  groups: readonly CollectionGroup[]; franchises: readonly Franchise[]; names: Names;
+/** Public incidences without semantic rendering still retain their supplied counterpart identities. */
+export function UnrenderedRelations({ entries, t, hrefFor }: {
+  entries: readonly RelationEntry[]; t: Copy; hrefFor?: SummaryHref;
+}) {
+  if (!entries.length) return null;
+  return <div className="grid gap-2">
+    <h3 className="font-medium text-muted-foreground text-sm">{t.relatedFallback}</h3>
+    <ul className="grid gap-2">
+      {entries.map((entry, index) => <li key={`${entry.relation}-${index}`} data-relation={entry.relation}
+        className="flex min-w-0 flex-wrap gap-x-4 gap-y-1 text-sm">
+        {entry.counterparts.length ? entry.counterparts.map((summary, counterpart) => <SummaryLink key={counterpart}
+          summary={summary} unavailable={t.unavailable} unnamed={t.unnamed} undisclosed={t.nameNotShown}
+          hrefFor={hrefFor ?? (named => summaryWorkHref(named) ?? resourceHref('/e/', named.address as AddressTarget))} />)
+          : <span className="text-muted-foreground">{t.unavailable}</span>}
+      </li>)}
+    </ul>
+  </div>;
+}
+
+function Collections({ projection, franchises, names, workRef, current, query, t, pageMessages }: {
+  projection: RelationPageGroups; franchises: readonly Franchise[]; names: Names;
   workRef: WorkAt; current: string; query: ConnectionsQuery; t: Copy; pageMessages: WorkPageMessages;
 }) {
+  const groups = projection.collections;
   if (!groups.length) return null;
   const hydrated = new Map(franchises.map(item => [item.collection.reference, item]));
   return <div id={anchors.franchises} className="grid scroll-mt-20 gap-3">
@@ -307,22 +327,23 @@ export function ConnectionsSection({ relations, franchises, names, people, workR
       <RegionFailure title={t.connectionsUnavailable} failure={relations.failure} messages={pageMessages} restartHref={first} />
     </Region>;
   }
-  const rows = relationRows(relations.data.items);
-  const collections = collectionGroups(relations.data.items);
-  const empty = !rows.length && !collections.length;
+  const projection = relationPageGroups(relations.data);
+  const { rows, collections, unrendered } = projection;
+  const empty = !rows.length && !collections.length && !unrendered.length;
   return <Region id={anchors.relations} title={t.connections} className="scroll-mt-20">
     {empty
-      ? !relations.data.next && !query.relationsAfter
+      ? !projection.page.next && !query.relationsAfter
         ? <EmptyState icon={NetworkIcon} headingLevel={3} title={t.noConnections} description={t.noConnectionsBody} /> : null
       : <>
-        <Collections groups={collections} franchises={franchises} names={names} workRef={workRef} current={current} query={query} t={t}
+        <Collections projection={projection} franchises={franchises} names={names} workRef={workRef} current={current} query={query} t={t}
           pageMessages={pageMessages} />
         {rows.length ? <RelationRows rows={rows} locale={locale} t={t} people={people} /> : null}
+        <UnrenderedRelations entries={unrendered} t={t} />
       </>}
-    {query.relationsAfter || relations.data.next
+    {query.relationsAfter || projection.page.next
       ? <nav aria-label={t.relationsPages} className="flex flex-wrap justify-between gap-2">
         {query.relationsAfter ? <Link documentNavigation href={first} className={outline}>{t.firstPage}</Link> : <span />}
-        {relations.data.next ? <Link documentNavigation href={connectionsHref(workRef, { ...query, relationsAfter: relations.data.next },
+        {projection.page.next ? <Link documentNavigation href={connectionsHref(workRef, { ...query, relationsAfter: projection.page.next },
           anchors.relations)} className={outline}>{t.showMore}</Link> : null}
       </nav> : null}
   </Region>;

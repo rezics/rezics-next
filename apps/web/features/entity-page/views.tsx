@@ -7,11 +7,11 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { signInPath } from '../auth/paths.ts';
 import Link from '../shell/localized-link.tsx';
-import { RelationRows } from '../work-levels/connections.tsx';
+import { RelationRows, UnrenderedRelations } from '../work-levels/connections.tsx';
 import { copyOf as levelsCopy } from '../work-levels/messages.ts';
 import { SummaryLink, type SummaryHref } from '../work-levels/names.tsx';
 import type { Names } from '../work-levels/types.ts';
-import { collectionGroups, relationRows } from '../work-levels/relation-rows.ts';
+import { relationPageGroups } from '../work-levels/relation-rows.ts';
 import { DiscussionList } from '../work-page/discussion.tsx';
 import type { WorkPageMessages } from '../work-page/messages.ts';
 import type { ScopeRealm } from '../work-page/scope-bar.tsx';
@@ -352,12 +352,12 @@ export function RelationsView({
       </Region>
     );
   }
-  const rows = relationRows(page.data.items, { together: true });
-  const collections = collectionGroups(page.data.items);
+  const projection = relationPageGroups(page.data, { together: true });
+  const { rows, collections, unrendered } = projection;
   const levels = levelsCopy(locale);
   return (
     <Region id="relations" title={t.relations}>
-      {rows.length || collections.length ? (
+      {rows.length || collections.length || unrendered.length ? (
         <div className="grid gap-5">
           {collections.map(group => (
             <section key={group.heading} aria-labelledby={`relations-${group.heading}`}
@@ -379,13 +379,14 @@ export function RelationsView({
             </section>
           ))}
           <RelationRows rows={rows} locale={locale} t={levels} hrefFor={summaryHref(hrefFor)} />
+          <UnrenderedRelations entries={unrendered} t={levels} hrefFor={summaryHref(hrefFor)} />
         </div>
-      ) : !cursor && !page.data.next ? (
+      ) : !cursor && !projection.page.next ? (
         <Quiet title={t.noRelations} body={t.noRelationsBody} />
       ) : null}
       <Pages
         cursor={cursor}
-        next={page.data.next}
+        next={projection.page.next}
         section="relations"
         hrefFor={hrefFor}
         messages={messages}

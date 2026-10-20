@@ -1,5 +1,5 @@
 import { contentText } from '../language/untagged.ts';
-import type { NameText, RelationEntry, RelationProjection, Summary } from './types.ts';
+import type { NameText, RelationEntry, RelationProjection, RelationsPage, Summary } from './types.ts';
 
 // How Main's relation rendering becomes rows. Everything a row says comes from
 // the rendering contract: the label (noun, heading and plural forms in the
@@ -167,21 +167,50 @@ export interface CollectionGroup {
   items: { relation: string; summary: Summary }[];
 }
 
+/** Partition a returned page for presentation; neither channel is an eligibility selection. */
+function groupRelations(entries: readonly RelationEntry[]) {
+  const groups = new Map<CollectionPurpose | null, CollectionGroup>();
+  const relations: RelationEntry[] = [];
+  for (const entry of entries) {
+    if (entry.kind === 'collection') {
+      const purpose = entry.collectionPurpose?.kind ?? null;
+      const group = groups.get(purpose) ?? { purpose,
+        heading: purpose === null ? 'collections' : collectionHeadings[purpose], items: [] };
+      const summaries: readonly Summary[] = entry.counterparts.length ? entry.counterparts
+        : [{ reference: entry.relation, status: 'unavailable' }];
+      for (const summary of summaries) group.items.push({ relation: entry.relation, summary });
+      groups.set(purpose, group);
+    } else {
+      relations.push(entry);
+    }
+  }
+  return { collections: [...groups.values()], relations };
+}
+
 /** Only an explicit native purpose names a group. Keep every incidence in Main's order within it. */
 export function collectionGroups(entries: readonly RelationEntry[]): CollectionGroup[] {
-  const groups = new Map<CollectionPurpose | null, CollectionGroup>();
-  for (const entry of entries) {
-    if (entry.kind !== 'collection') continue;
-    const purpose = entry.collectionPurpose?.kind ?? null;
-    const group = groups.get(purpose) ?? { purpose,
-      heading: purpose === null ? 'collections' : collectionHeadings[purpose], items: [] };
-    const summaries: readonly Summary[] = entry.counterparts.length ? entry.counterparts
-      : [{ reference: entry.relation, status: 'unavailable' }];
-    for (const summary of summaries) group.items.push({ relation: entry.relation, summary });
-    groups.set(purpose, group);
-  }
-  return [...groups.values()];
+  return groupRelations(entries).collections;
 }
+
+/**
+ * Groups belong to this native page, never independently paged purpose lists. Keep the
+ * entire answer (including its opaque next and source position) with the render model.
+ * Semantic-only row readers still require meaning; an unrenderable incidence remains
+ * visible through its supplied counterparts without inventing a meaning or a label.
+ */
+export function relationPageGroups(page: RelationsPage, options: { together?: boolean } = {}) {
+  const groups = groupRelations(page.items);
+  const rendered: RelationEntry[] = [];
+  const unrendered: RelationEntry[] = [];
+  for (const entry of groups.relations) {
+    const rows = relationRows([entry], options);
+    if (rows.some(row => row.items.length > 0)) rendered.push(entry);
+    else unrendered.push(entry);
+  }
+  return { page, collections: groups.collections, rows: relationRows(rendered, options), unrendered };
+}
+
+export type RelationPageGroups = ReturnType<typeof relationPageGroups>;
 
 /** Collection summaries in Main's order. The legacy name preserves the existing member-hydration callers. */
 export function franchisesOf(entries: readonly RelationEntry[]): Summary[] {
