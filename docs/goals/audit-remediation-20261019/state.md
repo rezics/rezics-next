@@ -1,6 +1,6 @@
 # Audit remediation state
 
-Checkpoint: 2026-10-20, after rechecking original acceptance and fresh execution.
+Checkpoint: 2026-10-20 18:28 Asia/Shanghai, after verified execution recovery.
 
 ## Accepted outcomes
 
@@ -31,12 +31,13 @@ decides closure. The old long-running Recipe service and all KEEP runtimes
 remain preserved; output custody was retained before the stalled CLI parents
 were terminated. No shared data or store was reset.
 
-The latest restarted Site and Catalogue turns and the G-2846 independent
-review request still report workspace-routing failures before any completed
-tool action. Those requests have not established resumed product work or a
-new source verdict. No original finding has been accepted since the previous
-23/61 checkpoint. Current execution receipts remain in the recovery directory;
-they must be checked before describing a task as executing.
+The preceding restarted manager and reviewer requests failed workspace routing
+before any completed tool action. At this checkpoint, actual completed tool
+calls with no routing errors were verified from G-2762 attempt 26 and G-2748
+attempt 20 on codex-2/max, and G-2846 attempt 21 on codex-1/xhigh. These three
+tasks have resumed execution. No original finding has been accepted since the
+previous 23/61 checkpoint. Execution, delivered source and accepted outcomes
+remain separate observations; current receipts are in the recovery directory.
 
 ## Current work
 
@@ -47,15 +48,26 @@ they must be checked before describing a task as executing.
   URN with a UUID and omits a supported body representation. G-2793's targeted
   handoff goes to original outcome owner G-2773 for a versioned premise
   correction preserving canonical identity, exact bytes and original outcomes.
+- G-2823 consumed that copy and delivered its running image/default backend
+  with a genuine normal-OAuth Main 200, current native/model qualification and
+  zero pending migrations. Its current handoff is
+  `.temp/worktrees/g-2823/.temp/lifecycle/site-image-backend-handoff.md`.
+  Preserve the two named borrower leases and G-2823 startup/stop custody.
+  G-2748 is finishing the reviewed image consumer's current-main composition;
+  G-2830's original genuine image journeys follow that exact source handoff.
+  No new preparation, restore or corpus is required for this lane.
 - G-2781 owns the existing Structure V2 Source adapter. G-2763 published its
   two-file current-profile reader correction at 4bc710fb9430: 32 focused tests
-  and worker checks passed. G-2846 has the committed first-review assignment;
-  its fresh request has not reached execution. Three unchanged native-basis
+  and worker checks passed. G-2846 is executing the committed first-review
+  assignment. Three unchanged native-basis
   failures still need fixture/classification diagnosis with assertions intact.
 - G-2799 owns the original A17 collection-purpose distinction, retaining
   current authority, null/ambiguity, disclosure and final-fence semantics.
-- Default Discover still needs one current unchanged request with exact
-  pre-transport call/byte attribution before the next G-2764 repair.
+- Default Discover has its released runtime lease but still needs one current
+  unchanged request with complete pre-debit call/byte attribution. G-2762 owns
+  the missing diagnostic boundary in infrastructure/fuseki.ts and is executing
+  that narrow change. G-2764 is the query consumer, not another writer of that
+  owner. No speculative query repair or increased cap is authorized.
 - G-2765's analyzer-readiness correction passed its independent source review
   and landed at 8b8a2c0a97. Reuse that approval. Only the missing original
   cold/cost/growth proof remains; the old restore/model mismatch is a setup
