@@ -146,7 +146,7 @@ export async function readIdentitySections(
     kindKey: entry ? kindKeys.get(bindingSummary(entry, 'kind', self)?.reference ?? '') : undefined,
     ratings: rated ? await ratingsFor(summary.reference) : null,
     applicability:
-      entry && entry.rendering?.meaning.definition === definitions.data.get('holds-title')
+      entry?.rendering?.meaning && entry.rendering.meaning.definition === definitions.data.get('holds-title')
         ? await titleApplicability(entry, position)
         : [],
   });

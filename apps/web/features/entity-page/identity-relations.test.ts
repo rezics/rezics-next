@@ -1,16 +1,20 @@
 import { describe, expect, test } from 'bun:test';
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
+import { createElement, type ReactElement } from 'react';
+import { renderToStaticMarkup as renderMarkup } from 'react-dom/server';
+import { AppRouterContext, type AppRouterInstance } from 'next/dist/shared/lib/app-router-context.shared-runtime.js';
 import { RatingInline, ratingsUntilMean } from '../catalogue/rating.tsx';
 import { figuresOfRating } from '../scoped-rating/score.ts';
+import { equivalentCounterparts } from '../tracking/series-progress-panel.tsx';
 import { RelationRows } from '../work-levels/connections.tsx';
 import { copyOf as levelsCopy } from '../work-levels/messages.ts';
-import { relationRows } from '../work-levels/relation-rows.ts';
+import { franchisesOf, relationRows } from '../work-levels/relation-rows.ts';
+import type { RelationEntry, RelationsPage } from '../work-levels/types.ts';
 import { Distribution, Mean } from '../work-page/ratings.tsx';
 import { messages as workMessages } from '../work-page/messages.ts';
 import {
   identityEntry,
   identityData,
+  identitySummary,
   alter,
   persona,
   saber,
@@ -27,10 +31,53 @@ import { messages, copyOf } from './messages.ts';
 import { parseEntityCursors, standaloneHrefFor } from './route.ts';
 import { resourceHref } from '../address/path.ts';
 
+const router: AppRouterInstance = { bfcacheId: '', refresh() {}, push() {}, replace() {}, back() {}, forward() {}, prefetch() {} };
+const renderToStaticMarkup = (element: ReactElement) =>
+  renderMarkup(createElement(AppRouterContext.Provider, { value: router }, element));
+
 describe('Identity relations', () => {
+  test('structural membership retains its Collection binding without becoming identity or equivalent progress', () => {
+    const collection = { ...identitySummary('520', 'Collection'), type: 'collection' as const };
+    const entry = identityEntry('member', 'collection', collection);
+    const structural: RelationEntry = {
+      ...entry,
+      kind: 'collection',
+      collectionPurpose: null,
+      rendering: {
+        ...entry.rendering!,
+        meaning: null,
+        structuralBasis: { profile: 'collection-membership', collection: collection.reference, member: saber.reference },
+      },
+    };
+    const variant = identityEntry('hub', 'variant', alter, persona);
+    const definitions = new Map([['variant-of' as const, variant.rendering!.meaning!.definition]]);
+    expect(identityEntries([structural, variant], definitions, 'variant-of')).toEqual([variant]);
+    expect(resourceBinding(structural, 'collection')).toBe(collection.reference);
+    expect(franchisesOf([structural])).toEqual([collection]);
+    expect(relationRows([structural, variant])).toEqual(relationRows([variant]));
+
+    const counterpart = identityEntry('original', 'equivalent', { ...alter, type: 'work' });
+    const relations: RelationsPage = {
+      profile: 'resource-relations-v1', resource: saber.reference, items: [structural, counterpart], next: 'next-page',
+      sourcePosition: { datasetId: 'product', dataEpoch: 'epoch', sequence: '1' },
+    };
+    expect(equivalentCounterparts(relations, counterpart.rendering!.meaning!.definition))
+      .toEqual([{ work: alter.reference, title: alter.name.value }]);
+    expect(equivalentCounterparts({ ...relations, items: [structural] }, counterpart.rendering!.meaning!.definition))
+      .toEqual([]);
+    expect(structural.rendering?.meaning).toBeNull();
+    if (!structural.rendering || !('structuralBasis' in structural.rendering))
+      throw new Error('Collection structural basis unavailable');
+    expect(structural.rendering.structuralBasis).toEqual({
+      profile: 'collection-membership', collection: collection.reference, member: saber.reference,
+    });
+    expect(structural.collectionPurpose).toBeNull();
+    expect(relations.next).toBe('next-page');
+  });
+
   test('exact definition and role select a variant; display labels cannot retarget the relation', () => {
     const entry = identityEntry('hub', 'variant', alter, persona);
-    const definitions = new Map([['variant-of' as const, entry.rendering!.meaning.definition]]);
+    const definitions = new Map([['variant-of' as const, entry.rendering!.meaning!.definition]]);
     expect(identityEntries([entry], definitions, 'variant-of')).toEqual([entry]);
     expect(identityEntries([entry], definitions, 'represents')).toEqual([]);
     expect(resourceBinding(entry, 'variant')).toBe(alter.reference);

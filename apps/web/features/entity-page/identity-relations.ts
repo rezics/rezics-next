@@ -42,7 +42,7 @@ export function identityEntries(
 ) {
   const definition = definitions.get(key);
   return definition
-    ? entries.filter((entry) => entry.rendering?.meaning.definition === definition)
+    ? entries.filter((entry) => entry.rendering?.meaning?.definition === definition)
     : [];
 }
 

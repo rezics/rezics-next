@@ -120,7 +120,7 @@ export function relationRows(entries: readonly RelationEntry[], { together = fal
   const groups = new Map<string, { projection: RelationProjection; items: RelationItem[] }>();
   for (const entry of entries) {
     const rendering = entry.rendering;
-    if (entry.kind === 'collection' || !rendering) continue;
+    if (entry.kind === 'collection' || !rendering?.meaning) continue;
     const summaries = new Map(entry.counterparts.map(summary => [summary.reference, summary]));
     const viewed = rendering.projections.filter(projection => projection.fromRole === rendering.viewingRole);
     const lead = together && viewed.length > 1

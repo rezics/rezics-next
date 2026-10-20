@@ -46,7 +46,7 @@ export async function RelationsSection({ section, cursor, position, frame, hideI
     const definitions = await readIdentityDefinitions();
     if (definitions.ok) {
       const own = new Set(definitions.data.values());
-      page = { ok: true, data: { ...page.data, items: page.data.items.filter(item => !item.rendering || !own.has(item.rendering.meaning.definition)) } };
+      page = { ok: true, data: { ...page.data, items: page.data.items.filter(item => !item.rendering?.meaning || !own.has(item.rendering.meaning.definition)) } };
       if (!page.data.items.length && !page.data.next && !cursor) return null;
     }
   }

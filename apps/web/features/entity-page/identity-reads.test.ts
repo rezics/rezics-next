@@ -1,10 +1,16 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { namespaces } from '@rezics/model';
+import { resourceHref } from '../address/path.ts';
 import { namesOf } from '../work-levels/read.ts';
+import type { RelationEntry } from '../work-levels/types.ts';
+import { messages as workMessages } from '../work-page/messages.ts';
 import { readIdentitySections } from './identity-read.ts';
 import { readEventParticipants } from './event-participants.tsx';
 import { alter, identityEntry, identitySummary, persona, saber, title } from './identity-fixtures.ts';
+import { copyOf } from './messages.ts';
 import { mainDouble, pageRequest } from './request-fixture.ts';
+import { standaloneHrefFor } from './route.ts';
+import { RelationsSection } from './sections.tsx';
 import type { EntityProjection } from './types.ts';
 
 let double: ReturnType<typeof mainDouble> | undefined;
@@ -12,9 +18,9 @@ afterEach(() => double?.restore());
 
 const idOf = (reference: string) => reference.slice(-36);
 const definitions: Record<string, string> = {
-  'variant-of': identityEntry('hub', 'variant', alter).rendering!.meaning.definition,
-  represents: identityEntry('unit', 'character', alter).rendering!.meaning.definition,
-  'holds-title': identityEntry('holder', 'title', title).rendering!.meaning.definition,
+  'variant-of': identityEntry('hub', 'variant', alter).rendering!.meaning!.definition,
+  represents: identityEntry('unit', 'character', alter).rendering!.meaning!.definition,
+  'holds-title': identityEntry('holder', 'title', title).rendering!.meaning!.definition,
 };
 const position = { datasetId: 'product', dataEpoch: 'epoch', sequence: '1' };
 const relationsPage = (resource: string, items: unknown[], next: string | null = null) =>
@@ -25,6 +31,50 @@ const pageOf = (self: typeof saber) =>
   ({ summary: self, target: { types: [`${namespaces.rv}Character`] } }) as unknown as EntityProjection;
 
 describe('Identity sections on a page that is not the whole list', () => {
+  test('hiding semantic identity keeps structural membership and its continuation in Connections', async () => {
+    const collection = { ...identitySummary('520', 'Collection'), type: 'collection' as const };
+    const entry = identityEntry('member', 'collection', collection);
+    const membership: RelationEntry = {
+      ...entry,
+      kind: 'collection',
+      collectionPurpose: null,
+      rendering: {
+        ...entry.rendering!,
+        meaning: null,
+        structuralBasis: { profile: 'collection-membership', collection: collection.reference, member: saber.reference },
+      },
+    };
+    const titleEntry = identityEntry('holder', 'title', title);
+    double = mainDouble((url) => {
+      const key = url.pathname.match(/\/lexicon\/definitions\/(.+)$/)?.[1];
+      if (key) return { definition: definitions[key] };
+      if (url.pathname === `/v1/resources/${idOf(saber.reference)}/relations`)
+        return relationsPage(saber.reference, [membership, titleEntry], 'next-page');
+      return 404;
+    });
+    const at = 'https://rezics.com/id/01944100-0000-7000-8000-000000000999';
+    const read = await pageRequest(() => readIdentitySections(pageOf(saber), {}, { scope: 'global' }, at));
+    expect(read.ok).toBe(true);
+    if (!read.ok) throw new Error('Identity sections unavailable');
+    const titles = read.data.sections.find((section) => section.kind === 'titles');
+    expect(titles?.members.map((member) => member.summary.reference)).toEqual([title.reference]);
+    expect(titles?.members.map((member) => member.applicability)).toEqual([[]]);
+    const section = await pageRequest(() => RelationsSection({
+      section: { id: 'relations', href: `/v1/resources/${idOf(saber.reference)}/relations`, actions: [] },
+      hideIdentity: true, cursor: 'current-page', position: at,
+      locale: 'en', t: copyOf('en'), messages: workMessages.en,
+      hrefFor: standaloneHrefFor({}, resourceHref('/e/', saber.reference)),
+    }));
+    expect(section).not.toBeNull();
+    if (!section) throw new Error('Structural membership was hidden');
+    expect(section.props.page).toEqual({ ok: true, data: relationsPage(saber.reference, [membership], 'next-page') });
+    expect(section.props.cursor).toBe('current-page');
+    const calls = double.calls.filter((call) => call.url.pathname.endsWith('/relations'));
+    expect(calls).toHaveLength(2);
+    expect(calls.map((call) => call.url.searchParams.get('position'))).toEqual([at, at]);
+    expect(calls[1]!.url.searchParams.get('after')).toBe('current-page');
+  });
+
   test('a signed-out reader sees a title row with no context, not a failure', async () => {
     double = mainDouble((url) => {
       const key = url.pathname.match(/\/lexicon\/definitions\/(.+)$/)?.[1];
