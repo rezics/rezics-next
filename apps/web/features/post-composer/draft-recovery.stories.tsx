@@ -10,6 +10,7 @@ import { ShellProvider } from '../shell/shell-provider.tsx';
 import { messages as shellMessages } from '../shell/messages.ts';
 import { forgetReadingLanguages } from '../content-language/use-reading-languages.ts';
 import { messages as editorMessages } from '../document-editor/messages.ts';
+import { newPostProgress } from './api.ts';
 
 const actor = 'https://rezics.com/id/a2d4f6e8-1c3b-4a5d-9e7f-0b2c4d6e8f1a';
 const realm = 'https://rezics.com/id/7c3e9a1d-2b4f-4d6e-8a0c-5e7f9b1d3c2a';
@@ -17,6 +18,7 @@ const work = 'https://rezics.com/id/d0e1f2a3-b4c5-4d6e-8f7a-000000000001';
 const draftKey = `rezics:post-draft:${actor}`;
 const representationId = '11111111-1111-4111-8111-111111111111';
 const mediaUseId = '33333333-3333-4333-8333-333333333333';
+const rootRevision = 'https://rezics.com/id/44444444-4444-4444-8444-444444444444';
 const imageDraft = serializeDocument(normalizeDocument({ ...fromPlainText('Keep the text through failures.', 'blocks'),
   doc: withDocumentIds({ type: 'doc', content: [
     { type: 'paragraph', content: [{ type: 'text', text: 'Keep the text through failures.' }] },
@@ -40,10 +42,25 @@ const meta = {
     initialTheme="light" initialCollapsed={false} signedIn><Story /></ShellProvider>],
   beforeEach({ parameters }) {
     forgetReadingLanguages();
+    const snapshot = parameters.recovery === 'snapshot';
+    const body = parameters.recovery === 'image' || snapshot ? imageDraft : 'Keep the text through failures.';
+    const intent = { realm, work, mainVersion: 'https://rezics.com/id/d0e1f2a3-b4c5-4d6e-8f7a-000000000002',
+      title: 'A complete draft', body, spoiler: false, language: 'en', actingSubject: actor };
+    const complete = parseStoredDocument(imageDraft)!;
     localStorage.setItem(draftKey, JSON.stringify({ community: { id: realm, name: 'Fiction Harbor' },
       work: { id: work, mainVersion: 'https://rezics.com/id/d0e1f2a3-b4c5-4d6e-8f7a-000000000002', title: 'The last letter' },
-      title: 'A complete draft', body: parameters.recovery === 'image' ? imageDraft : 'Keep the text through failures.',
-      ...(parameters.recovery === 'image' ? { bodyFormat: 'document' } : {}), spoiler: false, language: 'en', progress: null }));
+      title: 'A complete draft', body,
+      ...(parameters.recovery === 'image' || snapshot ? { bodyFormat: 'document' } : {}),
+      ...(snapshot ? {
+        // The last complete body is older than the raw recovery. Keep its acknowledged image basis.
+        imageDraft: { intent, progress: { ...newPostProgress(), rootRevision,
+          revisionId: '55555555-5555-4555-8555-555555555555', digest: 'a'.repeat(64), writeState: 'acknowledged' } },
+        recoveryBody: JSON.stringify({ ...complete, doc: withDocumentIds({ type: 'doc', content: [
+          { type: 'paragraph', content: [{ type: 'text', text: 'Retained current text.', marks: [{ type: 'bold' }] }] },
+          ...complete.doc.content!.filter(node => node.type === 'image'),
+          { type: 'image', attrs: { src: '/invalid-image.png', representationId: 'invalid' } },
+        ] }) }),
+      } : {}), spoiler: false, language: 'en', progress: null }));
     let failed = false;
     const original = window.fetch.bind(window);
     const fetch = spyOn(window, 'fetch').mockImplementation(async (input, init) => {
@@ -53,11 +70,13 @@ const meta = {
       if (path.endsWith('/person-preferences')) return Response.json({ contentLanguages: ['en'] });
       if (path.endsWith('/selection')) {
         if (parameters.recovery !== 'unknown' && !failed) { failed = true; return Response.json({ code: 'unavailable' }, { status: 503 }); }
-        return Response.json({ work, selectedDraft: 'root-revision' });
+        return Response.json({ work, selectedDraft: rootRevision });
       }
       if (path.endsWith('/member-reply-drafts')) {
         if (parameters.recovery === 'unknown' && !failed) { failed = true; throw new TypeError('Write response lost'); }
-        return Response.json({ revisionId: '00000000-0000-4000-8000-000000000003', revisionDigest: 'a'.repeat(64) });
+        const command = input instanceof Request ? await input.clone().json() : JSON.parse(String(init?.body));
+        return Response.json({ reply: command.reply, variantId: command.variantId, deleted: false,
+          revisionId: '00000000-0000-4000-8000-000000000003', revisionDigest: 'a'.repeat(64) });
       }
       if (path.endsWith('/realm-replies')) return Response.json({});
       if (path.endsWith('/realm-reply-placements')) {
@@ -186,3 +205,44 @@ export const SnapshotFailureKeepsCurrentText: Story = {
 };
 
 export const UnwrittenPhoneChinese: Story = { ...CancelUnwrittenAttempt, args: { locale: 'zh-Hans' }, globals: { locale: 'zh-Hans', viewport: { value: 'phone' } } };
+
+const storageRecovery: Story = {
+  parameters: { recovery: 'storage' },
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement), t = postText, locale = args.locale;
+    await expect(await canvas.findByText(t.draftSaveFailed[locale])).toBeVisible();
+    const title = canvas.getByDisplayValue('A complete draft');
+    await userEvent.type(title, ' revised');
+    await expect(canvas.queryByText(t.draftSaved[locale])).toBeNull();
+    await expect(JSON.parse(localStorage.getItem(draftKey)!).title).toBe('A complete draft');
+
+    const create = spyOn(URL, 'createObjectURL');
+    const download = spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    try {
+      await userEvent.click(canvas.getByRole('button', { name: t.exportDraft[locale] }));
+      await expect(download).toHaveBeenCalled();
+      const exported = create.mock.calls.at(-1)![0] as Blob;
+      await expect(JSON.parse(await exported.text())).toMatchObject({ title: 'A complete draft revised', body: 'Keep the text through failures.' });
+    } finally { create.mockRestore(); download.mockRestore(); }
+
+    const retry = canvas.getByRole('button', { name: t.retrySave[locale] });
+    retry.focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(await canvas.findByText(t.draftSaveFailed[locale])).toBeVisible();
+    await expect(retry).toHaveFocus();
+    await expect(canvas.queryByText(t.draftSaved[locale])).toBeNull();
+    // Restore only the failed platform operation, then exercise the component's Retry.
+    (Storage.prototype.setItem as typeof Storage.prototype.setItem & { mockRestore: () => void }).mockRestore();
+    await userEvent.keyboard('{Enter}');
+    await expect(await canvas.findByText(t.draftSaved[locale])).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: t.retrySave[locale] })).toBeNull();
+    await expect(canvas.getByRole('textbox', { name: t.body[locale] })).toHaveFocus();
+    await userEvent.click(canvas.getByRole('button', { name: 'Reopen draft' }));
+    await expect(await canvas.findByDisplayValue('A complete draft revised')).toBeVisible();
+    await expect(canvas.getByRole('textbox', { name: t.body[locale] })).toHaveTextContent('Keep the text through failures.');
+    await expect(await canvas.findByText(t.draftSaved[locale])).toBeVisible();
+  },
+};
+
+export const DeviceStorageRecoveryPhone: Story = { ...storageRecovery, globals: { viewport: { value: 'phone' } } };
+export const DeviceStorageRecoveryPhoneChinese: Story = { ...storageRecovery, args: { locale: 'zh-Hans' }, globals: { locale: 'zh-Hans', viewport: { value: 'phone' } } };

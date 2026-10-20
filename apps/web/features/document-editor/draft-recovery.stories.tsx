@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, spyOn, userEvent, waitFor, within } from 'storybook/test';
-import { fromPlainText, parseStoredDocument, serializeDocument } from '@rezics/document';
+import { fromPlainText, normalizeDocument, parseStoredDocument, serializeDocument, withDocumentIds } from '@rezics/document';
 import { Button } from '@rezics/ui/button';
 import { BodyEditor } from './body-editor.tsx';
 import { messages } from './messages.ts';
@@ -12,15 +12,28 @@ const key = 'rezics:story:complete-image-draft';
 const representationId = '11111111-1111-4111-8111-111111111111';
 const mediaUseId = '33333333-3333-4333-8333-333333333333';
 const initial = serializeDocument(fromPlainText('Keep text and image together.', 'blocks'));
+const stableImage = { type: 'image', attrs: { id: '22222222-2222-4222-8222-222222222222', representationId, mediaUseId,
+  src: `/api/main/v1/media/representations/${representationId}/bytes?use=${mediaUseId}` } };
+const savedImage = serializeDocument(normalizeDocument({ ...fromPlainText('Keep text and image together.', 'blocks'),
+  doc: withDocumentIds({ type: 'doc', content: [
+    { type: 'paragraph', content: [{ type: 'text', text: 'Keep text and image together.' }] }, stableImage,
+  ] }) }));
+const recoveryImage = serializeDocument(normalizeDocument({ ...fromPlainText('Current text and both images.', 'blocks'),
+  doc: withDocumentIds({ type: 'doc', content: [
+    { type: 'paragraph', content: [{ type: 'text', text: 'Current text and both images.' }] }, stableImage,
+    { type: 'image', attrs: { id: '44444444-4444-4444-8444-444444444444', representationId,
+      src: `/api/main/v1/media/representations/${representationId}/bytes` } },
+  ] }) }));
 
-function CompleteDraft({ locale = 'en', bind = false, failUpload = false }: { locale?: UiLocale; bind?: boolean; failUpload?: boolean }) {
-  const [saved, setSaved] = useState(initial);
-  const [retained, setRetained] = useState<string>();
+function CompleteDraft({ locale = 'en', bind = false, failUpload = false, arranged = false }: { locale?: UiLocale; bind?: boolean; failUpload?: boolean; arranged?: boolean }) {
+  const [saved, setSaved] = useState(arranged ? savedImage : initial);
+  const [retained, setRetained] = useState<string | undefined>(arranged ? recoveryImage : undefined);
   const [generation, reopen] = useState(0);
   const [state, setState] = useState<DocumentSaveState>('ready');
   return <div className="grid max-w-3xl gap-3 p-5">
-    <BodyEditor key={generation} label="Complete draft" locale={locale} value={saved} recoveryValue={retained}
-      actingSubject="author" mediaTarget="work" onSaveStateChange={setState}
+    <BodyEditor key={generation} compact label="Complete draft" locale={locale} value={saved} recoveryValue={retained}
+      actingSubject="https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839"
+      mediaTarget="https://rezics.com/id/01a14f4e-526a-706c-9404-479d17f3e7ba" onSaveStateChange={setState}
       onRecoveryChange={recoveryBody => { setRetained(recoveryBody); localStorage.setItem(key, JSON.stringify({ body: saved, recoveryBody })); }}
       onChange={body => { setSaved(body); setRetained(undefined); localStorage.setItem(key, JSON.stringify({ body })); }}
       onUploadImage={async () => {
@@ -117,11 +130,77 @@ export const CancelFailedUpload: Story = {
   },
 };
 
-export const ImageRecoveryPhoneChinese: Story = { ...RetryBindingAfterReopen, args: { bind: true, locale: 'zh-Hans' }, globals: { locale: 'zh-Hans', viewport: { value: 'phone' } },
-  async play({ canvasElement }) {
+const retryRecovery: Story = {
+  args: { arranged: true },
+  async play({ canvasElement, args }) {
     const canvas = within(canvasElement);
-    await upload(canvasElement, 'zh-Hans');
-    await expect(await canvas.findByRole('button', { name: messages['zh-Hans'].retrySave })).toBeVisible();
-    await expect(canvas.getByRole('button', { name: messages['zh-Hans'].exportDocument })).toBeVisible();
+    const t = messages[args.locale ?? 'en'];
+    await waitFor(() => expect(canvas.getByLabelText('Draft state')).toHaveTextContent('failed'));
+    const editor = canvas.getByRole('textbox', { name: 'Complete draft' });
+    await expect(editor).toHaveTextContent('Current text and both images.');
+    await expect(editor.querySelectorAll('figure')).toHaveLength(2);
+    await expect(canvas.getByLabelText('Saved image count')).toHaveTextContent('1');
+    const retained = JSON.parse(localStorage.getItem(key)!).recoveryBody;
+    await expect(retained).toContain('Current text and both images.');
+
+    const create = spyOn(URL, 'createObjectURL');
+    const download = spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    try {
+      await userEvent.click(canvas.getByRole('button', { name: t.exportDocument }));
+      await expect(download).toHaveBeenCalled();
+      const exported = JSON.parse(await (create.mock.calls.at(-1)![0] as Blob).text());
+      await expect(exported).toEqual(JSON.parse(retained));
+      await expect(JSON.parse(localStorage.getItem(key)!).recoveryBody).toBe(retained);
+    } finally { create.mockRestore(); download.mockRestore(); }
+
+    const retry = canvas.getByRole('button', { name: t.retrySave });
+    retry.focus();
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(canvas.getByLabelText('Draft state')).toHaveTextContent('ready'));
+    await expect(editor).toHaveFocus();
+    await expect(editor).toHaveTextContent('Current text and both images.');
+    await expect(canvas.queryByRole('button', { name: t.retrySave })).toBeNull();
+    await expect(canvas.getByLabelText('Saved image count')).toHaveTextContent('2');
+    const stored = JSON.parse(localStorage.getItem(key)!);
+    await expect(stored.recoveryBody).toBeUndefined();
+    await expect(parseStoredDocument(stored.body)?.doc.content?.filter(node => node.type === 'image').map(node => node.attrs))
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: stableImage.attrs.id, representationId, mediaUseId }),
+        expect.objectContaining({ id: '44444444-4444-4444-8444-444444444444', representationId, mediaUseId }),
+      ]));
+    await userEvent.click(canvas.getByRole('button', { name: 'Reopen draft' }));
+    const reopened = await canvas.findByRole('textbox', { name: 'Complete draft' });
+    await expect(reopened).toHaveTextContent('Current text and both images.');
+    await expect(reopened.querySelectorAll('figure')).toHaveLength(2);
+    await expect(canvas.getByLabelText('Draft state')).toHaveTextContent('ready');
+    await userEvent.click(reopened);
   },
 };
+
+export const ImageRecoveryPhone: Story = { ...retryRecovery, globals: { viewport: { value: 'phone' } } };
+export const ImageRecoveryPhoneChinese: Story = { ...retryRecovery, args: { arranged: true, locale: 'zh-Hans' }, globals: { locale: 'zh-Hans', viewport: { value: 'phone' } } };
+
+const removeRecovery: Story = {
+  args: { arranged: true },
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement), t = messages[args.locale ?? 'en'];
+    const remove = await canvas.findByRole('button', { name: t.removeImages });
+    const editor = canvas.getByRole('textbox', { name: 'Complete draft' });
+    await expect(editor).toHaveTextContent('Current text and both images.');
+    remove.focus();
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(canvas.getByLabelText('Draft state')).toHaveTextContent('ready'));
+    await expect(editor).toHaveFocus();
+    await expect(editor).toHaveTextContent('Current text and both images.');
+    await expect(editor.querySelectorAll('figure')).toHaveLength(0);
+    await expect(canvas.queryByRole('button', { name: t.removeImages })).toBeNull();
+    await expect(JSON.parse(localStorage.getItem(key)!).recoveryBody).toBeUndefined();
+    await userEvent.click(canvas.getByRole('button', { name: 'Reopen draft' }));
+    await expect(await canvas.findByRole('textbox', { name: 'Complete draft' })).toHaveTextContent('Current text and both images.');
+    await expect(canvas.getByLabelText('Saved image count')).toHaveTextContent('0');
+    await expect(canvas.getByLabelText('Draft state')).toHaveTextContent('ready');
+  },
+};
+
+export const RemoveRecoveryPhone: Story = { ...removeRecovery, globals: { viewport: { value: 'phone' } } };
+export const RemoveRecoveryPhoneChinese: Story = { ...removeRecovery, args: { arranged: true, locale: 'zh-Hans' }, globals: { locale: 'zh-Hans', viewport: { value: 'phone' } } };
