@@ -2971,5 +2971,351 @@
       "runtimeOrOriginalOutcomeExecuted": false
     },
     "landingDisposition": "Source verdict is ready independently of later runtime inputs. Manager may accept this report-only commit and pass these exact composition/consumer requirements to G-2762. This does not authorize individual product landing, new review chains or closure of any original class/persona outcome."
+  },
+  "accountRequestLifecycleDeltaReviewV1": {
+    "schemaVersion": 1,
+    "reviewId": "G-2822-ACCOUNT-REQUEST-LIFECYCLE-DELTA-01",
+    "reviewedAtUtc": "2026-10-20T15:32:18.389677+00:00",
+    "reviewer": {
+      "owner": "G-2822",
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "sameExistingReviewOwner": true,
+      "independentChangedDeltaReviewCount": 1,
+      "nestedOrFallbackAgents": false
+    },
+    "scope": {
+      "base": "d7711c90d3b804f1c5fa70b88806c189b1b20c97",
+      "head": "19e9747d4cb23d6d8aa8ec6fe4bab7d129ea78cb",
+      "tree": "14dbd76824db8e442332c8b33397537d929b3467",
+      "frozenProduct": "76c5955006dbea2016e84465d8f3e79fdf4fc979",
+      "workerHeadBeforeReport": "bbf178022089f82ebabfe6711c24eb91a18509ee",
+      "privatePinnedSnapshot": ".temp/account-lifecycle-review-v1/source",
+      "fixedDuringReview": true,
+      "initialWorkerTreeClean": true,
+      "sealedPacket": {
+        "manifest": {
+          "path": ".temp/account-lifecycle-review-v1/packet/manifest.json",
+          "bytes": 7423,
+          "sha256": "b626bdfcb1fd8690dbd9447117f8398185292f99b85f741da17cab606de2bd37"
+        },
+        "verifiedFiles": 42,
+        "allHashesAndSizesMatch": true
+      },
+      "changedPaths": [
+        "services/account/src/app.ts",
+        "services/account/src/introspection.ts",
+        "services/account/tests/request-lifecycle-observation.test.ts"
+      ],
+      "inspectedBlobs": [
+        {
+          "path": "services/account/src/app.ts",
+          "before": {
+            "blob": "3fd26f7aa01e44dd925949374d510ee4f7510bf9",
+            "bytes": 30268,
+            "sha256": "011804008250730463ded7202a5277bd6f70118abaca773609fd6280072f1e9f"
+          },
+          "after": {
+            "blob": "6794d763fd16f353420ae28fc12709878328f381",
+            "bytes": 33637,
+            "sha256": "ce5bd67326d43854fd725a35a6cad2bd9781b088157fae02ae0390642a0a7164"
+          },
+          "newAccountLifecycleDelta": true
+        },
+        {
+          "path": "services/account/src/introspection.ts",
+          "before": {
+            "blob": "b81b8c3d44745d51d76431ab4b2d184f480faf14",
+            "bytes": 7048,
+            "sha256": "7671e99a49c92149a296624fdff2dbdc8d8f3bbe2c9891715938e6a87acbad93"
+          },
+          "after": {
+            "blob": "5f140c374f3decae04f9310b62a6aad9f6f0e597",
+            "bytes": 7408,
+            "sha256": "74b81fcdea4e52aaa5e1eaba27318ccea279bd7f632f3d5f70c15e5d9adbc6c7"
+          },
+          "newAccountLifecycleDelta": true
+        },
+        {
+          "path": "services/account/tests/request-lifecycle-observation.test.ts",
+          "before": null,
+          "after": {
+            "blob": "3d8e93b8b86a8aac4cac79e662a9e284cdd51019",
+            "bytes": 14017,
+            "sha256": "fc4b590a3bd1d644e3785a2a9c3ca468fda37ea1534d283bf393e89fa13972c4"
+          },
+          "newAccountLifecycleDelta": true
+        }
+      ],
+      "consumerInputs": [
+        {
+          "path": ".temp/account-lifecycle-review-v1/packet/candidate/.temp/account-request-lifecycle-observation-v1/attach-account-work.ts",
+          "bytes": 1101,
+          "sha256": "af23daf087b930ab3339dd07a3a0a78af0d5eae898e3d0b03e1b99c84ff00823"
+        },
+        {
+          "path": ".temp/account-lifecycle-review-v1/packet/candidate/.temp/account-request-lifecycle-observation-v1/binding-contract.ts",
+          "bytes": 915,
+          "sha256": "139184cd2bf9f1924e6fd13c48212ec07ab97d6659d36fecf995a59cb376ad56"
+        }
+      ],
+      "inputReceipts": [
+        {
+          "path": ".temp/account-lifecycle-review-v1/packet/consumer-handoff.md",
+          "bytes": 6663,
+          "sha256": "67dd9b4092a42a69ba98bc851b0fe429f1d59d3a56141046375a05f833c74ed2"
+        },
+        {
+          "path": ".temp/account-lifecycle-review-v1/packet/handoff.json",
+          "bytes": 7069,
+          "sha256": "e8aebfeb94547bef2a39a732231c515071084b207cf3bf829630e0dbe65811eb"
+        },
+        {
+          "path": ".temp/account-lifecycle-review-v1/packet/observer-input.json",
+          "bytes": 2988,
+          "sha256": "83363f83096cdfeface0f8564f30b52f9b4ad8fe2573607beb60052c787aca7c"
+        },
+        {
+          "path": ".temp/account-lifecycle-review-v1/packet/affected-input-comparison.json",
+          "bytes": 4952,
+          "sha256": "28876fdca714c79301d3fd52430f3b0dffea3dc6478b334c232c16f5fc000c71"
+        },
+        {
+          "path": ".temp/account-lifecycle-review-v1/packet/checks.json",
+          "bytes": 10264,
+          "sha256": "21fd9dab7fe8cd2fdc9148e988a30bb0c8ed0dcb5e854e2d28016f680b829a26"
+        }
+      ],
+      "acceptedReviewsReopened": false,
+      "productOrOriginalAssertionEdits": false
+    },
+    "sourceVerdict": "APPROVE this exact three-path Account lifecycle observation delta for composition over approved d7711c90d3, with the concrete consumer conditions below. No blocking executable source finding. This is a source verdict independent of later Runtime inputs; it authorizes neither individual product landing nor original class/persona closure.",
+    "reviewedSemantics": [
+      {
+        "invariant": "Exact real Request and actual handler lifetime",
+        "evidence": "app.ts:81-123 and 580-586 track the original incoming Request in an app-local WeakMap. The opt-in fetch wrapper emits started before dispatch and released from finally after the awaited handler settles, including cancellation paths where Elysia afterResponse is skipped. The introspection route at 358-362 passes that same Request to the observation closure; the body-reading clones do not substitute an identity. The 18-case source suite exercises exact identity, aborted acquisition, concurrent independent requests and fresh retry."
+      },
+      {
+        "invariant": "Real pending acquisition, authority work and transaction cleanup",
+        "evidence": "introspection.ts:54-88 brackets the existing pool.connect await with pending/active notifications and otherwise preserves every authority decision, SQL statement, COMMIT, rollback and client.release finally. A rejected acquisition stays pending until the app wrapper releases it; an acquired request stays active through COMMIT or rollback and client release. The observer is not a cancellation mechanism and caller departure is never treated as owner release. Account pending specifically means currentIntrospection pool acquisition; other awaited handler work, including readiness, is active. This does not replace a separate real SQL owner meter."
+      },
+      {
+        "invariant": "Readiness timeout retains genuinely outstanding work",
+        "evidence": "app.ts:333-355 tracks the complete existing readiness promise, including production schema readiness chained after SELECT 1. A two-second response timeout sets responseSettled but cannot release while readinessPending. Either settlement order releases exactly once: the probe callback releases an already-settled response, or wrapper finally releases after a probe that settled earlier. Both successful and rejected probes run the same settlement callback; the existing timeout, status, timer cleanup and SQL execution remain unchanged. The retained test holds a real controlled query promise beyond the response timeout and observes active=1 until that promise settles."
+      },
+      {
+        "invariant": "Immutable whole-app cumulative totals and no retained event history",
+        "evidence": "app.ts:85-120 conserves starts = released + active + pending, clears zeroSince on each start, sets it only when the final live owner releases, and publishes frozen event and copied/frozen numeric totals. Each app owns separate counters and live weak state; completed Request entries are deleted. Only the actual outliving readiness continuation strongly retains its necessary Request/work until settlement. No trace, event history, credential or private payload is stored in the owner."
+      },
+      {
+        "invariant": "Optional non-awaited throw-safe observation preserves the disabled path and fences",
+        "evidence": "app.ts:82,115-121,340-349,361-362,580 and introspection.ts:28-32 allocate no WeakMap, install no wrapper and pass no phase callback when disabled. Enabled callbacks run synchronously without awaiting completion; thrown exceptions and rejected promises are swallowed. Frozen payload mutation cannot corrupt counts. The cumulative diff introduces no signal, deadline, cache, transport, native, transaction, authority, consent, scope, cost or final-fence rewrite. Retained observed/ordinary comparisons exercise unchanged authority decisions and SQL against external-I/O fixtures; these are source tests, not actual IAM/runtime execution."
+      },
+      {
+        "invariant": "Consumer attachment does not invent trace identity or own sink lifecycle",
+        "evidence": "attach-account-work.ts forwards the exact Request, immutable totals and initial idle event, adds a trace only from the supplied lookup, and retains no event history. detach drops the attached lookup/record callbacks. binding-contract.ts supplies structural types and an option example only; its spread overwrites observeRequestWork and its releaseSupport is only detach. The real binder must preserve an existing observer and implement its own capture drain, reference release and verified sink closure; neither example is a complete original Runtime binding."
+      }
+    ],
+    "affectedInputComparison": {
+      "independentlyVerified": true,
+      "method": "Compared actual immutable Git trees and every listed before/after blob, not producer count summaries; archived source locally and verified all 42 sealed file sizes/SHA256s and the exact full-index patch.",
+      "newDeltaPaths": [
+        "services/account/src/app.ts",
+        "services/account/src/introspection.ts",
+        "services/account/tests/request-lifecycle-observation.test.ts"
+      ],
+      "cumulativeFrozenDeltaPaths": [
+        "services/account/src/app.ts",
+        "services/account/src/introspection.ts",
+        "services/account/tests/request-lifecycle-observation.test.ts",
+        "services/main/src/infrastructure/fuseki.ts",
+        "services/main/src/modules/account/verify-assertion.ts",
+        "services/main/tests/request-read-budget-observation.test.ts",
+        "services/main/tests/request-read-budget-shared-key-observation.test.ts"
+      ],
+      "otherAcceptedEntriesUnchanged": 10099,
+      "otherFrozenEntriesUnchanged": 10095,
+      "unchangedInheritedMainPaths": [
+        "services/main/src/infrastructure/fuseki.ts",
+        "services/main/src/modules/account/verify-assertion.ts",
+        "services/main/tests/request-read-budget-observation.test.ts",
+        "services/main/tests/request-read-budget-shared-key-observation.test.ts"
+      ],
+      "unchangedDefaultCallbackSha256": "ae8ebf644cf2f7f117f86f02ee63d9a104a41f6efe72433eb9a9b5fabd0f6e17",
+      "unchangedSharedKeyCallbackSha256": "899fc593d7b35daceb9b761abdfdf31d73e01a2458c7c55c27ac199f3a72af24",
+      "unrelatedWaveSourceImported": false
+    },
+    "reusedChecks": {
+      "reexecuted": false,
+      "recordedJob": "fa58f356-f364-4d3b-bb8a-8a4964706f91",
+      "qaRun": "20261020t150350-7bacb5",
+      "command": "task -t .temp/account-request-lifecycle-observation-v1/Taskfile.yml test -> bun scripts/goal/goalctl.ts test services/account/tests/request-lifecycle-observation.test.ts",
+      "owner": {
+        "source": "19e9747d4cb23d6d8aa8ec6fe4bab7d129ea78cb",
+        "sourceStable": true,
+        "tests": 18,
+        "passed": 18,
+        "assertions": 777,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "junit": {
+          "path": ".temp/account-lifecycle-review-v1/packet/retained/owner.xml",
+          "bytes": 4816,
+          "sha256": "12c6f9ecc39f441aac92ff60c191e088dd3cacb45ddf45a06331bf273bab0310"
+        },
+        "renderedCasesAndAssertionSumVerified": true,
+        "scope": "Actual Account app/introspection bodies; only external provider/pg I/O controlled. No listener, real database, original Runtime or public-persona qualification."
+      },
+      "affectedStatic": {
+        "finalChangedTestTypes": 1377,
+        "bindingTypes": 1378,
+        "changedTestLintAndAst": "passed",
+        "sourceLintAndAst": "passed, reused unchanged source blobs",
+        "earlierSourceGraphs": "Reused successful Main/content/web/accounts/datasets/scripts selections from the producer source gate. The later 19e9747 commit changes only six lines of the new test fixture; app/introspection blobs are identical to b2f1714f93373d1d9f8a81bbcb7fd148b1776e9a. No fresh all-source result claimed.",
+        "inference": "Account-only delta does not select needsInferenceGate; retained accepted baseline/conditions are not waived.",
+        "moduleResolution": "Retained callback/Account app and accepted Main verifier/Fuseki callback resolve to the same sealed candidate; no application imported or started."
+      },
+      "guards": {
+        "files": 13,
+        "registered": 115,
+        "rendered": 115,
+        "passed": 111,
+        "skipped": 4,
+        "failures": 0,
+        "errors": 0,
+        "assertions": 915,
+        "wellFormed": true,
+        "junit": {
+          "path": ".temp/account-lifecycle-review-v1/packet/retained/guards.xml",
+          "bytes": 28541,
+          "sha256": "34a16f2f12bdc0143d0b65b70ba75f783a0f543af4d19369097394681d2fbdc7"
+        },
+        "skippedCasesRemainExplicit": true
+      },
+      "earlierFailuresPreserved": {
+        "initialOwner": {
+          "job": "d22c51e9-88ab-472e-946e-2260e443ba5b",
+          "tests": 18,
+          "passed": 16,
+          "failures": 2,
+          "assertions": 645,
+          "evidence": "initial-owner-failure.xml/log retained. Missed cancellation afterResponse release and a disconnected-response status premise were corrected in the new observation source/test before this sealed candidate; original acceptance assertions were not changed."
+        },
+        "missingLocalFrozenRef": "cc1d2829-5a66-43d8-8f3c-dc028ae8908a: source check did not start; candidate-local frozen refs supplied by producer.",
+        "fixtureType": "ed416168-6a28-4d09-bf21-1947d59c6942: one QueryResult fixture type failure; final selected fixture types/lint/AST pass. Other successful source selections retained."
+      },
+      "olderMalformedGuardXml": "Prior shared-key recorded gate exited 0, but its XML has a 172-test header and 168 rendered records and is malformed at line 220. That older limitation is unchanged, separate from the new well-formed 115-record/111-pass/four-skip receipt; no missing records invented.",
+      "newFocusedCounterexamples": 0,
+      "reasonNoSourceRerun": "No uncovered concrete counterexample found in this minimal delta review. The retained 18-case receipt covers the changed owner transitions and adversarial observer behavior. The latest cut requires reuse, not a repeat source tier."
+    },
+    "consumerObligations": [
+      "G-2762 attaches the exact af23daf087b930ab3339dd07a3a0a78af0d5eae898e3d0b03e1b99c84ff00823 callback to the actual Account app serving the original requests, before serving and before the initial idle observation. Keep its real auth, pool, all options, deadlines, signals, authority and fences. Do not substitute a second app or erase an existing observer: the type-example spread is not permission to overwrite it; preserve it with safe non-awaited delivery to both sinks if one exists.",
+      "Bind each real Account ingress Request to its existing lawful trace before the owner emits started. Never use a clone, Main/proxy Request, credential-derived identity, invented trace or global totals as per-trace counts. Retain unmatched events for whole-app totals; reduce only actually matched transitions for selected traces. State conservation and lastStartAt/zeroSince for selected traces must come from those transitions, not by copying total timestamps.",
+      "Retain the initial idle event and complete started/pending/active/released coverage for each observed live Request. Whole-app totals include health and all unselected traffic; require an otherwise idle runtime or account for that traffic. Account pending covers only introspection acquisition; independently retain actual SQL/native owner observations. Incomplete trace mapping, coverage, an outstanding readiness probe, unknown work or a lost event leaves the relevant result unavailable, never known zero.",
+      "Provide bounded private capture and bounded async sink work; product and adapter intentionally do not await or supervise it. Do not serialize Requests, headers, credentials, tokens or bodies. Record sink errors, queue overflow/drop state, actual written event count/bytes/SHA256, flush and close results independently. Swallowed observer errors or absent events cannot establish successful I/O or no work. There is no activated sink or known capture count/hash in this source packet.",
+      "Implement the full released support lifetime: detach after the required owner observation window, stop accepting events, settle/drain the bounded owned sink work, clear Request/trace/event references, then verify flush/close and release private sink resources. attachment.detach and the sample releaseSupport only clear callbacks; they do not finish those obligations. Preserve incompleteness on failure.",
+      "observer-input.json, module resolution and binding-contract.ts are source attachment inputs only. G-2762 supplies the matching complete original Runtime and real Request/control bindings; G-2823 alone retains startup/stop/lifecycle/lease custody. Separate runtime admission and verified sink I/O are required before the original commands. No source or callback approval substitutes for that execution."
+    ],
+    "executableFindings": [],
+    "preservation": {
+      "priorFieldCount": 19,
+      "priorReportSha256": "4cdc1c55b079cec99714f7623ddb660a81faa78468714b6d25729edc0ac19b19",
+      "allPriorFieldsAndHistoricalFailuresUnchanged": true,
+      "historicalNative571FailureAndBothArtifactLocations": "Preserved exactly, including all historical failure evidence and class summaries.",
+      "acceptedNative566AndReadinessRequestSharedKeyDiagnosticReviews": "Reused without reopening or replay; completed default capture and genuine data remain preserved.",
+      "runtimeOrOriginalOutcomeExecuted": false,
+      "fullTierReplay": false,
+      "captureOrDiagnosticReplay": false,
+      "nativeBuild": false,
+      "runtimeOAuthTransportLeaseCorpusOrPreparationAction": false,
+      "productOrOriginalAssertionEdits": false,
+      "individualProductLanding": false
+    },
+    "remainingProof": {
+      "originalAcceptance": "23/61 unchanged; zero original classes/persona cells closed.",
+      "outcomes": "All original D5/public-persona obligations remain separate: 70 authenticated and four mixed bodies, IAM02/IAM10, actual lawful Web/Main/Account/OAuth/current session/assertion/consent/scope/privacy enforcement, 1/2/4/8 readers, real in-flight departure, unaffected waiters, 100 ms grace followed by 300 ms with no new/active/pending work, real native/SQL pending-zero and fresh independent retry.",
+      "frozenRequest": {
+        "bytes": 100,
+        "sha256": "49d9dabeefeedbd562209a078d92873c8ca56cada2841d75abb76cadd0db0c24",
+        "calls": 72,
+        "bytesLimit": 8388608,
+        "deadlineMs": 10000,
+        "allTighterEnclosingLimits": "unchanged"
+      },
+      "privateSink": {
+        "activated": false,
+        "captureCount": null,
+        "bytes": null,
+        "sha256": null,
+        "flushCloseAndIOVerified": false
+      }
+    },
+    "artifacts": {
+      "root": ".temp/account-lifecycle-review-v1",
+      "producerOriginal": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2762/.temp/account-request-lifecycle-observation-v1",
+      "localSealedPacket": ".temp/account-lifecycle-review-v1/packet",
+      "sourceDiff": ".temp/account-lifecycle-review-v1/reviewed-delta.patch",
+      "snapshotVerification": ".temp/account-lifecycle-review-v1/snapshot-verification.json",
+      "originalReport": ".temp/account-lifecycle-review-v1/original-report.json",
+      "validation": ".temp/account-lifecycle-review-v1/validation.json",
+      "retention": "Both original sealed packet and independent local snapshot/evidence copies retained. No owned disposable service or resource started."
+    },
+    "checks": {
+      "status": "passed",
+      "recordedJob": "499e678b-d7ef-4143-881d-9a20ea1894ae",
+      "steps": [
+        {
+          "command": "task -t .temp/account-lifecycle-review-v1/Taskfile.yml report:validate",
+          "exit": 0,
+          "log": ".temp/goal/jobs/499e678b-d7ef-4143-881d-9a20ea1894ae.1.log",
+          "retainedLog": ".temp/account-lifecycle-review-v1/report-checks/499e678b-d7ef-4143-881d-9a20ea1894ae.1.log",
+          "logSha256": "ac698a82b97ac8454a38647265bf554066dffa6038353a6cef8f6430888950db"
+        },
+        {
+          "command": "task docs:check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/499e678b-d7ef-4143-881d-9a20ea1894ae.2.log",
+          "retainedLog": ".temp/account-lifecycle-review-v1/report-checks/499e678b-d7ef-4143-881d-9a20ea1894ae.2.log",
+          "logSha256": "9aceadaf1c881f56d0157528e7737356b594e7ed0ee096d1bf1a659c446dc079"
+        },
+        {
+          "command": "env GOAL_CHECK_PREPARED_TREE=/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2822 task goal -- check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/499e678b-d7ef-4143-881d-9a20ea1894ae.3.log",
+          "retainedLog": ".temp/account-lifecycle-review-v1/report-checks/499e678b-d7ef-4143-881d-9a20ea1894ae.3.log",
+          "logSha256": "ec235098acfac4a3297dcb876ef338615527d55f68c94247671f936185a74c67"
+        }
+      ],
+      "documentation": {
+        "status": "passed",
+        "markdownFiles": 258,
+        "checkerTests": 13
+      },
+      "workerCheck": {
+        "status": "passed",
+        "types": "not selected; no TypeScript workspace changed",
+        "tests": "not selected; no test files in brief",
+        "lint": "not selected; no source file changed",
+        "ast": "passed",
+        "guards": "passed; 1/45 selected for report-only change",
+        "output": ".temp/goal/check/run-6CVWi3/output.log"
+      },
+      "reportValidation": {
+        "sealedFiles": 42,
+        "sourceTreeFiles": 10102,
+        "priorFieldsPreserved": 19,
+        "reusedOwnerTests": 18,
+        "reusedOwnerAssertions": 777,
+        "reusedNewGuardPasses": 111,
+        "reusedNewGuardSkips": 4,
+        "reportOnlyDiff": true
+      },
+      "sourceCheckReruns": 0,
+      "runtimeOrOriginalOutcomeExecuted": false,
+      "currency": "Used the supported prepared-tree option to honor the explicit no-rebase/no-repin scope. Worker head remains bbf178022089f82ebabfe6711c24eb91a18509ee and the reviewed source remains the separate sealed 19e9747d4cb23d6d8aa8ec6fe4bab7d129ea78cb snapshot."
+    },
+    "landingDisposition": "Source verdict ready now for the exact 19e9747d4cb23d6d8aa8ec6fe4bab7d129ea78cb delta. Manager may accept this report-only commit and return the stated attachment/composition conditions to G-2762; no separate review chain, individual product landing or original outcome closure. G-2762 remains the sole binder/implementation owner; G-2823 retains lifecycle/stop/lease custody."
   }
 }
