@@ -85,6 +85,7 @@ export async function RealmThreadRoute({ params, searchParams }: ThreadRouteProp
   const content = <ThreadContent view={view} thread={parsed.id} sort={sort} here={here} feed={feed}
     language={language} cursor={parseCursor(search)} client={client} />;
   return DiscussionFrame({ view, locale: resolved.locale, feed, search, client,
+    thread: true,
     here: sort === 'best' ? here : `${here}?sort=${sort}`, children:
       <Suspense fallback={<ThreadSkeleton />}>{client ? await ThreadContent(content.props) : content}</Suspense>,
   });

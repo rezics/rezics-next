@@ -20,7 +20,7 @@ import {
 } from '../realm/read.ts';
 import { parseCursor, siteHref } from '../realm/route.ts';
 import { RealmBrowseRoute, SiteHomeRoute } from '../realm/routes.tsx';
-import { RealmUnavailable } from '../realm/states.tsx';
+import { RealmUnavailable as RealmUnavailableContent } from '../realm/states.tsx';
 import type { ReadFailure, ZonePresentationRead, ZoneRouteRead } from '../realm/types.ts';
 import { ListFailure, Pager } from '../realm/views.tsx';
 import { shownZoneFailure, zoneFailureView } from './failure.ts';
@@ -67,6 +67,7 @@ import { ZONE_NONCE_HEADER } from './csp.ts';
 import { ACCESS_COOKIE } from '../auth/cookies.ts';
 import { readSession } from '../auth/session.ts';
 import { ZoneAboutDiscussion } from './about-discussion-entry.tsx';
+import { setServerDocumentStatus } from '../api/server-read.ts';
 
 // /{locale}/z/{space}/… has one optional catch-all, including home. Main's
 // route table decides which mount or member a path names; community tabs cannot shadow it.
@@ -85,8 +86,9 @@ const routeCursor = (path: readonly string[], search: Search) =>
 /** Search and link-preview metadata: a Work's own (pointing at `/w/{id}`), or a mounted page's (its own address). */
 export async function zoneSiteMetadata({ params, searchParams }: ZoneSiteProps): Promise<Metadata> {
   const props = { params, searchParams };
-  const metadata = await siteContentMetadata(props);
-  const { locale, space } = await params;
+  const { locale, space, path = [] } = await params;
+  const metadata = !path.length && isUiLocale(locale)
+    ? await siteHomeMetadata(space, locale) : await siteContentMetadata(props);
   if (!isUiLocale(locale)) return metadata;
   const resolved = await resolveSite(space, locale);
   if (resolved.kind === 'join')
@@ -103,6 +105,21 @@ export async function zoneSiteMetadata({ params, searchParams }: ZoneSiteProps):
     ...(discovery?.robots === 'noindex' ? { robots: { index: false } } : {}),
     ...(discovery?.referrerPolicy ? { referrer: discovery.referrerPolicy } : {}),
   };
+}
+
+/** Home metadata and body select the same complete publication. An unused
+ * generic root route cannot decide this page's title or availability. */
+async function siteHomeMetadata(space: string, locale: import('../../i18n/define.ts').UiLocale): Promise<Metadata> {
+  const [resolved, { t }] = await Promise.all([resolveSite(space, locale), getTranslation('realm', [locale])]);
+  const hidden = { robots: { index: false } };
+  if (resolved.kind !== 'site')
+    return { title: resolved.kind === 'unavailable' ? t.unavailableTitle : t.notFoundTitle, ...hidden };
+  const publication = await readCompletePresentation(resolved.zone);
+  if (!publication.ok)
+    return { title: publication.failure === 'missing' ? t.notFoundTitle : t.unavailableTitle, ...hidden };
+  const page = await pageUrl();
+  return { title: resolved.address.canonical.suffixSource,
+    ...(page ? { alternates: { canonical: page.origin + representationPath(page) } } : {}) };
 }
 
 async function siteContentMetadata({ params, searchParams }: ZoneSiteProps): Promise<Metadata> {
@@ -186,6 +203,22 @@ function failure(
   );
 }
 
+function unavailableDocument(reason: ReadFailure | 'sign-in' = 'unavailable'): void {
+  // Only the route decision replacing the whole page owns its HTTP status.
+  // Optional metadata, mounted regions and client reads cannot set it.
+  if (reason === 'unavailable' || reason === 'offline') setServerDocumentStatus(503);
+}
+
+/** This server view is selected only when the Site's authoritative read
+ * replaces its whole page. The existing client view keeps contextual refresh. */
+function RealmUnavailable(props: Parameters<typeof RealmUnavailableContent>[0]) {
+  unavailableDocument(props.failure);
+  return <>
+    <RealmUnavailableContent {...props} />
+    <PageContainer><LocalizedLink href="/discover">{props.messages.browse}</LocalizedLink></PageContainer>
+  </>;
+}
+
 export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps, client?: RealmReadClient): Promise<ReactNode> {
   const [{ locale, space, path = [] }, search] = await Promise.all([params, searchParams]);
   if (!isUiLocale(locale)) notFound();
@@ -228,12 +261,14 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps, cli
     }
     return SiteHomeRoute(communityProps, async () => homeView);
   }
-  // Resolve mounts before the starter Browse renderer, so a mount named browse is never shadowed.
-  const routed = replay
-    ? await replay.readZoneRoute(resolved.zone, routePath(path), routeCursor(path, search))
-    : await readZoneRoute(resolved.zone, routePath(path), routeCursor(path, search));
-  if (!routed.ok && routed.status === 404 && routed.failure === 'missing' && path.length === 1 && path[0] === 'browse') {
-    return RealmBrowseRoute(communityProps, undefined, client);
+  if (path.length === 1 && path[0] === 'browse') {
+    // Resolve mounts before the starter Browse renderer, so a mount named browse is never shadowed.
+    const routed = replay
+      ? await replay.readZoneRoute(resolved.zone, routePath(path), routeCursor(path, search))
+      : await readZoneRoute(resolved.zone, routePath(path), routeCursor(path, search));
+    if (!routed.ok && routed.status === 404 && routed.failure === 'missing') {
+      return RealmBrowseRoute(communityProps, undefined, client);
+    }
   }
   const view = await loadRealmView(space, locale, search, 'site');
   if (view.kind === 'missing') notFound();
@@ -562,6 +597,7 @@ async function publishedIndependentZoneHome(
     } : null,
   }), { space, locale, actingSubject });
   if (visit.kind === 'unavailable') {
+    unavailableDocument(visit.failure);
     const shown = shownZoneFailure({ ok: true }, { ok: false, failure: visit.failure, ...(visit.reference ? { reference: visit.reference } : {}) });
     return shown
       ? failure(shown.failure, siteHref(locale, addressKey(resolved.address.canonical), []), messages, shown.reference)

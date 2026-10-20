@@ -71,7 +71,8 @@ export function identityOptions(discovery: AgentDiscovery,
 }
 
 export function resolveSessionAgent(options: readonly AgentOption[] | null,
-  chosen: string | null): SessionAgent {
+  chosen: string | null, eligible = true): SessionAgent {
+  if (chosen && !eligible) return { status: 'ineligible', previous: chosen };
   if (!options) return { status: 'unverified', previous: chosen };
   if (chosen) {
     const agent = options.find(option => option.iri === chosen);

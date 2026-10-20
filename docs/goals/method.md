@@ -46,10 +46,13 @@ says" is.
    answers recorded from the row's outcome tests: loading and populated always;
    empty, error and pending where the contract admits them (pending is a `202`
    and nothing else, so a read that answers only `200` or a problem has no
-   pending story). A state is never made by editing a recorded answer; a
-   missing one is first proved by the outcome test. Its gate is types, unit
-   tests and stories. One browser journey per vertical runs in the program's
-   nightly regression, not one per row.
+   pending story). Keep recorded API answers unchanged. UI interaction stories
+   may use clearly identified contract-shaped fixtures and failure injection;
+   a new backend state still needs its API outcome proof. Its gate is types,
+   unit tests and stories. Passing Storybook browser interactions establish
+   the UI criteria, combined with API evidence for server behavior. Do not
+   repeat a full backend journey for every UI viewport or locale. One browser
+   journey per vertical runs in the program's nightly regression, not one per row.
    A request the page sends that the row's record lacks is recorded by the
    surface task itself. The surface task claims the row's outcome test and
    record, imports the production client, changes no assertion and no cell,

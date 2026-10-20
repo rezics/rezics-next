@@ -34,6 +34,7 @@ import {
 import { FusekiQueryResponseTooLarge } from '../../infrastructure/fuseki.ts';
 import { DISCOVERY_DELTA_COST, type DiscoveryChanges } from './changes.ts';
 import { discoveryEventEffect, discoveryEventWorks, type DiscoveryEventInput } from './effects.ts';
+import { invalidWorkReadSource } from '../work/read-source-fault.ts';
 
 export const DISCOVERY_REFRESH_INPUT_COST = {
   queries: 1,
@@ -391,7 +392,7 @@ export async function projectDiscoveryBatch(
         limit + 1,
       )
     ).map((row) => {
-      if (!row.work) throw new WorkReadUnavailable('Discovery candidate is incomplete');
+      if (!row.work) throw invalidWorkReadSource('Discovery candidate is incomplete');
       return row.work.value;
     });
   if (!candidates.length) return { after, complete: true, items: [] };
@@ -432,7 +433,7 @@ export async function projectDiscoveryBatch(
   );
   const groups = new Map<string, typeof rows>();
   for (const row of rows) {
-    if (!row.work) throw new WorkReadUnavailable('Discovery source is incomplete');
+    if (!row.work) throw invalidWorkReadSource('Discovery source is incomplete');
     groups.set(row.work.value, [...(groups.get(row.work.value) ?? []), row]);
   }
   // Explicit deltas also advance across Works that ceased to be public.
@@ -481,8 +482,8 @@ export async function projectDiscoveryBatch(
   const ratingAccess = {
     readRatingAggregateInventory: (ctx: string, main: string, signal: AbortSignal) =>
       access.readRatingAggregateInventory!(ctx, main, signal),
-    checkRatingAggregateFence: (generation: string, signal: AbortSignal) =>
-      access.checkRatingAggregateFence!(generation, signal),
+    checkRatingAggregateFence: (...args: Parameters<NonNullable<typeof access.checkRatingAggregateFence>>) =>
+      access.checkRatingAggregateFence!(...args),
   };
   const ratings =
     basis.context && basis.scope !== 'mine'
@@ -512,7 +513,7 @@ export async function projectDiscoveryBatch(
       !first.classified ||
       !first.credited
     ) {
-      throw new WorkReadUnavailable('Discovery source is incomplete');
+      throw invalidWorkReadSource('Discovery source is incomplete');
     }
     if (
       own!.length > 3 ||
@@ -520,7 +521,7 @@ export async function projectDiscoveryBatch(
         (key) => new Set(own!.map((row) => row[key]?.value)).size !== 1,
       )
     )
-      throw new WorkReadUnavailable('Discovery source is ambiguous');
+      throw invalidWorkReadSource('Discovery source is ambiguous');
     const classified = basis.scope !== 'mine' && first.classified!.value === 'true';
     const credited = first.credited!.value === 'true' || !!session.deps.sourceAdoptions;
     checkpoint = work;

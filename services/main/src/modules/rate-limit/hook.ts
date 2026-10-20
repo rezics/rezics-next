@@ -81,7 +81,7 @@ export function rateLimitHook(
       return status(code, {
         type: 'about:blank',
         status: code,
-        code: code === 401 ? 'invalid_account_assertion' : 'rate_limit_unavailable',
+        code: code === 401 ? 'account_assertion_denied' : 'rate_limit_unavailable',
         title: code === 401 ? 'Account assertion refused' : 'Request budget unavailable',
       });
     }

@@ -13,6 +13,7 @@ import { dispatchTest, selectTestCommand } from '../../../scripts/qa/test.ts';
 import { acquireQaSlots, commandAsync, parseArgs, selfManagedFaultFiles, tierBunTestArgs } from '../../../scripts/qa/core.ts';
 import { waitForMemory } from '../../../scripts/qa/memory-admission.ts';
 import { qaFailure } from '../../../scripts/qa/failure.ts';
+import { parseJUnit } from '../../../scripts/qa/acceptance.ts';
 import { qaWaitStatusLines } from '../../../scripts/goal/goalctl.ts';
 import { cleanupQaStacks, forgetQaStack, QA_STACK_REGISTRY, rememberQaStack }
   from '../../../scripts/qa/stack-ownership.ts';
@@ -1295,3 +1296,56 @@ test('a case sleeping 7s passes in owner and fails in unit', async () => {
     expect(raisedUnit.status).toBe(0);
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }, 45_000);
+
+
+test('explicit selected hidden integration paths reach Bun and preserve failure', async () => {
+  const directory = mkdtempSync(join(root, '.temp/explicit-bun-file-'));
+  const file = 'tests/qa/integration/.temp/sentinel.test.ts';
+  const name = 'EXPLICITFILE01 reached hidden selection';
+  mkdirSync(join(directory, dirname(file)), { recursive: true });
+  writeFileSync(join(directory, file),
+    `import { expect, test } from 'bun:test';\n`
+    + `import { writeFileSync } from 'node:fs';\n`
+    + `writeFileSync(process.env.EXPLICIT_FILE_WITNESS, 'imported');\n`
+    + `test(${JSON.stringify(name)}, () => expect(process.env.EXPLICIT_FILE_FAIL).not.toBe('yes'));\n`);
+  const source = ts.createSourceFile('cli.ts', readFileSync(join(root, 'scripts/qa/cli.ts'), 'utf8'),
+    ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const shard = source.statements.find((node): node is ts.FunctionDeclaration =>
+    ts.isFunctionDeclaration(node) && node.name?.text === 'runShardWork');
+  const declarations: ts.VariableDeclaration[] = [];
+  const visit = (node: ts.Node) => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === 'batchArgs')
+      declarations.push(node);
+    ts.forEachChild(node, visit);
+  };
+  if (!shard) throw new Error('Missing QA shard boundary');
+  visit(shard);
+  expect(declarations).toHaveLength(1);
+  const initializer = declarations[0]!.initializer;
+  if (!initializer) throw new Error('Missing QA Bun arguments');
+  const boundary = ts.transpileModule(initializer.getText(source),
+    { compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.None } }).outputText;
+  try {
+    for (const failing of [false, true]) {
+      const batch = [file];
+      const batchFile = join(directory, failing ? 'failed.xml' : 'passed.xml');
+      const witness = join(directory, failing ? 'failed-import' : 'passed-import');
+      const args = new Script(boundary).runInNewContext({
+        tierBunTestArgs, tier: 'integration', batch, flags: ['-t', '^EXPLICITFILE01'], batchFile, options: failing ? { timeoutArgs: ['--timeout=1234'] } : {},
+      }) as string[];
+      const child = Bun.spawn([process.execPath, ...args], {
+        cwd: directory, env: { ...process.env, CLAUDECODE: '1', EXPLICIT_FILE_WITNESS: witness,
+          EXPLICIT_FILE_FAIL: failing ? 'yes' : 'no' }, stdout: 'pipe', stderr: 'pipe', timeout: 10_000,
+      });
+      const [status, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(),
+        new Response(child.stderr).text()]);
+      expect({ status, stdout, stderr }).toMatchObject({ status: failing ? 1 : 0 });
+      expect(readFileSync(witness, 'utf8')).toBe('imported');
+      const results = parseJUnit(readFileSync(batchFile, 'utf8'), 'integration');
+      expect(results).toHaveLength(1);
+      expect(results[0]).toMatchObject({ name, failed: failing, skipped: false });
+      expect(batch).toEqual([file]);
+      expect(args.filter(arg => arg.startsWith('--timeout='))).toEqual([failing ? '--timeout=1234' : '--timeout=60000']);
+    }
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});

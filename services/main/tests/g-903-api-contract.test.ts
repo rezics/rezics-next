@@ -5,7 +5,7 @@ import { buildMainOpenApi } from '../../../scripts/api/generate.ts';
 type Routes = MainApp['~Routes']['v1'];
 type Assert<Condition extends true> = Condition;
 type _Admission = Assert<Routes['works']['post']['response'][201] extends { admissionId: string } ? true : false>;
-type _Review = Assert<Routes['realm-reply-placements']['post']['response'][201] extends {
+type _Review = Assert<Extract<Routes['realm-reply-placements']['post']['response'][201], { profile: 'realm-reply-placement-v1' }> extends {
   reviewDecisionId: string; reviewGeneration: string
 } ? true : false>;
 type _Authority = Assert<Routes['access']['authority-state']['get']['response'][200] extends {
@@ -15,7 +15,8 @@ type _Authority = Assert<Routes['access']['authority-state']['get']['response'][
 test('G-903 generated contracts carry every next-call precondition', async () => {
   const document = JSON.parse(await buildMainOpenApi()) as { paths: Record<string, Record<string, {
     security?: unknown[]; responses: Record<string, { content: Record<string, { schema: {
-      required: string[]; properties: Record<string, any>
+      required: string[]; properties: Record<string, any>;
+      anyOf?: { properties: { profile: { const: string } }; required: string[] }[]
     } }> }>
   }>> };
   const schema = (path: string, method: string, status: string) =>
@@ -23,7 +24,9 @@ test('G-903 generated contracts carry every next-call precondition', async () =>
   for (const status of ['200', '201']) {
     const work = schema('/v1/works', 'post', status) as { required?: string[]; anyOf?: { required?: string[] }[] };
     expect(work.required ?? work.anyOf?.find(branch => branch.required?.includes('work'))?.required).toContain('admissionId');
-    expect(schema('/v1/realm-reply-placements', 'post', status).required).toContain('reviewGeneration');
+    const placements = schema('/v1/realm-reply-placements', 'post', status);
+    expect(placements.anyOf?.find(branch => branch.properties.profile.const === 'realm-reply-placement-v1')?.required)
+      .toContain('reviewGeneration');
   }
   for (const path of ['/v1/access/authority-state', '/v1/access/revocation-sources/{sourceId}']) {
     expect(document.paths[path]!.get!.security?.length).toBeGreaterThan(0);

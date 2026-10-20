@@ -84,3 +84,18 @@ test('reading and editor preview keep written steps interleaved with adopted ins
   expect(html.indexOf('Prepare the pan.')).toBeLessThan(html.indexOf('Stir the tomatoes'));
   expect(html.indexOf('Stir the tomatoes')).toBeLessThan(html.indexOf('Serve while warm.'));
 });
+
+test('recipe method markers retain occurrence identity and selected document text separately from credit', () => {
+  const credited = { ...instruction, details: { author: iri(9), creditNames: { [iri(9)]: 'Actual instruction author' }, refusals: [] } };
+  const html = renderToStaticMarkup(createElement(RecipeContent, {
+    page: readingOf(stateOf({ ...page, instructions: [credited] })), units: 'written', messages: englishMessages,
+  }));
+  expect(html).toContain(`data-step-occurrence="${instruction.occurrence}"`);
+  expect(html).toContain(`data-step-text="${instruction.occurrence}"`);
+  const body = html.match(/data-step-text="[^"]+"[^>]*>(.*?)<\/div><p class="text-xs text-muted-foreground">Author:/s)?.[1];
+  expect(body).toContain('Stir the tomatoes into the stock.');
+  expect(body).toContain('אחר כך');
+  expect(body).not.toContain('Actual instruction author');
+  expect(html).toContain('Actual instruction author');
+  expect(html).not.toContain('outside the selected procedure');
+});

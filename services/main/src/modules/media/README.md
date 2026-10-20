@@ -238,6 +238,38 @@ locks its Use so whole-document saves cannot race an absent slot. Content's
 and protected concealment during the existing draft transaction. It traverses
 only this document's actual nodes and does not follow referenced content.
 
+### Member reply document images
+
+`POST /v1/media/uses` keeps its Work-author command unchanged. An optional
+`memberReplyDraft` selects the closed `member-reply-draft-image-v1` profile:
+`variantId` (the actual Content variant), `expectedHead` (its acknowledged UUID
+draft revision), and the reply's immutable `rootTarget` and `rootRevision`.
+The existing `target` must be that reply itself. The writer first saves a real
+text draft through the member-reply draft command and reuses its returned head;
+an unsaved identifier or a readable Work supplies no reply ownership.
+
+This command requests Account `comment:create` and Access
+`media.member-reply.use` on `content:draft:<reply>`, with the actual root and
+revision as owner-bound admission metadata. Access owns the current Person,
+controller and readable-root policy, claim, replay and final authority fence.
+Media verifies the actual Content author, variant, successful draft receipt,
+current head and root under Content row locks before creating the Use. Its
+context must equal the draft's origin Realm, or the default context when no
+Realm is present. The existing owner-only, active, cleared representation gate
+still applies; this grants no Work publication authority or artwork rights.
+
+Success returns the existing exact `use`, `asset`, `representation`,
+`occurrence`, Content position and Access admission with HTTP 201; an identical
+key replays that same receipt with HTTP 200, including after a subsequent draft
+edit. Another intent under that key conflicts. A foreign/missing draft or image
+is unavailable (404), a changed draft head is stale (409), mismatched root,
+variant or context is denied (403), and missing authority/owner service is
+unavailable (503) or denied (403) as appropriate. A recorded stale/refused
+operation remains refused on replay. No Use is created by a refusal. Saving
+the document still requires Content's exact representation/occurrence/Use and
+reply-target binding checks; a successful Use alone does not save a draft or
+establish public delivery or page decoding.
+
 `POST /v1/media/representations/{representation}/inferences` records immutable
 client evidence bound to the server-confirmed representation digest. The admitted
 `image-nsfw-v1` policy validates complete finite NSFWJS scores, model/version and

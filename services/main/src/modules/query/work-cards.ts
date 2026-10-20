@@ -4,14 +4,21 @@ import { GLOBAL_RATING_POPULATION_OWNER } from '../rating/global.ts';
 import { RATING_STANDING_CADENCE } from '../rating/context.ts';
 import { readCreditAttributionCards } from '../profiles/attribution.ts';
 import { conceptCountBasis } from '../discovery/concepts.ts';
-import { namedAuthorCredit, type DiscoveryCredit, type OwnedDiscoveryBasis } from '../discovery/contract.ts';
+import { namedAuthorCredit, type DiscoveryCredit, type OwnedDiscoveryBasis, type ProjectedCredit } from '../discovery/contract.ts';
+import { primaryDiscoveryCreditBatch } from '../discovery/credits.ts';
 import { RESOURCE_WORK_CARD_COST, resourceProjectedCard, type ResourceWorkCard } from './resource-contract.ts';
 import { Value } from 'typebox/value';
-import type { Static } from 'typebox';
 import { optionalPreview } from './optional-preview.ts';
 import { readFactObligations } from '../rights/read-imported.ts';
 
-/** Work-keyed projection probes plus bounded current name batches. Optional
+// The Source name owner handles Open Library authors. V1 credits may omit the
+// author namespace; another provider or namespace cannot share its name keys.
+function sourceAuthorKey(credit: ProjectedCredit) {
+  return credit.participantKind === 'external-reference' && credit.provider === 'open-library'
+    && (credit.namespace ?? 'author') === 'author' ? credit.key : null;
+}
+
+/** Work-keyed projection probes and current bounded credit/name batches. Optional
  * previews fail independently; membership and disclosure belong to the caller. */
 export async function resourceWorkCards(session: WorkReadSession, works: readonly string[]) {
   const cost = RESOURCE_WORK_CARD_COST;
@@ -39,14 +46,22 @@ export async function resourceWorkCards(session: WorkReadSession, works: readonl
     ? await optionalPreview(session, () => projection.active(ratingBasis, session.position)) : null;
   const rated = ratingGeneration && !ratingGeneration.stale ? ratingGeneration : null;
   const generations = [active, rated].filter(row => row !== null);
-  if (!generations.length) return result;
-  const rows = await optionalPreview(session, () => projection.resourceCardPayloads(generations, works));
-  const credits = new Map<string, Static<typeof resourceProjectedCard>['primaryCredits']>();
+  // Projection lag does not withdraw a current attribution. The existing credit
+  // owner reads one bounded native prefix plus current retained Source bindings;
+  // it never aggregates an inventory or trusts stale projected names/identities.
+  const currentCredits = creditsBasis?.active.stale
+    ? await optionalPreview(session, () => primaryDiscoveryCreditBatch(session, works, true)) : null;
+  if (!generations.length && !currentCredits) return result;
+  const rows = generations.length
+    ? await optionalPreview(session, () => projection.resourceCardPayloads(generations, works)) : null;
+  const credits = new Map<string, ProjectedCredit[]>();
   const ratings = new Map<string, ResourceWorkCard['rating']>();
   for (const work of works) {
     const preview = active ? rows?.get(active.generation_id)?.get(work)?.primaryCredits : undefined;
     if (Value.Check(resourceProjectedCard.properties.primaryCredits, preview)
       && new Set(preview.map(credit => credit.id)).size === preview.length) credits.set(work, preview);
+    const current = currentCredits?.get(work);
+    if (current) credits.set(work, current);
     const rating = rated ? rows?.get(rated.generation_id)?.get(work)?.rating : undefined;
     if (Value.Check(resourceProjectedCard.properties.rating, rating)
       && (!rating || rating.context === context && rating.scale.max === 5
@@ -54,7 +69,10 @@ export async function resourceWorkCards(session: WorkReadSession, works: readonl
       ratings.set(work, rating);
   }
   const selected = [...credits.values()].flat();
-  const keys = [...new Set(selected.flatMap(credit => credit.key ? [credit.key] : []))];
+  const keys = [...new Set(selected.flatMap(credit => {
+    const key = sourceAuthorKey(credit);
+    return key ? [key] : [];
+  }))];
   const [agents, sources] = await Promise.all([
     optionalPreview(session, () => readCreditAttributionCards(session,
       selected.flatMap(credit => credit.agent ? [credit.agent] : []), 'preview')),
@@ -68,22 +86,35 @@ export async function resourceWorkCards(session: WorkReadSession, works: readonl
     ? await optionalPreview(session, () => projection.active(creditsBasis.basis, session.position, active.generation_id)) : null;
   const finalRated = ratingBasis && rated
     ? await optionalPreview(session, () => projection.active(ratingBasis, session.position, rated.generation_id)) : null;
+  const reportedWorks = currentCredits ? works.filter(work => credits.get(work)?.some(credit =>
+    credit.participantKind === 'external-reference' && credit.confirmation === 'source-reported')) : [];
+  // Agent and name hydration can outlive the credit owner's opening binding
+  // check. A withdrawn report may not survive those awaits as a saved identity.
+  const currentReports = reportedWorks.length ? await optionalPreview(session,
+    async () => session.deps.sourceAdoptions?.authorReferences(reportedWorks)) : null;
   for (const work of works) {
-    const preview = final && !final.stale ? credits.get(work) : undefined;
+    const preview = currentCredits || final && !final.stale ? credits.get(work) : undefined;
     const primaryCredits = (preview ?? []).flatMap((credit): DiscoveryCredit[] => {
       if (credit.participantKind === 'external-reference') {
-        const source = sources?.get(credit.key);
-        const current = currentSources?.get(credit.key);
+        if (currentCredits && credit.confirmation === 'source-reported'
+          && !currentReports?.get(work)?.some(ref => ref.id === credit.id
+            && ref.key === credit.key && ref.ordinal === credit.ordinal)) return [];
+        const key = sourceAuthorKey(credit);
+        const source = key ? sources?.get(key) : undefined;
+        const current = key ? currentSources?.get(key) : undefined;
         const name = source && JSON.stringify(source) === JSON.stringify(current) ? source : null;
-        return [{ ...credit, ...name, displayName: name?.displayName ?? null }];
+        const { displayName: _savedName, nameSource: _savedSource, ...identity } = credit;
+        return [{ ...identity, ...name, displayName: name?.displayName ?? null }];
       }
       const agent = agents?.get(credit.agent);
       const named = agent && namedAuthorCredit(credit, agent);
       return named ? [named] : [];
     });
-    // Missing data supplies a zero lower bound, never an exact empty inventory.
-    result.set(work, { factObligations: factObligations.get(work), primaryCredits, creditCount: { value: preview?.length ?? 0,
-      kind: preview && preview.length < cost.credits ? 'exact' : 'at-least' },
+    // A live prefix does not establish complete projection/Source coverage.
+    // Count only its disclosed credits; missing data remains a zero lower bound.
+    result.set(work, { factObligations: factObligations.get(work), primaryCredits, creditCount: {
+      value: currentCredits ? primaryCredits.length : preview?.length ?? 0,
+      kind: !currentCredits && preview && preview.length < cost.credits ? 'exact' : 'at-least' },
     rating: finalRated && !finalRated.stale ? ratings.get(work) ?? null : null });
   }
   return result;

@@ -2,6 +2,7 @@ import type { ZoneMatchedRelease, ZoneReleaseFilterSpec, ZoneReleaseMatches, Zon
 import { type AdaptContext, zoneImage, zoneText, workLink } from '../realm/adapt.ts';
 import type { MainAvatar, MainName } from '../realm/types.ts';
 import type { Realization, Release } from '../work-levels/types.ts';
+import type { Loaded } from '../work-page/types.ts';
 import { type ReleaseFilterState } from './state.ts';
 
 /** One result of Main's release query: a Work and the IDs of the releases that satisfied the group. */
@@ -14,12 +15,16 @@ export interface ReleaseHit {
 export interface ReleaseRecords {
   releases: ReadonlyMap<string, Release>;
   realizations: ReadonlyMap<string, Realization>;
+  /** Exact coverage selections, including refusals; never substitute an identity's head. */
+  realizationReads?: ReadonlyMap<string, Loaded<Realization>>;
   /** Translator Agents by IRI, named by their public profile; one Agent Main will not name is simply absent. */
   translators: ReadonlyMap<string, ZoneText>;
 }
 
 /** How many matched releases of one Work are read and shown; Main names up to eight. */
 export const SHOWN_MATCHES = 2;
+
+export const realizationSelectionKey = (identity: string, revision: string | null) => JSON.stringify([identity, revision]);
 
 /** The registry facets a release record's fields answer; a card states each as the reader's filter chose it. */
 const facet = { language: 'releaseLanguage', platform: 'releasePlatform', completeness: 'releaseCompleteness',
@@ -50,8 +55,17 @@ export function matchedRelease(release: Release, work: string, state: ReleaseFil
   records: ReleaseRecords): ZoneMatchedRelease {
   const chosen = state.conditions;
   const entry = matchedEntry(release, work, state);
-  const realization = entry?.realization ? records.realizations.get(entry.realization) : undefined;
-  const translators = (realization?.translators ?? []).flatMap((agent): ZoneText[] => {
+  let selected: Realization | undefined;
+  if (entry?.realization) {
+    if (records.realizationReads) {
+      const read = records.realizationReads.get(realizationSelectionKey(entry.realization, entry.revision));
+      if (read?.ok) selected = read.data;
+    } else {
+      const supplied = records.realizations.get(entry.realization);
+      if (supplied && (entry.revision === null || supplied.revision === entry.revision)) selected = supplied;
+    }
+  }
+  const translators = (selected?.translators ?? []).flatMap((agent): ZoneText[] => {
     const name = records.translators.get(agent);
     return name ? [name] : [];
   });

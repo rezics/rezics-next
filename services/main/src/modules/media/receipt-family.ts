@@ -4,5 +4,6 @@ export const receiptFamilies = {
   'media.labels': 'media-field', 'media.labels.protect': 'media-field',
   'media.conceal': 'media-field', 'media.conceal.protect': 'media-field',
   'media.inference': 'media-inference', 'media.use': 'media-document-use',
+  'media.member-reply.use': 'media-document-use',
   'media.campaign': 'media-campaign',
 } as const;

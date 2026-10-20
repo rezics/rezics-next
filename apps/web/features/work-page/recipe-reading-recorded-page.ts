@@ -41,6 +41,8 @@ export type RecipeWorkHost = {
   recipeReadPage?: (href: string) => ReturnType<typeof recipePageReader>;
   actingSubject: string | null;
   signedIn: boolean;
+  /** The current Work/Zone view, including its admitted continuation selection. */
+  pageUrl?: string | null;
 };
 
 type CallResult<T> = { data: T | null; error: { status: number; value?: unknown } | null };

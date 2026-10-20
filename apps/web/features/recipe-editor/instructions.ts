@@ -1,4 +1,4 @@
-import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
+import { checkDocument, type DocumentNode, type DocumentSnapshot } from '@rezics/document';
 import type { InstructionDetails } from './instruction-reads.ts';
 
 export type InstructionSelector =
@@ -9,6 +9,28 @@ export interface Instruction {
   occurrence: string; reference: InstructionReference; status: 'available' | 'unavailable';
   document?: DocumentSnapshot; text?: string; mediaUse?: string;
   details?: InstructionDetails;
+}
+
+export const RECIPE_METHOD_STATE = 'rezics-recipe-method-state';
+
+/** Cooking mode can only present the complete method already disclosed and loaded on this page. */
+export function recipeMethodReady(page: {
+  next?: string; instructions?: readonly Instruction[];
+  occurrences: readonly { occurrence: string; role: string; qualifier?: {
+    type?: string; instructionText?: { value: string };
+  } | null }[];
+} | null): boolean {
+  if (!page || page.next) return false;
+  const adopted = new Map(page.instructions?.map(item => [item.occurrence, item]));
+  const steps = page.occurrences.filter(item => adopted.has(item.occurrence)
+    || item.role === 'step' && item.qualifier?.type === 'recipe-step');
+  return steps.length > 0 && steps.every(step => {
+    const selected = adopted.get(step.occurrence);
+    if (!selected) return Boolean(step.qualifier?.instructionText?.value.trim());
+    const document = instructionDocument(selected);
+    return selected.status === 'available' && Boolean(document && checkDocument(document)
+      || selected.text?.trim() || selected.details?.recording);
+  });
 }
 export const procedureDefinition = 'https://rezics.com/definition/procedure-v1';
 export const referenceDefinition = 'https://rezics.com/definition/resource-reference-v1';

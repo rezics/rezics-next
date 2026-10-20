@@ -36,7 +36,7 @@ const meta = {
   component: NotificationsView,
   render: ({ calls: _calls, ...args }: Args) => <NotificationsView {...args} />,
   parameters: { route: { pathname: '/en/notifications' } },
-  globals: { viewport: { value: 'desktop' } },
+  globals: { viewport: { value: 'desktop1440' } },
 } satisfies Meta<Args>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -60,9 +60,11 @@ export const Latest: Story = {
     await expect(canvas.getByRole('heading', { level: 1, name: 'Notifications' })).toBeVisible();
     const rows = canvas.getAllByRole('listitem');
     // Three replies in one thread read as the newest, with a count.
-    await expect(rows[0]).toHaveTextContent(
-      'Daniel Chen replied on “雨夜书店” and 2 more like this',
-    );
+    const thread = within(rows[0]!);
+    await expect(thread.getByRole('link', { name: 'Daniel Chen replied on “雨夜书店”' })).toHaveTextContent('雨夜书店');
+    await expect(thread.getByText('Replied')).toBeVisible();
+    await expect(thread.getByText('Daniel Chen')).toBeVisible();
+    await expect(thread.getByText('and 2 more like this')).toBeVisible();
     await expect(rows[0]).toHaveTextContent('Also: chapter four is up!');
     await expect(
       canvas.getByRole('link', {
@@ -77,7 +79,8 @@ export const Latest: Story = {
       }),
     ).toHaveAttribute('href', localizedPath(spaceHref('fiction', 'community'), 'en'));
     await expect(rows[0]).toHaveTextContent('in Fiction · 小说');
-    await expect(canvas.getByText('Aria Wang 王雅 followed you')).toBeVisible();
+    await expect(canvas.getByRole('heading', { level: 2, name: 'Aria Wang 王雅' })).toBeVisible();
+    await expect(canvas.getByText('Followed you')).toBeVisible();
     await expect(canvas.getByText('This notification is no longer available.')).toBeVisible();
     await expect(canvas.getAllByText('Unread')).toHaveLength(3);
 
@@ -92,11 +95,12 @@ export const MoreOnRequest: Story = {
   args: args({ next: 'older:1:105' }),
   async play({ canvasElement, args }) {
     const canvas = within(canvasElement);
-    await expect(canvas.queryByText('Aria Wang 王雅 followed you')).toBeNull();
+    await expect(canvas.queryByText('Followed you')).toBeNull();
     const newest = canvas.getAllByRole('listitem')[0]!;
     await expect(newest).toHaveTextContent('Also: chapter four is up!');
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
-    await expect(await canvas.findByText('Aria Wang 王雅 followed you')).toBeVisible();
+    await expect(await canvas.findByText('Followed you')).toBeVisible();
+    await expect(canvas.getByRole('heading', { level: 2, name: 'Aria Wang 王雅' })).toBeVisible();
     await expect(canvas.getAllByRole('listitem')[0]).toBe(newest);
     await expect(canvas.getAllByRole('listitem').at(-1)).toHaveTextContent('This notification is no longer available.');
     await expect(args.calls).toEqual(['page:older:1:105:50']);
@@ -167,11 +171,13 @@ export const ContinuationReset: Story = {
   })(),
   async play({ canvasElement, args }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByText('Aria Wang 王雅 followed you')).toBeVisible();
+    await expect(canvas.getByText('Followed you')).toBeVisible();
+    await expect(canvas.getByRole('heading', { level: 2, name: 'Aria Wang 王雅' })).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Show more' }));
     await expect(await canvas.findByRole('link', { name: 'A correction was revised' })).toBeVisible();
     await expect(canvas.getAllByRole('listitem')).toHaveLength(1);
-    await expect(canvas.queryByText('Aria Wang 王雅 followed you')).toBeNull();
+    await expect(canvas.queryByText('Followed you')).toBeNull();
+    await expect(canvas.queryByRole('heading', { level: 2, name: 'Aria Wang 王雅' })).toBeNull();
     await expect(canvas.getByText('Unread')).toBeVisible();
     await expect(canvas.queryByRole('button', { name: 'Show more' })).toBeNull();
     await userEvent.click(canvas.getByRole('button', { name: 'Mark all as read' }));
@@ -195,7 +201,8 @@ export const Reviews: Story = {
   args: { ...args(), initial: inboxWindow(reviews, null, '112') },
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
-    await expect(canvas.getByText('Aria Wang 王雅 reviewed “雨夜书店”')).toBeVisible();
+    await expect(canvas.getByText('Aria Wang 王雅')).toBeVisible();
+    await expect(canvas.getByText('Posted a review')).toBeVisible();
     await expect(
       canvas.getByRole('link', { name: 'Aria Wang 王雅 reviewed “雨夜书店”' }),
     ).toHaveAttribute(
@@ -206,10 +213,9 @@ export const Reviews: Story = {
       canvas.getByText('Quiet, rainy and exactly as sad as it should be.'),
     ).toBeVisible();
     await expect(
-      canvas.getByText(
-        'Readers are finding your review of “Middlemarch: A Study of Provincial Life” helpful',
-      ),
+      canvas.getByRole('link', { name: 'Readers are finding your review of “Middlemarch: A Study of Provincial Life” helpful' }),
     ).toBeVisible();
+    await expect(canvas.getByText('Readers are finding your review helpful')).toBeVisible();
     await expect(canvas.getByText('in Classic Literature')).toBeVisible();
   },
 };
@@ -226,7 +232,22 @@ function invitationArgs(): Args {
   };
 }
 
-export const InvitationNotificationPending: Story = { args: invitationArgs() };
+export const InvitationNotificationPending: Story = {
+  args: invitationArgs(),
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('button', { name: 'Join' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Decline' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Actions' })).toHaveAttribute('aria-expanded', 'false');
+    await expect(args.calls).toEqual([]);
+  },
+};
+export const InvitationNotificationPhone: Story = {
+  args: invitationArgs(), globals: { viewport: { value: 'phone' } }, play: InvitationNotificationPending.play,
+};
+export const InvitationNotificationPhoneDark: Story = {
+  args: invitationArgs(), globals: { viewport: { value: 'phone' }, theme: 'dark' }, play: InvitationNotificationPending.play,
+};
 
 /** The notification itself can answer the invitation and then reads it. */
 export const InvitationNotification: Story = {
@@ -239,8 +260,23 @@ export const InvitationNotification: Story = {
     await expect(canvas.getByText('Unread')).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Join' }));
     await expect(await canvas.findByRole('status')).toHaveTextContent('You joined Fiction · 小说.');
+    await expect(canvas.getByRole('status')).toHaveFocus();
     await expect(canvas.queryByText('Unread')).toBeNull();
     await expect(args.calls).toEqual(['accept:00000901:00000501:false']);
+  },
+};
+
+export const InvitationNotificationDecline: Story = {
+  args: invitationArgs(),
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('button', { name: 'Join' })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: 'Actions' })).toHaveAttribute('aria-expanded', 'false');
+    canvas.getByRole('button', { name: 'Decline' }).focus();
+    await userEvent.keyboard('{Enter}');
+    await expect(await canvas.findByRole('status')).toHaveTextContent('You declined the invitation to Fiction · 小说.');
+    await expect(canvas.getByRole('status')).toHaveFocus();
+    await expect(args.calls).toEqual(['decline:00000901:00000501:false']);
   },
 };
 
@@ -381,6 +417,82 @@ export const Phone: Story = {
   },
 };
 
+/** The original audit's first viewport, with unread state intact and triage disclosed on request. */
+export const Ready: Story = {
+  args: args(),
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    const rows = canvas.getAllByRole('listitem');
+    await expect(rows).toHaveLength(6);
+    const first = within(rows[0]!);
+    await expect(first.getByRole('link', { name: 'Daniel Chen replied on “雨夜书店”' })).toHaveTextContent('雨夜书店');
+    await expect(first.getByText('Replied')).toBeVisible();
+    await expect(first.getByText('Daniel Chen')).toBeVisible();
+    await expect(rows[0]!.querySelector('time')).toHaveAttribute('datetime', inbox.at(-1)!.createdAt);
+    await expect(canvas.getByRole('link', { name: 'Your submission “Middlemarch: A Study of Provincial Life” was accepted' }))
+      .toHaveTextContent('Middlemarch: A Study of Provincial Life');
+    await expect(canvas.getByText('Submission accepted')).toBeVisible();
+    await expect(canvas.getByText('Moderators reached a decision on a report')).toBeVisible();
+    await expect(canvas.getAllByText('Unread')).toHaveLength(3);
+    await expect(canvas.getAllByRole('button', { name: 'Actions' })).toHaveLength(6);
+    await expect(canvas.queryByRole('button', { name: 'Save' })).toBeNull();
+    await expect(canvas.queryByRole('button', { name: 'Mark done' })).toBeNull();
+    await expect(args.calls).toEqual([]);
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+export const ReadyPhone: Story = { args: args(), globals: { viewport: { value: 'phone' } }, play: Ready.play };
+export const ReadyDark: Story = { args: args(), globals: { theme: 'dark' }, play: Ready.play };
+export const ReadyPhoneDark: Story = {
+  args: args(), globals: { theme: 'dark', viewport: { value: 'phone' } }, play: Ready.play,
+};
+export const ChinesePhone: Story = { ...Chinese, args: args(), globals: { locale: 'zh-Hans', viewport: { value: 'phone' } } };
+
+/** Opening and triage are distinct keyboard targets; removing a row continues in the list. */
+export const KeyboardTriage: Story = {
+  args: args(),
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    const first = canvas.getAllByRole('listitem')[0]!;
+    const row = within(first);
+    row.getByRole('link', { name: 'Daniel Chen replied on “雨夜书店”' }).focus();
+    await userEvent.tab();
+    const actions = row.getByRole('button', { name: 'Actions' });
+    await expect(actions).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await expect(actions).toHaveAttribute('aria-expanded', 'true');
+    await userEvent.tab();
+    await expect(row.getByRole('button', { name: 'Save' })).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await expect(await row.findByRole('status')).toHaveTextContent('Saved.');
+    await expect(row.getByRole('button', { name: 'Unsave' })).toHaveAttribute('aria-pressed', 'true');
+    await expect(row.getByText('Unread')).toBeVisible();
+    await userEvent.tab();
+    await expect(row.getByRole('button', { name: 'Mark done' })).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(first).not.toBeInTheDocument());
+    await expect(canvas.getAllByRole('button', { name: 'Actions' })[0]).toHaveFocus();
+    await expect(args.calls).toEqual([
+      'triage:00000108:true:undefined:',
+      'triage:00000108:undefined:true:1',
+    ]);
+  },
+};
+
+export const OpenWithoutTriage: Story = {
+  args: args(),
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    const row = within(canvas.getAllByRole('listitem')[0]!);
+    const link = row.getByRole('link', { name: 'Daniel Chen replied on “雨夜书店”' });
+    link.addEventListener('click', event => event.preventDefault(), { once: true });
+    await userEvent.click(link);
+    await waitFor(() => expect(row.queryByText('Unread')).toBeNull());
+    await expect(row.getByRole('button', { name: 'Actions' })).toHaveAttribute('aria-expanded', 'false');
+    await waitFor(() => expect(args.calls).toEqual(['read:00000108', 'count']));
+  },
+};
+
 function mixedArgs(): Args {
   const items = [
     ...inbox.slice(0, 2),
@@ -413,12 +525,14 @@ export const Mixed: Story = {
       canvas.getByRole('link', { name: 'A correction needs your review' }),
     ).toHaveAttribute('href', `/en/proposals/${streamId(912)}?revision=1`);
     await expect(canvas.getByText('Changes were requested on your correction')).toBeVisible();
+    await userEvent.click(canvas.getAllByRole('button', { name: 'Actions' })[0]!);
     await userEvent.click(canvas.getAllByRole('button', { name: 'Save' })[0]!);
     await expect(await canvas.findByRole('status')).toHaveTextContent('Saved.');
     await userEvent.click(canvas.getAllByRole('button', { name: 'Mark done' })[0]!);
     await waitFor(() =>
       expect(canvas.queryByRole('link', { name: 'A correction needs your review' })).toBeNull(),
     );
+    await expect(canvas.getAllByRole('button', { name: 'Actions' })[0]).toHaveFocus();
     await expect(args.calls?.some((call) => call.startsWith('triage:'))).toBe(true);
   },
 };
@@ -458,10 +572,13 @@ export const SavedOnly: Story = {
       'aria-current',
       'page',
     );
+    for (const trigger of canvas.getAllByRole('button', { name: 'Actions' })) await userEvent.click(trigger);
     await expect(canvas.getAllByRole('button', { name: 'Unsave' })).toHaveLength(2);
+    for (const button of canvas.getAllByRole('button', { name: 'Unsave' })) await expect(button).toHaveAttribute('aria-pressed', 'true');
     await expect(canvas.queryByRole('button', { name: 'Save' })).toBeNull();
     await userEvent.click(canvas.getAllByRole('button', { name: 'Unsave' })[0]!);
     await waitFor(() => expect(canvas.getAllByRole('button', { name: 'Unsave' })).toHaveLength(1));
+    await expect(canvas.getByRole('button', { name: 'Actions' })).toHaveFocus();
   },
 };
 
@@ -493,8 +610,11 @@ export const DoneUndo: Story = {
       'aria-current',
       'page',
     );
+    await userEvent.click(canvas.getByRole('button', { name: 'Actions' }));
+    await expect(canvas.getByRole('button', { name: 'Undo' })).toHaveAttribute('aria-pressed', 'true');
     await userEvent.click(canvas.getByRole('button', { name: 'Undo' }));
     await expect(await canvas.findByRole('heading', { name: 'Nothing done' })).toBeVisible();
+    await expect(canvas.getByRole('region', { name: 'Notifications' })).toHaveFocus();
   },
 };
 
@@ -524,6 +644,7 @@ export const TriageError: Story = {
   args: triageErrorArgs(),
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Actions' }));
     await userEvent.click(canvas.getByRole('button', { name: 'Save' }));
     await expect(await canvas.findByRole('alert')).toHaveTextContent(
       'Couldn’t update this notification',
@@ -538,6 +659,12 @@ export const TriageErrorDark: Story = {
   args: triageErrorArgs(),
   globals: { theme: 'dark' },
   play: TriageError.play,
+};
+export const TriageErrorPhone: Story = {
+  args: triageErrorArgs(), globals: { viewport: { value: 'phone' } }, play: TriageError.play,
+};
+export const TriageErrorPhoneDark: Story = {
+  args: triageErrorArgs(), globals: { viewport: { value: 'phone' }, theme: 'dark' }, play: TriageError.play,
 };
 
 export const FailedDark: Story = { ...Failed, globals: { theme: 'dark' } };
@@ -562,5 +689,5 @@ export const NewWorks: Story = {
     await expect(canvas.getByText('This notification is no longer available.')).toBeVisible();
   },
 };
-export const NewWorksPhone: Story = { ...NewWorks, globals: { viewport: { value: 'mobile' } } };
+export const NewWorksPhone: Story = { ...NewWorks, globals: { viewport: { value: 'phone' } } };
 export const NewWorksDark: Story = { ...NewWorks, globals: { theme: 'dark' } };

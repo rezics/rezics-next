@@ -25,7 +25,8 @@ import type {
 export function zoneText(name: MainName): ZoneText;
 export function zoneText(name: MainName | null): ZoneText | null;
 export function zoneText(name: MainName | null): ZoneText | null {
-  return name ? { value: name.value, lang: name.language, dir: name.direction } : null;
+  return name ? { value: name.value, lang: name.language, dir: name.direction,
+    ...(name.basis === 'fallback' ? { basis: name.basis } : {}) } : null;
 }
 
 /**
@@ -39,6 +40,7 @@ export function zoneImage(avatar: MainAvatar | null, avatarQuery = ''): ZoneImag
         url: `${BFF_PREFIX}${avatar.url}${avatarQuery}`,
         width: avatar.width,
         height: avatar.height,
+        ...(avatar.coverCredit ? { coverCredit: avatar.coverCredit } : {}),
       }
     : null;
 }
@@ -223,21 +225,21 @@ export function zoneWork(
   decision: string | null,
   mount: string | null = null,
 ): ZoneWork {
-  const credit = card.primaryCredits?.find((item) => item.displayName);
-  const author = credit?.displayName;
-  const href = credit?.agent
-    ? authorHref({ kind: 'agent', handle: credit.handle, agent: credit.agent })
-    : credit?.provider === 'open-library' && credit.key
-      ? authorHref({ kind: 'external', key: credit.key })
-      : null;
+  const authors = card.primaryCredits?.flatMap(credit => credit.displayName
+    && (!credit.role || credit.role === 'author') ? [{ name: credit.displayName,
+      href: credit.agent ? authorHref({ kind: 'agent', handle: credit.handle, agent: credit.agent })
+        : credit.provider === 'open-library' && credit.key
+          ? authorHref({ kind: 'external', key: credit.key }) : null }] : []);
+  const author = authors?.[0];
   return {
     id: card.id,
     href: workLink(context, card.id, mount, undefined, card.inZone, card.address),
     title: zoneText(card.title),
     cover: zoneImage(card.cover, context.avatarQuery),
     kind: coverKindOf(card.types),
-    author: author ? zoneContentText(author) : null,
-    authorHref: href,
+    author: author ? zoneContentText(author.name) : null,
+    authorHref: author?.href ?? null,
+    ...(authors ? { authors } : {}),
     tagline: zoneText(card.tagline),
     factObligations: card.factObligations,
     status: card.completionStatus,
@@ -251,6 +253,7 @@ export function zoneWork(
 
 /** A Work's credited author as Main's module reads name them: a REZICS Agent, or a source such as Open Library. */
 export interface ModuleCredit {
+  role?: string;
   agent: string | null;
   handle: string | null;
   displayName: string | null;

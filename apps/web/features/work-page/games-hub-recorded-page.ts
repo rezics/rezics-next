@@ -30,7 +30,8 @@ export async function readSuppliedStart(client: Host, id: string, work: string, 
   const { main, actingSubject } = client;
   if (actingSubject) {
     const next = await settle(() => main.v1.me.continue.get({ query: { actingSubject, limit: 6 } }));
-    const item = next.ok ? next.data.items.find(entry => entry.work === work) : undefined;
+    const continuing = next.ok ? { entries: next.data.items, nextCursor: next.data.nextCursor } : null;
+    const item = continuing?.entries.find(entry => entry.work === work);
     if (item) {
       return { kind: item.lastPosition ? 'continue' as const : 'start' as const,
         href: item.nextUnread.href, chapter: item.nextUnread.title };
@@ -40,10 +41,13 @@ export async function readSuppliedStart(client: Host, id: string, work: string, 
   let parent: string | undefined;
   for (let depth = 0; depth < 3; depth += 1) {
     const level = await readSuppliedContents(client, id, { parent });
-    if (!level.ok) return depth === 0 && level.failure === 'missing' ? nothing() : { kind: 'contents' as const };
-    const first = level.data.items.find(item => item.availability === 'available');
+    if (!level.ok) return depth === 0 && level.failure === 'missing' ? nothing()
+      : { kind: 'unavailable' as const, ...level };
+    const contents = { entries: level.data.items, nextCursor: level.data.nextCursor };
+    const first = contents.entries.find(item => item.availability === 'available');
     const occurrence = first ? idOf(first.occurrence) : null;
-    if (!first || !occurrence) return depth === 0 && !level.data.items.length ? nothing() : { kind: 'contents' as const };
+    if (!first || !occurrence) return depth === 0 && !contents.entries.length && !contents.nextCursor
+      ? nothing() : { kind: 'contents' as const };
     if (first.role === 'chapter') return { kind: 'start' as const, href: chapterHref(id, occurrence),
       chapter: first.label?.value ?? null };
     parent = occurrence;
@@ -51,9 +55,12 @@ export async function readSuppliedStart(client: Host, id: string, work: string, 
   return { kind: 'contents' as const };
 }
 
-const absent = (read: { ok: true; data: { items?: readonly unknown[]; parts?: readonly unknown[] } } | { ok: false; failure: string }) =>
-  read.ok ? !(read.data.items ?? read.data.parts)?.length
-    : read.failure === 'missing' || read.failure === 'sign-in' || read.failure === 'identity';
+const absent = (read: { ok: true; data: { items?: readonly unknown[]; parts?: readonly unknown[]; nextCursor?: string | null; next?: string | null } }
+  | { ok: false; failure: string }) => {
+  if (!read.ok) return false;
+  const page = { entries: read.data.items, nextCursor: read.data.nextCursor };
+  return !(page.entries ?? read.data.parts)?.length && !page.nextCursor && !read.data.next;
+};
 
 /** The one sample with this label. Two names are the same production read when this row kept an earlier label. */
 export function gamesAnswerLabel(record: AnswerRecord, persona: AnswerPersona, labels: readonly string[]): string {

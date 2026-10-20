@@ -28,6 +28,7 @@ import type { StudioMessages } from './messages.ts';
 import { chapterHref, workHref } from './agent.ts';
 import { languageName } from './parts.tsx';
 import { ChapterPublishDialog } from './publish-dialog.tsx';
+import { QualificationWithdrawal } from './qualification-withdrawal.tsx';
 import type { StudioChapter } from './read.ts';
 import { studioAgentName } from './studio-frame.tsx';
 import type { MainClient } from './types.ts';
@@ -155,7 +156,7 @@ export function ChapterEditor({
       placeholderDirection={interfaceDirection[locale]}
       back={{
         href: workHref(agent, book.id, 'chapters'),
-        label: t.backToChapters,
+        label: `${t.backToChapters}: ${book.title.value}`,
         title: book.title,
       }}
       context={[
@@ -172,6 +173,16 @@ export function ChapterEditor({
       delay={delay}
       publish={(slot) => (
         <>
+          {current?.eligibility ? <QualificationWithdrawal target={target} current={current} locale={locale} main={main}
+            onWithdrawn={(receipt) => {
+              setCurrent(previous => previous?.publication === receipt.publication
+                && previous.eligibility === receipt.withdrawnEligibilityHead
+                ? { ...previous, eligibility: receipt.decision } : previous);
+              const remembered = readChapterMemory(storage, memoryKey);
+              if (remembered?.publication === receipt.publication
+                && remembered.eligibility === receipt.withdrawnEligibilityHead)
+                rememberChapter(storage, memoryKey, { eligibility: receipt.decision });
+            }} /> : null}
           <Button type="button" size="sm" disabled={!slot.ready} onClick={() => void open(slot)}>
             <SendIcon aria-hidden="true" />
             {current ? t.publishUpdate : t.publish}

@@ -56,6 +56,7 @@ export interface ContentEligibilityDecisionProof {
   publicationDecision: string;
   graphSequence: string;
   rightsBasis: string;
+  withdrawnEligibilityHead?: string;
   sourceReceiptId?: string;
   requestDigest?: string;
 }
@@ -70,6 +71,7 @@ export type ContentEligibilityState =
   | (ContentEligibilityPublicationProof & { kind: 'public-current'; eligibilityDecision: string;
     rightsBasis: string })
   | (ContentEligibilityPublicationProof & { kind: 'closed-absent' })
+  | (ContentEligibilityPublicationProof & { kind: 'closed-withdrawn'; eligibilityDecision: string; withdrawnEligibilityHead: string })
   | (ContentEligibilityPublicationProof & { kind: 'closed-superseded-approval'; eligibilityDecision: string;
     approvedPublicationDecision: string })
   | { kind: 'unresolved'; variant: string; reason: string };
@@ -179,6 +181,8 @@ export function classifyContentEligibilityState(
   if (BigInt(proof.graphSequence) <= BigInt(approved.graphSequence)) {
     return unresolved(variant, 'eligibility decision does not follow its approved publication');
   }
+  if (proof.withdrawnEligibilityHead) return { kind: 'closed-withdrawn', ...current,
+    eligibilityDecision: eligibility, withdrawnEligibilityHead: proof.withdrawnEligibilityHead };
   if (proof.publicationDecision === publication) {
     if (BigInt(proof.graphSequence) <= BigInt(current.graphSequence)) {
       return unresolved(variant, 'current eligibility decision does not follow the current publication');
@@ -248,6 +252,7 @@ const publicationReceiptFields: readonly FieldSpec[] = [
 ];
 
 const eligibilityDecisionFields: readonly FieldSpec[] = [
+  { variable: 'dWithdrawn', predicate: 'rv:withdrawnEligibilityHead' },
   { variable: 'dComponent', predicate: 'rv:component' },
   { variable: 'dVariant', predicate: 'rv:variant' },
   { variable: 'dResource', predicate: 'rv:resource' },
@@ -267,6 +272,7 @@ const eligibilityDecisionFields: readonly FieldSpec[] = [
 ];
 
 const eligibilityReceiptFields: readonly FieldSpec[] = [
+  { variable: 'rWithdrawn', predicate: 'rv:withdrawnEligibilityHead' },
   { variable: 'rOutcome', predicate: 'rv:outcome' },
   { variable: 'rReason', predicate: 'rv:reason' },
   { variable: 'rRequestDigest', predicate: 'rv:requestDigest' },
@@ -362,8 +368,8 @@ function eligibilityProofQuery(ids: readonly string[]): string {
     ${aggregateFields(eligibilityDecisionFields)} ${aggregateFields(eligibilityReceiptFields)}
     WHERE {
       VALUES ?eligibility { ${values(ids)} }
-      OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?eligibility a rv:ContentSearchEligibilityDecision }
-        BIND(1 AS ?decisionType) }
+      OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?eligibility a ?decisionType .
+        VALUES ?decisionType { rv:ContentSearchEligibilityDecision rv:ContentSearchEligibilityWithdrawalDecision } } }
       OPTIONAL { GRAPH ${iri(GRAPHS.revisions)} { ?eligibility a rv:RevisionAnchor }
         BIND(1 AS ?anchorType) }
       ${optionalFields(GRAPHS.revisions, '?eligibility', eligibilityDecisionFields)}
@@ -503,6 +509,8 @@ function parseEligibilityProof(row: Row | undefined, id: string, snapshot: Conte
   if (!row || exactRowId(row, 'eligibility') !== id
     || count(row, 'decisionType') !== 1 || count(row, 'anchorType') !== 1
     || count(row, 'receipt') !== 1 || count(row, 'receiptType') !== 1) return undefined;
+  const withdrawal = optionalExact(row, 'dWithdrawn', 'uri');
+  if (withdrawal) return parseEligibilityWithdrawal(row, id, snapshot, variant, resource, withdrawal);
   const dComponent = exact(row, 'dComponent', 'uri');
   const dVariant = exact(row, 'dVariant', 'uri');
   const dResource = exact(row, 'dResource', 'uri');
@@ -571,6 +579,45 @@ function parseEligibilityProof(row: Row | undefined, id: string, snapshot: Conte
   return { id, variant, resource, publicationDecision, graphSequence: sequence,
     rightsBasis: rightsBasis === 'public-domain' ? `${RV}PublicDomain` : `${RV}OriginalContribution`,
     sourceReceiptId: receipt, requestDigest: digest };
+}
+
+function parseEligibilityWithdrawal(row: Row, id: string, snapshot: ContentEligibilitySnapshot,
+  variant: string, resource: string, withdrawnHead: string): ContentEligibilityDecisionProof | undefined {
+  const val = (field: string, kind: 'uri' | 'literal' = 'uri') => exact(row, field, kind);
+  const admission = val('dAdmissionId', 'literal');
+  const actor = val('dActor');
+  const publication = val('dPublication');
+  const sequence = val('dSequence', 'literal');
+  const scope = val('dScope', 'literal');
+  const authority = val('dAuthorityEpoch', 'literal');
+  const receipt = val('receipt');
+  const digest = val('rRequestDigest', 'literal');
+  const profile = 'https://rezics.com/definition/content-search-eligibility-withdrawal-v1';
+  if (!admission || !UUID.test(admission) || !actor || !isIri(actor) || !publication || !isIri(publication)
+    || !isIri(withdrawnHead) || !sequence || !DECIMAL.test(sequence) || BigInt(sequence) === 0n
+    || BigInt(sequence) > BigInt(snapshot.sequence) || !authority || !DECIMAL.test(authority)
+    || val('dComponent') !== variant || val('dVariant') !== variant || val('dResource') !== resource
+    || val('dModel') !== profile || val('dShape') !== profile || val('dDataset') !== DATASET
+    || val('dDataEpoch', 'literal') !== snapshot.dataEpoch
+    || scope !== `content:search-eligibility:${resource}` && scope !== `content:search-eligibility:${variant}`
+    || val('rOutcome') !== `${RV}Succeeded` || optionalExact(row, 'rReason', 'uri') !== null
+    || val('rWithdrawn') !== withdrawnHead || val('rExpectedHead') !== withdrawnHead
+    || val('rEligibility') !== id || !digest || !SHA256.test(digest)
+    || contentSearchEligibilityDecisionIri(admission, true) !== id
+    || contentSearchEligibilityReceiptIri(admission) !== receipt) return undefined;
+  for (const field of ['RightsBasis', 'Disclosure', 'Assessment']) {
+    if (optionalExact(row, `d${field}`, 'uri') !== null || optionalExact(row, `r${field}`, 'uri') !== null) return undefined;
+  }
+  for (const [field, kind] of [['AdmissionId', 'literal'], ['AuthorityEpoch', 'literal'], ['Scope', 'literal'],
+    ['Actor', 'uri'], ['Resource', 'uri'], ['Variant', 'uri'], ['Publication', 'uri'], ['Dataset', 'uri'],
+    ['DataEpoch', 'literal'], ['Sequence', 'literal']] as const) {
+    if (val(`d${field}`, kind) !== val(`r${field}`, kind)) return undefined;
+  }
+  if (contentSearchEligibilityDigest({ profile: 'content-search-eligibility-withdrawal-v1',
+    resourceId: resource, variantId: variant, publicationDecision: publication,
+    expectedEligibilityHead: withdrawnHead, actingSubject: actor }) !== digest) return undefined;
+  return { id, variant, resource, publicationDecision: publication, graphSequence: sequence,
+    rightsBasis: '', withdrawnEligibilityHead: withdrawnHead, sourceReceiptId: receipt, requestDigest: digest };
 }
 
 /** Resolve one retained Public approval to its immutable Content publication pin. */

@@ -19,19 +19,22 @@ import { AccessTopology } from './topology.ts';
 import { ControlUnavailable } from './topology-control.ts';
 import { agentLocalizedName } from '../agent/localized-name.ts';
 import { selectDisplayName, type DisplayName } from '../display-language/select.ts';
-import { visibleNames } from '../disclosure/name-policy.ts';
-import { disclosureViewer } from '../disclosure/viewer.ts';
 import { PersonPreferencesStore } from '../preferences/store.ts';
+import { isOwnerTransientFailure } from '../../infrastructure/owner-failure.ts';
 
 export class ActingContextDenied extends Error {}
 export class ActingContextInvalid extends Error {}
 export class ActingContextStale extends Error {}
+type IdentityFailure = 'access_recovery_held' | 'work_create_gate_unavailable'
+  | 'authority_dependency_unavailable' | 'identity_labels_unavailable'
+  | 'identity_names_unavailable' | 'identity_choices_unavailable';
 export class ActingContextUnavailable extends Error {
   readonly code?: string;
-  constructor(message?: string, options?: ErrorOptions) {
+  constructor(message?: string, options?: ErrorOptions & { code?: IdentityFailure }) {
     super(message, options);
+    this.code = options?.code;
     const cause = options?.cause;
-    if (cause && typeof cause === 'object' && 'code' in cause
+    if (!this.code && cause && typeof cause === 'object' && 'code' in cause
       && typeof cause.code === 'string' && /^[0-9A-Z]{5}$/.test(cause.code)) {
       this.code = cause.code;
     }
@@ -117,7 +120,13 @@ const revisionId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 
 export async function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<T>,
   isolation: 'REPEATABLE READ' | 'READ COMMITTED' = 'REPEATABLE READ'): Promise<T> {
-  const client = await pool.connect();
+  const client = await pool.connect().catch((cause: unknown) => {
+    if (isOwnerTransientFailure(cause)) {
+      throw new ActingContextUnavailable('Authority connection is unavailable', {
+        cause, code: 'authority_dependency_unavailable' });
+    }
+    throw cause;
+  });
   try {
     // Discovery/check use one stable snapshot; preference writes serialize on
     // the principal row and lock their authority dependencies before mutation.
@@ -131,11 +140,16 @@ export async function transaction<T>(pool: Pool, work: (client: PoolClient) => P
     try { await client.query('ROLLBACK'); } catch { /* preserve original failure */ }
     if (error instanceof GroupUnavailable || error instanceof RoleUnavailable
       || error instanceof ControlUnavailable) {
-      throw new ActingContextUnavailable(error.message, { cause: error });
+      throw new ActingContextUnavailable('Authority dependency is unavailable', {
+        cause: error, code: 'authority_dependency_unavailable' });
     }
     if (error && typeof error === 'object' && 'code' in error
       && ['40001', '40P01', '55P03', '57014'].includes(String(error.code))) {
       throw new ActingContextUnavailable('authority snapshot changed or timed out', { cause: error });
+    }
+    if (isOwnerTransientFailure(error)) {
+      throw new ActingContextUnavailable('Authority dependency is unavailable', {
+        cause: error, code: 'authority_dependency_unavailable' });
     }
     throw error;
   } finally { client.release(); }
@@ -157,8 +171,12 @@ export async function currentGate(client: PoolClient): Promise<{
     ) SELECT recovery.recovery_open, gate.* FROM recovery LEFT JOIN gate ON true`,
     [WORK_CREATE_CONTEXT.scope]);
   const row = gate.rows[0];
-  if (row?.recovery_open !== true) throw new ActingContextUnavailable('Access is held for recovery');
-  if (row.authority_epoch === null) throw new ActingContextUnavailable('Work creation scope is unavailable');
+  if (row?.recovery_open !== true) throw new ActingContextUnavailable('Access is held for recovery', {
+    code: 'access_recovery_held' });
+  if (!row.authority_epoch || !epoch.test(row.authority_epoch)
+    || typeof row.open !== 'boolean' || typeof row.dispatch_open !== 'boolean') {
+    throw new ActingContextUnavailable('Work creation scope is unavailable', { code: 'work_create_gate_unavailable' });
+  }
   return { authority_epoch: row.authority_epoch, open: row.open, dispatch_open: row.dispatch_open };
 }
 
@@ -166,7 +184,7 @@ export async function identityReadFence(client: PoolClient): Promise<void> {
   const recovery = await client.query<{ open: boolean }>(
     'SELECT open FROM access.recovery_fence WHERE id = true FOR SHARE');
   if (recovery.rows[0]?.open !== true) {
-    throw new ActingContextUnavailable('Access is held for recovery');
+    throw new ActingContextUnavailable('Access is held for recovery', { code: 'access_recovery_held' });
   }
 }
 
@@ -231,6 +249,14 @@ export async function eligibleSubject(client: PoolClient, principalId: string,
 export class AccessActingContexts {
   constructor(private readonly pool: Pool, private readonly environment?: WorkActivationEnvironment) {}
 
+  private visibleNames(subjects: readonly string[], principal: VerifiedPrincipal): Promise<Set<string>> {
+    // Discovery is a private identity read. Keep the same live name policy, but
+    // propagate its outage instead of reporting a successful inventory of null names.
+    return new PersonPreferencesStore(this.pool).visibleNameOwners(subjects, principal)
+      .catch((cause: unknown) => { throw new ActingContextUnavailable('Identity name policy is unavailable', {
+        cause, code: 'identity_names_unavailable' }); });
+  }
+
   async discoverAgents(principal: VerifiedPrincipal, languages: readonly string[] = []): Promise<AgentDiscovery> {
     const subjects = await transaction(this.pool, async client => {
       await identityReadFence(client);
@@ -271,7 +297,7 @@ export class AccessActingContexts {
       const claims = await this.pool.query<{ agent_id: string; handle: string }>(`SELECT holder AS agent_id, key AS handle
         FROM access.alias_registry WHERE scope = 'agent' AND holder = ANY($1::text[]) AND state = 'current'`, [subjects]);
       const handles = new Map(claims.rows.map(row => [row.agent_id, row.handle]));
-      const visible = await visibleNames(new PersonPreferencesStore(this.pool), subjects, disclosureViewer(principal));
+      const visible = await this.visibleNames(subjects, principal);
       const kinds: Record<string, AgentDiscoveryOption['kind']> = {
         [`${RV}PersonAgent`]: 'person', [`${RV}PenNameAgent`]: 'pen-name',
         [`${RV}OrganizationAgent`]: 'organization', [`${RV}ServiceAgent`]: 'service',
@@ -296,7 +322,8 @@ export class AccessActingContexts {
           language: selected.language, direction: selected.direction } : null });
       }
       return labels;
-    } catch (error) { throw new ActingContextUnavailable('Agent descriptions are unavailable', { cause: error }); }
+    } catch (error) { throw new ActingContextUnavailable('Agent descriptions are unavailable', {
+      cause: error, code: 'identity_labels_unavailable' }); }
   }
 
   /** One public graph read and one bounded current-handle batch for at most 50
@@ -325,7 +352,7 @@ export class AccessActingContexts {
       const claims = await this.pool.query<{ agent_id: string; handle: string }>(`SELECT holder AS agent_id, key AS handle
         FROM access.alias_registry WHERE scope = 'agent' AND holder = ANY($1::text[]) AND state = 'current'`, [subjects]);
       const currentHandles = new Map(claims.rows.map(row => [row.agent_id, row.handle]));
-      const visible = await visibleNames(new PersonPreferencesStore(this.pool), subjects, disclosureViewer(principal));
+      const visible = await this.visibleNames(subjects, principal);
       const kinds: Record<string, ActingContextOption['kind']> = {
         [`${RV}PersonAgent`]: 'person', [`${RV}PenNameAgent`]: 'pen-name',
         [`${RV}OrganizationAgent`]: 'organization', [`${RV}ServiceAgent`]: 'service',
@@ -347,7 +374,8 @@ export class AccessActingContexts {
       }
       return labels;
     } catch (error) {
-      throw new ActingContextUnavailable('public Agent descriptions are unavailable', { cause: error });
+      throw new ActingContextUnavailable('public Agent descriptions are unavailable', {
+        cause: error, code: 'identity_labels_unavailable' });
     }
   }
 

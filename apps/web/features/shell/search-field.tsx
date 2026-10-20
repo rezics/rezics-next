@@ -7,19 +7,24 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 import { useShell } from './shell-provider.tsx';
 import { localizedPath } from '../../i18n/locale.ts';
+import { browseSearchFields } from '../discover/browse-state.ts';
+import { selectionMessages } from '../discover/selection-messages.ts';
 
 function isEditable(target: EventTarget | null): boolean {
   return target instanceof HTMLElement
     && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
 }
 
-/** Discover's All search. `/` (outside text fields) or Cmd/Ctrl-K focuses it. */
+/** Discover edits keep the current selection. `/` or Cmd/Ctrl-K focuses the query. */
 export function SearchField() {
   const { t, locale } = useShell();
   const input = useRef<HTMLInputElement>(null);
   const pathname = usePathname();
-  const phrase = useSearchParams().get('q') ?? '';
-  const current = pathname === localizedPath('/discover', locale) ? phrase : '';
+  const params = useSearchParams();
+  const inDiscover = pathname === localizedPath('/discover', locale);
+  const current = inDiscover ? params.get('q') ?? '' : '';
+  const fields = inDiscover ? browseSearchFields(new URLSearchParams(params.toString())) : [];
+  const label = fields.length ? selectionMessages[locale].within : t.searchLabel;
 
   useEffect(() => {
     function focusSearch(event: KeyboardEvent) {
@@ -37,8 +42,9 @@ export function SearchField() {
   }, []);
 
   return <form role="search" aria-label={t.searchRegion} action={localizedPath('/discover', locale)} method="get" className="relative w-full">
+    {fields.map(([name, value], index) => <input key={`${name}:${index}`} type="hidden" name={name} value={value} />)}
     <Input ref={input} key={current} defaultValue={current} name="q" type="search" size="lg"
-      aria-label={t.searchLabel} placeholder={t.searchPlaceholder} maxLength={80}
+      aria-label={label} placeholder={fields.length ? label : t.searchPlaceholder} maxLength={80}
       autoComplete="off" enterKeyHint="search"
       onKeyDown={event => {
         if (event.key === 'Enter' && (event.nativeEvent.isComposing || event.keyCode === 229)) event.preventDefault();

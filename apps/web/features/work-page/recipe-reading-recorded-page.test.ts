@@ -1,8 +1,13 @@
 import { afterEach, expect, test } from 'bun:test';
+import { readFile } from 'node:fs/promises';
+import { browserMainApi } from '../api/browser.ts';
 import type { AnswerPersona, AnswerRecord, AnswerSample } from '../../../../scripts/api/answer-record.ts';
 import recipes from '../../../../tests/qa/fixtures/outcomes/recipes/read-a-recipe.json';
 import { mainApiWithToken } from '../api/main.ts';
 import { formatMeasure, formatQuantity } from '../recipe-editor/quantity.ts';
+import { recipeMethodReady, type Instruction } from '../recipe-editor/instructions.ts';
+import { instructionVisitIdentity, instructionVisitTransport } from '../recipe-editor/instruction-recorded-fixture.ts';
+import { appendRecipePage } from '../recipe-editor/pages.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import type { RecordedProblem } from './books-language-recorded-page.ts';
 import {
@@ -13,10 +18,30 @@ import {
   type RecipeIdentity,
 } from './recipe-reading-recorded-page.ts';
 import type { AgentCreditPage, RecipeWorkPage, WorkHeader } from './types.ts';
+import { englishMessages } from './messages.ts';
+import { recipeRegion, recipeWorkFrame, recipeWorkOverview } from './recipe-reading-recorded-page.tsx';
+import { EVERYONE } from './route.ts';
 
 const record = recipes as AnswerRecord;
 const personas = ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const;
 const disposals: (() => void)[] = [];
+
+test('cooking mode requires a complete loaded method, retaining unavailable native selections', () => {
+  const occurrence = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
+  const legacy = { occurrences: [{ occurrence, role: 'step', qualifier: {
+    type: 'recipe-step', instructionText: { value: 'Mix the sauce.' },
+  } }], instructions: [] as Instruction[] };
+  expect(recipeMethodReady(null)).toBe(false);
+  expect(recipeMethodReady({ occurrences: [] })).toBe(false);
+  expect(recipeMethodReady({ ...legacy, next: 'later-method-page' })).toBe(false);
+  expect(recipeMethodReady(legacy)).toBe(true);
+  const selected: Instruction = { occurrence, reference: { target: occurrence,
+    selector: { grain: 'representation', revision: occurrence, representation: occurrence } }, status: 'unavailable' };
+  // A native selected instruction takes precedence over an older qualifier on the same occurrence.
+  expect(recipeMethodReady({ ...legacy, instructions: [selected] })).toBe(false);
+  expect(recipeMethodReady({ ...legacy, instructions: [{ ...selected, status: 'available' }] })).toBe(false);
+  expect(recipeMethodReady({ ...legacy, instructions: [{ ...selected, status: 'available', text: 'Mix.' }] })).toBe(true);
+});
 afterEach(() => {
   for (const dispose of disposals.splice(0)) dispose();
 });
@@ -197,4 +222,174 @@ test('a continuation sends the cursor without a new serving count', async () => 
     expect(page.error).toBeNull();
     expect(page.data).toEqual(asRecipe(sample(persona, 'recipe-continuation').answer));
   }
+});
+
+function heldRecipeVisit(part: 'credits' | 'notes' | 'author', persona: AnswerPersona = 'visitor') {
+  const gate = Promise.withResolvers<void>();
+  const started = Promise.withResolvers<void>();
+  const misses: unknown[] = [];
+  const requests: URL[] = [];
+  const visit = instructionVisitTransport(persona, 'https://recorded.invalid', source =>
+    readFile(new URL(`../../../../${source}`, import.meta.url)).then(bytes => new Uint8Array(bytes)), error => misses.push(error));
+  const fetcher = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    requests.push(url);
+    if (part === 'credits' && url.pathname.endsWith('/agent-credits')
+      || part === 'notes' && url.pathname.endsWith('/selection')
+      || part === 'author' && /\/agents\/[^/]+\/works$/.test(url.pathname)) {
+      started.resolve();
+      await gate.promise;
+    }
+    return visit.fetcher(input, init);
+  }, { preconnect: fetch.preconnect });
+  const main = browserMainApi('https://recorded.invalid', { anonymous: persona === 'visitor', fetcher });
+  return { ...visit, gate, started, requests, misses,
+    host: { ...visit.host, main, anonymous: main, publicFetch: fetcher, recordingFetch: fetcher,
+      recipeReadPage: (href: string) => recipePageReader({ main, actingSubject: visit.actingSubject }, href) } };
+}
+
+test.each(['credits', 'notes', 'author'] as const)(
+  'the selected Recipe method and Cook settle while unrelated %s remain pending', async part => {
+    const visit = heldRecipeVisit(part);
+    let returned = false;
+    const pending = recipeWorkOverview({ host: visit.host, id: visit.id, workRef: visit.id, work: visit.header,
+      scope: EVERYONE, locale: 'en', messages: englishMessages }).then(node => { returned = true; return node; });
+    try {
+      await visit.started.promise;
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(returned).toBe(true);
+      const overview = await pending;
+      const region = await overview.props.type.props.children[1].props.children;
+      expect(region.props.initial).toMatchObject({ structure: visit.page.structure, revision: visit.page.revision });
+      expect(region.props.initial.instructions.map((item: { occurrence: string }) => item.occurrence))
+        .toEqual(visit.page.instructions?.map(item => item.occurrence));
+      expect(region.props.resource).toBe(visit.header.id);
+      expect(recipeMethodReady(region.props.initial)).toBe(true);
+      // A real sibling refusal remains a refusal; recovering the method cannot turn it into an empty list.
+      const parts = await overview.props.parts.props.children;
+      expect(parts.props.children[1].props.parts).toMatchObject({ ok: false, failure: 'missing', status: 404 });
+      const frame = await recipeWorkFrame({ host: visit.host, id: visit.id, workRef: visit.id, work: visit.header,
+        locale: 'en', messages: englishMessages, children: overview });
+      expect(frame.props.work).toBe(visit.header);
+      const action = await frame.props.readAction.props.children;
+      expect(action.props.kind).toBe('recipe');
+      expect(action.props.workId).toBe(visit.header.id);
+      expect(action.props.workRef).toBe(visit.id);
+      expect(action.props.canCook).toBe(true);
+      expect(action.props.recipeHref).toBe(region.props.href);
+      const methodRequests = visit.requests.filter(url => url.pathname.endsWith(`/recipes/works/${visit.id}`));
+      expect(methodRequests.length).toBeGreaterThan(0);
+      expect(methodRequests.every(url => url.searchParams.get('actingSubject') === null)).toBe(true);
+    } finally {
+      visit.gate.resolve();
+      await pending;
+      // Drain the supplemental identity read so no pending replay outlives its transport.
+      await loadRecipeIdentity(recipeReadingReads({ main: visit.host.main }), visit.id);
+      visit.dispose();
+    }
+    expect(visit.misses).toEqual([]);
+  },
+);
+
+test('recovering the method retains the signed-in Work and its captured shelf seed', async () => {
+  const visit = heldRecipeVisit('credits', 'owner');
+  let failing = true;
+  const fetcher = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (failing && url.pathname.endsWith(`/recipes/works/${visit.id}`)) {
+      return Response.json({ code: 'specific_unavailable' }, { status: 503 });
+    }
+    return visit.host.publicFetch(input, init);
+  }, { preconnect: fetch.preconnect });
+  const main = browserMainApi('https://recorded.invalid', { fetcher });
+  const host = { ...visit.host, main };
+  const read = () => recipeWorkFrame({ host, id: visit.id, workRef: visit.id, work: visit.header,
+    locale: 'en', messages: englishMessages, children: null });
+  try {
+    const failed = await read();
+    expect((await failed.props.readAction.props.children).props.canCook).toBe(false);
+    expect(failed.props.readerSeed).toBeDefined();
+    expect(failed.props.actingSubject).toBe(visit.actingSubject);
+    failing = false;
+    const recovered = await read();
+    expect(recovered.props.work).toBe(visit.header);
+    expect(recovered.props.actingSubject).toBe(failed.props.actingSubject);
+    expect(recovered.props.readerSeed).toEqual(failed.props.readerSeed);
+    expect(recovered.props.ratingTarget).toEqual(failed.props.ratingTarget);
+    expect((await recovered.props.readAction.props.children).props.kind).toBe('recipe');
+  } finally {
+    visit.gate.resolve();
+    await loadRecipeIdentity(recipeReadingReads({ main, actingSubject: visit.actingSubject }), visit.id);
+    visit.dispose();
+  }
+  expect(visit.misses).toEqual([]);
+});
+
+test('a recovered method does not wait for its notes or hide a notes failure', async () => {
+  const visit = heldRecipeVisit('notes');
+  let failing = true;
+  let attempts = 0;
+  const fetcher = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    if (url.pathname.endsWith(`/recipes/works/${visit.id}`)) {
+      attempts++;
+      if (failing) return Response.json({ code: 'specific_unavailable' }, { status: 503 });
+    }
+    if (url.pathname.endsWith('/selection')) {
+      visit.started.resolve();
+      await visit.gate.promise;
+      return Response.json({ code: 'work_read_unavailable' }, { status: 503 });
+    }
+    return visit.fetcher(input, init);
+  }, { preconnect: fetch.preconnect });
+  const main = browserMainApi('https://recorded.invalid', { anonymous: true, fetcher });
+  const host = { ...visit.host, main, recipeReadPage: undefined, recordingFetch: undefined };
+  const read = () => recipeRegion({ host, id: visit.id, work: visit.header, href: `/v1/recipes/works/${visit.id}`,
+    locale: 'en', messages: englishMessages });
+  try {
+    const failed = await read();
+    expect(failed.props.failure).toBe('unavailable');
+    expect(failed.props.initial).toBeNull();
+    expect(attempts).toBe(1);
+    failing = false;
+    const recovered = await read();
+    expect(recovered.props.failure).toBeUndefined();
+    expect(recovered.props.initial.revision).toBe(visit.page.revision);
+    expect(recipeMethodReady(recovered.props.initial)).toBe(true);
+    expect(attempts).toBe(2);
+    visit.gate.resolve();
+    const notes = await recovered.props.notes;
+    expect(notes.props).toMatchObject({ title: englishMessages.recipeNotes, failure: 'unavailable' });
+    await failed.props.notes;
+  } finally {
+    visit.gate.resolve();
+    visit.dispose();
+  }
+  expect(visit.misses).toEqual([]);
+});
+
+test('Cook requires a complete published method, including every available instruction', async () => {
+  // An available selection has not yet disclosed its method text or recording.
+  expect(recipeMethodReady(instructionVisitIdentity('visitor').page)).toBe(false);
+  const visit = heldRecipeVisit('credits');
+  try {
+    const answer = await recipeReadingReads({ main: visit.host.main }).readRecipe(`/v1/recipes/works/${visit.id}`);
+    expect(answer.ok).toBe(true);
+    if (!answer.ok || !answer.data) throw new Error('Captured Recipe method was not read');
+    const instructions = answer.data;
+    expect(recipeMethodReady(instructions)).toBe(true);
+    expect(recipeMethodReady(null)).toBe(false);
+    expect(recipeMethodReady({ ...instructions, next: 'next-page' })).toBe(false);
+    expect(recipeMethodReady({ ...instructions, instructions: instructions.instructions?.map((item, index) =>
+      index === 0 ? { ...item, status: 'unavailable' } : item) })).toBe(false);
+    expect(recipeMethodReady({ ...instructions, instructions: [], occurrences: [] })).toBe(false);
+    const first = asRecipe(sample('visitor', 'recipe-start').answer);
+    const last = asRecipe(sample('visitor', 'recipe-continuation').answer);
+    expect(recipeMethodReady(first)).toBe(false);
+    expect(recipeMethodReady(appendRecipePage(first, last))).toBe(true);
+  } finally {
+    visit.gate.resolve();
+    visit.dispose();
+  }
+  expect(visit.misses).toEqual([]);
 });

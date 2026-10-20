@@ -2,6 +2,7 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { LibraryMessages } from '../messages.ts';
 
 export default {
+  libraryTools: '目標、統計與匯入匯出',
   title: '藏書庫',
   description: '你的書架、正在閱讀的作品、你擁有的書，以及你記下的借閱。',
   workCount: plural({ one: insert('{{count}} 部作品'), other: insert('{{count}} 部作品') }, { count: asValue(number()) }),

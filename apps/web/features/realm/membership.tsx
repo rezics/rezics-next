@@ -11,6 +11,7 @@ import { materializeData } from 'native-i18n';
 import { useRouter } from 'next/navigation';
 import { useMemo, useRef, useState } from 'react';
 import { mainRelationships, RelationshipError } from '../relationships/api.ts';
+import type { ReportMenuTarget } from '../safety/report-action.tsx';
 import { RelationshipControl } from '../relationships/control.tsx';
 import { relationshipsChanged } from '../relationships/events.ts';
 import { storyFollowApi } from '../relationships/legacy.ts';
@@ -73,10 +74,11 @@ export function RealmMembership(props: Parameters<typeof RealmMembershipState>[0
 }
 
 function RealmMembershipState({ realm, realmName, initial, signedIn, actingSubject, signInHref, rulesHref,
-  actions, locale, messages, className, relationshipApi, transport }: {
+  actions, locale, messages, className, relationshipApi, transport, moreAccessibleLabel, reactionsLabel, reports }: {
   realm: string; realmName: string; initial: Membership | null; signedIn: boolean; actingSubject?: string | null;
   signInHref: string; rulesHref: string; actions?: MembershipActions; locale: UiLocale; messages: RealmMessages; className?: string;
   relationshipApi?: RelationshipsApi;
+  moreAccessibleLabel?: string; reactionsLabel?: string; reports?: readonly ReportMenuTarget[];
   /** Replaying fetch for a recorded page. Production leaves this unset. */
   transport?: { fetch?: typeof fetch; origin?: string };
 }) {
@@ -101,6 +103,7 @@ function RealmMembershipState({ realm, realmName, initial, signedIn, actingSubje
   const offer = offerOf(state);
   return <div className={cn('flex flex-wrap items-center justify-end gap-2', className)}>
     <RelationshipControl target={realm} kind="realm" realm={realm} name={realmName} locale={locale}
+      moreAccessibleLabel={moreAccessibleLabel} reactionsLabel={reactionsLabel} reports={reports}
       signedIn={signedIn} actingSubject={adapter.kind === 'unavailable' ? null : actingSubject}
       signInHref={adapter.kind === 'signed-out' ? adapter.signInHref : signInHref} api={adapter.kind === 'ready' ? api : undefined} initial={follow}
       membership={offer === 'joined' ? { joined: true, leave: api.canLeave ? () => {

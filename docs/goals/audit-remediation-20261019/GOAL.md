@@ -3,6 +3,13 @@ areas: []
 ---
 # Audit remediation
 
+The 16:00 target on 2026-10-19 was missed. The maintainer has directed continued
+manager work: both codex-2 / GPT-6.1 Sol / ultra audit managers are resumed.
+A reporting deadline is not permission to stop unfinished authorized work.
+Continue through implementation, original acceptance and main integration until
+the audits are complete or the maintainer cancels them. Do not alter proxy,
+node or network configuration; use the environment selected by the maintainer.
+
 The latest [conversion and citation direction](conversion-citation-direction.md)
 settles standalone-library conversion, an optional separate conversion interface,
 native-only ordinary interfaces and independent source annotation. It supersedes

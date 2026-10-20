@@ -26,12 +26,16 @@ test.each(['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as
       expect(recipe.ok).toBe(true);
       if (!recipe.ok) throw new Error('Recorded recipe read failed');
       expect(misses).toEqual([]);
-      const html = renderToStaticMarkup(createElement(RecipeResourceBody, { recipe, href: path.pathname,
+      const header = record.personas[persona].find(item => item.label === 'editor-work-header')!.answer as { id: string };
+      const html = renderToStaticMarkup(createElement(RecipeResourceBody, { resource: header.id, recipe, href: path.pathname,
         actingSubject: actingSubject ?? null, allowed: [], work: path.pathname.split('/').pop()!, text: null,
         locale: 'en', messages: englishMessages }));
       expect(recipe.data).toEqual(sample.answer as RecipeWorkPage);
       expect(html).toContain('1 ½ cup flour');
       expect(html).toContain('¼ cup flour');
+      for (const ingredient of recipe.data?.ingredients ?? []) {
+        expect(html).toContain(`data-ingredient="${ingredient.occurrence}"`);
+      }
       expect(html).toContain('lang="fr"');
       expect(html).not.toContain('Import Schema.org JSON');
       expect(html).not.toContain('Edit recipe');

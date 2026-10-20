@@ -7,6 +7,8 @@ export interface StoryRoute {
   search?: string;
   /** Observe navigation commands without changing the Storybook iframe's address. */
   onPush?: (href: string, options?: { scroll?: boolean }) => void;
+  /** Model the next RSC snapshot while exercising a task-bound refresh. */
+  onRefresh?: () => void;
 }
 
 export const StoryRouteContext = createContext<StoryRoute>({ pathname: '/' });
@@ -22,7 +24,7 @@ export function useSearchParams(): URLSearchParams {
 export function useRouter() {
   const route = use(StoryRouteContext);
   const ignore = () => undefined;
-  return { push: route.onPush ?? ignore, replace: ignore, refresh: ignore, back: ignore, forward: ignore, prefetch: ignore };
+  return { push: route.onPush ?? ignore, replace: ignore, refresh: route.onRefresh ?? ignore, back: ignore, forward: ignore, prefetch: ignore };
 }
 
 export function notFound(): never {

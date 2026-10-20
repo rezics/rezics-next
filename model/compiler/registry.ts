@@ -284,7 +284,7 @@ export function commandBindingRead(profile: string, binding: RegistryBinding, sh
     fields('placement', { realm: 'realm', reply: 'reply', root: 'rootTarget', revision: 'contentRevision',
       review: 'reviewDecision', author: 'author', actor: 'decidedBy' });
     receipt('placement', 'placement');
-  } else if (profile === 'work-author-credit-v1') {
+  } else if (profile === 'work-author-credit-v1' || profile === 'work-author-credit-v2') {
     triple('credit', 'creditRevision', 'revision');
     triple('revision', 'component', 'credit');
     fields('revision', { work: 'work', 'work-head': 'workRevision', key: 'externalKey',
@@ -337,6 +337,6 @@ export function commandBindingGraphs(profile: string, graphs: {
   current: string; revisions: string; receipts: string; control: string;
 }): string[] {
   const receiptBound = ['translation-link-v1', 'work-derivation-v1',
-    'fixed-native-text-release-v1', 'work-author-credit-v1'].includes(profile);
+    'fixed-native-text-release-v1', 'work-author-credit-v1', 'work-author-credit-v2'].includes(profile);
   return [graphs.current, graphs.revisions, ...receiptBound ? [graphs.receipts, graphs.control] : []];
 }

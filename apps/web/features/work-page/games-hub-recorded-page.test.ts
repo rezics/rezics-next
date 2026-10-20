@@ -220,6 +220,19 @@ test('the primary action starts from the recorded continue list and missing cont
   }
 });
 
+test('a refused contents read retains its owner failure instead of disclosing a Read destination', async () => {
+  const main = browserMainApi('https://recorded.invalid', { anonymous: true,
+    fetcher: (async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      Response.json({ code: 'read_unavailable' }, { status: 503 })) as typeof fetch });
+  let textReads = 0;
+  expect(await readSuppliedStart({ main }, workId('visitor'), 'https://rezics.com/work/example', async () => {
+    textReads += 1;
+    return 'en';
+  })).toMatchObject({ kind: 'unavailable', ok: false, failure: 'unavailable', status: 503,
+    problem: { code: 'read_unavailable' } });
+  expect(textReads).toBe(0);
+});
+
 test('each signed-in reader’s progress summary is their own recorded answer', async () => {
   for (const persona of signedIn) {
     const progress = sample(persona, answerLabel(persona, ['progress-summary', 'hub-progress-summary']));

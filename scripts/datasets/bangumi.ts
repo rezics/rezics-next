@@ -272,34 +272,40 @@ export function bangumiSourceUrl(kind: 'subject' | 'character', id: string | num
   return `https://bgm.tv/${kind}/${id}`;
 }
 
-function bangumiCoverCandidate(
+/** Roles come from the official endpoint's entity, never an image path or extension. */
+export function bangumiImageCandidate(
   row: Row,
-  canonicalId: number,
+  kind: 'subject' | 'character',
   captureUrl: string,
   recordDigest: string | undefined,
 ): DatasetImage | undefined {
+  const canonicalId = id(row);
+  const role = kind === 'subject' ? 'cover' : 'portrait';
+  const endpoint = kind === 'subject' ? 'subjects' : 'characters';
+  if (!new RegExp(`^https://api\\.bgm\\.tv/v0/${endpoint}/[1-9]\\d*$`).test(captureUrl))
+    throw new Error(`Bangumi ${role} requires its captured ${kind} endpoint`);
   const imageSet = row.images;
   if (!imageSet || typeof imageSet !== 'object' || Array.isArray(imageSet)) return undefined;
   const url = (imageSet as Row).large;
   if (url === undefined || url === null || url === '') return undefined;
   if (typeof url !== 'string' || url !== url.trim() || !url.startsWith('https://'))
-    throw new Error(`Bangumi subject ${canonicalId} has an invalid large cover URL`);
+    throw new Error(`Bangumi ${kind} ${canonicalId} has an invalid large ${role} URL`);
   if (!recordDigest || !/^[a-f0-9]{64}$/.test(recordDigest))
-    throw new Error(`Bangumi subject ${canonicalId} cover lacks captured source evidence`);
+    throw new Error(`Bangumi ${kind} ${canonicalId} ${role} lacks captured source evidence`);
   return {
-    record: key('subject', canonicalId),
-    role: 'cover',
+    record: key(kind, canonicalId),
+    role,
     url,
     sourceEvidence: {
       provider: 'bangumi',
-      namespace: 'subject',
+      namespace: kind,
       externalId: String(canonicalId),
       revision: null,
       captureUrl,
       recordDigest,
       field: '/images/large',
       sourceName: 'Bangumi',
-      sourceUrl: bangumiSourceUrl('subject', canonicalId),
+      sourceUrl: bangumiSourceUrl(kind, canonicalId),
       holder: null,
     },
   };
@@ -442,7 +448,7 @@ export async function enrichBangumiSubjects(
         });
       }
     }
-    const cover = bangumiCoverCandidate(row, canonicalId, url, captured?.digest);
+    const cover = bangumiImageCandidate(row, 'subject', url, captured?.digest);
     if (cover) {
       const prior = coverCandidates.get(cover.record);
       const currentCapture = cover.sourceEvidence!.captureUrl;
@@ -525,7 +531,12 @@ export async function enrichBangumiSubjects(
     ...source,
     records,
     edges,
-    images: [...coverCandidates.values()].sort((left, right) =>
+    images: [
+      ...source.images.filter(
+        (image) => image.role !== 'cover' || !coverCandidates.has(image.record),
+      ),
+      ...coverCandidates.values(),
+    ].sort((left, right) =>
       canonical([left.record, left.role, left.url, left.sourceEvidence]).localeCompare(
         canonical([right.record, right.role, right.url, right.sourceEvidence]),
       ),
@@ -559,7 +570,7 @@ export async function enrichBangumiSubjects(
             !item.startsWith('Covers and other images are not imported'),
         ),
         'Archive community tag subsets are supplemented with all tags exposed by the official subject API; tags unexposed by both sources remain outside observable coverage.',
-        'Portraits, screenshots, other images and user posts are not imported. The captured API does not evidence a cover rights holder, so holder identity remains unknown.',
+        'Only elected subject covers and portraits witnessed by an already captured character API response are retained as image candidates. Screenshots, other images and user posts are not acquired. Image rights holders remain unknown.',
       ],
     },
   };
@@ -680,6 +691,7 @@ export async function fetchBangumi(acquisition: Acquisition): Promise<DatasetSou
     }
   });
   const records: DatasetRecord[] = [];
+  const images: DatasetImage[] = [];
   const subjectIds = new Set([...selected.family, ...selected.references]);
   await scanBangumiArchive(
     path,
@@ -722,6 +734,11 @@ export async function fetchBangumi(acquisition: Acquisition): Promise<DatasetSou
         const row = (await acquisition.json(url)) as Row;
         const canonicalId = id(row),
           canonicalKey = key(kind, canonicalId);
+        if (kind === 'character') {
+          const captured = acquisition.captures.get(sha256(canonical([url, null])));
+          const portrait = bangumiImageCandidate(row, kind, url, captured?.digest);
+          if (portrait) images.push(portrait);
+        }
         if (canonicalId !== Number(externalId)) {
           // Bangumi transparently redirects merged IDs. Retain the requested
           // identity and the canonical entity without relabeling the source row.
@@ -834,7 +851,7 @@ export async function fetchBangumi(acquisition: Acquisition): Promise<DatasetSou
       .map((value) => key('subject', value)),
     records,
     edges,
-    images: [],
+    images,
     scope: {
       archive: latest,
       archiveDigest: archive.digest,

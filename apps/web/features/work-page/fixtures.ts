@@ -245,6 +245,7 @@ export const history = ok<HistoryPage>(page([
 export const noHistory = ok<HistoryPage>(page([]));
 
 const reply = (n: number, realm: string, body: string, sequence: string) => ({
+  kind: 'reply' as const,
   reply: iri(`d0e1f2a3-b4c5-4d6e-8f7a-${n.toString().padStart(12, '0')}`), realm: iri(realm),
   placement: iri(v7(day(`2026-09-${String(28 - n * 3).padStart(2, '0')}`), `4e7f8a9b${n}`)),
   revisionId: `f2a3b4c5-d6e7-4f8a-9b0c-${n.toString().padStart(12, '0')}`, body, dataEpoch: sourcePosition.dataEpoch,

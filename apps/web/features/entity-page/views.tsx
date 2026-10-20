@@ -23,7 +23,7 @@ import { messages as defaultFeedMessages, type FeedMessages } from '../feed/mess
 import { RightsMark, rightsRuns } from '../rights-mark/rights-mark.tsx';
 import type { Copy } from './messages.ts';
 import type { PredicateLabels } from './predicate-labels.ts';
-import { presentStatements } from './statement-groups.ts';
+import { presentStatements, splitStatementSources } from './statement-groups.ts';
 import type {
   EntitySection,
   HrefFor,
@@ -64,7 +64,7 @@ export function Quiet({
   children?: ReactNode;
 }) {
   return (
-    <div className="grid justify-items-start gap-2 rounded-2xl bg-muted/60 px-5 py-4">
+    <div className="grid justify-items-start gap-1 text-muted-foreground text-sm">
       <p className="font-medium">{title}</p>
       {body ? <p className="text-muted-foreground text-sm">{body}</p> : null}
       {children}
@@ -148,6 +148,7 @@ export function Value({
           summary={names.get(ref)}
           unavailable={t.unavailable}
           unnamed={t.unnamed}
+          undisclosed={t.nameNotShown}
           hrefFor={summaryHref(hrefFor)}
         />
       );
@@ -182,6 +183,7 @@ export function Value({
       summary={names.get(value.iri)}
       unavailable={t.unavailable}
       unnamed={t.unnamed}
+      undisclosed={t.nameNotShown}
       hrefFor={summaryHref(hrefFor)}
     />
   );
@@ -253,6 +255,7 @@ export function StatementsView({
   locale = 'en',
   t,
   messages,
+  pageEndSources = false,
 }: {
   page: Loaded<StatementPage>;
   labels?: PredicateLabels;
@@ -265,6 +268,7 @@ export function StatementsView({
   locale?: UiLocale;
   t: Copy;
   messages: WorkPageMessages;
+  pageEndSources?: boolean;
 }) {
   if (!page.ok) {
     return (
@@ -278,7 +282,8 @@ export function StatementsView({
       </Region>
     );
   }
-  const { labelled, other } = presentStatements(page.data.groups, labels, ownName);
+  const groups = pageEndSources ? splitStatementSources(page.data.groups).facts : page.data.groups;
+  const { labelled, other } = presentStatements(groups, labels, ownName);
   const rows = [...labelled.flatMap((group) => group.items), ...other];
   return (
     <Region id="statements" title={t.statements}>
@@ -297,12 +302,12 @@ export function StatementsView({
           {other.length ? (
             <StatementGroupView heading={t.otherFacts} items={other} names={names} hrefFor={hrefFor} t={t} />
           ) : null}
-          {rightsRuns(rows, () => page.data.factObligations).map((run, index) => (
+          {!pageEndSources ? rightsRuns(rows, () => page.data.factObligations).map((run, index) => (
             <RightsMark key={index} rights={run.rights} locale={locale} />
-          ))}
+          )) : null}
         </div>
       ) : (
-        <Quiet title={t.noStatements} body={t.noStatementsBody} />
+        <Quiet title={pageEndSources ? t.noFurtherDetails : t.noStatements} body={pageEndSources ? undefined : t.noStatementsBody} />
       )}
       <Pages
         cursor={cursor}
@@ -364,6 +369,7 @@ export function RelationsView({
                       summary={summary}
                       unavailable={t.unavailable}
                       unnamed={t.unnamed}
+                      undisclosed={t.nameNotShown}
                       hrefFor={summaryHref(hrefFor)}
                     />
                   </li>

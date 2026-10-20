@@ -178,9 +178,11 @@ class RouteRead {
   }
   async targets(targets: readonly string[]) {
     if (!targets.length) return [];
-    const summaries: Array<Available | null> = [];
-    for (let at = 0; at < targets.length; at += 50) {
-      const resources = targets.slice(at,at + 50);
+    // The closing dependency fence rereads each selected owner batch. Reuse
+    // this attempt's selections here, including an unavailable result.
+    const unknown = [...new Set(targets)].filter(target => !this.summaries.has(target));
+    for (let at = 0; at < unknown.length; at += 50) {
+      const resources = unknown.slice(at,at + 50);
       const input = { resources, context: DEFAULT_MEDIA_CONTEXT, language: null, includeCollections: true,
         localBasis: true,
         languages: readerLanguages(this.request.headers.get('x-rezics-display-languages'),
@@ -203,10 +205,9 @@ class RouteRead {
       for (const summary of batch.summaries) {
         const available = summary.status === 'available' ? summary : null;
         this.summaries.set(summary.reference,available);
-        summaries.push(available);
       }
     }
-    return summaries;
+    return targets.map(target => this.summaries.get(target) ?? null);
   }
   async target(target: string) {
     if (!this.summaries.has(target)) this.summaries.set(target, (await this.targets([target]))[0] ?? null);

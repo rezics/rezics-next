@@ -3,6 +3,7 @@ import { resourceHref } from '../address/path.ts';
 import { communityHref } from '../feed/discussion.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, fn, screen, userEvent, waitFor, within } from 'storybook/test';
+import { materializeData } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
 import { fixtureFollow, memoryRelationships } from '../relationships/fixtures.ts';
 import { relationshipStoryFetch } from '../relationships/story-fetch.ts';
@@ -10,6 +11,8 @@ import { memoryReaderActions } from '../catalogue/fixtures.ts';
 import { everyKind, memoryFeed, NOW, page, post, realms, storyId, suggestion } from '../feed/fixtures.ts';
 import { messages as feed } from '../feed/messages.ts';
 import feedZhHans from '../feed/messages/zh-Hans.ts';
+import feedDe from '../feed/messages/de.ts';
+import feedFr from '../feed/messages/fr.ts';
 import { idOf } from '../discover/scope.ts';
 import { type FeedDefaults, type FeedState, feedQuery } from '../feed/state.ts';
 import type { FeedPage, Loaded } from '../feed/types.ts';
@@ -21,7 +24,11 @@ import { HomePage, type HomePageProps, HomePosts } from './home-page.tsx';
 import { ConceptTopicFeed } from './tabs.tsx';
 import { messages as home } from './messages.ts';
 import homeZhHans from './messages/zh-Hans.ts';
-import { Rail } from './rail.tsx';
+import homeDe from './messages/de.ts';
+import homeFr from './messages/fr.ts';
+import { Rail, type RailData } from './rail.tsx';
+import { AppShell } from '../shell/app-shell.tsx';
+import { messages as shell } from '../shell/messages.ts';
 import { chooseOption } from '../stories/choose-option.ts';
 import { gateFor, NO_PLATFORM_ACCESS } from '../api/platform-access.ts';
 import { Button } from '@rezics/ui/button';
@@ -42,7 +49,7 @@ const state = (change: Partial<FeedState> = {}): FeedState =>
 const fantasy = readerFilters.pinned[0]!;
 const pinnedState = (filter: SavedFilter = fantasy) => state({ tab: 'pinned', filter: filter.id });
 
-type Args = HomePageProps & { withRail?: boolean };
+type Args = HomePageProps & { withRail?: boolean; withShell?: boolean; railState?: RailData };
 
 /** A Home over the in-memory Main; `page` and `personalRefused` shape the posts, as the route's read does. */
 function props(options: { signedIn?: boolean; state?: FeedState; page?: Loaded<FeedPage>; locale?: UiLocale;
@@ -51,7 +58,7 @@ function props(options: { signedIn?: boolean; state?: FeedState; page?: Loaded<F
     recommendations = null, ...rest } = options;
   const view = options.state ?? state(signedIn ? {} : { tab: 'all' });
   const zh = locale === 'zh-Hans';
-  const messages = { home: zh ? { ...home, ...homeZhHans } : home, feed: zh ? { ...feed, ...feedZhHans } : feed };
+  const messages = options.messages ?? { home: zh ? { ...home, ...homeZhHans } : home, feed: zh ? { ...feed, ...feedZhHans } : feed };
   const defaults: FeedDefaults = signedIn ? following : { tab: 'all', sort: 'best' };
   const pinned = view.tab === 'pinned' ? [...filters.pinned, ...filters.unpinned].find(item => item.id === view.filter)
     ?? null : null;
@@ -76,9 +83,15 @@ function props(options: { signedIn?: boolean; state?: FeedState; page?: Loaded<F
 const meta = {
   title: 'Home/Page',
   component: HomePage,
-  render: ({ withRail = true, ...args }: Args) => <HomePage {...args} rail={withRail
-    ? <Rail data={args.signedIn ? railData : { ...railData, moderated: [], trending: { ...railData.trending, scope: 'global' } }}
-      signedIn={args.signedIn} locale={args.locale} messages={args.messages.home} /> : undefined} />,
+  render: ({ withRail = true, withShell = false, railState, ...args }: Args) => {
+    const page = <HomePage {...args} rail={withRail
+      ? <Rail data={railState ?? (args.signedIn ? railData
+        : { ...railData, moderated: [], trending: { ...railData.trending, scope: 'global' } })}
+        signedIn={args.signedIn} locale={args.locale} messages={args.messages.home} /> : undefined} />;
+    return withShell ? <AppShell locale={args.locale} messages={shell} theme="light" navCollapsed={false}
+      signedIn={args.signedIn} account={args.signedIn ? <span className="text-sm">Reader</span>
+        : <a href={args.signInHref}>{shell.signIn}</a>}>{page}</AppShell> : page;
+  },
   parameters: { route: { pathname: '/en' } },
   globals: { viewport: { value: 'desktop' } },
   beforeEach({ args }) {
@@ -111,7 +124,7 @@ export const SignedOutZoom: Story = {
   },
 };
 
-/** Signed out: why to join, and All · Best under one control line. The official Zones are in the navigation. */
+/** Signed out: All · Best leads to content; joining follows the posts. */
 export const SignedOut: Story = {
   args: props({ signedIn: false, operationGate: gateFor(NO_PLATFORM_ACCESS) }),
   async play({ canvasElement }) {
@@ -132,6 +145,75 @@ export const SignedOut: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Dismiss' }));
     await expect(canvas.queryByRole('link', { name: 'Join REZICS' })).toBeNull();
     await expect(document.cookie).toContain('rezics_home_welcome=dismissed');
+  },
+};
+
+const emptyRail: RailData = { trending: { scope: 'global', items: [] }, suggestions: [], moderated: [],
+  ranking: railData.ranking };
+
+/** Actual feed rows in the app shell, with Welcome present and no recommendations to fill a rail. */
+export const ContentFirstPhone: Story = {
+  args: props({ signedIn: false, withShell: true, railState: emptyRail, operationGate: gateFor(NO_PLATFORM_ACCESS) }),
+  globals: { viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const posts = canvas.getByRole('region', { name: 'Posts' });
+    const welcome = canvas.getByRole('region', { name: home.welcomeTitle });
+    await expect(posts.compareDocumentPosition(welcome) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await document.fonts.ready;
+    window.scrollTo(0, 0);
+    await waitFor(() => {
+      const headerBottom = canvasElement.querySelector('header')!.getBoundingClientRect().bottom;
+      const fixedNav = [...canvasElement.querySelectorAll('nav')]
+        .find(nav => getComputedStyle(nav).position === 'fixed' && nav.checkVisibility()
+          && nav.getBoundingClientRect().height > 0);
+      const bottom = fixedNav?.getBoundingClientRect().top ?? window.innerHeight;
+      const titles = within(posts).getAllByRole('heading', { level: 3 }).slice(0, 2);
+      expect(titles).toHaveLength(2);
+      const previews = [within(posts).getByText(/^A new annotated translation/),
+        within(posts).getByText(/^Adds Ginger Island crops/)];
+      for (const item of [...titles, ...previews]) {
+        const box = item.getBoundingClientRect();
+        expect(box.top).toBeGreaterThanOrEqual(headerBottom);
+        expect(box.bottom).toBeLessThanOrEqual(bottom);
+        expect(box.left).toBeGreaterThanOrEqual(0);
+        expect(box.right).toBeLessThanOrEqual(window.innerWidth);
+      }
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    });
+    await expect(within(welcome).getByRole('link', { name: home.signUp })).toHaveAttribute('href', `${signInHref}&create=1`);
+  },
+};
+
+export const NoRecommendationsDesktop: Story = {
+  args: ContentFirstPhone.args,
+  globals: { viewport: { value: 'desktop1440' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const posts = canvas.getByRole('region', { name: 'Posts' });
+    const welcome = canvas.getByRole('region', { name: home.welcomeTitle });
+    const sidebar = canvas.getByRole('complementary', { name: home.sidebar });
+    await expect(within(sidebar).queryByRole('region', { name: home.trendingGlobal })).toBeNull();
+    await expect(within(sidebar).queryByText(home.trendingEmpty)).toBeNull();
+    await expect(within(sidebar).getByText(home.howHomeWorks)).toBeVisible();
+    const frame = posts.parentElement!.parentElement!;
+    await waitFor(() => expect(getComputedStyle(frame).gridTemplateColumns.split(' ')).toHaveLength(1));
+    await expect(posts.getBoundingClientRect().width).toBeLessThanOrEqual(46 * 16);
+    await expect(welcome.compareDocumentPosition(sidebar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  },
+};
+
+export const SignedOutEmpty: Story = {
+  args: props({ signedIn: false, withShell: true, railState: emptyRail,
+    page: { ok: true, data: page([], { scope: 'all' }) } }),
+  globals: { viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('link', { name: 'Explore Discover' })).toHaveAttribute('href', '/en/discover');
+    const welcome = canvas.getByRole('region', { name: home.welcomeTitle });
+    await expect(within(welcome).getByRole('link', { name: home.signUp })).toBeVisible();
+    await expect(canvas.queryByRole('region', { name: home.continueTitle })).toBeNull();
+    await expect(canvas.queryByRole('article')).toBeNull();
   },
 };
 
@@ -170,6 +252,54 @@ export const ReturningReader: Story = {
     await expect(canvas.getByText(/fading over about 24 hours/)).toBeVisible();
     await expect(canvas.getByText('No Realm fills more than 3 of any 10 posts in a row.')).toBeVisible();
   },
+};
+
+const expectContinueDescriptions: Story['play'] = async ({ canvasElement, args }) => {
+  const { userEvent: keyboard } = await import('vitest/browser');
+  const t = materializeData(args.messages.home, { locale: args.locale });
+  const strip = within(canvasElement).getByRole('region', { name: t.continueTitle });
+  const descriptionOf = (item: typeof continueItems[number]) => `${item.nextUnread.title
+    ? t.nextChapter({ chapter: item.nextUnread.title }) : t.nextUp} ${item.unreadCount.kind === 'exact'
+    ? t.newChapters(item.unreadCount.value) : t.newChaptersAtLeast(item.unreadCount.value)}`;
+
+  // Focused access keeps the visible chapter and exact/lower-bound badge even with a custom link name.
+  for (const item of continueItems) {
+    const link = within(strip).getByRole('link', { name: t.continueWork({ title: item.title.value }) });
+    await expect(link).toHaveAccessibleDescription(descriptionOf(item));
+    await expect(link).toHaveAttribute('href', localizedPath(item.nextUnread.href, args.locale));
+    await expect(link.querySelector('span[lang]')).toHaveAttribute('lang', item.title.language);
+  }
+  const item = continueItems[0]!;
+  const name = t.continueWork({ title: item.title.value });
+  within(strip).getByRole('link', { name }).focus();
+  await keyboard.keyboard('{Tab}');
+  await expect(within(strip).getByRole('button', { name: t.hideFromContinue({ title: item.title.value }) }))
+    .toHaveFocus();
+  await keyboard.keyboard('{Enter}');
+  await waitFor(() => expect(within(strip).queryByRole('link', { name })).toBeNull());
+  await expect(within(strip).getByRole('status')).toHaveTextContent(t.hiddenFromContinue({ title: item.title.value }));
+  within(strip).getByRole('button', { name: t.undo }).focus();
+  await keyboard.keyboard(' ');
+  await waitFor(() => expect(within(strip).getByRole('link', { name })).toHaveAccessibleDescription(descriptionOf(item)));
+  await expect((args.api as ReturnType<typeof memoryFeed>).calls.filter(call => call.startsWith('continue')))
+    .toEqual([`continue:${item.work.slice(-4)}:true`, `continue:${item.work.slice(-4)}:false`]);
+  await document.fonts.ready;
+  window.scrollTo(0, 0);
+  await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+};
+
+export const ContinueDescriptionsGermanPhone: Story = {
+  args: props({ locale: 'de', continueItems, withRail: false, messages: { home: { ...home, ...homeDe }, feed: feedDe } }),
+  globals: { viewport: { value: 'phone' }, locale: 'de' },
+  parameters: { route: { pathname: '/de' } },
+  play: expectContinueDescriptions,
+};
+
+export const ContinueDescriptionsFrenchPhone: Story = {
+  args: props({ locale: 'fr', continueItems, withRail: false, messages: { home: { ...home, ...homeFr }, feed: feedFr } }),
+  globals: { viewport: { value: 'phone' }, locale: 'fr', theme: 'dark' },
+  parameters: { route: { pathname: '/fr' } },
+  play: expectContinueDescriptions,
 };
 
 /**
@@ -222,7 +352,7 @@ export const ZoneAddresses: Story = {
   },
 };
 
-/** A new person is invited to the first-minute setup; All · Best stays below, and `+` pins a topic any time. */
+/** All · Best leads to content, followed by a new person's setup invite; `+` pins a topic any time. */
 export const NewPerson: Story = {
   args: props({ newPerson: true, followed: { realms: [], zones: [], complete: true }, filters: noFilters,
     state: state({ tab: 'all' }), page: { ok: true, data: page(everyKind.slice(2, 5), { scope: 'all' }) } }),
@@ -301,6 +431,7 @@ export const TabMenu: Story = {
     const choose = async (item: string) => {
       await userEvent.click(canvas.getByRole('button', { name: 'Options for Fantasy' }));
       await waitFor(() => expect(screen.getByRole('menuitem', { name: item })).toBeVisible());
+      await waitFor(() => expect(screen.getByRole('menu')).toHaveFocus());
       for (let step = 0; step < 6 && !screen.getByRole('menuitem', { name: item }).hasAttribute('data-highlighted'); step++) {
         await userEvent.keyboard('{ArrowDown}');
       }
@@ -310,6 +441,7 @@ export const TabMenu: Story = {
     await userEvent.click(canvas.getByRole('button', { name: 'Options for Fantasy' }));
     await waitFor(() => expect(screen.getByRole('menuitem', { name: 'Unfollow Fantasy' })).toBeVisible());
     await expect(screen.queryByRole('menuitem', { name: 'Move left' })).toBeNull();
+    await waitFor(() => expect(screen.getByRole('menu')).toHaveFocus());
     await userEvent.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
 

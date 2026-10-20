@@ -55,7 +55,7 @@ export function contentReferenceOwners(session: WorkReadSession, contentClient?:
   publicSelection?: () => Promise<boolean>): ReferenceOwners {
   const deps = session.deps, env = deps.environment, principal = session.principal;
   const actingSubject = session.options.actingSubject;
-  const viewer = disclosureViewer(principal, actingSubject);
+  const viewer = session.viewer;
   const disclosed = referenceDisclosure(env, { access: deps.access, principal, actingSubject,
     readers: { media: deps.media, mediaAccess: deps.mediaAccess } }, async target => !!principal && !!actingSubject
       && (!!await deps.access.canReadSemanticResource?.(principal, actingSubject, target)
@@ -113,15 +113,29 @@ export function contentReferenceOwners(session: WorkReadSession, contentClient?:
       const authority = privateReadable ? privateAuthority
         : publicSelection ?? (() => isPublicContentRevision(env, target, revision, variant, selector));
       const read = async () => {
-        if (await deps.content!.owningResourceForRevision(revision, contentClient) !== target
-          || !await authority()) return null;
-        const result = (await discloseContent(env,
-          await deps.content!.readExactBatch([revision], async ids => new Set(ids), contentClient), viewer))[0];
-        if (result?.status !== 'available' || result.reference.resourceId !== target
-          || result.reference.variantId !== variant
-          || !await publicDomainRevisionCurrent(result.reference, deps.rights?.store, contentClient)
-          || !await authority()) return null;
-        return result;
+        try {
+          if (!await authority()) return null;
+          if (await deps.content!.owningResourceForRevision(revision, contentClient) !== target) {
+            throw new WorkReadUnavailable('Content and publication disagree');
+          }
+          const results = await discloseContent(env,
+            await deps.content!.readExactBatch([revision], async ids => new Set(ids), contentClient), viewer);
+          if (results.length !== 1) throw new WorkReadUnavailable('Content owner result is incomplete');
+          const result = results[0]!;
+          if (result.status === 'denied' || result.status === 'erased') return null;
+          if (result.status === 'corrupt') throw new WorkReadUnavailable('Content integrity mismatch');
+          if (result.status === 'unavailable') throw new WorkReadUnavailable('Content dependency unavailable');
+          if (result.status === 'missing') throw new WorkReadUnavailable('Published Content object missing');
+          if (result.status !== 'available') throw new WorkReadUnavailable('Content owner result is invalid');
+          if (result.revisionId !== revision || result.reference.resourceId !== target
+            || result.reference.variantId !== variant) throw new WorkReadUnavailable('Content and publication disagree');
+          if (!await publicDomainRevisionCurrent(result.reference, deps.rights?.store, contentClient)
+            || !await authority()) return null;
+          return result;
+        } catch (cause) {
+          if (cause instanceof WorkReadUnavailable) throw cause;
+          throw new WorkReadUnavailable('Content reference owner is unavailable', { cause });
+        }
       };
       const result = await read();
       session.observeDependency(`content-reference:${target}:${JSON.stringify(selector)}`, result, read);

@@ -186,14 +186,14 @@ test('G-944: shared stack browser journey follows, changes level, pins, joins, l
         expect(before.following, 'Use an unfollowed test Space so this journey leaves no preexisting relation changed').toBe(false);
         cleanup = { realm, subject, dedicated: (await page.getByRole('heading', { level: 1 }).textContent())?.startsWith('G-944 journey ') === true };
         console.info(`G-944 ${width}px: follow, level, pin, join, leave`);
-        await control.getByRole('button', { name: /^Relationship options/ }).click();
+        await control.getByRole('button', { name: /^More actions/ }).click();
         await page.getByRole('menuitem', { name: 'Follow independently of membership' }).click();
         const bell = control.getByRole('button', { name: /^Notifications:/ });
         await visible(bell).toBeVisible();
         await bell.click();
         await page.getByRole('menuitemradio', { name: 'All', exact: true }).click();
         await visible(control.getByRole('button', { name: 'Notifications: All' })).toBeVisible();
-        await control.getByRole('button', { name: /^Relationship options/ }).click();
+        await control.getByRole('button', { name: /^More actions/ }).click();
         await page.getByRole('menuitem', { name: 'Pin', exact: true }).click();
         await visible.poll(async () => (await readState()).pinPosition).toBe(0);
         await control.getByRole('button', { name: /^Join ·/ }).click();

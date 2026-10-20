@@ -1,0 +1,12 @@
+diff --git a/dist/server/app-browser-entry.js b/dist/server/app-browser-entry.js
+--- a/dist/server/app-browser-entry.js
++++ b/dist/server/app-browser-entry.js
+@@ -1451,6 +1451,8 @@
+ 			} catch (error) {
+ 				if (!browserNavigationController.isCurrentNavigation(navId)) return;
+ 				if (!isPageUnloading) console.error("[vinext] RSC navigation error:", error);
++				// A failed refresh retains the current route; finally settles its pending state.
++				if (navigationKind === "refresh") return;
+ 				performHardNavigationForScrollIntent(navigationPlanner.classifyRscNavigationError({ currentHref }).url);
+ 			} finally {
+ 				navigationAbortHandle.release();

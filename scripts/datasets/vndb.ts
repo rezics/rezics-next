@@ -1,7 +1,13 @@
 import { readFileSync } from 'node:fs';
 import type { Acquisition } from './network.ts';
-import { blobPath } from './store.ts';
-import type { DatasetEdge, DatasetImage, DatasetRecord, DatasetSource } from './types.ts';
+import { blobPath, canonical, sha256 } from './store.ts';
+import type {
+  DatasetEdge,
+  DatasetImage,
+  DatasetMediaEvidence,
+  DatasetRecord,
+  DatasetSource,
+} from './types.ts';
 
 export const VNDB_DUMP_URL = 'https://dl.vndb.org/dump/vndb-db-2026-10-02.tar.zst';
 export type CopyRow = Record<string, string | null>;
@@ -78,6 +84,133 @@ export class VndbDump {
 }
 
 const key = (kind: string, id: string) => `vndb:${kind}:${id}`;
+
+export function vndbImageUrl(imageId: string): string {
+  const match = /^(cv|ch|sf)(\d+)$/.exec(imageId);
+  if (!match) throw new Error(`Unknown VNDB image identity: ${imageId}`);
+  return `https://t.vndb.org/${match[1]}/${String(Number(match[2]) % 100).padStart(2, '0')}/${match[2]}.jpg`;
+}
+
+type ImageTable = NonNullable<DatasetMediaEvidence['derivation']>['table'];
+function imageLocation(
+  image: DatasetImage,
+): { table: ImageTable; column: string; owner: string } | undefined {
+  const [provider, kind] = image.record.split(':');
+  if (provider !== 'vndb') return undefined;
+  if (kind === 'vn') {
+    if (image.role === 'cover') return { table: 'vn', column: 'image', owner: 'id' };
+    if (image.role === 'selected-cover') return { table: 'vn', column: 'c_image', owner: 'id' };
+    if (image.role === 'candidate-cover')
+      return { table: 'vn_image_votes', column: 'img', owner: 'vid' };
+    if (image.role === 'screenshot') return { table: 'vn_screenshots', column: 'scr', owner: 'id' };
+  }
+  if (kind === 'character' && image.role === 'portrait')
+    return { table: 'chars', column: 'image', owner: 'id' };
+  if (
+    kind === 'release' &&
+    (image.role === 'cover:release:pkgfront' || image.role.startsWith('release:'))
+  )
+    return { table: 'releases_images', column: 'img', owner: 'id' };
+  return undefined;
+}
+
+function imageEvidence(
+  image: DatasetImage,
+  row: CopyRow,
+  provenance: { url: string; digest: string },
+): DatasetMediaEvidence {
+  const location = imageLocation(image);
+  if (!location || !row[location.column]) throw new Error('VNDB image has no source field');
+  const [, namespace, externalId] = image.record.split(':');
+  return {
+    provider: 'vndb',
+    namespace: namespace!,
+    externalId: externalId!,
+    revision: null,
+    captureUrl: provenance.url,
+    recordDigest: sha256(canonical(row)),
+    field: `/${location.column}`,
+    sourceName: 'VNDB',
+    sourceUrl: `https://vndb.org/${externalId}`,
+    holder: null,
+    derivation: {
+      format: 'vndb-copy-image-v1',
+      archiveDigest: provenance.digest,
+      table: location.table,
+      imageId: row[location.column]!,
+    },
+  };
+}
+
+/** Recover only a witnessed source field, using a retained dump, never the filename's role. */
+function retainedImageEvidence(
+  candidates: readonly CopyRow[],
+  image: DatasetImage,
+  provenance: { url: string; digest: string },
+): DatasetMediaEvidence | undefined {
+  const location = imageLocation(image);
+  if (!location) return undefined;
+  const externalId = image.record.split(':')[2]!;
+  const rows = candidates
+    .filter((row) => {
+      if (row[location.owner] !== externalId) return false;
+      const imageId = row[location.column];
+      if (!imageId || vndbImageUrl(imageId) !== image.url) return false;
+      if (location.table === 'releases_images')
+        return (
+          image.role ===
+          (row.itype === 'pkgfront' ? 'cover:release:pkgfront' : `release:${row.itype}`)
+        );
+      return true;
+    })
+    .sort((left, right) => canonical(left).localeCompare(canonical(right)));
+  // Historical evidence-free descriptors were deduplicated by record/role/URL.
+  // One recovered witness supports that tuple; it does not identify independent
+  // occurrences or assert that this view contains every supporting archive row.
+  const row = image.sourceEvidence
+    ? rows.find((candidate) => sha256(canonical(candidate)) === image.sourceEvidence!.recordDigest)
+    : rows[0];
+  return row ? imageEvidence(image, row, provenance) : undefined;
+}
+
+/** Each elected COPY table is scanned once, even for a large captured image roster. */
+export function retainedVndbImageEvidenceReader(
+  dump: VndbDump,
+  images: readonly DatasetImage[],
+  provenance: { url: string; digest: string },
+): (image: DatasetImage) => DatasetMediaEvidence | undefined {
+  const tables = new Map<
+    ImageTable,
+    { owner: string; ids: Set<string>; rows: Map<string, CopyRow[]> }
+  >();
+  for (const image of images) {
+    const location = imageLocation(image);
+    if (!location) continue;
+    let table = tables.get(location.table);
+    if (!table)
+      tables.set(
+        location.table,
+        (table = { owner: location.owner, ids: new Set(), rows: new Map() }),
+      );
+    table.ids.add(image.record.split(':')[2]!);
+  }
+  for (const [name, table] of tables) {
+    for (const row of dump.rows(name, { column: table.owner, values: table.ids })) {
+      const id = row[table.owner]!;
+      const rows = table.rows.get(id) ?? [];
+      rows.push(row);
+      table.rows.set(id, rows);
+    }
+  }
+  return (image) => {
+    const location = imageLocation(image);
+    const rows = location
+      ? tables.get(location.table)?.rows.get(image.record.split(':')[2]!)
+      : undefined;
+    return rows ? retainedImageEvidence(rows, image, provenance) : undefined;
+  };
+}
+
 const seriesRelation = new Set(['preq', 'seq', 'side', 'set', 'alt', 'ser', 'par', 'orig']);
 export function fateTitle(value: string | null): boolean {
   return (
@@ -373,33 +506,45 @@ export function selectFate(
       data: row,
     });
   const imageUrls = new Map<string, string>();
-  const image = (kind: string, id: string, role: string, imageId: string | null) => {
+  const image = (kind: string, id: string, role: string, row: CopyRow, column: string) => {
+    const imageId = row[column];
     if (!imageId) return;
     ids('image').add(imageId);
-    const match = /^(cv|ch|sf)(\d+)$/.exec(imageId);
-    if (!match) throw new Error(`Unknown VNDB image identity: ${imageId}`);
-    const url = `https://t.vndb.org/${match[1]}/${String(Number(match[2]) % 100).padStart(2, '0')}/${match[2]}.jpg`;
+    const url = vndbImageUrl(imageId);
     imageUrls.set(imageId, url);
-    images.push({ record: key(kind, id), role, url });
+    const candidate: DatasetImage = { record: key(kind, id), role, url };
+    if (
+      typeof provenance.url === 'string' &&
+      typeof provenance.digest === 'string' &&
+      /^[a-f0-9]{64}$/.test(provenance.digest)
+    )
+      candidate.sourceEvidence = imageEvidence(candidate, row, {
+        url: provenance.url,
+        digest: provenance.digest,
+      });
+    images.push(candidate);
   };
   for (const record of records.values()) {
+    const { tables: _tables, ...row } = record.data;
     if (record.kind === 'vn') {
-      image('vn', record.externalId, 'cover', record.data.image as string | null);
-      image('vn', record.externalId, 'selected-cover', record.data.c_image as string | null);
+      image('vn', record.externalId, 'cover', row as CopyRow, 'image');
+      image('vn', record.externalId, 'selected-cover', row as CopyRow, 'c_image');
     }
     if (record.kind === 'character')
-      image('character', record.externalId, 'portrait', record.data.image as string | null);
+      image('character', record.externalId, 'portrait', row as CopyRow, 'image');
   }
-  for (const row of electedTables.vn_screenshots ?? []) image('vn', row.id!, 'screenshot', row.scr);
+  for (const row of electedTables.vn_screenshots ?? [])
+    image('vn', row.id!, 'screenshot', row, 'scr');
   for (const row of electedTables.releases_images ?? [])
     image(
       'release',
       row.id!,
       row.itype === 'pkgfront' ? 'cover:release:pkgfront' : `release:${row.itype}`,
-      row.img,
+      row,
+      'img',
     );
   for (const row of electedTables.vn_image_votes ?? [])
-    image('vn', row.vid!, 'candidate-cover', row.img);
+    image('vn', row.vid!, 'candidate-cover', row, 'img');
   for (const row of take('images', 'id', ids('image')))
     records.set(key('image', row.id!), {
       key: key('image', row.id!),

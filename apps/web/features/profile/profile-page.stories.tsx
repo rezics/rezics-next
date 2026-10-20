@@ -180,11 +180,30 @@ export const LongBio: Story = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     const toggle = await canvas.findByRole('button', { name: 'Show more' });
+    const more = canvas.getByRole('button', { name: 'More actions for Lin Mei 林梅' });
+    await expect(more).toBeVisible();
+    await expect(canvas.getByRole('link', { name: /^Follow/ })).toBeVisible();
+    await expect(more.compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
     await userEvent.click(toggle);
     await expect(canvas.getByRole('button', { name: 'Show less' })).toHaveAttribute(
       'aria-expanded',
       'true',
     );
+  },
+};
+
+export const SubjectMenuKeyboard: Story = {
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.queryByRole('link', { name: 'Report this profile' })).toBeNull();
+    const more = canvas.getByRole('button', { name: 'More actions for Lin Mei 林梅' });
+    more.focus();
+    await userEvent.keyboard('{Enter}');
+    const report = await within(document.body).findByRole('menuitem', { name: 'Report this profile' });
+    await expect(new URL(report.getAttribute('href')!, location.origin).searchParams.get('target')).toBe(storyId(1));
+    await userEvent.keyboard('{Escape}');
+    await expect(more).toHaveFocus();
   },
 };
 
@@ -592,5 +611,37 @@ export const AllWorks: StoryObj<typeof ProfileWorksPage> = {
       'href',
       localizedPath(`${profileHref('northstar')}/works?cursor=story-next`, 'en'),
     );
+  },
+};
+
+
+export const NativeHeader: Story = {
+  async play({ canvasElement }) {
+    const header = canvasElement.querySelector<HTMLElement>('[data-subject-header]')!;
+    const top = within(header);
+    await expect(header).toHaveAttribute('data-resource', storyId(1));
+    await expect(header).toHaveAttribute('data-semantic-type', 'https://rezics.com/vocab/Agent');
+    const primary = top.getByRole('group', { name: 'Primary actions' });
+    const reactions = top.getByRole('group', { name: 'Reactions' });
+    const more = top.getByRole('button', { name: 'More actions for Lin Mei 林梅' });
+    await expect(within(primary).getByRole('link', { name: 'Works by Lin Mei 林梅' })).toHaveAttribute('href', '#profile-content');
+    await expect(primary.compareDocumentPosition(reactions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await expect(more.getBoundingClientRect().left).toBeGreaterThanOrEqual(reactions.getBoundingClientRect().right - 1);
+    await expect(Math.abs(more.getBoundingClientRect().top - reactions.getBoundingClientRect().top)).toBeLessThan(16);
+    await expect(canvasElement.querySelector('[data-primary-content]')).toHaveTextContent(authorWorks.items[0]!.title.value);
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+export const NativeHeaderPhone: Story = { ...NativeHeader, globals: { viewport: { value: 'phone' } } };
+export const SparseHeaderPhone: Story = {
+  args: { works: { ok: true, data: noWorks }, library: null }, globals: { viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const header = within(canvasElement.querySelector<HTMLElement>('[data-subject-header]')!);
+    await expect(within(header.getByRole('group', { name: 'Primary actions' }))
+      .getByRole('link', { name: 'Overview' })).toHaveAttribute('href', '#profile-content');
+    await expect(header.getByRole('group', { name: 'Reactions' })).toBeVisible();
+    await expect(canvas.queryByRole('region', { name: 'Works by Lin Mei 林梅' })).toBeNull();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 };

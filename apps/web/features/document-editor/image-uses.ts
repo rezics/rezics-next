@@ -1,6 +1,7 @@
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
 import { BFF_PREFIX } from '../api/browser.ts';
 import { imageReferenceFromUrl, resolveMediaMetadata } from '../api/media-metadata.ts';
+import { imageUseCommand, imageUseTarget, type ImageUseTarget } from './image-target.ts';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 function images(document: DocumentSnapshot): DocumentNode[] {
@@ -10,16 +11,16 @@ function images(document: DocumentSnapshot): DocumentNode[] {
 }
 
 /** Rebind copied occurrences; unchanged occurrences retain their immutable Use. Four owner calls run at most. */
-export function imageUseReconciler(initial: DocumentSnapshot, actingSubject: string, target: string, send: typeof fetch = fetch) {
+export function imageUseReconciler(initial: DocumentSnapshot, actingSubject: string, target: ImageUseTarget, send: typeof fetch = fetch) {
   const known = new Map<string, string>();
   const linked = new Map<string, Promise<string>>();
   const slots: Promise<unknown>[] = Array.from({ length: 4 }, () => Promise.resolve());
   let nextSlot = 0;
-  for (const node of images(initial)) {
+  for (const node of typeof target === 'string' || target.retained ? images(initial) : []) {
     if (typeof node.attrs?.representationId === 'string' && typeof node.attrs.mediaUseId === 'string')
       known.set(`${node.attrs.id}:${node.attrs.representationId}`, node.attrs.mediaUseId);
   }
-  return async (document: DocumentSnapshot, imported = false): Promise<DocumentSnapshot> => {
+  const reconcile = async (document: DocumentSnapshot, imported = false): Promise<DocumentSnapshot> => {
     const changes = new Map<DocumentNode, DocumentNode>();
     const nodes = images(document);
     for (let offset = 0; offset < nodes.length; offset += 4) {
@@ -40,9 +41,9 @@ export function imageUseReconciler(initial: DocumentSnapshot, actingSubject: str
         let pending = linked.get(key);
         if (!pending) {
           const slot = nextSlot++ % slots.length;
-          pending = slots[slot]!.then(() => send(`${BFF_PREFIX}/v1/media/uses`, { method: 'POST',
+          pending = slots[slot]!.then(async () => send(`${BFF_PREFIX}/v1/media/uses`, { method: 'POST',
             headers: { 'content-type': 'application/json', 'idempotency-key': crypto.randomUUID() },
-            body: JSON.stringify({ actingSubject, target, representation: reference.representationId, occurrence, conceal: attrs.conceal === true }) }))
+            body: JSON.stringify(imageUseCommand({ actingSubject, ...await imageUseTarget(target), representation: reference.representationId, occurrence, conceal: attrs.conceal === true })) }))
             .then(async response => {
               if (!response.ok) throw new Error('image-reference-not-created');
               const result = await response.json() as { use: string };
@@ -66,4 +67,11 @@ export function imageUseReconciler(initial: DocumentSnapshot, actingSubject: str
     };
     return { ...document, doc: copy(document.doc) };
   };
+  return Object.assign(reconcile, {
+    rememberUpload(occurrence: string, reference: { representationId?: string; mediaUseId?: string }) {
+      // Upload already obtained this occurrence's owner receipt; preview metadata is unrelated.
+      if (reference.representationId && reference.mediaUseId)
+        known.set(`${occurrence}:${reference.representationId}`, reference.mediaUseId);
+    },
+  });
 }

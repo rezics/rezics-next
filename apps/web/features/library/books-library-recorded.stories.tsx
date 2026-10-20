@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import collectionRecord from '../../../../tests/qa/fixtures/outcomes/books/collection-tracking-and-progress.json';
 import importRecord from '../../../../tests/qa/fixtures/outcomes/books/library-import.json';
 import resumeRecord from '../../../../tests/qa/fixtures/outcomes/books/resume-an-interrupted-export-interrupted-exports.json';
 import { memoryExportStore } from '../library-backup/export-store.ts';
 import type { RecordedSelection } from '../stories/recorded-fetch.ts';
+import { AppShell } from '../shell/app-shell.tsx';
+import { messages as shell } from '../shell/messages.ts';
 import { BooksLibraryRecorded, RecordedLibraryImport } from './books-library-recorded-page.tsx';
 import { memoryImportShelf } from './import-store.ts';
+import { messages } from './messages.ts';
+import { expectReadingFocusClearsShell } from './reading-focus.test-utils.ts';
 
 const collection = collectionRecord as AnswerRecord;
 const imported = importRecord as AnswerRecord;
@@ -100,13 +104,71 @@ async function expectOwnerLibrary(canvasElement: HTMLElement) {
   await expect(reading.getByRole('link', { name: /^Continue/ })).toBeVisible();
   await expect(reading.getByText(/Next: Chapter 1/)).toBeVisible();
   await expect(reading.getByText(/2 chapters left/)).toBeVisible();
+  const tools = canvas.getByText(messages.libraryTools, { selector: 'summary' });
+  await expect(tools.closest('details')).not.toHaveAttribute('open');
+  await userEvent.click(tools);
   await expect(canvas.getByRole('heading', { level: 2, name: 'Reading in 2026' })).toBeVisible();
   await expect(canvas.getByText('1 chapter completed')).toBeVisible();
+  await userEvent.click(tools);
+  window.scrollTo(0, 0);
 }
 
 /** Owner’s recorded shelves, reading status and the next chapter. */
 export const OwnerPopulated: Story = { play: async ({ canvasElement }) => { await expectOwnerLibrary(canvasElement); } };
 export const OwnerPopulatedPhone: Story = { ...OwnerPopulated, ...phone };
+
+/** The recorded successful API state inside the app's actual navigation chrome. */
+export const OwnerReadingFirst: Story = {
+  render: args => <AppShell locale="en" messages={shell} theme="light" navCollapsed={false} signedIn
+    account={<span className="text-sm">Reader</span>}><BooksLibraryRecorded {...args} /></AppShell>,
+  globals: { viewport: { value: 'desktop1440' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const reading = await canvas.findByRole('region', { name: 'Currently reading' });
+    const title = within(reading).getByRole('heading', { name: 'Original outcome series' });
+    const open = within(reading).getByRole('link', { name: /^Open/ });
+    await document.fonts.ready;
+    window.scrollTo(0, 0);
+    const header = canvasElement.querySelector('header')!.getBoundingClientRect();
+    const fixedNav = [...canvasElement.querySelectorAll('nav')]
+      .find(nav => getComputedStyle(nav).position === 'fixed' && nav.checkVisibility()
+        && nav.getBoundingClientRect().height > 0);
+    const bottom = fixedNav?.getBoundingClientRect().top ?? window.innerHeight;
+    for (const item of [title, open]) {
+      const box = item.getBoundingClientRect();
+      await expect(box.top).toBeGreaterThanOrEqual(header.bottom);
+      await expect(box.bottom).toBeLessThanOrEqual(bottom);
+      await expect(box.left).toBeGreaterThanOrEqual(0);
+      await expect(box.right).toBeLessThanOrEqual(window.innerWidth);
+    }
+    await expect(canvas.getByRole('heading', { name: 'Reading in 2026', hidden: true })).not.toBeVisible();
+    const tools = canvas.getByText(messages.libraryTools, { selector: 'summary' });
+    await expect(tools.closest('details')).not.toHaveAttribute('open');
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    const continuation = within(reading).getByRole('link', { name: /^Continue/ });
+    continuation.focus();
+    await waitFor(() => {
+      const box = continuation.getBoundingClientRect();
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(window.innerWidth);
+      expect(window.scrollX).toBe(0);
+      expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    });
+    await userEvent.click(tools);
+    await expect(canvas.getByRole('heading', { name: 'Reading in 2026' })).toBeVisible();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    await userEvent.click(tools);
+    await expect(tools.closest('details')).not.toHaveAttribute('open');
+    reading.querySelector('ul')!.scrollLeft = 0;
+    window.scrollTo(0, 0);
+  },
+};
+export const OwnerReadingFirstPhone: Story = { ...OwnerReadingFirst, ...phone };
+
+export const OwnerShortWindowFocus: Story = {
+  ...OwnerReadingFirst,
+  async play({ canvasElement }) { await expectReadingFocusClearsShell(canvasElement); },
+};
 
 /** The shelf read is held unanswered, so the page stays at its loading status. */
 export const OwnerLoading: Story = {
@@ -126,6 +188,7 @@ async function expectChangedExport(canvasElement: HTMLElement) {
   await expect(shelves.getByRole('link', { name: 'Want to read 1' })).toBeVisible();
   await expect(shelves.getByRole('link', { name: /Empty private shelf/ })).toBeVisible();
   await expect(shelves.getByRole('link', { name: /Private portable shelf/ })).toBeVisible();
+  await userEvent.click(canvas.getByText(messages.libraryTools, { selector: 'summary' }));
   await userEvent.click(canvas.getByRole('heading', { level: 2, name: 'Download your library' }));
   await userEvent.click(await canvas.findByRole('button', { name: 'Resume download' }));
   await expect(await canvas.findByRole('alert')).toHaveTextContent(

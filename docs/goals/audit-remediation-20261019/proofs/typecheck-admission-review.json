@@ -1,0 +1,1229 @@
+{
+  "schema_version": 1,
+  "goal": "audit-remediation-20261019",
+  "worker": "G-2852",
+  "reviewed_at_utc": "2026-10-19T10:39:24.892367+00:00",
+  "reviewer": {
+    "engine": "codex-1",
+    "model": "gpt-6.1-sol",
+    "effort": "xhigh",
+    "identity_basis": "Worker dispatch identity supplied in this session; this worker performed the actual source review and commands.",
+    "independent_source_review_count": 1,
+    "account_fallback_used": false,
+    "nested_agents_used": false,
+    "previous_review_reports_read": false,
+    "implementation_log_used_as_independent_proof": false
+  },
+  "candidate": {
+    "commit": "84eecfc15b72d39dd085f977d62e562def4b6212",
+    "base": "3b34e7cd53e8bec9d346a5a2ccecced22ea512b5",
+    "tree": "1c55278bc8cd6fc4de16f1da20d32f0641d3afe8",
+    "source_and_test_blobs": {
+      "scripts/goal/typecheck-gate.ts": "55b2dce5af492df255ec99b0eccb217f589286ee",
+      "scripts/qa/host-admission.ts": "20e060f612be5aac2b9653138443e351cab2874b",
+      "scripts/goal/typecheck-gate.test.ts": "38cffcec812d415bf41f61a851e648cb73eb3d53",
+      "scripts/goal/goalctl.test.ts": "e235cf5959f23630e7b76df80ea6872a542f1cfd"
+    },
+    "all_pins_match": true,
+    "reviewed_diff": ".temp/typecheck-admission-review/candidate.diff",
+    "execution_checkout": ".temp/typecheck-admission-review/candidate",
+    "execution_checkout_method": "Independent detached local clone under the worker worktree, using read-only shared Git objects. No writes to the manager candidate checkout. Existing worker dependencies reused through local package symlinks only after equal dependency input digests; the dependency stamp is local to the clone.",
+    "tracked_candidate_source_modified": false,
+    "read_scope": "Complete four-path base-to-candidate diff, changed source/test contents, and directly relevant unchanged Task admission, memory deadline, CPU permit, diagnostic classification and owned-process termination contracts."
+  },
+  "verdict": {
+    "decision": "request_changes",
+    "blocking_findings": 1,
+    "reason": "Incomplete token-matching notifications can be ignored after a valid completion, allowing an inconsistent run to be classified as inherited diagnostics.",
+    "next_action": "Return the executable finding to the manager for candidate correction. This review changes no candidate/product source and does not land the candidate or close any product audit class."
+  },
+  "findings": [
+    {
+      "id": "incomplete-notification-fail-open",
+      "severity": "high",
+      "blocking": true,
+      "title": "Incomplete token-matching records can still admit inherited diagnostics",
+      "locations": [
+        {
+          "file": "scripts/goal/typecheck-gate.ts",
+          "line": 188,
+          "end_line": 195,
+          "reason": "The per-stream pending tail is never validated on stream end or child close."
+        },
+        {
+          "file": "scripts/goal/typecheck-gate.ts",
+          "line": 156,
+          "end_line": 158,
+          "reason": "A line containing the exact marker and token but no trailing space/payload is silently treated as unrelated output."
+        },
+        {
+          "file": "scripts/goal/typecheck-gate.ts",
+          "line": 218,
+          "end_line": 220,
+          "reason": "A previously valid completed record leaves done=true because neither ignored case sets invalid."
+        }
+      ],
+      "source_explanation": "After a valid BEGIN and END, a duplicate END or malformed END without a final newline stays in pending and is discarded. Even with a newline, QA_ADMITTED_COMMAND <exact-token> without the expected final space fails the prefix check and is discarded. In all three cases completed remains set and invalid remains false. A nonzero Task result and matching TypeScript diagnostic then enter the inherited-diagnostic comparison as a completed run.",
+      "impact": "Violates the explicit acceptance rule that malformed, duplicate or inconsistent completion evidence must never classify a run as inherited diagnostics. This is a protocol fault-injection result, not a claim that the unmodified host reporter normally emits these malformed records.",
+      "independent_executable_evidence": {
+        "test_file": ".temp/typecheck-admission-review/candidate/.temp/review/notification.test.ts",
+        "outcome_assertion_line": 87,
+        "outcome_assertion_reached": true,
+        "test_cases": [
+          "incomplete notification must refuse inherited diagnostic classification: duplicate-eof",
+          "incomplete notification must refuse inherited diagnostic classification: malformed-eof",
+          "incomplete notification must refuse inherited diagnostic classification: token-only-line"
+        ],
+        "expected": "The gate returns a main-side inconclusive refusal.",
+        "observed": "All three main runs returned done=true,status=201. The gate returned undefined (serialized as null in evidence), logged one diagnostic already on main and zero introduced, and did not refuse. All three Boolean outcome assertions failed with Expected:true, Received:false.",
+        "method": "Real pinned runTypecheck/typecheckGate and actual Task processes. The branch runs through the real pinned runHostAdmission wrapper with an injected adequate-memory reading. The main-side fixture is a controlled protocol emitter using its own caller token; it sends a valid envelope followed by one malformed/duplicate record. No production module is mocked or edited.",
+        "confirmation_job": "e5bcde20-7c6f-48cf-8336-5ac41e699b09",
+        "confirmation_log": ".temp/goal/jobs/e5bcde20-7c6f-48cf-8336-5ac41e699b09.log",
+        "observations": ".temp/typecheck-admission-review/candidate/.temp/review/observations.json"
+      },
+      "requested_correction": "Validate token-matching incomplete records and stream tails before accepting completion, including records missing the event separator. Preserve rejection of duplicate records and all existing timeout, signal and status checks. Add focused regression coverage for these three demonstrated cases. The manager owns the correction."
+    }
+  ],
+  "independently_verified_behavior": [
+    {
+      "behavior": "Affected admission/gate suite passes on the exact pinned source.",
+      "result": "40 tests,125 assertions,0 failures: host admission 14/59, typecheck gate 13/43, CPU admission 13/23.",
+      "qa_run_id": "20261019t103335-2173d8",
+      "evidence": ".temp/typecheck-admission-review/candidate/.artifacts/qa/20261019t103335-2173d8"
+    },
+    {
+      "behavior": "Memory/CPU admission can exceed a scaled execution budget while a fast compiler still completes; actual outer flock relay retains reporting and budget; shared parallel and sequential budgets do not reset or pause behind a waiting workspace.",
+      "basis": "Passing pinned typecheck-gate and host/CPU tests; scaled fixture budgets, not a twelve-minute live compiler run."
+    },
+    {
+      "behavior": "A slow admitted compiler is inconclusive and its owned detached descendant is gone before the test observes return; admission expiration starts no fixture compiler; real nonzero diagnostics compare while timeout/signal cases refuse.",
+      "basis": "Passing pinned typecheck-gate tests, including explicit processRunning assertions for both fixture PIDs."
+    },
+    {
+      "behavior": "Legacy diagnostic fixture comparison succeeds only in explicitly selected legacy mode; missing reporting in ordinary mode refuses. Exact legacy source recognition accepts only blob 0510625863c6d24de1194fb68fbf503d8074336d, rejects modified/partial/unknown content and throws for a missing file. Legacy shared wall accounting includes preparation and inter-comparison gaps.",
+      "basis": "Passing pinned typecheck-gate tests. These are focused fixtures, not a full preMergeTypecheckGate install/checkout run."
+    },
+    {
+      "behavior": "Existing pre-merge diagnostic subset passes.",
+      "result": "11 tests,72 assertions,289 filtered out,0 failures.",
+      "evidence": ".temp/goal/jobs/85de50dd-c2f8-4401-a28e-eff64dff1645.1.log"
+    },
+    {
+      "behavior": "Ordinary new-protocol inherited diagnostics work through real host wrappers on both sides.",
+      "result": "Both real Task runs done=true,status=201 with compiler status 2; no refusal for their matching diagnostic. Protocol controls were removed before the compiler.",
+      "evidence": ".temp/typecheck-admission-review/observations-first.json"
+    },
+    {
+      "behavior": "Missing END and newline-terminated malformed/duplicate records refuse; the separate terminal completion timer refuses a wrapper that remains alive after END.",
+      "result": "Four refusal controls passed; terminal-stall run returned done=false,status=null after 5252ms with terminal-cleanup-deadline output.",
+      "evidence": ".temp/typecheck-admission-review/observations-first.json"
+    },
+    {
+      "behavior": "Incomplete-record refusal fails as described in the blocking finding.",
+      "result": "Three outcome assertions fail; five controls passed in the full private probe run. Only the three failing cases were rerun with a Boolean outcome assertion, and all failed again."
+    }
+  ],
+  "source_only_conclusions": [
+    {
+      "conclusion": "The default per-side execution budget remains 720000ms; no budget increase or compiler/test graph exclusion is introduced.",
+      "locations": [
+        "scripts/goal/unit-gate.ts:718",
+        "scripts/goal/typecheck-gate.ts:290"
+      ],
+      "basis": "Unchanged unitGateBudgetMs policy and complete four-file diff."
+    },
+    {
+      "conclusion": "Sorted retained spans charge their union. Concurrent branch runs share one budget object; sequential main comparisons share a distinct single object. Each admitted compiler contributes a span, while the parent timer remains authoritative even if a child received an older remaining-budget snapshot.",
+      "locations": [
+        "scripts/goal/typecheck-gate.ts:62",
+        "scripts/goal/typecheck-gate.ts:103",
+        "scripts/goal/typecheck-gate.ts:118",
+        "scripts/goal/typecheck-gate.ts:199"
+      ]
+    },
+    {
+      "conclusion": "The gate computes qaMemoryDeadline once, preserves the inherited deadline or defaults to six hours from entry, and propagates it into Task admission. Admission is independently finite and stops charging its timer once that compiler has begun.",
+      "locations": [
+        "scripts/goal/typecheck-gate.ts:101",
+        "scripts/goal/typecheck-gate.ts:146",
+        "scripts/goal/typecheck-gate.ts:202",
+        "scripts/qa/memory-admission.ts:714"
+      ]
+    },
+    {
+      "conclusion": "Actual Task typecheck entries continue through the host CPU/memory wrapper. The outer flock relay retains protocol controls; final admission consumes the token, descriptor and command budget before starting compiler descendants. CPU permits release in finally.",
+      "locations": [
+        "Taskfile.yml:106",
+        "Taskfile.yml:195",
+        "scripts/qa/host-admission.ts:65",
+        "scripts/qa/host-admission.ts:118",
+        "scripts/qa/host-admission.ts:132",
+        "scripts/qa/cpu-admission.ts:88"
+      ]
+    },
+    {
+      "conclusion": "For recognized full records, the parser checks BEGIN/END order, timestamps, numeric status range, duplicate events, timeout/signal indicators and Task success/failure consistency. Task maps inner nonzero exits to status 201, so success/failure equivalence is intentional. These checks do not cover the incomplete-record finding.",
+      "locations": [
+        "scripts/goal/typecheck-gate.ts:157",
+        "scripts/goal/typecheck-gate.ts:218"
+      ]
+    },
+    {
+      "conclusion": "END starts the separate 5000ms Task/permit-shutdown bound and closes the compiler span. A timeout awaits stopProcessGroup; the host wrapper also awaits any initiated termination before reporting END. The existing process helper snapshots descendant groups, signals them, freezes/kills survivors and uses bounded post-kill waits.",
+      "locations": [
+        "scripts/goal/typecheck-gate.ts:174",
+        "scripts/goal/typecheck-gate.ts:216",
+        "scripts/qa/host-admission.ts:96",
+        "scripts/goal/unit-gate.ts:725",
+        "scripts/qa/process/terminate.ts:118"
+      ]
+    },
+    {
+      "conclusion": "Only the exact known old host-admission blob enables the legacy exception. Its explicitly logged shared wall budget begins at main-budget creation before baseline checkout/install and is not reset between comparisons. Unknown/partial sources get the ordinary protocol path; a missing blob lookup throws and cannot enable legacy mode. Acceptance on the ordinary protocol path remains subject to the blocking parser finding.",
+      "locations": [
+        "scripts/goal/typecheck-gate.ts:137",
+        "scripts/goal/typecheck-gate.ts:230",
+        "scripts/goal/typecheck-gate.ts:279",
+        "scripts/goal/typecheck-gate.ts:286"
+      ]
+    },
+    {
+      "conclusion": "CPU fixtures name private SQLite state and private slot directories; the gate fixture also gives its CPU override a private directory and lock. Injected readers/clocks keep fixture pressure independent of live Goal admission limits; no policy or fixture budget was raised.",
+      "locations": [
+        "scripts/goal/typecheck-gate.test.ts:69",
+        "scripts/goal/typecheck-gate.test.ts:74",
+        "scripts/qa/cpu-admission.test.ts:16",
+        "scripts/qa/memory-admission.ts:261"
+      ]
+    }
+  ],
+  "unchanged_contract_blob_pins": {
+    "Taskfile.yml": "30cfc2093436fab2cc18a589404a2f589783f7c7",
+    "scripts/goal/unit-gate.ts": "76f026c22e0a6f7fed372773a2d083e82050370d",
+    "scripts/qa/memory-admission.ts": "85a4cb28a1536564152a46d6eec3d140f46de05a",
+    "scripts/qa/cpu-admission.ts": "ae86c829feeecc03f8bc83fd7d26fb36a833b58a",
+    "scripts/qa/process/terminate.ts": "c6f9a172d9a93ac2a3bcdff553024ad8d2548309",
+    "tests/qa/unit/host-admission.test.ts": "5cf696be0d25ed67a2e803c68ab491133971b063",
+    "scripts/qa/cpu-admission.test.ts": "46e3897692e03c6b42e39422de4ed9584197cb3b"
+  },
+  "commands_and_results": [
+    {
+      "command": "git diff 3b34e7cd53e8bec9d346a5a2ccecced22ea512b5 84eecfc15b72d39dd085f977d62e562def4b6212 -- scripts/goal/typecheck-gate.ts scripts/qa/host-admission.ts scripts/goal/typecheck-gate.test.ts scripts/goal/goalctl.test.ts",
+      "exit_status": 0,
+      "result": "Complete diff retained and reviewed; exactly four changed paths."
+    },
+    {
+      "command": "git rev-parse 84eecfc15b72d39dd085f977d62e562def4b6212^{tree} 84eecfc15b72d39dd085f977d62e562def4b6212:scripts/goal/typecheck-gate.ts 84eecfc15b72d39dd085f977d62e562def4b6212:scripts/qa/host-admission.ts 84eecfc15b72d39dd085f977d62e562def4b6212:scripts/goal/typecheck-gate.test.ts 84eecfc15b72d39dd085f977d62e562def4b6212:scripts/goal/goalctl.test.ts",
+      "exit_status": 0,
+      "result": "All exact pins match and tracked candidate content remains unchanged.",
+      "evidence": ".temp/typecheck-admission-review/pins.json"
+    },
+    {
+      "command": "git -C .temp/typecheck-admission-review/candidate diff --exit-code 84eecfc15b72d39dd085f977d62e562def4b6212 --",
+      "exit_status": 0,
+      "result": "Empty tracked diff; four on-disk file blob hashes also match the pinned Git objects.",
+      "evidence": ".temp/typecheck-admission-review/pins.json"
+    },
+    {
+      "job": "c9323b46-2e9a-4334-917a-cf5328223d29",
+      "step": 1,
+      "command": "task --dir .temp/typecheck-admission-review/candidate goal -- test scripts/goal/typecheck-gate.test.ts tests/qa/unit/host-admission.test.ts scripts/qa/cpu-admission.test.ts",
+      "exit_status": 0,
+      "result": "40 tests/125 assertions passed.",
+      "qa_run_id": "20261019t103335-2173d8",
+      "log": ".temp/goal/jobs/c9323b46-2e9a-4334-917a-cf5328223d29.1.log"
+    },
+    {
+      "job": "c9323b46-2e9a-4334-917a-cf5328223d29",
+      "step": 2,
+      "command": "task --dir .temp/typecheck-admission-review/candidate goal -- test scripts/goal/goalctl.test.ts --test-name-pattern 'pre-merge type check'",
+      "exit_status": 201,
+      "result_class": "harness",
+      "result": "Selector rejected the arbitrary pattern for a registered owner suite before running that subset. The job stopped; the following private-probe step did not run.",
+      "log": ".temp/goal/jobs/c9323b46-2e9a-4334-917a-cf5328223d29.2.log"
+    },
+    {
+      "job": "8eae9b9c-7ce8-4d02-9bc2-bafb39e78154",
+      "step": 1,
+      "command": "task --dir .temp/typecheck-admission-review/candidate goal -- test .temp/review/diagnostics.test.ts --test-name-pattern 'pre-merge type check'",
+      "exit_status": 201,
+      "result_class": "harness",
+      "result": "Bun file discovery required an explicit ./.temp path. No diagnostic tests ran; the job stopped before private probes.",
+      "log": ".temp/goal/jobs/8eae9b9c-7ce8-4d02-9bc2-bafb39e78154.1.log"
+    },
+    {
+      "job": "85de50dd-c2f8-4401-a28e-eff64dff1645",
+      "step": 1,
+      "command": "task --dir .temp/typecheck-admission-review/candidate goal -- test ./.temp/review/diagnostics.test.ts --test-name-pattern 'pre-merge type check'",
+      "exit_status": 0,
+      "result": "11 tests/72 assertions passed,289 unrelated tests filtered out. A temporary import-only entry point loads the original pinned scripts/goal/goalctl.test.ts so goalctl test preserves the requested Bun pattern without editing tracked source.",
+      "log": ".temp/goal/jobs/85de50dd-c2f8-4401-a28e-eff64dff1645.1.log"
+    },
+    {
+      "job": "85de50dd-c2f8-4401-a28e-eff64dff1645",
+      "step": 2,
+      "command": "task --dir .temp/typecheck-admission-review/candidate goal -- test ./.temp/review/notification.test.ts",
+      "exit_status": 201,
+      "result_class": "assertion",
+      "result": "5 controls passed;3 notification-refusal outcome assertions failed. Each reached the body assertion with refusal=undefined, not a fixture/setup error.",
+      "log": ".temp/goal/jobs/85de50dd-c2f8-4401-a28e-eff64dff1645.2.log"
+    },
+    {
+      "job": "e5bcde20-7c6f-48cf-8336-5ac41e699b09",
+      "command": "task --dir .temp/typecheck-admission-review/candidate goal -- test ./.temp/review/notification.test.ts --test-name-pattern 'incomplete notification'",
+      "exit_status": 201,
+      "result_class": "assertion",
+      "result": "Only the three failed cases rerun after making the expected-refusal assertion explicitly Boolean;3 failed at line87,5 controls filtered out.",
+      "log": ".temp/goal/jobs/e5bcde20-7c6f-48cf-8336-5ac41e699b09.log"
+    }
+  ],
+  "execution_procedure": {
+    "recorded_job_runner": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job",
+    "recorded_job_cwd": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2852",
+    "qa_entry": "Task goal dispatches bun scripts/goal/goalctl.ts test inside the pinned clone.",
+    "claudecode_failure_only_logging": true,
+    "wakes": "Both PARKED returns ended their turns immediately; no polling or interruption of checks."
+  },
+  "publication_validation": {
+    "status": "passed",
+    "job": "df12dbfe-5194-4286-8e14-d1f80f72a8bc",
+    "commands": [
+      {
+        "command": "task docs:check",
+        "exit_status": 0,
+        "result": "13 checker tests passed;250 Markdown files checked for local links/fragments/navigation.",
+        "log": ".temp/goal/jobs/df12dbfe-5194-4286-8e14-d1f80f72a8bc.1.log"
+      },
+      {
+        "command": "task goal -- check",
+        "exit_status": 0,
+        "result": "AST and the 1/45 repository guard applicable to the sole changed JSON path passed. Types/lint selected no source; no brief test files selected. This check is publication validation, separate from the candidate tests and deliberately failing review probes.",
+        "log": ".temp/goal/jobs/df12dbfe-5194-4286-8e14-d1f80f72a8bc.2.log",
+        "full_output": ".temp/goal/check/run-YaJKWy/output.log"
+      }
+    ],
+    "note": "Only the claimed review JSON is published. Ignored evidence remains under .temp. Results were added to this JSON after the successful checks; no Markdown link, source or check-selection change followed."
+  },
+  "unexecuted_limits": [
+    "No full live twelve-minute compiler or six-hour admission run; long budget behavior is verified with scaled real-process fixtures and source accounting.",
+    "No full preMergeTypecheckGate checkout/install journey against the known old baseline. Focused legacy-mode wall accounting and exact source recognition are independently tested; preparation ordering and explicit logging are source-reviewed.",
+    "The four-file type graph, oxlint and ast-grep results reported in the implementation context were not rerun and are not independent review evidence. This review edits no TypeScript source.",
+    "No browser/product journey, unrelated fixture suite, graph exclusion, admission-policy change, running-check interruption, candidate landing or product audit-class closure.",
+    "Signal/timeout and owned detached-descendant cleanup claims are limited to the executed fixtures and the existing bounded termination contract; arbitrary operating-system failure modes are not newly certified.",
+    "All other notification byte sequences or timestamp/status combinations were inspected in source only unless explicitly listed as executed probes."
+  ],
+  "retained_evidence": [
+    {
+      "path": ".temp/typecheck-admission-review/candidate.diff",
+      "sha256": "ec28fd73a0967c83735f9f49b0cb872f5b3407c3c3110507c14c82b8d970eebe"
+    },
+    {
+      "path": ".temp/typecheck-admission-review/pins.json",
+      "sha256": "2e542dae5589cc37f07b3c29a9f63f3c1a33d110888a6aa432bf8910d023d2be"
+    },
+    {
+      "path": ".temp/typecheck-admission-review/dependencies.json",
+      "sha256": "545743fee8f662a830a3e518c516de317d5ad7048bcd72563a0ef448390488f0"
+    },
+    {
+      "path": ".temp/typecheck-admission-review/observations-first.json",
+      "sha256": "be45d50661e09ea4d3c7c69b79b37c01ae40c21775361e47960051f70ba4d515"
+    },
+    {
+      "path": ".temp/typecheck-admission-review/candidate/.temp/review/notification.test.ts",
+      "sha256": "5cfb4979a1d98712eed4dbdd1a794dae97f6ba8e33bd66ce582ed0a1665dab52"
+    },
+    {
+      "path": ".temp/typecheck-admission-review/candidate/.temp/review/diagnostics.test.ts",
+      "sha256": "d21c0ec70d74002a7650f18753ad40b7c51ee982ab23f3755c6b191816bd7ded"
+    },
+    {
+      "path": ".temp/typecheck-admission-review/candidate/.temp/review/observations.json",
+      "sha256": "a305ae49db8f59ebee3eea0edc947efa5accea213412e1c862a6f0f13e365987"
+    },
+    {
+      "path": ".temp/typecheck-admission-review/candidate/.artifacts/qa/20261019t103335-2173d8/summary.md",
+      "sha256": "b89a202ab28357084623c08f45da8beab68e0b212b8386e4e400714470ddbf0e"
+    },
+    {
+      "path": ".temp/typecheck-admission-review/candidate/.artifacts/qa/20261019t103335-2173d8/unit.xml",
+      "sha256": "3c6991ffa548d26e07a9d52a9d2b0b75b2edad74c79a70ed85cecb64a1df2573"
+    },
+    {
+      "path": ".temp/typecheck-admission-review/candidate/.artifacts/qa/20261019t103335-2173d8/owner.xml",
+      "sha256": "dbc2d956f250ed4e79d39c7675f63a590ea4e696cb01bd133b432027a4006438"
+    },
+    {
+      "path": ".temp/goal/jobs/c9323b46-2e9a-4334-917a-cf5328223d29.1.log",
+      "sha256": "c9dd2c955ede7412e259557738411027084196b249cddb3dd00cd7e511eea5e3"
+    },
+    {
+      "path": ".temp/goal/jobs/c9323b46-2e9a-4334-917a-cf5328223d29.2.log",
+      "sha256": "b0f56e46dd23efd93fc31b42f5ba5c42059413dfeaf1f278c440f172bc52b97c"
+    },
+    {
+      "path": ".temp/goal/jobs/8eae9b9c-7ce8-4d02-9bc2-bafb39e78154.1.log",
+      "sha256": "def04b7272dd235a375a33e409bf6337ab22fdd9ea68d61b8b4f68932393a442"
+    },
+    {
+      "path": ".temp/goal/jobs/85de50dd-c2f8-4401-a28e-eff64dff1645.1.log",
+      "sha256": "50392ae030c99a2ce3328159c284ba3074447298cc42517e37e174f066a3d5e2"
+    },
+    {
+      "path": ".temp/goal/jobs/85de50dd-c2f8-4401-a28e-eff64dff1645.2.log",
+      "sha256": "aa91215586d41a31e1687ead37988d615ca1fde517330c279b89f843175c42a2"
+    },
+    {
+      "path": ".temp/goal/jobs/e5bcde20-7c6f-48cf-8336-5ac41e699b09.log",
+      "sha256": "27fa954c2d0db24fe6b3ca8ada2dab603462468f04cf17ff7e36688bcd454561"
+    },
+    {
+      "path": ".temp/goal/jobs/df12dbfe-5194-4286-8e14-d1f80f72a8bc.1.log",
+      "sha256": "667086b669fe39f0128e6470eaee3dded89da8b9144ff5638d189008c8c1f111"
+    },
+    {
+      "path": ".temp/goal/jobs/df12dbfe-5194-4286-8e14-d1f80f72a8bc.2.log",
+      "sha256": "d4f6a20a52a527583a321abb124fd0eb9605f845e5a1b13207b592d43716f5c1"
+    },
+    {
+      "path": ".temp/goal/check/run-YaJKWy/output.log",
+      "sha256": "3e864740ca6947a707104dc7746409f45df0c316357b0e98197f65149e672c6f"
+    },
+    {
+      "path": ".temp/typecheck-admission-review/candidate/.artifacts/qa/20261019t103335-2173d8/logs/unit.log",
+      "sha256": "2066b4a55e8fcdb5e379bfa4fb71d04ae819834179eae5ec14b9e6321ef76990"
+    },
+    {
+      "path": ".temp/typecheck-admission-review/candidate/.artifacts/qa/20261019t103335-2173d8/logs/owner.log",
+      "sha256": "84825868017f667b5152a1c3a68f4eb688609f13e7fbdb4afea74858f0088c7e"
+    }
+  ],
+  "evidence_path_base": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2852",
+  "completed_at_utc": "2026-10-19T10:40:36.163946+00:00",
+  "review_record_scope": {
+    "original_sections": "All pre-existing top-level sections, including verdict and findings, describe the original 84eecfc candidate and remain unchanged.",
+    "latest_verdict": "current_verdict and correction_review describe the same-review continuation for the exact 1b0699 correction."
+  },
+  "correction_review": {
+    "reviewed_at_utc": "2026-10-19T10:52:54.687259+00:00",
+    "continuation_of_same_independent_review": true,
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "account_fallback_used": false,
+      "nested_agents_used": false,
+      "implementation_correction_report_read": false,
+      "implementation_results_used_as_independent_proof": false
+    },
+    "scope": "Only the complete two-path correction diff from the original candidate to the exact single-parent correction, adjacent notification/completion logic, and the three unchanged original counterexamples. Original source review and its evidence remain above; no whole candidate or goalctl baseline replay.",
+    "original_review_preservation": {
+      "commit": "0eacf5e1e6fe547f94f107ee145a18a650a0c0dc",
+      "manager_rebased_worker_head": "f76975f72bd1444ab7080e75e7d7baa33c5d1901",
+      "report_blob": "09f02bad15fa3636b3709db6c12f498bbad2c94f",
+      "original_decision": "request_changes",
+      "all_original_top_level_fields_preserved": true
+    },
+    "candidate": {
+      "commit": "1b0699d0b4ca59b9b10088619259f9c36d1d9025",
+      "parent": "84eecfc15b72d39dd085f977d62e562def4b6212",
+      "original_base": "3b34e7cd53e8bec9d346a5a2ccecced22ea512b5",
+      "tree": "10e0b7ec8f048301cd84d8b4b61e052ce98214fa",
+      "source_and_test_blobs": {
+        "scripts/goal/typecheck-gate.ts": "63534a7fbdb4e66c3cf84b543c9c1c63ff4c2179",
+        "scripts/qa/host-admission.ts": "20e060f612be5aac2b9653138443e351cab2874b",
+        "scripts/goal/typecheck-gate.test.ts": "192cb6952f38a4973621fcf759b737a7f45a6f28",
+        "scripts/goal/goalctl.test.ts": "e235cf5959f23630e7b76df80ea6872a542f1cfd"
+      },
+      "all_pins_match": true,
+      "only_changed_paths": [
+        "scripts/goal/typecheck-gate.test.ts",
+        "scripts/goal/typecheck-gate.ts"
+      ],
+      "execution_checkout": ".temp/typecheck-admission-review/correction",
+      "execution_checkout_method": "Independent detached shared-object clone inside this worker worktree. Local node_modules entries reuse worker dependencies after equal dependency-input digests; the dependency stamp is local. Manager candidate and product sources were not modified.",
+      "tracked_candidate_source_modified": false
+    },
+    "source_findings": [],
+    "resolved_findings": [
+      {
+        "id": "incomplete-notification-fail-open",
+        "original_severity": "high",
+        "status": "resolved_in_exact_correction",
+        "locations": [
+          {
+            "file": "scripts/goal/typecheck-gate.ts",
+            "line": 156,
+            "end_line": 164,
+            "conclusion": "Token matching is checked before the required separator. Exact-token records lacking a separator now set invalid and expire the run."
+          },
+          {
+            "file": "scripts/goal/typecheck-gate.ts",
+            "line": 185,
+            "end_line": 207,
+            "conclusion": "Both output streams flush their pending EOF tails through observe(..., false). The child close handler flushes both tails before resolving completion. Clearing pending makes end and close flushing idempotent."
+          },
+          {
+            "file": "scripts/goal/typecheck-gate.ts",
+            "line": 224,
+            "end_line": 237,
+            "conclusion": "An invalid observation reaches the existing owned-process cleanup path, and !invalid remains required even when Task close wins the race. A previously valid END cannot make the resulting run eligible for diagnostic inheritance."
+          },
+          {
+            "file": "scripts/goal/typecheck-gate.test.ts",
+            "line": 208,
+            "end_line": 235,
+            "conclusion": "The three added regression cases emit a valid BEGIN/END followed by duplicate EOF, malformed EOF, or a token-only line, then require main done=false and an inconclusive comparison."
+          }
+        ],
+        "independent_execution": "All three original reviewer assertions pass unchanged on this exact correction. Their original fail-open observations and failing assertions remain in the original evidence above."
+      }
+    ],
+    "independently_verified_behavior": [
+      {
+        "cases": [
+          "duplicate-eof",
+          "malformed-eof",
+          "token-only-line"
+        ],
+        "result": "For every mode the real new-protocol branch host wrapper completes with done=true and a genuine compiler diagnostic; the fault-injected main completion returns done=false, status=null and Invalid type check admission notification. The gate refuses inherited classification with the type check on main is inconclusive.",
+        "tests": 3,
+        "assertions": 3,
+        "failed": 0,
+        "filtered": 5,
+        "evidence": ".temp/goal/jobs/831cfbcd-b27e-4d23-8c72-9893c102c344.log"
+      },
+      {
+        "result": "The copied reviewer test is byte-identical to the retained final original counterexamples. Only its relative import resolves to the new pinned checkout. No assertions, compiler budgets or admission limits were changed.",
+        "fixture_sha256": "5cfb4979a1d98712eed4dbdd1a794dae97f6ba8e33bd66ce582ed0a1665dab52",
+        "evidence": ".temp/typecheck-admission-review/correction-pins.json"
+      }
+    ],
+    "source_only_conclusions": [
+      "The correction handles both newline-terminated token-only records and unterminated matching-token tails. A matching tail is invalid regardless of whether it arrived before or after a valid completion. Nonmatching ordinary output is still ignored by the notification parser.",
+      "Flush runs on each stream end and again before child close resolves, so an EOF tail cannot remain unexamined merely because the child close event supplied the final outcome. The existing !invalid condition also rejects a malformed record when the close promise wins the timeout race.",
+      "No execution/admission/terminal constants, active-budget accounting, status/signal/timeout checks, exact legacy blob recognition, host admission implementation or owned-process cleanup contract changed. The correction diff contains only the parser change and its three regression cases.",
+      "The review identifies no remaining executable finding in this exact correction. This is a source verdict supported by the three rerun counterexamples and the retained original proof, rather than a newly executed whole-candidate validation."
+    ],
+    "preserved_original_validation": {
+      "rerun": false,
+      "focused_admission_gate_tests": {
+        "passed": 40,
+        "assertions": 125,
+        "candidate": "84eecfc15b72d39dd085f977d62e562def4b6212",
+        "scope": "Original gate, host and CPU admission tests; unchanged host/CPU wrappers, budget, status, signal, timeout, legacy recognition and process cleanup controls."
+      },
+      "pre_merge_diagnostic_subset": {
+        "passed": 11,
+        "assertions": 72,
+        "candidate": "84eecfc15b72d39dd085f977d62e562def4b6212",
+        "scope": "Original existing goalctl pre-merge type check diagnostic subset via retained import adapter; no baseline rerun."
+      },
+      "additional_original_controls": "Original real modern inherited comparison and missing/newline-malformed/newline-duplicate/finite-terminal-shutdown controls remain retained. They were not rerun during this correction review.",
+      "evidence_location": "All original commands, outcomes, source pins and evidence SHA256s remain in their unchanged top-level sections."
+    },
+    "commands_and_results": [
+      {
+        "command": "git diff 84eecfc15b72d39dd085f977d62e562def4b6212 1b0699d0b4ca59b9b10088619259f9c36d1d9025 -- scripts/goal/typecheck-gate.ts",
+        "exit_status": 0,
+        "result": "Complete correction source diff reviewed with numbered adjacent notification/terminal code; retained with the complete test diff in correction.diff."
+      },
+      {
+        "command": "git diff 84eecfc15b72d39dd085f977d62e562def4b6212 1b0699d0b4ca59b9b10088619259f9c36d1d9025 -- scripts/goal/typecheck-gate.test.ts",
+        "exit_status": 0,
+        "result": "Complete 29-line regression-test addition reviewed."
+      },
+      {
+        "command": "git clone --shared --no-checkout . .temp/typecheck-admission-review/correction",
+        "exit_status": 0,
+        "result": "Created isolated execution checkout within the worker worktree."
+      },
+      {
+        "command": "git checkout --detach 1b0699d0b4ca59b9b10088619259f9c36d1d9025",
+        "cwd": ".temp/typecheck-admission-review/correction",
+        "exit_status": 0,
+        "result": "Detached checkout matches exact correction, tree and all four blob pins. Git rev-parse/diff-tree verification and unchanged test hash retained in correction-pins.json."
+      },
+      {
+        "command": "env CLAUDECODE=1 bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --dir .temp/typecheck-admission-review/correction goal -- test ./.temp/review/notification.test.ts --test-name-pattern 'incomplete notification'",
+        "job": "831cfbcd-b27e-4d23-8c72-9893c102c344",
+        "exit_status": 0,
+        "result": "3 tests passed, 3 assertions, 0 failed, 5 filtered. Bun 1.4.3; test time 2.50s. Goal QA selector executed the unchanged private Bun test through Task and local goalctl test.",
+        "log": ".temp/goal/jobs/831cfbcd-b27e-4d23-8c72-9893c102c344.log"
+      }
+    ],
+    "unexecuted_limits": [
+      "No new whole gate/host/CPU suite, 11-case goalctl subset, 16-case author correction suite, affected compiler graph, lint or AST replay was performed for this review continuation. Prior independent 40/125 and 11/72 proof is retained at its original candidate pin; author implementation results are context only.",
+      "The three rerun tests exercise real Task and branch host admission wrappers with fault-injected main notification bytes. They do not prove that the ordinary host wrapper emits malformed records, nor exhaust arbitrary byte splits, cross-stream reorderings or all EOF event schedules. Broader EOF/race handling is a source-only conclusion.",
+      "Manager reports five unrelated baseline fixture failures. Those failures remain explicitly unresolved by this review; they were not rerun, independently diagnosed or used to approve baseline fixtures.",
+      "No live 720000ms compiler run, six-hour admission wait, full pre-merge installation/comparison, browser journey or product audit-class closure was executed. Original unexecuted limits remain applicable.",
+      "Manager notes current main ca43 has a sameScope goalctl delta. This review neither assembles nor changes it; later manager assembly must preserve that delta. Approval is limited to the exact correction pins and does not validate a future assembled tree."
+    ],
+    "retained_evidence": [
+      {
+        "path": ".temp/typecheck-admission-review/correction.diff",
+        "sha256": "db2257c1b044689d4cc33195deff0a316381faa15369a852110d3936f40ea5e8"
+      },
+      {
+        "path": ".temp/typecheck-admission-review/correction-pins.json",
+        "sha256": "db6ebf4eb53e46112e80ad9f3c6424afb9da7f8e68ab1b87ddd9d018e37b9c24"
+      },
+      {
+        "path": ".temp/typecheck-admission-review/correction-dependencies.json",
+        "sha256": "054477847214ee3f71783da5593e1c0cf1663535eaea72f5e79bb4b473a51c98"
+      },
+      {
+        "path": ".temp/typecheck-admission-review/correction/.temp/review/notification.test.ts",
+        "sha256": "5cfb4979a1d98712eed4dbdd1a794dae97f6ba8e33bd66ce582ed0a1665dab52"
+      },
+      {
+        "path": ".temp/typecheck-admission-review/correction/.temp/review/observations.json",
+        "sha256": "4e3a4ff03b60f659a1cbc1ba5148d45fd642e1bd931a79684ec76c0eaf6e0872"
+      },
+      {
+        "path": ".temp/goal/jobs/831cfbcd-b27e-4d23-8c72-9893c102c344.log",
+        "sha256": "55225b8a8121cbcff8769dd307128ea7db0f71702100046556d057b5f9a5a4c0"
+      },
+      {
+        "path": ".temp/goal/jobs/db317e51-088c-4c8d-8b31-327f0891b571.1.log",
+        "sha256": "21c8dcbdadd499757c4fc2db15f2e369ea13aa0070364b410b3f2d3c39d59749"
+      },
+      {
+        "path": ".temp/goal/jobs/db317e51-088c-4c8d-8b31-327f0891b571.2.log",
+        "sha256": "8871fd49c95e281db2619bb7661100564f75c18a8d7d936400e4479c6a05cf42"
+      },
+      {
+        "path": ".temp/goal/check/run-5fFmM7/output.log",
+        "sha256": "ce8584b28d5209e1bb3be0f8441ef29bd16193f12646c16b1915b1c6bbba8731"
+      }
+    ],
+    "publication_validation": {
+      "status": "passed",
+      "job": "db317e51-088c-4c8d-8b31-327f0891b571",
+      "recorded_command": "env CLAUDECODE=1 bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "commands": [
+        {
+          "command": "task docs:check",
+          "exit_status": 0,
+          "result": "13 checker tests passed; 250 Markdown files checked for local links, fragments and navigation.",
+          "log": ".temp/goal/jobs/db317e51-088c-4c8d-8b31-327f0891b571.1.log"
+        },
+        {
+          "command": "task goal -- check",
+          "exit_status": 0,
+          "result": "AST and the 1/45 repository guard selected for the sole changed JSON path passed. No TypeScript/source workspace changed; no test files named in brief.",
+          "log": ".temp/goal/jobs/db317e51-088c-4c8d-8b31-327f0891b571.2.log",
+          "full_output": ".temp/goal/check/run-5fFmM7/output.log"
+        }
+      ],
+      "note": "Publication validation checks this report only; it does not add candidate type/lint/test claims. Check results and evidence hashes were appended after passing checks, with no Markdown link, source or check-selection changes."
+    },
+    "verdict": {
+      "decision": "approve",
+      "blocking_findings": 0,
+      "scope": "Exact source correction 1b0699d0b4ca59b9b10088619259f9c36d1d9025 only, continuing the same independent codex-1/gpt-6.1-sol/xhigh review.",
+      "reason": "The sole original HIGH finding is resolved in source and all three unchanged reviewer counterexamples now refuse inherited diagnostics. Original REQUEST_CHANGES history, passing controls and limitations are preserved.",
+      "next_action": "Manager may accept the correction review and assemble under existing authority, preserving the current main goalctl delta and explicit baseline-fixture failures. This worker does not land sources or close product audit classes."
+    },
+    "completed_at_utc": "2026-10-19T10:53:51.535985+00:00"
+  },
+  "current_verdict": {
+    "decision": "approve",
+    "candidate": "1b0699d0b4ca59b9b10088619259f9c36d1d9025",
+    "tree": "10e0b7ec8f048301cd84d8b4b61e052ce98214fa",
+    "blocking_findings": 0,
+    "scope": "Exact correction source review with three original counterexamples passing; original request_changes preserved above.",
+    "limitations": "Retained original validation and explicit unexecuted limits apply; no product landing, audit closure or future assembled-tree approval."
+  },
+  "explicitFileSelectionFirstReview": {
+    "reviewedAtUtc": "2026-10-19T15:24:41.159521+00:00",
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "independentSourceReviewCountForThisCandidate": 1,
+      "accountFallbackUsed": false,
+      "nestedAgentsUsed": false,
+      "implementationResultsUsedAsIndependentProof": false
+    },
+    "authority": "Existing G-2852 claim and the 2026-10-19T15:11:31.473895Z explicit QA file-selection Decision; no product contract or original audit assertion change.",
+    "historyPreservation": {
+      "priorHead": "8cdf8373d6c04f2129708bfa4c1d7cdef43e015e",
+      "priorReportBlob": "af687dc08660a1bbdf32fe5d8d16596639e7390b",
+      "allPriorFieldsUnchanged": true,
+      "admissionReviewReopened": false
+    },
+    "candidate": {
+      "commit": "3c039218d5052e48704e1135dbbf1d6c76832c4c",
+      "base": "ffca2b5c4c692d7678c31a6d5deca3bb389d56a0",
+      "parent": "ffca2b5c4c692d7678c31a6d5deca3bb389d56a0",
+      "tree": "0371d581c14483fb2fb2b7a2437bc19e9eaf3ba6",
+      "sourceAndTestBlobs": {
+        "scripts/qa/cli.ts": "7307ed8ba68996ab99f3351b9024cd0e1e2f75e7",
+        "tests/qa/unit/qa-harness.test.ts": "11bc84a1cde8d058e8df60703c2122b6782d7850"
+      },
+      "allManifestPinsMatch": true,
+      "onlyChangedPaths": [
+        "scripts/qa/cli.ts",
+        "tests/qa/unit/qa-harness.test.ts"
+      ],
+      "patchManifestSHA256Verified": true,
+      "readOnlyManagerCandidate": ".temp/qa-explicit-path-candidate",
+      "executionCheckout": ".temp/explicit-file-selection-review/candidate",
+      "executionMethod": "Detached shared-object local clone under this worker worktree; no candidate source edits. Local package symlinks reuse the manager candidate dependency installation only after input and installed-stamp digests matched; stamp and cache paths remain local.",
+      "trackedCandidateSourceModified": false
+    },
+    "scope": "Complete two-path base-to-candidate diff, the new regression, directly relevant existing AST/VM boundary pattern, canonical test selection/expansion and file-result normalization, tier arguments and surrounding final command calls. No side-effectful whole CLI import or real integration stack.",
+    "verdict": {
+      "decision": "approve",
+      "blockingFindings": 0,
+      "reason": "The final Bun boundary converts selected expanded file operands to explicit relative paths without mutating canonical batch identities or other arguments. The focused real-child regression independently passes both success and reached assertion failure cases.",
+      "scope": "Exact pinned two-path candidate only; accepted admission verdict/history and product acceptance remain unchanged."
+    },
+    "findings": [],
+    "sourceOnlyConclusions": [
+      {
+        "file": "scripts/qa/cli.ts",
+        "line": 907,
+        "endLine": 910,
+        "conclusion": "Only batch.map constructs new ./-prefixed file operands in the final tierBunTestArgs call. The original batch array, flags, JUnit outfile and optional timeout arguments remain unchanged."
+      },
+      {
+        "file": "scripts/qa/cli.ts",
+        "line": 1049,
+        "endLine": 1058,
+        "conclusion": "testArgs paths are separated from flags, expanded to files and passed through existing preparation selection before sharding. The ordinary integration outer budget remains 480000ms, separate from the inner Bun test timeout."
+      },
+      {
+        "file": "scripts/qa/acceptance.ts",
+        "line": 382,
+        "endLine": 425,
+        "conclusion": "Chosen and retained selections retain existing registered root-relative path validation. The ./ conversion happens after this canonical selection; no registry or shard keys are rewritten."
+      },
+      {
+        "file": "scripts/qa/core.ts",
+        "line": 57,
+        "endLine": 77,
+        "conclusion": "tierBunTestArgs still preserves a single explicit caller timeout or adds the existing tier default; the one-line CLI edit does not map or alter flags. Integration default remains 60000ms."
+      },
+      {
+        "file": "scripts/qa/cli.ts",
+        "line": 911,
+        "endLine": 936,
+        "conclusion": "Both ordinary and campaign command paths consume the same batchArgs with existing active budget, run deadline, phase callback, environment and startup admission. None of those contracts changes in this patch."
+      },
+      {
+        "file": "scripts/qa/cli.ts",
+        "line": 959,
+        "endLine": 985,
+        "conclusion": "Report completion still consumes the canonical batch. The unchanged file-results.ts:24-28 strips a leading ./ from observed JUnit file names before matching completeness; this review does not claim an executed full shard/report flow."
+      },
+      {
+        "file": "tests/qa/unit/qa-harness.test.ts",
+        "line": 1311,
+        "endLine": 1335,
+        "conclusion": "The regression extracts the unique real batchArgs initializer from runShardWork and evaluates it through the existing TypeScript AST/VM boundary pattern, instead of importing the whole CLI or duplicating the argument expression."
+      },
+      {
+        "file": "tests/qa/unit/qa-harness.test.ts",
+        "line": 1336,
+        "endLine": 1350,
+        "conclusion": "Each bounded Bun child is awaited with drained output before its exit, import witness and exact named non-skipped JUnit result are checked. Both pass and intentional assertion failure are required; no-match alone cannot satisfy these checks. Scratch cleanup runs in finally."
+      }
+    ],
+    "independentlyVerifiedBehavior": {
+      "command": "env CLAUDECODE=1 bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --dir .temp/explicit-file-selection-review/candidate goal -- test tests/qa/unit/qa-harness.test.ts --test-name-pattern '^explicit selected hidden integration paths reach Bun and preserve failure$'",
+      "job": "f10e6fbc-d9d9-4a30-ae1d-ed82a3bcc185",
+      "exitStatus": 0,
+      "testsPassed": 1,
+      "assertions": 13,
+      "failed": 0,
+      "filteredOut": 81,
+      "testElapsedSeconds": 1.73,
+      "bunVersion": "1.4.3",
+      "selector": "^explicit selected hidden integration paths reach Bun and preserve failure$",
+      "observed": "The actual pinned regression passes: hidden selected file imports and produces exactly the named passing JUnit case; its intentional assertion failure imports, produces that failed case and exits 1. Original batch stays canonical in both cases. Default inner timeout is 60000ms and explicit inner timeout is 1234ms.",
+      "evidence": ".temp/goal/jobs/f10e6fbc-d9d9-4a30-ae1d-ed82a3bcc185.log",
+      "testCustody": "The pinned candidate test/source were unmodified. No private replacement assertion, extra selector or integration stack was used. The owned children use their existing 10000ms watchdog.",
+      "postRun": "Execution checkout tracked source remained clean; no explicit-bun-file scratch directories remained."
+    },
+    "unchangedContractBlobPins": {
+      "scripts/qa/core.ts": "7e73c7a7b25c09930781ef55fd0f837587c7a97f",
+      "scripts/qa/acceptance.ts": "aa99f17a1df1b75a7edf0f10768c980deabcc445",
+      "scripts/qa/preparation-selection.ts": "117c625df0425a80615d202f8dd4aa425c4893a9",
+      "scripts/qa/test.ts": "81c4fa2ae7770c68b359f86ae910069aca509c08",
+      "Taskfile.yml": "30cfc2093436fab2cc18a589404a2f589783f7c7",
+      "scripts/qa/file-results.ts": "30afe0840709b4ca409f0f06b412f71091a9ba65"
+    },
+    "commandsAndResults": [
+      {
+        "command": "git diff ffca2b5c4c692d7678c31a6d5deca3bb389d56a0 3c039218d5052e48704e1135dbbf1d6c76832c4c -- scripts/qa/cli.ts tests/qa/unit/qa-harness.test.ts",
+        "exitStatus": 0,
+        "result": "Complete one-line source change and new regression reviewed; 55 insertions, 1 deletion across exactly two paths. Git parent/tree/blob pins match supplied manifest; supplied patch SHA256 verified."
+      },
+      {
+        "command": "git clone --shared --no-checkout . .temp/explicit-file-selection-review/candidate",
+        "exitStatus": 0,
+        "result": "Isolated clone created inside the worker worktree."
+      },
+      {
+        "command": "git checkout --detach 3c039218d5052e48704e1135dbbf1d6c76832c4c",
+        "cwd": ".temp/explicit-file-selection-review/candidate",
+        "exitStatus": 0,
+        "result": "Exact candidate checked out; all mutations and QA outputs stay inside worker paths."
+      },
+      {
+        "exitStatus": 1,
+        "result": "Old worker dependency input digest differed from candidate. No test ran and no install or budget change was attempted. Retained mismatch evidence; then selected the existing manager candidate installation whose input/stamp digest equals the execution clone.",
+        "operation": "dependencyDigest worker/candidate preflight before reuse"
+      },
+      {
+        "command": "env CLAUDECODE=1 bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --dir .temp/explicit-file-selection-review/candidate goal -- test tests/qa/unit/qa-harness.test.ts --test-name-pattern '^explicit selected hidden integration paths reach Bun and preserve failure$'",
+        "exitStatus": 0,
+        "job": "f10e6fbc-d9d9-4a30-ae1d-ed82a3bcc185",
+        "result": "1 pass / 13 assertions / 81 filtered / 0 fail, through recorded Task and local goalctl test."
+      }
+    ],
+    "implementationContextOnly": "The Decision reports root red then green 1-test/13-assertion proof, including an initially mistaken timeout expectation corrected to inner 60000/1234 rather than outer 480000. Those logs and original G-2753 no-discovery result were not independently replayed or used as independent proof. Only supplied manifest pin/patch metadata was checked; its actualChecks are context.",
+    "unexecutedLimits": [
+      "No independent red/base replay was performed. The independent execution above is only the exact new selector on the pinned candidate.",
+      "No whole QA tier, original count/author lifecycle, original admission suite, Docker stack, data restore, source-support generation, compiler/lint graph, budget rewrite or product journey was run.",
+      "The regression verifies real Bun process discovery and assertion/JUnit behavior through the actual argument initializer; full CLI sharding, callbacks, integration fixture custody and report aggregation remain source-only unchanged-contract conclusions.",
+      "The regression does not assert the exact JUnit file attribute or exhaust ordinary/non-hidden/multiple-file operands. Canonical input preservation is asserted and existing file-result normalization is inspected; no broader runtime identity claim is added.",
+      "Author-created scratch witnesses and child JUnit files are removed by the pinned test finally block. The retained independent job log establishes the passing 13 assertions; no removed child artifact is claimed as retained evidence.",
+      "Approval does not land the candidate, resolve manager merge conflicts, validate a future assembled tree, alter original audit assertions or close any product/audit class."
+    ],
+    "retainedEvidence": [
+      {
+        "path": ".temp/explicit-file-selection-review/candidate.diff",
+        "sha256": "69ed6f4812e832e481e1693ee32c5d5adb1ee8cdc487fe901e928e7fbc905989"
+      },
+      {
+        "path": ".temp/explicit-file-selection-review/pins.json",
+        "sha256": "77b6bb6a8213caa8e5b567e25caa926c600520fc9d93d5f1febff47b5771b9fc"
+      },
+      {
+        "path": ".temp/explicit-file-selection-review/qa-explicit-selected-files-candidate.json",
+        "sha256": "197768d93b1a7fd49544695e1791fb7782f65edfa36691cde045d5ea32b2687a"
+      },
+      {
+        "path": ".temp/explicit-file-selection-review/qa-explicit-selected-files.patch",
+        "sha256": "69ed6f4812e832e481e1693ee32c5d5adb1ee8cdc487fe901e928e7fbc905989"
+      },
+      {
+        "path": ".temp/explicit-file-selection-review/dependencies.json",
+        "sha256": "b01254351611fbb6a8fd6304c6bf5438cdea683ec963499c86d56962afdebb0e"
+      },
+      {
+        "path": ".temp/explicit-file-selection-review/dependency-worker-mismatch.json",
+        "sha256": "153a9085eec4b748fc672728d128456e95b269a7d917d1c358a9bc5df9dbc402"
+      },
+      {
+        "path": ".temp/goal/jobs/f10e6fbc-d9d9-4a30-ae1d-ed82a3bcc185.log",
+        "sha256": "4118ccd86181a14dcc5c596ccb031e9ffb7ee4b3bb9a0f87fd70338e5527a8b8"
+      },
+      {
+        "path": ".temp/goal/jobs/172744cc-f32d-4db6-8ddc-614cec67da10.1.log",
+        "sha256": "b90cadba2e959866b621438a8a13121442ad870ebf6e26621915ca6301fe71a1"
+      },
+      {
+        "path": ".temp/goal/jobs/172744cc-f32d-4db6-8ddc-614cec67da10.2.log",
+        "sha256": "81240631e719c20b739b7d852dda1f8274ace74b8fd9929f44a4f13821f6041a"
+      },
+      {
+        "path": ".temp/goal/check/run-tTjTP5/output.log",
+        "sha256": "7bd65ab29cd6a498d4a1b9fc32a12e6a036adb0dc4a656f7196818fecee2e8e6"
+      }
+    ],
+    "publicationValidation": {
+      "status": "passed",
+      "job": "172744cc-f32d-4db6-8ddc-614cec67da10",
+      "recordedCommand": "env CLAUDECODE=1 bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "commands": [
+        {
+          "command": "task docs:check",
+          "exitStatus": 0,
+          "result": "13 checker tests passed; 250 Markdown files checked for local links, fragments and navigation.",
+          "log": ".temp/goal/jobs/172744cc-f32d-4db6-8ddc-614cec67da10.1.log"
+        },
+        {
+          "command": "task goal -- check",
+          "exitStatus": 0,
+          "result": "AST and 1/45 repository guards selected for the sole changed JSON path passed. No TypeScript/source workspace changed and no test files named in brief.",
+          "log": ".temp/goal/jobs/172744cc-f32d-4db6-8ddc-614cec67da10.2.log",
+          "fullOutput": ".temp/goal/check/run-tTjTP5/output.log",
+          "advisory": "Gate reported one harness commit behind main; checks passed. Worker did not rebase or resolve manager assembly conflicts."
+        }
+      ],
+      "note": "These checks validate publication of this JSON only. Results and evidence hashes were appended after passing checks with no subsequent Markdown link, source or check-selection change."
+    },
+    "completedAtUtc": "2026-10-19T15:25:45.843351+00:00",
+    "rootCopiedEvidenceBase": ".temp/audit-remediation-20261019/proofs/qa-explicit-file-review-G2852"
+  },
+  "absoluteJUnitAttributionFirstReview": {
+    "reviewedAtUtc": "2026-10-19T16:48:51.270702Z",
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "independentSourceReviewCountForThisCandidate": 1,
+      "accountFallbackUsed": false,
+      "nestedAgentsUsed": false,
+      "implementationResultsUsedAsIndependentProof": false,
+      "candidateSourceOrTestEditsMade": false
+    },
+    "authority": {
+      "goal": "audit-remediation-20261019",
+      "worker": "G-2852",
+      "releasedDecisionCommit": "c07097af73a65879d44db166fbbe1e80fe5d21fc",
+      "releasedDecisionPath": "docs/goals/audit-remediation-20261019/tasks/G-2852.md",
+      "releasedDecisionSha256": "dd2cd17d6348034d26de22f50485183333022e43c836f3830f793c1ebd0b6484",
+      "release": "Current sameScope packet authorizes this exact first source review while root retains normal brief/main integration. Complete coherent Decision, report/ledger guard and evidence index consumed; no gate bypass or wait on product data.",
+      "writeClaim": "docs/goals/audit-remediation-20261019/proofs/typecheck-admission-review.json",
+      "newTopLevelKeyOnly": "absoluteJUnitAttributionFirstReview"
+    },
+    "historyPreservation": {
+      "baseline": "Current published report, matching the packet guard; all previous top-level values retained exactly.",
+      "baselineSha256": "8eb7992a0c2dfc8fb91849f1e92e67ae7e89e759860c0cbadb619a37cdede681",
+      "baselineBytes": 55018,
+      "allPreviousTopLevelValueHashes": {
+        "schema_version": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+        "goal": "6a851ce07b323e35c03f89f41a8065362e4ba2b5fef22a71383cb3f3438d8c4b",
+        "worker": "6dd5186277070bdfeba43738ec30c33feac40434056e77a96730b2360a3f3d9d",
+        "reviewed_at_utc": "776cf0b995525b5b3b906f518322d12642cd395eb4f7811ef57b1598979d2beb",
+        "reviewer": "edba601293bf55f1ac5457b9b71532bbfe16ac3f0194841683d3a68af2c73714",
+        "candidate": "85d82849e1b822daa4147b376609d95b2b79fe1e1452d51c83c5c2158e9ae792",
+        "verdict": "4529073c5904b2a8558dbca2620baae751a8579f6e4dfe5b498eaa936910f0dd",
+        "findings": "11a357087d8d2c7ecdaee965aeffa5ef367343cd423bffaae6beaaa4d188795a",
+        "independently_verified_behavior": "37e234022d4234f9e94d3c01139183099571e6f27b9baf5a92197a4bbbdfef80",
+        "source_only_conclusions": "0a1a7a0f43f4e7c59f7ec5e4ef23c4000f17f0ad787a43b4e896c77cc41044bd",
+        "unchanged_contract_blob_pins": "e96892c8b59a606c19699340ef21f400db351e95289050702793e88541d44866",
+        "commands_and_results": "8bc523989174a1c9c89d186b5e5940f3f574ed210e01538e81002677117e1d75",
+        "execution_procedure": "4e81978ac4eea35e67ed17ea8f299a7447c3dae383393eb5ca2113110bd96863",
+        "publication_validation": "5a9b654959b9cf5822ea95d94bd25041064dcc31e77fb9cfc8e6544d7079dcdb",
+        "unexecuted_limits": "e8c4d6dfa64f6b20ddb65b0d9a39dcb28c4f2603652eff70f14ad7596a5c559e",
+        "retained_evidence": "9924b126affd7cfce84f610c4cd9174d98f9483b2d78a796f79091cce1c6d831",
+        "evidence_path_base": "33963a915197b508ee2b1bbe4d11a762768e9b65ba48bd7396edc42d33e8d718",
+        "completed_at_utc": "6424c61048663a7c11046d5db450a160ed9760f594876e78bf489b6aacbaca27",
+        "review_record_scope": "0ce4da162d33af799bf793c8c7d2779df6503295228ae159763e3346af659cf3",
+        "correction_review": "6341c085d83f7d8f4e5ccf6472d95098d6ec981c05dc5355ac376273648ab994",
+        "current_verdict": "5ff348f4a939a7f26f50cf64f2f342a713b0888f8854e38319e920ca2f73daef",
+        "explicitFileSelectionFirstReview": "89d81da7cfab19e0fdc60126eabca36079ff43fc36a0741f436b46de000368db"
+      },
+      "staleWorkerDifference": "The published explicitFileSelectionFirstReview.rootCopiedEvidenceBase is retained. It is already published manager metadata absent from this worker HEAD; adopting it preserves the current report rather than revising the prior review.",
+      "previousAdmissionAndExplicitFileOutcomesUnchanged": true
+    },
+    "candidate": {
+      "commit": "5d792603c9618f3cf859587225157fdf9ffde34b",
+      "base": "ee32064fb70e0c79a294b704a388b915fd61395e",
+      "singleParent": "ee32064fb70e0c79a294b704a388b915fd61395e",
+      "tree": "280b651129d186d7dd4ec6552826b245955ab28a",
+      "blobPins": {
+        "scripts/qa/cli.ts": "c9a1cdd94e351875ffb8466fae071204ffaad2f9",
+        "scripts/qa/file-results.ts": "278e95e64db8e170240812df031d39e0824f5d27",
+        "tests/qa/unit/file-results.test.ts": "ba2a8c69cd6c3fe10a4c1da20e8ca22b963f4a67"
+      },
+      "managerReadOnlyInput": "/home/edge/projects/rezics/rezics-next/.temp/qa-junit-attribution-candidate",
+      "independentExecutionCheckout": ".temp/absolute-junit-attribution-review/candidate",
+      "suppliedFullPatchSha256": "e9443729dcd8e9cee198dc81a85098e6ce66da7146a51ecd25ccdd25b1a03ff0",
+      "pinsAndCleanTrackedExecutionSourceVerified": true,
+      "initialImplementationAndTestAuthorship": "Root implementation, recorded in candidate commit; reviewer did not author or revise these sources/tests."
+    },
+    "scope": "One first review of the complete three-path base-to-candidate diff and directly necessary unchanged filename normalization, JUnit retention and failure-classification contracts. Existing admission and explicit-file selection reviews retained without repeat review. No product, fixture, custody, budget or admission change is claimed.",
+    "verdict": {
+      "decision": "approve",
+      "blockingFindings": 0,
+      "basis": "Source review of the exact pinned change, with a narrow independent execution of the unchanged candidate file-results tests.",
+      "scope": "Absolute JUnit attribution and explicit reporter-root propagation only. This is a source-review approval, not a whole-tier/type-check pass, assembled-tree approval, product landing or audit closure."
+    },
+    "findings": [],
+    "sourceOnlyConclusions": [
+      {
+        "filesAndLines": [
+          "scripts/qa/file-results.ts:18",
+          "scripts/qa/file-results.ts:25",
+          "scripts/qa/file-results.ts:26",
+          "scripts/qa/file-results.ts:28",
+          "scripts/qa/file-results.ts:30",
+          "scripts/qa/file-results.ts:31"
+        ],
+        "conclusion": "The reusable completion helper alone defaults its optional root to process.cwd(). The same chosen root normalizes absolute selected and incomplete filenames and parseJUnit observations; relative canonical filenames and a leading ./ normalize consistently. An absolute foreign-checkout path becomes a different relative key and cannot complete a canonical selected file."
+      },
+      {
+        "filesAndLines": [
+          "scripts/qa/cli.ts:102",
+          "scripts/qa/cli.ts:619",
+          "scripts/qa/cli.ts:975",
+          "scripts/qa/cli.ts:1001",
+          "scripts/qa/cli.ts:1089",
+          "scripts/qa/cli.ts:1204",
+          "scripts/qa/cli.ts:125",
+          "scripts/qa/cli.ts:963",
+          "scripts/qa/cli.ts:1030",
+          "scripts/qa/cli.ts:1180",
+          "scripts/qa/cli.ts:1219"
+        ],
+        "conclusion": "Production retains const root = resolve(import.meta.dir, '../..'). All five completeFileResults calls and all five parseJUnit calls explicitly pass that module-derived root. No production attribution depends on a later ambient cwd change. An independent AST call-site audit confirms five plus five root arguments without importing the side-effectful CLI."
+      },
+      {
+        "filesAndLines": [
+          "scripts/qa/file-results.ts:28",
+          "scripts/qa/file-results.ts:30",
+          "scripts/qa/file-results.ts:32",
+          "scripts/qa/file-results.ts:33",
+          "scripts/qa/acceptance.ts:61",
+          "scripts/qa/acceptance.ts:68",
+          "scripts/qa/acceptance.ts:80",
+          "scripts/qa/core.ts:1197",
+          "scripts/qa/core.ts:1219"
+        ],
+        "conclusion": "Failed testcases remain failed evidence even when their file is observed. Skipped-only observations are excluded, incomplete files are removed from the completed set, and absent selected files receive synthetic missing-file failures under the existing unfiltered policy. The pre-existing filtered/noninterrupted exemption remains unchanged. Raw extracted suite XML blocks are kept; merging changes the aggregate wrapper rather than rewriting the original suite evidence."
+      },
+      {
+        "filesAndLines": [
+          "scripts/qa/cli.ts:908",
+          "scripts/qa/cli.ts:963",
+          "scripts/qa/cli.ts:975",
+          "scripts/qa/cli.ts:1204",
+          "tests/qa/unit/file-results.test.ts:11",
+          "tests/qa/unit/file-results.test.ts:24",
+          "tests/qa/unit/file-results.test.ts:37"
+        ],
+        "conclusion": "The CLI delta is confined to reporter-root arguments. The prior ./ Bun discovery correction, selected assertions, parser implementation, timeout values, admissions and product/custody sources are unchanged. The new tests exercise completion against synthetic JUnit, including an explicit reporter root different from launcher cwd; they do not import donor support or the CLI."
+      }
+    ],
+    "independentlyVerifiedBehavior": {
+      "testRevision": "ba2a8c69cd6c3fe10a4c1da20e8ca22b963f4a67",
+      "executed": "tests/qa/unit/file-results.test.ts from the clean detached pinned candidate, without test revisions",
+      "result": {
+        "exit": 0,
+        "passed": 3,
+        "failed": 0,
+        "assertions": 21,
+        "bunVersion": "1.4.3"
+      },
+      "assertionsReached": [
+        "Absolute reporter filenames complete only matching selected files; a missing selected file and foreign-checkout XML are refused.",
+        "Failure elements remain failures; skipped-only and incomplete results do not complete selected files, including an absolute incomplete filename; ./ relative spelling still qualifies.",
+        "An explicit reporter root different from process.cwd() preserves passing and failed suite evidence, refuses skipped/incomplete/missing/foreign-root completion, and retains each original raw suite block."
+      ],
+      "proofBoundary": "These are actual independent helper tests over synthetic XML. There was no independent real Bun-reporter capture, donor-support cwd mutation, CLI import, selected integration run or product execution.",
+      "staticAudit": "All ten CLI completion/parser call sites pass root; candidate/base/tree/three blob pins, unchanged contract pins and report guard were independently checked."
+    },
+    "unchangedContractBlobPins": {
+      "scripts/qa/acceptance.ts": "aa99f17a1df1b75a7edf0f10768c980deabcc445",
+      "scripts/qa/core.ts": "7e73c7a7b25c09930781ef55fd0f837587c7a97f",
+      "scripts/qa/failure.ts": "df82eaa48900e7d97d3a10395f49f853e086eae1",
+      "scripts/qa/test.ts": "81c4fa2ae7770c68b359f86ae910069aca509c08",
+      "Taskfile.yml": "30cfc2093436fab2cc18a589404a2f589783f7c7"
+    },
+    "commandsAndResults": [
+      {
+        "command": "git diff ee32064fb70e0c79a294b704a388b915fd61395e 5d792603c9618f3cf859587225157fdf9ffde34b -- scripts/qa/cli.ts scripts/qa/file-results.ts tests/qa/unit/file-results.test.ts",
+        "result": "Complete three-path original source/test diff read once; only these three changed paths, 82 insertions and 10 deletions. Retained as candidate.diff; supplied patch hash matched packet."
+      },
+      {
+        "command": "env CLAUDECODE=1 bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --dir .temp/absolute-junit-attribution-review/candidate goal -- test tests/qa/unit/file-results.test.ts --result-file .temp/absolute-junit-review-result.json",
+        "job": "job:c5f74633-4138-4943-954c-0716097ced1e",
+        "result": "PASS, exit 0; 3 tests, 21 expect calls, 0 failures; Bun reported 59ms. Goal test result records queue 415ms and test process 4753ms; these are different timing scopes.",
+        "log": ".temp/goal/jobs/c5f74633-4138-4943-954c-0716097ced1e.log",
+        "resultFile": ".temp/absolute-junit-attribution-review/candidate/.temp/absolute-junit-review-result.json"
+      },
+      {
+        "command": "git -C .temp/absolute-junit-attribution-review/candidate status --porcelain",
+        "result": "Clean tracked pinned candidate after independent tests. Execution checkout and its local dependency stamp/temp artifacts are under this worker only."
+      }
+    ],
+    "executionProcedure": {
+      "recordedJobOwnerCode": "/home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts",
+      "qa": "Task goal test wrapper in the worker-local pinned candidate; existing Task/host admission retained.",
+      "dependencies": "Matching candidate dependency digest afed563fd4dcabbfa62a2354edc5c7b7b8856b5067fc2a39011e76ff75b59c64 verified before creating the clone-local dependency stamp; own package links read the existing installed candidate packages. No install or manager/candidate mutation.",
+      "budgetsAdmissionsAndFailureClassificationsChanged": false
+    },
+    "implementationContextOnly": {
+      "independentRuntimeProof": false,
+      "affectedTests": "Author reports 113 passed / 883 assertions / 0 failures. Retained final result/log; not rerun or counted as independent proof.",
+      "scopedTypes": {
+        "status": "FAIL",
+        "candidateExit": 201,
+        "productionPreimageExit": 201,
+        "authorComparison": "26 complete diagnostic blocks, equal as a multiset, in 19 imported files; zero changed-path diagnostics. This is not a passing type-check claim.",
+        "qualification": "Read retained comparison and exact source manifest. Independently matched production CLI/helper preimages to base Git bytes and the root-authored original two-test prefix to its retained hash. That prefix is absent from the production base and was used to keep the imported type graph equal. No independent type execution or diagnostic-multiset recomputation.",
+        "comparison": ".temp/absolute-junit-attribution-review/implementation-context/type-diagnostics-comparison.json",
+        "sourceQualification": ".temp/absolute-junit-attribution-review/context-qualification.json"
+      },
+      "redAndCorrectionHistory": "Retained new explicit-root regression red, then the initial broader 112-pass/1-fail whitespace assertion error and its correction to raw-suite-block retention, then final author 113/883. Earlier conversational red0/2 and green30/311 have no separate immutable artifact claim.",
+      "offlineHistoricalApi23": "Author offline normalization uses retained genuine XML only: original job2b6955d2-d680-4bf6-9435-cc2929313be1 remains 201, original files unchanged, Main39539 closed. Correct-root extracted passing suite adds no missing-file failure, foreign-root evidence is refused, historical aggregate failure remains present. Retained context only; no independent offline/API replay or new selected-file, custody or Feed proof.",
+      "contextFileHashQualification": "Copied retained context artifacts into this worker and verified their SHA256 values against the supplied evidence index. Hash verification establishes custody of context, not independent behavioral execution."
+    },
+    "unexecutedLimits": [
+      "No whole QA tier, unchanged 113-test suite, original four count cases, AMGT01, D3001 transition, browser/native proof, fixture preparation, data restore, Docker, API replay, product journey or original admission review was rerun.",
+      "No actual donor-support import/cwd mutation, full CLI execution or new live Bun JUnit capture was performed. CLI root propagation and unchanged classifications are source conclusions; the three independent tests use synthetic XML.",
+      "Absolute selected-file normalization is source-reviewed; the executed tests select canonical relative files and exercise an absolute incomplete filename. No symlink/realpath equivalence claim beyond the existing path contract.",
+      "No independent scoped type or lint run for this bounded review. Author types remain FAIL201 with inherited imported diagnostics; implementation logs are context, not approval evidence.",
+      "Existing filtered/noninterrupted missing-file exemption is preserved; no broader skipped/missing-result policy change is asserted.",
+      "Approval applies only to the exact three-source pinned candidate. Prior review outcomes remain as published; no future assembled-tree validation, product/source landing or audit-class closure is claimed."
+    ],
+    "evidencePathBase": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2852",
+    "retainedEvidence": [
+      {
+        "path": ".temp/absolute-junit-attribution-review/current-brief-report-ledger-guard.json",
+        "sha256": "ac7b2d684f1b5b50f991ff067c3b3431d91508ce4c0a254ba916e32fd611ee61"
+      },
+      {
+        "path": ".temp/absolute-junit-attribution-review/evidence-index.json",
+        "sha256": "d62bb497b9d7590143e87fa1880f0da3ea33669c4b8eaa82637fcfec140fe533"
+      },
+      {
+        "path": ".temp/absolute-junit-attribution-review/proposed-G-2852.md",
+        "sha256": "dd2cd17d6348034d26de22f50485183333022e43c836f3830f793c1ebd0b6484"
+      },
+      {
+        "path": ".temp/absolute-junit-attribution-review/released-Decision.md",
+        "sha256": "dd2cd17d6348034d26de22f50485183333022e43c836f3830f793c1ebd0b6484"
+      },
+      {
+        "path": ".temp/absolute-junit-attribution-review/published-report-before.json",
+        "sha256": "8eb7992a0c2dfc8fb91849f1e92e67ae7e89e759860c0cbadb619a37cdede681"
+      },
+      {
+        "path": ".temp/absolute-junit-attribution-review/supplied-candidate.patch",
+        "sha256": "e9443729dcd8e9cee198dc81a85098e6ce66da7146a51ecd25ccdd25b1a03ff0"
+      },
+      {
+        "path": ".temp/absolute-junit-attribution-review/candidate.diff",
+        "sha256": "b9b362fcd618b565a086e7e1583fc400ccc58b8607d9849bb6b2447f83149dba"
+      },
+      {
+        "path": ".temp/absolute-junit-attribution-review/pins.json",
+        "sha256": "3002f9b84daf1f9710b154f667521d3d4a0b3d75e0db66ca68f34edd06cb6bc7"
+      },
+      {
+        "path": ".temp/absolute-junit-attribution-review/dependencies.json",
+        "sha256": "ca7b051e709b467345d2afa26cb0642e23804f79399a5210c59b022dd7363ea0"
+      },
+      {
+        "path": ".temp/absolute-junit-attribution-review/callsite-audit.json",
+        "sha256": "ac3779e0e3e167e93b13aa473c320c988f82f001d4ef31f5193db2858e180034"
+      },
+      {
+        "path": ".temp/absolute-junit-attribution-review/context-qualification.json",
+        "sha256": "c94242dad5c2521a83c8f0a2287826d6eb56ac82e03c5885fa8105f23c4f90fc"
+      },
+      {
+        "path": ".temp/absolute-junit-attribution-review/implementation-context/affected-tests-final-result.json",
+        "sha256": "7416246dd22683f33ca9d7e660057d061e61a46ab573572fc2aabb2922785c17",
+        "role": "implementation_context_only"
+      },
+      {
+        "path": ".temp/absolute-junit-attribution-review/implementation-context/affected-tests-final.log",
+        "sha256": "9de052ce2fa3576770aa5e9daff0a17488e8394efe42eb3b51c7f8d7bc9bb276",
+        "role": "implementation_context_only"
+      },
+      {
+        "path": ".temp/absolute-junit-attribution-review/implementation-context/type-files-preimage-sources.json",
+        "sha256": "50e3d9dfd877891a1d58118d3f84e0dca7fd5258ceb2bb08f2e7333410d3b171",
+        "role": "implementation_context_only"
+      },
+      {
+        "path": ".temp/absolute-junit-attribution-review/implementation-context/type-diagnostics-comparison.json",
+        "sha256": "ec1e5cb92b46d6acf058c6b93e14fac0434c194473d7694374bc546b8fd14144",
+        "role": "implementation_context_only"
+      },
+      {
+        "path": ".temp/absolute-junit-attribution-review/implementation-context/type-files-final.log",
+        "sha256": "68a0d6d7c4ed13d544f89bda22114ed4021ec208d8d4c6eb48bb135a0dd48204",
+        "role": "implementation_context_only"
+      },
+      {
+        "path": ".temp/absolute-junit-attribution-review/implementation-context/type-files-preimage.log",
+        "sha256": "bc99c5ab3bdff49d146d8d52a01c2f85848269589754f7b80d21961086aa589d",
+        "role": "implementation_context_only"
+      },
+      {
+        "path": ".temp/absolute-junit-attribution-review/implementation-context/explicit-root-red.log",
+        "sha256": "dd5a7de67586833305ac2be10aac38462d34a1d9483e7089ef4f304cae64ed6c",
+        "role": "implementation_context_only"
+      },
+      {
+        "path": ".temp/absolute-junit-attribution-review/implementation-context/explicit-root-red-result.json",
+        "sha256": "0628780e21a577dce31d11fd2faa698d387b3e55ab3039fc5a71fcbd5309edb6",
+        "role": "implementation_context_only"
+      },
+      {
+        "path": ".temp/absolute-junit-attribution-review/implementation-context/affected-tests.log",
+        "sha256": "28c1b2be7251e19e76d41d7843a2124315e85e3653c8092157ada6f081a8336e",
+        "role": "implementation_context_only"
+      },
+      {
+        "path": ".temp/absolute-junit-attribution-review/implementation-context/affected-tests-result.json",
+        "sha256": "dc9483755362b5b9ed4fca0f547ea8458fa86df509fb84e420f755ac0e7c1afe",
+        "role": "implementation_context_only"
+      },
+      {
+        "path": ".temp/absolute-junit-attribution-review/implementation-context/historical-api23-offline.json",
+        "sha256": "272bc4704b85787b1fb32bdba94a8e361b3cc295215678a66ba2d2784a7c4894",
+        "role": "implementation_context_only"
+      },
+      {
+        "path": ".temp/goal/jobs/c5f74633-4138-4943-954c-0716097ced1e.log",
+        "sha256": "943123e0d5720176a29ce08c4b4b38049b3347ef55c577a91a0a478f52b5f732",
+        "role": "independent_execution"
+      },
+      {
+        "path": ".temp/absolute-junit-attribution-review/candidate/.temp/absolute-junit-review-result.json",
+        "sha256": "dbb665e17e39e5ea6871e0e47fe54aa6a465bec3f1ca0f1837c59957c72ab01a",
+        "role": "independent_execution"
+      },
+      {
+        "path": ".temp/absolute-junit-attribution-review/report-preservation.json",
+        "sha256": "3732d01b960042cc6ba1d5e7c20db555ea809b1ee400b68eb3c43c124335d373",
+        "role": "report_publication_validation"
+      },
+      {
+        "path": ".temp/goal/jobs/f08b686f-94a6-450b-924f-fc2db8bc7a59.log",
+        "sha256": "e61e6e8db403622ae8e9dc98bc701a84c968805b2c8160ec916ad54de08d31aa",
+        "role": "report_publication_validation"
+      },
+      {
+        "path": ".temp/goal/jobs/f08b686f-94a6-450b-924f-fc2db8bc7a59.1.log",
+        "sha256": "82f30dc1b425d3b876df2bc141c770a8e45cbf8ab1f4493899b5f95c8e31fac5",
+        "role": "report_publication_validation"
+      },
+      {
+        "path": ".temp/goal/jobs/f08b686f-94a6-450b-924f-fc2db8bc7a59.2.log",
+        "sha256": "fe8d141caf98f2b9128c46a933aeb6fecb10bc38a2a58a05a30aebebdf5cbe94",
+        "role": "report_publication_validation"
+      },
+      {
+        "path": ".temp/goal/check/run-wqz0s2/output.log",
+        "sha256": "578f576101216e617ba1257015d786b9881bc1150c101a5bd27e9fa6af2a7d5c",
+        "role": "report_publication_validation"
+      }
+    ],
+    "publicationValidation": {
+      "job": "job:f08b686f-94a6-450b-924f-fc2db8bc7a59",
+      "command": "env CLAUDECODE=1 bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "exit": 0,
+      "steps": [
+        {
+          "command": "task docs:check",
+          "exit": 0,
+          "result": "Documentation checks passed: 250 Markdown files; 13 documentation checker tests passed. External URLs and runtime behavior not tested.",
+          "log": ".temp/goal/jobs/f08b686f-94a6-450b-924f-fc2db8bc7a59.1.log"
+        },
+        {
+          "command": "task goal -- check",
+          "exit": 0,
+          "result": "Report-only change: types/lint had no changed TypeScript/source to check; no tests named in brief; ast and selected repository guard passed. Does not convert author candidate types FAIL201 into PASS.",
+          "log": ".temp/goal/jobs/f08b686f-94a6-450b-924f-fc2db8bc7a59.2.log",
+          "fullOutput": ".temp/goal/check/run-wqz0s2/output.log"
+        }
+      ],
+      "historyGuard": "All 22 existing published top-level values retained with their guarded canonical hashes; only absoluteJUnitAttributionFirstReview appended.",
+      "trackedCandidateStatus": "Clean after independent test execution; unchanged exact candidate tree and all three blobs.",
+      "scope": "These publication checks validate the report change in the worker; they do not replay candidate types, the 113-test author suite or product QA."
+    },
+    "completedAtUtc": "2026-10-19T16:49:41.306183Z"
+  }
+}

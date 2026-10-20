@@ -1,0 +1,2951 @@
+{
+  "schema": "catalogue-retained-source-review-v1",
+  "review": {
+    "worker": "G-2859",
+    "goal": "audit-remediation-20261019",
+    "engine": "codex-1",
+    "model": "GPT-6.1 Sol",
+    "effort": "xhigh",
+    "reviewedAtUtc": "2026-10-19T14:45:38.368267+00:00",
+    "worktree": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2859",
+    "workerBase": "311fd8c0e01f17da51896b2cb64c00587a3d4bed",
+    "decision": "request-changes-bounded-candidate",
+    "actionableFindingCount": 1,
+    "summary": "The 86-file retained Source cut preserves the explicit conversion and independent citation boundary. One confirmed refusal defect has two sites: inherited object keys throw TypeError in retained provider and V2 attribution basis validation. Six negative cases reach failing outcome assertions; positive and ordinary refusal controls pass. No product edits, landing or original class closure.",
+    "candidateLandedByReviewer": false
+  },
+  "candidate": {
+    "commit": "55c1885659575f5fe4303a690b258388cd5d8e6e",
+    "parent": "eaf9c5da53821b8851693dfcb62a6e12e61366cd",
+    "directParentVerified": true,
+    "tree": "a41e90d13965d42f39623d8b913c8c37a351a03c",
+    "ref": "candidate/g-2781-retained-source-20261019",
+    "isolatedCheckout": ".temp/worktrees/g-2781/.temp/candidates/retained-source",
+    "ownerCheckoutHeadAndTrackedCleanVerified": true,
+    "changedPathCount": 86,
+    "diffStat": "86 files changed, 82541 insertions(+), 19505 deletions(-)",
+    "method": "Read every changed authored/runtime/test delta and all four authored profile definitions. Verify every candidate Git blob and SHA256 against the immutable owner manifest; freeze local copies for review. Inspect selective merges, native dependency closure, generated semantic additions and matching reused receipts. Execute only two concrete refusal checks. No review of the five inherited library files or excluded Site composition.",
+    "paths": [
+      {
+        "path": "docs/development/toolchain.md",
+        "parentBlob": "a277c9a54246276703d1d381004a4c238c7abd71",
+        "blob": "1fde97981a3ecd79fdc15d2e716862772a5a162d",
+        "sha256": "2afd284538686e1ebe24a9c81e25044c5aa05ee8f6f0663d36ff544855a4aee8",
+        "bytes": 55589,
+        "inspected": true,
+        "generated": true,
+        "originalBlob": null,
+        "unchangedOriginal": false,
+        "provenance": null,
+        "originalAuthorship": null
+      },
+      {
+        "path": "generated/model/contexts/relation-occurrence-v2.jsonld",
+        "parentBlob": null,
+        "blob": "4717afd94090ca750662c4dc9a895b5e4d0ab6ad",
+        "sha256": "9f909041be22b747a8114884858cbfe83fe3598affadecacb9affa2f740ba9ab",
+        "bytes": 3044,
+        "inspected": true,
+        "generated": true,
+        "originalBlob": null,
+        "unchangedOriginal": false,
+        "provenance": null,
+        "originalAuthorship": null
+      },
+      {
+        "path": "generated/model/contexts/semantic-definition-v2.jsonld",
+        "parentBlob": null,
+        "blob": "b7af16e60a641a473f986d090fb6bd57a0ebd58d",
+        "sha256": "a455850c8e286d4953be2778e82b5d208e30ece15bf8fc33ee107eb9eb2ae77b",
+        "bytes": 2190,
+        "inspected": true,
+        "generated": true,
+        "originalBlob": null,
+        "unchangedOriginal": false,
+        "provenance": null,
+        "originalAuthorship": null
+      },
+      {
+        "path": "generated/model/contexts/statement-v2.jsonld",
+        "parentBlob": null,
+        "blob": "1dfc416fea4fb80f20b7230a641d3abee38014cd",
+        "sha256": "1d28d0ff2b7be89807cc71b0a35052a3693a30e23cfd1e316e918a4c36dea666",
+        "bytes": 4998,
+        "inspected": true,
+        "generated": true,
+        "originalBlob": null,
+        "unchangedOriginal": false,
+        "provenance": null,
+        "originalAuthorship": null
+      },
+      {
+        "path": "generated/model/contexts/work-editorial-field-v2.jsonld",
+        "parentBlob": null,
+        "blob": "a30394a9520abf76b52ae525c82cc3b49f185315",
+        "sha256": "8394c641d2420dc6afa76ea07be95f1a37f1841fb45c6748b571edc9a56f7bc3",
+        "bytes": 2503,
+        "inspected": true,
+        "generated": true,
+        "originalBlob": null,
+        "unchangedOriginal": false,
+        "provenance": null,
+        "originalAuthorship": null
+      },
+      {
+        "path": "generated/model/manifest.json",
+        "parentBlob": "ce71e7cf7a9ff14d76bedcf361d2f2a1a4bc88fa",
+        "blob": "0529bdcc2e4cea2d590ec2fbf05ffc44f28f221f",
+        "sha256": "822387c426ef490a4d4bfe1ea581a09056033e3c2844849b05866c75e1eb1c03",
+        "bytes": 162357,
+        "inspected": true,
+        "generated": true,
+        "originalBlob": null,
+        "unchangedOriginal": false,
+        "provenance": null,
+        "originalAuthorship": null
+      },
+      {
+        "path": "generated/model/shapes/relation-occurrence-v2.ttl",
+        "parentBlob": null,
+        "blob": "ee5a504cb3e4665297fbe8e76e92749b5359a64b",
+        "sha256": "f845f39cff9c253dafe3a267f10340e98e538bf0cf2bf210de0d5e68ffe18745",
+        "bytes": 4253,
+        "inspected": true,
+        "generated": true,
+        "originalBlob": null,
+        "unchangedOriginal": false,
+        "provenance": null,
+        "originalAuthorship": null
+      },
+      {
+        "path": "generated/model/shapes/semantic-definition-v2.ttl",
+        "parentBlob": null,
+        "blob": "d9df667c4a3ef75f1b2ef1264b50df8248eced06",
+        "sha256": "fc4ed843cea04c13d9fac64b9056455cf316977d8ff7f4c40856ac5879cf6d7c",
+        "bytes": 3248,
+        "inspected": true,
+        "generated": true,
+        "originalBlob": null,
+        "unchangedOriginal": false,
+        "provenance": null,
+        "originalAuthorship": null
+      },
+      {
+        "path": "generated/model/shapes/statement-v2.ttl",
+        "parentBlob": null,
+        "blob": "b802ef33fb8033eede1a54ca913de0e133be7fcf",
+        "sha256": "f491f13329de73fd3e216a94ef691692a92785553b718c19bbdfce2bd5ea5f2d",
+        "bytes": 10435,
+        "inspected": true,
+        "generated": true,
+        "originalBlob": null,
+        "unchangedOriginal": false,
+        "provenance": null,
+        "originalAuthorship": null
+      },
+      {
+        "path": "generated/model/shapes/work-editorial-field-v2.ttl",
+        "parentBlob": null,
+        "blob": "9b8b4c99f3bd8d07175c9d12f4f2da763e495fdf",
+        "sha256": "429d88dbbd5b58588b429de468905d5675fb31846743cac5e67c5c45fb235c97",
+        "bytes": 5243,
+        "inspected": true,
+        "generated": true,
+        "originalBlob": null,
+        "unchangedOriginal": false,
+        "provenance": null,
+        "originalAuthorship": null
+      },
+      {
+        "path": "generated/openapi/main/public.json",
+        "parentBlob": "7eefa1db2f34396c52de04a65dfb64d55882b3f9",
+        "blob": "2d83f1d9d431a00124cdc4f5e8f4ccdc169981aa",
+        "sha256": "422a006b153856c19b0a4349923ad813a36dde31c0ed74d2f0acbb6c0ae4f7dd",
+        "bytes": 41751862,
+        "inspected": true,
+        "generated": true,
+        "originalBlob": null,
+        "unchangedOriginal": false,
+        "provenance": null,
+        "originalAuthorship": null
+      },
+      {
+        "path": "infra/dev/compose.yaml",
+        "parentBlob": "70d68927952cfcab64771c887f3aba2f39c0c0c4",
+        "blob": "966a8a1cdc0e823a9498899aff32f906c52ff08d",
+        "sha256": "dadea44e34b6c092dfd3133260b8edcaffc7ae4a3b67736bcf6551380d68c551",
+        "bytes": 4154,
+        "inspected": true,
+        "generated": true,
+        "originalBlob": null,
+        "unchangedOriginal": false,
+        "provenance": null,
+        "originalAuthorship": null
+      },
+      {
+        "path": "model/definitions/relation-occurrence-v2.ts",
+        "parentBlob": null,
+        "blob": "9767ddffa954f157187dc78cc59260a76e74266c",
+        "sha256": "588e25c436aa43da828e49c2e56f5d7c730883f2ce4b5b6b4d90fee47ed6ab1e",
+        "bytes": 763,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "9767ddffa954f157187dc78cc59260a76e74266c",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "model/definitions/relation-occurrence-v2.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "authored_profiles"
+        },
+        "originalAuthorship": "aa2898ed9b0f2c955a99cf6ac3b4f918be3d34e3\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T15:34:50+08:00"
+      },
+      {
+        "path": "model/definitions/relation-occurrence-v2.ttl",
+        "parentBlob": null,
+        "blob": "ee5a504cb3e4665297fbe8e76e92749b5359a64b",
+        "sha256": "f845f39cff9c253dafe3a267f10340e98e538bf0cf2bf210de0d5e68ffe18745",
+        "bytes": 4253,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "ee5a504cb3e4665297fbe8e76e92749b5359a64b",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "model/definitions/relation-occurrence-v2.ttl",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "authored_profiles"
+        },
+        "originalAuthorship": "aa2898ed9b0f2c955a99cf6ac3b4f918be3d34e3\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T15:34:50+08:00"
+      },
+      {
+        "path": "model/definitions/semantic-definition-v2.ts",
+        "parentBlob": null,
+        "blob": "b4d98023b108c4ec3aadae9383e3289f6245cd9a",
+        "sha256": "971822b5fd08e2756f20f737f58e671a6dc7ee3b3c0107b344adbdac1a48f290",
+        "bytes": 823,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "b4d98023b108c4ec3aadae9383e3289f6245cd9a",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "model/definitions/semantic-definition-v2.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "authored_profiles"
+        },
+        "originalAuthorship": "c36336fd5552c1ceb64028d4c32757db9f054c07\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T12:59:14+08:00"
+      },
+      {
+        "path": "model/definitions/semantic-definition-v2.ttl",
+        "parentBlob": null,
+        "blob": "d9df667c4a3ef75f1b2ef1264b50df8248eced06",
+        "sha256": "fc4ed843cea04c13d9fac64b9056455cf316977d8ff7f4c40856ac5879cf6d7c",
+        "bytes": 3248,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "d9df667c4a3ef75f1b2ef1264b50df8248eced06",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "model/definitions/semantic-definition-v2.ttl",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "authored_profiles"
+        },
+        "originalAuthorship": "c36336fd5552c1ceb64028d4c32757db9f054c07\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T12:59:14+08:00"
+      },
+      {
+        "path": "model/definitions/statement-v2.ts",
+        "parentBlob": null,
+        "blob": "a2d3f7b0a1befe3a75417b743881e96abdd6cd0e",
+        "sha256": "23c2184037ff29560773b22c7fa6aa67c5a530bec1b1641b5d422d7b5f321f72",
+        "bytes": 574,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "a2d3f7b0a1befe3a75417b743881e96abdd6cd0e",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "model/definitions/statement-v2.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "authored_profiles"
+        },
+        "originalAuthorship": "46db2d531812950393dc72e6fe6c37fe242bc06c\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T14:04:56+08:00"
+      },
+      {
+        "path": "model/definitions/statement-v2.ttl",
+        "parentBlob": null,
+        "blob": "b802ef33fb8033eede1a54ca913de0e133be7fcf",
+        "sha256": "f491f13329de73fd3e216a94ef691692a92785553b718c19bbdfce2bd5ea5f2d",
+        "bytes": 10435,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "b802ef33fb8033eede1a54ca913de0e133be7fcf",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "model/definitions/statement-v2.ttl",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "authored_profiles"
+        },
+        "originalAuthorship": "46db2d531812950393dc72e6fe6c37fe242bc06c\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T14:04:56+08:00"
+      },
+      {
+        "path": "model/definitions/work-editorial-field-v2.ts",
+        "parentBlob": null,
+        "blob": "b56368e5d5361673908be75edf17d903c76f6e18",
+        "sha256": "ec13f196cd4fd014fb383d5c7721a42d9b11e3263223ab4a57f666980b522fc0",
+        "bytes": 371,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "b56368e5d5361673908be75edf17d903c76f6e18",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "model/definitions/work-editorial-field-v2.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "authored_profiles"
+        },
+        "originalAuthorship": "487e1fb3bce2a5863ba9795f0bf2bca288aa7631\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T13:42:32+08:00"
+      },
+      {
+        "path": "model/definitions/work-editorial-field-v2.ttl",
+        "parentBlob": null,
+        "blob": "9b8b4c99f3bd8d07175c9d12f4f2da763e495fdf",
+        "sha256": "429d88dbbd5b58588b429de468905d5675fb31846743cac5e67c5c45fb235c97",
+        "bytes": 5243,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "9b8b4c99f3bd8d07175c9d12f4f2da763e495fdf",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "model/definitions/work-editorial-field-v2.ttl",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "authored_profiles"
+        },
+        "originalAuthorship": "487e1fb3bce2a5863ba9795f0bf2bca288aa7631\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T13:42:32+08:00"
+      },
+      {
+        "path": "model/tests/work-editorial-field-v2.test.ts",
+        "parentBlob": null,
+        "blob": "7830302966aa26a88425222032d3fbf17365005e",
+        "sha256": "5fbd8c4c5feb66ae84cb053409f70d7e5fd424ee1722ad33eb1190d70a54714b",
+        "bytes": 1702,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "7830302966aa26a88425222032d3fbf17365005e",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "model/tests/work-editorial-field-v2.test.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "retained_focused_tests"
+        },
+        "originalAuthorship": "487e1fb3bce2a5863ba9795f0bf2bca288aa7631\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T13:42:32+08:00"
+      },
+      {
+        "path": "packages/model/src/generated/profiles.ts",
+        "parentBlob": "c95697beb4de346c005b9b218cc4fd86626aac88",
+        "blob": "738721fa9ee7fdff16950fa5045ee882bd74eaf4",
+        "sha256": "6d2766e1c2e140e08b553af583fa6806f7b15c4dbf60984e7bb30bee76e85591",
+        "bytes": 67724,
+        "inspected": true,
+        "generated": true,
+        "originalBlob": null,
+        "unchangedOriginal": false,
+        "provenance": null,
+        "originalAuthorship": null
+      },
+      {
+        "path": "packages/model/src/generated/schemas.ts",
+        "parentBlob": "5f1a46a202f1081faa6c6da04686fc53c69e164a",
+        "blob": "8dc0be00df9a418ac17efe0e9fcce480862c05df",
+        "sha256": "beb49e9f19988f20f0148f27373e328ee7c826767ebc7896c0da01e872446dc3",
+        "bytes": 614372,
+        "inspected": true,
+        "generated": true,
+        "originalBlob": null,
+        "unchangedOriginal": false,
+        "provenance": null,
+        "originalAuthorship": null
+      },
+      {
+        "path": "packages/model/src/generated/vocabulary.ts",
+        "parentBlob": "627769786771d28829e38dd8b8ee1dab12c6de5d",
+        "blob": "dcedfc38070227220c7eb4f35691d8415e8e8527",
+        "sha256": "94e49e10cdd095caf3cf45887fe0fb0f6b5d247a150ac7ffad425a1d1fd10765",
+        "bytes": 98862,
+        "inspected": true,
+        "generated": true,
+        "originalBlob": null,
+        "unchangedOriginal": false,
+        "provenance": null,
+        "originalAuthorship": null
+      },
+      {
+        "path": "scripts/datasets/native/context.ts",
+        "parentBlob": null,
+        "blob": "df63d751b4d1923852a576df13f0f6377b0ecbe0",
+        "sha256": "047c2b8a7a857c09419caadba755aa6c95b3d5d3910ec6182198c818591f5c77",
+        "bytes": 8200,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "df63d751b4d1923852a576df13f0f6377b0ecbe0",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "scripts/datasets/native/context.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "explicit_conversion_planner_runtime"
+        },
+        "originalAuthorship": "c4de2bd2aa248309b08416eed8358f7fce28c1f1\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T12:37:08+08:00"
+      },
+      {
+        "path": "scripts/datasets/native/fields.ts",
+        "parentBlob": null,
+        "blob": "6799af9d11ece61274853576c7a09ed6752e3767",
+        "sha256": "bc969163a2998c58d3edf9db9f173ff8a1421ebddd1b66b97dac3e0995e1c9de",
+        "bytes": 28999,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "6799af9d11ece61274853576c7a09ed6752e3767",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "scripts/datasets/native/fields.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "explicit_conversion_planner_runtime"
+        },
+        "originalAuthorship": "07f38bc94391be16427b2bda266e6b8e25661a68\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T15:09:35+08:00"
+      },
+      {
+        "path": "scripts/datasets/native/releases.ts",
+        "parentBlob": null,
+        "blob": "8634ce166669c71d2258f622bc353a15b2ee78a6",
+        "sha256": "4367897cac3987faee46999410e5077bd224a7d029bcd83d760d49b492ca6df0",
+        "bytes": 27316,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "8634ce166669c71d2258f622bc353a15b2ee78a6",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "scripts/datasets/native/releases.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "explicit_conversion_planner_runtime"
+        },
+        "originalAuthorship": "65a496efdff48aa210da4d6873889867de0de1de\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T05:24:00+08:00"
+      },
+      {
+        "path": "scripts/datasets/types.ts",
+        "parentBlob": "eaea99ca0a47aa4519aa3451151b236988f58420",
+        "blob": "8e0ef60c9f4d78a57911dee7077b5434f1af6837",
+        "sha256": "6b0b80e6174419be7d4b3259790b4a86f662067b1709c7405d5cc940a903d961",
+        "bytes": 8871,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "028e85fd6ad83391acac26d4bd7b25d68adb5e47",
+        "unchangedOriginal": false,
+        "provenance": {
+          "path": "scripts/datasets/types.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "selective_shared_source_merges",
+          "included": "existing native planner context and retained custody type closure; main media/acquisition types unchanged",
+          "excludedTypes": [
+            "DatasetFieldAdoption",
+            "DatasetFieldAdoptionJournal",
+            "DatasetIntakeJournal"
+          ]
+        },
+        "originalAuthorship": "b08513f820208a298f0e0b2a79340b13a2742ccb\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T14:28:29+08:00"
+      },
+      {
+        "path": "scripts/dev/release-manifest.ts",
+        "parentBlob": "1cf12cecb6b6abc2d66baf77fbcee0b4cb81e64f",
+        "blob": "a2ec7489818db9a539ab904ea77df368ac4c04a0",
+        "sha256": "be3b0112af12ff9d8e394b1fa76c4bed684d2f42826fc80daa3ce34aa0f730b9",
+        "bytes": 3045,
+        "inspected": true,
+        "generated": true,
+        "originalBlob": null,
+        "unchangedOriginal": false,
+        "provenance": null,
+        "originalAuthorship": null
+      },
+      {
+        "path": "services/content/migrations/2701_source_retained_record.sql",
+        "parentBlob": null,
+        "blob": "69f9c90bf657d5ea8e05833aabee96b7504da985",
+        "sha256": "a794df55d4aebcf1efc9fb9a06e4ab329021143c18b2181463e30c7ee73fccb4",
+        "bytes": 6244,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "69f9c90bf657d5ea8e05833aabee96b7504da985",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/content/migrations/2701_source_retained_record.sql",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "source_sql"
+        },
+        "originalAuthorship": "ab56671ae1e22580d481b834777df172c10a95c0\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T12:44:32+08:00"
+      },
+      {
+        "path": "services/content/migrations/2702_source_field_attachment.sql",
+        "parentBlob": null,
+        "blob": "8a9de886b9c9c7450640665b1a7a6f30ca639cd5",
+        "sha256": "9dce99d762fddf26cdd1203a7931658debb4972404f2c42ed7319ea24c444298",
+        "bytes": 10704,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "8a9de886b9c9c7450640665b1a7a6f30ca639cd5",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/content/migrations/2702_source_field_attachment.sql",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "source_sql"
+        },
+        "originalAuthorship": "487e1fb3bce2a5863ba9795f0bf2bca288aa7631\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T13:42:32+08:00"
+      },
+      {
+        "path": "services/content/migrations/2703_source_field_evidence_generation.sql",
+        "parentBlob": null,
+        "blob": "27e3e319ed289185dbc901c214181f3441424d04",
+        "sha256": "132e2de1c25233ae00e6cda6f53601736f02271a7e5ce7ffb2281a706d074d6e",
+        "bytes": 1769,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "27e3e319ed289185dbc901c214181f3441424d04",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/content/migrations/2703_source_field_evidence_generation.sql",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "source_sql"
+        },
+        "originalAuthorship": "07f38bc94391be16427b2bda266e6b8e25661a68\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T15:09:35+08:00"
+      },
+      {
+        "path": "services/content/migrations/2704_source_release_field_mapping.sql",
+        "parentBlob": null,
+        "blob": "503f490ca235bd3752394d51f16d78d5dea1f29d",
+        "sha256": "971c45261f06237f3ffb70dc3bce91087723ac132a5ab753bb6a7ff5092de0da",
+        "bytes": 451,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "503f490ca235bd3752394d51f16d78d5dea1f29d",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/content/migrations/2704_source_release_field_mapping.sql",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "source_sql"
+        },
+        "originalAuthorship": "07f38bc94391be16427b2bda266e6b8e25661a68\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T15:09:35+08:00"
+      },
+      {
+        "path": "services/content/migrations/2705_source_field_slot_bounds.sql",
+        "parentBlob": null,
+        "blob": "fda035ff91a4bc2183d255b6c0235eea83fc017c",
+        "sha256": "db09f0a63cf218120841daa46a6f8c8922228860f68de8bcbcb3d776b5e1b3ab",
+        "bytes": 644,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "fda035ff91a4bc2183d255b6c0235eea83fc017c",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/content/migrations/2705_source_field_slot_bounds.sql",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "source_sql"
+        },
+        "originalAuthorship": "222d57ae9bb8886db39f42d7d76e7e3ea58aac7c\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T20:56:40+08:00"
+      },
+      {
+        "path": "services/content/tests/source-field-slot-migration.test.ts",
+        "parentBlob": null,
+        "blob": "7b4e5febdcb1f478988b59e2ced38a88f034dd35",
+        "sha256": "0c4fcfc6b3f10d7ee55430aa5eb78740f8eaf97243e9eb28d95671951e3c6053",
+        "bytes": 6211,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "7b4e5febdcb1f478988b59e2ced38a88f034dd35",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/content/tests/source-field-slot-migration.test.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "retained_focused_tests"
+        },
+        "originalAuthorship": "222d57ae9bb8886db39f42d7d76e7e3ea58aac7c\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T20:56:40+08:00"
+      },
+      {
+        "path": "services/main/src/api-contract.ts",
+        "parentBlob": "460cb70835d1de9162cf58135b7b78bc26b96e7c",
+        "blob": "33eb6219f38815d2400a1ecc920c9ecdd730b8cc",
+        "sha256": "d0798f89a434a909d0b725b42bfee983ae315d8ebcf8795d65050e574806f35c",
+        "bytes": 21425,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "33eb6219f38815d2400a1ecc920c9ecdd730b8cc",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/api-contract.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "shared_source_merges"
+        },
+        "originalAuthorship": "487e1fb3bce2a5863ba9795f0bf2bca288aa7631\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T13:42:32+08:00"
+      },
+      {
+        "path": "services/main/src/modules/context/command.ts",
+        "parentBlob": "8c65df4a692554629352c4164cdacc45a4a66c17",
+        "blob": "826e75aa0d4dc6e4059459333bab07a2b3429d33",
+        "sha256": "dd56b836e2f9428f4a0f2f81dbf76c817f33dbe7938b57926263968ad1e19d48",
+        "bytes": 16835,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "826e75aa0d4dc6e4059459333bab07a2b3429d33",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/context/command.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "native_acknowledgement_and_v2_read_dependencies"
+        },
+        "originalAuthorship": "46db2d531812950393dc72e6fe6c37fe242bc06c\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T14:04:56+08:00"
+      },
+      {
+        "path": "services/main/src/modules/context/problems.ts",
+        "parentBlob": null,
+        "blob": "6816a49783da7f8ea4c338db5782d01bb2794633",
+        "sha256": "e2177dc04ca66a1204b2f466309af1b3223f2f11e3b9a641d18c91e89e95ee42",
+        "bytes": 201,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "6816a49783da7f8ea4c338db5782d01bb2794633",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/context/problems.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "native_acknowledgement_and_v2_read_dependencies"
+        },
+        "originalAuthorship": "46db2d531812950393dc72e6fe6c37fe242bc06c\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T14:04:56+08:00"
+      },
+      {
+        "path": "services/main/src/modules/relation/attribution.ts",
+        "parentBlob": null,
+        "blob": "2b4de4c90b4f5f2e967b554b6f71b794791746b4",
+        "sha256": "668b50b219766e5ff346b1ad9af3d6bb7ad28b8a186e1b368ca1137349d0a34e",
+        "bytes": 4673,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "2b4de4c90b4f5f2e967b554b6f71b794791746b4",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/relation/attribution.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "native_acknowledgement_and_v2_read_dependencies"
+        },
+        "originalAuthorship": "63b515928a1c9afac7109edd46d23896496858a7\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T17:29:10+08:00"
+      },
+      {
+        "path": "services/main/src/modules/relation/change.ts",
+        "parentBlob": "b520bd75e2472478630f61d100daaf0cca6b7605",
+        "blob": "e910a5bbba10c84c04df71d6910e0d099b1e1795",
+        "sha256": "b8fa30d89aeb0e6afa494a5225d2581e32f582c34fe247dea0d6851200d5c494",
+        "bytes": 43398,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "e910a5bbba10c84c04df71d6910e0d099b1e1795",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/relation/change.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "native_acknowledgement_and_v2_read_dependencies"
+        },
+        "originalAuthorship": "aa2898ed9b0f2c955a99cf6ac3b4f918be3d34e3\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T15:34:50+08:00"
+      },
+      {
+        "path": "services/main/src/modules/relation/v2-read.ts",
+        "parentBlob": null,
+        "blob": "de840fb67b6e115c3204ab7930af91b907fda185",
+        "sha256": "1e3c80ed274d39983132ddb85c9fa2171d8cb915774b90544b1ab8a10fc62b11",
+        "bytes": 9470,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "de840fb67b6e115c3204ab7930af91b907fda185",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/relation/v2-read.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "native_acknowledgement_and_v2_read_dependencies"
+        },
+        "originalAuthorship": "aa2898ed9b0f2c955a99cf6ac3b4f918be3d34e3\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T15:34:50+08:00"
+      },
+      {
+        "path": "services/main/src/modules/relation/v2-schema.ts",
+        "parentBlob": null,
+        "blob": "ee183efe25930169dd3c236d70cd62f9855153d6",
+        "sha256": "cdffd9c899f8760b4e3e81dc8d6397712d642d1251b63bc1b20ee9ee3966aa65",
+        "bytes": 7676,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "ee183efe25930169dd3c236d70cd62f9855153d6",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/relation/v2-schema.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "native_acknowledgement_and_v2_read_dependencies"
+        },
+        "originalAuthorship": "aa2898ed9b0f2c955a99cf6ac3b4f918be3d34e3\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T15:34:50+08:00"
+      },
+      {
+        "path": "services/main/src/modules/rights/store.ts",
+        "parentBlob": "7b93987957a7195f427d550ff49b746d8a496abb",
+        "blob": "83afe8d4ef15dee388dc57aee9389f6ef3e32781",
+        "sha256": "586c85a16da8929974397181773f790f4e6af48bcc35de0cd63a4fd53a8be926",
+        "bytes": 47987,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "9f67ad4f035741468371c102c5bad36c381edc98",
+        "unchangedOriginal": false,
+        "provenance": {
+          "path": "services/main/src/modules/rights/store.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "selective_shared_source_merges",
+          "exclude": "unrelated public-domain diagnostic changes"
+        },
+        "originalAuthorship": "1e5155f2ab1dd177e7be9cc357804542cf941d57\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T15:01:44+08:00"
+      },
+      {
+        "path": "services/main/src/modules/semantic/association.ts",
+        "parentBlob": null,
+        "blob": "2049c85e8ab6aa5abceaabef95a57794412c13a2",
+        "sha256": "68aef58906b1673ee4a49393a675ffd1b1d7346057212c7b2416f589d0a00508",
+        "bytes": 4591,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "2049c85e8ab6aa5abceaabef95a57794412c13a2",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/semantic/association.ts",
+          "source": "d76f441d29",
+          "group": "native_acknowledgement_and_v2_read_dependencies"
+        },
+        "originalAuthorship": "c36336fd5552c1ceb64028d4c32757db9f054c07\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T12:59:14+08:00"
+      },
+      {
+        "path": "services/main/src/modules/semantic/change.ts",
+        "parentBlob": "7718df9e017ed83ac2ac2a0df4a0c89f1e6ef50c",
+        "blob": "4663ce9edc55e73eb6021e3c76eb589938db2dcc",
+        "sha256": "a05a141b361e52ee1502ab4cccb5ddb822d65bd3f2538a48950f15a6c4d920cb",
+        "bytes": 45639,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "4663ce9edc55e73eb6021e3c76eb589938db2dcc",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/semantic/change.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "native_acknowledgement_and_v2_read_dependencies"
+        },
+        "originalAuthorship": "c36336fd5552c1ceb64028d4c32757db9f054c07\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T12:59:14+08:00"
+      },
+      {
+        "path": "services/main/src/modules/semantic/command.ts",
+        "parentBlob": "ff77fb29d12a41f4a5d7adf28d3198e37ef0e8d7",
+        "blob": "2d671ee800a517dc652ef3cd885dc9c4df317316",
+        "sha256": "3807177a9ed9bdaf241f163e6170d935127b12c298eec127bab9d7fe519506cb",
+        "bytes": 22404,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "2d671ee800a517dc652ef3cd885dc9c4df317316",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/semantic/command.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "native_acknowledgement_and_v2_read_dependencies"
+        },
+        "originalAuthorship": "c36336fd5552c1ceb64028d4c32757db9f054c07\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T12:59:14+08:00"
+      },
+      {
+        "path": "services/main/src/modules/semantic/native-basis.ts",
+        "parentBlob": null,
+        "blob": "5361b74296d1bb8197c88477bca9470a4b3b8c09",
+        "sha256": "8350cd3509e0d076e23b8b6264b4dc967270e0aca1087be21a17c0b33e6866bd",
+        "bytes": 26926,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "5361b74296d1bb8197c88477bca9470a4b3b8c09",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/semantic/native-basis.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "native_acknowledgement_and_v2_read_dependencies"
+        },
+        "originalAuthorship": "0f75526fac0638949d9ceed58de2bc5e5f78b569\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T18:03:30+08:00"
+      },
+      {
+        "path": "services/main/src/modules/semantic/read.ts",
+        "parentBlob": "0f506a3f07d7712cd533595270f6625ad52fc774",
+        "blob": "e65ed485be50908f315b4c4a7f70897fd599f162",
+        "sha256": "a4fbd3fdeaaa472ccf67d90ed67fb23d689402a9595568684840e2dd8050d8a9",
+        "bytes": 7161,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "e65ed485be50908f315b4c4a7f70897fd599f162",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/semantic/read.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "native_acknowledgement_and_v2_read_dependencies"
+        },
+        "originalAuthorship": "c36336fd5552c1ceb64028d4c32757db9f054c07\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T12:59:14+08:00"
+      },
+      {
+        "path": "services/main/src/modules/semantic/schema.ts",
+        "parentBlob": "1451eef2a2c7f396c41bfd837a06e7a234e34cf2",
+        "blob": "c3daf0884c0f683f24832516c573c722c58bb211",
+        "sha256": "5ba27f49aade4c68984355fef4a29242255c8689e3f44b734c581f631b6f81eb",
+        "bytes": 8854,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "c3daf0884c0f683f24832516c573c722c58bb211",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/semantic/schema.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "native_acknowledgement_and_v2_read_dependencies"
+        },
+        "originalAuthorship": "c36336fd5552c1ceb64028d4c32757db9f054c07\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T12:59:14+08:00"
+      },
+      {
+        "path": "services/main/src/modules/source/bangumi-conversion.ts",
+        "parentBlob": "3019de8b4e53853768f519d12a1a2c692a930c6e",
+        "blob": "edcbaa928d6e618ac3d3738cc6af7b1698c6b7fe",
+        "sha256": "d626606b84867208792fd8bbda7ce5ed3accb39c1b77e6beb8ee1092b2a1fc7c",
+        "bytes": 2052,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "edcbaa928d6e618ac3d3738cc6af7b1698c6b7fe",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/source/bangumi-conversion.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "source_runtime"
+        },
+        "originalAuthorship": "61ba57c0767dee7666f993e41773c2b7dac6a58c\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T15:50:57+08:00"
+      },
+      {
+        "path": "services/main/src/modules/source/field-control-language.ts",
+        "parentBlob": null,
+        "blob": "5632689b7a521b4b8df3b390bfe3cb7660780918",
+        "sha256": "bfe16661d0a6f6af634d32532a3a15f2802e9833dbbb4a4ae5a1725ffccc28e1",
+        "bytes": 1665,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "5632689b7a521b4b8df3b390bfe3cb7660780918",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/source/field-control-language.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "source_runtime"
+        },
+        "originalAuthorship": "487e1fb3bce2a5863ba9795f0bf2bca288aa7631\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T13:42:32+08:00"
+      },
+      {
+        "path": "services/main/src/modules/source/field-control-native.ts",
+        "parentBlob": "3c0a44126aa5d069458307f0249565f4c5919b2c",
+        "blob": "74aa2af0c69e453b5590cdce629f8031ffd9c726",
+        "sha256": "9e4c827e7ef61b0128fc5581fc1ecc361e8272aa5579594eed9c63faff180acc",
+        "bytes": 18498,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "74aa2af0c69e453b5590cdce629f8031ffd9c726",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/source/field-control-native.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "source_runtime"
+        },
+        "originalAuthorship": "487e1fb3bce2a5863ba9795f0bf2bca288aa7631\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T13:42:32+08:00"
+      },
+      {
+        "path": "services/main/src/modules/source/field-support-acknowledged.ts",
+        "parentBlob": null,
+        "blob": "9e45319d4d5561f5fdc8f475364a1527d359f7b3",
+        "sha256": "515ec9ca32354049d898dcb7d896170a8354179773275a534e168209da188d60",
+        "bytes": 4933,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "9e45319d4d5561f5fdc8f475364a1527d359f7b3",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/source/field-support-acknowledged.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "source_runtime"
+        },
+        "originalAuthorship": "6032598f2dc54ffe110ee5ba7dde34f98a0ddea8\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T18:22:05+08:00"
+      },
+      {
+        "path": "services/main/src/modules/source/field-support-contract.ts",
+        "parentBlob": null,
+        "blob": "7205592cf7fbb3ee6302c92ab43bcf8cb70f3a3d",
+        "sha256": "f123ed758f5d3a44f88d1bc45c13ed3c6150b4f14329da05b0bbbae0c03efc34",
+        "bytes": 5361,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "7205592cf7fbb3ee6302c92ab43bcf8cb70f3a3d",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/source/field-support-contract.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "source_runtime"
+        },
+        "originalAuthorship": "6032598f2dc54ffe110ee5ba7dde34f98a0ddea8\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T18:22:05+08:00"
+      },
+      {
+        "path": "services/main/src/modules/source/field-support-evidence.ts",
+        "parentBlob": null,
+        "blob": "bc32ab47458c202a18ee4094da3f8e1d2eca9f18",
+        "sha256": "18e0fcc56bf514f6158d7cf02c2ab6889f8f6bd447c5da9575fda59eb6af59d0",
+        "bytes": 8465,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "bc32ab47458c202a18ee4094da3f8e1d2eca9f18",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/source/field-support-evidence.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "source_runtime"
+        },
+        "originalAuthorship": "b6ccfb47911e4381006c8e5220909f3b96e027e9\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T18:02:40+08:00"
+      },
+      {
+        "path": "services/main/src/modules/source/field-support-native.ts",
+        "parentBlob": null,
+        "blob": "e113dbcbdacd2438d62d5d503f93086b22c684cf",
+        "sha256": "0016869b5c4a5164a22f5f3a4ee474cc28fae0e9dae566c45718d45f0b92b686",
+        "bytes": 8292,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "e113dbcbdacd2438d62d5d503f93086b22c684cf",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/source/field-support-native.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "source_runtime"
+        },
+        "originalAuthorship": "b6ccfb47911e4381006c8e5220909f3b96e027e9\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T18:02:40+08:00"
+      },
+      {
+        "path": "services/main/src/modules/source/field-support-retained.ts",
+        "parentBlob": null,
+        "blob": "811373af9c9c88b783edc4fdcc46aa9d7ac6faa7",
+        "sha256": "d5f6017fa7d9734498af94933b2029764922674bfc801afb12169795e5d5cc8c",
+        "bytes": 23250,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "811373af9c9c88b783edc4fdcc46aa9d7ac6faa7",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/source/field-support-retained.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "source_runtime"
+        },
+        "originalAuthorship": "867d708b2ac4a83f88032717e7e63a04a36e0277\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T19:36:56+08:00"
+      },
+      {
+        "path": "services/main/src/modules/source/field-support-schema.ts",
+        "parentBlob": null,
+        "blob": "8dd9a4a5e82aa826860e24ed5378bda7e8c3735b",
+        "sha256": "def26104aeb056bd2572513fac3a1e4fb43a6b9cfe7131358f38ec7396e6d778",
+        "bytes": 6693,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "8dd9a4a5e82aa826860e24ed5378bda7e8c3735b",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/source/field-support-schema.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "source_runtime"
+        },
+        "originalAuthorship": "b6ccfb47911e4381006c8e5220909f3b96e027e9\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T18:02:40+08:00"
+      },
+      {
+        "path": "services/main/src/modules/source/mapped-values.ts",
+        "parentBlob": "7b68a7182d20f9aa76144ae7287830c1bb9369c2",
+        "blob": "ec490d25bd9b6fc4a043e2dbf97eeaddd8e62ace",
+        "sha256": "228b49306795016eeff73b476ab0f9defab330555ac369e55562db3f856baf3b",
+        "bytes": 1920,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "ec490d25bd9b6fc4a043e2dbf97eeaddd8e62ace",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/source/mapped-values.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "source_runtime"
+        },
+        "originalAuthorship": "61ba57c0767dee7666f993e41773c2b7dac6a58c\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T15:50:57+08:00"
+      },
+      {
+        "path": "services/main/src/modules/source/open-library-conversion.ts",
+        "parentBlob": "124f2caae1e7047bf65f8c07d7f9f36c09be4e79",
+        "blob": "14dc1da6514a3edf0bc0f6f3125c9e4da0e686fe",
+        "sha256": "432ec9235c5f433102f95d74e34ab95b9c02abe97eb71dacda66856dd03676d9",
+        "bytes": 23048,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "14dc1da6514a3edf0bc0f6f3125c9e4da0e686fe",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/source/open-library-conversion.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "source_runtime"
+        },
+        "originalAuthorship": "61ba57c0767dee7666f993e41773c2b7dac6a58c\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T15:50:57+08:00"
+      },
+      {
+        "path": "services/main/src/modules/source/retained-evidence.ts",
+        "parentBlob": null,
+        "blob": "15d1e6e6f90f1be63a902d51fa01e7a8bb4682b0",
+        "sha256": "8c48b69b75ba7abef233b36c20a08001f2ec4bc3b70f1cca9bb9dcac67a89ff6",
+        "bytes": 12591,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "15d1e6e6f90f1be63a902d51fa01e7a8bb4682b0",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/source/retained-evidence.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "source_runtime"
+        },
+        "originalAuthorship": "ecb8e124fa7a75de42d79670a1377b3ed95c22cc\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T19:00:44+08:00"
+      },
+      {
+        "path": "services/main/src/modules/source/retained-record-normalization.ts",
+        "parentBlob": null,
+        "blob": "67522f1710cc16b1344b9b4d32c3233ebd4f20cc",
+        "sha256": "07d776d551d2f6aac322e3118438d96a0f4d7533854e8475ffbb6c75777153f8",
+        "bytes": 9614,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "67522f1710cc16b1344b9b4d32c3233ebd4f20cc",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/source/retained-record-normalization.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "source_runtime"
+        },
+        "originalAuthorship": "61ba57c0767dee7666f993e41773c2b7dac6a58c\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T15:50:57+08:00"
+      },
+      {
+        "path": "services/main/src/modules/source/retained-record-schema.ts",
+        "parentBlob": null,
+        "blob": "23e3ea8f8bd6ce7b9ddcd2875ea1b9837dcf3e69",
+        "sha256": "6122981f84c4d76f5572c24868aad34901aa912cbdc749982b5b78fd4c1f263b",
+        "bytes": 2534,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "23e3ea8f8bd6ce7b9ddcd2875ea1b9837dcf3e69",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/source/retained-record-schema.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "source_runtime"
+        },
+        "originalAuthorship": "ab56671ae1e22580d481b834777df172c10a95c0\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T12:44:32+08:00"
+      },
+      {
+        "path": "services/main/src/modules/source/retained-record.ts",
+        "parentBlob": null,
+        "blob": "9c109a6af6c359fb4c43dca9d90aca4bc2946e39",
+        "sha256": "7df118796d21fa1878f96efd5aaf2b6fc34c8d125139fee10c65f28c1ea6d995",
+        "bytes": 12533,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "9c109a6af6c359fb4c43dca9d90aca4bc2946e39",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/source/retained-record.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "source_runtime"
+        },
+        "originalAuthorship": "61ba57c0767dee7666f993e41773c2b7dac6a58c\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T15:50:57+08:00"
+      },
+      {
+        "path": "services/main/src/modules/source/withdrawal.ts",
+        "parentBlob": "a3f2fa568825bc2f28fde59dbd54479f56bf8cfa",
+        "blob": "34912f19e3704613ad17a33fd9324ee82bf9d104",
+        "sha256": "30114907b0f1deca80c706ed5f6f52109750c2f3cdc7c1847a24f56799cfc1a4",
+        "bytes": 14903,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "34912f19e3704613ad17a33fd9324ee82bf9d104",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/source/withdrawal.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "source_runtime"
+        },
+        "originalAuthorship": "07f38bc94391be16427b2bda266e6b8e25661a68\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T15:09:35+08:00"
+      },
+      {
+        "path": "services/main/src/modules/statement/contract.ts",
+        "parentBlob": "4b82b92cc023ca1446f68fb92220e06da79519d3",
+        "blob": "69fdeffe1621367f5522362e4f743870f0f973f9",
+        "sha256": "e8384e417a64c981eccf5f71855c88e38e2ca244a70cda510397c283066fb954",
+        "bytes": 1389,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "69fdeffe1621367f5522362e4f743870f0f973f9",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/statement/contract.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "native_acknowledgement_and_v2_read_dependencies"
+        },
+        "originalAuthorship": "46db2d531812950393dc72e6fe6c37fe242bc06c\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T14:04:56+08:00"
+      },
+      {
+        "path": "services/main/src/modules/statement/qualification.ts",
+        "parentBlob": "ccd907fd65c64ffc0672479ab456e36597d88476",
+        "blob": "f2beda60a0e4b5ce4a617a9dbe0fe57e1c8409f7",
+        "sha256": "615dafe8bf38f832a29fee916580a69853c82ef58e33f960846f1a3145893089",
+        "bytes": 29624,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "f2beda60a0e4b5ce4a617a9dbe0fe57e1c8409f7",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/statement/qualification.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "native_acknowledgement_and_v2_read_dependencies"
+        },
+        "originalAuthorship": "46db2d531812950393dc72e6fe6c37fe242bc06c\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T14:04:56+08:00"
+      },
+      {
+        "path": "services/main/src/modules/statement/read.ts",
+        "parentBlob": "a07a50e821dac9048fa99e704aebc8f33d1bd161",
+        "blob": "2ab48d70afbbf48a768c6e1d59e24a853526f77f",
+        "sha256": "3809b893b8008f2becd64a8a2b486d4044a021309cee0bd824143cefbb2fe6cc",
+        "bytes": 43100,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "2ab48d70afbbf48a768c6e1d59e24a853526f77f",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/statement/read.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "native_acknowledgement_and_v2_read_dependencies"
+        },
+        "originalAuthorship": "46db2d531812950393dc72e6fe6c37fe242bc06c\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T14:04:56+08:00"
+      },
+      {
+        "path": "services/main/src/modules/statement/v2-coverage.ts",
+        "parentBlob": null,
+        "blob": "62a5a93bb2ef99e680c51b1e34f23da4b65c2503",
+        "sha256": "3ac95f74f57c3678c5f55659c5976ef3e5d27a29a7fff49046d172ef996a50dc",
+        "bytes": 7631,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "62a5a93bb2ef99e680c51b1e34f23da4b65c2503",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/statement/v2-coverage.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "native_acknowledgement_and_v2_read_dependencies"
+        },
+        "originalAuthorship": "0f75526fac0638949d9ceed58de2bc5e5f78b569\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T18:03:30+08:00"
+      },
+      {
+        "path": "services/main/src/modules/statement/v2-read.ts",
+        "parentBlob": null,
+        "blob": "8a2bcdd25ef30e9ea4d3fe125b76fa1ce4e92993",
+        "sha256": "b0419faf53f2e7a65f207d073f066cac40843775add1a8fa3ad233aa73f6fbb5",
+        "bytes": 25403,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "8a2bcdd25ef30e9ea4d3fe125b76fa1ce4e92993",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/statement/v2-read.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "native_acknowledgement_and_v2_read_dependencies"
+        },
+        "originalAuthorship": "0f75526fac0638949d9ceed58de2bc5e5f78b569\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T18:03:30+08:00"
+      },
+      {
+        "path": "services/main/src/modules/statement/v2-schema.ts",
+        "parentBlob": null,
+        "blob": "3c7affd89034447988c233dcd6ad7ec9059157fb",
+        "sha256": "b42b3e6602afcda7cc2d79bcf01ea419586160d3b4d8e19179f30c31bf50a9d8",
+        "bytes": 5325,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "3c7affd89034447988c233dcd6ad7ec9059157fb",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/statement/v2-schema.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "native_acknowledgement_and_v2_read_dependencies"
+        },
+        "originalAuthorship": "46db2d531812950393dc72e6fe6c37fe242bc06c\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T14:04:56+08:00"
+      },
+      {
+        "path": "services/main/src/modules/work/credit-attribution.ts",
+        "parentBlob": null,
+        "blob": "e73b1b4412fcec643bcebbbce7af722bd87e9fb6",
+        "sha256": "f1403de976ec0963362514c2954afd2cf5af7c6370d7676f99cf20a5c3483ba3",
+        "bytes": 7591,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "e73b1b4412fcec643bcebbbce7af722bd87e9fb6",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/modules/work/credit-attribution.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "native_acknowledgement_and_v2_read_dependencies"
+        },
+        "originalAuthorship": "94039d9783d719ca8fe884c31312fbb9b9aef1b6\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T18:17:33+08:00"
+      },
+      {
+        "path": "services/main/src/routes/dependencies.ts",
+        "parentBlob": "1709046f3f4ab4691a589fa644928156f222a2bc",
+        "blob": "020e21976f594954053ae2aded8579ea577072da",
+        "sha256": "3c01be108f9fe7df820f86cb3c1bf9f05524e180b952a16c00bc5d81cbe00d08",
+        "bytes": 18364,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "733a6d5b7f8f18c57837c2c67f127d003afef237",
+        "unchangedOriginal": false,
+        "provenance": {
+          "path": "services/main/src/routes/dependencies.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "selective_shared_source_merges",
+          "exclude": "archive public POST dependency"
+        },
+        "originalAuthorship": "aa2898ed9b0f2c955a99cf6ac3b4f918be3d34e3\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T15:34:50+08:00"
+      },
+      {
+        "path": "services/main/src/routes/problems.ts",
+        "parentBlob": "f8011233aae833acc28aeb8c14706a9b575b2a00",
+        "blob": "7fe536fbff88ec8e1c0aa0788d5bd83a4761339f",
+        "sha256": "03942a334de8b774d9a837cc5b23864fa185d646dc7e0ee0b8746240e260bce8",
+        "bytes": 37794,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "7fe536fbff88ec8e1c0aa0788d5bd83a4761339f",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/routes/problems.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "shared_source_merges"
+        },
+        "originalAuthorship": "ab56671ae1e22580d481b834777df172c10a95c0\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T12:44:32+08:00"
+      },
+      {
+        "path": "services/main/src/routes/source-supports.ts",
+        "parentBlob": "0e17b8db85116da314445ab09cdfc3e55168c9fb",
+        "blob": "08cec1ad5db0319451cd781d1ee468e647569705",
+        "sha256": "3ee20da83de79871bb9b7318a0bc38482eff0caedeb101bd474d3099c6b072db",
+        "bytes": 67246,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "08cec1ad5db0319451cd781d1ee468e647569705",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/src/routes/source-supports.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "shared_source_merges"
+        },
+        "originalAuthorship": "07f38bc94391be16427b2bda266e6b8e25661a68\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T15:09:35+08:00"
+      },
+      {
+        "path": "services/main/src/routes/sources.ts",
+        "parentBlob": "51416eeb2ebf91716244f0d9fa2e7705815bdf92",
+        "blob": "003f27a47f4c2ea025329a99e572b24e93fe1914",
+        "sha256": "91574b140938379dae416948d0ee6f7cd7daee63a39e7f07f8fa5ed377a89d88",
+        "bytes": 49842,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "d93895394aeeabff65aed31a6f762f2ff41d93fd",
+        "unchangedOriginal": false,
+        "provenance": {
+          "path": "services/main/src/routes/sources.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "selective_shared_source_merges",
+          "includedHunks": 4,
+          "exclude": "archive POST/limits/types"
+        },
+        "originalAuthorship": "f25237250e6d126278d0dcfdc89770702b8f9307\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T15:50:56+08:00"
+      },
+      {
+        "path": "services/main/tests/public-retained-evidence.test.ts",
+        "parentBlob": null,
+        "blob": "388add4adb11b9e098243eca205f2ea0ec17a7f1",
+        "sha256": "a878a3be6ef5970a434c7e21d5a238ccc79af7c1e42d1f2b44b417dde2ab6421",
+        "bytes": 18551,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "388add4adb11b9e098243eca205f2ea0ec17a7f1",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/tests/public-retained-evidence.test.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "retained_focused_tests"
+        },
+        "originalAuthorship": "ecb8e124fa7a75de42d79670a1377b3ed95c22cc\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T19:00:44+08:00"
+      },
+      {
+        "path": "services/main/tests/semantic-native-basis-occurrence.test.ts",
+        "parentBlob": null,
+        "blob": "feb2e88fd9471994094b1f049fcea7533da9e27b",
+        "sha256": "e87ac61ac91a1663e7cb632d998707d6b5263aa372ea98bff03e0142da7c4c8c",
+        "bytes": 17677,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "feb2e88fd9471994094b1f049fcea7533da9e27b",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/tests/semantic-native-basis-occurrence.test.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "retained_focused_tests"
+        },
+        "originalAuthorship": "0f75526fac0638949d9ceed58de2bc5e5f78b569\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T18:03:30+08:00"
+      },
+      {
+        "path": "services/main/tests/semantic-native-basis.test.ts",
+        "parentBlob": null,
+        "blob": "4e311633564fbb073efdb59507988a50e5e148c1",
+        "sha256": "7aa52227c2efa65afacf25b272bd56b7e20721b2cf153fd4ebb22faa241c3a7b",
+        "bytes": 16739,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "4e311633564fbb073efdb59507988a50e5e148c1",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/tests/semantic-native-basis.test.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "retained_focused_tests"
+        },
+        "originalAuthorship": "0f75526fac0638949d9ceed58de2bc5e5f78b569\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T18:03:30+08:00"
+      },
+      {
+        "path": "services/main/tests/source-field-native-basis.test.ts",
+        "parentBlob": null,
+        "blob": "39972bcc3729ac0a1aedf5900d5c92bd48830b30",
+        "sha256": "00ec2d9b973515deb7f4e2b1ab255783f53c4b43d3930bdef7adbf1a33fa4cc8",
+        "bytes": 14113,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "39972bcc3729ac0a1aedf5900d5c92bd48830b30",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/tests/source-field-native-basis.test.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "retained_focused_tests"
+        },
+        "originalAuthorship": "6032598f2dc54ffe110ee5ba7dde34f98a0ddea8\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T18:22:05+08:00"
+      },
+      {
+        "path": "services/main/tests/source-retained-evidence.test.ts",
+        "parentBlob": null,
+        "blob": "48b23d694b1db2373f79b984517a4e3182e68b01",
+        "sha256": "2a125e3021e764a52f280af076bfbeca9ab78a4fc46413ced2adad1937a68d7f",
+        "bytes": 16737,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "48b23d694b1db2373f79b984517a4e3182e68b01",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/tests/source-retained-evidence.test.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "retained_focused_tests"
+        },
+        "originalAuthorship": "9d4ccdc6ebca248b0da5308137f0b11ab5ce9cb6\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T13:52:13+08:00"
+      },
+      {
+        "path": "services/main/tests/source-retained-record.test.ts",
+        "parentBlob": null,
+        "blob": "02d36e9652fea56b9f84c66417409b814ccc7658",
+        "sha256": "ef43ecf42bdb58e00c6a605d71cdc9b9c57ab3ace0e67deef5c0d6d9c5789e6c",
+        "bytes": 41685,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "02d36e9652fea56b9f84c66417409b814ccc7658",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/tests/source-retained-record.test.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "retained_focused_tests"
+        },
+        "originalAuthorship": "867d708b2ac4a83f88032717e7e63a04a36e0277\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T19:36:56+08:00"
+      },
+      {
+        "path": "services/main/tests/support/source-field-native-fixture.ts",
+        "parentBlob": null,
+        "blob": "2cb63b82b92a7ecbe3292317154d0098f385405e",
+        "sha256": "d584fcab37edde02fafd966750ec97848adfad6b6d1b3228b1acdd21774a27bf",
+        "bytes": 10960,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "2cb63b82b92a7ecbe3292317154d0098f385405e",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "services/main/tests/support/source-field-native-fixture.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "retained_focused_tests"
+        },
+        "originalAuthorship": "6032598f2dc54ffe110ee5ba7dde34f98a0ddea8\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T18:22:05+08:00"
+      },
+      {
+        "path": "tests/qa/unit/conversion-source-boundary.test.ts",
+        "parentBlob": null,
+        "blob": "40d3330686ba594a4f3c8cd33bc11e03b8701467",
+        "sha256": "9a9b2244df5cb54f052a5bf297eaeb0df53735d74e965e19f917449571afa129",
+        "bytes": 1529,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": null,
+        "unchangedOriginal": false,
+        "provenance": {
+          "path": "tests/qa/unit/conversion-source-boundary.test.ts",
+          "source": "61ba57c076",
+          "group": "preserved_source_assertions"
+        },
+        "originalAuthorship": ""
+      },
+      {
+        "path": "tests/qa/unit/dataset-field-mapping.test.ts",
+        "parentBlob": null,
+        "blob": "5d43e3d4ebec7607505060a90ea344f9c2c625b6",
+        "sha256": "1ccb508a6a879227c58e3114019f89c41e9518e70339658c22353f89ec15d8bc",
+        "bytes": 22631,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "5d43e3d4ebec7607505060a90ea344f9c2c625b6",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "tests/qa/unit/dataset-field-mapping.test.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "retained_focused_tests"
+        },
+        "originalAuthorship": "07f38bc94391be16427b2bda266e6b8e25661a68\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T15:09:35+08:00"
+      },
+      {
+        "path": "tests/qa/unit/source-field-values.test.ts",
+        "parentBlob": null,
+        "blob": "da32de63c40ae14b82e74bd07b35c6fc693a99ff",
+        "sha256": "41262cc612ad5022006ef7f74f32ba66f50d3144bf875043a6c73de88ef05fa3",
+        "bytes": 2580,
+        "inspected": true,
+        "generated": false,
+        "originalBlob": "da32de63c40ae14b82e74bd07b35c6fc693a99ff",
+        "unchangedOriginal": true,
+        "provenance": {
+          "path": "tests/qa/unit/source-field-values.test.ts",
+          "source": "2f53317556f68b209bc82987093478e2b2e5ab71",
+          "group": "retained_focused_tests"
+        },
+        "originalAuthorship": "487e1fb3bce2a5863ba9795f0bf2bca288aa7631\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T13:42:32+08:00"
+      }
+    ]
+  },
+  "controllingDirection": {
+    "references": [
+      {
+        "path": ".temp/ref/conversion-citation-direction.md",
+        "sha256": "521b2f77eeb27112dad003aa3a345f999eeec6347a1896ad8b855ed0524be8fc"
+      },
+      {
+        "path": ".temp/ref/source-citations-review-20261019.md",
+        "sha256": "644a91a56dec771e2399cdca533808a877de6d0f3bfe50677724eee2adc69f50"
+      }
+    ],
+    "appliedBoundary": "Conversion is an independently reusable external library, invoked only through explicit conversion commands. Native/business APIs and ordinary manual citations need no conversion ID, mapper registration, re-conversion, retained bytes or converter proof. Retained evidence, lineage and strong correspondence are optional separate records. No replacement citation or mapping framework is proposed.",
+    "manualCitationLimit": "This cut neither replaces the independent citation model nor proves a complete manual citation editor/reader journey. Converter-dependent retained-support contracts are not asserted to be mandatory citation contracts.",
+    "headGuarantee": "Verified-before-commit only; Source SQL settlement is not an atomic cross-owner transaction with native graph commands."
+  },
+  "provenance": {
+    "manifest": {
+      "path": ".temp/review/retained-source/retained-source-manifest.json",
+      "sha256": "ce0a5e7f1d5e0a8fcb51e7ccfd9a865fba4d8fa2b36c3ebf38f2ffd2d5969702",
+      "ownerPath": ".temp/worktrees/g-2781/.temp/goal/landing-candidates/retained-source-manifest.json",
+      "expectedSha256": "ce0a5e7f1d5e0a8fcb51e7ccfd9a865fba4d8fa2b36c3ebf38f2ffd2d5969702",
+      "exactMatch": true
+    },
+    "preparation": {
+      "path": ".temp/review/retained-source/retained-source-preparation.json",
+      "sha256": "1ae89cb9896d93d1370ebdc8c3425abaf4c8db510b5896e94fa6b63fb4f09b90"
+    },
+    "publishedHandoff": {
+      "path": ".temp/review/retained-source/retained-source-published.txt",
+      "sha256": "86adcc8afcf12ee23643c85d50b6e80642282d08c79e824d0917f1905f9238f7"
+    },
+    "sourceInput": "2f53317556f68b209bc82987093478e2b2e5ab71",
+    "historicalMainInput": "7538d1970f49ae3e11f0d462e9d2295a26b1d4ab",
+    "authoredInputPreservation": "Seventy selected authored input paths, nineteen native owner inputs and the explicit planner/custody type closure are recorded in the preparation inventory. The semantic association input is exactly d76f441d29, excluding later Performer additions. Seven shared merges preserve unrelated main behavior; four profiles and merged schema outputs were selectively regenerated by Task, not copied from cumulative generated blobs.",
+    "preservedSourceTestSplit": {
+      "authoredCommit": "61ba57c0767dee7666f993e41773c2b7dac6a58c",
+      "originalMixedTestBlob": "ad13894e8351e1b9fe0e9c7b8546f8820f1b2368",
+      "retainedPath": "tests/qa/unit/conversion-source-boundary.test.ts",
+      "retainedBlob": "40d3330686ba594a4f3c8cd33bc11e03b8701467",
+      "hashConvention": "Whole original test(...) block including its terminating newline.",
+      "cases": [
+        {
+          "name": "native retained validation reads explicit results instead of invoking provider transformations",
+          "sha256": "a0ac04d42aa7c68086630b20798c33dfda99f98d6aa01df55ce4971c9bc44c2b",
+          "exactAuthoredCaseIncludingTrailingNewline": true,
+          "executedByReviewer": false,
+          "executionReusedFrom": "82a469a4-27d4-4616-836b-1c4b598068ac"
+        },
+        {
+          "name": "legacy native source reads also validate saved conversion output without transforming the provider again",
+          "sha256": "6e98a57f3262ab568de6d4253b21794bb0d71c8af3a46ffba4be7e9d40e4bfbe",
+          "exactAuthoredCaseIncludingTrailingNewline": true,
+          "executedByReviewer": false,
+          "executionReusedFrom": "82a469a4-27d4-4616-836b-1c4b598068ac"
+        }
+      ],
+      "limit": "The two bodies are unchanged, not deleted, skipped or weakened. Their Source candidate execution is reused from job 82a469a4; they are not asserted executed against current main."
+    }
+  },
+  "actionableFindings": [
+    {
+      "id": "SOURCE-REFUSAL-1",
+      "priority": "P2",
+      "status": "confirmed-outcome-assertions-fail",
+      "title": "Use own-key dispatch for retained provider and attribution basis refusal",
+      "class": "Prototype-inherited members are mistaken for declared dispatch entries before an array method is invoked.",
+      "locations": [
+        {
+          "path": "services/main/src/modules/source/retained-record-normalization.ts",
+          "line": 25,
+          "blob": "67522f1710cc16b1344b9b4d32c3233ebd4f20cc",
+          "trigger": "retainedMappingRevision(provider, 'vn') with provider constructor, __proto__ or toString",
+          "expected": "SourceFieldProblem with status 422 and code source_mapping_unverified, matching ordinary unsupported providers.",
+          "actual": "TypeError: RETAINED_NAMESPACES[provider]?.includes is not a function.",
+          "reachability": "retainedConversionRequest.identity.provider is an arbitrary string. retainedBasis calls retainedMappingRevision before checking record/provider equality, so the nested record provider enum does not fence this lookup.",
+          "testJob": "334ec0fb-da8e-42d9-bb04-145792fafc66",
+          "failingCases": 3
+        },
+        {
+          "path": "services/main/src/modules/relation/v2-schema.ts",
+          "line": 49,
+          "blob": "ee183efe25930169dd3c236d70cd62f9855153d6",
+          "trigger": "checkedAttributionSupports([{basis:{kind},fields:['creditedName'],evidence:['https://example.test/citation']}]) with kind constructor, __proto__ or toString",
+          "expected": "InvalidRelationOccurrence, matching ordinary unsupported attribution basis kinds.",
+          "actual": "TypeError: required.every is not a function at keys(), after the inherited object member becomes basisKeys.",
+          "reachability": "The V2 native participation validator accepts unknown input and invokes checkedAttributionSupports. Its closed basis validation reaches the inherited lookup before it can refuse the unsupported kind.",
+          "testJob": "4ec7f4ae-70ef-4ac9-86c3-74efb637555a",
+          "failingCases": 3
+        }
+      ],
+      "impact": "Unsupported caller input escapes the intended validation refusal. It does not pass validation or demonstrate an unauthorized write. An internal-error HTTP response is inferred from the exception type and route problem handling; no HTTP response was executed in this review.",
+      "counterexamples": [
+        "constructor",
+        "__proto__",
+        "toString"
+      ],
+      "sameClassSearch": "Searched dynamic Record/object dispatch and indexing throughout the 86-file native/Source/planner delta. These two newly introduced untrusted dispatch sites are confirmed. Pointer traversals explicitly require own properties; other enumerations use declared/validated fields or trusted owner terms. No broader repository audit or accepted library re-review.",
+      "requestedCorrection": "Use a private Map, a null-prototype dispatch record, or an explicit own-property check at both sites. Preserve all 28 declared provider pairs, four native basis kinds and ordinary unsupported behavior. Add refusal regression coverage for Object.prototype own names. Do not alter citation independence, native acknowledgement authority or accepted strict library behavior.",
+      "repairPerformedByReviewer": false
+    }
+  ],
+  "acceptedObservations": [
+    {
+      "area": "Retained multipart custody and explicit saved plan",
+      "paths": [
+        "retained-record-normalization.ts",
+        "retained-record.ts",
+        "retained-record-schema.ts",
+        "retained-evidence.ts"
+      ],
+      "assessment": "Reconstruction validates actual ordered parts, chunk coordinates/count/order, canonical base64/hash/length/UTF8/media, snapshot identity and complete canonical record equality. Raw-part, reconstructed payload, canonical record and selected-value digests stay separate. Explicit conversion alone transforms bare provider data and saves its normalization rule, projection, inventory and field plan. Later native/evidence reads validate saved results and exact bytes without invoking provider transformation again.",
+      "adverseStatesInspected": [
+        "part/order/count or snapshot mismatch",
+        "changed whole record/raw payload",
+        "missing/deleted/foreign custody",
+        "unknown saved normalization rule",
+        "idempotent key collision"
+      ],
+      "limit": "Provider refusal has SOURCE-REFUSAL-1. Owner positives use actual SQL with controlled ports; no new capture or producer adoption."
+    },
+    {
+      "area": "Lossless values and native planning",
+      "paths": [
+        "scripts/datasets/native/fields.ts",
+        "scripts/datasets/native/context.ts",
+        "scripts/datasets/native/releases.ts",
+        "scripts/datasets/types.ts",
+        "field-support-evidence.ts",
+        "mapped-values.ts",
+        "field-control-language.ts"
+      ],
+      "assessment": "Pointers use RFC6901 tokens, own properties and canonical array indices. Missing/null/empty strings/arrays/objects and supplied language omission/null/value stay distinct. The saved plan selects exact pointer, ordinal, alias, disposition and language. Numeric lexicals retain exact decimal/integer strings; unsafe/fractional JS numbers are not silently repaired. Partial Gregorian dates retain precision; release/realization candidates retain actual edition/language coverage. Multiline/CRLF/tab synopsis strings preserve bytes within the explicit one-MiB bound. Unsupported media, traits, counters, raw JSON and nutrition are not fabricated as prose or values.",
+      "adverseStatesInspected": [
+        "escaped pointer tokens and prototype keys",
+        "wrong alias ordinal or scalar shape",
+        "null/empty language",
+        "exact decimal versus unsafe numeric inputs",
+        "year-only/month-only dates",
+        "unsupported native target or self-comparison"
+      ],
+      "limit": "Planner outputs are explicit candidates/dispositions, not installed importer writes, generated identities or native adoption coverage."
+    },
+    {
+      "area": "Independent native validation and actual acknowledgement binding",
+      "paths": [
+        "field-support-native.ts",
+        "field-support-acknowledged.ts",
+        "semantic/native-basis.ts",
+        "statement/v2-coverage.ts",
+        "relation/attribution.ts",
+        "work/credit-attribution.ts"
+      ],
+      "assessment": "Retained coordinates and saved selected values are checked separately from actual native owner state. Acknowledgement adapters consume the real terminal receipt/admission/scope/action/component/revision/operation/manifest/generation/data-epoch/sequence; a revision ID is not relabelled a receipt. Current native head, property, exact typed value/language, reference visibility and disclosure are verified. V1 meaning stays exact; V2 coverage explicitly distinguishes participation, occurrence and subject-global cases and requires actual occurrence adoption/attribution authority.",
+      "adverseStatesInspected": [
+        "missing owner/receipt/coverage",
+        "forged receipt, component, revision, admission or operation",
+        "wrong role/participant/occurrence",
+        "stale head or data epoch",
+        "private/missing semantic referent"
+      ],
+      "limit": "Controlled graph and authority fixtures establish owner refusal/binding behavior. Actual installed native admission is not supplied by this candidate."
+    },
+    {
+      "area": "Source settlement, replay and independent withdrawal",
+      "paths": [
+        "field-support-retained.ts",
+        "withdrawal.ts",
+        "field-control-native.ts",
+        "rights/store.ts"
+      ],
+      "assessment": "Custody and current reuse are authorized before mismatch detail. Source uses real admitted authority, locks its support head, refuses withdrawn/pending supports and records a genuine Source settlement receipt/certificate bound to the acknowledged native command. Exact replay preserves the historical certificate without pretending the historical native head is current. Current support/evidence reads still recheck native head, rights and withdrawal. Withdrawing one support leaves native content and other support records intact; later human values are retained.",
+      "adverseStatesInspected": [
+        "same-key changed request",
+        "foreign binding and unsupported reuse",
+        "pending/withdrawn head",
+        "stale native state with historical replay",
+        "independent supports and human override"
+      ],
+      "limit": "Native verification precedes Source commit. No atomic graph/SQL transaction, installed authority admission or importer behavior is asserted."
+    },
+    {
+      "area": "Reader-authorized evidence and hidden-position continuation",
+      "paths": [
+        "retained-evidence.ts",
+        "field-support-retained.ts",
+        "rights/store.ts"
+      ],
+      "assessment": "Public projection uses the actual reader, including principal:null, and the exact retained pointer, payload digest and supplied language. The evidence owner checks all multipart custody and current rights/disclosure; quotation authority is separate from field reuse. Exact component/revision and generation select the inventory. A physical keyset frontier advances over hidden supports, so an empty visible page can retain more:true/next. WorkReadSession dependencies recheck generation, current native/evidence state and rights/disclosure before emission. Historical certificates do not become current public evidence. No source Work, manual-citation method, modality or submitter is invented.",
+      "adverseStatesInspected": [
+        "anonymous/ordinary reader versus custodian",
+        "hidden first/middle support positions",
+        "changed generation or head",
+        "rights/disclosure withdrawal during a read",
+        "absent quote authority"
+      ],
+      "limit": "The evidence owner has actual SQL cases; native projection ports are controlled. Public consumer pagination/composition and actual public native admission remain unproved."
+    },
+    {
+      "area": "Native dependency closure and compatibility",
+      "paths": [
+        "semantic/change.ts",
+        "semantic/association.ts",
+        "semantic/read.ts",
+        "semantic/schema.ts",
+        "semantic/command.ts",
+        "context/command.ts",
+        "context/problems.ts",
+        "relation/change.ts",
+        "relation/v2-read.ts",
+        "relation/v2-schema.ts",
+        "statement/contract.ts",
+        "statement/qualification.ts",
+        "statement/read.ts",
+        "statement/v2-read.ts",
+        "statement/v2-schema.ts"
+      ],
+      "assessment": "Authored V2 meanings are explicit opt-ins. V1 canonical routes, omitted-profile command digests and native meanings remain intact; V1 writers refuse implicit V2 mutation. Semantic/Statement receipt and selected-current reads stay with their native owners. Exact relation attribution proofs remain independent owner inputs; they are not replaced by conversion records or trusted caller labels.",
+      "limit": "V2 basis refusal has SOURCE-REFUSAL-1. This is source review of the declared closure; no excluded successor-credit/Performer/bootstrap writes or citation design is accepted."
+    },
+    {
+      "area": "Migrations and selective route merges",
+      "assessment": "The five additive Source migrations retain existing legacy slot values and constraints, immutable conversion/support/withdrawal relations and generation updates. The additive 2705 repair replaces PostgreSQL-invalid 2702 bounded regex repetition with a valid unbounded expression plus explicit 1..512 character length. Fresh/upgrade tests retain existing rows and cover boundary, whitespace, prefix and legacy refusals. Source routes add only explicit retained conversion/private reads and retained support/synopsis language handling; missing optional owner ports remain unavailable. Ordinary native writers do not acquire automatic conversion or mandatory retained support.",
+      "limit": "Original SQL2201B evidence is historical and preserved below. Optional archive POST and actual Site installation are excluded."
+    }
+  ],
+  "generatedOutputInspection": {
+    "profiles": [
+      "relation-occurrence-v2",
+      "semantic-definition-v2",
+      "statement-v2",
+      "work-editorial-field-v2"
+    ],
+    "shapes": "All four generated shape files are byte-identical to their authored TTL definitions and match their manifest SHA256 values.",
+    "manifest": "145 existing profile entries and all 61 binding demands remain exact; four profiles added. All 218 canonical types remain; eight type entries add explicit V2 modelRevision selectors while retaining their original V1/default routes. Existing artifacts remain exact except the three merged model TS outputs; eight profile artifacts added.",
+    "typescript": "profiles.ts, schemas.ts and vocabulary.ts contain additions only: four profile registries, V2 schemas/exports and fifteen vocabulary entries. Existing generated schema lines are unchanged.",
+    "contexts": "Reviewed all four contexts against authored terms: typed IRI references versus literals/language strings, coverage references and supplied-language state. No existing contexts changed.",
+    "openapi": {
+      "existingPathCount": 719,
+      "existingComponentSchemaCount": 27,
+      "removedPaths": [],
+      "addedPaths": [],
+      "optionalSharedProblemBasisOccurrences": 5439,
+      "remainingChangedOperations": [
+        "/v1/sources/conversions/{conversion} GET",
+        "/v1/sources/field-supports POST",
+        "/v1/sources/field-supports/{support} GET",
+        "/v1/sources/observations/{observation}/conversions POST",
+        "/v1/sources/supports/{support} GET",
+        "/v1/sources/withdrawals POST",
+        "/v1/works/{id}/fields/synopsis/control GET/POST"
+      ],
+      "comparison": "After removing only the added optional 1..128 string basis property from shared problem schemas, all remaining component schemas and all other operations equal the parent. The remaining seven paths carry the explicit retained unions and synopsis language/one-MiB bound reflected in authored routes."
+    },
+    "imagePin": {
+      "prior": "rezics/fuseki:6.2.0-cmd0.5.43-f8607944ef4a",
+      "candidate": "rezics/fuseki:6.2.0-cmd0.5.43-f59c5c63e7b2",
+      "consistentPaths": [
+        "docs/development/toolchain.md",
+        "infra/dev/compose.yaml",
+        "scripts/dev/release-manifest.ts"
+      ]
+    },
+    "generationExecutedByReviewer": false,
+    "generationReusedFrom": "82a469a4-27d4-4616-836b-1c4b598068ac"
+  },
+  "checksActuallyExecuted": [
+    {
+      "kind": "targeted-task-test",
+      "job": "334ec0fb-da8e-42d9-bb04-145792fafc66",
+      "command": "bun scripts/goal/goalctl.ts test ./.temp/review/retained-source/retained-provider-refusal.test.ts",
+      "result": "failed",
+      "exitCode": 1,
+      "tests": 5,
+      "passed": 2,
+      "failed": 3,
+      "assertions": 38,
+      "outcomeAssertionReached": true,
+      "assertion": "retained-provider-refusal.test.ts:32 expects SourceFieldProblem",
+      "positiveControl": "All 28 declared provider/namespace pairs preserve exact mapping revisions; unknown/empty providers and an unsupported namespace refuse with status 422/source_mapping_unverified.",
+      "test": {
+        "path": ".temp/review/retained-source/retained-provider-refusal.test.ts",
+        "sha256": "68d329b3f3aae71bfcd1fcdfeee283e00aae283f5658a69b23144017504d8251",
+        "source": "import { expect, test } from 'bun:test';\nimport { retainedMappingRevision, RETAINED_NAMESPACES } from './candidate/services/main/src/modules/source/retained-record-normalization.ts';\nimport { SourceFieldProblem } from './candidate/services/main/src/modules/source/field-support-contract.ts';\n\nfunction refusal(provider: string, namespace: string): unknown {\n  try { retainedMappingRevision(provider, namespace); return null; }\n  catch (error) { return error; }\n}\n\ntest('all 28 declared retained provider/namespace pairs preserve their exact revisions', () => {\n  let count = 0;\n  for (const [provider, namespaces] of Object.entries(RETAINED_NAMESPACES)) {\n    for (const namespace of namespaces) {\n      expect(retainedMappingRevision(provider, namespace)).toBe(`${provider}-${namespace}-retained-map-v${namespace === 'release' ? 2 : 1}`);\n      count++;\n    }\n  }\n  expect(count).toBe(28);\n});\n\ntest('ordinary unknown provider, empty provider and unsupported namespace refuse structurally', () => {\n  for (const [provider, namespace] of [['unknown', 'vn'], ['', 'vn'], ['vndb', 'constructor']]) {\n    const error = refusal(provider!, namespace!);\n    expect(error).toBeInstanceOf(SourceFieldProblem);\n    expect(error).toMatchObject({ status: 422, code: 'source_mapping_unverified' });\n  }\n});\n\nfor (const provider of ['constructor', '__proto__', 'toString']) {\n  test(`unsupported retained provider ${provider} returns a structured mapping refusal`, () => {\n    const error = refusal(provider, 'vn');\n    expect(error).toBeInstanceOf(SourceFieldProblem);\n    expect(error).toMatchObject({ status: 422, code: 'source_mapping_unverified' });\n  });\n}\n"
+      },
+      "log": {
+        "path": ".temp/goal/jobs/334ec0fb-da8e-42d9-bb04-145792fafc66.log",
+        "sha256": "382111fd6e3d07e955b43418b485330716bff7af592bcece050dbc363aa79c67"
+      },
+      "premise": "Exact frozen candidate normalization and SourceFieldProblem blobs. The unchanged canonical JSON dependency is from this candidate. Three pure library dependencies use the already accepted d27a26dd20 strict Map implementation, outside this review; the tested lookup never invokes that converter.",
+      "extraReadOnlyDependencyBlobs": [
+        {
+          "path": "scripts/lib/canonical-json.ts",
+          "commit": "55c1885659575f5fe4303a690b258388cd5d8e6e",
+          "blob": "bf51803b46dc231e15543f4ccd06097339f366bb",
+          "sha256": "d2a1bfbdf3a3d6869d4c2e9591b17921697b548aeba5662de6e9a3e808a94db1"
+        },
+        {
+          "path": "packages/conversion/src/index.ts",
+          "commit": "d27a26dd20ebf71a27f212fca84484467fb7fa0f",
+          "blob": "4d07ac212265d7b2f3ac14b6df4906609e16526c",
+          "sha256": "2677ab1def56c86886377a7308615da5238e98a37355a3158153e89a455773b5"
+        },
+        {
+          "path": "packages/conversion/src/bangumi.ts",
+          "commit": "d27a26dd20ebf71a27f212fca84484467fb7fa0f",
+          "blob": "26e11897c263e140a0438e11b698e58c0548e35c",
+          "sha256": "98f49e86a7a3f7e7ec4c81613b017bc17059548558a427524b378d3fadbaf93c"
+        },
+        {
+          "path": "packages/conversion/src/errors.ts",
+          "commit": "d27a26dd20ebf71a27f212fca84484467fb7fa0f",
+          "blob": "2e5c4f66c14b6a6f2f8e94fe37bd4e87e2e737c9",
+          "sha256": "ef8aa4000953066c9c7236dac582a31548e094f63da9e87cc92b6eeb1a7b56ed"
+        }
+      ]
+    },
+    {
+      "kind": "targeted-task-test",
+      "job": "4ec7f4ae-70ef-4ac9-86c3-74efb637555a",
+      "command": "bun scripts/goal/goalctl.ts test ./.temp/review/retained-source/retained-attribution-refusal.test.ts",
+      "result": "failed",
+      "exitCode": 1,
+      "tests": 6,
+      "passed": 3,
+      "failed": 3,
+      "assertions": 9,
+      "outcomeAssertionReached": true,
+      "assertion": "retained-attribution-refusal.test.ts:22 expects InvalidRelationOccurrence",
+      "positiveControl": "All four declared attribution basis kinds preserve their owner references; ordinary unknown and empty basis kinds refuse with InvalidRelationOccurrence.",
+      "test": {
+        "path": ".temp/review/retained-source/retained-attribution-refusal.test.ts",
+        "sha256": "8ee2c8dfebde633c511743c06c7ca42a61eb91fb502d6daa6e02864df837454f",
+        "source": "import { expect, test } from 'bun:test';\nimport { checkedAttributionSupports } from '/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/candidates/retained-source/services/main/src/modules/relation/v2-schema.ts';\nimport { InvalidRelationOccurrence } from '/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/candidates/retained-source/services/main/src/modules/relation/schema.ts';\n\nconst ref = 'https://rezics.com/id/12345678-1234-1234-1234-123456789abc';\nconst input = (basis: unknown) => [{ basis, fields: ['creditedName'], evidence: ['https://example.test/citation'] }];\n\ntest('the four declared attribution basis kinds keep their native owner references', () => {\n  for (const basis of [\n    { kind: 'source-credit', support: ref },\n    { kind: 'native-credit', credit: ref, revision: ref },\n    { kind: 'source-binding', binding: ref },\n    { kind: 'selected-publication', decision: ref },\n  ]) expect(checkedAttributionSupports(input(basis))).toEqual(input(basis));\n});\n\nfor (const kind of ['unknown', '', 'constructor', '__proto__', 'toString']) {\n  test(`unsupported attribution basis ${JSON.stringify(kind)} returns the native validation refusal`, () => {\n    let result: unknown = null;\n    try { checkedAttributionSupports(input({ kind })); }\n    catch (error) { result = error; }\n    expect(result).toBeInstanceOf(InvalidRelationOccurrence);\n  });\n}\n"
+      },
+      "log": {
+        "path": ".temp/goal/jobs/4ec7f4ae-70ef-4ac9-86c3-74efb637555a.log",
+        "sha256": "21ede1e83675c3b663bbeb9e5347d660aa0646700f805d4f3c02df55839a0e77"
+      },
+      "premise": "Imports the actual immutable candidate checkout read-only, including its actual schema/error dependencies. Candidate HEAD and clean tracked status verified. Pure validators only; no service, graph, database, native command or HTTP request executed."
+    },
+    {
+      "kind": "report-documentation-check",
+      "job": "546a546e-b1b6-4424-8df8-0640350858c5",
+      "command": "task docs:check",
+      "result": "passed",
+      "exitCode": 0,
+      "markdownFiles": 259,
+      "checks": 13,
+      "log": {
+        "path": ".temp/goal/jobs/546a546e-b1b6-4424-8df8-0640350858c5.1.log",
+        "sha256": "64e1b841d6a746aea9efd511cd8c725964544b25edc5ad8487a5cfe3c66195f6"
+      }
+    },
+    {
+      "kind": "required-worker-gate",
+      "job": "546a546e-b1b6-4424-8df8-0640350858c5",
+      "command": "task goal -- check",
+      "result": "passed",
+      "exitCode": 0,
+      "details": "types: no TypeScript workspace changed; tests: no test files named in brief; lint: no source file changed; AST passed; 1/45 selected repository guards passed. The gate path union includes the inherited accepted library report; its working-tree bytes are unchanged. No Source implementation types/tests were rerun by this report-only gate.",
+      "log": {
+        "path": ".temp/goal/jobs/546a546e-b1b6-4424-8df8-0640350858c5.2.log",
+        "sha256": "0441bcff0d519584f54b087f184b638ab743d3cdb38b0a8b8ee49edd0193535c"
+      }
+    }
+  ],
+  "readOnlyVerification": {
+    "all86BlobsAndParent": "passed",
+    "manifestSha256": "passed",
+    "preservedReports": "passed",
+    "sourceCaseBlocks": "passed with original terminating-newline hash convention",
+    "sqlRepairBlobs": "passed",
+    "strictReceiptAndMatchingDependencies": "passed",
+    "generatedSemanticComparison": "passed within the described additions",
+    "noProductEdits": true
+  },
+  "reusedEvidence": [
+    {
+      "job": "82a469a4-27d4-4616-836b-1c4b598068ac",
+      "qa": "20261019t140749-d9861d",
+      "executedByReviewer": false,
+      "result": "Task generation; Main types/inference/lint/AST; 36/45 selected guards; web types 4000 files; 55 tests/1177 assertions (16 unit/173 and 39 owner/1004) passed.",
+      "matching": "All 86 reviewed blobs equal the immutable tested manifest. Historical parent library files also appeared in that check union but are outside this review. Both original retained Source-only cases were executed in this Source run.",
+      "correctionsAndLimits": "One existing static guard timeout retried and passed without changing the assertion. Owner execution used isolated actual PostgreSQL/migrations and actual Source normalization/receipt/evidence code, with controlled graph, native, selected authority/reuse and projection ports. Not actual installed public admission or importer adoption.",
+      "logs": [
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/goal/jobs/82a469a4-27d4-4616-836b-1c4b598068ac.1.log",
+          "sha256": "13436fc460f0c15fe7161b0bbae38865210452a70f1f33a046d5f2472364ccbf"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/goal/jobs/82a469a4-27d4-4616-836b-1c4b598068ac.2.log",
+          "sha256": "5e6a1f878551af46bc4729e628aa73b813fc20d66cd4074cabaf204f2109aca0"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/goal/jobs/82a469a4-27d4-4616-836b-1c4b598068ac.3.log",
+          "sha256": "2d6249108062b0687eaf9e4566ff04c643701a8eb593554b3760b2832bd747b9"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/goal/jobs/82a469a4-27d4-4616-836b-1c4b598068ac.4.log",
+          "sha256": "5c7e36dee7b61a294c49a45f5095e56ab0bdcc122d4bad38ee306819e3adbc5d"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/goal/jobs/82a469a4-27d4-4616-836b-1c4b598068ac.log",
+          "sha256": "276926f4f4836f5f904edc0e03e9c1ab41e9fc56b8dae2f159864128d845b6ff"
+        }
+      ]
+    },
+    {
+      "job": "6e5505e1-f1d1-4a25-9b06-fad97be7a747",
+      "executedByReviewer": false,
+      "result": "task docs:check passed 259 Markdown files/13 checks for the candidate, including the generated toolchain image pin.",
+      "log": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/goal/jobs/6e5505e1-f1d1-4a25-9b06-fad97be7a747.log",
+        "sha256": "87d778d5689aa7d33f1a716b63d2a217c437fc4b0e20dfc9fa27fd20f6a262b6"
+      }
+    },
+    {
+      "job": "81a51211-f0ff-4418-a1b4-1117f7702edf",
+      "qa": "20261019t125409-5d9aff",
+      "executedByReviewer": false,
+      "result": "Actual isolated PostgreSQL fresh/upgrade, 2 tests/110 assertions passed.",
+      "matching": "Migration 2705 and source-field-slot-migration.test.ts exactly match repair 222d57ae9bb8886db39f42d7d76e7e3ea58aac7c; all five migrations and the test match the frozen source input and candidate manifest.",
+      "logs": [
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/goal/jobs/81a51211-f0ff-4418-a1b4-1117f7702edf.1.log",
+          "sha256": "af0cb2884b1b1ea2d07fae75358908cc60899f9238cf56d4f7f7c89d11cb2fae"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/goal/jobs/81a51211-f0ff-4418-a1b4-1117f7702edf.2.log",
+          "sha256": "900191e9651e5404064638ee097f46194e393824a1760fe0a1c6bde10d6c2ea3"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/goal/jobs/81a51211-f0ff-4418-a1b4-1117f7702edf.3.log",
+          "sha256": "91645c0779760f9bb2e886884df750cb6db78ef9b25333014c6592776f781121"
+        },
+        {
+          "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/goal/jobs/81a51211-f0ff-4418-a1b4-1117f7702edf.log",
+          "sha256": "726e1316147ca79baf90761bbd6064d4e0a2e303034d1bf68dc91b5001c01617"
+        }
+      ],
+      "limit": "Reused migration proof only; no database/service started by this reviewer."
+    },
+    {
+      "job": "eb6b3bce-070a-4d4a-b35a-d0ecdecaa9ee",
+      "qa": "20261019t130841-8d96bf",
+      "executedByReviewer": false,
+      "result": "Unchanged six cases/36 assertions passed with actual isolated PostgreSQL and controlled graph ports.",
+      "receipt": {
+        "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2763/.temp/goal/composition-source-native-owners-rerun-receipt.json",
+        "sha256": "22d0070d56ae65d1c645e931c66114ec0129d7913ecb2a83ed4bc0450e3eafa4"
+      },
+      "matchingIncludedBlobs": [
+        {
+          "path": "services/main/tests/support/source-field-native-fixture.ts",
+          "blob": "2cb63b82b92a7ecbe3292317154d0098f385405e",
+          "matchesCandidate": true
+        },
+        {
+          "path": "services/main/src/modules/semantic/native-basis.ts",
+          "blob": "5361b74296d1bb8197c88477bca9470a4b3b8c09",
+          "matchesCandidate": true
+        },
+        {
+          "path": "services/main/src/modules/source/field-support-acknowledged.ts",
+          "blob": "9e45319d4d5561f5fdc8f475364a1527d359f7b3",
+          "matchesCandidate": true
+        },
+        {
+          "path": "services/main/src/modules/work/credit-attribution.ts",
+          "blob": "e73b1b4412fcec643bcebbbce7af722bd87e9fb6",
+          "matchesCandidate": true
+        },
+        {
+          "path": "services/content/migrations/2705_source_field_slot_bounds.sql",
+          "blob": "fda035ff91a4bc2183d255b6c0235eea83fc017c",
+          "matchesCandidate": true
+        }
+      ],
+      "excludedCompositionBlobs": {
+        "services/main/src/composition.ts": "0b22f552b1969ac08f2449b72daa163977266165",
+        "services/main/tests/composition-source-native-owners.test.ts": "d1ff1876aaef31ab715ae2f688cf1a127ecd2893"
+      },
+      "limit": "The two Site composition paths and their review are excluded. Only matching included dependency behavior is reused; this is not execution of installed candidate composition or current-main public admission."
+    }
+  ],
+  "preservedNegativeEvidence": [
+    {
+      "job": "6d84878c-722d-4090-96db-b85ee85b246c",
+      "qa": "20261019t120525-9084bc",
+      "result": "5 pass / 1 fail; Semantic success reached SQL settlement and failed with inherited 2201B in migration 2702",
+      "disposition": "Historical SQL2201B remains recorded. Additive 2705 and unchanged fresh/upgrade and strict assertions passed later; it is not a current candidate SQL failure."
+    },
+    {
+      "result": "The current two targeted jobs have three failing outcome assertions each; no setup failure, deletion, skip, cast or assertion weakening.",
+      "disposition": "Current actionable SOURCE-REFUSAL-1; all logs and exact tests are retained above."
+    },
+    {
+      "result": "Accepted A19 report retains original story/type diagnostics and original product limits. Accepted library report retains CONV-REFUSAL-1 actual three negative failures in 5011f702 and the accepted strict Map correction, including the earlier as-const test-literal diagnostic.",
+      "disposition": "Both reports preserved byte-for-byte. None of their historical failures is relabelled a current accepted-candidate failure."
+    }
+  ],
+  "preservedAcceptedWork": [
+    {
+      "path": "docs/goals/audit-remediation-20261019/proofs/catalogue-A19-nutrition-absence-review.json",
+      "acceptedReportCommit": "3b83cd82350ddb2e3f787fea7d08626c52d8d2c1",
+      "blob": "f314de0649d2b20ff09a550c7a880b44950f6929",
+      "unchanged": true
+    },
+    {
+      "path": "docs/goals/audit-remediation-20261019/proofs/catalogue-conversion-library-review.json",
+      "acceptedReportCommit": "311fd8c0e01f17da51896b2cb64c00587a3d4bed",
+      "blob": "a5b1e8d3aad1b99e09456656bd6a8780e42376c9",
+      "unchanged": true
+    }
+  ],
+  "integrationBoundary": {
+    "historicalLibraryParent": "77e6db65b767ca7d60d50008964e71e913fe1cf8",
+    "acceptedLibraryCandidate": "d27a26dd20ebf71a27f212fca84484467fb7fa0f",
+    "acceptedLibraryReport": "311fd8c0e01f17da51896b2cb64c00587a3d4bed",
+    "acceptedLibraryMainLanding": "fa76ef9adc",
+    "requirement": "Apply only the reviewed 86-file Source delta after correction; preserve current main strict Map namespace refusal and its accepted regression. Do not restore the historical parent library. Five library paths are outside this review; no accepted library re-review or integration performed."
+  },
+  "limits": [
+    "Review only: no product implementation edits, install, service, network capture, account/client mutation, shared-data mutation or landing.",
+    "Site strict composition remains in its one existing review. Optional archive POST, successor-credit/Performer/bootstrap writes and unrelated query/importer changes are excluded.",
+    "No actual public native command admission, current real-grant HTTP journey, importer adoption, producer run, browser, corpus, original-113 restore or class-level outcome proof was executed.",
+    "Owner positives distinguish actual PostgreSQL owners from controlled native graph/authority/reader projection ports. Historical certificates and current reader evidence have separate meanings.",
+    "This review introduces no mandatory conversion-backed citation contract or mapping/workflow framework; complete independent manual citation product acceptance remains separate.",
+    "A19 positive nutrition/scaling/substitution and full A19 remain open. All original catalogue assertions and identity epochs are unchanged. No original catalogue class closes from source review or pure checks."
+  ],
+  "reportValidation": {
+    "recordedSequence": "546a546e-b1b6-4424-8df8-0640350858c5",
+    "results": [
+      {
+        "kind": "report-documentation-check",
+        "job": "546a546e-b1b6-4424-8df8-0640350858c5",
+        "command": "task docs:check",
+        "result": "passed",
+        "exitCode": 0,
+        "markdownFiles": 259,
+        "checks": 13,
+        "log": {
+          "path": ".temp/goal/jobs/546a546e-b1b6-4424-8df8-0640350858c5.1.log",
+          "sha256": "64e1b841d6a746aea9efd511cd8c725964544b25edc5ad8487a5cfe3c66195f6"
+        }
+      },
+      {
+        "kind": "required-worker-gate",
+        "job": "546a546e-b1b6-4424-8df8-0640350858c5",
+        "command": "task goal -- check",
+        "result": "passed",
+        "exitCode": 0,
+        "details": "types: no TypeScript workspace changed; tests: no test files named in brief; lint: no source file changed; AST passed; 1/45 selected repository guards passed. The gate path union includes the inherited accepted library report; its working-tree bytes are unchanged. No Source implementation types/tests were rerun by this report-only gate.",
+        "log": {
+          "path": ".temp/goal/jobs/546a546e-b1b6-4424-8df8-0640350858c5.2.log",
+          "sha256": "0441bcff0d519584f54b087f184b638ab743d3cdb38b0a8b8ee49edd0193535c"
+        }
+      }
+    ],
+    "finalization": "Receipt metadata appended after the passing sequence. A final docs:check runs after this update; its result is reported in the worker handoff. No implementation or test bodies changed."
+  },
+  "disposition": {
+    "accepted": false,
+    "reason": "SOURCE-REFUSAL-1 requires a bounded correction at both inherited-key dispatch sites.",
+    "next": "Existing owner corrects the two dispatch sites and adds meaningful refusal regressions without weakening positives or citation independence; manager freezes the corrected delta and preserves accepted library/A19 reports. No new owner or framework requested.",
+    "originalClassClosure": false
+  },
+  "correctionReview": {
+    "kind": "SOURCE-REFUSAL-1-same-scope-correction-review",
+    "reviewedAtUtc": "2026-10-19T15:13:48.457012+00:00",
+    "reviewer": {
+      "worker": "G-2859",
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "fallback": false
+    },
+    "decision": "accept-bounded-corrected-candidate",
+    "priorReviewCommit": "8a7ca2b7bcfaf1a9432f26a3b48e7fdf5d1976e1",
+    "priorReportSha256": "67f80a543fecc64ba0e49265e9e3fe4c91caf3562cb63b507f4ca512593627c6",
+    "priorDecisionPreservedAsHistory": true,
+    "candidate": {
+      "commit": "e44ea5413624f3f868fb04c8591b74eb845c8505",
+      "parent": "da6764f83d0f4eaa08e004c499e06b3f54a913c5",
+      "directParentVerified": true,
+      "tree": "9740069dc0cbbc9ec3fdf8a61479dc0c199e4248",
+      "ref": "candidate/g-2781-retained-source-refusal-20261019",
+      "checkout": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/candidates/retained-source-refusal",
+      "comparedWithFirstReviewedCandidate": "55c1885659575f5fe4303a690b258388cd5d8e6e",
+      "originalSourceParent": "eaf9c5da53821b8851693dfcb62a6e12e61366cd",
+      "sourcePathCount": 86,
+      "unchangedPreviouslyReviewedBlobs": 82,
+      "changedSourcePaths": [
+        {
+          "path": "services/main/src/modules/relation/v2-schema.ts",
+          "testedBlob": "520ffe4b359b22b51465f8c4bfc40db363431e74",
+          "sha256": "5ad91fdf07df87989db9c6fd9f60635a40942c4a398f31d0deb7c451d43018f9",
+          "bytes": 7735,
+          "previousBlob": "ee183efe25930169dd3c236d70cd62f9855153d6",
+          "previousSha256": "cdffd9c899f8760b4e3e81dc8d6397712d642d1251b63bc1b20ee9ee3966aa65",
+          "originalAuthorship": "aa2898ed9b0f2c955a99cf6ac3b4f918be3d34e3\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T15:34:50+08:00",
+          "inspected": true
+        },
+        {
+          "path": "services/main/src/modules/source/retained-record-normalization.ts",
+          "testedBlob": "13b9b521ae09ac9c64e38b7dc8bf586cb2a5b731",
+          "sha256": "8edf9f5cf28ed44ef47b8c7fa743be4bc0fb3ed280e2c4a9cfb9596fa3197df9",
+          "bytes": 9663,
+          "previousBlob": "67522f1710cc16b1344b9b4d32c3233ebd4f20cc",
+          "previousSha256": "07d776d551d2f6aac322e3118438d96a0f4d7533854e8475ffbb6c75777153f8",
+          "originalAuthorship": "61ba57c0767dee7666f993e41773c2b7dac6a58c\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T15:50:57+08:00",
+          "inspected": true
+        },
+        {
+          "path": "tests/qa/unit/dataset-field-mapping.test.ts",
+          "testedBlob": "c28bc2f73eea472eda7d77af346493766e7a8dbb",
+          "sha256": "59cf474a13ad2f0f3d795fb3337216dabdd48b149a1d9ffa714acfc225ffb504",
+          "bytes": 23805,
+          "previousBlob": "5d43e3d4ebec7607505060a90ea344f9c2c625b6",
+          "previousSha256": "1ccb508a6a879227c58e3114019f89c41e9518e70339658c22353f89ec15d8bc",
+          "originalAuthorship": "07f38bc94391be16427b2bda266e6b8e25661a68\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T15:09:35+08:00",
+          "existingTestTextPreserved": true,
+          "inspected": true
+        },
+        {
+          "path": "tests/qa/unit/source-field-values.test.ts",
+          "testedBlob": "8a4d272d56f8b163812d7f34c91aeab9bcef24bc",
+          "sha256": "4d71b6c21c3df5a0d99856b15ab28bfc2986b09d845f7a9c7f0942465f5fd1fe",
+          "bytes": 3860,
+          "previousBlob": "da32de63c40ae14b82e74bd07b35c6fc693a99ff",
+          "previousSha256": "41262cc612ad5022006ef7f74f32ba66f50d3144bf875043a6c73de88ef05fa3",
+          "originalAuthorship": "487e1fb3bce2a5863ba9795f0bf2bca288aa7631\nEdge-coordinates <Edgecoordinates@gmail.com>\n2026-10-19T13:42:32+08:00",
+          "existingTestTextPreserved": true,
+          "inspected": true
+        }
+      ],
+      "scopeVerification": "Compared all Source manifest blob identities only: exactly 82 of 86 previously reviewed Source blobs unchanged. Exactly four Source paths changed, comprising two dispatch repairs and two additive regression files. No authored or generated schema changed. No repeated 86-file content review.",
+      "wholeCommitComparison": "The full diff from historical 55c1885659 also contains two previously accepted library correction paths. All five library blobs match accepted d27a26dd20 exactly and are outside this Source correction review. The direct parent da6764f83d0f4eaa08e004c499e06b3f54a913c5 already carries that library prerequisite; its Source delta is exactly the original 86-path set.",
+      "trackedCheckoutCleanVerified": true
+    },
+    "manifest": {
+      "path": ".temp/review/retained-source-correction/manifest.json",
+      "sha256": "98f865be038e369057f7e982edd2a8672fc3ed60879a8e8c1a08aaf9d6bc15b0",
+      "ownerPath": ".temp/worktrees/g-2781/.temp/goal/landing-candidates/retained-source-refusal-manifest.json",
+      "frozenOriginalManifestSha256": "ce0a5e7f1d5e0a8fcb51e7ccfd9a865fba4d8fa2b36c3ebf38f2ffd2d5969702"
+    },
+    "correctionPatch": {
+      "ownerPath": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/goal/landing-candidates/retained-source-refusal-four-path.patch",
+      "sha256": "0308b7b6204b4e8c5d2c4a7a92c40e91f91c1e54aaea2e78800e4bcd913dac4d",
+      "matchVerified": true
+    },
+    "inspection": [
+      {
+        "path": "services/main/src/modules/source/retained-record-normalization.ts",
+        "assessment": "Object.hasOwn(RETAINED_NAMESPACES, provider) now fences the lookup before includes is invoked. The same three declared provider arrays, all 28 pairs and exact revision string rule remain unchanged. An inherited provider now takes the existing mappingUnverified structured refusal; no conversion or saved-field semantics changed."
+      },
+      {
+        "path": "services/main/src/modules/relation/v2-schema.ts",
+        "assessment": "A module-private Map contains exactly the four former own basis entries. Map.get(String(basis.kind)) cannot resolve Object.prototype names. Required basis keys, native references, fields, evidence, ordering and budgets retain their existing validation. No manual citation prerequisite or new owner was introduced."
+      },
+      {
+        "path": "tests/qa/unit/dataset-field-mapping.test.ts",
+        "assessment": "Adds one case for all 28 exact pairs, ordinary unknown/empty/unsupported namespace input and every Object.prototype own name. Refusals require both SourceFieldProblem and 422/source_mapping_unverified. Existing file lines and assertions are unchanged; the diff has additions only."
+      },
+      {
+        "path": "tests/qa/unit/source-field-values.test.ts",
+        "assessment": "Adds one case for all four exact native basis objects and ordinary/prototype-name refusals as InvalidRelationOccurrence. Existing file lines/assertions remain unchanged. Final typing uses the existing CreditAttributionBasis union and a generic input helper, with only the creditedName literal narrowed as const. No any/unknown cast, skipped case or relaxed matcher replaces the assertions.",
+        "pretypeComparison": "Compared 087cf561460509ffc2c96163af2140c8073f38a2 to final e44ea541: type-only import, typed positive basis array and generic literal-preserving helper correct the expected-value inference. Runtime positive objects, error assertions, loop membership and evidence remain the same."
+      }
+    ],
+    "findingDisposition": {
+      "id": "SOURCE-REFUSAL-1",
+      "priority": "P2",
+      "status": "corrected-and-accepted-for-bounded-source-candidate",
+      "sites": 2,
+      "originalFailingCases": 6,
+      "originalOutcomeFailuresPreserved": true,
+      "verification": "All six original constructor/__proto__/toString outcome assertions now pass. Original ordinary refusal cases and 28 provider/four basis positives also pass without body changes.",
+      "remainingActionableFindingsInCorrection": 0,
+      "scopeLimit": "This closes the reported bounded dispatch refusal defect only. It does not close original catalogue classes or prove native/public product acceptance."
+    },
+    "checksActuallyExecuted": [
+      {
+        "kind": "targeted-original-reviewer-tests",
+        "job": "9e79d871-0a50-4c3e-a39e-9228f6c4d878",
+        "command": "bun scripts/goal/goalctl.ts test ./.temp/review/retained-source-correction/retained-provider-refusal.test.ts ./.temp/review/retained-source-correction/retained-attribution-refusal.test.ts",
+        "recordedWith": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- <command>",
+        "result": "passed",
+        "exitCode": 0,
+        "tests": 11,
+        "passed": 11,
+        "failed": 0,
+        "assertions": 50,
+        "files": 2,
+        "hiddenPathsSelectedExplicitly": true,
+        "allOutcomeAssertionsReached": true,
+        "testCopies": [
+          {
+            "path": ".temp/review/retained-source-correction/retained-provider-refusal.test.ts",
+            "sha256": "5b7c892f5adcf7148889ffc43134dba81ff695c90493c3ca15a149254e377066",
+            "originalSha256": "68d329b3f3aae71bfcd1fcdfeee283e00aae283f5658a69b23144017504d8251",
+            "nonImportBytesSha256": "50fb60834a910f500f81862a3acb87255e90500ec20b9103de612ae264604bde",
+            "onlyImportsChanged": true,
+            "source": "import { expect, test } from 'bun:test';\nimport { retainedMappingRevision, RETAINED_NAMESPACES } from '/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/candidates/retained-source-refusal/services/main/src/modules/source/retained-record-normalization.ts';\nimport { SourceFieldProblem } from '/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/candidates/retained-source-refusal/services/main/src/modules/source/field-support-contract.ts';\n\nfunction refusal(provider: string, namespace: string): unknown {\n  try { retainedMappingRevision(provider, namespace); return null; }\n  catch (error) { return error; }\n}\n\ntest('all 28 declared retained provider/namespace pairs preserve their exact revisions', () => {\n  let count = 0;\n  for (const [provider, namespaces] of Object.entries(RETAINED_NAMESPACES)) {\n    for (const namespace of namespaces) {\n      expect(retainedMappingRevision(provider, namespace)).toBe(`${provider}-${namespace}-retained-map-v${namespace === 'release' ? 2 : 1}`);\n      count++;\n    }\n  }\n  expect(count).toBe(28);\n});\n\ntest('ordinary unknown provider, empty provider and unsupported namespace refuse structurally', () => {\n  for (const [provider, namespace] of [['unknown', 'vn'], ['', 'vn'], ['vndb', 'constructor']]) {\n    const error = refusal(provider!, namespace!);\n    expect(error).toBeInstanceOf(SourceFieldProblem);\n    expect(error).toMatchObject({ status: 422, code: 'source_mapping_unverified' });\n  }\n});\n\nfor (const provider of ['constructor', '__proto__', 'toString']) {\n  test(`unsupported retained provider ${provider} returns a structured mapping refusal`, () => {\n    const error = refusal(provider, 'vn');\n    expect(error).toBeInstanceOf(SourceFieldProblem);\n    expect(error).toMatchObject({ status: 422, code: 'source_mapping_unverified' });\n  });\n}\n"
+          },
+          {
+            "path": ".temp/review/retained-source-correction/retained-attribution-refusal.test.ts",
+            "sha256": "174353591829e2465898f1f6214313d6f1d5312b49b6afd84f74929bc6ce7926",
+            "originalSha256": "8ee2c8dfebde633c511743c06c7ca42a61eb91fb502d6daa6e02864df837454f",
+            "nonImportBytesSha256": "03dffedb9daf1a13fa6407ad9e94595fe4ab27cdb1a5b059d7f489ae7da173e0",
+            "onlyImportsChanged": true,
+            "source": "import { expect, test } from 'bun:test';\nimport { checkedAttributionSupports } from '/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/candidates/retained-source-refusal/services/main/src/modules/relation/v2-schema.ts';\nimport { InvalidRelationOccurrence } from '/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/candidates/retained-source-refusal/services/main/src/modules/relation/schema.ts';\n\nconst ref = 'https://rezics.com/id/12345678-1234-1234-1234-123456789abc';\nconst input = (basis: unknown) => [{ basis, fields: ['creditedName'], evidence: ['https://example.test/citation'] }];\n\ntest('the four declared attribution basis kinds keep their native owner references', () => {\n  for (const basis of [\n    { kind: 'source-credit', support: ref },\n    { kind: 'native-credit', credit: ref, revision: ref },\n    { kind: 'source-binding', binding: ref },\n    { kind: 'selected-publication', decision: ref },\n  ]) expect(checkedAttributionSupports(input(basis))).toEqual(input(basis));\n});\n\nfor (const kind of ['unknown', '', 'constructor', '__proto__', 'toString']) {\n  test(`unsupported attribution basis ${JSON.stringify(kind)} returns the native validation refusal`, () => {\n    let result: unknown = null;\n    try { checkedAttributionSupports(input({ kind })); }\n    catch (error) { result = error; }\n    expect(result).toBeInstanceOf(InvalidRelationOccurrence);\n  });\n}\n"
+          }
+        ],
+        "premise": "Only import module paths differ from the first reviewer tests. Non-import bytes, test bodies, names, fixtures and assertions are identical to the originals embedded in the first report. Both tests import the actual corrected candidate checkout read-only. No graph, SQL, HTTP, service, install or native admission run.",
+        "log": {
+          "path": ".temp/goal/jobs/9e79d871-0a50-4c3e-a39e-9228f6c4d878.log",
+          "sha256": "4bce81a31668dfd5d3dfece94bcb3bdebbad40cd62412a3894aaf7157cb0b88f"
+        }
+      },
+      {
+        "kind": "report-documentation-check",
+        "job": "75069982-aaf0-42d5-b4f8-06fa831515be",
+        "command": "task docs:check",
+        "result": "passed",
+        "exitCode": 0,
+        "markdownFiles": 259,
+        "checks": 13,
+        "log": {
+          "path": ".temp/goal/jobs/75069982-aaf0-42d5-b4f8-06fa831515be.1.log",
+          "sha256": "c1efe29e588ada4cd45f6789e67ab507e247ac9dcd2098bdfbcad1b701ffaf8d"
+        }
+      },
+      {
+        "kind": "required-worker-gate",
+        "job": "75069982-aaf0-42d5-b4f8-06fa831515be",
+        "command": "task goal -- check",
+        "result": "passed",
+        "exitCode": 0,
+        "details": "AST and 1/45 selected repository guards passed. No TypeScript workspace or source file changed; no tests named in brief. This report-only gate did not rerun Source implementation checks. The gate inherited path union mentions the accepted library report, whose bytes remain unchanged.",
+        "log": {
+          "path": ".temp/goal/jobs/75069982-aaf0-42d5-b4f8-06fa831515be.2.log",
+          "sha256": "b7898558aa5d5255d5158f9e43085389124d18c53ccfc97b99ed3357b02dbc5d"
+        }
+      }
+    ],
+    "reusedCorrectionEvidence": [
+      {
+        "job": "f26955e2-4fb8-4b00-bb47-f254e3681f5b",
+        "executedByReviewer": false,
+        "candidate": "e44ea5413624f3f868fb04c8591b74eb845c8505",
+        "tests": "14 pass/86 assertions/3 files: source-field-values and the two original reviewer copies selected with actual ./.temp paths.",
+        "types": "Task goal:type-files, scripts/tsconfig.json, four selected correction paths and closure: no errors in 1354 files.",
+        "matching": "Both Source runtime blobs, both owner test blobs and the unchanged reviewer assertion-body hashes were verified against the final manifest. No additional broad types or owner test run by this reviewer.",
+        "logs": [
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/goal/jobs/f26955e2-4fb8-4b00-bb47-f254e3681f5b.1.log",
+            "sha256": "ec1f0e8dce5f1761e5a09d66692e87df64bbb404fc65889909c0d899ba2cde9a"
+          },
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/goal/jobs/f26955e2-4fb8-4b00-bb47-f254e3681f5b.2.log",
+            "sha256": "cc73a5e0004c348d7b7985e815756afc60b60f5102d0e202c8c19a48c90bfa0a"
+          },
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/goal/jobs/f26955e2-4fb8-4b00-bb47-f254e3681f5b.log",
+            "sha256": "09307cf456b1baffd67c539db533361b0c19c462a53a1fefca91a7b115507f95"
+          }
+        ]
+      },
+      {
+        "job": "30e689ab-1ee0-4c91-b1c9-380da0708ac9",
+        "executedByReviewer": false,
+        "candidate": "087cf561460509ffc2c96163af2140c8073f38a2",
+        "tests": "15 pass/230 assertions in the two owner files. The hidden reviewer paths lacked ./ and were not selected; this step supplies no reviewer-test execution proof.",
+        "matching": "The dataset-field-mapping final blob is identical. The later source-field-values change fixes typing without changing runtime assertions.",
+        "types": "FAILED: TS2769 at source-field-values.test.ts:16, expected-value inference had basis:unknown instead of CreditAttributionBasis. Historical failure is preserved; final typed candidate passed in f26955e2.",
+        "preservedCandidateRef": "candidate/g-2781-retained-source-refusal-pretype-20261019",
+        "logs": [
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/goal/jobs/30e689ab-1ee0-4c91-b1c9-380da0708ac9.1.log",
+            "sha256": "e9d6fd2c112a4ce8a1278feffb5b6387dda27afafc4d5baeea54d50a2f3c64e7"
+          },
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/goal/jobs/30e689ab-1ee0-4c91-b1c9-380da0708ac9.2.log",
+            "sha256": "73f90869cad17fa09cc81241c831244c3c60a3b5db1fc3c80deaa20462d3cb4a"
+          },
+          {
+            "path": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2781/.temp/goal/jobs/30e689ab-1ee0-4c91-b1c9-380da0708ac9.log",
+            "sha256": "e72c3b031523218719c2f34bc3adb23f2f79a8daeff5dda72dc8553c21ea4248"
+          }
+        ]
+      }
+    ],
+    "unchangedEvidenceReused": {
+      "source": {
+        "job": "82a469a4-27d4-4616-836b-1c4b598068ac",
+        "qa": "20261019t140749-d9861d",
+        "result": "55 tests/1177 assertions, Task generation, Main types/inference/lint/AST/selected guards and web types.",
+        "limit": "Reused for unchanged code and assertions only. Four-path repair proof is the focused new run plus matching supplied owner/type proof, not a claim that the full 55 were rerun against e44ea541."
+      },
+      "sql": {
+        "job": "81a51211-f0ff-4418-a1b4-1117f7702edf",
+        "result": "2 fresh/upgrade PostgreSQL tests/110 assertions; exact migration/test blobs unchanged."
+      },
+      "strictDependencies": {
+        "job": "eb6b3bce-070a-4d4a-b35a-d0ecdecaa9ee",
+        "result": "6 tests/36 assertions; reuse only matching unchanged dependencies.",
+        "limit": "The corrected relation/v2-schema.ts is a new blob accepted by this correction review; no duplicate native review is requested. Excluded Site composition is not asserted tested against the new correction."
+      },
+      "externalLibrary": {
+        "candidate": "d27a26dd20ebf71a27f212fca84484467fb7fa0f",
+        "landedMain": "fa76ef9adc59c52095ae7a1155df958d7c1116ce",
+        "allFiveAcceptedBlobsMatch": true,
+        "paths": [
+          {
+            "path": "packages/conversion/package.json",
+            "testedBlob": "946ba903846f0e8a734988322072eb34a95cc625",
+            "sha256": "a05f73f96a6d9f4d590913192b838d78c5e7f8305f7361978cf6309d5e88bf85",
+            "bytes": 167,
+            "unchangedAcceptedLibrary": true,
+            "outsideSource86": true
+          },
+          {
+            "path": "packages/conversion/src/bangumi.ts",
+            "testedBlob": "26e11897c263e140a0438e11b698e58c0548e35c",
+            "sha256": "98f49e86a7a3f7e7ec4c81613b017bc17059548558a427524b378d3fadbaf93c",
+            "bytes": 2299,
+            "unchangedAcceptedLibrary": true,
+            "outsideSource86": true
+          },
+          {
+            "path": "packages/conversion/src/errors.ts",
+            "testedBlob": "2e5c4f66c14b6a6f2f8e94fe37bd4e87e2e737c9",
+            "sha256": "ef8aa4000953066c9c7236dac582a31548e094f63da9e87cc92b6eeb1a7b56ed",
+            "bytes": 154,
+            "unchangedAcceptedLibrary": true,
+            "outsideSource86": true
+          },
+          {
+            "path": "packages/conversion/src/index.ts",
+            "testedBlob": "4d07ac212265d7b2f3ac14b6df4906609e16526c",
+            "sha256": "2677ab1def56c86886377a7308615da5238e98a37355a3158153e89a455773b5",
+            "bytes": 2886,
+            "unchangedAcceptedLibrary": true,
+            "outsideSource86": true
+          },
+          {
+            "path": "tests/qa/unit/conversion-library.test.ts",
+            "testedBlob": "a03831624e9c8b95144308d1da00cef0a2ec057d",
+            "sha256": "c9dc12dc0ca2c34dc3490c489cf97d849f4fced40b0149ab586448c9cdb939ec",
+            "bytes": 4638,
+            "unchangedAcceptedLibrary": true,
+            "outsideSource86": true
+          }
+        ],
+        "reviewedAgain": false
+      },
+      "preservedReports": "A19 and corrected external library reports remain byte-for-byte unchanged. All original Source six negative assertion failures, SQL2201B and earlier report checks remain in the historical sections above."
+    },
+    "limits": [
+      "Correction review only: no repeat of the 86-file content review, research, schema generation, whole-tier tests, native/public runtime, browser, producer, corpus or importer run.",
+      "Actual PostgreSQL owner proof remains distinct from controlled native graph and authority ports. Verified-before-commit remains the guarantee, not atomic cross-owner settlement.",
+      "No mandatory conversion ID, mapper, raw capture, re-conversion or converter proof was added to manual citations or ordinary native APIs.",
+      "The earlier whole-file owner pass did not include hidden reviewer files; its typing failure is preserved. The final focused type and reviewer checks passed and are separately attributed.",
+      "Original catalogue acceptance, full A19, installed public native admission and real current-head product journeys remain open. No original class closes."
+    ],
+    "integrationDisposition": {
+      "accepted": true,
+      "sourceCandidate": "e44ea5413624f3f868fb04c8591b74eb845c8505",
+      "landingPerformedByReviewer": false,
+      "next": "Manager integrates the accepted four-path correction with the already reviewed Source delta and selects/regenerates the actual main generated union. Preserve accepted strict external library and independently authored manual citations. The native owner can consume corrected relation/v2-schema.ts blob 520ffe4b359b22b51465f8c4bfc40db363431e74 without duplicating SOURCE-REFUSAL-1 review.",
+      "originalClassClosure": false
+    },
+    "reportValidation": {
+      "recordedSequence": "75069982-aaf0-42d5-b4f8-06fa831515be",
+      "results": [
+        {
+          "kind": "report-documentation-check",
+          "job": "75069982-aaf0-42d5-b4f8-06fa831515be",
+          "command": "task docs:check",
+          "result": "passed",
+          "exitCode": 0,
+          "markdownFiles": 259,
+          "checks": 13,
+          "log": {
+            "path": ".temp/goal/jobs/75069982-aaf0-42d5-b4f8-06fa831515be.1.log",
+            "sha256": "c1efe29e588ada4cd45f6789e67ab507e247ac9dcd2098bdfbcad1b701ffaf8d"
+          }
+        },
+        {
+          "kind": "required-worker-gate",
+          "job": "75069982-aaf0-42d5-b4f8-06fa831515be",
+          "command": "task goal -- check",
+          "result": "passed",
+          "exitCode": 0,
+          "details": "AST and 1/45 selected repository guards passed. No TypeScript workspace or source file changed; no tests named in brief. This report-only gate did not rerun Source implementation checks. The gate inherited path union mentions the accepted library report, whose bytes remain unchanged.",
+          "log": {
+            "path": ".temp/goal/jobs/75069982-aaf0-42d5-b4f8-06fa831515be.2.log",
+            "sha256": "b7898558aa5d5255d5158f9e43085389124d18c53ccfc97b99ed3357b02dbc5d"
+          }
+        }
+      ],
+      "finalization": "Gate receipt metadata appended after the passing sequence; a final docs:check is run before commit and reported in the worker handoff. Original report fields and all test assertions remain unchanged."
+    }
+  },
+  "effectiveDisposition": {
+    "candidate": "e44ea5413624f3f868fb04c8591b74eb845c8505",
+    "decision": "accept-bounded-corrected-candidate",
+    "SOURCE-REFUSAL-1": "corrected; both sites accepted",
+    "originalDecisionAndFailuresAreHistorical": true,
+    "originalClassClosure": false
+  },
+  "structureV2AdapterFirstSourceReview": {
+    "schema": "source-structure-v2-adapter-first-source-review-v1",
+    "review": {
+      "task": "G-2859",
+      "goal": "audit-remediation-20261019",
+      "reviewer": "codex-1/GPT-6.1 Sol/xhigh",
+      "reviewKind": "first-independent-review-of-new-13-file-delta",
+      "reviewedAt": "2026-10-20T12:21:07Z",
+      "reportBase": "7b30661fe20c0fd04faa7b3d7795ae7f144367cf",
+      "scopeDecision": "The 2026-10-20T12:09:49Z Decision supersedes the old 86-file assignment. Review only 0bae541e30043100fe525fe1dbcedadb6b904e7b against f1c42d420130d899605fcd06e1a6ab2b3e14faf7. No advancing wave tip or previously accepted candidate is reviewed again.",
+      "reviewOnly": true,
+      "productEdits": false,
+      "originalClassClosure": false
+    },
+    "candidate": {
+      "parent": "f1c42d420130d899605fcd06e1a6ab2b3e14faf7",
+      "candidate": "0bae541e30043100fe525fe1dbcedadb6b904e7b",
+      "files": [
+        {
+          "path": "generated/openapi/main/public.json",
+          "gitBlob": "d1ef62dee65708957ebc69902b38e291d220d624",
+          "sha256": "0c5df657a9a8e915da42f95206f70cab54b7f03495c307bb187daa852276b4f1",
+          "parentBlob": "94bd0bdeb050deeb85162a791b6c4349e4b6231a"
+        },
+        {
+          "path": "scripts/datasets/native/fields.ts",
+          "gitBlob": "81ffea26b8da449ff6de0bec86b1f65d689b98b3",
+          "sha256": "84720ed24307eafc5ecccf90d6cc4d5f2d4effceef0fdbc8924d674d75e12713",
+          "parentBlob": "6799af9d11ece61274853576c7a09ed6752e3767"
+        },
+        {
+          "path": "services/main/src/modules/source/field-support-contract.ts",
+          "gitBlob": "359e3b9b8699365421ce2d1ef67553c88ae0294b",
+          "sha256": "b6dd07f3f86e2f66f058f948665349aee1add75f636914699c836a5ea09a8b40",
+          "parentBlob": "7205592cf7fbb3ee6302c92ab43bcf8cb70f3a3d"
+        },
+        {
+          "path": "services/main/src/modules/source/field-support-episode.ts",
+          "gitBlob": "5b1db55e5e40320fecffd314f8a2912c1a51e440",
+          "sha256": "45b021f2d8a2286e35317036023b731f2f7024f1840156296d32d93972a20bf0",
+          "parentBlob": null
+        },
+        {
+          "path": "services/main/src/modules/source/field-support-evidence.ts",
+          "gitBlob": "d60a0748b45db7677fab68e995a0e9ce447cb666",
+          "sha256": "aa63e00ed401eeb212b276b6bc23b67818c51c7ae7d04e69b73aef8e529eaf9d",
+          "parentBlob": "bc32ab47458c202a18ee4094da3f8e1d2eca9f18"
+        },
+        {
+          "path": "services/main/src/modules/source/field-support-native.ts",
+          "gitBlob": "c023ce1030e0586b23b5e77a3d76f2a38c6069c2",
+          "sha256": "441fc3ff107f2b5578d46ed6e2d2f4e5138ac40035d46a9d7e4f407bbc562b93",
+          "parentBlob": "e113dbcbdacd2438d62d5d503f93086b22c684cf"
+        },
+        {
+          "path": "services/main/src/modules/source/field-support-retained.ts",
+          "gitBlob": "892248a6d607727f531b85398d707f34e0d85113",
+          "sha256": "983fc402b50c2a12fbb0346176b66b84048aa7f65de0ec84ed564cfd0debc7d4",
+          "parentBlob": "811373af9c9c88b783edc4fdcc46aa9d7ac6faa7"
+        },
+        {
+          "path": "services/main/src/modules/source/field-support-schema.ts",
+          "gitBlob": "c09f90af16a07b1a5ef1c7c7d27bbb95494cab6d",
+          "sha256": "3e65b8b98ff352c1b83001f8736e758298aff72289ff390296a7da4072e09ca9",
+          "parentBlob": "8dd9a4a5e82aa826860e24ed5378bda7e8c3735b"
+        },
+        {
+          "path": "services/main/src/modules/source/field-support-structure.ts",
+          "gitBlob": "461daf0da0f9ac0a450ff56439c9fec246663649",
+          "sha256": "5f02be29cf4c18a1336ec11dcebe45b86ed9890bb464e6c2026a9a3cbb1c4c07",
+          "parentBlob": null
+        },
+        {
+          "path": "services/main/src/routes/source-supports.ts",
+          "gitBlob": "f5d418ee664ededa60f79f72e7c16fb9ac57501d",
+          "sha256": "2e47cbf791657207a20280b5d9803a5984d8ab54bfccc66b298c03c476be26e7",
+          "parentBlob": "08cec1ad5db0319451cd781d1ee468e647569705"
+        },
+        {
+          "path": "services/main/tests/source-field-structure-fixture.ts",
+          "gitBlob": "0220fe805d1db2c428329f146bac3d701eb82767",
+          "sha256": "c3edd2afe3083724363bb44b70bce61cac95219e809d49992f46dd3b18189bd9",
+          "parentBlob": null
+        },
+        {
+          "path": "services/main/tests/source-field-structure.test.ts",
+          "gitBlob": "274f5dab3acf11007fa18806d72fefcb5f534377",
+          "sha256": "30341054ad669bc17bc190277f5bc7b1a83f83796c5a29b232e69fa23a2b4e37",
+          "parentBlob": null
+        },
+        {
+          "path": "tests/qa/unit/dataset-field-mapping.test.ts",
+          "gitBlob": "8fd2cb36440683c631e66ef9f72dcdac8f54bd4a",
+          "sha256": "cda97201b4e4e70c698a252da1b8adfc80e4ac48766f88b627f50c9fa3bd6a9f",
+          "parentBlob": "5d43e3d4ebec7607505060a90ea344f9c2c625b6"
+        }
+      ],
+      "manifestSha256": "f5babaad4e5387c31b74d6beb283c29e4843b8e4694933f9f438f7b46dc51839",
+      "exactFirstParentVerified": true,
+      "changedFileCount": 13,
+      "manifestSource": ".temp/worktrees/g-2781/.temp/goal/source-structure-publication.json",
+      "manifestSnapshot": ".temp/review/structure-v2/source-structure-publication.json",
+      "manifestMeaning": "All 13 manifest Git blobs and SHA-256 values independently match git diff parent..candidate; every changed candidate file was inspected. Candidate runtime source used by the focused check is also extracted from this immutable commit, with no product patch.",
+      "publicationSha256": "f5babaad4e5387c31b74d6beb283c29e4843b8e4694933f9f438f7b46dc51839",
+      "handoffSha256": "05c6e82f275c9c48a0631a48ca6a7a95e79fe0b313ef4855d516aeef16690582",
+      "ownerValidationSha256": "524a67b8bd8d7dd896d377a57bb9087d5761593ab5240331e58f8be717317237",
+      "authorship": "Edge-coordinates <Edgecoordinates@gmail.com>",
+      "preservedAuthorship": [
+        {
+          "commit": "f3ee0c069dc66bfb9470220476d50cfd64a7af25",
+          "author": "Edge-coordinates <Edgecoordinates@gmail.com>",
+          "isAncestor": false
+        },
+        {
+          "commit": "e44ea5413624f3f868fb04c8591b74eb845c8505",
+          "author": "Edge-coordinates <Edgecoordinates@gmail.com>",
+          "isAncestor": false
+        },
+        {
+          "commit": "c6d99a317355ba5c83f46efad2c6ae8ca9d63d3f",
+          "author": "Edge-coordinates <Edgecoordinates@gmail.com>",
+          "isAncestor": true
+        },
+        {
+          "commit": "7224fd87fcb68f2a5299d6e11d011516daaca28c",
+          "author": "Edge-coordinates <Edgecoordinates@gmail.com>",
+          "isAncestor": true
+        },
+        {
+          "commit": "f1c42d420130d899605fcd06e1a6ab2b3e14faf7",
+          "author": "Edge-coordinates <Edgecoordinates@gmail.com>",
+          "isAncestor": true
+        }
+      ],
+      "baseSourceAuthorship": [
+        {
+          "commit": "867d708b2ac4a83f88032717e7e63a04a36e0277",
+          "author": "Edge-coordinates <Edgecoordinates@gmail.com>",
+          "isAncestor": true
+        },
+        {
+          "commit": "b6ccfb47911e4381006c8e5220909f3b96e027e9",
+          "author": "Edge-coordinates <Edgecoordinates@gmail.com>",
+          "isAncestor": true
+        },
+        {
+          "commit": "61ba57c0767dee7666f993e41773c2b7dac6a58c",
+          "author": "Edge-coordinates <Edgecoordinates@gmail.com>",
+          "isAncestor": true
+        }
+      ]
+    },
+    "disposition": {
+      "accepted": false,
+      "decision": "request-bounded-source-correction",
+      "blockingFindings": [
+        "SOURCE-STRUCTURE-FENCE-1"
+      ],
+      "summary": "The new acknowledgement and finite retained correspondence preserve the intended owner boundary, but a stable Structure evidence window cannot complete the enclosing session dependency fence. Its registered reread calls read(), which runs the full fence again and recursively rereads the same window until the request budget expires. Even withheld evidence triggers the loop.",
+      "existingOwner": "G-2781 Source; shared composition wiring remains with G-2763",
+      "landingPerformed": false,
+      "originalClassClosure": false
+    },
+    "actionableFindings": [
+      {
+        "id": "SOURCE-STRUCTURE-FENCE-1",
+        "priority": "P1",
+        "class": "An owner dependency reread reenters its enclosing session-wide fence",
+        "status": "confirmed-at-outcome-assertion",
+        "locations": [
+          {
+            "path": "services/main/src/modules/source/field-support-retained.ts",
+            "line": 285,
+            "detail": "The new Structure read branch calls session.fenceDependencies() after native acknowledgement comparison and evidence projection, including when publicEvidence is null."
+          },
+          {
+            "path": "services/main/src/modules/source/field-support-retained.ts",
+            "line": 347,
+            "detail": "The existing window loader now explicitly passes the same session to each retained support read."
+          },
+          {
+            "path": "services/main/src/modules/source/field-support-retained.ts",
+            "line": 359,
+            "detail": "session.dependency registers load() as the whole current evidence-window reread."
+          },
+          {
+            "path": "services/main/src/modules/work/read-session.ts",
+            "line": 211,
+            "detail": "The unchanged session fence awaits each registered owner dependency. The window callback therefore returns to read() and starts this same fence again."
+          }
+        ],
+        "counterexample": {
+          "reader": "An authenticated reader with actingSubject in one active WorkReadSession",
+          "selection": "One current, unchanged retained Structure occurrence support; all SQL/native/custody/evidence owner inputs remain fixed",
+          "evidence": "publicEvidence returns null, so no public quotation or installed disclosure positive is assumed",
+          "initialResult": {
+            "items": [],
+            "generation": "1",
+            "more": false,
+            "next": null
+          },
+          "expected": "The enclosing final dependency fence completes on unchanged inputs and permits emission of the empty evidence window.",
+          "observed": "The initial window load passed. The enclosing session.fenceDependencies() then reloaded the window 668 more times (669 total window loads/native verifier reads) and raised FusekiReadDeadlineExceeded. The actual source stack alternates field-support-retained.ts read:285 -> load:347 -> dependency callback:360 -> read-session.ts fenceDependencies:211.",
+          "assertion": "expect(failure, \"unchanged input and withheld evidence must allow the final fence to complete\").toBeUndefined()",
+          "assertionLine": 77,
+          "assertionReached": true,
+          "result": "0 pass / 1 fail / 3 expect calls; no setup error in the confirming run"
+        },
+        "proof": {
+          "job": "01b8fe8d-e7f0-43b8-93b1-ab0e00f20599",
+          "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --taskfile .temp/review/structure-v2/Taskfile.yml evidence-fence",
+          "taskCommand": "bun scripts/goal/goalctl.ts test ./.temp/review/structure-v2/structure-evidence-reentrancy.test.ts",
+          "exitCode": 201,
+          "log": {
+            "path": ".temp/goal/jobs/01b8fe8d-e7f0-43b8-93b1-ab0e00f20599.log",
+            "sha256": "b79bd600f642ef7d22fb08e7f17405392604b61e07adb0b78ada7b8bdd66911c"
+          },
+          "testPath": ".temp/review/structure-v2/structure-evidence-reentrancy.test.ts",
+          "testSha256": "aea95a3641e309f8059f717d6c133cbc87cd3845a6efd07596e24c915818c264",
+          "testSource": "import { expect, test } from 'bun:test';\nimport { randomUUID } from 'node:crypto';\nimport { SourceRetainedFieldSupportStore, retainedAttachmentDigest } from './runtime/services/main/src/modules/source/field-support-retained.ts';\nimport { verifyRetainedField } from './runtime/services/main/src/modules/source/field-support-evidence.ts';\nimport { canonicalDigest } from './runtime/services/main/src/modules/source/retained-record-normalization.ts';\nimport { WorkReadSession, withWorkReadSession } from './runtime/services/main/src/modules/work/read-session.ts';\nimport { fusekiReadBudget } from './runtime/services/main/src/infrastructure/fuseki.ts';\nimport { projectDatasetFields } from './runtime/scripts/datasets/native/fields.ts';\n\n// Unit counterexample: actual Source read/window/session methods; controlled SQL,\n// retained custody and native/evidence owner ports. No native admission, SQL\n// service or installed/public product claim is made by these prerequisites.\ntest('stable retained Structure evidence window completes its final dependency fence', async () => {\n  const id = () => `https://rezics.com/id/${randomUUID()}`;\n  const principalId = randomUUID(), supportId = randomUUID(), stepId = randomUUID();\n  const principal = { issuer: 'https://account.test', subject: 'reader' };\n  const record = { key: 'bangumi:episode:101', provider: 'bangumi', kind: 'episode', externalId: '101',\n    title: 'Episode', native: 'episode', data: { id: 101, subject_id: 10, sort: 0.5, disc: 0, type: 1 } };\n  const binding = { binding: id(), sourceRecord: id(), conversion: id(), recordDigest: canonicalDigest(record),\n    mappingRevision: 'bangumi-episode-retained-map-v1', normalizationRevision: 'retained-record-json-v1' };\n  const source = { key: record.key, provider: record.provider, namespace: record.kind, externalId: record.externalId,\n    snapshot: 'snapshot', snapshotDigest: 'a'.repeat(64), recordDigest: binding.recordDigest, observations: [], intakes: [] };\n  const evidence = { record, payload: { record }, rule: 'dataset-record-envelope-v1',\n    conversion: { retainedRecord: binding }, fieldPlan: projectDatasetFields(record as never, source as never) };\n  const native = { kind: 'structure-occurrence', owner: 'structure', target: id(), component: id(), structure: id(),\n    profile: 'episode-list-v1', revision: id(), receipt: `urn:rezics:receipt:${'b'.repeat(64)}`, occurrence: id() };\n  const request = { profile: 'source-field-support-attachment-v2', target: native.target,\n    slot: 'structure-occurrence-v1#qualifier.values.position', occurrence: native.occurrence,\n    context: native.structure, sourceRecord: binding.sourceRecord, conversion: binding.conversion,\n    grain: 'episode', sourceField: 'sort', sourceOccurrence: null, expectedHead: native.revision, actingSubject: id(), native,\n    evidence: { binding: binding.binding, recordDigest: binding.recordDigest, mappingRevision: binding.mappingRevision,\n      field: { pointer: '/data/sort', presence: 'value', valueDigest: canonicalDigest(0.5) } } };\n  const field = await verifyRetainedField(request as never, evidence as never);\n  const acknowledgement = { receipt: native.receipt, admissionId: randomUUID(), scope: `work:edit:${native.target}`,\n    action: 'work.edit', component: native.component, revision: native.revision, dataEpoch: randomUUID(), sequence: '1' };\n  const admission = { profile: 'source-field-support-admission-v1', sourceRecord: binding.sourceRecord,\n    conversion: binding.conversion, evidence: request.evidence, correspondence: field.correspondence,\n    native, headGuarantee: 'verified-before-commit' };\n  const digest = retainedAttachmentDigest(principalId, request as never, admission as never, acknowledgement as never);\n  const saved = { support_id: supportId, step_id: stepId, request, request_digest: digest,\n    retained_admission: admission, native_acknowledgement: acknowledgement,\n    certificate: { profile: 'source-field-attachment-certificate-v1', receipt: `urn:rezics:receipt:${'c'.repeat(64)}`,\n      requestDigest: digest, nativeReceipt: native.receipt }, created_at: new Date('2026-10-20T00:00:00Z'),\n    withdrawal_id: null, reason: null, withdrawn_at: null };\n  let windowLoads = 0, nativeReads = 0;\n  const pool = { query: async (sql: string) => {\n    if (sql.includes('field_support_generation')) return { rows: [{ generation: '1' }], rowCount: 1 };\n    if (sql.includes('SELECT s.id,s.principal_id')) {\n      windowLoads++;\n      return { rows: [{ id: supportId, principal_id: principalId }], rowCount: 1 };\n    }\n    if (sql.includes('AS support_id')) return { rows: [saved], rowCount: 1 };\n    if (sql.startsWith('SELECT 1 FROM source.retained_record_binding')) return { rows: [{}], rowCount: 1 };\n    if (sql.startsWith('SELECT principal_id,conversion_id')) return { rows: [{ principal_id: principalId,\n      conversion_id: binding.conversion.slice(-36) }], rowCount: 1 };\n    throw new Error(`Unexpected SQL: ${sql}`);\n  } };\n  const deps = { environment: {}, access: { activePrincipalId: async () => principalId, assertRecoveryOpen: async () => {} } };\n  const session = new WorkReadSession(deps as never, new Request('https://main.test/v1/evidence'),\n    { actingSubject: request.actingSubject }, { dataEpoch: acknowledgement.dataEpoch, sequence: '1' });\n  session.principal = principal;\n  const store = new SourceRetainedFieldSupportStore(pool as never, {} as never, {} as never,\n    { evidence: async () => evidence } as never, {\n      structure: async () => { nativeReads++; return acknowledgement; },\n      publicEvidence: async () => null,\n    } as never);\n  const budget = { callsLeft: 100, bytesLeft: 1_048_576, deadline: Infinity, signal: new AbortController().signal };\n  await fusekiReadBudget.run(budget, () => withWorkReadSession(session, async () => {\n    const window = await store.readEvidenceWindow(session, { target: native.target, slot: request.slot,\n      occurrence: native.occurrence, context: native.structure, component: native.component, revision: native.revision });\n    expect(window).toEqual({ items: [], generation: '1', more: false, next: null });\n    expect(windowLoads).toBe(1);\n    budget.deadline = performance.now() + 100;\n    let failure: unknown;\n    try { await session.fenceDependencies(); } catch (error) { failure = error; }\n    console.log(JSON.stringify({ windowLoads, nativeReads, finalFenceError: failure instanceof Error ? failure.name : null }));\n    expect(failure, 'unchanged input and withheld evidence must allow the final fence to complete').toBeUndefined();\n  }));\n});\n",
+          "runtimePin": "0bae541e30043100fe525fe1dbcedadb6b904e7b",
+          "reconstruction": "Extract candidate sources into .temp/review/structure-v2/runtime, including services/main/src, scripts/datasets, scripts/lib and packages, and resolve their relative tracked imports from the same immutable commit. Point only snapshot-local @rezics package links at those extracted packages; reuse installed external dependencies without installs. The embedded test imports this snapshot. The recorded Taskfile evidence-fence task invokes the worktree goalctl test command above.",
+          "runtimeClosureArtifact": {
+            "path": ".temp/review/structure-v2/runtime-closure.json",
+            "sha256": "15fe5cf3f598dcb13c5ea94a02f5b15e6779eab3a5acc5683c28f0f5ef76e8ef"
+          },
+          "premiseLimits": "Actual unmodified Source read(), readEvidenceWindow(), verifyRetainedField(), verifySourceNative() dispatch, field planning and WorkReadSession code; controlled SQL transport, retained evidence/custody store port, Structure verifier and null public-evidence owner. This is a unit counterexample to session composition, not an outcome test or evidence of actual native admission. A 100ms real request deadline bounds the otherwise recursive stable reread. No services, PostgreSQL, captures, accounts or installed public API ran."
+        },
+        "boundedClassInspection": "Within the 13-file cut the reentrant call is in the one new Structure branch of read(). Every selected current Structure support reached through readEvidenceWindow is affected when the active session has a principal/actingSubject and the acknowledgement is current. Withheld/null evidence still enters this branch. Direct private historical reads without a qualified session skip current projection; direct POST settlement has no registered enclosing evidence-window reread. Existing V1 and other V2 reads do not enter this new branch.",
+        "ownerAction": "The existing Source owner must make support projection safe as an owner-dependency reread while preserving the outer final fences for native inputs, current subject, custody/reuse, rights, withdrawal and evidence. Add a regression that performs the complete window -> enclosing final-fence sequence, including stable withheld/current evidence and movement or revocation. Freeze the corrected bounded delta for this same reviewer. No new mapping framework, owner API or cross-owner transaction is requested."
+      }
+    ],
+    "acceptedObservations": [
+      {
+        "area": "Closed acknowledgement and native authority",
+        "finding": "The new runtime native union is closed and requires kind/owner/Work/component/Structure/profile/revision/receipt/exact native child. verifySourceNative binds target, expected head, context and occurrence before dispatch; an absent Structure owner refuses unavailable. The adapter consumes the existing readAcknowledgedStructureOccurrence rather than creating, adopting or converting a native object."
+      },
+      {
+        "area": "Exact native receipt and same-revision ancestry",
+        "finding": "The existing native owner resolves an actual succeeded terminal receipt, admission, operation and revision anchor; verifies the Structure owner/component/profile/current head; loads the immutable manifest and exact active child/order entry; traverses active container ancestry at the same revision; checks current target grain and disclosure; and registers dependencies for closing fences. The Source acknowledgement retains that result, source binding, manifest, operation, epoch and sequence. The adapter additionally requires work.edit, the exact Work edit scope and exact receipt/Structure/revision."
+      },
+      {
+        "area": "Finite retained placement and value/language fidelity",
+        "finding": "Only Bangumi episode /data/sort, /data/disc and /data/type map to occurrence position/disc/kindCode. The Map-based pointer lookup refuses inherited aliases. Exact nonnegative decimal rationals reduce after parsing; 0.5 becomes 1/2 and zero becomes 0/1; disc/type require integral values and existing native magnitude bounds. Missing, null and empty evidence retain separate presence. The whole retained placement, optional-field presence, kindScheme bangumi:episode:type, native sourceKey, episode identity and adopted subject Work must agree. Selected retained value and supplied language are independently compared; sibling order and semantic episodeNumber are not substituted."
+      },
+      {
+        "area": "Current subject/session and verified-before-commit",
+        "finding": "New Structure settlement requires the exact active WorkReadSession, the input actingSubject and matching verified principal. The adapter consumes this session. Source uses existing live withOwnerAuthority, rereads custody/reuse, fences selected native/adoption/identity dependencies and authority, and checks the deadline before Source COMMIT. The POST route uses localBasis and one workRead attempt; request.method POST prevents read retries around committing callbacks. This is verified-before-commit only, with no atomic cross-owner guarantee."
+      },
+      {
+        "area": "Replay, withdrawal and custody",
+        "finding": "Exact idempotent replay is resolved from the persisted request and immutable certificate before current-head settlement. A moved head with a new key must pass fresh acknowledgement verification and is refused. Historical certificate custody is distinct from current public evidence. Support/withdrawal SQL and the current rights/evidence projection are registered as dependencies; independent Source withdrawal has no native effect. The enclosing evidence-window fence is blocked by SOURCE-STRUCTURE-FENCE-1, so these mechanisms do not establish a working complete public evidence path."
+      },
+      {
+        "area": "Evidence continuation shape",
+        "finding": "The selected coordinate, private generation/after frontier, limit 16 and limit+1 physical-row scan remain intact; withheld rows retain their physical continuation position. The only window code delta passes the same session into read(). The intended continuation shape is preserved, but final emission for a current authenticated Structure window fails as the confirmed counterexample demonstrates."
+      },
+      {
+        "area": "Existing branches and citation independence",
+        "finding": "The route split preserves handler order, policies, runtime validators and V1/other V2 branches apart from the new Structure dispatch/session path. ownerSchema is a type-only identity cast preserving Elysia validator objects. No migration, lockfile, converter, native write API, manual citation model or owner composition file is in the delta. Manual citations and ordinary native commands remain independent of conversion; the V2 retained-evidence contract is not imposed on them."
+      }
+    ],
+    "exactDependenciesConsulted": {
+      "scope": "Only the existing owner/session/custody/authority boundary needed to assess this new adapter; accepted native/query/Source implementations are not independently reviewed again.",
+      "files": [
+        {
+          "path": "services/main/src/modules/structure/native-basis.ts",
+          "gitBlob": "6af834b2d903502e6eb8a0af03eb3b68ee04a796",
+          "sha256": "98950f274622580471977a3f56b7cc2f2e51c8a9c3896483f762a578687725b8",
+          "unchangedFromParent": true
+        },
+        {
+          "path": "services/main/src/modules/structure/episode-profile.ts",
+          "gitBlob": "941506974f4ff87d13f93da0e8d7ce00f199c400",
+          "sha256": "8c3bbf9f76a2cb6586344e11cc5d4ce74caf5a25503815457ff3bdd6910817d0",
+          "unchangedFromParent": true
+        },
+        {
+          "path": "services/main/src/modules/work/read-session.ts",
+          "gitBlob": "85381184a0704f74645f97e0b0327a2b13d0d27d",
+          "sha256": "1e057f09ae28386be2ee2a737826a5060bf67aabe3dd4ce8abe105183659b4db",
+          "unchangedFromParent": true
+        },
+        {
+          "path": "services/main/src/modules/source/native-work-adoption.ts",
+          "gitBlob": "3e0946319e8a4d8415aa5cb3f3162e40e086313e",
+          "sha256": "3d964e805c9f33a9b4a586593b9aeca0e45a79f689cc941ecb633710ef1fc1d0",
+          "unchangedFromParent": true
+        },
+        {
+          "path": "services/main/src/modules/source/retained-evidence.ts",
+          "gitBlob": "15d1e6e6f90f1be63a902d51fa01e7a8bb4682b0",
+          "sha256": "8c48b69b75ba7abef233b36c20a08001f2ec4bc3b70f1cca9bb9dcac67a89ff6",
+          "unchangedFromParent": true
+        },
+        {
+          "path": "services/main/src/modules/access/admission.ts",
+          "gitBlob": "aef348515d8573ec066c9c765af01139151d719c",
+          "sha256": "38249c3dc3e91bb26c1ec36c06aa2bbeadfae9ad64450f78f4b5615636068a4b",
+          "unchangedFromParent": true
+        },
+        {
+          "path": "services/main/src/routes/work-reads.ts",
+          "gitBlob": "97443a6c90c5cddb1842270b6b456ee176415f3d",
+          "sha256": "58028ef063c188144a290b04fc95da135eed088ee8c7e5bc8c55c0d2226a65e3",
+          "unchangedFromParent": true
+        },
+        {
+          "path": "services/main/src/modules/structure/read.ts",
+          "gitBlob": "67093e29eb9bb4196a48f4fe2bd4ec2f70b87814",
+          "sha256": "2a533d4da3e1b0e453bd36d2ab2f22e06ef06a78dc1249efa4befb987f5c9413",
+          "unchangedFromParent": true
+        }
+      ],
+      "sections": [
+        "structure/native-basis.ts acknowledged read and its return contract",
+        "structure/episode-profile.ts checkEpisodeOrder and current Episode target guard",
+        "structure/read.ts readCompositionSnapshot",
+        "work/read-session.ts dependency registration, fenceDependencies, fenceAuthority, active session and workRead retry/closing semantics",
+        "source/native-work-adoption.ts importBinding and assertActive",
+        "source/retained-evidence.ts retained reuse and reader-authorized public projection",
+        "access/admission.ts withOwnerAuthority",
+        "routes/work-reads.ts workReadError"
+      ]
+    },
+    "generatedOutputInspection": {
+      "structureBranchLocations": [
+        "/paths//v1/sources/field-supports/post/requestBody/content/application/json/schema/anyOf/1/properties/native/anyOf",
+        "/paths//v1/sources/field-supports/post/requestBody/content/application/x-www-form-urlencoded/schema/anyOf/1/properties/native/anyOf",
+        "/paths//v1/sources/field-supports/post/requestBody/content/multipart/form-data/schema/anyOf/1/properties/native/anyOf",
+        "/paths//v1/sources/field-supports/post/responses/200/content/application/json/schema/properties/support/properties/admission/properties/native/anyOf",
+        "/paths//v1/sources/field-supports/post/responses/201/content/application/json/schema/properties/support/properties/admission/properties/native/anyOf",
+        "/paths//v1/sources/field-supports/{support}/get/responses/200/content/application/json/schema/properties/admission/properties/native/anyOf",
+        "/paths//v1/sources/supports/{support}/get/responses/200/content/application/json/schema/anyOf/0/properties/admission/properties/native/anyOf",
+        "/paths//v1/sources/withdrawals/post/responses/200/content/application/json/schema/properties/support/anyOf/0/properties/admission/properties/native/anyOf",
+        "/paths//v1/sources/withdrawals/post/responses/201/content/application/json/schema/properties/support/anyOf/0/properties/admission/properties/native/anyOf"
+      ],
+      "newBranchCount": 9,
+      "allNewBranchesIdentical": true,
+      "closedRequiredFields": [
+        "kind",
+        "owner",
+        "target",
+        "component",
+        "structure",
+        "profile",
+        "revision",
+        "receipt",
+        "occurrence"
+      ],
+      "equalToParentAfterRemovingOnlyNewStructureBranches": true,
+      "unchangedGuardInputs": [
+        "apps/web",
+        "scripts/static",
+        "package.json",
+        "yarn.lock"
+      ],
+      "reviewRuntimeSourceFiles": 1941,
+      "method": "Independently traverse the exact candidate public OpenAPI; remove only the nine native anyOf structure-occurrence branches; compare the complete remaining JSON to the exact parent. All nine new branches are equal, closed, and match the actual nine-field validator including literal episode-list-v1. Runtime field-support schemas and unchanged old branch definitions were inspected separately.",
+      "datasetMapping": "The exact changed dataset mapper uses the same episodeRational/episodeKindCode primitives as retained verification and names the three actual occurrence qualifier fields. Source-only values never gain a native candidate; the existing semantic episodeNumber projection is removed for these Episode placement fields. This is planning, not importer adoption.",
+      "migrationsChanged": false,
+      "otherGeneratedOwnersChanged": false
+    },
+    "checksActuallyExecuted": [
+      {
+        "kind": "read-only-pin-and-report-verification",
+        "result": "passed",
+        "details": "Verified exact parent/13-file union, each candidate Git blob/SHA-256, candidate runtime bytes for changed source files, new OpenAPI branches and full remaining projection equality, unchanged web/static/package/lock guard inputs, and byte preservation of prior reports. No product test is inferred from static inspection."
+      },
+      {
+        "kind": "targeted-counterexample-setup-failure",
+        "job": "5d145798-e89b-4c34-90ae-56a784cfccc6",
+        "result": "failed before loading the test: Bun treated the hidden .temp path as a filter",
+        "assertionReached": false,
+        "correction": "Prefix the test path with ./ in the Task invocation.",
+        "log": {
+          "path": ".temp/goal/jobs/5d145798-e89b-4c34-90ae-56a784cfccc6.log",
+          "sha256": "cd5df21ab0c72d646afc9584f57a65808b91dd3d9343a7531efd542ada5e3d35"
+        }
+      },
+      {
+        "kind": "targeted-counterexample-source-loading-failure",
+        "job": "40c86df9-afdd-4b46-a002-55b1d65db8f8",
+        "result": "0 pass/1 fail/1 error before test assertions: the temporary source snapshot lacked services/content/src/connection.ts",
+        "assertionReached": false,
+        "correction": "Complete relative tracked imports from the exact same candidate. No test body or product source was changed.",
+        "log": {
+          "path": ".temp/goal/jobs/40c86df9-afdd-4b46-a002-55b1d65db8f8.log",
+          "sha256": "b48dddc2e237419c4caa40919e0aa422405bb36b8fe7f59da9aff2f5dc035511"
+        }
+      },
+      {
+        "kind": "targeted-counterexample",
+        "job": "01b8fe8d-e7f0-43b8-93b1-ab0e00f20599",
+        "result": "failed at the final stable-window outcome assertion; confirms SOURCE-STRUCTURE-FENCE-1",
+        "assertionReached": true,
+        "tests": 1,
+        "passing": 0,
+        "failing": 1,
+        "expectCalls": 3,
+        "log": {
+          "path": ".temp/goal/jobs/01b8fe8d-e7f0-43b8-93b1-ab0e00f20599.log",
+          "sha256": "b79bd600f642ef7d22fb08e7f17405392604b61e07adb0b78ada7b8bdd66911c"
+        }
+      }
+    ],
+    "reusedEvidence": {
+      "job": "2035e24c-f7d6-47ce-b086-85bb82ed9a34",
+      "basis": "Explicitly authorized matching publication proof. Its manifest candidate files match the immutable reviewed blobs; QA records a stable dirty-source fingerprint on parent f1c42d42 before publication. Job sequence and exit statuses were read from the owner job database read-only; QA summaries/JUnit and selected logs were inspected without rerunning them.",
+      "sequence": [
+        {
+          "command": [
+            "task",
+            "--taskfile",
+            ".temp/goal/source-structure.Taskfile.yml",
+            "openapi"
+          ],
+          "started": 1792496296898,
+          "code": 0,
+          "ended": 1792496301666
+        },
+        {
+          "command": [
+            "/bin/sh",
+            "-c",
+            "bun scripts/goal/goalctl.ts test services/main/tests/source-field-structure.test.ts services/main/tests/source-field-native-basis.test.ts services/main/tests/source-retained-record.test.ts services/main/tests/source-retained-evidence.test.ts services/main/tests/source-retained-archive-routes.test.ts tests/qa/unit/dataset-field-mapping.test.ts tests/qa/unit/source-field-values.test.ts tests/qa/unit/conversion-library.test.ts"
+          ],
+          "started": 1792496301715,
+          "code": 0,
+          "ended": 1792496387060
+        },
+        {
+          "command": [
+            "/bin/sh",
+            "-c",
+            "task web:typecheck"
+          ],
+          "started": 1792496387100,
+          "code": 0,
+          "ended": 1792496417802
+        },
+        {
+          "command": [
+            "/bin/sh",
+            "-c",
+            "task goal -- check --only types,lint,guards"
+          ],
+          "started": 1792496417838,
+          "code": 201,
+          "ended": 1792496554621
+        }
+      ],
+      "qa": {
+        "run": "20261020t113825-940361",
+        "source": "f1c42d420130d899605fcd06e1a6ab2b3e14faf7",
+        "fingerprint": "de368ce272ca",
+        "stable": true,
+        "files": [
+          "services/main/tests/source-field-structure.test.ts",
+          "services/main/tests/source-field-native-basis.test.ts",
+          "services/main/tests/source-retained-record.test.ts",
+          "services/main/tests/source-retained-evidence.test.ts",
+          "services/main/tests/source-retained-archive-routes.test.ts",
+          "tests/qa/unit/dataset-field-mapping.test.ts",
+          "tests/qa/unit/source-field-values.test.ts",
+          "tests/qa/unit/conversion-library.test.ts"
+        ],
+        "tests": 48,
+        "assertions": 1255,
+        "result": "passed; full qualification no",
+        "fingerprintFull": "de368ce272cafbbdab835659fe5b48e8a51bfba0f4151bb91fd850e855921c30",
+        "owner": {
+          "tests": 29,
+          "assertions": 1026,
+          "failures": 0
+        },
+        "unit": {
+          "tests": 19,
+          "assertions": 229,
+          "failures": 0
+        },
+        "sourceClean": false,
+        "fullQualification": false,
+        "acceptanceIdsPassed": 0
+      },
+      "openapiGeneration": "passed; step 1",
+      "webTypes": "passed; 4062 files; step 3",
+      "mainTypes": "passed",
+      "lint": "passed",
+      "ast": "passed",
+      "fullInference": {
+        "result": "passed",
+        "mainInstantiations": 26948971,
+        "mainUnchangedLimit": 26950993.65,
+        "webInstantiations": 38791263,
+        "edenInstantiations": 17710656,
+        "artifacts": ".temp/api-inference/run-t9YArw"
+      },
+      "fullCheck": "Not green: the guards step exited 201 on the unchanged-base Home/Zone continuation assertion. Passing types/inference/48 focused tests do not refute the newly confirmed outer-window fence counterexample, which the six new Structure tests never perform.",
+      "fixtureLimits": "Owner tests use actual isolated PostgreSQL, actual retained intake/conversion and receipt readers, but controlled native graph/access transports and explicit adoption/terminal prerequisites. Structure publicEvidence is null. They establish neither installed native create/import nor production current Structure public evidence."
+    },
+    "preservedNegativeEvidence": {
+      "unchangedBaseGuard": {
+        "test": "scripts/static/web-continuations.test.ts:13",
+        "assertionReached": true,
+        "instances": [
+          "apps/web/features/home/continue-strip.tsx ContinueStrip dropped continuation",
+          "apps/web/features/zones/site-route.tsx ZoneSiteRoute dropped route.items",
+          "apps/web/features/zones/site-route.tsx ZoneSiteRoute invented routeCursor continuation"
+        ],
+        "scope": "All apps/web, scripts/static, package and lockfile tracked inputs are unchanged between parent and candidate. These remain later integration gates with their existing owner; they are not this Source correction and do not themselves determine this source verdict."
+      },
+      "historical": "Every prior report value, SQL2201B, original Source refusal failures, CONV-REFUSAL-1/5011f702, accepted correction verdict and failed probes remain preserved. No accepted candidate is reviewed again and no old failure is relabelled as a new candidate failure.",
+      "newProbeFailures": "Both test setup failures and the assertion-confirming failure are recorded separately above; no setup run is counted as a confirmed finding."
+    },
+    "preservedAcceptedWork": {
+      "originalReportSha256": "f6aa110ea53c8a8f3357b7420edb5010e223864882a666cb044cb63286c323a6",
+      "preservedReports": [
+        {
+          "path": "docs/goals/audit-remediation-20261019/proofs/catalogue-A19-nutrition-absence-review.json",
+          "gitBlob": "f314de0649d2b20ff09a550c7a880b44950f6929",
+          "sha256": "62b8d0a00a19e82cb5bdaf2baae36ad5962d454a268316d1725940dc28e9bcc3"
+        },
+        {
+          "path": "docs/goals/audit-remediation-20261019/proofs/catalogue-conversion-library-review.json",
+          "gitBlob": "a5b1e8d3aad1b99e09456656bd6a8780e42376c9",
+          "sha256": "02c5d961af18f0fa43befcd49657bfb7c7a84537d5d72a0d891adffd52919826"
+        }
+      ],
+      "originalReportValuesUnchanged": true,
+      "acceptedReportsUnchanged": true,
+      "acceptedSourceRefusalReport": "7b30661fe20c0fd04faa7b3d7795ae7f144367cf",
+      "nativeQueryA19LibraryVerdictsReopened": false,
+      "strictLibraryIntegrationRequirement": {
+        "acceptedLibraryCandidate": "d27a26dd20ebf71a27f212fca84484467fb7fa0f",
+        "acceptedReview": "311fd8c0e01f17da51896b2cb64c00587a3d4bed",
+        "acceptedIndexBlob": "4d07ac212265d7b2f3ac14b6df4906609e16526c",
+        "inheritedParentAndCandidateIndexBlob": "2e9229364cf18fa397e1d33da37d80621ec7d531",
+        "inside13FileDelta": false,
+        "disposition": "Identity-only integration check: the pinned adapter candidate inherits the older index from its parent. The manager must preserve the already accepted strict Map-based refusal on composition and must not overwrite it with this inherited library. The five library files remain outside this review; CONV-REFUSAL-1 is not reviewed or reproduced again."
+      }
+    },
+    "existingOwnerDependencies": [
+      "G-2781 corrects SOURCE-STRUCTURE-FENCE-1 and publishes only the bounded correction with a matching focused window/final-fence regression.",
+      "G-2763 composes acknowledgedStructureSupportOwners({sourceAdoptions}) with the existing RetainedFieldOwners passed to SourceRetainedFieldSupportStore. Until installed, a new Structure support refuses 503 source_support_unavailable; this publication alone installs no admission.",
+      "G-2778 supplies actual selected retained coordinates and acknowledged native receipts through its existing importer; no importer adoption is established here.",
+      "Native/query consumers retain one qualified fenced session and the existing support cursor; preserve G-2846 profile review, accepted native/query/Source/A19/library verdicts and later composition gates.",
+      "The existing web owner resolves the unchanged Home/Zone continuation guards before normal integration."
+    ],
+    "unexecutedLimits": [
+      "No product edits, migrations, generation, installs, services, runtime stack, browser, lease, accounts, captures, corpus, import, restore, shared data writes, merge, rebase or landing.",
+      "No repeated whole-tier tests or independent rerun of the accepted Source87/refusal/native/query/A19/library reviews. Only the concrete new fence concern received a focused recorded unit check.",
+      "No installed public native admission, real importer adoption, production Structure public-evidence positive, original A01/all113 journey, Composition target-disclosure outcome or original class closure.",
+      "The native admission and rights mechanisms were read at their exact dependency blobs; controlled owner proof and the unit counterexample do not constitute current installed/public product acceptance.",
+      "Verified-before-commit remains the guarantee. No cross-owner atomic transaction is claimed."
+    ],
+    "reportValidation": {
+      "status": "passed",
+      "recordedSequence": "0f1bc221-a640-4a68-8198-4a34bcce0a6a",
+      "results": [
+        {
+          "kind": "report-integrity",
+          "job": "0f1bc221-a640-4a68-8198-4a34bcce0a6a",
+          "command": "task --taskfile .temp/review/structure-v2/Taskfile.yml report-integrity",
+          "result": "passed",
+          "exitCode": 0,
+          "log": {
+            "path": ".temp/goal/jobs/0f1bc221-a640-4a68-8198-4a34bcce0a6a.1.log",
+            "sha256": "f4e01ca886a91584d8d483e7177856e7d3733e13f1ffd21a6253ff072d21f267"
+          }
+        },
+        {
+          "kind": "report-documentation-check",
+          "job": "0f1bc221-a640-4a68-8198-4a34bcce0a6a",
+          "command": "task docs:check",
+          "result": "passed",
+          "exitCode": 0,
+          "log": {
+            "path": ".temp/goal/jobs/0f1bc221-a640-4a68-8198-4a34bcce0a6a.2.log",
+            "sha256": "d95e54515af6363f5028aa6cf81a9c700fd40c01733d54dbbc6541b6a183943e"
+          },
+          "markdownFiles": 259,
+          "checks": 13
+        },
+        {
+          "kind": "affected-report-worker-gate",
+          "job": "0f1bc221-a640-4a68-8198-4a34bcce0a6a",
+          "command": "task goal -- check",
+          "result": "passed",
+          "exitCode": 0,
+          "log": {
+            "path": ".temp/goal/jobs/0f1bc221-a640-4a68-8198-4a34bcce0a6a.3.log",
+            "sha256": "df85e3bb926966cadffa3c58521bdc2776d11259161940236fc3f7f0de63de0e"
+          },
+          "details": "AST and 1/45 selected repository guards passed. Types: no TypeScript workspace changed; tests: no test files named in brief; lint: no source file changed. The inherited gate path union mentions the accepted library report, whose working-tree bytes remain unchanged. No implementation type/test suite was rerun by this report-only gate."
+        }
+      ],
+      "finalization": "Receipt metadata appended after the passing sequence. Final Task report-integrity and docs:check run before commit and are reported in the worker handoff. Only this new review key changes; all earlier report values, test-source bytes and historical failures are preserved."
+    }
+  }
+}

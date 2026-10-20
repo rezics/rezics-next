@@ -80,9 +80,9 @@ function sourceCredit(notice: string): { name: string; href: string | null } {
   return { name: new URL(href).hostname.replace(/^www\./, ''), href };
 }
 
-function SourceCredit({ notice, label }: { notice: string; label: string }) {
+function SourceCredit({ notice, label, linkedSourceHref }: { notice: string; label: string; linkedSourceHref?: string }) {
   const credit = sourceCredit(notice);
-  const name = credit.href
+  const name = credit.href && credit.href !== linkedSourceHref
     ? <a href={credit.href} rel="noreferrer noopener" className={linkClass}>{credit.name}</a>
     : credit.name;
   return <span>{label}{name}</span>;
@@ -123,11 +123,12 @@ function LicenceLink({ instrument, copy }: { instrument: string; copy: RightsMar
  * licence, then a short note for every other duty. A recorded notice on those
  * duties stays, because notice retention is the notice itself.
  */
-function markPieces(rights: Assessed, copy: RightsMarkCopy): ReactNode[] {
+function markPieces(rights: Assessed, copy: RightsMarkCopy, linkedSourceHref?: string): ReactNode[] {
   const pieces: ReactNode[] = [];
   for (const [index, item] of rights.obligations.entries()) {
     const notice = item.kind === 'attribution' ? item.notice?.trim() : '';
-    if (notice) pieces.push(<SourceCredit key={`attribution-${index}`} notice={notice} label={copy.source} />);
+    if (notice) pieces.push(<SourceCredit key={`attribution-${index}`} notice={notice} label={copy.source}
+      linkedSourceHref={linkedSourceHref} />);
   }
   const instruments = [rights.instrument, ...rights.obligations.map(item => item.instrument)]
     .filter((instrument): instrument is string => Boolean(instrument));
@@ -187,9 +188,13 @@ export function rightsRuns<T>(items: readonly T[], rightsOf: (item: T) => Displa
  * The source's credit and licence, and nothing when the read is unassessed.
  * The mark does not decide rights; it shows the read.
  */
-export function RightsMark({ rights, locale = 'en' }: { rights: DisplayObligations; locale?: UiLocale }) {
+export function RightsMark({ rights, locale = 'en', linkedSourceHref }: {
+  rights: DisplayObligations; locale?: UiLocale;
+  /** A preceding publication link owns this address; retain every credit and duty as text. */
+  linkedSourceHref?: string;
+}) {
   if (rights.status !== 'assessed') return null;
-  const pieces = markPieces(rights, messages[locale]);
+  const pieces = markPieces(rights, messages[locale], linkedSourceHref ? httpUrl(linkedSourceHref)?.href : undefined);
   if (!pieces.length) return null;
   return <p data-rights-mark dir="auto"
     className="min-w-0 max-w-3xl text-pretty text-muted-foreground text-xs/5 [overflow-wrap:anywhere]">

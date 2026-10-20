@@ -167,6 +167,7 @@ export async function goalMeasures(ledger: Ledger, options: MeasureOptions = {})
         const kind = attempt.continuedFor === 'capacity' ? 'capacityRetry'
           : attempt.continuedFor === 'transport' ? 'transportRetry' : attempt.continuedFor === 'handoff' ? 'handoffRetry' : index === 0 ? 'first'
           : attempt.continuedFor === 'job' || wakes.has(attempt.n) || priorResult === 'parked' ? 'jobWake'
+          : attempt.resumeClass === 'sameScope' ? 'fixRound'
           : attempt.resumeClass ?? (!refusedBeforeResume && priorResult === 'partial' ? 'stepResume' : 'fixRound');
         const wakeResult = attempt.jobResult ?? wakes.get(attempt.n) ?? 'unclassified';
         // Legacy handoffs cannot establish a failure class; retain their conservative fix count visibly.

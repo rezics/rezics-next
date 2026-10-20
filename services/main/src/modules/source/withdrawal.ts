@@ -6,6 +6,9 @@ import { checkedFieldEvidence, checkedFieldNativeValue,
   fieldAttachmentEvidenceSql } from './support-attach.ts';
 import { readNativeFieldReceipt, synopsisSlot } from './field-control-native.ts';
 import { hash, GRAPHS, RV, iri as graphIri } from '../work/activate.ts';
+import type { SourceRetainedFieldSupportStore } from './field-support-retained.ts';
+import { SYNOPSIS_TEXT_LIMIT } from './field-control-language.ts';
+import type { VerifiedPrincipal } from '../access/admission.ts';
 
 export class FieldWithdrawalInvalid extends Error {}
 export class FieldWithdrawalConflict extends Error {}
@@ -96,7 +99,8 @@ function result(row: SupportRow): FieldSupportResult {
 
 /** One primary-key row lock, bounded joins and one immutable insert per support. */
 export class SourceFieldWithdrawalStore {
-  constructor(private readonly pool: Pool, private readonly env?: WorkActivationEnvironment) {}
+  constructor(private readonly pool: Pool, private readonly env?: WorkActivationEnvironment,
+    private readonly retained?: Pick<SourceRetainedFieldSupportStore, 'read'>) {}
 
   /** Locate legacy native supports by their immutable owner key, never by a provider alias. */
   async locateNative(principalId: string, support: string): Promise<{
@@ -110,9 +114,11 @@ export class SourceFieldWithdrawalStore {
     return rows[0] ?? null;
   }
 
-  async read(principalId: string, support: string): Promise<FieldSupportResult | null> {
+  async read(principalId: string, support: string, principal?: VerifiedPrincipal): Promise<FieldSupportResult | null> {
     const supportId = id(support);
     if (!UUID.test(principalId) || !supportId) throw new FieldWithdrawalInvalid('invalid support identity');
+    const retained = await this.retained?.read(principalId,supportId,undefined,principal);
+    if (retained) return retained;
     const row = (await this.pool.query<SupportRow>(readSql, [supportId, principalId])).rows[0];
     if (!row) return null;
     const value = result(row);
@@ -176,7 +182,7 @@ export class SourceFieldWithdrawalStore {
       const exact = await this.env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?value WHERE {
         GRAPH ${graphIri(GRAPHS.revisions)} { ${graphIri(row.native_revision)} a rv:EditorialFieldRevision ;
           rv:component ${graphIri(slot)} ; rv:fieldValue ?value ; rv:rightsStatus rv:Undetermined . }
-      } LIMIT 2`, 8192);
+      } LIMIT 2`, SYNOPSIS_TEXT_LIMIT * 8 + 16_384);
       const values = exact.results?.bindings ?? [];
       if (values.length !== 1 || !values[0]?.value
         || hash(JSON.stringify(values[0].value.value)) !== row.value_digest) {

@@ -51,10 +51,11 @@ import { WorkAbout } from './work-header.tsx';
 import { readOwnWorkShowcase, readShowcaseImages } from '../api/showcase.ts';
 import { workShowcaseHeader } from '../showcase/work-header.tsx';
 import { WorkTypeSections } from '../zones/work-sections.tsx';
-import { AboutFacts, Availability, DiscussionHub, Parts, PrimaryAction, Status } from './hub-sections.tsx';
+import { AboutFacts, Availability, DiscussionHub, Parts, PrimaryAction, readWorkFacts, Status } from './hub-sections.tsx';
+import type { DisplayObligations } from '../rights-mark/rights-mark.tsx';
 import { type HubSection, hubLabels, hubPlan } from './hub.ts';
 import { WikiSection, WikiShortcut } from './wiki-server.tsx';
-import { readEntityProjection } from '../entity-page/read.ts';
+import { readCurrentWorkProjection } from './current-projection.ts';
 import { showsEditionStatus, type WorkExperience, workExperience } from '../entity-page/experience.ts';
 import { shelfWords } from './shelf-words.ts';
 import { WorkKindActions } from './types/actions.tsx';
@@ -97,6 +98,7 @@ async function recipePageHost(): Promise<RecipeWorkHost> {
     publicFetch: anonymousShowcaseFetch as typeof fetch,
     actingSubject: actingSubject ?? null,
     signedIn,
+    pageUrl: (await headers()).get('x-rezics-page-url'),
   };
 }
 
@@ -189,42 +191,51 @@ async function RatingLineSlot({ id, experience, locale, messages, client }: Comm
  * type section is left out.
  */
 export const readExperience = async (id: string, types: readonly string[], client?: WorkPageClient): Promise<WorkExperience> => {
-  const page = await readEntityProjection(id, undefined, client);
+  const page = await readCurrentWorkProjection(id, client);
   return workExperience(page.ok ? page.data : null, types);
 };
 
 /** A type's own action (cook, copy, install), or for cover-led Works the one primary action the hub leads with. */
 async function ReadSlot({ workRef, id, work, experience, locale, messages, client }: Common & { workRef: WorkAt; id: string;
   work: Header; experience: WorkExperience }) {
-  if (experience.kind === 'book') {
+  if (experience.kind === 'book' || showsEditionStatus(experience)) {
     return PrimaryAction({ workRef, id, work, locale, messages, client });
+  }
+  if (experience.kind === 'guide') {
+    const text = await readText(work.mainVersion, work.selectedLanguage ?? undefined);
+    if (!text.ok || !text.data.body.trim()) return null;
   }
   const hub = experience.typeSection && experience.kind !== 'recipe' ? await readHubWorkPage(experience.typeSection.href)
     : null;
-  return <WorkKindActions kind={experience.kind} workId={work.id} title={work.title.value} locale={locale}
+  return <WorkKindActions kind={experience.kind} workId={work.id} workRef={workRef} title={work.title.value} locale={locale}
     messages={messages} hubText={hub?.ok ? hub.data?.content ?? null : null}
     words={shelfWords(experience, messages)} />;
 }
 
 /** The hub sections the Work's projection binds, in the documented order. */
 export const readHubPlan = async (id: string, client?: WorkPageClient): Promise<readonly HubSection[]> => {
-  const page = await readEntityProjection(id, undefined, client);
+  const page = await readCurrentWorkProjection(id, client);
   return hubPlan(page.ok ? page.data : null);
 };
 
 /** Header and tabs around every Work view; credits and the rating summary stream in on their own. */
-export async function WorkFrameView({ workRef, id, work, locale, messages, lead, children, client, readerActions, relationships }: Common & {
+export async function WorkFrameView({ workRef, id, work, locale, messages, lead, children, sources, factObligations, client, readerActions, relationships }: Common & {
   workRef: WorkAt; id: string; work: Header; children: ReactNode;
+  sources?: ReactNode;
+  factObligations?: readonly DisplayObligations[];
   readerActions?: ReaderActions; relationships?: RelationshipsApi;
   /** The sections a Zone's page leads with (`ZonePackage.hubOrder`). */
   lead?: readonly HubSection[];
 }) {
   const experience = await readExperience(id, work.types, client);
   if (experience.kind === 'recipe') {
-    return recipeWorkFrame({ host: await recipePageHost(), workRef, id, work, locale, messages, children });
+    return recipeWorkFrame({ host: await recipePageHost(), workRef, id, work, locale, messages, children, sources,
+      factObligations, readerActions, relationships });
   }
-  const [{ signedIn, actingSubject }, { avatarQuery }, seed, ratings, plan, art, showcaseMessages] = await Promise.all([
-    readingAgent(client), (client ?? browseReader()), animeReaderState(id, client), readRatings(id, EVERYONE, undefined, client),
+  const agent = readingAgent(client);
+  const [{ signedIn, actingSubject }, { avatarQuery }, seed, ratings, plan, art, showcaseMessages, facts] = await Promise.all([
+    agent, (client ?? browseReader()), animeReaderState(id, client),
+    agent.then(viewer => viewer.signedIn ? readRatings(id, EVERYONE, undefined, client) : null),
     readHubPlan(id, client),
     // One batch for the page, so the art costs one round trip however many layers it has, and one for
     // the header's images, so they are drawn (or masked) in the server's HTML.
@@ -232,12 +243,13 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, lead,
       const item = art.get(work.id);
       return { item, images: item ? await readShowcaseImages(item.images.flatMap(image =>
         image.role === 'cutout' ? [] : [image.url])) : {} };
-    }), getMessages('showcase', locale)]);
+    }), getMessages('showcase', locale), readWorkFacts(id, locale, client)]);
   // The stars answer everyone's first rating question for the Main Version shown, as the summary above them does.
-  const context = ratings.ok ? ratings.data.context : null;
+  const context = ratings?.ok ? ratings.data.context : null;
   const ratingTarget = context ? { work: work.id, context: context.context, mainVersion: work.mainVersion,
     max: context.scale.max } : null;
   return <WorkFrame workRef={workRef} work={work} experience={experience} locale={locale} messages={messages} signedIn={signedIn}
+    statementSources={facts.page} sourceLabels={facts.labels} factObligations={factObligations}
     showcase={workShowcaseHeader(art.item, showcaseMessages, art.images)}
     actingSubject={seed ? actingSubject : null} readerSeed={seed ?? undefined} ratingTarget={ratingTarget} readerActions={readerActions} relationships={relationships}
     signInHref={signInPath(localizedPath(workHref(workRef), locale))} avatarQuery={avatarQuery}
@@ -246,6 +258,15 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, lead,
     credits={<Suspense fallback={<WorkCreditsSkeleton label={messages.loadingRegion} />}>
       {(client ? Credits({ id, work, locale, messages, client }) : <Credits id={id} work={work} locale={locale} messages={messages} />)}</Suspense>}
     ratingLine={<Suspense fallback={null}>{(client ? RatingLineSlot({ id, experience, locale, messages, client }) : <RatingLineSlot id={id} experience={experience} locale={locale} messages={messages} />)}</Suspense>}
+    sources={<>
+      {sources}
+      <Suspense fallback={null}>{client ? AboutFacts({ id, locale, messages, client })
+        : <AboutFacts id={id} locale={locale} messages={messages} />}</Suspense>
+      <Suspense fallback={<WorkRecord work={work} locale={locale} messages={messages} />}>
+        {client ? Record({ id, workRef, work, locale, messages, client })
+          : <Record id={id} workRef={workRef} work={work} locale={locale} messages={messages} />}
+      </Suspense>
+    </>}
     sections={hubLabels(messages, plan, lead)}
     readAction={<Suspense fallback={experience.kind === 'book'
       ? <ReadButton workRef={workRef} start={{ kind: 'contents' }} messages={messages} /> : null}>
@@ -382,13 +403,19 @@ async function Adoption(props: ScopedProps) {
 }
 
 /** The Work's recipe, prompt, skill or guide, laid out from the section its projection listed. */
-export async function TypeExperience({ id, work, experience, locale, messages }: Common & { id: string; work: Header;
+export async function TypeExperience({ id, work, experience, locale, messages, client }: Common & { id: string; work: Header;
   experience: WorkExperience }) {
   const section = experience.typeSection;
   if (experience.kind === 'recipe' && section) {
     return recipeRegion({ host: await recipePageHost(), id, work, href: section.href, locale, messages });
   }
-  if ((experience.kind === 'prompt' || experience.kind === 'skill') && section) {
+  if (experience.kind === 'prompt' || experience.kind === 'skill') {
+    if (!section) {
+      if (!operationOpen('getV1HubWorksById', await readPlatformAccess(client))) return null;
+      const projection = await readCurrentWorkProjection(id, client);
+      return <RegionFailure title={messages.hubUnavailable} failure={projection.ok ? 'unavailable' : projection.failure}
+        messages={messages} />;
+    }
     const hub = await readHubWorkPage(section.href);
     if (!hub) return null;
     if (!hub.ok) return <RegionFailure title={messages.hubUnavailable} failure={hub.failure} messages={messages} />;
@@ -428,10 +455,9 @@ export async function WorkOverview({ workRef, id, work, scope, context, locale, 
     type={experience.kind === 'prompt' || experience.kind === 'skill'
       ? operationOpen('getV1HubWorksById', access) ? <Suspense fallback={<RegionSkeleton
         id="work-type-loading" title={work.title.value} label={loading} lines={5} />}>
-        <TypeExperience id={id} work={work} experience={experience} locale={locale} messages={messages} /></Suspense> : null
+        <TypeExperience id={id} work={work} experience={experience} locale={locale} messages={messages} client={client} /></Suspense> : null
       : experience.kind === 'book' || experience.kind === 'plain' ? null : specialist}
     about={<WorkAbout work={work} locale={locale} messages={messages} />}
-    facts={<Suspense fallback={null}>{plan.includes('about') ? (client ? AboutFacts(common) : <AboutFacts {...common} />) : null}</Suspense>}
     availability={<>
       <Suspense fallback={<RegionSkeleton id="work-availability-loading" title={t.sectionAvailability} label={loading}
         lines={4} />}>
@@ -466,8 +492,7 @@ export async function WorkOverview({ workRef, id, work, scope, context, locale, 
       label={loading} lines={2} />}>
       {plan.includes('discussion') ? (client ? Adoption({ workRef, id, scope, locale, messages, client }) : <Adoption workRef={workRef} id={id} scope={scope} locale={locale} messages={messages} />) : null}
     </Suspense> : null}
-    record={<Suspense fallback={<WorkRecord work={work} locale={locale} messages={messages} />}>
-      {(client ? Record({ id, workRef, work, locale, messages, client }) : <Record id={id} workRef={workRef} work={work} locale={locale} messages={messages} />)}</Suspense>}
+    record={null}
     alsoEnjoyed={<Suspense fallback={null}>
       {plan.includes('lists') ? (client ? AlsoEnjoyed({ id, work, locale, messages, client }) : <AlsoEnjoyed id={id} work={work} locale={locale} messages={messages} />) : null}</Suspense>}
     author={<Suspense fallback={null}>{plan.includes('lists') ? (client ? Author({ id, locale, messages, client }) : <Author id={id} locale={locale} messages={messages} />) : null}</Suspense>} />;

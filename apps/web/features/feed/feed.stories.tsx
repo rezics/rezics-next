@@ -2,6 +2,8 @@ import { profileHref } from '../profile/route.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { spaceHref, threadHref } from '../address/path.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Button } from '@rezics/ui/button';
+import { useState } from 'react';
 import { expect, screen, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
 import { fixtureFollow, memoryRelationships } from '../relationships/fixtures.ts';
@@ -39,6 +41,7 @@ interface Args {
   query?: FeedQuery;
   api?: MemoryFeed;
   signedIn?: boolean;
+  actingSubject?: string | null;
   tab?: FeedTab;
   followedRealms?: string[] | null;
   locale?: UiLocale;
@@ -53,6 +56,7 @@ function Feed({
   query = { scope: 'following', sort: 'best' },
   api = memoryFeed(),
   signedIn = true,
+  actingSubject = signedIn ? storyId(801, 'bbbb') : null,
   tab = 'following',
   followedRealms = [realms.fiction.id],
   locale = 'en',
@@ -64,7 +68,7 @@ function Feed({
       messages={locale === 'zh-Hans' ? { ...messages, ...zhHans } : messages}
       now={NOW}
       signedIn={signedIn}
-      actingSubject={signedIn ? storyId(801, 'bbbb') : null}
+      actingSubject={actingSubject}
       signInHref={signInHref}
       avatarQuery=""
       tab={tab}
@@ -81,7 +85,7 @@ function Feed({
           <section aria-label="Posts">
             <FeedList
               initial={initial}
-              query={query}
+              query={{ ...query, ...(actingSubject ? { actingSubject } : {}) }}
               allHref="/en?tab=all"
               headInterval={headInterval}
               empty={<p>Nothing here</p>}
@@ -130,7 +134,7 @@ export const EveryKind: Story = {
       'href',
       expect.stringMatching(/^\/en\/w\/.+\/read\//),
     );
-    await expect(within(serial).getByRole('link', { name: '41 comments' })).toBeVisible();
+    await expect(within(serial).getByRole('link', { name: '41 (41 comments)' })).toBeVisible();
 
     // Past the reader's position, a chapter's text stays hidden.
     const behind = article(canvas, 'Chapter 58');
@@ -139,7 +143,7 @@ export const EveryKind: Story = {
 
     // Counts Main cannot prove exactly say "at least"; big scores are compact.
     const novel = article(canvas, 'Middlemarch: A Study of Provincial Life');
-    await expect(within(novel).getByRole('link', { name: '64+ comments' })).toBeVisible();
+    await expect(within(novel).getByRole('link', { name: '64+ (64+ comments)' })).toBeVisible();
     await expect(within(novel).getByLabelText('1,830 points')).toHaveTextContent('1.8K');
 
     // Each kind's own action.
@@ -288,7 +292,7 @@ export const Discussions: Story = {
     await expect(
       within(bennet).getByRole('link', { name: /^Pride and Prejudice/ }),
     ).toHaveAttribute('href', expect.stringMatching(/^\/en\/w\//));
-    await expect(within(bennet).getByRole('link', { name: '17 comments' })).toHaveAttribute(
+    await expect(within(bennet).getByRole('link', { name: '17 (17 comments)' })).toHaveAttribute(
       'href',
       `${thread}#comments`,
     );
@@ -701,6 +705,230 @@ export const CursorMoved: Story = {
     await expect(within(alert).getByRole('button', { name: 'Refresh' })).toBeVisible();
     await expect(canvas.getAllByRole('article')).toHaveLength(2);
   },
+};
+
+interface RecoveryFeed extends MemoryFeed {
+  release(): void;
+  queries: FeedQuery[];
+}
+
+/** The router stand-in never returns RSC: a client recovery must finish on its own. */
+function recoveryFeed(change: 'reviews' | 'personal', unavailable = false): RecoveryFeed {
+  let release = () => {};
+  const ready = new Promise<void>(resolve => { release = resolve; });
+  const api = memoryFeed() as RecoveryFeed;
+  api.release = release;
+  api.queries = [];
+  api.page = async query => {
+    api.calls.push(`page:${query.cursor ?? ''}`);
+    api.queries.push(query);
+    if (query.cursor === 'old') return { ok: false, failure: 'moved', status: 409 };
+    const fresh = page(query.cursor ? [post(2), post(3)] : [post(2)],
+      { nextCursor: query.cursor ? null : 'fresh' });
+    if (change === 'reviews') fresh.projection.reviewSequence = '8';
+    if (!query.cursor) await ready;
+    if (unavailable) return { ok: false, failure: 'unavailable', status: 503 };
+    return { ok: true, data: fresh };
+  };
+  return api;
+}
+
+async function recoverOnce(canvasElement: HTMLElement, api: RecoveryFeed, chinese = false, keyboard = false) {
+  const canvas = within(canvasElement);
+  const before = window.location.href;
+  const alert = await canvas.findByRole('alert');
+  await expect(alert).toHaveTextContent(chinese ? '你浏览时动态有了变化' : 'The feed changed while you were reading');
+  const refresh = within(alert).getByRole('button', { name: chinese ? '刷新' : 'Refresh' });
+  if (keyboard) {
+    refresh.focus();
+    await expect(refresh).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+  } else await userEvent.click(refresh);
+  await waitFor(() => expect(api.queries.filter(query => !query.cursor)).toHaveLength(1));
+  await expect(canvas.queryByRole('alert')).toBeNull();
+  const status = canvas.getByText(chinese ? '正在刷新动态…' : 'Refreshing posts…', { exact: true });
+  await expect(status).toHaveAttribute('role', 'status');
+  await expect(status).toHaveTextContent(chinese ? '正在刷新动态' : 'Refreshing posts');
+  const recoveryFocus = document.activeElement as HTMLElement;
+  if (keyboard) {
+    await expect(recoveryFocus).not.toBe(document.body);
+    await expect(recoveryFocus).toHaveAccessibleName(chinese ? '动态列表' : 'Posts');
+    await expect(recoveryFocus).toContainElement(status);
+  }
+  await expect(canvas.getByRole('feed')).toHaveAttribute('aria-busy', 'true');
+  api.release();
+  await waitFor(() => expect(canvas.getAllByRole('article')).toHaveLength(2));
+  await expect(canvas.queryByRole('article', { name: 'Work 1' })).toBeNull();
+  await expect(canvas.getByRole('article', { name: 'Work 2' })).toBeVisible();
+  await expect(canvas.getByRole('article', { name: 'Work 3' })).toBeVisible();
+  await expect(api.queries.map(query => query.cursor ?? '')).toEqual(['old', '', 'fresh']);
+  for (const query of api.queries) await expect(query.contentLanguages).toEqual(['en']);
+  await expect(window.location.href).toBe(before);
+  await expect(canvas.queryByRole('alert')).toBeNull();
+  if (keyboard) {
+    await expect(recoveryFocus).toHaveFocus();
+    await expect(recoveryFocus).toContainElement(canvas.getByRole('article', { name: 'Work 3' }));
+  }
+}
+
+export const RecoverChangedReviewsAtSameSequence: Story = {
+  globals: { viewport: { value: 'desktop1440' } },
+  args: {
+    initial: { ok: true, data: page([post(1)], { nextCursor: 'old' }) },
+    query: { scope: 'following', sort: 'best', contentLanguages: ['en'] },
+    api: recoveryFeed('reviews'),
+  },
+  parameters: { route: { pathname: '/en', search: '?lang=en' } },
+  async play({ canvasElement, args }) { await recoverOnce(canvasElement, args.api as RecoveryFeed); },
+};
+
+export const RecoverChangedPersonalConditionsAtSameSequence: Story = {
+  globals: RecoverChangedReviewsAtSameSequence.globals,
+  args: { ...RecoverChangedReviewsAtSameSequence.args, api: recoveryFeed('personal') },
+  parameters: RecoverChangedReviewsAtSameSequence.parameters,
+  async play({ canvasElement, args }) { await recoverOnce(canvasElement, args.api as RecoveryFeed); },
+};
+
+export const RecoverPublicFallbackChinese: Story = {
+  args: {
+    ...RecoverChangedReviewsAtSameSequence.args,
+    query: { scope: 'all', sort: 'best', contentLanguages: ['en'] },
+    locale: 'zh-Hans', signedIn: true, actingSubject: null, tab: 'all', api: recoveryFeed('personal'),
+  },
+  globals: { locale: 'zh-Hans', viewport: { value: 'phone' }, theme: 'dark' },
+  parameters: { route: { pathname: '/zh-Hans', search: '?lang=en' } },
+  async play({ canvasElement, args }) { await recoverOnce(canvasElement, args.api as RecoveryFeed, true); },
+};
+
+export const KeyboardRecoveryFocus: Story = {
+  ...RecoverChangedPersonalConditionsAtSameSequence,
+  args: { ...RecoverChangedPersonalConditionsAtSameSequence.args, api: recoveryFeed('personal') },
+  async play({ canvasElement, args }) {
+    await recoverOnce(canvasElement, args.api as RecoveryFeed, false, true);
+  },
+};
+
+/** A failed first page also replaces its Refresh control, while keeping the reader's focus. */
+export const KeyboardRecoveryFailure: Story = {
+  globals: RecoverChangedReviewsAtSameSequence.globals,
+  args: {
+    ...RecoverChangedReviewsAtSameSequence.args,
+    initial: { ok: false, failure: 'moved', status: 409 },
+    api: recoveryFeed('personal', true),
+  },
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement);
+    const refresh = within(canvas.getByRole('alert')).getByRole('button', { name: 'Refresh' });
+    refresh.focus();
+    await expect(refresh).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    const status = await canvas.findByText('Refreshing posts…', { exact: true });
+    const recoveryFocus = document.activeElement as HTMLElement;
+    await expect(recoveryFocus).not.toBe(document.body);
+    await expect(recoveryFocus).toHaveAccessibleName('Posts');
+    await expect(recoveryFocus).toContainElement(status);
+    await expect(canvas.queryByRole('alert')).toBeNull();
+    (args.api as RecoveryFeed).release();
+    const failure = await canvas.findByRole('alert');
+    await expect(failure).not.toHaveTextContent('The feed changed');
+    await expect(within(failure).getByRole('button', { name: 'Try again' })).toBeVisible();
+    await expect(recoveryFocus).toHaveFocus();
+    await expect(recoveryFocus).toContainElement(failure);
+    await expect((args.api as RecoveryFeed).queries.map(query => query.cursor ?? '')).toEqual(['']);
+  },
+};
+
+export const InvalidRequestIsNotFeedMovement: Story = {
+  args: { initial: { ok: false, failure: 'invalid', status: 400 } },
+  async play({ canvasElement }) {
+    const alert = within(canvasElement).getByRole('alert');
+    await expect(alert).not.toHaveTextContent('The feed changed');
+    await expect(within(alert).getByRole('button', { name: 'Try again' })).toBeVisible();
+  },
+};
+
+export const ExpiredFeedSession: Story = {
+  args: { initial: { ok: false, failure: 'sign-in', status: 401 } },
+  async play({ canvasElement }) {
+    const status = within(canvasElement).getByRole('status');
+    await expect(status).toHaveTextContent('Your session may have ended');
+    await expect(within(status).getByRole('link', { name: 'Sign in' })).toBeVisible();
+    await expect(status).not.toHaveTextContent('The feed changed');
+  },
+};
+
+export const FeedPermissionDenied: Story = {
+  args: { initial: { ok: false, failure: 'unavailable', status: 403 } },
+  async play({ canvasElement }) {
+    const status = within(canvasElement).getByRole('status');
+    await expect(status).toHaveTextContent('You don’t have access to this feed');
+    await expect(within(status).queryByRole('link', { name: 'Sign in' })).toBeNull();
+    await expect(status).not.toHaveTextContent('The feed changed');
+  },
+};
+
+function ServerRefresh(args: Args) {
+  const [initial, setInitial] = useState(args.initial);
+  return <>
+    <Button onClick={() => {
+      const refreshed = page([post(2)], { nextCursor: 'fresh' });
+      refreshed.projection.reviewSequence = '8';
+      setInitial({ ok: true, data: refreshed });
+    }}>Deliver server response</Button>
+    <Feed {...args} initial={initial} />
+  </>;
+}
+
+export const ServerResponseAtSameSequence: Story = {
+  args: {
+    ...RecoverChangedReviewsAtSameSequence.args,
+    api: memoryFeed({ pages: { old: { ok: false, failure: 'moved', status: 409 },
+      fresh: { ok: true, data: page([post(2), post(3)]) } } }),
+  },
+  render: args => <ServerRefresh {...args} />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('alert');
+    await userEvent.click(canvas.getByRole('button', { name: 'Deliver server response' }));
+    await waitFor(() => expect(canvas.getAllByRole('article')).toHaveLength(2));
+    await expect(canvas.queryByRole('alert')).toBeNull();
+    await expect(canvas.queryByRole('article', { name: 'Work 1' })).toBeNull();
+  },
+};
+
+const previewSamples = [
+  post(31, { card: { kind: 'recipe' }, target: {
+    title: { ...post(31).target.title, value: '25. Minestra di mattoncini di ricotta' },
+    excerpt: '25. Minestra di mattoncini di ricotta Ingredients Ricotta, eggs and broth.',
+  } }),
+  post(32, { target: { title: { ...post(32).target.title, value: 'Middlemarch' },
+    excerpt: 'Middlemarch\nA study of provincial life.' } }),
+  post(33, { target: { title: { ...post(33).target.title, value: 'Reading guide' },
+    excerpt: 'Reading guide: Compare the two narrators.' } }),
+  post(34, { card: { kind: 'recipe', totalTime: '35 min', servings: 'Serves 4' }, target: {
+    title: { ...post(34).target.title, value: 'Soup for four' }, excerpt: 'Soup for four\nIngredients',
+  } }),
+];
+
+export const UsefulWorkPreviews: Story = {
+  globals: { viewport: { value: 'desktop1440' } },
+  args: { initial: { ok: true, data: page(previewSamples, { scope: 'all' }) },
+    query: { scope: 'all', sort: 'best' }, signedIn: false, tab: 'all' },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(within(article(canvas, '25. Minestra di mattoncini di ricotta'))
+      .getByText('Ricotta, eggs and broth.', { exact: true })).toBeVisible();
+    await expect(within(article(canvas, 'Middlemarch')).getByText('A study of provincial life.', { exact: true })).toBeVisible();
+    await expect(within(article(canvas, 'Reading guide')).getByText('Compare the two narrators.', { exact: true })).toBeVisible();
+    const factsOnly = article(canvas, 'Soup for four');
+    await expect(factsOnly).toHaveTextContent('35 min · Serves 4');
+    await expect(factsOnly).not.toHaveTextContent('Ingredients');
+  },
+};
+
+export const UsefulWorkPreviewsPhone: Story = {
+  ...UsefulWorkPreviews,
+  globals: { viewport: { value: 'phone' }, theme: 'dark' },
 };
 
 /** The first page failed: in words, with the one fix. */

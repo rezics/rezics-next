@@ -1,0 +1,568 @@
+{
+  "format": "catalogue-original-A15-product-proof-v1",
+  "observedAt": "2026-10-19T15:12:12.648415+00:00",
+  "finding": "A15",
+  "scenario": "C23",
+  "status": "accepted-original-registry-class",
+  "originalAuthority": [
+    {
+      "path": ".temp/catalogue-audit-20261018/02-findings-and-capability-matrix.md:27",
+      "assertion": "Preserved descriptive types must bind their entity page registry rather than fall back to Resource."
+    },
+    {
+      "path": ".temp/catalogue-audit-20261018/03-acceptance-and-investigation-backlog.md:44",
+      "assertion": "Open people, organizations, terms, publication events, source datasets and music entities; preserved type/correct registry; recognizable subject and suitable information groups at1440/390."
+    }
+  ],
+  "scopeDecision": {
+    "basis": "Original A15 is the missing descriptive registry class, distinct from C24 field/image richness and C25 inverse graph. All six descriptive families, Character control and two MusicBrainz representatives are covered; original27 is the historical observed sample, not a mandatory fresh27/provider census.",
+    "groupAssessment": "The actual retained records contain identity and public URL facts only. Both widths provide named typed subjects and readable provider/key identity with genuine links under Sources and licenses, without raw provider JSON. These are suitable groups for the available descriptive record. This does not accept additional domain fields, specialized layouts, provenance completeness or the other open classes.",
+    "callbackProvenance": "The dedicated C23 tests translate the original literal scenario; they are not an originally existing byte-exact dedicated callback. Frozen original publicSubject/layout helper bodies and selected translated assertions were unchanged during this execution. Full supporting-information14journeys was not a prerequisite or executed claim.",
+    "cardConsistency": "No new rendered card journey is claimed. Existing original related C1 assertion remains preserved; independent source review covers registry consumers and original single-descriptive-type semantics. Current API and details use the same registered semantic type; wider mixed-type cross-surface tie behavior remains the explicitly recorded pre-existing observation."
+  },
+  "code": {
+    "registryMain": "df431",
+    "candidate": "661d0484a7ed65c30bcfd15506a79a00fceffd29",
+    "independentReview": "d46a9",
+    "review": {
+      "path": "docs/goals/audit-remediation-20261019/proofs/catalogue-supporting-registry-review.json",
+      "sha256": "9080de934c3808d1096925b7b2eacb3514bb82df858b37d64cb05e7aef6d8429",
+      "bytes": 51679
+    },
+    "headerMain": "58454cf4c0",
+    "frozenFrontend": "caecadc10a37b36daaf03773282b47183673ee89",
+    "actualMainAtAcceptance": "eade69c812b1d0c797726f6653e8d5d0a44be94e",
+    "frontendCompatibility": {
+      "path": ".temp/audit-remediation-20261019/two-hour-sprint/catalogue-C23-current-main-compatibility.json",
+      "sha256": "e3d430fb062d6f7281b10fc24b48303119ef7111e5ea54fd2b3dcf7360ef8485",
+      "bytes": 46995
+    },
+    "backendCompatibility": "The backend remains the disclosed genuine G2791 runtime product4a616b079a364b8f5ac7fe4d4ff56bc99849e766 plus executionb75d06d70509ac852e2b9cdef807a8c8e95ec702/support1f1032cc60369a69bb07695b1b37e6a409c0ac56/runtimefixb8ec0159dfd3b4f38d210bead790757222f8871f. Registry and selected owner read contract are explicitly qualified; no byte-identical whole-main backend claim."
+  },
+  "actualProof": {
+    "launcher": {
+      "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/launcher-receipt.json",
+      "sha256": "8287d5294db2fba04c077f31fbcdea2127a78113728a925f49a5386d7dbf5ed3",
+      "bytes": 20774
+    },
+    "task": "GOAL_ID=audit-remediation-20261019 task -t .temp/c23-current-eight/Taskfile.yml run:ui",
+    "cwd": ".temp/worktrees/g-2758",
+    "nestedBrowser": {
+      "startTime": "2026-10-19T15:00:44.041Z",
+      "duration": 139827.087,
+      "expected": 2,
+      "skipped": 0,
+      "unexpected": 0,
+      "flaky": 0
+    },
+    "browserExit": 0,
+    "viewportObservations": 16,
+    "screenshotsRootViewed": 16,
+    "nativePrerequisiteGets": 16,
+    "nativePrerequisiteStatuses": [
+      200
+    ],
+    "actualBrowserNativeReads": "Each publicSubject callback independently reads genuine page API200, exact reference, registry type and available summary. No mocked page/API payload.",
+    "apiReuse": {
+      "path": ".temp/audit-remediation-20261019/two-hour-sprint/trace/a15-c23-carry-plan-v1/actual-api-pass.compact.json",
+      "sha256": "398534800dcb80c82a7f85006727328752e477b3a7a7883f5543b1bffa08dbfa",
+      "bytes": 19937
+    },
+    "apiReuseResult": "Actual six-control original API callback PASS:19GET200,1type registry+6nativepages+12statementpages, exact cursors/identities/registered labels and no Agent/Release promotion. Current8 browser observations add actual music Person/PublicationEvent nativepage200 and rendered identities; no new full8APIcallback claimed.",
+    "independentRegistryReuse": "G2849 actual4tests443assertions covers original27 retained semantic selections,19correctedfallbacks/eightCharactercontrols, exactgeneratedclosure/36existingentries/41total, all8locale labels, unknown/cross-base/retired-row counterexamples. Source/API contract proof, not current27HTTP.",
+    "cells": [
+      {
+        "key": "character",
+        "width": 1440,
+        "resource": "https://rezics.com/id/01a15428-1cff-73aa-8190-cae713d2cd57",
+        "registryType": "https://rezics.com/vocab/Character",
+        "typeLabel": "Character",
+        "name": "衛宮 士郎",
+        "projection": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/character-1440/projection.json",
+          "sha256": "77068118c98570892de6b10b8aab4dd0e89d6c5038b7ae646e6a8c6120e93a93",
+          "bytes": 2605
+        },
+        "groups": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/character-1440/groups.json",
+          "sha256": "e25a46ab18c0f132083ff417427c06fd7fa3dddef8ed7d731a9c11897b4ae68c",
+          "bytes": 906
+        },
+        "layout": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/character-1440/original-layout.json",
+          "sha256": "df722e57afff7f4a13f224b27152f428cfbb6be8c837352bb7073ad6a827b3c1",
+          "bytes": 11038
+        },
+        "screenshot": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/character-1440/page.png",
+          "sha256": "06d8917b73d02c4c3393bdb4c08c72d3863560482a72359eb7109d73278deef9",
+          "bytes": 109610
+        },
+        "rootVisualReview": "PASS: named subject and correct descriptive label readable; genuine source identity/links grouped in Sources and licenses. Existing unavailable Relations followed by empty Relations is an A01 defect, not accepted as a complete inverse read."
+      },
+      {
+        "key": "character",
+        "width": 390,
+        "resource": "https://rezics.com/id/01a15428-1cff-73aa-8190-cae713d2cd57",
+        "registryType": "https://rezics.com/vocab/Character",
+        "typeLabel": "Character",
+        "name": "衛宮 士郎",
+        "projection": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/character-390/projection.json",
+          "sha256": "77068118c98570892de6b10b8aab4dd0e89d6c5038b7ae646e6a8c6120e93a93",
+          "bytes": 2605
+        },
+        "groups": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/character-390/groups.json",
+          "sha256": "e25a46ab18c0f132083ff417427c06fd7fa3dddef8ed7d731a9c11897b4ae68c",
+          "bytes": 906
+        },
+        "layout": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/character-390/original-layout.json",
+          "sha256": "9d9049a3a3c4c92c78533a3267310da2182e44fbe4b53b4646bfbc1e026739ed",
+          "bytes": 11003
+        },
+        "screenshot": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/character-390/page.png",
+          "sha256": "78e9b5a9352779af10ae4d80d8d5ee24bd284f6235e369072a7315041970dfa2",
+          "bytes": 93145
+        },
+        "rootVisualReview": "PASS: named subject and correct descriptive label readable; genuine source identity/links grouped in Sources and licenses. Existing unavailable Relations followed by empty Relations is an A01 defect, not accepted as a complete inverse read."
+      },
+      {
+        "key": "organization",
+        "width": 1440,
+        "resource": "https://rezics.com/id/01a15428-23b5-7609-928b-98e93cdfbdec",
+        "registryType": "https://schema.org/Organization",
+        "typeLabel": "Organization",
+        "name": "株式会社アニプレックス",
+        "projection": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/organization-1440/projection.json",
+          "sha256": "c169ceff63d9533bcda63e834af9329b429ff86f9da8660f86d3e8ccce5b0190",
+          "bytes": 2603
+        },
+        "groups": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/organization-1440/groups.json",
+          "sha256": "ca9d58f935ccc5f07f948c4b9df67903ec07c9f27f1854eaaaf9c8c3c517a5fe",
+          "bytes": 936
+        },
+        "layout": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/organization-1440/original-layout.json",
+          "sha256": "f29ac0816d5a3d775f7a26ca67095885a963fe83ba0ca68f295e43c1018004e0",
+          "bytes": 11269
+        },
+        "screenshot": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/organization-1440/page.png",
+          "sha256": "a49d988c85d8c01fdf28419d0cf0aeea22f4750960f3341c25c6c7e11f070bde",
+          "bytes": 117415
+        },
+        "rootVisualReview": "PASS: named subject and correct descriptive label readable; genuine source identity/links grouped in Sources and licenses. Existing unavailable Relations followed by empty Relations is an A01 defect, not accepted as a complete inverse read."
+      },
+      {
+        "key": "organization",
+        "width": 390,
+        "resource": "https://rezics.com/id/01a15428-23b5-7609-928b-98e93cdfbdec",
+        "registryType": "https://schema.org/Organization",
+        "typeLabel": "Organization",
+        "name": "株式会社アニプレックス",
+        "projection": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/organization-390/projection.json",
+          "sha256": "c169ceff63d9533bcda63e834af9329b429ff86f9da8660f86d3e8ccce5b0190",
+          "bytes": 2603
+        },
+        "groups": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/organization-390/groups.json",
+          "sha256": "ca9d58f935ccc5f07f948c4b9df67903ec07c9f27f1854eaaaf9c8c3c517a5fe",
+          "bytes": 936
+        },
+        "layout": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/organization-390/original-layout.json",
+          "sha256": "85d04f32fa8c2c6ea8ed172432a529e55543da3d4d01037b690e39e9a3d38e83",
+          "bytes": 11234
+        },
+        "screenshot": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/organization-390/page.png",
+          "sha256": "c8bd7d13867a7c057c047a8a3e4035a93435f6f40703a4adbae1d96370b2a018",
+          "bytes": 98700
+        },
+        "rootVisualReview": "PASS: named subject and correct descriptive label readable; genuine source identity/links grouped in Sources and licenses. Existing unavailable Relations followed by empty Relations is an A01 defect, not accepted as a complete inverse read."
+      },
+      {
+        "key": "publicationEvent",
+        "width": 1440,
+        "resource": "https://rezics.com/id/01a15428-2a74-7498-a901-448779139e8d",
+        "registryType": "https://schema.org/PublicationEvent",
+        "typeLabel": "Publication event",
+        "name": "Fate/stay night［Realta Nua］フェイト/ステイナイト［レアルタ・ヌア］extra edition",
+        "projection": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/publicationEvent-1440/projection.json",
+          "sha256": "2297fb548179aba895cb98baacddda6a7ceb428a434c0c3517ea299f47bf71ec",
+          "bytes": 2897
+        },
+        "groups": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/publicationEvent-1440/groups.json",
+          "sha256": "9dd6483240391b7bb260946a7da165f4cb1c7961dc42d06552ee86995ba5c9e5",
+          "bytes": 995
+        },
+        "layout": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/publicationEvent-1440/original-layout.json",
+          "sha256": "581cc1ce70a78482e27f468ac943c0b2907844e571f68ea2919a4fd414bf4c41",
+          "bytes": 11837
+        },
+        "screenshot": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/publicationEvent-1440/page.png",
+          "sha256": "2baa3737e7095a0e9373c93330e465a2b2857ff8a4df7a06e512545c0b34473d",
+          "bytes": 131151
+        },
+        "rootVisualReview": "PASS: named subject and correct descriptive label readable; genuine source identity/links grouped in Sources and licenses. Existing unavailable Relations followed by empty Relations is an A01 defect, not accepted as a complete inverse read."
+      },
+      {
+        "key": "publicationEvent",
+        "width": 390,
+        "resource": "https://rezics.com/id/01a15428-2a74-7498-a901-448779139e8d",
+        "registryType": "https://schema.org/PublicationEvent",
+        "typeLabel": "Publication event",
+        "name": "Fate/stay night［Realta Nua］フェイト/ステイナイト［レアルタ・ヌア］extra edition",
+        "projection": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/publicationEvent-390/projection.json",
+          "sha256": "2297fb548179aba895cb98baacddda6a7ceb428a434c0c3517ea299f47bf71ec",
+          "bytes": 2897
+        },
+        "groups": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/publicationEvent-390/groups.json",
+          "sha256": "9dd6483240391b7bb260946a7da165f4cb1c7961dc42d06552ee86995ba5c9e5",
+          "bytes": 995
+        },
+        "layout": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/publicationEvent-390/original-layout.json",
+          "sha256": "fd593524670eca29e04e2201453eb7982666b6a7e990c6c78f5653e2b18c2886",
+          "bytes": 11802
+        },
+        "screenshot": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/publicationEvent-390/page.png",
+          "sha256": "5b23134b32a54776b5dd7d3d3e9837b0be65ddecd52398462dcfc56130edaf28",
+          "bytes": 110871
+        },
+        "rootVisualReview": "PASS: named subject and correct descriptive label readable; genuine source identity/links grouped in Sources and licenses. Existing unavailable Relations followed by empty Relations is an A01 defect, not accepted as a complete inverse read."
+      },
+      {
+        "key": "sourceDatasetEpisode",
+        "width": 1440,
+        "resource": "https://rezics.com/id/01a15428-342b-76c4-92b9-7c65504115ca",
+        "registryType": "https://rezics.com/vocab/SourceDatasetEpisode",
+        "typeLabel": "Source episode record",
+        "name": "Episode 39",
+        "projection": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/sourceDatasetEpisode-1440/projection.json",
+          "sha256": "5cb44b06eeb191d5172bb2c67a7968bef53185f340515deded2a75b582219975",
+          "bytes": 2835
+        },
+        "groups": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/sourceDatasetEpisode-1440/groups.json",
+          "sha256": "c9ea318eafc9afa8a1f8fb7ab563b66b47d20a50ba7ca9394863ec70d829579c",
+          "bytes": 892
+        },
+        "layout": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/sourceDatasetEpisode-1440/original-layout.json",
+          "sha256": "5ea000105af3d89fda6d2cc864e9256549bcd57c4a4ca55123f5e89489605b79",
+          "bytes": 10098
+        },
+        "screenshot": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/sourceDatasetEpisode-1440/page.png",
+          "sha256": "5a9626dfe0e7c864b39ee0387a7484c1b1398128718d5e6cda854c95d08e7fca",
+          "bytes": 113138
+        },
+        "rootVisualReview": "PASS: named subject and correct descriptive label readable; genuine source identity/links grouped in Sources and licenses. Existing unavailable Relations followed by empty Relations is an A01 defect, not accepted as a complete inverse read."
+      },
+      {
+        "key": "sourceDatasetEpisode",
+        "width": 390,
+        "resource": "https://rezics.com/id/01a15428-342b-76c4-92b9-7c65504115ca",
+        "registryType": "https://rezics.com/vocab/SourceDatasetEpisode",
+        "typeLabel": "Source episode record",
+        "name": "Episode 39",
+        "projection": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/sourceDatasetEpisode-390/projection.json",
+          "sha256": "5cb44b06eeb191d5172bb2c67a7968bef53185f340515deded2a75b582219975",
+          "bytes": 2835
+        },
+        "groups": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/sourceDatasetEpisode-390/groups.json",
+          "sha256": "c9ea318eafc9afa8a1f8fb7ab563b66b47d20a50ba7ca9394863ec70d829579c",
+          "bytes": 892
+        },
+        "layout": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/sourceDatasetEpisode-390/original-layout.json",
+          "sha256": "ee0fd9f7162890cdb18e295d1b2c73c9603fe73cd2788fbab2b7453aa30fddf5",
+          "bytes": 10058
+        },
+        "screenshot": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/sourceDatasetEpisode-390/page.png",
+          "sha256": "31864f11bfbeb5547bea3a0cea42b7f5b55cdad1a879bc19555ab2c0c8c56d3c",
+          "bytes": 97445
+        },
+        "rootVisualReview": "PASS: named subject and correct descriptive label readable; genuine source identity/links grouped in Sources and licenses. Existing unavailable Relations followed by empty Relations is an A01 defect, not accepted as a complete inverse read."
+      },
+      {
+        "key": "person",
+        "width": 1440,
+        "resource": "https://rezics.com/id/01a15428-40db-703a-849b-841df6c387ee",
+        "registryType": "https://schema.org/Person",
+        "typeLabel": "Person",
+        "name": "水樹奈々",
+        "projection": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/person-1440/projection.json",
+          "sha256": "468302a2b482e66d9fa6e2b597a4f934b9970b6b9d091a83554ab21623a694c1",
+          "bytes": 2504
+        },
+        "groups": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/person-1440/groups.json",
+          "sha256": "6a38b08ebc457bea7b27c477272063f7e6c6e1d1968c3cdff18c63df8316a4f5",
+          "bytes": 876
+        },
+        "layout": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/person-1440/original-layout.json",
+          "sha256": "198696a139004fb550ee718cf37dbfb2f45a8f4a28a8e3ab9f7e92f14a4efa6f",
+          "bytes": 9937
+        },
+        "screenshot": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/person-1440/page.png",
+          "sha256": "c0e4ade29d241fdaaef3302d16f83afcb121eae2bbaddf6d3e95aba510743e6c",
+          "bytes": 109637
+        },
+        "rootVisualReview": "PASS: named subject and correct descriptive label readable; genuine source identity/links grouped in Sources and licenses. Existing unavailable Relations followed by empty Relations is an A01 defect, not accepted as a complete inverse read."
+      },
+      {
+        "key": "person",
+        "width": 390,
+        "resource": "https://rezics.com/id/01a15428-40db-703a-849b-841df6c387ee",
+        "registryType": "https://schema.org/Person",
+        "typeLabel": "Person",
+        "name": "水樹奈々",
+        "projection": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/person-390/projection.json",
+          "sha256": "468302a2b482e66d9fa6e2b597a4f934b9970b6b9d091a83554ab21623a694c1",
+          "bytes": 2504
+        },
+        "groups": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/person-390/groups.json",
+          "sha256": "6a38b08ebc457bea7b27c477272063f7e6c6e1d1968c3cdff18c63df8316a4f5",
+          "bytes": 876
+        },
+        "layout": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/person-390/original-layout.json",
+          "sha256": "1fd8e0081ab14886a30da262730e5eb6f06832705dab1dad841dfa2e396c2f40",
+          "bytes": 9905
+        },
+        "screenshot": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/person-390/page.png",
+          "sha256": "fb8f6e08f36a17c3525c174d383829a105708c1ec6d0db20ddcb7e5282589486",
+          "bytes": 94405
+        },
+        "rootVisualReview": "PASS: named subject and correct descriptive label readable; genuine source identity/links grouped in Sources and licenses. Existing unavailable Relations followed by empty Relations is an A01 defect, not accepted as a complete inverse read."
+      },
+      {
+        "key": "concept",
+        "width": 1440,
+        "resource": "https://rezics.com/id/01a15428-4801-7509-8f5c-c2e7c8486d27",
+        "registryType": "https://schema.org/DefinedTerm",
+        "typeLabel": "Term",
+        "name": "漫画",
+        "projection": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/concept-1440/projection.json",
+          "sha256": "c1a77202d8fe25c86f614de62ab99ba80afbb82a1e1b51d7e3a40d14dfe4ed47",
+          "bytes": 2499
+        },
+        "groups": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/concept-1440/groups.json",
+          "sha256": "7b9ad742123e154bf894552989ffb6c9dd34cb5dbe92acb212d4c9a347e7f71d",
+          "bytes": 940
+        },
+        "layout": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/concept-1440/original-layout.json",
+          "sha256": "8c841122a4e8620054b85f365bd5ede9df762cdae8ba0fbd6c2ffd5932143c0f",
+          "bytes": 10233
+        },
+        "screenshot": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/concept-1440/page.png",
+          "sha256": "2e7be1a521313a3e9c31cec4e8c813985f24d91aea702f9e772cc620db4a8ef5",
+          "bytes": 115860
+        },
+        "rootVisualReview": "PASS: named subject and correct descriptive label readable; genuine source identity/links grouped in Sources and licenses. Existing unavailable Relations followed by empty Relations is an A01 defect, not accepted as a complete inverse read."
+      },
+      {
+        "key": "concept",
+        "width": 390,
+        "resource": "https://rezics.com/id/01a15428-4801-7509-8f5c-c2e7c8486d27",
+        "registryType": "https://schema.org/DefinedTerm",
+        "typeLabel": "Term",
+        "name": "漫画",
+        "projection": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/concept-390/projection.json",
+          "sha256": "c1a77202d8fe25c86f614de62ab99ba80afbb82a1e1b51d7e3a40d14dfe4ed47",
+          "bytes": 2499
+        },
+        "groups": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/concept-390/groups.json",
+          "sha256": "7b9ad742123e154bf894552989ffb6c9dd34cb5dbe92acb212d4c9a347e7f71d",
+          "bytes": 940
+        },
+        "layout": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/concept-390/original-layout.json",
+          "sha256": "9883efb141740d8a139b78ffd8782c1392a685c03360c7467a74784a599270bf",
+          "bytes": 10202
+        },
+        "screenshot": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/concept-390/page.png",
+          "sha256": "52b4f6a89472774610db1f3dd4cce673015dc710cea83413b5816c3f3f980cb7",
+          "bytes": 101969
+        },
+        "rootVisualReview": "PASS: named subject and correct descriptive label readable; genuine source identity/links grouped in Sources and licenses. Existing unavailable Relations followed by empty Relations is an A01 defect, not accepted as a complete inverse read."
+      },
+      {
+        "key": "artist",
+        "width": 1440,
+        "resource": "https://rezics.com/id/01a1548c-ca39-70b0-9c1b-9a22533e0468",
+        "registryType": "https://schema.org/Person",
+        "typeLabel": "Person",
+        "name": "Paul McCartney",
+        "projection": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/artist-1440/projection.json",
+          "sha256": "a3360928cd14d4da3e834d17164ea48235c5440cf0d4ae56aea6008f80534056",
+          "bytes": 2509
+        },
+        "groups": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/artist-1440/groups.json",
+          "sha256": "c16e5d0f7fac7d85a24fd094e9f41ef04ce39890a17fcfd6c1f18a71c88f2ad4",
+          "bytes": 927
+        },
+        "layout": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/artist-1440/original-layout.json",
+          "sha256": "013ce519a91be0cda1c0d07afa5485a9af03e3d5c72f1ce57bdd6cf8fef7700d",
+          "bytes": 9682
+        },
+        "screenshot": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/artist-1440/page.png",
+          "sha256": "9515388c0ccd51ebde8e2df045c3f4fe349d932128bd3cebfd4db9bd576ba527",
+          "bytes": 115048
+        },
+        "rootVisualReview": "PASS: named subject and correct descriptive label readable; genuine source identity/links grouped in Sources and licenses. Existing unavailable Relations followed by empty Relations is an A01 defect, not accepted as a complete inverse read."
+      },
+      {
+        "key": "artist",
+        "width": 390,
+        "resource": "https://rezics.com/id/01a1548c-ca39-70b0-9c1b-9a22533e0468",
+        "registryType": "https://schema.org/Person",
+        "typeLabel": "Person",
+        "name": "Paul McCartney",
+        "projection": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/artist-390/projection.json",
+          "sha256": "a3360928cd14d4da3e834d17164ea48235c5440cf0d4ae56aea6008f80534056",
+          "bytes": 2509
+        },
+        "groups": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/artist-390/groups.json",
+          "sha256": "c16e5d0f7fac7d85a24fd094e9f41ef04ce39890a17fcfd6c1f18a71c88f2ad4",
+          "bytes": 927
+        },
+        "layout": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/artist-390/original-layout.json",
+          "sha256": "ac12468f129222cca363d960b5139754caf87c7c7c79ff6914382fc00f27e5b4",
+          "bytes": 9655
+        },
+        "screenshot": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/artist-390/page.png",
+          "sha256": "2ef0abc3b9a861fe8cc2418d15977d81e9fd5fe1f38fe053f025212182f0cf94",
+          "bytes": 100598
+        },
+        "rootVisualReview": "PASS: named subject and correct descriptive label readable; genuine source identity/links grouped in Sources and licenses. Existing unavailable Relations followed by empty Relations is an A01 defect, not accepted as a complete inverse read."
+      },
+      {
+        "key": "musicPublicationEvent",
+        "width": 1440,
+        "resource": "https://rezics.com/id/01a1548c-d038-747d-90d9-58868340ab4c",
+        "registryType": "https://schema.org/PublicationEvent",
+        "typeLabel": "Publication event",
+        "name": "The Beatles",
+        "projection": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/musicPublicationEvent-1440/projection.json",
+          "sha256": "92a80e9778e4d3fde2f04eaed99ca05cad6a744fc64bbd620ff5a7d3d9ae4637",
+          "bytes": 2715
+        },
+        "groups": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/musicPublicationEvent-1440/groups.json",
+          "sha256": "ff25281a51fe8bbddcd597726be8d45f7a4a2b67613fc59f047ff824a0566152",
+          "bytes": 927
+        },
+        "layout": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/musicPublicationEvent-1440/original-layout.json",
+          "sha256": "44c33c0c682a1b779dfd9dd2e38c9fa173de1daaef5c19bebd021d0529f3059b",
+          "bytes": 9776
+        },
+        "screenshot": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/musicPublicationEvent-1440/page.png",
+          "sha256": "e8e259a012845d6530b12ca2a3cfd7e6be56df7848bb7aaf60b4c973f9705159",
+          "bytes": 114548
+        },
+        "rootVisualReview": "PASS: named subject and correct descriptive label readable; genuine source identity/links grouped in Sources and licenses. Existing unavailable Relations followed by empty Relations is an A01 defect, not accepted as a complete inverse read."
+      },
+      {
+        "key": "musicPublicationEvent",
+        "width": 390,
+        "resource": "https://rezics.com/id/01a1548c-d038-747d-90d9-58868340ab4c",
+        "registryType": "https://schema.org/PublicationEvent",
+        "typeLabel": "Publication event",
+        "name": "The Beatles",
+        "projection": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/musicPublicationEvent-390/projection.json",
+          "sha256": "92a80e9778e4d3fde2f04eaed99ca05cad6a744fc64bbd620ff5a7d3d9ae4637",
+          "bytes": 2715
+        },
+        "groups": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/musicPublicationEvent-390/groups.json",
+          "sha256": "ff25281a51fe8bbddcd597726be8d45f7a4a2b67613fc59f047ff824a0566152",
+          "bytes": 927
+        },
+        "layout": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/musicPublicationEvent-390/original-layout.json",
+          "sha256": "5afed5593eba2e056d43da38f4a88585946e5605d4e140c69e9dc5f8637d0de9",
+          "bytes": 9747
+        },
+        "screenshot": {
+          "path": ".temp/worktrees/g-2758/.temp/c23-current-eight-runs/2026-10-19T14-57-41-600Z-1794305/original/musicPublicationEvent-390/page.png",
+          "sha256": "7b5612b8ef2f7f6f814bb4a327e968f57f58f43c3cf510272e451fa002c4f0fb",
+          "bytes": 99891
+        },
+        "rootVisualReview": "PASS: named subject and correct descriptive label readable; genuine source identity/links grouped in Sources and licenses. Existing unavailable Relations followed by empty Relations is an A01 defect, not accepted as a complete inverse read."
+      }
+    ]
+  },
+  "productAudit": {
+    "skill": ".agents/skills/product-audit/SKILL.md",
+    "application": "Visitor recognizes an imported descriptive object without inventing native account/Release authority. API→registry→localized header→real identity group checked across affected families and both widths; exact known unknown/cross-base counterexamples reuse independent review.",
+    "remainingFindings": {
+      "A01": "Relations unavailable banner followed by empty list is not accepted as successful inverse data; continue owner repair.",
+      "A07": "Only retained identity/URL facts are present; richer domain fields and media remain open.",
+      "A13": "Sources footer presence does not establish complete independent citations/attribution.",
+      "A16": "Subject and per-object menus have separate original acceptance.",
+      "siteColdPerformance": "One first-document warmup503 remains retained; bounded read-only preparation yielded200 before selected assertions. Cold availability/performance remains Site original obligation."
+    }
+  },
+  "preservation": {
+    "original113NativeAssociations": "untouched",
+    "original206SourceParts": "untouched",
+    "genuineCurrentNativeBindings": "new explicitly mapped G2791 selection; original source identities retained",
+    "sharedReset": false,
+    "backendWrites": [],
+    "peerLifecycleActions": [],
+    "sourceClean": true,
+    "ownedFrontendStopped": true,
+    "browserClosed": true
+  },
+  "limitations": [
+    "No full27 fresh native census, rich-field/image fidelity, inverse relations, all14supporting journeys or all61 acceptance claimed.",
+    "No converter invocation, mandatory evidence or conversion-dependent citation model introduced.",
+    "Historical cold503, failed setup and exact corrected wire-key evidence remain preserved.",
+    "Registry labels do not grant account authority; descriptive PublicationEvent remains resource, not nativeRelease."
+  ]
+}

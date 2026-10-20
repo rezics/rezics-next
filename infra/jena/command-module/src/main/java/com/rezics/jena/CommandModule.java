@@ -59,11 +59,14 @@ public final class CommandModule implements FusekiAutoModule {
             "https://rezics.com/vocab/rankedText", FilteredGraphTextIndex.RankedFunction.class);
         org.apache.jena.sparql.function.FunctionRegistry.get().put(
             "https://rezics.com/vocab/occurrenceSearch", OccurrenceLabelIndex.SearchFunction.class);
+        org.apache.jena.sparql.function.FunctionRegistry.get().put(
+            "https://rezics.com/vocab/realizationTranslators", RealizationTranslators.class);
     }
 
     @Override public void prepare(FusekiServer.Builder builder, Set<String> datasetNames, Model configModel) {
         searchEvidence.install();
         builder.addFilter("/*", searchEvidence);
+        builder.addFilter("/*", new QueryWorkService.ReadBoundaryFilter());
         builder.registerOperation(COMMAND, new CommandService(profiles));
         builder.registerOperation(Operation.Query, org.apache.jena.riot.WebContent.contentTypeSPARQLQuery,
             new QueryWorkService());

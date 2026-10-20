@@ -9,6 +9,7 @@ import { sourceReportedCredits } from '../source/author-name-read.ts';
 import { DISCOVERY_COST, type ProjectedWork } from './contract.ts';
 import { isNativeCreditRole, type NativeCreditRole } from '../work/credit-roles.ts';
 import { optionalPreview } from '../query/optional-preview.ts';
+import { invalidWorkReadSource } from '../work/read-source-fault.ts';
 
 export const DISCOVERY_CREDIT_BATCH_COST = { works: 64, queries: 1, rows: 192 } as const;
 /** Each Work retains its own ordered three-credit seek. Literal Work keys keep
@@ -38,7 +39,7 @@ export async function primaryDiscoveryCreditBatch(session: WorkReadSession, work
   const all = await session.query(`SELECT ?work ?id ?key ?ordinal ?agent ?role ?provider ?namespace WHERE { ${seeks} }`,
     unique.length * DISCOVERY_COST.primaryCredits);
   if (all.some(row => !row.work || !unique.includes(row.work.value))) {
-    throw new WorkReadUnavailable('Discovery credit Work is incomplete');
+    throw invalidWorkReadSource('Discovery credit Work is incomplete');
   }
   const readReports = () => sourceReportedCredits(session, unique, DISCOVERY_COST.primaryCredits, preview);
   const reports = preview ? await optionalPreview(session, readReports) : await readReports();
@@ -51,7 +52,7 @@ export async function primaryDiscoveryCreditBatch(session: WorkReadSession, work
       || !Number.isSafeInteger(Number(row.ordinal?.value)))) || (row.agent && (row.key || row.ordinal)))
       || new Set(rows.map(row => row.id!.value)).size !== rows.length) {
       if (preview) { unavailable.add(work); continue; }
-      throw new WorkReadUnavailable('Discovery credits are ambiguous');
+      throw invalidWorkReadSource('Discovery credits are ambiguous');
     }
     const confirmed: ProjectedWork['primaryCredits'] = rows.map(row => row.agent
       ? { id: row.id!.value, role: row.role!.value as NativeCreditRole, participantKind: 'agent',
@@ -94,7 +95,7 @@ export async function namedDiscoveryCredits(session: WorkReadSession,
   if (!preview && (new Set(rows.map(row => row.agent?.value)).size !== rows.length
     || rows.some(row => !row.agent || !row.displayName || !agents.includes(row.agent.value)
       || !row.displayName.value || row.displayName.value.length > 200))) {
-    throw new WorkReadUnavailable('Discovery Agent names are ambiguous');
+    throw invalidWorkReadSource('Discovery Agent names are ambiguous');
   }
   const named = new Map<string, CreditAttribution>();
   const seen = new Set<string>(), damaged = new Set<string>();

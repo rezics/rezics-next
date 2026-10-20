@@ -11,13 +11,13 @@ import { copyOf } from './messages.ts';
 import { recipeEditHref } from './route.ts';
 
 /** The production Work page's recipe region; the editor preview reuses its content component. */
-export function RecipeResourceBody({ recipe, href, actingSubject, allowed, work, text, locale, messages,
+export function RecipeResourceBody({ resource, recipe, href, actingSubject, allowed, work, text, locale, messages,
   exportApi, saveExport }: {
   recipe: BooksRead<RecipeWorkPage | null>; href: string; actingSubject: string | null; allowed: readonly string[];
-  work: string; text: string | null; locale: UiLocale; messages: WorkPageMessages;
+  resource: string; work: string; text: string | null; locale: UiLocale; messages: WorkPageMessages;
   exportApi?: RecipeExportApi; saveExport?: (value: RecipeExport) => void;
 }) {
-  return <RecipeRegionView recipe={recipe} href={href} actingSubject={actingSubject}
+  return <RecipeRegionView resource={resource} recipe={recipe} href={href} actingSubject={actingSubject}
     edit={mayEdit(allowed) ? { href: recipeEditHref(work), label: copyOf(locale).editRecipe } : null}
     text={text} locale={locale} messages={messages} exportApi={exportApi} saveExport={saveExport} />;
 }

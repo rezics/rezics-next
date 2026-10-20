@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { discloseNotifications } from '../disclosure/notifications.ts';
 import { notificationRecipientAllowed } from './recipient-policy.ts';
 import type { Pool, PoolClient } from 'pg';
+import type { WorkActivationEnvironment } from '../work/activate.ts';
+import { notificationGraphRead, notificationRead, notificationReadStep } from './request-budget.ts';
 import { NotificationConflict, NotificationInvalid, NotificationStore, NotificationUnavailable, normalizeNotificationError,
   requireAccessOpen, rollback, sha256,
   optionalNotification, type ProposalSubscriptionReason,
@@ -78,7 +80,7 @@ export class NotificationDispatcher {
 
   constructor(private readonly pool: Pool, private readonly provider: DeliveryProvider,
     private readonly subjects: NotificationSubjectReader, private readonly options: {
-      retryMs?: number; disclosureBasis?: string } = {}) {
+      retryMs?: number; disclosureBasis?: string; environment?: WorkActivationEnvironment } = {}) {
     this.retryMs = options.retryMs ?? DISPATCH_LIMITS.retryMs;
   }
 
@@ -245,6 +247,14 @@ export class NotificationDispatcher {
   /** Render only fields currently disclosed to this recipient on this endpoint. */
   private async prepare(row: Claimed): Promise<{ kind: 'cancel'; reason: string } | { kind: 'send';
     address: string | null; addressDigest: string; payload: Record<string, string>; disclosureDigest: string }> {
+    return notificationRead(undefined, () => notificationGraphRead(this.options.environment,
+      () => this.prepareSubject(row)));
+  }
+
+  private async prepareSubject(row: Claimed): Promise<{ kind: 'cancel'; reason: string } | { kind: 'send';
+    address: string | null; addressDigest: string; payload: Record<string, string>; disclosureDigest: string }> {
+    const reason = await this.transaction(client => this.ineligible(client, row));
+    if (reason) return { kind: 'cancel', reason };
     const context = (await this.pool.query<{ subject_owner: string; subject_ref: string;
       subject_revision: string | null; disclosure_basis: string; address: string | null; address_digest: string;
       lock_screen_disclosure: boolean; realm: string | null; actor_agent: string | null; group_key: string | null;
@@ -260,12 +270,19 @@ export class NotificationDispatcher {
     const subjectReader = this.scopedSubjects.get(context.disclosure_basis) ?? this.subjects;
     const input = { principalId: row.principal_id, owner: context.subject_owner,
       ref: context.subject_ref, revision: context.subject_revision, disclosureBasis: context.disclosure_basis,
-      realm: context.realm, recipientReason: context.reason, topic: context.topic };
-    const [resolved] = await discloseNotifications(this.pool,
-      [{ input, result: await subjectReader.resolve(input) }], row.channel);
+      realm: context.realm, recipientReason: context.reason, topic: context.topic,
+      actorAgent: context.actor_agent, relatedResource: context.group_key };
+    const subject = await notificationReadStep(() => subjectReader.resolve(input));
+    const [resolved] = await notificationReadStep(() => discloseNotifications(this.pool,
+      [{ input, result: subject }], row.channel));
     if (!resolved) return { kind: 'cancel', reason: 'undisclosed' };
     if (resolved.status === 'erased') return { kind: 'cancel', reason: 'subject_erased' };
+    if (resolved.status === 'unavailable') throw new NotificationUnavailable('Notification subject is unavailable');
     if (resolved.status !== 'available') return { kind: 'cancel', reason: 'undisclosed' };
+    const currentReason = await this.transaction(client => this.ineligible(client, row));
+    if (currentReason) return { kind: 'cancel', reason: currentReason };
+    if (!await notificationRecipientAllowed(this.pool, row.principal_id,
+      context.actor_agent, context.realm, context.group_key)) return { kind: 'cancel', reason: 'unsubscribed' };
     const payload = renderedDeliveryPayload(resolved.subject.fields, row.channel, {
       private: resolved.subject.private, lockScreenDisclosure: context.lock_screen_disclosure });
     return { kind: 'send', address: context.address, addressDigest: context.address_digest, payload,

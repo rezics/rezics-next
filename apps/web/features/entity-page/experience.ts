@@ -30,7 +30,8 @@ export function workExperience(page: EntityProjection | null, types: readonly st
   const section = page?.sections.find(candidate => (typeSectionIds as readonly string[]).includes(candidate.id));
   const typeSection = section ? { id: section.id as TypeSectionId, href: section.href } : null;
   const kind: ExperienceKind = typeSection ? typeSection.id
-    : presentation === 'book' ? 'book' : presentation === 'guide' ? 'guide' : 'plain';
+    : presentation === 'book' || presentation === 'guide' || presentation === 'recipe'
+      || presentation === 'prompt' || presentation === 'skill' ? presentation : 'plain';
   return { kind, presentation, primaryAction, typeSection };
 }
 

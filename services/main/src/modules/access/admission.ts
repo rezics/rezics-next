@@ -14,7 +14,7 @@ import { createHash } from 'node:crypto';
 import { receiptFamilyFor } from './receipt-families.ts';
 import { Pool, type PoolClient } from 'pg';
 import { recordRatingAggregateHead, readRatingAggregateInventory,
-  checkRatingAggregateFence, readRatingContextPolicyWitness } from '../rating/aggregate-inventory.ts';
+  checkRatingAggregateFence, readRatingContextPolicyWitness, type StandingRatingCut } from '../rating/aggregate-inventory.ts';
 import { directWorkCreateProof, selectedDirectWorkProof } from './direct-principal.ts';
 import { groupWorkCreateProof, GroupUnavailable } from './groups.ts';
 import { representedWorkProof, selectedRepresentedWorkProof, saveInvitedWorkProof,
@@ -110,8 +110,8 @@ interface MemberReplyAuthoringIntent {
 const nativeMemberReplyResource = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const memberReplyRevision = /^(?:[0-9a-f-]{36}|https:\/\/rezics\.com\/id\/[0-9a-f-]{36})$/;
 
-/** Reply drafts carry their root only in owner-bound admission metadata. Keep
- * malformed or partial metadata out of ordinary draft authority. */
+/** Reply drafts and their Media uses carry their root only in owner-bound
+ * admission metadata. Keep malformed or partial metadata out of Work authority. */
 function memberReplyAuthoringIntent(request: AdmissionRequest): MemberReplyAuthoringIntent | null {
   const hasReplyRootMetadata = request.baselineRelatedWork !== undefined
     || request.baselineSourceRevision !== undefined;
@@ -123,12 +123,14 @@ function memberReplyAuthoringIntent(request: AdmissionRequest): MemberReplyAutho
       && request.baselineCollectionCreate !== true
       && request.resolvedZonePage === undefined };
   }
-  if (request.action !== 'content.draft' || !hasReplyRootMetadata) return null;
+  const memberReplyMedia = request.action === 'media.member-reply.use';
+  if (!memberReplyMedia && (request.action !== 'content.draft' || !hasReplyRootMetadata)) return null;
   const prefix = 'content:draft:';
   const reply = request.scope.startsWith(prefix) ? request.scope.slice(prefix.length) : '';
   return { valid: nativeMemberReplyResource.test(reply)
     && nativeMemberReplyResource.test(request.baselineRelatedWork ?? '')
-    && memberReplyRevision.test(request.baselineSourceRevision ?? '')
+    && (memberReplyMedia ? nativeMemberReplyResource : memberReplyRevision)
+      .test(request.baselineSourceRevision ?? '')
     && request.baselineContribution === undefined
     && request.baselineCollectionCreate !== true
     && request.resolvedZonePage === undefined };
@@ -619,12 +621,12 @@ export class AccessAdmissionRegistry {
     return issueTitleAdmission(this.pool, admission, command, this.titleAdmissionKey);
   }
 
-  readRatingAggregateInventory(context: string, mainVersion: string, signal?: AbortSignal) {
-    return readRatingAggregateInventory(this.pool, context, mainVersion, signal);
+  readRatingAggregateInventory(context: string, mainVersion: string, signal?: AbortSignal, onlySlot?: string) {
+    return readRatingAggregateInventory(this.pool, context, mainVersion, signal, onlySlot);
   }
 
-  checkRatingAggregateFence(generation: string, signal?: AbortSignal) {
-    return checkRatingAggregateFence(this.pool, generation, signal);
+  checkRatingAggregateFence(generation: string, signal?: AbortSignal, cuts?: readonly StandingRatingCut[]) {
+    return checkRatingAggregateFence(this.pool, generation, signal, cuts);
   }
 
   readRatingContextPolicyWitness(context: string, signal?: AbortSignal) {
@@ -1918,8 +1920,9 @@ export class AccessAdmissionRegistry {
       if (row.action === 'publication.reject.organization') {
         throw new AdmissionDenied('organization moderation cannot use generic claim');
       }
-      if (row.action === 'reply.create' && !await savedBaselineProof(client, row.id)) {
-        throw new AdmissionDenied('reply creation requires a Person baseline admission');
+      if (['reply.create', 'media.member-reply.use'].includes(row.action)
+        && !await savedBaselineProof(client, row.id)) {
+        throw new AdmissionDenied('member reply authoring requires a Person baseline admission');
       }
       if (row.authority_epoch !== gateResult.rows[0]?.authority_epoch) {
         throw new AdmissionDenied('admission scope epoch is stale');

@@ -97,6 +97,7 @@ function Member({
             summary={member.summary}
             unavailable={t.unavailable}
             unnamed={t.unnamed}
+            undisclosed={t.nameNotShown}
             hrefFor={href}
           />
           {member.hub ? (
@@ -121,6 +122,7 @@ function Member({
                   summary={where}
                   unavailable={t.unavailable}
                   unnamed={t.unnamed}
+                  undisclosed={t.nameNotShown}
                   hrefFor={href}
                 />
               </li>
@@ -179,6 +181,7 @@ function IdentitySection({
             summary={section.hub}
             unavailable={t.unavailable}
             unnamed={t.unnamed}
+            undisclosed={t.nameNotShown}
             hrefFor={summaryHref(hrefFor)}
           />
         </p>

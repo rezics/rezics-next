@@ -6,6 +6,7 @@ import { beforePathNormalization } from '../features/address/edge.ts';
 import { readAddress, type ResolvedAddress } from '../features/address/client.ts';
 import { mainReadHeaders } from '../features/api/main-read.ts';
 import { sessionCookies } from '../features/auth/session-state.ts';
+import { REFRESH_COOKIE } from '../features/auth/cookies.ts';
 import { forwardToMain, mainRequestHeaders } from '../features/api/bff.ts';
 import { appEnvironment } from '../../../scripts/dev/config.ts';
 import { families, principalClasses, rateLimitBudgets } from '../../../services/main/src/modules/rate-limit/budgets.ts';
@@ -116,6 +117,55 @@ test('G998: a canonical signed-in request carries admission without another reso
   expect(calls).toBe(1);
   const admission = response.headers.get('x-middleware-request-x-rezics-resolved-address');
   expect(JSON.parse(decodeURIComponent(admission!)).holder).toBe(holder);
+});
+
+test('signed-in private resource redirects retain reader authority and private caching at both entry boundaries', async () => {
+  process.env.WEB_OAUTH_CLIENT_ID = 'g-998-test';
+  stub((url, headers) => {
+    if (url.pathname === '/v1/me/session-agent')
+      return Response.json({ sessionAgent: { eligible: true, actingSubject: holder } });
+    expect(url.pathname).toBe('/v1/addresses/resolve');
+    if (!headers.has('authorization')) return new Response(null, { status: 404 });
+    expect(url.searchParams.get('actingSubject')).toBe(holder);
+    return Response.json({ ...agent, scope: 'resource', canonical: { prefix: '/e/', key: sid, suffixSource: 'Private list' } });
+  });
+  const path = `https://rezics.test/en/e/${uuid}`;
+  for (const response of [
+    await proxy(new NextRequest(path, { headers: { cookie: signedInCookie } })),
+    await beforePathNormalization(new Request(`${path}/`, { headers: { cookie: signedInCookie } })),
+  ]) {
+    expect(response?.status).toBe(301);
+    expect(response?.headers.get('location')).toBe(`https://rezics.test/en/e/${sid}-private-list`);
+    expect(response?.headers.get('cache-control')).toBe('private, no-store');
+  }
+  const hidden = await proxy(new NextRequest(path));
+  expect(hidden.status).toBe(404);
+  expect(hidden.headers.get('location')).toBeNull();
+  expect(await hidden.text()).not.toContain('Private list');
+});
+
+test('a private address awaits refresh and retains a useful 503 when Account cannot restore its identity', async () => {
+  process.env.WEB_OAUTH_CLIENT_ID = 'g-998-test';
+  let calls = 0;
+  stub(url => {
+    calls++;
+    expect(url.pathname).toBe('/api/auth/oauth2/token');
+    return Response.json({ code: 'temporarily_unavailable' }, { status: 503 });
+  });
+  const path = `https://rezics.test/zh-Hant/e/${uuid}?language=sv&tag=a&tag=b`;
+  const headers = { cookie: `${REFRESH_COOKIE}=g2784-await-refresh` };
+  const trailing = new URL(path);
+  trailing.pathname += '/';
+  expect(await beforePathNormalization(new Request(trailing, { headers }))).toBeNull();
+  expect(calls).toBe(0);
+  const response = await proxy(new NextRequest(path, { headers }));
+  expect(response.status).toBe(503);
+  expect(response.headers.get('location')).toBeNull();
+  const html = await response.text();
+  expect(html).toContain('lang="zh-Hant"');
+  expect(html).toContain('role="alert"');
+  expect(html).toContain('language=sv&amp;tag=a&amp;tag=b');
+  expect(calls).toBe(1);
 });
 
 test('G998: rate limits preserve 429 and Retry-After instead of becoming an infrastructure 503', async () => {

@@ -1,5 +1,6 @@
 import { OPEN_LIBRARY_RATE } from './modules/source/open-library.ts';
 import { createWorkActivationEnvironment } from './modules/work/activate.ts';
+import { creditAttributionOwner } from './modules/work/credit-attribution.ts';
 import { AccessExposure } from './modules/access/exposure.ts';
 import { PostgresReceiptCustodyStore, ReceiptCustody } from './modules/outbox/receipt-custody.ts';
 import { proofRetirementSender } from './modules/graph/slim-command.ts';
@@ -119,6 +120,8 @@ import { VerificationCorrectionPublisher, VerificationCorrectionWorker }
   from './modules/verification/correction-delivery.ts';
 import { verificationCorrectionSubjectReader } from './modules/verification/correction-delivery.ts';
 import { NotificationStore } from './modules/notification/store.ts';
+import { notificationRead, notificationReadPool } from './modules/notification/request-budget.ts';
+import { notificationError } from './routes/notifications.ts';
 import { SourceIntakeStore } from './modules/source/intake.ts';
 import { SourceCoverEvidenceVerifier } from './modules/source/cover-evidence.ts';
 import { SourceAuthorNameStore } from './modules/source/author-name.ts';
@@ -148,6 +151,9 @@ import { SourceAuthorCreditStore } from './modules/source/author-credit.ts';
 import { SourceFieldWithdrawalStore } from './modules/source/withdrawal.ts';
 import { SourceFieldAttachmentStore } from './modules/source/support-attach.ts';
 import { SourceFieldApplicationStore } from './modules/source/field-application.ts';
+import { SourceRetainedFieldSupportStore, retainedFieldEvidenceOwners, type RetainedFieldOwners } from './modules/source/field-support-retained.ts';
+import { acknowledgedSemanticSupportOwners } from './modules/source/field-support-acknowledged.ts';
+import { SourceRetainedRecordEvidenceOwner } from './modules/source/retained-evidence.ts';
 import { SourceNativeChildStore } from './modules/source/child-native-support.ts';
 import { ProviderIdentityStore } from './modules/source/provider-identity.ts';
 import { SourceScoreStore } from './modules/source/score.ts';
@@ -206,6 +212,7 @@ import { WorkMaintainers } from './modules/work/maintainers.ts';
 import { StatementSeek, StatementSeekWorker } from './modules/statement/seek.ts';
 
 import type { Pool } from 'pg';
+import { reservedTransactionPool } from './infrastructure/pool-reservation.ts';
 import type { MainConfig } from './config.ts';
 import type { MediaDependencies } from './modules/media/commands.ts';
 import type { SearchRouteDependencies } from './routes/search.ts';
@@ -218,6 +225,7 @@ export interface ComposeMainOverrides {
   account?: SearchRouteDependencies['account'];
   media?: MediaDependencies;
   mediaAccess?: SearchRouteDependencies['mediaAccess'];
+  sourceRetainedOwners?: Partial<RetainedFieldOwners>;
   /** Replaces fields on the production dependency object. A new production field stays unless named here. */
   dependencies?: Partial<SearchRouteDependencies>;
 }
@@ -235,10 +243,11 @@ export interface ComposeMainInput {
 }
 
 export async function composeMain(input: ComposeMainInput) {
+  reservedTransactionPool(input.accessPool);
   const { config, fuseki } = input;
   const fusekiUrl = config.FUSEKI_URL;
-  const pool = input.accessPool;
-  const contentPool = input.contentPool;
+  const pool = notificationReadPool(input.accessPool);
+  const contentPool = notificationReadPool(input.contentPool);
   const relayPool = input.relayPool;
   const erasureRelayPool = input.erasureRelayPool;
   const ownerRelayPool = input.ownerRelayPool;
@@ -401,7 +410,7 @@ export async function composeMain(input: ComposeMainInput) {
   const notificationDispatcher = deliveryProvider
     ? new NotificationDispatcher(pool, deliveryProvider,
       currentContentSubjectReader(content, notificationStore, access),
-      { disclosureBasis: notificationProvider ? undefined : SAFETY_ALERT_BASIS }) : undefined;
+      { disclosureBasis: notificationProvider ? undefined : SAFETY_ALERT_BASIS, environment }) : undefined;
   if (safetyAlerts) notificationDispatcher?.registerSubjectReader(SAFETY_ALERT_BASIS, safetyAlerts);
   notificationDispatcher?.registerSubjectReader('verification-correction-subscription-v1',
     verificationCorrectionSubjectReader(new VerificationStore(contentPool)));
@@ -429,7 +438,15 @@ export async function composeMain(input: ComposeMainInput) {
   const sourceAdoptions = new SourceNativeWorkAdoptionStore(contentPool, sourceProposals,
     environment, account, access);
   const sourceCorrespondences = new SourceChildCorrespondenceStore(contentPool, sourceConversions);
-  const sourceFieldWithdrawals = new SourceFieldWithdrawalStore(contentPool, environment);
+  const retainedEvidence = new SourceRetainedRecordEvidenceOwner(contentPool,sourceIntake,access,
+    rightsStore,sourceConversions.retained,environment);
+  const relationAttribution = creditAttributionOwner(environment);
+  const sourceRetainedFieldSupports = new SourceRetainedFieldSupportStore(contentPool,environment,
+    access,sourceConversions.retained,{ ...retainedFieldEvidenceOwners(retainedEvidence),
+      ...acknowledgedSemanticSupportOwners({ environment,access,contextSelections: rankingContextSelections,
+        relationAttribution }),
+      ...input.overrides?.sourceRetainedOwners });
+  const sourceFieldWithdrawals = new SourceFieldWithdrawalStore(contentPool, environment,sourceRetainedFieldSupports);
   const correctionWorker = new VerificationCorrectionWorker(new VerificationCorrectionPublisher(
     new VerificationStore(contentPool), new NotificationStore(pool)));
   const accessOwners = composeAccess(pool, environment);
@@ -499,6 +516,7 @@ export async function composeMain(input: ComposeMainInput) {
     readingSettings: new ReadingSettingsStore(contentPool),
     access,
     contextSelections: rankingContextSelections,
+    relationAttribution,
     eventQueries,
     downloadLeases,
     protectionSigner: new ProtectionAdmissionSigner(pool, config.FUSEKI_TITLE_ADMISSION_KEY),
@@ -569,6 +587,7 @@ export async function composeMain(input: ComposeMainInput) {
     sourceAuthorCredits: new SourceAuthorCreditStore(contentPool, sourceProposals, sourceConversions,
       sourceCorrespondences, environment, account, access, sourceAuthorNames),
     sourceFieldWithdrawals,
+    sourceRetainedFieldSupports,
     sourceFieldApplications: new SourceFieldApplicationStore(contentPool, environment,
       account, access, sourceConversions, sourceAdoptions, sourceFieldWithdrawals, rightsStore),
     sourceNativeChildren: new SourceNativeChildStore(contentPool, sourceProposals, sourceConversions,
@@ -623,7 +642,15 @@ export async function composeMain(input: ComposeMainInput) {
       : workRead(dependencies, new Request('http://main.internal/v1/compositions'),
         { publicViewer: currentDisclosureViewer(), localBasis: true }, read);
   };
-  const app = createMainApp(fuseki, dependencies);
+  const app = createMainApp(fuseki, dependencies).wrap(fetch => request => {
+    const path = new URL(request.url).pathname;
+    if (request.method !== 'GET' || !['/v1/me/notifications', '/v1/me/notifications/unread-count'].includes(path)) {
+      return fetch(request);
+    }
+    // Include rate admission and Account, before any route/subject owner runs.
+    return notificationRead(request, signal => Promise.resolve(fetch(new Request(request, { signal }))))
+      .catch(notificationError);
+  });
   libraryImport.setDispatch(request => app.handle(request));
   const savedViewNotifications = new SavedViewNotifications(pool, { environment, account, access, media, content,
     judgments: new AccessJudgments(pool),

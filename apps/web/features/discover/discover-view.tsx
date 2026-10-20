@@ -1,3 +1,4 @@
+import { materializeData } from 'native-i18n';
 import { buttonVariants } from '@rezics/ui/button';
 import type { EntityPickerLoad } from '@rezics/ui/entity-picker';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -15,6 +16,11 @@ import { BrowseContinuation, ResourceList } from './resource-list.tsx';
 import type { TopicItem } from './topic-picker.tsx';
 import { ChapterTextResults } from './chapter-text.tsx';
 import { chapterTextMessages } from './chapter-text-messages.ts';
+import { chapterSearchState } from './chapter-text-read.ts';
+import { BrowseTabs } from './browse-tabs.tsx';
+import { selectionMessages } from './selection-messages.ts';
+import { messages as searchMessages } from '../search/messages.ts';
+import { BrowseSearchRecovery } from './search-recovery.tsx';
 
 export interface DiscoverPageProps extends LoadedBrowse {
   topicLoad?: EntityPickerLoad<TopicItem>;
@@ -45,6 +51,12 @@ function Failure({
 }) {
   const t = browseMessages[locale];
   if (read.pending) return <p role="status" aria-busy="true">{messages[locale].preparing}</p>;
+  const copy = materializeData(searchMessages[locale], { locale });
+  if (read.failure === 'unsupported' || read.failure === 'invalid') return <div role="alert"
+    className="grid gap-2 rounded-2xl border border-border p-5">
+    <p>{read.failure === 'unsupported' ? copy.unsupportedTitle : copy.invalidTitle}</p>
+    {read.failure === 'unsupported' ? <p className="text-muted-foreground text-sm">{copy.unsupportedHelp}</p> : null}
+  </div>;
   return (
     <div
       role="alert"
@@ -75,13 +87,12 @@ export function DiscoverView({
   avatarQuery,
   locale,
   topicLoad,
+  checkedPages = 1,
+  suggestions,
 }: DiscoverPageProps) {
   const t = browseMessages[locale],
-    copy = messages[locale];
-  const tabs = [
-    { id: 'all', label: t.all },
-    ...browseCategories().map((category) => ({ id: category.id, label: category.labels[locale] })),
-  ];
+    copy = messages[locale], selection = selectionMessages[locale],
+    search = materializeData(searchMessages[locale], { locale });
   if (!state)
     return (
       <PageContainer className="grid gap-5">
@@ -92,10 +103,20 @@ export function DiscoverView({
         </Link>
       </PageContainer>
     );
+  const resultHeading = state.q ? chapterTextMessages[locale].resources : state.tab === 'all' ? selection.results
+    : browseCategories().find(category => category.id === state.tab)?.labels[locale] ?? selection.results;
+  // A failed response supplies no section reasons; keep only the identity known from the request.
+  const sectionHeading = state.section ? {
+    popular: t.popular, communities: t.communities, sites: t.newSites,
+  }[state.section] : t.recommendations;
   return (
     <PageContainer className="grid min-w-0 gap-7">
       <header className="grid min-w-0 gap-4">
-        <h1 className="font-semibold text-3xl tracking-tight sm:text-4xl">{copy.title}</h1>
+        <h1 className="break-words font-semibold text-3xl tracking-tight sm:text-4xl">{state.q
+          ? search.resultsFor({ phrase: state.q }) : copy.title}</h1>
+        {state.q ? <p className="text-muted-foreground text-sm">{selection.within} · {state.scope.kind === 'global'
+          ? search.global : search.scopeLabel}</p> : null}
+        <BrowseTabs state={state} locale={locale} />
         <BrowseConditions
           state={state}
           locale={locale}
@@ -104,22 +125,6 @@ export function DiscoverView({
           topics={topics}
           load={topicLoad}
         />
-        <nav aria-label={t.type} className="flex min-w-0 max-w-full gap-1 overflow-x-auto pb-1">
-          {tabs.map(({ id: tab, label }) => (
-            <Link
-              key={tab}
-              documentNavigation
-              prefetch={false}
-              href={browseHref(changeBrowse(state, { tab }))}
-              aria-current={state.tab === tab && !state.section ? 'page' : undefined}
-              className="inline-flex h-9 shrink-0 items-center rounded-full px-4 font-medium text-sm outline-none
-            hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-foreground
-            aria-[current=page]:text-background"
-            >
-              {label}
-            </Link>
-          ))}
-        </nav>
         {actingSubject ? (
           <Link
             href={browseHref(changeBrowse(state, { personalized: !state.personalized }))}
@@ -131,7 +136,6 @@ export function DiscoverView({
           </Link>
         ) : null}
       </header>
-      <ChapterTextResults read={chapterText ?? null} locale={locale} />
       {sections ? (
         sections.ok ? (
           sections.data.map((section) => (
@@ -160,24 +164,27 @@ export function DiscoverView({
             </section>
           ))
         ) : (
-          <Failure read={sections} state={state} locale={locale} />
+          <section aria-label={sectionHeading} className="grid gap-4">
+            <h2 className="font-semibold text-xl">{sectionHeading}</h2>
+            <Failure read={sections} state={state} locale={locale} />
+          </section>
         )
       ) : null}
       {results ? (
-        results.ok ? (
-          <section
-            aria-label={state.q ? chapterTextMessages[locale].resources : tabs.find((tab) => tab.id === state.tab)?.label ?? t.type}
-            className="grid gap-4"
-          >
-            {state.q ? <h2 className="font-semibold text-xl">{chapterTextMessages[locale].resources}</h2> : null}
-            <ResourceList items={results.data.items} locale={locale} avatarQuery={avatarQuery} scope={state.scope}
-              headingLevel={state.q ? 3 : 2} />
-            <BrowseContinuation page={results.data} state={state} locale={locale} />
-          </section>
-        ) : (
-          <Failure read={results} state={state} locale={locale} />
-        )
+        <section aria-label={resultHeading} className="grid gap-4">
+          <h2 className="font-semibold text-xl">{resultHeading}</h2>
+          {results.ok ? <>
+            {!results.data.items.length && !results.data.complete
+              ? <p role="status" className="text-muted-foreground text-sm">{selection.scan} · {selection.checked}: {new Intl.NumberFormat(locale).format(checkedPages)}</p>
+              : <ResourceList {...results.data} locale={locale} avatarQuery={avatarQuery} scope={state.scope} headingLevel={3} />}
+            <BrowseContinuation page={results.data} state={state} locale={locale}
+              moreLabel={!results.data.items.length && !results.data.complete ? selection.continue : undefined} />
+            {suggestions ? <BrowseSearchRecovery read={suggestions} state={state} locale={locale} /> : null}
+          </> : <Failure read={results} state={state} locale={locale} />}
+        </section>
       ) : null}
+      <ChapterTextResults read={chapterText ?? null} state={chapterSearchState(state)} locale={locale}
+        actingSubject={actingSubject} signedIn={signedIn} />
     </PageContainer>
   );
 }

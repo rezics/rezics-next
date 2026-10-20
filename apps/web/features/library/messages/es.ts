@@ -2,6 +2,7 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { LibraryMessages } from '../messages.ts';
 
 export default {
+  libraryTools: 'Metas, estadísticas, importación y exportación',
   title: 'Biblioteca',
   description: 'Tus estanterías, lo que estás leyendo, los ejemplares que tienes y los préstamos que anotas.',
   workCount: plural({ one: insert('{{count}} obra'), other: insert('{{count}} obras') }, { count: asValue(number()) }),

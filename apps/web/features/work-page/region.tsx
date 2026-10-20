@@ -46,7 +46,9 @@ export function RegionFailure({ title, failure, messages, restartHref }: {
   title: string; failure: ReadFailure; messages: WorkPageMessages; restartHref?: string;
 }) {
   const restart = restartHref && (failure === 'moved' || failure === 'invalid');
-  return <Alert variant={failure === 'pending' ? 'default' : 'destructive'} role={failure === 'pending' ? 'status' : 'alert'}>
+  // An absent resource stays explicit and retryable; it is not a successful empty list or an urgent alert.
+  const status = failure === 'pending' || failure === 'missing';
+  return <Alert variant={status ? 'default' : 'destructive'} role={status ? 'status' : 'alert'}>
     <TriangleAlertIcon aria-hidden="true" />
     <AlertTitle>{title}</AlertTitle>
     <AlertDescription>{failureText(failure, messages)}</AlertDescription>

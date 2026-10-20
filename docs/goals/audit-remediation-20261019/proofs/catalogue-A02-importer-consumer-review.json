@@ -1,0 +1,212 @@
+{
+  "format": "catalogue-A02-importer-consumer-review-v1",
+  "goal": "audit-remediation-20261019",
+  "worker": "G-2857",
+  "managerSession": "goal-audit-remediation-20261019",
+  "reviewer": {
+    "engine": "codex-1",
+    "model": "GPT-6.1 Sol",
+    "effort": "xhigh",
+    "independentOfCandidateAuthor": true,
+    "subagentsUsed": false,
+    "accountOrModelFallbackUsed": false
+  },
+  "disposition": {
+    "result": "accepted",
+    "summary": "No blocking consumer defect found in the exact two-file delta. The importer admits the existing selection before session/API activity, retains parent intake intent and recovery identities, and processes the full accepted view without the legacy prefix cap. One nonblocking test-coverage observation is recorded below.",
+    "blockingFindings": [],
+    "runtimeDefectsDemonstrated": [],
+    "nonblockingObservations": ["A02-REQUEST-ASSERTION-COVERAGE"],
+    "landingRecommendation": "Manager may integrate only 6430441893f5c3609efd97b3921a21a85eab0707..aa535290b435aefc98020dd432bc6676e8b95e46 through its normal integration gate. This worker has not applied or landed that implementation.",
+    "classAcceptance": "Reserved to the manager's original applicable assertions. This source review and the reused unit counts do not close A02 or prove complete native projection, public media delivery, corpus readiness or a product journey."
+  },
+  "pins": {
+    "reviewWorktreeInitialHead": "8fd25156033615ecca54088fada064ac9666dcd6",
+    "base": "6430441893f5c3609efd97b3921a21a85eab0707",
+    "candidate": "aa535290b435aefc98020dd432bc6676e8b95e46",
+    "candidateTree": "ee4f46e1b30828542aaee849acd64cf576d50480",
+    "authoredCommits": [
+      "64198c208f105d70ecbcf645f2e197254933b03d",
+      "aa535290b435aefc98020dd432bc6676e8b95e46"
+    ],
+    "combinedPatchSha256": "eb038b4616d6a12d11d8e6978144bb69861034c35c0b793b0d03a2b1e6feba36",
+    "patchVerification": "Recomputed from git diff --binary BASE CANDIDATE -- scripts/datasets/import.ts tests/qa/unit/dataset-import.test.ts; exact supplied SHA256 matched. Git name/stat inspection confirmed exactly two paths, 207 insertions and 8 deletions.",
+    "checkedPaths": [
+      {
+        "path": "scripts/datasets/import.ts",
+        "baseBlob": "8d017dc427ee3e24f7c6a5c101ce6eff6b415951",
+        "candidateBlob": "483048d88d1d0b5d316f98d3bf931973f07768c0",
+        "candidateSha256": "877019c4c04984e52b7e747ce42e2ce4bcdbacb63004603a91e732f7c6ab6b40",
+        "inspection": "Complete patch plus caller, journal, intake, recovery, native adjacency, rights, media and result paths at the candidate pin."
+      },
+      {
+        "path": "tests/qa/unit/dataset-import.test.ts",
+        "baseBlob": "570fe9ff5923c08d4553f514bf35bbf14c40ef33",
+        "candidateBlob": "fe2536db1cc2b7dbba92880b55bc9dccea4a5069",
+        "candidateSha256": "cb83380dd2b2ce0952ed385bf51f3afd1c4256cde57b041342b3c668c3d494b6",
+        "inspection": "Complete added consumer cases at lines 286-452, their fixture helpers and relevant unchanged recovery/media/relationship cases."
+      }
+    ],
+    "stagedReferences": [
+      {
+        "path": ".temp/ref/handoff.md",
+        "sha256": "518c9d5c45f0056fe0170ab1fb3fac5353cb5ccfb02b5af06e8d9b37e9d622c7",
+        "use": "Exact G2778 current-main candidate handoff; candidate execution claims below are carried from this supplied evidence."
+      },
+      {
+        "path": ".temp/ref/catalogue-A02-A17-ready-proof-map.json",
+        "sha256": "8bc6c362946a2708c8d25492f764b0ccf1ff8ec200bf12d39d814cbad983f40b",
+        "use": "A02 scope, genuine parent proofs, unchanged selector pins and prior review qualifications only. A17 was not reviewed."
+      }
+    ]
+  },
+  "consumerReview": [
+    {
+      "invariant": "Selection admission and durable refusal precede session and public commands",
+      "source": "scripts/datasets/import.ts:544-561, 584-600",
+      "assessment": "The existing parent-wide source-post exclusion remains in force. selectDatasetRoots runs offline; canonical manifest content determines imports/selections/<sha256>.json, atomicJson persists it, and a refused result throws DatasetSelectionRefusedError with both manifest and path. Session discovery, epoch lookup, import locking and journal creation occur afterward. No intake, native, media transfer or catalogue read can be reached by a selector refusal.",
+      "counterexample": "An over-budget v11 closure or absent vndb:vn:missing root must not start even the epoch catalogue read. The new two-case test at dataset-import.test.ts:335-355 asserts no API requests/transfers, no import-latest.json, and only the selections directory.",
+      "qualification": "Those tests supply a complete fake session; absence of localDatasetSession activity is established by control-flow inspection. Invalid source-post input fails the existing policy preflight, rather than returning a selector-refusal manifest. Local persistence errors also fail before API activity."
+    },
+    {
+      "invariant": "An accepted closure is consumed in full and never prefix-capped again",
+      "source": "scripts/datasets/import.ts:555-564, 578-582, 909-929, 962, 1107-1122, 1184-1254, 1260-1264",
+      "assessment": "Accepted view sources supply records and allEdges; all accepted edges enter endpoint validation and undirected native-neighbor lookup. Selection manifests bypass maxRecords entirely. Four-record intake chunks and native API batches partition that full view without truncating it. Work mapping and descriptive resource mapping consume selected records under the existing native policy. Work-to-Work relationship election uses accepted allEdges, and media iteration uses view.images.",
+      "counterexample": "v11 is the third parent record, after unrelated v99 and its staff. Selecting v11 with maxRecords:1 retains records at original indexes [2,3,4,5], not the first parent record or one selected record. Replaying with maxRecords:0 adds no mutations. Expanding relatedWorkDepth to 1 includes the related Work's staff and reaches five selected records.",
+      "qualification": "Consumed does not mean every edge becomes a native assertion. The unchanged policy retains all outgoing source evidence, elects Work-to-Work evidence resources, uses a single representative Work visibility anchor for generic resources, and explicitly declines native classification/release/composition equivalence. No broader native completeness is inferred."
+    },
+    {
+      "invariant": "Parent intake evidence stays exact while native adjacency follows the accepted view",
+      "source": "scripts/datasets/import.ts:565-582, 597-599, 732-755, 919-955, 1080-1105",
+      "assessment": "The parent snapshot ID/digest, full record objects, parent outgoing arrays, parent stored-image arrays and source scope envelopes remain the intake basis. Selected records are retained with those original envelopes. Context still hashes origin, acting subject, product epoch and parent identity, so selection changes do not fork old journal identities. Only native adjacency and processing membership use the view.",
+      "counterexample": "Character c1 has two identical appearance occurrences to v11 and an appearance to unrelated, previously imported v99. The parent intake keeps all three appearances, including the excluded v99 boundary edge; the accepted edge indexes are [1,2,3,4], so new character visibility anchors to v11 rather than v99. Replacing parent intake edges with view edges would change the old record request's bytes despite unchanged snapshot identity.",
+      "preservation": "The new frozen-parent test compares every selected record envelope with parent-filtered outgoing edges and stored images, checks sourceRevision and parent identity, deep-freezes the supplied parent, and compares its in-memory JSON and saved file bytes afterward. Parent arrays are iterated without in-place sort/splice/replacement. Manifest source and stored-image occurrence indexes remain the selector's original coordinates."
+    },
+    {
+      "invariant": "Bindings and saved request recovery survive selection changes, including records outside the view",
+      "source": "scripts/datasets/import.ts:567, 625-677, 773-805, 807-902, 966-991, 1021-1059; scripts/lib/command-journal.ts:11-29",
+      "assessment": "byKey is built from every parent record. Semantic bulk child recovery and catalogue bulk item recovery therefore resolve earlier request item keys outside the newly selected closure. The complete request directory is loaded and old groups are reconciled before fresh groups are chosen. replayCommand sends stored method/path/body and returns stored results; it does not replace an existing request body with a new selection's proposal. Prior native registry entries are retained, and fresh mapping skips them.",
+      "counterexample": "After a previous bulk request succeeds but the native summary is lost, selecting another root must still resolve the earlier child IDs against the parent. A byKey made only from selected records would lose a recovered semantic child or throw for an earlier catalogue Work. The candidate's parent-wide lookup prevents that failure by inspection.",
+      "qualification": "The new selection test proves preservation of existing native bindings, narrower-view anchoring, zero-write replay and expansion. The unchanged test at dataset-import.test.ts:574-631 separately clears the native summary and recovers 141 identities without new receipts. Neither directly executes the combined outside-view crash case; that combination is source-reviewed, not newly runtime-proven. See the nonblocking request-file assertion observation."
+    },
+    {
+      "invariant": "Repeated occurrences and media dispositions retain their original meaning",
+      "source": "scripts/datasets/import.ts:569-577, 1260-1325, 1454-1516, 1522-1543; tests/qa/unit/dataset-import.test.ts:304-321, 375-392",
+      "assessment": "Outgoing and image lists are appended in original order without deduplication; the selected manifest retains duplicate source edges and image occurrences by index. The importer does not acquire missing media during selection. Missing/unavailable/null captures cannot reach upload, and imported status still requires the ordinary owner sequence and a selection receipt. Coverage remains the selector's explicit knowledge/media disposition.",
+      "counterexample": "The fixture includes identical appearance edges at indexes 1 and 2, duplicate stored covers at indexes 2 and 3, and a source image descriptor with no stored acquisition. The accepted manifest records source images [1,2,3,4] and stored images [1,2,3], with media incomplete. Processing completion is true even with those missing bytes; it cannot be read as media success.",
+      "qualification": "All stored images in the new fixture have captureRole other, capture null and missing true. Thus coverResults:[] and zero transfers prove no fabricated cover result, not execution of a selected cover's pending/upload path. Existing cover tests exercise the unchanged owner sequence with fake transport. Work-to-Work native relation labels remain content-derived as before; no distinct native ID for byte-identical repeated source edges is established by this patch."
+    },
+    {
+      "invariant": "Omitting selection retains the legacy valid-input behavior and replay",
+      "source": "scripts/datasets/import.ts:544-582, 909-910, 1261, 1540; tests/qa/unit/dataset-import.test.ts:433-451",
+      "assessment": "With no selection, sources, records, edges, stored media, parent lookup and prefix slicing resolve to the original arrays and rule. Context, command labels, intake envelopes, native/rights logic and result shape remain unchanged. No selection directory or selection result properties are created. The new no-selection case checks the first parent record's exact envelope, partial completion and byte-identical summary replay without new writes.",
+      "qualification": "The source-post preflight moved ahead of session lookup even without selection. Rejected user-post inputs can therefore fail before local session discovery; this is an earlier enforcement of the existing exclusion, with no change to accepted import/replay semantics."
+    },
+    {
+      "invariant": "Source rights, ordinary native APIs and independent citations are not redefined",
+      "source": "scripts/datasets/import.ts:33-44, 380-385, 754, 1064-1077; complete two-file diff; scripts/datasets/cli.ts:133-138",
+      "assessment": "Selected intake uses the same provider rights evidence, and selected native Works receive the existing rights-use assessments, including resumed Works. No ordinary API handler, citation operation, converter, policy schema or source identity is modified. The selector is the only added runtime dependency. This tooling call does not install a converter in an ordinary native operation or condition ordinary citations on conversion/retained proof. No generic mapping/workflow framework or producer is added.",
+      "qualification": "This is delta-level noninterference, not a new end-to-end citation or rights acceptance proof. The CLI still passes only legacy import options. Callers must explicitly pass selection through the existing importDataset seam; this review does not assert a CLI or current corpus producer now invokes it."
+    }
+  ],
+  "nonblockingObservations": [
+    {
+      "id": "A02-REQUEST-ASSERTION-COVERAGE",
+      "severity": "low",
+      "kind": "test-coverage",
+      "paths": [
+        "tests/qa/unit/dataset-import.test.ts:407",
+        "tests/qa/unit/dataset-import.test.ts:428",
+        "scripts/datasets/import.ts:651-658"
+      ],
+      "observation": "The new preservation test reads original.entries and journal.entries from receiptFile. save writes entries:{} into that summary and persists real requests separately under imports/<context>/requests. Both entry-comparison loops therefore iterate zero entries; they do not establish preservation of durable request bytes.",
+      "counterexample": "A future regression that alters one successful durable request file while leaving native bindings and write counts unchanged would escape those two loops. The native-binding comparisons and zero-write assertions remain meaningful.",
+      "action": "When strengthening this test, enumerate the prior request directory, assert a nonzero count, and compare each existing file's exact bytes after selection, replay and expansion. An outside-view record with its native summary entry removed would directly cover the combined recovery premise.",
+      "disposition": "Nonblocking: no runtime defect was demonstrated. Immutable saved-request replay and parent-wide recovery are supported by source inspection and the reused lower-level tests. This observation is not a new original A02 class-acceptance prerequisite."
+    }
+  ],
+  "reusedEvidence": [
+    {
+      "owner": "G-2779",
+      "job": "0e3c4760-28df-439b-80f1-7b1d157fdd4c",
+      "proofCommit": "095ef14163707847227e00a939ccf3fddf341b2a",
+      "result": "20 tests passed, 0 failed, 43241 assertions",
+      "command": "env REZICS_DATASET_ROOT=<retained-dataset-root> bun scripts/goal/goalctl.ts test tests/qa/unit/dataset-selection.test.ts tests/qa/unit/dataset-vndb.test.ts",
+      "logSha256FromStagedMap": "8e2eb558722e745eb582922c620fa2c410ee709d4283eee86f1de5df234a9e34",
+      "unchangedCandidateFiles": [
+        {
+          "path": "scripts/datasets/selection.ts",
+          "blob": "c22ba75edd5a9ba0d6ec06c8562c78070ab7c05d",
+          "sha256": "ca04cf81fa0b7077b7d0c6daadf2d7609c80c465166c656736b4444f89fbd36f"
+        },
+        {
+          "path": "tests/qa/unit/dataset-selection.test.ts",
+          "blob": "dda7cd4727c6b8112f7bd36ba0de0b151c224ebc",
+          "sha256": "6985c54c8288e7603d2ee2bbce674426e039f271c3f4b637de96be107ae6c69c"
+        }
+      ],
+      "verification": "Candidate selector/test blob IDs and SHA256 values were independently recomputed and match the supplied proof map; both blobs are also unchanged from the review base. The accepted selector algorithm and producer were not reviewed or run again.",
+      "frozenParentsFromStagedMap": [
+        {
+          "id": "dataset-904aa4496a525e699074",
+          "root": "vndb:vn:v11",
+          "fileSha256": "e32b3489a7a178fba54aa6d9dcbe93aeb57fb3f5ca0deecb2e0d035a2e31a5bd"
+        },
+        {
+          "id": "dataset-424753e973cbd3609613",
+          "root": "bangumi:subject:975",
+          "fileSha256": "89ba2f7bb2b874ec77886bae97007d959c0e3409af1d8581fa7d05a7f9911625"
+        }
+      ],
+      "limit": "Genuine v11 and Bangumi root adjacency, >1000 ordered episodes, subject-qualified voices and original media occurrence checks are retained selector evidence. This worker did not reread parent datasets or the original job log, and did not execute a native import of those closures."
+    },
+    {
+      "owner": "G-2778",
+      "job": "59b89d62-1715-4aa0-97dc-707991f92f34",
+      "pin": "aa535290b435aefc98020dd432bc6676e8b95e46",
+      "steps": [
+        {
+          "command": "bun scripts/goal/goalctl.ts test tests/qa/unit/dataset-import.test.ts",
+          "result": "30 tests passed, 0 failed, 351 assertions"
+        },
+        {
+          "command": "task goal -- check --only types,lint,guards",
+          "result": "Affected types, type-aware lint, AST and selected guards actually executed and passed; 11/45 guards selected, QA06 timeout retry passed.",
+          "checkReceipt": "run-OIZe1o"
+        }
+      ],
+      "fixturePremises": "Transport fixtures allocate deterministic fake native/source receipts and epoch-1; there is no real Main, storage, media service or retained parent import. The five new consumer cases consist of two refusal cases and three acceptance/replay/legacy cases. The handcrafted graph now uses captured VNDB character-to-Work appearance direction and source kind/externalId coordinates; it is not a genuine corpus fixture.",
+      "fixtureCorrection": "The supplied handoff records that job 9b0518bd-27c3-4d20-8c4e-068463ba3244 reached assertions and failed two cases with generic character edges. aa535290b corrected fixture coordinates; no selector policy or independent outcome assertion changed.",
+      "limit": "Reused as explicitly authorized evidence at the exact candidate pin, corroborated by patch and fixture source inspection. This worker did not independently read the original job logs or rerun this passing file. No candidate execution is attributed to this review worktree."
+    },
+    {
+      "owner": "G-2815",
+      "reviewCommit": "c84263f1ba2a33cbcd62cc11b1643328ff3d2c91",
+      "reviewedCore": "c8896182d214be08781aa23e13d5e7e5d9c2e251",
+      "use": "Prior source review of the identical accepted selector only. The commit's reviewed core is explicitly different from this candidate; its prior review does not cover this parent-intake/selected-native split or the new consumer tests. Historical 91-test wider-owner results are not relabelled current-candidate evidence."
+    }
+  ],
+  "reviewValidation": {
+    "method": "Read-only git object inspection at exact pins and staged evidence reuse; no implementation checkout changes, importer execution, corpus operation or landing.",
+    "focusedCandidateRerun": "None needed: no concrete runtime concern remained that required new execution beyond the explicitly reusable selector and candidate jobs. The nonblocking assertion weakness is apparent from the summary serializer and test source.",
+    "reportChecks": {
+      "job": "ab082835-c4e7-4b2b-b57d-0331d414854b",
+      "result": "passed; both ordered commands exited 0",
+      "recordingCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "docs": "task docs:check passed: 13 checker tests and 258 Markdown files; local links, fragments and design navigation. External URLs and runtime behavior were not tested.",
+      "workerCheck": "run-x1FqBm: AST and the 1/45 guard selected by this report path passed. Types and lint had no source workspace/file to check; no tests were named in the brief. These are report-worktree checks, not execution of aa535290b.",
+      "logs": [
+        ".temp/goal/jobs/ab082835-c4e7-4b2b-b57d-0331d414854b.1.log",
+        ".temp/goal/jobs/ab082835-c4e7-4b2b-b57d-0331d414854b.2.log",
+        ".temp/goal/check/run-x1FqBm/output.log"
+      ],
+      "json": "Report parsed successfully with Python's standard JSON parser."
+    },
+    "affectedChecksOutsideClaim": "The candidate's dataset-import test and affected types/lint/AST/guards are the reused G2778 evidence above. The unchanged dataset-selection/VNDB tests are the reused G2779 evidence; no additional affected product suites are claimed."
+  },
+  "limitsAndNext": {
+    "classSweep": "Within the two-file delta, traced the cap/preservation invariant through preflight refusal, record intake, parent scopes, original edge/image occurrences, selected native adjacency, saved bulk recovery, rights, media and legacy replay. No API/UI journeys or unrelated provider/domain audit was introduced.",
+    "unchangedAuthorities": "Original independent assertions, source rights, both original identity epochs, frozen bytes/digests, product baseline, backups and producer ownership were not changed. No restore, all-113 run, services, public import, network capture or reset was performed.",
+    "managerNext": "Use this independent delta disposition together with the exact candidate and unchanged selector proof. Perform normal integration separately. Decide A02 class acceptance only from its original applicable assertion evidence; retain native projection/public media limitations and existing producer ownership. The request-file test improvement is optional follow-up, not a closure condition added here."
+  }
+}

@@ -7,6 +7,7 @@ import ja from '../../features/library/messages/ja.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { prepareBook, prepareBookCopies } from '../books-browser-fixture.ts';
 import { expectClean, type Findings, pressByKeyboard } from '../g-743-matrix.ts';
+import { openLibraryTools } from '../library-tools.ts';
 
 const exportRequests = '**/v1/me/library-export?**';
 
@@ -26,6 +27,8 @@ export function registerBooksExportJourney() {
       await page.goto(localizedPath('/library', locale));
       await expect(page.getByRole('heading', { name: t.deniedTitle })).toHaveCount(0);
       await expect(page.locator('html')).toHaveAttribute('lang', locale);
+      await openLibraryTools(page, t.libraryTools,
+        summary => pressByKeyboard(page, summary, findings, t.libraryTools));
       const section = page.getByRole('region', { name: t.backupTitle, exact: true });
       const disclosure = section.locator('summary');
       await pressByKeyboard(page, disclosure, findings, 'Download library disclosure');
@@ -60,6 +63,8 @@ export function registerBooksExportJourney() {
       await page.unroute(exportRequests, dropContinuation);
       await page.reload();
       await expect(page.locator('html')).toHaveAttribute('lang', locale);
+      await openLibraryTools(page, t.libraryTools,
+        summary => pressByKeyboard(page, summary, findings, t.libraryTools));
       await pressByKeyboard(page, disclosure, findings, 'Reopen library download');
       await expect(section.getByRole('alert')).toHaveText(t.backupPaused(first.rows.length));
       await page.screenshot({ path: info.outputPath(`book-export-paused-${locale}.png`), fullPage: true });

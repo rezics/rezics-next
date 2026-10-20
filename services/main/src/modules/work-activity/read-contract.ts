@@ -3,6 +3,7 @@ import { pageFields, readId } from '../work/read-contract.ts';
 
 export const discussionItem = t.Object({
   reply: readId, realm: readId, placement: readId,
+  kind: t.Union([t.Literal('post'), t.Literal('reply')]),
   revisionId: t.String({ pattern: '^[0-9a-f-]{36}$' }),
   body: t.String({ maxLength: 1_048_576 }),
   spoiler: t.Optional(t.Boolean()),
@@ -20,7 +21,8 @@ export const activityHistoryItem = t.Object({
 export const discussionPage = t.Object({ items: t.Array(discussionItem, { maxItems: 20 }), ...pageFields });
 export const activityHistoryPage = t.Object({ items: t.Array(activityHistoryItem, { maxItems: 20 }), ...pageFields });
 
-/** At most one candidate page and one Content batch; review is checked twice per item. */
+/** One candidate page, one Content body batch and one selected identity batch;
+ * review is checked twice per item. */
 export const WORK_ACTIVITY_COST = { pageSize: 20, contentBytes: 4 * 1024 * 1024,
   reviewChecks: 40, graphCalls: 160, graphBytes: 4 * 1024 * 1024,
   deadlineMs: 10_000 } as const;

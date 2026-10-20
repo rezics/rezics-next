@@ -20,8 +20,9 @@ import {
   PlusIcon,
   VolumeXIcon,
 } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
+import { ReportMenu, ReportMenuItems, type ReportMenuTarget } from '../safety/report-action.tsx';
 import { mainRelationships, RelationshipError } from './api.ts';
 import { observeRelationships } from './events.ts';
 import { messages } from './messages.ts';
@@ -75,6 +76,11 @@ export function NotificationMenu({
   );
 }
 
+/** The reaction group excludes the object's more menu so each keeps its own accessible identity. */
+function Reactions({ label, children }: { label?: string; children: ReactNode }) {
+  return label ? <div role="group" aria-label={label} className="flex min-w-0 items-center gap-1.5">{children}</div> : children;
+}
+
 /** Follow/Join, its delivery level and separate negative relationships share one control on every surface. */
 export function RelationshipControl(props: Parameters<typeof RelationshipControlState>[0]) {
   return (
@@ -103,6 +109,9 @@ function RelationshipControlState({
   followLabel,
   followingLabel,
   followAccessibleLabel,
+  moreAccessibleLabel,
+  reactionsLabel,
+  reports = [],
 }: {
   target: string;
   kind: string;
@@ -121,6 +130,9 @@ function RelationshipControlState({
   followLabel?: string;
   followingLabel?: string;
   followAccessibleLabel?: string;
+  moreAccessibleLabel?: string;
+  reactionsLabel?: string;
+  reports?: readonly ReportMenuTarget[];
 }) {
   const t = messages[locale];
   const api = useMemo(
@@ -265,7 +277,7 @@ function RelationshipControlState({
         : (followLabel ?? t.follow);
   if (!signedIn)
     return (
-      <a
+      <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5"><Reactions label={reactionsLabel}><a
         href={signInHref}
         aria-label={followAccessibleLabel ? `${followAccessibleLabel} · ${t.signIn}` : undefined}
         className={cn(buttonVariants({ pill: true, size: compact ? 'xs' : 'sm' }), 'w-fit max-w-full justify-self-start', className)}
@@ -276,13 +288,13 @@ function RelationshipControlState({
           {' '}
           · {name} · {t.signIn}
         </span>
-      </a>
+      </a></Reactions><ReportMenu targets={reports} name={name} locale={locale} moreAccessibleLabel={moreAccessibleLabel} /></div>
     );
   if (!api)
     return (
-      <p role="status" className="text-muted-foreground text-sm">
+      <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5"><Reactions label={reactionsLabel}><p role="status" className="text-muted-foreground text-sm">
         {t.unknown}
-      </p>
+      </p></Reactions><ReportMenu targets={reports} name={name} locale={locale} moreAccessibleLabel={moreAccessibleLabel} /></div>
     );
   return (
     <div
@@ -290,6 +302,7 @@ function RelationshipControlState({
       data-relationship={target}
       data-hydrated={hydrated ? 'true' : undefined}
     >
+      <Reactions label={reactionsLabel}>
       <Button
         type="button"
         pill
@@ -335,36 +348,37 @@ function RelationshipControlState({
           onChange={(level) => void write({ level })}
         />
       ) : null}
+      </Reactions>
       <Menu>
         <MenuTrigger asChild>
           <Button
             type="button"
             variant="ghost"
             size="icon-sm"
-            disabled={busy || !hydrated}
-            aria-label={`${t.options} · ${name}`}
+            aria-label={moreAccessibleLabel ?? `${t.options} · ${name}`}
           >
             <EllipsisIcon aria-hidden="true" />
           </Button>
         </MenuTrigger>
         <MenuContent className="max-w-[calc(100vw-2rem)]">
+          {reports.length ? <><ReportMenuItems targets={reports} locale={locale} /><MenuSeparator /></> : null}
           {membership ? (
             <MenuItem
               value="follow"
-              disabled={state?.following == null}
+              disabled={busy || !hydrated || state?.following == null}
               onSelect={() => void write({ following: !state?.following })}
             >
               {state?.following ? t.unfollow : t.explicitFollow}
             </MenuItem>
           ) : null}
           {membership && state?.following && state.source === 'join' ? (
-            <MenuItem value="explicit" onSelect={() => void write({ following: true })}>
+            <MenuItem value="explicit" disabled={busy || !hydrated} onSelect={() => void write({ following: true })}>
               {t.explicitFollow}
             </MenuItem>
           ) : null}
           <MenuItem
             value="pin"
-            disabled={!state?.following}
+            disabled={busy || !hydrated || !state?.following}
             onSelect={() => void write({ pinPosition: state?.pinPosition === null ? 0 : null })}
           >
             <PinIcon aria-hidden="true" />
@@ -374,7 +388,7 @@ function RelationshipControlState({
           <MenuItem
             value="mute"
             title={!muteKind ? t.unsupported : undefined}
-            disabled={!muteKind || negative === 'muted'}
+            disabled={busy || !hydrated || !muteKind || negative === 'muted'}
             onSelect={() => void negativeAction('mute')}
           >
             <VolumeXIcon aria-hidden="true" />
@@ -383,7 +397,7 @@ function RelationshipControlState({
           <MenuItem
             value="block"
             title={kind !== 'agent' ? t.unsupported : undefined}
-            disabled={kind !== 'agent' || negative === 'blocked'}
+            disabled={busy || !hydrated || kind !== 'agent' || negative === 'blocked'}
             onSelect={() => void negativeAction('block')}
           >
             {t.block}

@@ -3,13 +3,41 @@ import { readWorkParts, readWorkRealizations, readWorkRelations, readWorkWholes 
 import { settle } from '../work-page/books-edition-page.read.ts';
 import { reader, type SuppliedClient } from '../work-page/read.ts';
 import { animeRelationsReads } from '../work-page/anime-relations-recorded-page.ts';
+import { idOf } from '../work-page/route.ts';
 import type { CollectionMembers, Loaded, Names, PartsPage, RealizationPage, Realization,
-  People, RelationEntry, RelationsPage, Release, ReleasePage, WholesPage } from './types.ts';
+  CollectionMember, People, RelationEntry, RelationsPage, Release, ReleasePage, Summary, WholesPage } from './types.ts';
+
+export interface PublicCollectionPage {
+  occurrences: readonly CollectionMember[];
+  names: Names;
+  nextCursor: string | null;
+}
+
+/** Main admits public and private membership, including groups and opaque continuation. */
+export async function readPublicCollectionPage(id: string,
+  query: { after?: string; parent?: string; position?: string }, client?: SuppliedClient): Promise<Loaded<PublicCollectionPage>> {
+  const current = client ?? await reader();
+  const read = await settle(() => current.main.v1.collections({ id }).get({ query: {
+    ...query, actingSubject: current.actingSubject, limit: 20 } }), query.after);
+  if (!read.ok) return read;
+  const occurrences = read.data.occurrences as CollectionMember[];
+  const resources = [...new Set(occurrences.flatMap(item => item.target ?? []))];
+  const names = new Map<string, Summary>();
+  if (resources.length) {
+    const summaries = await settle(() => current.main.v1.resources.summaries.post({
+      profile: 'resource-summary-batch-v1', resources, actingSubject: current.actingSubject,
+      ...(query.position ? { position: query.position } : {}) }));
+    if (!summaries.ok) return summaries;
+    for (const summary of summaries.data.summaries) names.set(summary.reference, summary);
+  }
+  // The Collection owner calls its opaque cursor `next`; forward it without interpreting it.
+  const cursor = read.data.next;
+  return { ok: true, data: { occurrences, names, nextCursor: cursor } };
+}
 
 // Server reads for the Work-level pages. Each returns a `Loaded` result instead
 // of throwing, so one section's failure never takes down another. Main decides
-// disclosure for public parts, wholes and relations reads. Collection reads
-// still require an acting Agent.
+// disclosure for public parts, wholes, relations and Collection reads.
 
 export async function readParts(id: string, query: { parent?: string; after?: string; limit?: number }, client?: SuppliedClient):
   Promise<Loaded<PartsPage>> {
@@ -35,7 +63,7 @@ export async function readCollectionMembers(collection: string, query: { after?:
 }
 
 /**
- * Names and availability for up to 64 resources per Main call; a failed batch leaves its resources unnamed. `position` is
+ * Names and availability for up to 64 resources per Main call; failed batches retain unavailable entries. `position` is
  * the reading position (`all` or an occurrence IRI) Main withholds later names for; omitted, Main chooses.
  */
 export const readNames = cache(async (resources: string, position?: string, client?: SuppliedClient): Promise<Names> => {
@@ -56,9 +84,30 @@ export async function readRealizations(id: string, after?: string, client?: Supp
   return readWorkRealizations(main, actingSubject, id, after);
 }
 
-export async function readRealization(work: string, realization: string): Promise<Loaded<Realization>> {
-  const { main, actingSubject } = await reader();
-  return settle(() => main.v1.works({ id: work }).realizations({ realization }).get({ query: { actingSubject } }));
+export async function readRealization(work: string, realization: string, revision?: string, client?: SuppliedClient): Promise<Loaded<Realization>> {
+  const { main, actingSubject } = client ?? await reader();
+  return settle(() => main.v1.works({ id: work }).realizations({ realization }).get({ query: { actingSubject, revision } }));
+}
+
+/** A release selects a retained realization revision, independently of its current head. */
+export async function readReleaseRealizations(coverage: Release['coverage'], client?: SuppliedClient):
+  Promise<ReadonlyMap<string, Loaded<Realization>>> {
+  return new Map(await Promise.all(coverage.flatMap(entry => entry.realization
+    ? [readRealization(idOf(entry.work) ?? entry.work, idOf(entry.realization) ?? entry.realization,
+      entry.revision ?? undefined, client).then(read => [entry.realization!, read] as const)] : [])));
+}
+
+export type SelectedRealizationRead = Pick<Realization, 'work' | 'id' | 'revision'> & { read: Loaded<Realization> };
+
+/** Resolve only exact source revisions; retain a selected revision's refusal instead of substituting another head. */
+export async function readFollowedRealizations(loaded: readonly Realization[], client?: SuppliedClient): Promise<SelectedRealizationRead[]> {
+  const known = new Set(loaded.map(item => `${item.id}\0${item.revision}`));
+  const followed = new Map(loaded.flatMap(item => item.source.kind === 'realization'
+    && !known.has(`${item.source.realization}\0${item.source.revision}`)
+    ? [[`${item.source.realization}\0${item.source.revision}`, item.source] as const] : []));
+  return Promise.all([...followed.values()].map(async source => ({ work: source.work, id: source.realization,
+    revision: source.revision, read: await readRealization(idOf(source.work) ?? source.work,
+      idOf(source.realization) ?? source.realization, source.revision, client) })));
 }
 
 /** One release of a Work, by its own ID; the release's Work comes from its resource summary. */

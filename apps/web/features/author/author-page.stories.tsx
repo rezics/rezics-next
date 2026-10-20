@@ -89,7 +89,17 @@ export const OpenLibraryAuthor: Story = {
       'href',
       `/auth/start?next=${encodeURIComponent('/en/authors/open-library/OL21594A')}`,
     );
+    const sources = canvas.getByRole('contentinfo', { name: 'Sources and licenses' });
+    await expect(sources.compareDocumentPosition(canvas.getByRole('region', { name: 'Works by Jane Austen' })) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    await expect(within(sources).getByRole('link', { name: 'Source record' })).toHaveAttribute('href',
+      'https://openlibrary.org/authors/OL21594A.json');
+    await expect(within(sources).getByText(/open-library-revision:77/)).toBeVisible();
   },
+};
+
+export const AuthorDetailPhone: Story = {
+  ...OpenLibraryAuthor,
+  globals: { viewport: { value: 'phone' } },
 };
 
 /** Following shows at once, as on a REZICS author's profile, and the count moves with it. */
@@ -335,3 +345,23 @@ export const AllWorksMoved: Story = {
     );
   },
 };
+
+
+export const HeaderActions: Story = {
+  args: { reader: signedIn, followActions: memoryFollowActions() },
+  async play({ canvasElement }) {
+    const header = canvasElement.querySelector<HTMLElement>('[data-subject-header]')!;
+    const top = within(header);
+    const primary = top.getByRole('group', { name: 'Primary actions' });
+    const reactions = top.getByRole('group', { name: 'Reactions' });
+    const more = top.getByRole('button', { name: 'More actions for Jane Austen' });
+    await expect(within(primary).getByRole('link', { name: 'Works by Jane Austen' })).toHaveAttribute('href', '#author-works');
+    await expect(primary.compareDocumentPosition(reactions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await expect(more.getBoundingClientRect().left).toBeGreaterThanOrEqual(reactions.getBoundingClientRect().right - 1);
+    await expect(header).not.toHaveAttribute('data-resource');
+    await expect(within(canvasElement).queryByRole('link', { name: 'Report this page' })).toBeNull();
+    await expect(canvasElement.querySelector('[data-primary-content]')).toHaveTextContent('Pride and Prejudice');
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  },
+};
+export const HeaderActionsPhone: Story = { ...HeaderActions, globals: { viewport: { value: 'phone' } } };

@@ -8,7 +8,7 @@ import { zoneContentText } from '../language/untagged.ts';
 import { readAgent } from '../realm/read.ts';
 import { readRealization, readRelease } from '../work-levels/read.ts';
 import type { Realization, Release } from '../work-levels/types.ts';
-import { type ReleaseHit, type ReleaseResult, releaseWork, SHOWN_MATCHES } from './adapt.ts';
+import { type ReleaseHit, type ReleaseRecords, type ReleaseResult, realizationSelectionKey, releaseWork, SHOWN_MATCHES } from './adapt.ts';
 import type { ResolvedReleaseFilter } from './registry.ts';
 import { type ReleaseFilterState, releaseGroup } from './state.ts';
 
@@ -41,32 +41,36 @@ async function readHits(realm: string, locale: UiLocale, state: ReleaseFilterSta
 const uuid = (iri: string) => iri.slice(-36);
 
 /** The records of the releases a page shows: at most `SHOWN_MATCHES` per Work, and the realizations they carry. */
-async function readRecords(hits: readonly ReleaseHit[]) {
+export async function readRecords(hits: readonly ReleaseHit[], reads: {
+  release: typeof readRelease; realization: typeof readRealization; agent: typeof readAgent;
+} = { release: readRelease, realization: readRealization, agent: readAgent }): Promise<ReleaseRecords> {
   const wanted = hits.flatMap(hit => hit.matchedReleases.slice(0, SHOWN_MATCHES).map(release => ({ work: hit.id, release })));
-  const loaded = await Promise.all(wanted.map(async item => [item, await readRelease(uuid(item.work), uuid(item.release))] as const));
+  const loaded = await Promise.all(wanted.map(async item => [item, await reads.release(uuid(item.work), uuid(item.release))] as const));
   const releases = new Map<string, Release>();
-  const realizationIds = new Map<string, string>();
+  const selections = new Map<string, { work: string; identity: string; revision: string | null }>();
   for (const [item, read] of loaded) {
     if (!read.ok) continue;
     releases.set(item.release, read.data);
     for (const entry of read.data.coverage) {
-      if (entry.work === item.work && entry.realization) realizationIds.set(entry.realization, item.work);
+      if (entry.work === item.work && entry.realization) selections.set(realizationSelectionKey(entry.realization, entry.revision),
+        { work: entry.work, identity: entry.realization, revision: entry.revision });
     }
   }
-  const realizations = new Map<string, Realization>();
-  await Promise.all([...realizationIds].map(async ([realization, work]) => {
-    const read = await readRealization(uuid(work), uuid(realization));
-    if (read.ok) realizations.set(realization, read.data);
+  const realizationReads = new Map<string, Loaded<Realization>>();
+  await Promise.all([...selections].map(async ([key, selected]) => {
+    realizationReads.set(key, await reads.realization(uuid(selected.work), uuid(selected.identity), selected.revision ?? undefined));
   }));
+  const realizations = new Map<string, Realization>();
+  for (const read of realizationReads.values()) if (read.ok) realizations.set(read.data.id, read.data);
   // A translator is an Agent; its public profile names it, and a profile Main will not give leaves it unnamed.
   const translators = new Map<string, ZoneText>();
-  await Promise.all([...new Set([...realizations.values()].flatMap(item => item.translators))].map(async agent => {
-    const read = await readAgent(uuid(agent));
+  await Promise.all([...new Set([...realizationReads.values()].flatMap(item => item.ok ? item.data.translators : []))].map(async agent => {
+    const read = await reads.agent(uuid(agent));
     if (read.ok) translators.set(agent, read.data.displayNameInfo
       ? { value: read.data.displayNameInfo.value, lang: read.data.displayNameInfo.language,
         dir: read.data.displayNameInfo.direction } : zoneContentText(read.data.displayName));
   }));
-  return { releases, realizations, translators };
+  return { releases, realizations, realizationReads, translators };
 }
 
 /** One page of a Zone's release-filtered browse; a failed record read only drops that release's line. */

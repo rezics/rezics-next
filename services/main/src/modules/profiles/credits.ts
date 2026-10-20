@@ -1,6 +1,6 @@
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { GRAPHS, RV, hash, iri, lit } from '../work/activate.ts';
-import { adoptAuthorCredit, validExternalReference, AuthorCreditConflict, AuthorCreditUnavailable,
+import { adoptAuthorCredit, creditProfile, validExternalReference, AuthorCreditConflict, AuthorCreditUnavailable,
   type AuthorCreditValue } from '../work/author-credit.ts';
 import { fenceWorkBasis, readWorkBasis } from '../work/read-header.ts';
 import { pageResult, WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
@@ -20,13 +20,14 @@ async function creditedAgentVisible(env: MainWorkDependencies['environment'], ag
   return result.boolean === true;
 }
 
-export function nativeCreditDigest(input: NativeCreditInput) {
+export function nativeCreditDigest(input: NativeCreditInput, modelRevision?: string) {
   if (![input.work, input.credit, input.expectedWorkHead, input.actingSubject].every(id => nativeId.test(id))
     || !isNativeCreditRole(input.role)
     || (input.agent ? !nativeId.test(input.agent) || input.participant !== undefined || input.ordinal !== undefined
       : !input.participant || !validExternalReference(input.participant)
         || !Number.isInteger(input.ordinal ?? 0) || (input.ordinal ?? 0) < 0 || (input.ordinal ?? 0) > 127)) throw new WorkReadInvalid('Invalid native Agent credit');
-  return hash(JSON.stringify({ profile: 'native-agent-credit-v1', work: input.work, credit: input.credit,
+  const selected = creditProfile({ agent: input.agent, role: input.role, modelRevision });
+  return hash(JSON.stringify({ profile: selected.endsWith('-v2') ? selected : 'native-agent-credit-v1', work: input.work, credit: input.credit,
     ...(input.agent ? { agent: input.agent } : { participant: input.participant, ordinal: input.ordinal ?? 0 }), role: input.role, expectedWorkHead: input.expectedWorkHead, actingSubject: input.actingSubject }));
 }
 

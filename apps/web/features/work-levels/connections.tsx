@@ -1,10 +1,11 @@
+import type { WorkAt } from '../work-page/route.ts';
 import { Badge } from '@rezics/ui/badge';
 import { buttonVariants } from '@rezics/ui/button';
 import { LocalizedText } from '@rezics/ui/localized-text';
 import { cn } from '@rezics/ui/utils';
 import { LinkIcon, NetworkIcon } from 'lucide-react';
 import type { UiLocale } from '../../i18n/define.ts';
-import { resourceHref } from '../address/path.ts';
+import { resourceHref, type AddressTarget } from '../address/path.ts';
 import { authorHref } from '../author/route.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import Link from '../shell/localized-link.tsx';
@@ -16,8 +17,52 @@ import { namedWorkHref, NameLink, SummaryLink, type SummaryHref, summaryWorkHref
 import { type Appearance, type CreditedName, labelFor, type RelationItem, type RelationRow, relationRows } from './relation-rows.ts';
 import { anchors, connectionsHref, type ConnectionsQuery, type Grain, grains } from './route.ts';
 import type { CollectionMembers, Loaded, Names, PartsPage, People, RelationsPage, Summary } from './types.ts';
+import type { PublicCollectionPage as CollectionRead } from './read.ts';
+import { PageContainer, PageHeader } from '../shell/page.tsx';
+import { browseMessages } from '../discover/browse-messages.ts';
+import { copyOf } from './messages.ts';
 
 const outline = buttonVariants({ variant: 'outline', size: 'sm' });
+
+/** Changing only the membership position keeps every other task parameter. */
+export function collectionPageHref(current: string, change: { after?: string | null; parent?: string | null }): string {
+  const url = new URL(current, 'https://rezics.com');
+  for (const [key, value] of Object.entries(change)) {
+    if (value) url.searchParams.set(key, value);
+    else url.searchParams.delete(key);
+  }
+  return url.pathname + url.search;
+}
+
+/** The standalone Collection destination consumes its public owner, never an entity capability. */
+export function PublicCollectionPage({ summary, page, currentUrl, locale, messages }: {
+  summary: Extract<Summary, { status: 'available' }>; page: Loaded<CollectionRead>;
+  currentUrl: string; locale: UiLocale; messages: WorkPageMessages;
+}) {
+  const t = copyOf(locale), browse = browseMessages[locale];
+  const current = new URL(currentUrl, 'https://rezics.com');
+  const start = collectionPageHref(currentUrl, { after: null, parent: null });
+  const restart = collectionPageHref(currentUrl, { after: null });
+  return <PageContainer className="grid gap-6">
+    <Link href="/discover?type=lists" className="w-fit text-sm underline underline-offset-4">{browse.lists}</Link>
+    <PageHeader title={<LocalizedText text={summary.name} />} />
+    {!page.ok ? <RegionFailure title={browse.unavailable} failure={page.failure} messages={messages} restartHref={restart} />
+      : page.data.occurrences.length ? <ol aria-label={browse.lists} className="grid gap-3">
+        {page.data.occurrences.map(item => <li key={item.occurrence} className="min-w-0 break-words rounded-xl border p-4">
+          {item.target ? <SummaryLink summary={page.data.names.get(item.target)} unavailable={t.unavailable} unnamed={t.unnamed} undisclosed={t.nameNotShown}
+            hrefFor={named => resourceHref('/e/', named.address as AddressTarget)} />
+            : <Link href={collectionPageHref(currentUrl, { after: null, parent: item.occurrence })} className="underline underline-offset-4">
+              {item.labels[0] ? <bdi lang={item.labels[0].language}>{item.labels[0].value}</bdi> : t.openGroup}</Link>}
+        </li>)}
+      </ol> : <p role="status" className="text-muted-foreground">{browse.empty}</p>}
+    <nav aria-label={browse.lists} className="flex flex-wrap gap-3">
+      {current.searchParams.has('after') || current.searchParams.has('parent')
+        ? <Link href={start} className={outline}>{browse.first}</Link> : null}
+      {page.ok && page.data.nextCursor ? <Link href={collectionPageHref(currentUrl, { after: page.data.nextCursor })}
+        className={outline}>{browse.more}</Link> : null}
+    </nav>
+  </PageContainer>;
+}
 
 /** A franchise Collection, its members in Main's order, and at the parts grain each member's parts. */
 export interface Franchise {
@@ -29,7 +74,7 @@ export interface Franchise {
 
 function Participant({ item, t, hrefFor, people }: { item: RelationItem; t: Copy; hrefFor?: SummaryHref; people?: People }) {
   const target = item.target;
-  if (target.kind === 'withheld') return <span className="text-muted-foreground">{t.unavailable}</span>;
+  if (target.kind === 'withheld') return <span className="text-muted-foreground">{t.nameNotShown}</span>;
   if (target.kind === 'external') {
     // A contributor is one REZICS Agent wherever they are named: the link is their profile, not a page of this Zone.
     const person = target.agent ? people?.get(target.agent) : undefined;
@@ -40,7 +85,7 @@ function Participant({ item, t, hrefFor, people }: { item: RelationItem; t: Copy
         {person.name}</Link>
       : <bdi className="font-mono text-sm">{target.label}</bdi>;
   }
-  return <SummaryLink summary={target.summary} unavailable={t.unavailable} unnamed={t.unnamed} hrefFor={hrefFor} />;
+  return <SummaryLink summary={target.summary} unavailable={t.unavailable} unnamed={t.unnamed} undisclosed={t.nameNotShown} hrefFor={hrefFor} />;
 }
 
 /** Where a withheld credit can be read: the participant's own page, never the reference written out. */
@@ -161,7 +206,7 @@ export function RelationRows({ rows, locale, t, hrefFor, people }: { rows: reado
   </div>;
 }
 
-function GrainSwitch({ workRef, query, t }: { workRef: string; query: ConnectionsQuery; t: Copy }) {
+function GrainSwitch({ workRef, query, t }: { workRef: WorkAt; query: ConnectionsQuery; t: Copy }) {
   const label: Record<Grain, string> = { series: t.grainSeries, parts: t.grainParts };
   return <nav aria-label={t.grainSwitch} className="flex flex-wrap items-center gap-2">
     <span className="text-muted-foreground text-sm">{t.grainLabel}</span>
@@ -176,7 +221,7 @@ function GrainSwitch({ workRef, query, t }: { workRef: string; query: Connection
 }
 
 function Members({ franchise, current, names, workRef, query, t }: {
-  franchise: Franchise; current: string; names: Names; workRef: string; query: ConnectionsQuery; t: Copy;
+  franchise: Franchise; current: string; names: Names; workRef: WorkAt; query: ConnectionsQuery; t: Copy;
 }) {
   const members = franchise.members;
   if (!members.ok) return <p role="status" className="text-muted-foreground text-sm">{t.membersUnavailable}</p>;
@@ -191,14 +236,14 @@ function Members({ franchise, current, names, workRef, query, t }: {
         return <li key={member.occurrence} className="grid min-w-0 gap-1"
           aria-current={work.endsWith(current) ? 'true' : undefined}>
           <span className="flex flex-wrap items-center gap-2">
-            <NameLink reference={work} names={names} unavailable={t.unavailable} unnamed={t.unnamed} />
+            <NameLink reference={work} names={names} unavailable={t.unavailable} unnamed={t.unnamed} undisclosed={t.nameNotShown} />
             {work.endsWith(current) ? <Badge variant="soft">{t.thisWork}</Badge> : null}
           </span>
           {query.grain === 'parts' && parts
             ? parts.ok
               ? <ol className="ms-4 flex flex-wrap gap-x-3 gap-y-1 text-muted-foreground text-sm">
                 {parts.data.parts.filter(part => part.work).map(part => <li key={part.occurrence} className="whitespace-nowrap">
-                  <NameLink reference={part.work!} names={names} unavailable={t.unavailable} unnamed={t.unnamed} />
+                  <NameLink reference={part.work!} names={names} unavailable={t.unavailable} unnamed={t.unnamed} undisclosed={t.nameNotShown} />
                   {part.displayLabel ? <> <bdi className="tabular-nums">({part.displayLabel})</bdi></> : null}
                 </li>)}
                 {parts.data.next && workPage ? <li><Link documentNavigation href={`${workPage}/connections#parts`}
@@ -217,7 +262,7 @@ function Members({ franchise, current, names, workRef, query, t }: {
 }
 
 function Franchises({ franchises, names, workRef, current, query, t }: {
-  franchises: readonly Franchise[]; names: Names; workRef: string; current: string; query: ConnectionsQuery; t: Copy;
+  franchises: readonly Franchise[]; names: Names; workRef: WorkAt; current: string; query: ConnectionsQuery; t: Copy;
 }) {
   if (!franchises.length) return null;
   return <div id={anchors.franchises} className="grid scroll-mt-20 gap-3">
@@ -240,7 +285,7 @@ function Franchises({ franchises, names, workRef, current, query, t }: {
  * the Work with their series ⇄ parts grain, and Main's continuation of both.
  */
 export function ConnectionsSection({ relations, franchises, names, people, workRef, current, query, locale, t, pageMessages }: {
-  relations: Loaded<RelationsPage>; franchises: readonly Franchise[]; names: Names; people?: People; workRef: string;
+  relations: Loaded<RelationsPage>; franchises: readonly Franchise[]; names: Names; people?: People; workRef: WorkAt;
   /** The Work's UUID, to mark it among its franchise's members. */
   current: string; query: ConnectionsQuery; locale: UiLocale; t: Copy; pageMessages: WorkPageMessages;
 }) {

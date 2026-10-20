@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
 import { Pool } from 'pg';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { DiscoveryProjection, discoveryScopeKey } from '../../../services/main/src/modules/discovery/store.ts';
@@ -12,9 +13,17 @@ import { RelayHandoffPositions } from '../../../services/main/src/modules/outbox
 import { RecommendationStale, RecommendationUnavailable } from '../../../services/main/src/modules/recommendation/derived-generation.ts';
 import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
 import { authorCreditTriples } from '../../../services/main/src/modules/work/author-credit.ts';
-import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
-import { WorkReadUnavailable } from '../../../services/main/src/modules/work/read-session.ts';
+import { GRAPHS, RV, hash, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { CLASSIFICATION_PROPOSITION_PROFILE } from '../../../services/main/src/modules/classification/proposition.ts';
+import { MediaInvalid } from '../../../services/main/src/modules/media/contract.ts';
+import { WorkReadUnavailable, workRead } from '../../../services/main/src/modules/work/read-session.ts';
+import { WORK_READ_COST } from '../../../services/main/src/modules/work/read-contract.ts';
 import { startMediaStack } from './media-support.ts';
+import { DiscoveryRefreshInputs, projectDiscoveryBatch } from '../../../services/main/src/modules/discovery/source.ts';
+import type { OwnedDiscoveryBasis } from '../../../services/main/src/modules/discovery/contract.ts';
+import { cloneQaOwnerDatabases } from '../support/databases.ts';
+import { requireQa } from './recommendation-support.ts';
+import { isolateDiscoveryProbeGraph } from './discovery-projection-fixture.ts';
 
 async function json<T>(response: Response, status = 200): Promise<T> {
   const text = await response.text();
@@ -199,3 +208,427 @@ test('Discovery scheduled refresh: native source proof, automatic enrollment, re
     console.log(`discovery refresh measured: ${JSON.stringify(measurements)}`);
   } finally { await relay.end(); await stack.stop(); }
 }, 240_000);
+
+interface QueueState {
+  generation_id: string | null;
+  quarantine_basis: { sequence: string; graphVersion: string | null } | null;
+  quarantine_reason: string | null;
+  last_error: string | null;
+  last_outcome: string;
+  attempts: string;
+  lease_epoch: string;
+  due_at: Date;
+  checkpoint: string | null;
+}
+
+test('D5004C01: refresh owners quarantine malformed source once, bound fleet probes, recover transient work and rearm repaired input', async () => {
+  const artifacts = Bun.env.REZICS_QA_ARTIFACT_DIR;
+  if (!artifacts) throw new Error('QA artifact directory is unavailable');
+  const basis: OwnedDiscoveryBasis = { scope: 'global', realm: null, context: null, owner: null };
+  const key = discoveryScopeKey(basis);
+  const owners = await cloneQaOwnerDatabases(requireQa(), ['access', 'content', 'relay'], 'privileged');
+  const f = await startMediaStack('discovery-refresh-disposition', { ownerUrls: owners.urls });
+  const relay = new Pool({ connectionString: owners.urls.relay });
+  const query = f.fuseki.query.bind(f.fuseki);
+  let head: string | undefined;
+  let restoreGraph: (() => Promise<void>) | undefined;
+  let pendingRefresh: Promise<QueueState> | undefined;
+  let releasePopulation = () => {};
+  let populationTimer: ReturnType<typeof setTimeout> | undefined;
+  // Contradictory current revision evidence is a real fault in today's identity
+  // projection. No media hydration or synthetic worker outcome produces it.
+  const conflictingSequence = '9223372036854775808';
+  const repair = async () => {
+    if (head) await f.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/>
+      DELETE DATA { GRAPH ${iri(GRAPHS.revisions)} { ${iri(head)} rv:sequence ${conflictingSequence} } }`);
+  };
+  try {
+    restoreGraph = await isolateDiscoveryProbeGraph(f.env);
+    const writer = await f.member('refresh disposition writer');
+    const work = await f.publicWork(writer.actor, ['en'], 'Retained refresh candidate');
+    const hidden = await f.privateWork(writer.actor, 'Private refresh candidate');
+    const heads = await query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT ?head WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(work.work)} rv:head ?head } } LIMIT 2`);
+    expect(heads.results!.bindings).toHaveLength(1);
+    head = heads.results!.bindings[0]!.head!.value;
+    const consumer = `refresh-disposition-${randomUUID()}`;
+    await initializeRelayCheckpoint(relay, consumer, f.env.lineage.dataEpoch);
+    const drain = async () => {
+      for (let i = 0; i < 1000; i++) {
+        if (!await relayMainOutboxOnce(f.fuseki, relay, consumer)) return;
+      }
+      throw new Error('Refresh fixture exceeded its relay preparation bound');
+    };
+    await drain();
+    const positions = new RelayHandoffPositions(relay, consumer);
+    const projection = new DiscoveryProjection(f.accessPool);
+    let now = Date.now() + 60_000;
+    const store = new DiscoveryRefreshStore(f.accessPool, () => new Date(now));
+    const worker = new DiscoveryRefreshWorker({ ...f.composition.dependencies,
+      alsoEnjoyed: undefined, relayPosition: positions, discoveryRefreshInputs: new DiscoveryRefreshInputs(relay, consumer),
+    }, store, projection);
+    await store.enroll([basis]);
+    const state = async (): Promise<QueueState> => (await f.accessPool.query<QueueState>(`
+      SELECT j.generation_id,j.quarantine_basis,j.quarantine_reason,j.last_error,j.last_outcome,
+        j.attempts::text,j.lease_epoch::text,j.due_at,d.checkpoint
+      FROM access.discovery_refresh j LEFT JOIN access.discovery_generation d ON d.generation_id=j.generation_id
+      WHERE j.scope_key=$1`, [key])).rows[0]!;
+    let claimedScope: string | undefined, populationReads = 0, fullClaims = 0, probeClaims = 0;
+    let unavailable = false;
+    const claim = store.claim.bind(store);
+    store.claim = async background => {
+      const job = await claim(background);
+      claimedScope = job?.scope_key;
+      if (job?.quarantine_basis) probeClaims++;
+      else if (job?.scope_key === key) fullClaims++;
+      return job;
+    };
+    let holdPopulation = false;
+    let entered!: () => void;
+    const entering = new Promise<void>(resolve => { entered = resolve; });
+    const overlap = { capability: 'discovery-refresh-maintenance', phase: 'concurrent-core-read',
+      personaJourney: false, nativeEngineCpuOverlapClaimed: false, responseDeliveryHeld: true,
+      nativeResponseAtMs: 0, coreStartedAtMs: 0, coreAnsweredAtMs: 0, deliveryReleasedAtMs: 0,
+      refreshSettledAtMs: 0, refreshSettledAtAnswer: false, publicStatus: 0, privateStatus: 0,
+      assertionReached: false, failure: null as string | null };
+    const released = new Promise<void>(resolve => {
+      releasePopulation = () => {
+        if (!overlap.deliveryReleasedAtMs) overlap.deliveryReleasedAtMs = performance.now();
+        resolve();
+      };
+    });
+    f.fuseki.query = async (...args) => {
+      const population = claimedScope === key && args[0].includes('SELECT DISTINCT ?work ?head');
+      if (population) {
+        populationReads++;
+        if (unavailable) throw new WorkReadUnavailable('Fixture discovery transport is unavailable');
+      }
+      const hold = holdPopulation && population;
+      if (hold) holdPopulation = false;
+      const result = await query(...args);
+      if (hold) {
+        // Keep the real native result unchanged; only delivery to the refresh
+        // waits while real HTTP readers answer. This does not measure Jena CPU overlap.
+        overlap.nativeResponseAtMs = performance.now();
+        populationTimer = setTimeout(releasePopulation, WORK_READ_COST.deadlineMs);
+        entered();
+        await released;
+      }
+      return result;
+    };
+    const until = async (done: (row: QueueState) => boolean, advance: number = DISCOVERY_REFRESH_COST.probeMs) => {
+      for (let i = 0; i < 200; i++) {
+        now += advance;
+        await worker.tick();
+        const row = await state();
+        if (done(row)) return row;
+      }
+      throw new Error('Refresh fixture did not reach its bounded owner outcome');
+    };
+    await f.fuseki.update(`PREFIX rv: <https://rezics.com/vocab/>
+      INSERT DATA { GRAPH ${iri(GRAPHS.revisions)} { ${iri(head)} rv:sequence ${conflictingSequence} } }`);
+    holdPopulation = true;
+    pendingRefresh = until(row => row.quarantine_reason === 'basis-invalid');
+    void pendingRefresh.then(() => { overlap.refreshSettledAtMs = performance.now(); },
+      () => { overlap.refreshSettledAtMs = performance.now(); });
+    try {
+      await Promise.race([entering, pendingRefresh.then(() => {
+        throw new Error('Faulty refresh finished before concurrent HTTP reads');
+      })]);
+      overlap.coreStartedAtMs = performance.now();
+      const [publicResponse, privateResponse] = await Promise.all([
+        f.main.handle(new Request(`http://main.local/v1/works/${work.work.slice(-36)}`)),
+        f.main.handle(new Request(`http://main.local/v1/works/${hidden.work.slice(-36)}`)),
+      ]);
+      const [publicBody, privateBody] = await Promise.all([publicResponse.text(), privateResponse.text()]);
+      overlap.coreAnsweredAtMs = performance.now();
+      overlap.refreshSettledAtAnswer = overlap.refreshSettledAtMs !== 0;
+      overlap.publicStatus = publicResponse.status;
+      overlap.privateStatus = privateResponse.status;
+      overlap.assertionReached = true;
+      expect(overlap.nativeResponseAtMs).toBeLessThanOrEqual(overlap.coreStartedAtMs);
+      expect(overlap.deliveryReleasedAtMs, 'Refresh response delivery must still be pending at both HTTP answers').toBe(0);
+      expect(overlap.refreshSettledAtAnswer).toBe(false);
+      expect(overlap.coreAnsweredAtMs - overlap.nativeResponseAtMs).toBeLessThan(WORK_READ_COST.deadlineMs);
+      expect(publicResponse.status, publicBody).toBe(200);
+      expect(JSON.parse(publicBody)).toMatchObject({ id: work.work });
+      expect(privateResponse.status, privateBody).toBe(404);
+      expect(privateBody).not.toContain(hidden.work);
+    } catch (error) {
+      overlap.failure = String(error);
+      throw error;
+    } finally {
+      releasePopulation();
+      clearTimeout(populationTimer);
+      await Bun.write(join(artifacts, 'discovery-refresh-core-overlap.json'), JSON.stringify({ ...overlap,
+        coreDurationMs: overlap.coreAnsweredAtMs ? overlap.coreAnsweredAtMs - overlap.coreStartedAtMs : null,
+        heldDurationMs: overlap.nativeResponseAtMs ? overlap.deliveryReleasedAtMs - overlap.nativeResponseAtMs : null,
+      }, null, 2));
+    }
+    const failed = await pendingRefresh;
+    expect(failed.last_error).toBe('Discovery source is ambiguous');
+    expect(failed.generation_id).not.toBeNull();
+    expect(failed.attempts).toBe('0');
+    expect(failed.quarantine_basis!.graphVersion, 'Native repairs must be observable without a receipt').not.toBeNull();
+    const failedReads = populationReads, failedClaims = fullClaims;
+    // Unchanged probes retain the same source disposition and generation checkpoint.
+    for (let pass = 0; pass < 3; pass++) {
+      const priorLease = (await state()).lease_epoch;
+      now += DISCOVERY_REFRESH_COST.maximumRetryMs;
+      await until(row => row.lease_epoch !== priorLease);
+      expect(await state()).toMatchObject({ generation_id: failed.generation_id,
+        checkpoint: failed.checkpoint, quarantine_basis: failed.quarantine_basis, attempts: '0' });
+      expect(populationReads).toBe(failedReads);
+      expect(fullClaims).toBe(failedClaims);
+    }
+    // All these invalid populations must share one probe allowance. Enrollment
+    // and queue time are owner APIs; the fixture never edits scheduler SQL state.
+    const invalid: OwnedDiscoveryBasis[] = Array.from({ length: 20 }, () => ({
+      scope: 'realm', realm: null, context: native(), owner: null,
+    }));
+    await store.enroll(invalid);
+    const invalidKeys = invalid.map(discoveryScopeKey);
+    for (let i = 0; i < 200; i++) {
+      now += 1000;
+      await worker.tick();
+      const count = (await f.accessPool.query<{ count: string }>(`SELECT count(*)::text FROM access.discovery_refresh
+        WHERE scope_key=ANY($1::text[]) AND quarantine_basis IS NOT NULL`, [invalidKeys])).rows[0]!.count;
+      if (Number(count) === invalid.length) break;
+      if (i === 199) throw new Error('Background invalid populations were starved');
+    }
+    now += DISCOVERY_REFRESH_COST.maximumRetryMs;
+    const probesBefore = probeClaims;
+    for (let i = 0; i < 40; i++) await worker.tick();
+    const probesInOneAllowance = probeClaims - probesBefore;
+    expect(probesInOneAllowance).toBe(1);
+    expect(populationReads).toBe(failedReads);
+    expect(fullClaims).toBe(failedClaims);
+    // Repair the retained evidence without changing its receipted source cut.
+    // A fresh store/worker must rearm on the native stamp and reuse the build.
+    await repair();
+    const restoredStore = new DiscoveryRefreshStore(f.accessPool, () => new Date(now));
+    const restoredWorker = new DiscoveryRefreshWorker({ ...f.composition.dependencies,
+      alsoEnjoyed: undefined, relayPosition: positions, discoveryRefreshInputs: new DiscoveryRefreshInputs(relay, consumer),
+    }, restoredStore, projection);
+    let repaired: QueueState | undefined;
+    for (let i = 0; i < 200; i++) {
+      now += DISCOVERY_REFRESH_COST.probeMs;
+      await restoredWorker.tick();
+      const row = await state();
+      if (row.last_outcome === 'activated') { repaired = row; break; }
+    }
+    expect(repaired).toMatchObject({ quarantine_basis: null, last_error: null, attempts: '0' });
+    const active = (await f.accessPool.query<{ active_generation: string }>(`SELECT active_generation
+      FROM access.derived_generation_head WHERE family='discovery' AND scope_key=$1`, [key])).rows[0]!.active_generation;
+    expect(active).toBe(failed.generation_id!);
+    const generation = (await f.accessPool.query<{ source_sequence: string }>(`SELECT source_sequence::text
+      FROM access.discovery_generation WHERE generation_id=$1`, [active])).rows[0]!;
+    expect(generation.source_sequence).toBe(failed.quarantine_basis!.sequence);
+    const page = await f.main.handle(new Request('http://main.local/v1/works'));
+    expect(page.status, await page.clone().text()).toBe(200);
+    const body = await page.json() as { items: { id: string }[] };
+    expect(body.items.some(item => item.id === hidden.work)).toBe(false);
+    const ready = await projection.active(basis, { dataEpoch: f.env.lineage.dataEpoch, sequence: generation.source_sequence });
+    expect((await f.accessPool.query(`SELECT work FROM access.discovery_entries($1,$2)
+      WHERE generation_id=$1 AND work=$3 AND work_type='' AND term=''`,
+    [ready.storage_generation ?? ready.generation_id, ready.storage_version ?? '0', work.work])).rows).toHaveLength(1);
+
+    const appended = await f.publicWork(writer.actor, ['en'], 'Transient recovery candidate');
+    await drain();
+    unavailable = true;
+    const transient = await until(row => row.last_outcome === 'retry' && row.attempts === '1');
+    expect(transient.quarantine_basis).toBeNull();
+    expect(transient.due_at.getTime() - now).toBe(DISCOVERY_REFRESH_COST.retryMs);
+    now = transient.due_at.getTime() - 1;
+    await worker.tick();
+    expect((await state()).lease_epoch).toBe(transient.lease_epoch);
+    now++;
+    const second = await until(row => row.attempts === '2', 0);
+    expect(second.due_at.getTime() - now).toBe(2 * DISCOVERY_REFRESH_COST.retryMs);
+    expect(second.generation_id).toBe(transient.generation_id);
+    expect(second.checkpoint).toBe(transient.checkpoint);
+    unavailable = false;
+    now = second.due_at.getTime();
+    const recovered = await until(row => row.last_outcome === 'activated', DISCOVERY_REFRESH_COST.intervalMs);
+    expect(recovered).toMatchObject({ quarantine_basis: null, attempts: '0' });
+    expect((await f.accessPool.query(`SELECT active_generation FROM access.derived_generation_head
+      WHERE family='discovery' AND scope_key=$1`, [key])).rows[0]!.active_generation).toBe(transient.generation_id);
+    const currentPosition = await workRead(f.composition.dependencies,
+      new Request('http://main.internal/discovery-refresh'), {}, async session => session.position);
+    const current = await projection.active(basis, currentPosition);
+    expect((await f.accessPool.query(`SELECT work FROM access.discovery_entries($1,$2)
+      WHERE generation_id=$1 AND work=$3 AND work_type='' AND term=''`,
+    [current.storage_generation ?? current.generation_id, current.storage_version ?? '0', appended.work])).rows).toHaveLength(1);
+    console.info(JSON.stringify({ capability: 'discovery-refresh-maintenance', permanentFullClaims: failedClaims,
+      permanentPopulationReads: failedReads, unchangedPopulationReads: 0, parkedPopulations: invalid.length + 1,
+      probesInOneAllowance, transientAttempts: 2,
+      personaJourney: false, queueClock: 'injected; graph, Access, projection and leases use production owners' }));
+  } finally {
+    releasePopulation();
+    clearTimeout(populationTimer);
+    await pendingRefresh?.catch(() => {}); // Its rejection is propagated above; settle before restoring owners.
+    f.fuseki.query = query;
+    try { await repair(); }
+    finally {
+      try { await restoreGraph?.(); }
+      finally { await relay.end(); await f.stop(); await owners.close(); }
+    }
+  }
+}, 300_000);
+
+test('D5004C02: classified-source MediaInvalid is quarantined at an unchanged basis and rearms after repair', async () => {
+  const owners = await cloneQaOwnerDatabases(requireQa(), ['access', 'content', 'relay'], 'privileged');
+  const f = await startMediaStack('discovery-refresh-media-invalid', { ownerUrls: owners.urls });
+  const relay = new Pool({ connectionString: owners.urls.relay });
+  const query = f.fuseki.query.bind(f.fuseki);
+  let restoreGraph: (() => Promise<void>) | undefined;
+  try {
+    restoreGraph = await isolateDiscoveryProbeGraph(f.env);
+    const writer = await f.member('classified refresh writer');
+    const work = await f.publicWork(writer.actor, ['en'], 'Classified refresh candidate');
+    for (const [scope, action] of [
+      ['classification:define:global', 'classification.proposition.define'],
+      ['classification:decide:global', 'statement.decide'],
+      ['context:create:root', 'context.create'],
+      [`statement:speak:${writer.actor}`, 'statement.record'],
+      ['projection:create:root', 'projection.create'],
+    ] as const) await writer.grant(scope, action);
+    const term = await json<{ sense: string; concept: string; definitionRevision: string }>(
+      await writer.send('POST', '/v1/classification-propositions', {
+        profile: 'classification-proposition-v1', label: 'Refresh classification', actingSubject: writer.actor,
+      }), 201);
+    await new AccessJudgments(f.accessPool).declareHint(writer.principal, {
+      concept: term.concept, context: { kind: 'global' }, hint: 'not-spoiler', expectedGeneration: '0',
+      actingSubject: writer.actor, idempotencyKey: randomUUID(),
+      requestDigest: hash(JSON.stringify([term.concept, 'global', 'not-spoiler'])),
+    });
+    const interpretation = await json<{ context: string; semanticRevision: string }>(
+      await writer.send('POST', '/v1/contexts', {
+        profile: 'context-v1', role: 'shared', disclosure: 'public', base: null,
+        entries: [{ target: term.concept, relation: `${RV}classifiedAs`, state: 'defined',
+          definition: term.definitionRevision, applicability: [] }], actingSubject: writer.actor,
+      }), 201);
+    const statement = await json<{ statement: string; meaningKey: string }>(
+      await writer.send('POST', '/v1/statements', {
+        profile: 'statement-v1', speaker: { kind: 'personal' }, subject: work.mainVersion,
+        predicate: `${RV}classifiedAs`, relationDefinition: CLASSIFICATION_PROPOSITION_PROFILE,
+        value: { kind: 'resource', iri: term.concept }, applicability: [], evidence: [],
+        interpretation: { kind: 'explicit', context: interpretation.context,
+          semanticRevision: interpretation.semanticRevision }, actingSubject: writer.actor,
+      }), 201);
+    await json(await writer.send('POST', '/v1/statement-decisions', {
+      profile: 'statement-decision-v1', target: { kind: 'qualified-fact',
+        meaningKey: statement.meaningKey, support: [statement.statement] }, acceptance: { kind: 'global' },
+      outcome: 'accepted', expectedDecisionHead: null, actingSubject: writer.actor,
+    }), 201);
+    const projection = await json<{ projection: { id: string } }>(await writer.send('POST', '/v1/projections', {
+      subject: term.concept, frames: [work.work], actingSubject: writer.actor,
+    }), 201);
+    const basis: OwnedDiscoveryBasis = { scope: 'global', realm: null, context: null, owner: null };
+    const key = discoveryScopeKey(basis);
+    const project = () => workRead(f.composition.dependencies, new Request('http://main.local/v1/works'),
+      { scope: 'global' }, session => projectDiscoveryBatch(session, basis, ''));
+    expect((await project()).items.find(item => item.work === work.work)?.classifications)
+      .toMatchObject([{ sense: term.sense }]);
+
+    // A current source fault, not an injected MediaInvalid or a claim about the
+    // historical asset: accepted Concept -> identity redirect -> Projection ->
+    // stored frame reference longer than the summary owner's 2048-character bound.
+    const invalidFrame = `https://rezics.com/id/${'x'.repeat(2048)}`;
+    await f.fuseki.update(`PREFIX rv: <${RV}>
+      DELETE { GRAPH ${iri(GRAPHS.current)} { ${iri(projection.projection.id)} rv:frame ${iri(work.work)} } }
+      INSERT { GRAPH ${iri(GRAPHS.current)} {
+        ${iri(term.concept)} rv:mergedInto ${iri(projection.projection.id)} .
+        ${iri(projection.projection.id)} rv:frame ${iri(invalidFrame)} } }
+      WHERE {}`);
+    const fault: unknown = await project().then(() => null, (error: unknown) => error);
+    expect(fault).toBeInstanceOf(MediaInvalid);
+    expect(fault).toMatchObject({ message: 'resource summary request is invalid' });
+
+    const consumer = `refresh-media-invalid-${randomUUID()}`;
+    await initializeRelayCheckpoint(relay, consumer, f.env.lineage.dataEpoch);
+    for (let i = 0; i < 1000; i++) {
+      if (!await relayMainOutboxOnce(f.fuseki, relay, consumer)) break;
+      if (i === 999) throw new Error('Classified refresh relay preparation exceeded its bound');
+    }
+    const refreshProjection = new DiscoveryProjection(f.accessPool);
+    let now = Date.now() + 60_000;
+    const store = new DiscoveryRefreshStore(f.accessPool, () => new Date(now));
+    const deps = { ...f.composition.dependencies, alsoEnjoyed: undefined,
+      relayPosition: new RelayHandoffPositions(relay, consumer),
+      discoveryRefreshInputs: new DiscoveryRefreshInputs(relay, consumer) };
+    const worker = () => new DiscoveryRefreshWorker(deps, store, refreshProjection);
+    await store.enroll([basis]);
+    const state = async (): Promise<QueueState> => (await f.accessPool.query<QueueState>(`
+      SELECT j.generation_id,j.quarantine_basis,j.quarantine_reason,j.last_error,j.last_outcome,
+        j.attempts::text,j.lease_epoch::text,j.due_at,d.checkpoint
+      FROM access.discovery_refresh j LEFT JOIN access.discovery_generation d ON d.generation_id=j.generation_id
+      WHERE j.scope_key=$1`, [key])).rows[0]!;
+    let populationReads = 0, fullClaims = 0;
+    const claim = store.claim.bind(store);
+    store.claim = async background => {
+      const job = await claim(background);
+      if (job?.scope_key === key && !job.quarantine_basis) fullClaims++;
+      return job;
+    };
+    f.fuseki.query = async (...args) => {
+      if (args[0].includes('SELECT DISTINCT ?work ?head')) populationReads++;
+      return query(...args);
+    };
+    const until = async (done: (row: QueueState) => boolean) => {
+      for (let i = 0; i < 20; i++) {
+        now += DISCOVERY_REFRESH_COST.maximumRetryMs;
+        await worker().tick();
+        const row = await state();
+        if (done(row)) return row;
+      }
+      throw new Error('Classified refresh did not reach its bounded disposition');
+    };
+    // A repeatable permanent media refusal must leave the normal retry lane.
+    // Baseline reaches the real MediaInvalid above but keeps retrying here.
+    const failed = await until(row => row.quarantine_reason === 'basis-invalid');
+    expect(failed.last_error).toBe('resource summary request is invalid');
+    expect(failed.generation_id).not.toBeNull();
+    expect(failed.checkpoint).toBe('');
+    expect(failed.attempts).toBe('0');
+    expect(failed.quarantine_basis!.graphVersion).not.toBeNull();
+    expect(fullClaims).toBe(1);
+    const failedReads = populationReads;
+    for (let pass = 0; pass < 3; pass++) {
+      const before = await state();
+      const probed = await until(row => row.lease_epoch !== before.lease_epoch);
+      expect(probed).toMatchObject({ generation_id: failed.generation_id, checkpoint: failed.checkpoint,
+        quarantine_basis: failed.quarantine_basis, quarantine_reason: 'basis-invalid', attempts: '0' });
+      expect(populationReads).toBe(failedReads);
+      expect(fullClaims).toBe(1);
+    }
+    const unchangedPopulationReads = populationReads - failedReads;
+    // Repair source evidence, not queue SQL. A fresh worker and store must see
+    // the native graph stamp change and rearm the retained generation.
+    await f.fuseki.update(`PREFIX rv: <${RV}>
+      DELETE { GRAPH ${iri(GRAPHS.current)} { ${iri(projection.projection.id)} rv:frame ${iri(invalidFrame)} } }
+      INSERT { GRAPH ${iri(GRAPHS.current)} { ${iri(projection.projection.id)} rv:frame ${iri(work.work)} } }
+      WHERE {}`);
+    const resumed = new DiscoveryRefreshWorker(deps,
+      new DiscoveryRefreshStore(f.accessPool, () => new Date(now)), refreshProjection);
+    for (let i = 0; i < 20 && (await state()).last_outcome !== 'activated'; i++) {
+      now += DISCOVERY_REFRESH_COST.maximumRetryMs;
+      await resumed.tick();
+    }
+    expect(await state()).toMatchObject({ last_outcome: 'activated', generation_id: null,
+      quarantine_basis: null, quarantine_reason: null, attempts: '0' });
+    expect((await f.accessPool.query(`SELECT active_generation FROM access.derived_generation_head
+      WHERE family='discovery' AND scope_key=$1`, [key])).rows[0]!.active_generation).toBe(failed.generation_id);
+    expect(populationReads).toBeGreaterThan(failedReads);
+    f.fuseki.query = query;
+    expect((await project()).items.find(item => item.work === work.work)?.classifications)
+      .toMatchObject([{ sense: term.sense }]);
+    console.info(JSON.stringify({ capability: 'discovery-refresh-maintenance', case: 'D5004C02',
+      fault: 'MediaInvalid: resource summary request is invalid', cause: 'classified Concept redirect to Projection with invalid frame',
+      permanentFullClaims: fullClaims, unchangedPopulationReads, unchangedProbes: 3, personaJourney: false }));
+  } finally {
+    f.fuseki.query = query;
+    try { await restoreGraph?.(); }
+    finally { await relay.end(); await f.stop(); await owners.close(); }
+  }
+}, 300_000);

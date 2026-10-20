@@ -1,0 +1,351 @@
+{
+  "schemaVersion": 1,
+  "goal": "audit-remediation-20261019",
+  "reviewer": {
+    "task": "G-2850",
+    "engine": "codex-1",
+    "model": "GPT-6.1 Sol",
+    "effort": "xhigh",
+    "execution": "The independently dispatched worker performed this review directly in its current session.",
+    "nestedAgents": false,
+    "accountFallback": false,
+    "previousReportsRead": false
+  },
+  "candidate": {
+    "commit": "8c9d0995abe4afaf69138a3f06efda1650457c33",
+    "parent": "31a88b213186bc174c219862988e85cfb001aaee",
+    "tree": "b4c20ce5fad193d4f49d18ecf37739f486a181b1",
+    "managerWorktree": ".temp/worktrees/site-resume-authorization-candidate",
+    "reviewSnapshot": ".temp/resume-authorization-review/source",
+    "sourceVerification": "Detached local clone at the exact candidate; git diff --exit-code against the candidate is clean. Only excluded disposable review tests were added; no tracked candidate or product file was modified.",
+    "diffPaths": [
+      "docs/goals/worker.md",
+      "scripts/goal/goalctl.test.ts",
+      "scripts/goal/goalctl.ts",
+      "scripts/goal/tasks.ts",
+      "scripts/goal/types.ts"
+    ]
+  },
+  "verdict": "request_changes",
+  "summary": "One confirmed source integration defect blocks the candidate: the new sameScope resume classification is not handled by the attempt-measurement consumer, causing TS7053 and NaN run/daily counters. Authorization, unchanged-claim/message refusal, queue persistence, admission ownership and failed-launch recovery passed focused checks.",
+  "authorityInterpretation": "The maintainer explicitly authorizes manager-recorded exact corrections when claims, outcome, authority and acceptance remain unchanged. sameScope is the manager attestation for those semantic constraints; no repeated brief Decision is required. Actual contract changes still require a coherent brief. No finding is based on the superseded repeated-brief policy.",
+  "findings": [
+    {
+      "id": "unhandled-resume-classification",
+      "priority": "P1",
+      "title": "Handle sameScope in attempt measurements before extending the persisted classification",
+      "candidate": "8c9d0995abe4afaf69138a3f06efda1650457c33",
+      "codeLocation": {
+        "path": "scripts/goal/types.ts",
+        "startLine": 33,
+        "endLine": 33
+      },
+      "relatedLocations": [
+        {
+          "path": "scripts/goal/measures.ts",
+          "line": 11,
+          "reason": "AttemptCounts does not declare sameScope."
+        },
+        {
+          "path": "scripts/goal/measures.ts",
+          "line": 33,
+          "reason": "Counter initialization has no sameScope value."
+        },
+        {
+          "path": "scripts/goal/measures.ts",
+          "line": 170,
+          "reason": "The persisted resumeClass becomes the counter key."
+        },
+        {
+          "path": "scripts/goal/measures.ts",
+          "line": 176,
+          "reason": "counts[kind]++ indexes the missing counter; TS7053 and runtime NaN."
+        },
+        {
+          "path": "scripts/goal/measures.ts",
+          "line": 219,
+          "reason": "The rendered attempt summary has no representation for this class."
+        }
+      ],
+      "trigger": "Read Goal measurements after an initial attempt followed by a persisted round=fix, resumeClass=sameScope attempt.",
+      "observed": "The candidate type check fails with TS7053 at measures.ts:176. At runtime counts.sameScope++ increments undefined, creating NaN in both attempts.run.sameScope and attempts.today.sameScope. JSON serialization turns those values into null, and the rendered attempt categories omit the correction.",
+      "expected": "Every admitted persisted resume classification must be handled by the measurement consumer, produce finite counts and remain represented under the intended repair-count policy; affected type checks must compile.",
+      "remediation": "Update the owning measurement type, initialization and classification/rendering behavior coherently for sameScope (or deliberately normalize it into the existing fix category), with regression coverage. Preserve the admitted sameScope classification on attempts and queued requests.",
+      "evidence": {
+        "types": {
+          "job": "job:d6236145-63e0-497f-8340-dc057060eff0",
+          "step": 2,
+          "command": "task --dir .temp/resume-authorization-review/source goal -- check --only types,lint",
+          "log": ".temp/resume-authorization-review/source/.temp/goal/check/run-FeyYsB/output.log",
+          "diagnostic": "scripts/goal/measures.ts(176,16): error TS7053: Property 'sameScope' does not exist on type 'AttemptCounts'."
+        },
+        "runtime": {
+          "job": "job:10ef7c03-c277-4529-9d04-f93ee510d30f",
+          "step": 2,
+          "log": ".temp/goal/jobs/10ef7c03-c277-4529-9d04-f93ee510d30f.2.log",
+          "resultFile": ".temp/resume-authorization-review/measures-result.json",
+          "exitCode": 1,
+          "passed": 0,
+          "failed": 1,
+          "assertionReached": "yes",
+          "case": "sameScope review: supported resume classifications produce finite run and daily counts",
+          "assertionLine": 48,
+          "actual": "[{period: run, kind: sameScope, value: NaN}, {period: today, kind: sameScope, value: NaN}]",
+          "expected": "[]",
+          "test": {
+            "path": "scripts/goal/same-scope-measures-review.test.ts",
+            "sha256": "341cddc78eb4f6f6e9d98e97eccda1504d40b638c5aa0435ce4d6b858b6aec81",
+            "content": "import { Database } from 'bun:sqlite';\nimport { describe, expect, test } from 'bun:test';\nimport { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';\nimport { join } from 'node:path';\nimport type { Attempt, Ledger, Task } from './goalctl.ts';\nimport { goalMeasures, measureLines } from './measures.ts';\n\nconst nowMs = Date.parse('2026-10-13T12:00:00Z');\nfunction fixture() {\n  const root = join(import.meta.dir, '../../.temp/measures-tests');\n  mkdirSync(root, { recursive: true });\n  const dir = mkdtempSync(join(root, 'case-'));\n  const ledger: Ledger = { goals: { api: { manager: 'api', startedAt: '2026-10-12T00:00:00Z' },\n    closed: { manager: 'closed', startedAt: '2026-10-12T00:00:00Z', closedAt: '2026-10-12T01:00:00Z' } }, tasks: {} };\n  const write = (path: string, value: string) => { mkdirSync(join(dir, path, '..'), { recursive: true }); writeFileSync(join(dir, path), value); };\n  const task = (id: string, state: Task['state'] = 'verified') => {\n    const t: Task = { id, title: 'Prove a row', effort: 'high', cases: [], paths: [], migrations: [], shared: [], depends: [],\n      brief: '', worktree: dir, branch: '', base: '', state, goal: 'api', attempts: [] };\n    ledger.tasks[id] = t; return t;\n  };\n  const attempt = (t: Task, handoff = 'done', options: Partial<Attempt> = {}, usage?: { input_tokens: number; output_tokens: number }) => {\n    const n = t.attempts.length + 1;\n    const a: Attempt = { n, effort: 'high', engine: 'codex', pid: 0, session: `${t.id}-session`,\n      output: `runs/${t.id}/attempt-${n}.json`, lastMessage: `runs/${t.id}/attempt-${n}.last.md`,\n      startedAt: `2026-10-13T${String(n).padStart(2, '0')}:00:00Z`, endedAt: `2026-10-13T${String(n).padStart(2, '0')}:30:00Z`, ...options };\n    t.attempts.push(a);\n    if (a.lastMessage) write(a.lastMessage, `RESULT: ${handoff}\\n`);\n    write(a.output, JSON.stringify({ type: 'thread.started', thread_id: a.session }) + '\\n'\n      + (usage ? JSON.stringify({ type: 'turn.completed', usage }) + '\\n' : ''));\n    return a;\n  };\n  return { dir, ledger, write, task, attempt,\n    report: () => goalMeasures(ledger, { root: dir, nowMs, codexHomes: [join(dir, 'codex')] }),\n    cleanup: () => rmSync(dir, { recursive: true, force: true }) };\n}\n\n\ntest('sameScope review: supported resume classifications produce finite run and daily counts', async () => {\n  const f = fixture();\n  try {\n    const task = f.task('correction');\n    f.attempt(task, 'done', { round: 'initial' });\n    f.attempt(task, 'done', { round: 'fix', resumeClass: 'sameScope' });\n    const measures = (await f.report()).api!;\n    const invalid = (['run', 'today'] as const).flatMap(period =>\n      Object.entries(measures.attempts[period]).flatMap(([kind, value]) =>\n        typeof value === 'number' && !Number.isFinite(value) ? [{ period, kind, value }] : []));\n    expect(invalid).toEqual([]);\n  } finally { f.cleanup(); }\n});\n"
+          },
+          "reproduce": "Materialize the embedded test.content at test.path in a checkout of the candidate, then run bun scripts/goal/goalctl.ts test scripts/goal/same-scope-measures-review.test.ts. The failure is the test-body expect at line 48, after successful fixture setup."
+        }
+      }
+    }
+  ],
+  "focusedChecks": [
+    {
+      "job": "job:442e42a5-0b95-4723-950d-cedbd0ce499e",
+      "step": 1,
+      "log": ".temp/goal/jobs/442e42a5-0b95-4723-950d-cedbd0ce499e.1.log",
+      "resultFile": ".temp/resume-authorization-review/focused-result.json",
+      "status": "mixed_setup_timeout",
+      "passedCases": [
+        "Existing a three-step task retains its two fixes, and records why each attempt starts: ordinary third-fix refusal; explicit sameScope launch after two fixes; persisted fix/sameScope attempt; next landed step.",
+        "sameScope rejects a missing message without publishing an attempt.",
+        "sameScope rejects a whitespace-only message without publishing an attempt.",
+        "sameScope rejects an empty/whitespace file message without publishing an attempt.",
+        "sameScope rejects another Goal before admission and preserves the ledger."
+      ],
+      "setupFailures": "Four new multi-process probes exceeded Bun’s default five-second case timeout. The temporary test file received setDefaultTimeout(120_000); only those four cases were rerun. These were not candidate findings."
+    },
+    {
+      "job": "job:d6236145-63e0-497f-8340-dc057060eff0",
+      "step": 1,
+      "log": ".temp/goal/jobs/d6236145-63e0-497f-8340-dc057060eff0.1.log",
+      "resultFile": ".temp/resume-authorization-review/focused-retry-result.json",
+      "status": "passed",
+      "passed": 4,
+      "failed": 0,
+      "assertions": 46,
+      "passedCases": [
+        "Changed claims are refused under sameScope even with a fresh brief Decision; ledger and attempt history are unchanged.",
+        "Queued sameScope classification, exact file-message contents, token and options persist while gated; deleting the message file does not lose the note; concurrent admission pumps launch once on the same recording Codex session.",
+        "Claim drift after enqueue is refused on admission with no launch; the pending request remains, and restoring the brief admits it successfully.",
+        "A missing recording launcher fails without a phantom attempt or ledger mutation; pending authorization remains and succeeds when the local launcher is restored. PATH is restricted to fixture binaries to prevent real-model fallback."
+      ]
+    },
+    {
+      "job": "job:d6236145-63e0-497f-8340-dc057060eff0",
+      "step": 2,
+      "status": "failed",
+      "types": "TS7053: unhandled sameScope counter key",
+      "lint": "passed",
+      "ast": "passed",
+      "log": ".temp/resume-authorization-review/source/.temp/goal/check/run-FeyYsB/output.log",
+      "selection": "The scoped checker selected the five candidate diff paths and their type dependencies. No unrelated test tier was run."
+    },
+    {
+      "job": "job:10ef7c03-c277-4529-9d04-f93ee510d30f",
+      "step": 1,
+      "command": "task --dir .temp/resume-authorization-review/source docs:check",
+      "status": "passed",
+      "tests": 13,
+      "markdownFiles": 249,
+      "log": ".temp/goal/jobs/10ef7c03-c277-4529-9d04-f93ee510d30f.1.log"
+    }
+  ],
+  "sourceInspection": [
+    {
+      "topic": "Authority",
+      "paths": [
+        "scripts/goal/tasks.ts:509",
+        "scripts/goal/ledger.ts:141",
+        "scripts/goal/briefs.ts:322"
+      ],
+      "result": "Existing assertOwner, prepared/running/closed checks and claim-identity/conflict validation precede the new sameScope exception."
+    },
+    {
+      "topic": "Queue persistence and admission",
+      "paths": [
+        "scripts/goal/types.ts:40",
+        "scripts/goal/tasks.ts:507",
+        "scripts/goal/tasks.ts:549",
+        "scripts/goal/queue.ts:275"
+      ],
+      "result": "waitingResume uses Attempt.resumeClass, stores the exact note/options, restores them by token, revalidates ownership/claims and uses the existing admission pump. No new queue or admission owner was added."
+    },
+    {
+      "topic": "Failure handling",
+      "paths": [
+        "scripts/goal/tasks.ts:546",
+        "scripts/goal/tasks.ts:574",
+        "scripts/goal/ledger.ts:504",
+        "scripts/goal/queue.ts:287"
+      ],
+      "result": "Only recognized admission refusals become pending requests. Successful launch publishes the classified attempt and clears waitingResume; callback errors do not write the ledger. Queue errors remain visible on stderr and retain the pending correction for retry."
+    },
+    {
+      "topic": "Classification consumers",
+      "paths": [
+        "scripts/goal/types.ts:33",
+        "scripts/goal/tasks.ts:486",
+        "scripts/goal/measures.ts:170"
+      ],
+      "result": "All non-test resumeClass consumers were searched. The measurement consumer is the single confirmed missing sameScope integration, affecting run/daily counts and display as one defect class."
+    }
+  ],
+  "scopeAndLimits": {
+    "originalProductClassProof": "This report concerns only the bounded tooling candidate. It does not reassess or close the original product-class proof.",
+    "modelUse": "The review was performed by this worker; tests used disposable local launchers, with no nested agents or account fallback.",
+    "semanticAuthority": "The manager attests unchanged outcome/authority/acceptance through its exact recorded correction message. Source checks enforce unchanged normalized claims and a nonempty message.",
+    "landing": "No landing or candidate/product modifications were performed.",
+    "testScope": "Nine unique focused authorization/launch cases passed across the initial and corrected runs. One additional runtime regression intentionally fails at its outcome assertion. No whole-tier replay."
+  },
+  "incidentalHarnessHistory": [
+    {
+      "job": "job:e7a69455-f71a-402c-9319-d4bf55da3fbc",
+      "result": "No test executed: Bun treated .temp paths as name filters. Corrected invocation prefixes explicit paths with ./."
+    }
+  ],
+  "handoffChecks": {
+    "status": "passed",
+    "job": "job:a005a31a-254e-4b02-8966-69e1c535a1a9",
+    "workerCheck": {
+      "command": "task goal -- check",
+      "exitCode": 0,
+      "log": ".temp/goal/check/run-om8oa9/output.log",
+      "selection": "Claimed report only: AST and 1/44 affected repository guards passed. No TypeScript/source workspace changed and no tests are named in the worker brief. This does not supersede the separate candidate type failure."
+    },
+    "docsCheck": {
+      "command": "task docs:check",
+      "exitCode": 0,
+      "tests": 13,
+      "markdownFiles": 249,
+      "log": ".temp/goal/jobs/a005a31a-254e-4b02-8966-69e1c535a1a9.2.log"
+    }
+  },
+  "workflowInstructions": [
+    {
+      "path": ".agents/skills/goal-worker/SKILL.md",
+      "instruction": "End that turn immediately with `RESULT: parked`, without a handoff, polling, reading logs or starting more work.",
+      "effect": "The two recorded sequences that exceeded the inline window parked this worker; work resumed only on their recorded completion wakes."
+    }
+  ],
+  "correctedDeltaReview": {
+    "candidate": "8d5543b5e964a0f08256932ec6e01e09dad407f2",
+    "parent": "8c9d0995abe4afaf69138a3f06efda1650457c33",
+    "tree": "aee739275bb722addd57b8827954893cc431aa0a",
+    "originalReviewCommit": "b369ac0fe6b6eeef1fffae19b948010631532778",
+    "reviewer": {
+      "task": "G-2850",
+      "engine": "codex-1",
+      "model": "GPT-6.1 Sol",
+      "effort": "xhigh",
+      "execution": "Continuation of the same independent review session, restricted to the exact corrective delta.",
+      "nestedAgents": false,
+      "accountFallback": false
+    },
+    "reviewSnapshot": ".temp/resume-authorization-review/corrected-source",
+    "sourceVerification": "Detached checkout at the corrected immutable candidate. Parent and two-path delta verified from Git objects; tracked source matches the pin. Root dirty work and the manager candidate checkout were not used as proof.",
+    "deltaPaths": [
+      "scripts/goal/measures.test.ts",
+      "scripts/goal/measures.ts"
+    ],
+    "deltaAssessment": [
+      {
+        "path": "scripts/goal/measures.ts",
+        "line": 170,
+        "observation": "Explicit sameScope classification maps to fixRound before the generic resumeClass counter key. Existing retry/job-wake precedence remains. Run and daily increments, repair share and rendered fix totals therefore use the initialized finite fixRound counter; persisted attempt/queue classification is untouched."
+      },
+      {
+        "path": "scripts/goal/measures.test.ts",
+        "line": 222,
+        "observation": "The existing explicit-classification fixture adds a sameScope attempt and expects fixRound=2 and firstAttemptShare.run.share=1/3, while baselineRed/environment/unclassified expectations remain."
+      }
+    ],
+    "preservedEvidence": {
+      "originalCandidate": "8c9d0995abe4afaf69138a3f06efda1650457c33",
+      "originalVerdict": "request_changes",
+      "originalFinding": "unhandled-resume-classification",
+      "originalFailingReproducer": {
+        "path": "scripts/goal/same-scope-measures-review.test.ts",
+        "sha256": "341cddc78eb4f6f6e9d98e97eccda1504d40b638c5aa0435ce4d6b858b6aec81",
+        "contentLocation": "findings[0].evidence.runtime.test.content",
+        "modified": false
+      },
+      "successfulAuthorizationAndLaunchCases": 9,
+      "unchangedReview": "All original findings, the test-body failure, check records and nine successful authorization/launch counterexamples remain intact above; unchanged authorization code was not reviewed or tested again."
+    },
+    "verdict": "approve",
+    "findings": [],
+    "checks": {
+      "status": "passed",
+      "job": "job:1da55310-c591-4d08-b34d-6160ef2ec8fc",
+      "measurementTests": {
+        "step": 1,
+        "command": "env CLAUDECODE=1 bun scripts/goal/goalctl.ts test ./.temp/resume-authorization-review/corrected-source/scripts/goal/measures.test.ts ./.temp/resume-authorization-review/corrected-source/scripts/goal/same-scope-measures-review.test.ts --result-file .temp/resume-authorization-review/corrected-measures-result.json",
+        "exitCode": 0,
+        "passed": 16,
+        "failed": 0,
+        "assertions": 71,
+        "files": [
+          "scripts/goal/measures.test.ts",
+          "scripts/goal/same-scope-measures-review.test.ts"
+        ],
+        "log": ".temp/goal/jobs/1da55310-c591-4d08-b34d-6160ef2ec8fc.1.log",
+        "resultFile": ".temp/resume-authorization-review/corrected-measures-result.json",
+        "originalReproducer": {
+          "sha256": "341cddc78eb4f6f6e9d98e97eccda1504d40b638c5aa0435ce4d6b858b6aec81",
+          "modified": false,
+          "result": "passed",
+          "assertionReached": "yes",
+          "case": "sameScope review: supported resume classifications produce finite run and daily counts"
+        },
+        "classificationFixture": "explicit baseline-red and environment resumes exclude only those causes: sameScope adds the second fixRound and firstAttemptShare.run.share equals 1/3."
+      },
+      "sourceTypecheck": {
+        "step": 2,
+        "command": "task --dir .temp/resume-authorization-review/corrected-source scripts:typecheck",
+        "exitCode": 0,
+        "checkedFiles": 3578,
+        "diagnostic": "No type errors; no TS7053.",
+        "log": ".temp/goal/jobs/1da55310-c591-4d08-b34d-6160ef2ec8fc.2.log"
+      },
+      "reportWorkerCheck": {
+        "step": 3,
+        "command": "task goal -- check",
+        "exitCode": 0,
+        "log": ".temp/goal/jobs/1da55310-c591-4d08-b34d-6160ef2ec8fc.3.log",
+        "detailLog": ".temp/goal/check/run-koJcI9/output.log",
+        "selection": "Claimed JSON report only: AST and 1/45 affected repository guards passed. No source workspace changed and no tests were named in the worker brief."
+      },
+      "reportDocsCheck": {
+        "step": 4,
+        "command": "task docs:check",
+        "exitCode": 0,
+        "tests": 13,
+        "markdownFiles": 250,
+        "log": ".temp/goal/jobs/1da55310-c591-4d08-b34d-6160ef2ec8fc.4.log"
+      }
+    },
+    "scope": "Only the exact two-file correction and its measurement consumer behavior are reassessed. No source edits, landing, nested agents, fallback or unrelated product tests; original product-class proof remains outside this source review.",
+    "summary": "The exact corrective two-file delta resolves the original missing-consumer finding. The unchanged originally failing test-body reproducer now passes; all affected measurement tests pass, including two fixRound attempts and a first-attempt share of 1/3. The corrected source type-checks without TS7053. No remaining source issue was found in this delta; the nine original authorization/launch counterexamples and original failed-candidate evidence are preserved.",
+    "resolvedFindings": [
+      {
+        "id": "unhandled-resume-classification",
+        "originalCandidate": "8c9d0995abe4afaf69138a3f06efda1650457c33",
+        "correctedCandidate": "8d5543b5e964a0f08256932ec6e01e09dad407f2",
+        "status": "resolved",
+        "evidence": "The byte-identical reproducer now passes for finite run and daily counters; the existing explicit-classification fixture confirms sameScope counts as a fix and contributes to repair share. Script type checking reports no type errors."
+      }
+    ],
+    "workflowInstructions": [
+      {
+        "path": ".agents/skills/goal-worker/SKILL.md",
+        "instruction": "End that turn immediately with `RESULT: parked`, without a handoff, polling, reading logs or starting more work.",
+        "effect": "The single corrective verification sequence parked this worker until its recorded successful completion wake."
+      }
+    ],
+    "next": "Manager may proceed with normal landing of the seven-file corrected implementation and this actual review; no source-review blocker remains for this exact corrected pin."
+  }
+}

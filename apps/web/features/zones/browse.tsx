@@ -4,6 +4,7 @@ import type { ZoneBrowseEntry, ZoneWork } from '@rezics/zone-sdk';
 import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, InfoIcon, LayoutGridIcon, ListIcon, SearchIcon,
   SearchXIcon, SlidersHorizontalIcon, XIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { CatalogueGrid } from '../catalogue/catalogue-grid.tsx';
 import { EmptyState } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { PageContainer } from '../shell/page.tsx';
@@ -136,8 +137,10 @@ export function ZoneBrowse({ model, card, messages, header }: {
   const chosen = model.chosen.length;
   const slot = slotRatio(model.items);
   const list = (items: readonly ZoneWork[]) => model.state.view === 'grid'
-    ? <ul className="grid grid-cols-2 gap-x-(--zone-shelf-gap) gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
-      {items.map(work => <li key={work.id} className="min-w-0">{card(work, { layout: 'cover', slot })}</li>)}</ul>
+    // The shell rail and facets can appear at the same breakpoint. Fit the
+    // shared browse previews to the result space left by both, without shrinking them.
+    ? <CatalogueGrid className="gap-x-(--zone-shelf-gap)">
+      {items.map(work => <li key={work.id} className="min-w-0">{card(work, { layout: 'cover', slot })}</li>)}</CatalogueGrid>
     : <ul className="grid grid-cols-1 divide-y divide-border/60 rounded-(--zone-radius-card) border border-border/60
       bg-card">
       {items.map(work => <li key={work.id} className="min-w-0 p-3 sm:p-4">{card(work, { layout: 'row' })}</li>)}</ul>;

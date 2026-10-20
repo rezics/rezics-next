@@ -139,19 +139,25 @@ final class TemplateQueryService {
     }
 
     static JsonObject select(DatasetGraph dataset, JsonObject body) {
+        QueryWorkService.ReadBoundary.checkCurrent();
         Prepared prepared = PublicSearchPhaseEvidence.timed(PublicSearchPhaseEvidence.Phase.PARSE, () -> prepare(body));
         try (var phase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.QUERY)) {
+        // Templates read fixed model graphs, without a committed text capture.
+        // Preparation must not let a departed request start that transaction.
+        QueryWorkService.ReadBoundary.checkCurrent();
         dataset.begin(ReadWrite.READ);
         try {
             List<Binding> candidates=prepared.candidates().isEmpty()?List.of(org.apache.jena.sparql.engine.binding.BindingFactory.empty()):prepared.candidates();
             org.apache.jena.atlas.json.JsonArray collected=new org.apache.jena.atlas.json.JsonArray();
-            JsonObject head=null;long deadline=System.nanoTime()+10_000_000_000L;
+            JsonObject head=null;long deadline=QueryWorkService.ReadBoundary.deadline(System.nanoTime()+10_000_000_000L);
             for(Binding candidate:candidates) {
+                QueryWorkService.ReadBoundary.checkCurrent();
                 BindingBuilder builder=BindingBuilder.create();prepared.parameters().forEach(builder::add);candidate.forEach(builder::add);
                 Query query=bind(prepared.query(),builder.build());
                 long remaining=(deadline-System.nanoTime())/1_000_000L;
                 if(remaining<=0) throw new IllegalArgumentException("template deadline exceeded");
                 try(QueryExecution execution=QueryExecution.dataset(DatasetFactory.wrap(dataset)).query(query).timeout(remaining).build()) {
+                    QueryWorkService.ReadBoundary.watch(execution);
                     ByteArrayOutputStream chunk=new ByteArrayOutputStream();
                     ResultSetFormatter.outputAsJSON(chunk,execution.execSelect());
                     JsonObject result=JSON.parse(chunk.toString(java.nio.charset.StandardCharsets.UTF_8));

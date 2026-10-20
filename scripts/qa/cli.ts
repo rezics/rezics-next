@@ -122,7 +122,7 @@ function fail(message: string, failureClass: FailureClass = 'harness', tier?: Ti
 }
 function testFailure(result: { timedOut?: boolean; output?: string }, tier: Tier): FailureClass {
   const xml = join(directory, `${tierArtifactName(tier)}.xml`);
-  return testFailureClass(result, existsSync(xml) ? parseJUnit(readFileSync(xml, 'utf8'), tier) : []);
+  return testFailureClass(result, existsSync(xml) ? parseJUnit(readFileSync(xml, 'utf8'), tier, { root }) : []);
 }
 const integrationBudgetNotes: string[] = [];
 const stackLeaseNotes: string[] = [];
@@ -617,6 +617,7 @@ async function runShardWork(
     }
     if (record.stage !== 'test') {
       const results = completeFileResults(run.xml ?? '', files, tier, {
+        root,
         interrupted: true,
         reason: `Shard ${record.stage} failed before tests ran`,
       });
@@ -905,7 +906,7 @@ async function runShardWork(
     const batchFile =
       batches.length === 1 ? outfile : outfile.replace(/\.xml$/, `-${index + 1}.xml`);
     const batchArgs = tierBunTestArgs(tier, [
-      ...batch, ...flags, '--reporter=junit', `--reporter-outfile=${batchFile}`,
+      ...batch.map(file => `./${file}`), ...flags, '--reporter=junit', `--reporter-outfile=${batchFile}`,
       ...(options.timeoutArgs ?? []),
     ]);
     const runBatch = (environment: NodeJS.ProcessEnv, onLine: (line: string) => void) => commandAsync(
@@ -959,7 +960,7 @@ async function runShardWork(
     childAdmissionMs += result.admissionWaitMs;
     output.push(result.output);
     const empty = !result.ok && !result.timedOut && matchedNoTests(result.output);
-    const observed = existsSync(batchFile) ? parseJUnit(readFileSync(batchFile, 'utf8'), tier) : [];
+    const observed = existsSync(batchFile) ? parseJUnit(readFileSync(batchFile, 'utf8'), tier, { root }) : [];
     for (const file of batch) {
       const failed = observed.filter(test => test.file === file && test.failed);
       if (failed.length) (record.fileFailures ??= {})[file] ??= testFailureClass({ output: result.output }, failed);
@@ -976,6 +977,7 @@ async function runShardWork(
       batch,
       tier,
       {
+        root,
         filtered: flags.includes('-t'),
         interrupted: result.timedOut,
         incompleteFiles: result.timedOut ? [lastStartedTestFile(result.output)].filter((file): file is string => Boolean(file)) : [],
@@ -1001,6 +1003,7 @@ async function runShardWork(
     filesKeptAfterResetFailure(files, resetBlockedFiles),
     tier,
     {
+      root,
       filtered: flags.includes('-t'),
       interrupted: timedOut || (!commandOk && resetBlockedFiles.length === 0),
       reason: timedOut
@@ -1024,7 +1027,7 @@ async function runShardWork(
 
 function failedTests(run: ShardRun, tier: StackTier): Map<string, string[]> {
   const failed = new Map<string, string[]>();
-  for (const test of parseJUnit(run.xml ?? '', tier).filter(test => test.failed && test.name !== 'QA file did not complete' && !test.preparationFailure)) {
+  for (const test of parseJUnit(run.xml ?? '', tier, { root }).filter(test => test.failed && test.name !== 'QA file did not complete' && !test.preparationFailure)) {
     failed.set(test.file, [...failed.get(test.file) ?? [], test.name]);
   }
   return failed;
@@ -1084,6 +1087,7 @@ async function runStackTier(tier: StackTier): Promise<void> {
       writeFileSync(
         join(directory, `${artifact}.xml`),
         completeFileResults('', [...estimates.keys()], tier, {
+          root,
           reason: 'Small-fixture preparation failed before the tier ran',
         }).xml,
       );
@@ -1173,7 +1177,7 @@ async function runStackTier(tier: StackTier): Promise<void> {
     const replaced = new Map<string, ShardRun>();
     candidates.forEach(({ run, file, names, afterFiles, infrastructure }, index) => {
       const rerun = reruns[index];
-      const observed = rerun ? parseJUnit(rerun.xml ?? '', tier) : [];
+      const observed = rerun ? parseJUnit(rerun.xml ?? '', tier, { root }) : [];
       const ranAlone = rerun?.record.stage === 'test' && !rerun.timedOut && !rerun.noMatch
         && names.every(name => observed.some(test => test.file === file && test.name === name));
       const recovered = ranAlone && rerun.ok && !failedTests(rerun, tier).size;
@@ -1201,7 +1205,7 @@ async function runStackTier(tier: StackTier): Promise<void> {
       mergeJUnit(suites, elapsedMs),
       [...estimates.keys()].filter((file) => !resetBlocked.has(file)),
       tier,
-      { filtered: flags.includes('-t'), interrupted: runs.some((run) => run.timedOut), elapsedMs },
+      { root, filtered: flags.includes('-t'), interrupted: runs.some((run) => run.timedOut), elapsedMs },
     );
     writeFileSync(join(directory, `${artifact}.xml`), finalResults.xml);
     if (finalResults.missing.length)
@@ -1212,7 +1216,7 @@ async function runStackTier(tier: StackTier): Promise<void> {
       fail(`${tier} failed (budget ${(run.record.budgetMs ?? budget) / 1000}s) in ${run.record.project} (see logs/${label}.log)`,
         run.record.failureClass ?? 'harness', tier);
     }
-    const executed = parseJUnit(mergeJUnit(suites, 0), tier).length > 0;
+    const executed = parseJUnit(mergeJUnit(suites, 0), tier, { root }).length > 0;
     if (!executed) fail(`${tier} executed no tests`);
     if (elapsedMs > tierBudget) fail(`${tier} test wall time ${(elapsedMs / 1000).toFixed(1)}s exceeded ${tierBudget / 1000}s`, 'timeout', tier);
     const ok = executed && elapsedMs <= tierBudget && runs.every(resolved) && completed.every(run => run.ok);

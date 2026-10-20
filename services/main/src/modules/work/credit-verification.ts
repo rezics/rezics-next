@@ -4,6 +4,7 @@ import {
   readAuthorCredit,
   readAuthorCreditReceipt,
   AuthorCreditUnavailable,
+  verifyCreditModelPins,
   type AuthorCreditReceipt,
   type AuthorCreditValue,
 } from './author-credit.ts';
@@ -55,20 +56,20 @@ export async function readCreditOwnerWitness(
     dataEpoch = native.dataEpoch;
     sequence = native.sequence;
   } else if (kind === `${RV}NativeAgentCredit`) {
-    const profile = 'https://rezics.com/definition/native-agent-credit-v1';
     const agents =
       (
         await env.fuseki.query(
           `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
-      SELECT ?work ?head ?agent ?role ?actor ?epoch ?sequence WHERE {
+      SELECT ?work ?head ?agent ?role ?actor ?epoch ?sequence ?model ?shape ?currentModel WHERE {
         GRAPH ${iri(GRAPHS.current)} { ${iri(credit)} a rv:NativeAgentCredit ;
           rv:creditRevision ${iri(head)} ; rv:work ?work ; rv:agent ?agent ; schema:roleName ?role .
           FILTER NOT EXISTS { ${iri(credit)} rv:externalKey ?key }
+          OPTIONAL { ${iri(credit)} rv:modelRevision ?currentModel }
         }
         GRAPH ${iri(GRAPHS.revisions)} { ${iri(head)} a rv:NativeAgentCreditRevision, rv:RevisionAnchor ;
           rv:component ${iri(credit)} ; rv:work ?work ; rv:workRevision ?head ;
           rv:agent ?agent ; schema:roleName ?role ; rv:confirmedBy ?actor ;
-          rv:modelRevision ${iri(profile)} ; rv:shapeRevision ${iri(profile)} ;
+          rv:modelRevision ?model ; rv:shapeRevision ?shape ;
           rv:dataEpoch ?epoch ; rv:sequence ?sequence .
           FILTER NOT EXISTS { ${iri(head)} a rv:ErasedRevision }
           FILTER NOT EXISTS { ${iri(head)} rv:externalKey ?key }
@@ -100,6 +101,7 @@ export async function readCreditOwnerWitness(
       sourceRoleKey: null,
       nativeOrdinal: 0,
     };
+    verifyCreditModelPins(value, row.model, row.shape, row.currentModel);
     dataEpoch = row.epoch!.value;
     sequence = row.sequence!.value;
   } else throw new AuthorCreditUnavailable('credit profile is unavailable');
@@ -167,7 +169,7 @@ export async function readCreditOwnerWitness(
               key: value.sourceKey,
             },
           }),
-    });
+    }, value.modelRevision);
     if (
       head !== `https://rezics.com/id/${admission}` ||
       receipt.sourceIntent !== credit ||

@@ -49,7 +49,9 @@ public class ConsistentReadCaptureTest {
         long sequence;
         volatile Runnable afterPrivateRead;
 
-        Fixture() throws Exception {
+        Fixture() throws Exception { this(null); }
+
+        Fixture(Runnable beforeBegin) throws Exception {
             Files.createDirectories(Path.of(".temp"));
             root = Files.createTempDirectory(Path.of(".temp"), "consistent-read-");
             storage = TDB2Factory.connectDataset(root.resolve("tdb2").toString()).asDatasetGraph();
@@ -64,6 +66,14 @@ public class ConsistentReadCaptureTest {
             lucene = new TextIndexLucene(new ByteBuffersDirectory(), config);
             filtered = new FilteredGraphTextIndex(lucene);
             data = new DatasetGraphText(storage, filtered, new TextDocProducerTriples(filtered)) {
+                @Override public void begin(ReadWrite mode) {
+                    if (beforeBegin != null) beforeBegin.run();
+                    super.begin(mode);
+                }
+                @Override public void begin(org.apache.jena.query.TxnType type) {
+                    if (beforeBegin != null) beforeBegin.run();
+                    super.begin(type);
+                }
                 @Override public java.util.Iterator<org.apache.jena.sparql.core.Quad> find(
                     Node graph, Node subject, Node predicate, Node object) {
                     var rows = super.find(graph, subject, predicate, object);
@@ -106,7 +116,7 @@ public class ConsistentReadCaptureTest {
                 put(data, CommandPolicy.PUBLIC_SEARCH, UNIT, BODY, "en");
                 put(data, CommandPolicy.PRIVATE_SEARCH, PRIVATE_UNIT, BODY, "en");
                 SearchDeltaJournal.initialize(data);
-                synchronized (SearchDeltaJournal.publicationMonitor()) { data.commit(); }
+                try (var publication = SearchDeltaJournal.publicationFence()) { data.commit(); }
             } finally { data.end(); }
             assertTrue("fixture has one qualified committed generation", SearchDeltaJournal.qualify(data));
         }
@@ -325,7 +335,7 @@ public class ConsistentReadCaptureTest {
                 "urn:test:consistent-read:head:next", originalSource.epoch(), originalSource.recipe());
             var before = java.util.List.of(new TextEntityDocuments.Row(NodeFactory.createLiteralLang(BODY, "en"), originalSource));
             var after = java.util.List.of(new TextEntityDocuments.Row(NodeFactory.createLiteralLang("gamma delta replacement", "en"), nextSource));
-            synchronized (SearchDeltaJournal.publicationMonitor()) {
+            try (var publication = SearchDeltaJournal.publicationFence()) {
                 TextEntityDocuments.replace(fixture.lucene, scope, before);
                 fixture.lucene.commit();
             }
@@ -333,7 +343,7 @@ public class ConsistentReadCaptureTest {
                 long generation = cut.reader().getIndexCommit().getGeneration();
                 assertEquals(generation, TextEntityDocuments.verifyCommitted(fixture.lucene, scope, before));
                 workers.submit(() -> {
-                    synchronized (SearchDeltaJournal.publicationMonitor()) {
+                    try (var publication = SearchDeltaJournal.publicationFence()) {
                         TextEntityDocuments.replace(fixture.lucene, scope, after);
                         fixture.lucene.commit();
                     }

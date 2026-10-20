@@ -111,6 +111,23 @@ async function saveVerifiedDraft(env: WorkActivationEnvironment, content: Conten
   if (input.originRealm) {
     if (!access.withRealmPolicy) throw new AdmissionDenied('Realm policy owner is unavailable');
   }
+  let spoiler = input.spoiler;
+  if (input.expectedHead !== null) {
+    const prior = (await content.readExactBatch([input.expectedHead], async ids => new Set(ids)))[0];
+    if (prior?.status !== 'available' || prior.reference.resourceId !== input.reply
+      || prior.reference.variantId !== input.variantId || prior.reference.model !== 'member-reply-v1'
+      || prior.reference.provenance.kind !== 'admitted-original-contribution-v1'
+      || typeof prior.reference.provenance.author !== 'string'
+      || prior.body.spoiler !== undefined && typeof prior.body.spoiler !== 'boolean') {
+      throw new ContentConflict('prior reply declaration is unavailable');
+    }
+    // Root participation admits a new reply, not correction of another author's
+    // retained bytes. Content still fences immutable authorship in its final CAS.
+    if (prior.reference.provenance.author !== input.actingSubject) {
+      throw new AdmissionDenied('reply author authority is required');
+    }
+    if (spoiler === undefined) spoiler = prior.body.spoiler as boolean | undefined;
+  }
   const proveRoot = async (creating: boolean) => {
     try {
       const readable = await targetRead(env, { access, principal, actingSubject: input.actingSubject },
@@ -133,18 +150,6 @@ async function saveVerifiedDraft(env: WorkActivationEnvironment, content: Conten
     if (canonicalParent) input.rootRevision = canonicalParent.rootRevision;
     else input.rootRevision = plan.canonical.targetRevision;
   } else await proveRoot(false);
-  let spoiler = input.spoiler;
-  // A plain text edit must retain an author declaration it did not address.
-  // Bind the one exact read to this reply and variant before using its value.
-  if (spoiler === undefined && input.expectedHead !== null) {
-    const prior = (await content.readExactBatch([input.expectedHead], async ids => new Set(ids)))[0];
-    if (prior?.status !== 'available' || prior.reference.resourceId !== input.reply
-      || prior.reference.variantId !== input.variantId || prior.reference.model !== 'member-reply-v1'
-      || prior.body.spoiler !== undefined && typeof prior.body.spoiler !== 'boolean') {
-      throw new ContentConflict('prior reply declaration is unavailable');
-    }
-    spoiler = prior.body.spoiler as boolean | undefined;
-  }
   const command: SaveDraftCommand = { operationId: '', variant: { id: input.variantId,
     resourceId: input.reply, language: { kind: 'tag', tag: input.language, originalTag: input.language },
     direction: input.direction }, expectedHead: input.expectedHead, model: 'member-reply-v1',

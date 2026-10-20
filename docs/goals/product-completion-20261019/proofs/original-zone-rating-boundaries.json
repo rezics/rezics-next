@@ -1,0 +1,313 @@
+{
+  "profile": "original-zone-rating-boundaries-proof-v1",
+  "acceptance": "D5-006 original official-Zone and standing-rating read boundaries",
+  "worker": "G-2826",
+  "status": "partial; frozen-original-boundary-suites-pass; original-applicable-assertion-gaps-remain",
+  "scope": "Delegated execution of the two original frozen suites only. No production change, assertion change, corpus reconstruction, history rerun, finding closure or proved-row registration.",
+  "source": {
+    "commit": "79aa206d48b218e0955618f425886e0cd591df87",
+    "tree": "b290d342a2df90bd97992e69789ad9cac389a7c1",
+    "snapshot": ".temp/original-boundary-proof/source",
+    "trackedSourceFiles": 9901,
+    "sourceFileDigestBeforeQaOverlay": "3972cdc0ed9223b36e6dd7dea5f2874606f08d6515467c2042780650e600bc52",
+    "actualStorageCompatibility": "6b500023d92730766795edd9771f36b3550e60095d6cd748273eb38e99076264",
+    "matchesBothSuppliedManifests": true,
+    "approvedOverlayCommit": "b8ec0159dfd3b4f38d210bead790757222f8871f",
+    "approvedProductOverlays": [
+      {"path": "services/main/src/infrastructure/fuseki.ts", "sha256": "913bd1d766a215932a0efd88e0362b083b2e0a0843d0f2f19b7ad47c9171de13"},
+      {"path": "services/main/tests/request-read-budget.test.ts", "sha256": "4b7038acc0d5fb00609b90b6505311da54d2dab6e5d6d22eb588bdaa7efcfdf1"}
+    ],
+    "requiredNativeImage": "rezics/fuseki:6.2.0-cmd0.5.43-6699b42ecd5d",
+    "runtimeImageStartedOrRebuilt": false,
+    "dependencies": "Private lockfile/manifests-matched copies from the qualified source; no peer dependency symlinks",
+    "frontend": "Not started or assessed"
+  },
+  "frozenQaOverlay": [
+    {"path": "tests/qa/integration/official-zone-read-budget.test.ts", "sha256": "490e09a5dba826239bfeaa4d80d336856b7679ae574dc1fba6dab33b00860d23"},
+    {"path": "tests/qa/integration/rating-population-read-budget.test.ts", "sha256": "7a70561d2f59fa031953bfc1dbdaf1305291d3bff17aaa6686b8e9e2104ce168"},
+    {"path": "tests/qa/support/bounded-read-corpus.ts", "sha256": "22b736942522a2915b25603908f8ef8b0ce4d2c1b187e87d3a7dc0b7a8374a79"},
+    {"path": "tests/qa/support/command-race.ts", "sha256": "9a5ca99363437d8c33ced50fbebcc8773183bede43c818e13950a10f68b78f77"},
+    {"path": "tests/qa/support/joining-auth.ts", "sha256": "75a589feff7afc2fb6766438328511a8af6a3530af81247a323b6ad1ba37ae81"},
+    {"path": "tests/qa/support/outcome-response.ts", "sha256": "a90f459d3b78eb6c5cd63f6e7bbca49a707072278274118fc118774e151e3f54"},
+    {"path": "tests/qa/support/persona-fixture-authority.ts", "sha256": "02a60db426f311e024a8448e8f1c2a17e9fe809e89bfc0ca27aeaa25e3ed9e69"},
+    {"path": "tests/qa/support/personas.ts", "sha256": "e38b4eff624b971ab4f6c58b028a66e4c7fe4017f83e47fbc2ce39bbb57c502b"},
+    {"path": "tests/qa/support/proof-phase.ts", "sha256": "5a4a37c1655cbcdfe10d0a223d9fe1df622e43ab6cc381201d33253a6ccc45dc"},
+    {"path": "tests/qa/support/provisioned-agent.ts", "sha256": "6d9476993fa270fc3ccb89daa3d6eb9f382135ca3681f87b6683c0cc939cb441"},
+    {"path": "tests/qa/support/request-watch.ts", "sha256": "066eed949f90cf9c375df2cf5cb8ec78da39dc907d615277638e1ea3a79a1e53"},
+    {"path": "tests/qa/support/settled-write.ts", "sha256": "cdbbbde9c406f4638ee75603af7fbac5a72c1128dbb6a3c0884aa050b1e15409"},
+    {"path": "tests/qa/support/work-profile.ts", "sha256": "a950846b08f32e1e74573518cacd473629686cd26318bd28c895e45a111a707b"}
+  ],
+  "suppliedFixtures": {
+    "pointerPolicy": "Both recipes were staged byte-for-byte in the private snapshot before any hook import; their absolute backup pointers and the supplied backup contents were preserved.",
+    "zones": {
+      "corpus": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/zones-attempt3/corpus.json",
+      "corpusSha256": "169b7dde39f3c9719001c1a5e0674b5b3c7ef6b4c0beff16b01b4983dd57e016",
+      "stagedCorpus": ".temp/original-boundary-proof/source/.temp/audit-bounded-reads/zones/corpus.json",
+      "backup": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/source-fixed/.temp/read-budget-derivatives/zones/owners/backup.json",
+      "backupSha256": "81c40acf12d49b07a524211a73773d054ff4f7a78b17da06db2c3c8af32a61cb",
+      "parentManifestSha256": "89331d2a132d937b34a975668ae92dc250b09b09edc918e253ee113f20d4f9ba",
+      "producerQualificationSha256": "8d273af63a3947c2fb48fbaa3582fe1ff78aa7fa156883ff5c17d1d46bff51be",
+      "producerPreparationMs": 180030,
+      "producerRestoreMs": 32545
+    },
+    "ratings": {
+      "corpus": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/ratings-attempt5/corpus.json",
+      "corpusSha256": "e2f6d27d756c78cc20b08a8e731610633f550d59d412d8c174f79c42af687513",
+      "stagedCorpus": ".temp/original-boundary-proof/source/.temp/audit-bounded-reads/ratings/corpus.json",
+      "backup": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2750/.temp/read-budget-migration/source-fixed/.temp/read-budget-derivatives/ratings/owners/backup.json",
+      "backupSha256": "d7591eb25339e8ff0c87463414031c22d6d7c6ff6bae9a27a68dd8d925d82bd9",
+      "parentManifestSha256": "36d9c6a5e66a802f2d45cee36810915c9dbd89a56431a8ed8b5de2ab48ceb567",
+      "producerQualificationSha256": "5423802875542e2fc5c468b243a8ac8901d5cdd90ce8ea94157823156ee7e52a",
+      "producerPreparationMs": 157357,
+      "producerRestoreMs": 28931,
+      "producerThroughSmokeMs": 49291
+    },
+    "producerEvidenceLimit": "These are retained supplier environment receipts, not independent boundary results. No new corpus, grant, migration or producer lifecycle operation ran. Ratings attempt 4 was not repeated."
+  },
+  "preparationRun": {
+    "job": "539bd99a-d7c5-499e-88fd-a5c06d624eec",
+    "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task --taskfile .temp/original-boundary-proof/Taskfile.yml prepare",
+    "executorStartedAt": "2026-10-19T13:23:34.255Z",
+    "snapshotReceiptAt": "2026-10-19T13:23:51.369813+00:00",
+    "exit": 201,
+    "resultClass": "harness",
+    "qaRun": null,
+    "ownerStarted": false,
+    "restoreAttempted": false,
+    "readinessOrSmokeReached": false,
+    "outcomeAssertionsReached": false,
+    "preparationCeilingMs": 600000,
+    "ceilingResult": "Not qualified: execution stopped before store restoration, startup or smoke; source-copy timing is not a successful preparation receipt",
+    "error": "Error: Catalogue backup source must stay in checkout .temp or the declared shared work-profiles",
+    "failingOperation": "scripts/load/catalogue-backup.ts:42 corpusBackupSourceDirectory, called by restoreCatalogueBackup at line 261; the frozen hook calls restoreCatalogueBackup(corpus.backup, ...) in beforeAll",
+    "reproduction": "Read-only preflight imported the exact qualified helper and called its source-directory guard for each unchanged supplied backup parent. Both failed identically; no test hook was imported.",
+    "reason": "The private snapshot's checkout .temp and its declared shared work-profiles do not contain either supplied absolute G2750 private-checkout backup directory. Actual source/storage compatibility passed independently.",
+    "missingPrerequisite": "A supported readable backup location accepted by the unchanged helper while satisfying the instruction to keep backup paths unchanged. A byte-preserving local directory copy would also require a pointer-only change to the staged recipe, which this continuation did not authorize.",
+    "disposition": "Return the exact setup discrepancy once. No manifest rewrite, fixture-root override, symlink bypass, producer checkout execution, repeated restore or new corpus."
+  },
+  "boundaryExecution": {
+    "selectorsNotLaunched": [
+      "task --dir /home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2826/.temp/original-boundary-proof/source goal -- test tests/qa/integration/official-zone-read-budget.test.ts",
+      "task --dir /home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2826/.temp/original-boundary-proof/source goal -- test tests/qa/integration/rating-population-read-budget.test.ts"
+    ],
+    "personas": ["visitor", "stranger", "member", "owner", "moderator", "operator"],
+    "perPersonaPopulationResults": {
+      "visitor": {"zones8_9_10": "not-run", "ratings100_101_102": "not-run", "admission": "not-run"},
+      "stranger": {"zones8_9_10": "not-run", "ratings100_101_102": "not-run", "admission": "not-run"},
+      "member": {"zones8_9_10": "not-run", "ratings100_101_102": "not-run", "admission": "not-run"},
+      "owner": {"zones8_9_10": "not-run", "ratings100_101_102": "not-run", "admission": "not-run"},
+      "moderator": {"zones8_9_10": "not-run", "ratings100_101_102": "not-run", "admission": "not-run"},
+      "operator": {"zones8_9_10": "not-run", "ratings100_101_102": "not-run", "admission": "not-run"}
+    },
+    "publicRequests": 0,
+    "commands": 0,
+    "assertions": 0,
+    "observedStatus": null,
+    "observedBody": null,
+    "observedGraphCalls": null,
+    "observedGraphBytes": null,
+    "observedDeadlineMs": null,
+    "classification": "Environment premise blocker before any population transition or request, not a Zone or rating outcome failure"
+  },
+  "frozenAssertionScope": {
+    "method": "Static inspection only of the hash-verified suites and qualified source; no runtime inference",
+    "zones": {"populations": [8, 9, 10], "request": "GET /v1/onboarding/suggested-follows?languages=en with actingSubject for authenticated readers", "assertions": "200, 1..6 suggestions, no private Realm identifier, graphCalls >0 and <=160, graphBytes <=4194304, elapsedMs <10000; incomplete auth/Agent pairs return 400 invalid_home_command, no items, zero graph calls"},
+    "ratings": {"populations": [100, 101, 102], "request": "POST /v1/global-rating-aggregates with retained native context/work/mainVersion", "assertions": "200, complete true, count and population exactly 100/101/102, withdrawnCount 0, mean 5, global-account-principal, graphCalls exactly 1, graphBytes <=1048576, elapsedMs <10000, no principalId or rating-slot; transitions use retained reserve owner/member commands"},
+    "sourceContinuationEvidence": "At 79aa206d, zone/publication.ts:377 listOfficialZones uses limit+1 and returns next at line 401, filtering public listed unprotected Spaces/Zones. onboarding/suggestions.ts:118 describes a bounded candidate sample whose continuation belongs to the Zone listing. onboarding/contract.ts:52 suggestionsResult contains profile/items/sourcePosition, not a continuation field.",
+    "missingOriginalApplicableAssertions": [
+      "The Zone suite asserts nonempty bounded suggestions and absence of one private Realm identifier, but never requests/asserts the Zone listing next cursor, continuation traversal, or disclosure of returned candidates. It does not prove the original continuation/disclosure clause.",
+      "Neither frozen suite exercises a distinct empty population or a private target population and its bounded cost. Rating voter-identifier privacy and exclusion of one private Realm from suggestions are narrower than the original empty/private clause."
+    ],
+    "disposition": "Report these assertion gaps to the manager without changing frozen assertions or inventing a new suggestions endpoint/field. Even a future suite pass cannot alone close all original clauses."
+  },
+  "receipts": [
+    {"path": ".temp/original-boundary-proof/execution.json", "sha256": "67d79dfdaaf29b9e0ddd31cf54874affbe82211bd07c4bdd692664fa11a56470"},
+    {"path": ".temp/original-boundary-proof/preflight.json", "sha256": "b73022182764bc0ec74ac10a1040176048cce7c1e0700dc27c70526d2799a054"},
+    {"path": ".temp/goal/jobs/539bd99a-d7c5-499e-88fd-a5c06d624eec.log", "sha256": "5e0b8339b5df77840ea69aa6e3626e8817757a88d6fb60514975fa037be70a31"},
+    {"path": ".temp/original-boundary-proof/prepare.py", "sha256": "672c947cb36bac1551dcbb2487d9f5110da13c577f077fa86e118670a9389fb4"},
+    {"path": ".temp/original-boundary-proof/preflight.ts", "sha256": "4a5c5c4df7af1750e7a66cc9009bea7ac35b3e919e76f92ad324362694d83939"},
+    {"path": ".temp/original-boundary-proof/Taskfile.yml", "sha256": "a052aa79e2114c4d503b4baa89d0a301e6d224f4e7fb92354f5e7cf1c75bf9c2"},
+    {"path": ".temp/original-boundary-proof/site-G2826-original-D5006-resume-inputs.json", "sha256": "d266e0c2f0ec010fb440a04e069166239d3731fe37e90abf59cc6ee1f5a4e5ca"},
+    {"path": ".temp/original-boundary-proof/site-D5-006-current-original-readiness-map.json", "sha256": "1ce76d33f090d2812865e52a4c433a227f9c443dd6bb0a28d6859e73407b5956"},
+    {"path": ".temp/original-boundary-proof/execution-composition.json", "sha256": "daf882f38ed515c715221595a32d27ba9c969d86c1848f9513e41e9ad9ab249d"}
+  ],
+  "preservedSeparateEvidence": {
+    "report": "docs/goals/product-completion-20261019/proofs/rating-context-selection.json",
+    "unchangedReportSha256": "470091846cd86379601b57083343fac96d64e881a05d327d0b98a758e2c2dca0",
+    "unchangedContextAssertionSha256": "bd8192f401cdeac28b1f603c1d1730eaf8fa94ce239b7ebdbaa43fe151795213",
+    "limit": "Prior six-persona 438-assertion/196-read fixed-wave evidence and every failed premise remain separate. No context/history repetition, publication/rights preservation acceptance, native review duplication, frontend acceptance or central closure is claimed."
+  },
+  "checks": {
+    "job": "d65b05ac-be08-432c-b589-67ef69bf0d91",
+    "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+    "resultClass": "passed",
+    "docs": {"exit": 0, "result": "13 tests passed; 259 Markdown files checked", "log": ".temp/goal/jobs/d65b05ac-be08-432c-b589-67ef69bf0d91.1.log", "sha256": "51c6077f961cfff15c12ef9a230a13937031d0e392a060f2f0d6cbe5ce3d351d"},
+    "worker": {"exit": 0, "result": "Types: no TypeScript workspace changed; no automatic tests named in brief; lint, ast and ten selected repository guard files passed", "log": ".temp/goal/jobs/d65b05ac-be08-432c-b589-67ef69bf0d91.2.log", "sha256": "7ab50f5b9283fd6f2f93961308f41cf7f67f87519b35fc5112a2bf7bf02dbc7f", "output": ".temp/goal/check/run-sR9wR0/output.log"},
+    "integrity": "All retained receipt, approved product overlay, frozen QA overlay, supplied/staged recipe and backup-manifest hashes rechecked after gates; the separate context report and frozen assertion hashes remain unchanged",
+    "limit": "Documentation/static checks are not boundary-suite execution, runtime readiness or preservation evidence"
+  },
+  "next": "Manager reviews the original boundary results and exact applicability gaps; no entire D5-006 acceptance or closure. Keep separate context/publication preservation work at its actual tier.",
+  "supportedCustodyContinuation": {
+    "status": "frozen-original-boundary-suites-pass; original-applicable-clauses-remain-unproved",
+    "authorization": "Recorded same-scope checkout-relative custody correction: byte-preserving checkout-local backup copies and only staged-copy backup-pointer relocation; original producer recipes/backups and prior manual snapshot preserved",
+    "priorReportSha256": "464782127d6fcc869750aa40e569d4b08b2a5a6ced4369f5f1b233a9d55d33df",
+    "supersededNext": "Manager supplies an accepted immutable backup read location or explicitly permits byte-preserving local backup relocation plus pointer-only staged-recipe changes, then the same two frozen suites can use normal sequential Task jobs. Address original assertion gaps separately without claiming closure from suite counts.",
+    "historicalSections": "Pre-existing source, frozenQaOverlay, preparationRun, boundaryExecution, receipts and checks describe the preserved manual guard refusal. The independent supported execution is reported here separately.",
+    "job": "d38cd379-400e-4b28-b53c-9a7cbd90d0d4",
+    "orderedTasks": ["stage", "compile", "verify", "prove"],
+    "driverSha256": "d21265541ba83d6f247bab5792dab8200026163539c93c367a4421255da7cf05",
+    "taskfileSha256": "35e0e799e62794c58ad35b2dc144ddea1cb73caff17633832698ac9dda515296",
+    "producerPreparedReceiptSha256": "fc749ad64544c28e6a8313891706fbfbdf5e653e2747a3dedd019ed8085e8bc7",
+    "executionReceipt": {
+      "path": ".temp/read-budget-independent/execution.json",
+      "sha256": "e9eadcc2ab4844f026f3bb9bf36983a2f1e616b75ac5610b3ebe42085c9d2e7c"
+    },
+    "source": {
+      "product": "79aa206d48b218e0955618f425886e0cd591df87",
+      "fixtureOverlay": "505ab6643aeb199816eca9fb3e26f65209b1a312",
+      "approvedProductOverlays": {
+        "services/main/src/infrastructure/fuseki.ts": {"pin": "b8ec0159dfd3b4f38d210bead790757222f8871f", "sha256": "913bd1d766a215932a0efd88e0362b083b2e0a0843d0f2f19b7ad47c9171de13"},
+        "services/main/tests/request-read-budget.test.ts": {"pin": "b8ec0159dfd3b4f38d210bead790757222f8871f", "sha256": "4b7038acc0d5fb00609b90b6505311da54d2dab6e5d6d22eb588bdaa7efcfdf1"}
+      },
+      "sourceFilesVerifiedBeforeAndAfterRun": 9904,
+      "runtimeSourceDigestBeforeQaOverlay": "3972cdc0ed9223b36e6dd7dea5f2874606f08d6515467c2042780650e600bc52",
+      "frozenQaFiles": 14,
+      "additionalQaFile": {
+        "path": "packages/observability/tests/otlp.ts",
+        "sha256": "5a6715bcab3808d75b4e0b6cdda881f1245a2881a86cdc74e559be6c89462ec1"
+      },
+      "harnessRegistration": {
+        "path": "scripts/qa/resource-classes.ts",
+        "pin": "505ab6643aeb199816eca9fb3e26f65209b1a312",
+        "sha256": "ccbeac9d7c6a4fcd6451451e16771f6656cfecbae8aaffc3d0b872cba7578420",
+        "reason": "Retain catalogue-disk allocation and existing 480s budget for the two explicit frozen suites"
+      },
+      "storageCompatibility": "6b500023d92730766795edd9771f36b3550e60095d6cd748273eb38e99076264",
+      "nativeImage": {
+        "tag": "rezics/fuseki:6.2.0-cmd0.5.43-6699b42ecd5d",
+        "id": "sha256:1f130a1afc35d1e286f7b30a12d2afd56b4e623f7ceef3501939f6e79db010bc",
+        "created": "2026-10-19T15:03:07.90313583+08:00",
+        "observation": "Pinned by the verified compose source; existing image predates this run. No native build/test/review was requested."
+      },
+      "postgresComposePin": "postgres:18.6-trixie@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722",
+      "objectStoreComposePin": "rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff",
+      "qaMetadataDeclaredEnclosingWorkerSource": "5ef77ac6774783d88db5e9fb3ebe5ac8162b44a4",
+      "qaMetadataFingerprint": "d348a7c4578f",
+      "sourceLimit": "The archived snapshot has no separate Git checkout; QA Git metadata names its enclosing worker. Executed product/QA source is identified by the immutable pins and all 9904 verified file digests, not by that enclosing HEAD.",
+      "frontend": "Not started or assessed"
+    },
+    "custodyComparisonScope": "All regular files in each copied owners directory (manifest, configuration and object files) were compared with the qualified supplied directory. Physical Docker volumes remain retained stopped stores copied by the supported restore helper; this directory comparison does not hash their contents.",
+    "custody": {
+      "zones": {
+        "originalManifestSha256": "89331d2a132d937b34a975668ae92dc250b09b09edc918e253ee113f20d4f9ba",
+        "qualifiedManifestSha256": "81c40acf12d49b07a524211a73773d054ff4f7a78b17da06db2c3c8af32a61cb",
+        "localManifestSha256": "81c40acf12d49b07a524211a73773d054ff4f7a78b17da06db2c3c8af32a61cb",
+        "qualifiedRecipeSha256": "169b7dde39f3c9719001c1a5e0674b5b3c7ef6b4c0beff16b01b4983dd57e016",
+        "localRecipeSha256": "48d34ef3c616e7c5eba4e03fe6d2bc15b9570c2d08ba73fe2e4ff21ce9edab6a",
+        "localManifest": ".temp/read-budget-independent/source/.temp/audit-bounded-reads/zones/owners/backup.json",
+        "backupFilesCompared": 128,
+        "backupBytesCompared": 136935,
+        "allBackupFileBytesEqual": true,
+        "inventory": {"path": ".temp/read-budget-independent-custody/zones-backup-custody.json", "sha256": "201685e8da50f092c10abe7c69beb69a0ba3476767be85b619ac790d3d040572"}
+      },
+      "ratings": {
+        "originalManifestSha256": "36d9c6a5e66a802f2d45cee36810915c9dbd89a56431a8ed8b5de2ab48ceb567",
+        "qualifiedManifestSha256": "d7591eb25339e8ff0c87463414031c22d6d7c6ff6bae9a27a68dd8d925d82bd9",
+        "localManifestSha256": "d7591eb25339e8ff0c87463414031c22d6d7c6ff6bae9a27a68dd8d925d82bd9",
+        "qualifiedRecipeSha256": "e2f6d27d756c78cc20b08a8e731610633f550d59d412d8c174f79c42af687513",
+        "localRecipeSha256": "698f7772937a34cc2afa51c80d13dc0c54661069ed20552b08e1e064194bbd02",
+        "localManifest": ".temp/read-budget-independent/source/.temp/audit-bounded-reads/ratings/owners/backup.json",
+        "backupFilesCompared": 240,
+        "backupBytesCompared": 231870,
+        "allBackupFileBytesEqual": true,
+        "inventory": {"path": ".temp/read-budget-independent-custody/ratings-backup-custody.json", "sha256": "a516d49452f87e85a25678e113872d355f42c42aae0a4cb0650b35cc2be82d34"}
+      }
+    },
+    "qa": {
+      "id": "20261019t133610-820841",
+      "result": "pass",
+      "fullQualification": false,
+      "automaticAcceptanceIdsProved": 0,
+      "passedCases": 18,
+      "failedCases": 0,
+      "assertions": 294,
+      "shards": "Two distinct catalogue-disk projects executed sequentially by the one exact explicit normal selection; unchanged 480000ms per-file budget",
+      "measuredOutcomeRequests": 42,
+      "measuredValidRequests": 36,
+      "measuredAdmissionRequests": 6,
+      "completedLogicalPopulationAdvanceCommands": 4,
+      "countLimit": "Measured response counts exclude unmeasured fixture authentication, setup and command settlement traffic; four completed logical native commands are inferred from the frozen loop and reached populations, not a full HTTP request tally",
+      "graphRows": null,
+      "rowLimit": "The frozen helper persists graph call count and response bytes, not graph row counts; no independent measured graph-row bound is claimed",
+      "observedRequestBodies": "Ratings use the unchanged retained corpus context/work/mainVersion; suggestion paths and full first-response bodies/costs are retained in the evidence. Native population advances remain the original Zone configuration and reserve owner/member observation commands."
+    },
+    "results": {
+      "zones": {
+        "isolatedRun": "bounded-ce49b275db8f49f7",
+        "fixtureCreationBaseline": "7df2e285d3199c32b4e61c08c33ba9c25afaaa21",
+        "qaShard": "20261019t133610-820841-1",
+        "passedCases": 12,
+        "assertions": 168,
+        "outcomeAssertionsReached": true,
+        "preparation": {"restoreAndApiSetupMsExcludingAdmission": 46352.184245, "admissionMs": 2536, "budgetMs": 600000, "budgetPassed": true, "originalBuildMsFromRecipeNotReexecuted": 231959.491948, "suiteWallSeconds": 131.263199747, "limit": "Frozen helper clocks restore through retained-session API setup; first public bodies are the measured 200 results below. Exact through-first-response preparation clock was not persisted separately."},
+        "observationColumns": ["population", "status", "items", "graphCalls", "graphResponseBytes", "elapsedMs"],
+        "observationsByPersona": {"visitor": [[8, 200, 3, 67, 89107, 3636.702019000004], [9, 200, 3, 67, 89546, 4526.208049000008], [10, 200, 3, 67, 89546, 2461.115531999996]], "stranger": [[8, 200, 3, 67, 89107, 3323.3100040000063], [9, 200, 3, 67, 89546, 2772.631487999999], [10, 200, 3, 67, 89546, 2235.797636000003]], "member": [[8, 200, 3, 67, 89107, 2484.6195369999987], [9, 200, 3, 67, 89546, 2806.1643659999972], [10, 200, 3, 67, 89546, 4197.282535999999]], "owner": [[8, 200, 3, 67, 89107, 2067.9959249999956], [9, 200, 3, 67, 89546, 3106.093089999995], [10, 200, 3, 67, 89546, 2092.238293000002]], "moderator": [[8, 200, 3, 67, 89107, 2721.0066889999944], [9, 200, 3, 67, 89546, 2612.633720999991], [10, 200, 3, 67, 89546, 1815.1564529999887]], "operator": [[8, 200, 3, 67, 89107, 4326.444516000003], [9, 200, 3, 67, 89546, 2941.7006519999995], [10, 200, 3, 67, 89546, 1922.123867000002]]},
+        "populationAudits": 0,
+        "rawBodiesAndCosts": {"path": ".temp/read-budget-independent-custody/zones-outcomes.json", "sha256": "4736a608cafdd2ae443a87868f0f1b40c82df7aea95ee16349f5e2c0e359a9a9"},
+        "originalEvidence": {"path": ".temp/read-budget-independent/source/.temp/audit-bounded-reads/zones/bounded-ce49b275db8f49f7-evidence.json", "sha256": "4736a608cafdd2ae443a87868f0f1b40c82df7aea95ee16349f5e2c0e359a9a9"},
+        "admissionColumns": ["status", "graphCalls", "graphResponseBytes", "elapsedMs"],
+        "admissionByPersona": {"visitor": [400, 0, 0, 3.4997129999974277], "stranger": [400, 0, 0, 29.303106000006665], "member": [400, 0, 0, 39.90534899999329], "owner": [400, 0, 0, 34.37418400000024], "moderator": [400, 0, 0, 12.537555000002612], "operator": [400, 0, 0, 10.798634000006132]},
+        "commonBodyResults": "Three suggestions at every population/persona; no private Realm identifier. All six incomplete authentication/Agent pair cases returned invalid_home_command without items."
+      },
+      "ratings": {
+        "isolatedRun": "bounded-9b5c5b0769d14292",
+        "fixtureCreationBaseline": "7df2e285d3199c32b4e61c08c33ba9c25afaaa21",
+        "qaShard": "20261019t133610-820841-2",
+        "passedCases": 6,
+        "assertions": 126,
+        "outcomeAssertionsReached": true,
+        "preparation": {"restoreAndApiSetupMsExcludingAdmission": 83963.863375, "admissionMs": 1676, "budgetMs": 600000, "budgetPassed": true, "originalBuildMsFromRecipeNotReexecuted": 351709.5869, "suiteWallSeconds": 103.11338513, "limit": "Frozen helper clocks restore through retained-session API setup; first public bodies are the measured 200 results below. Exact through-first-response preparation clock was not persisted separately."},
+        "observationColumns": ["population", "status", "countEqualsBodyPopulation", "graphCalls", "graphResponseBytes", "elapsedMs"],
+        "observationsByPersona": {"visitor": [[100, 200, 100, 1, 213669, 383.64016300000367], [101, 200, 101, 1, 4130, 33.38253299999633], [102, 200, 102, 1, 4130, 29.569619000001694]], "stranger": [[100, 200, 100, 1, 213669, 90.535652999999], [101, 200, 101, 1, 4130, 31.32173400001193], [102, 200, 102, 1, 4130, 18.440992999996524]], "member": [[100, 200, 100, 1, 213669, 83.75945900000806], [101, 200, 101, 1, 4130, 34.424468000011984], [102, 200, 102, 1, 4130, 23.31396600000153]], "owner": [[100, 200, 100, 1, 213669, 91.70667300000787], [101, 200, 101, 1, 4130, 28.55914300000586], [102, 200, 102, 1, 4130, 22.867614999995567]], "moderator": [[100, 200, 100, 1, 213669, 75.46106200000213], [101, 200, 101, 1, 4130, 25.38207799999509], [102, 200, 102, 1, 4130, 17.619441999995615]], "operator": [[100, 200, 100, 1, 213669, 66.48660000000382], [101, 200, 101, 1, 4130, 24.025527999998303], [102, 200, 102, 1, 4130, 20.084843999997247]]},
+        "populationAudits": 0,
+        "rawBodiesAndCosts": {"path": ".temp/read-budget-independent-custody/ratings-outcomes.json", "sha256": "1b23a773592191c5255826615c39e09c8b57da7cc5860f49c475db6768225d4d"},
+        "originalEvidence": {"path": ".temp/read-budget-independent/source/.temp/audit-bounded-reads/ratings/bounded-9b5c5b0769d14292-evidence.json", "sha256": "1b23a773592191c5255826615c39e09c8b57da7cc5860f49c475db6768225d4d"},
+        "commonBodyResults": {"complete": true, "withdrawnCount": 0, "mean": 5, "populationPolicy": "global-account-principal", "voterIdentifiersAbsent": true}
+      }
+    },
+    "cleanup": "Both frozen afterAll hooks completed; no containers remain for either owned bounded restore project; copied owners-directory files still hash equal to their qualified supplied originals, within custodyComparisonScope",
+    "limits": ["The original continuation/disclosure and distinct empty/private assertion gaps in frozenAssertionScope remain unproved; no whole D5-006 acceptance or closure.", "No replacement assertion, API, grant, producer, corpus, standing reconstruction, migration, native review, context/history rerun, frontend or landing.", "Prior setup failures and separate context-selection evidence are unchanged; this run does not substitute for publication/rights preservation."],
+    "artifacts": [
+      {"path": ".temp/read-budget-independent/execution.json", "sha256": "e9eadcc2ab4844f026f3bb9bf36983a2f1e616b75ac5610b3ebe42085c9d2e7c"},
+      {"path": ".temp/read-budget-independent-custody/dispatch-inputs.json", "sha256": "f17a67fc963772c152183f84a451ff6bbf6efc09cf024e6e71898c556c0d2586"},
+      {"path": ".temp/read-budget-independent-custody/producer-handoff-addendum.json", "sha256": "52a42728d761825cbe64828f5dce3a92e081fa677d1b2ae0de796e72ae141d1c"},
+      {"path": ".temp/read-budget-independent-custody/zones-outcomes.json", "sha256": "4736a608cafdd2ae443a87868f0f1b40c82df7aea95ee16349f5e2c0e359a9a9"},
+      {"path": ".temp/read-budget-independent/source/.temp/audit-bounded-reads/zones/bounded-ce49b275db8f49f7-evidence.json", "sha256": "4736a608cafdd2ae443a87868f0f1b40c82df7aea95ee16349f5e2c0e359a9a9"},
+      {"path": ".temp/read-budget-independent-custody/zones-backup-custody.json", "sha256": "201685e8da50f092c10abe7c69beb69a0ba3476767be85b619ac790d3d040572"},
+      {"path": ".temp/read-budget-independent-custody/ratings-outcomes.json", "sha256": "1b23a773592191c5255826615c39e09c8b57da7cc5860f49c475db6768225d4d"},
+      {"path": ".temp/read-budget-independent/source/.temp/audit-bounded-reads/ratings/bounded-9b5c5b0769d14292-evidence.json", "sha256": "1b23a773592191c5255826615c39e09c8b57da7cc5860f49c475db6768225d4d"},
+      {"path": ".temp/read-budget-independent-custody/ratings-backup-custody.json", "sha256": "a516d49452f87e85a25678e113872d355f42c42aae0a4cb0650b35cc2be82d34"},
+      {"path": ".temp/read-budget-independent/source/.artifacts/qa/20261019t133610-820841/integration.xml", "sha256": "719f6cd847247d19ee2607fa90d23e0068db91accf910d0ea08c37bd1d63d4db"},
+      {"path": ".temp/read-budget-independent/source/.artifacts/qa/20261019t133610-820841/summary.md", "sha256": "f3ca81114efbb5e16528584c5169fb3764879acf4bb5d59326c60ff5cc3bd172"},
+      {"path": ".temp/read-budget-independent/source/.artifacts/qa/20261019t133610-820841/run-deadline.json", "sha256": "493703833a0db1fe9c827ab5453984d9b9af51212b69ff60b7baea4962ddc3b6"},
+      {"path": ".temp/read-budget-independent/source/.artifacts/qa/20261019t133610-820841/logs/integration-1.log", "sha256": "7a545fc537cc24c0d773a3c691d5efaf394a52833b6b6f079bb7c55c68980d33"},
+      {"path": ".temp/read-budget-independent/source/.artifacts/qa/20261019t133610-820841/logs/integration-2.log", "sha256": "e4ce25225dd4bd9723d2630ce0c4642aebec83afb977b984c48ef88437f4a837"},
+      {"path": ".temp/read-budget-independent/source/.artifacts/qa/20261019t133610-820841/logs/integration-1-durations.json", "sha256": "90efcaf7e9306f5284d43a9e6c7a3fedc1830c41efa8990532f921aecdc488b9"},
+      {"path": ".temp/read-budget-independent/source/.artifacts/qa/20261019t133610-820841/logs/integration-2-durations.json", "sha256": "516282ee30354d6305a22dea46a0c3134d9bbb87e8235fc5c45d9a5563ffd320"},
+      {"path": ".temp/read-budget-independent/source/.artifacts/qa/20261019t133610-820841/logs/memory-admission.log", "sha256": "0db4e6e93436d3623be87088bba24500851cea6c6bf4e677ebf014d5f30537de"},
+      {"path": ".temp/goal/jobs/d38cd379-400e-4b28-b53c-9a7cbd90d0d4.1.log", "sha256": "a7ee253062df3bbf6ef51b123855de7263318c7de6271fc425b20e2693eb9f4b"},
+      {"path": ".temp/goal/jobs/d38cd379-400e-4b28-b53c-9a7cbd90d0d4.2.log", "sha256": "856955008348a02c3eb540727adad417e2e4258299b20e8ca0730bfc427a7775"},
+      {"path": ".temp/goal/jobs/d38cd379-400e-4b28-b53c-9a7cbd90d0d4.3.log", "sha256": "3dda7688d803fa347271aad8f3c3f5a323e3d44a54519d3869f3e4707648a8b0"},
+      {"path": ".temp/goal/jobs/d38cd379-400e-4b28-b53c-9a7cbd90d0d4.4.log", "sha256": "d2da6b4ce0340beeab38224f1de917cc29c03a1f9c8b4fc3ae567e6288e47835"}
+    ],
+    "checks": {
+      "job": "2b5ce35c-6bc6-421a-bae5-736f224636e9",
+      "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task docs:check' --then 'task goal -- check' -- task --taskfile .temp/read-budget-independent-custody/Taskfile.yml record",
+      "resultClass": "passed",
+      "record": {"exit": 0, "driver": ".temp/read-budget-independent-custody/record-outcomes.py", "driverSha256": "530c8107447ea9a33cd0eda1003b6fac0b6388c06431bd7aba343a9522708d38", "log": ".temp/goal/jobs/2b5ce35c-6bc6-421a-bae5-736f224636e9.1.log", "sha256": "dfa93037adbafcd65364ce452e55d8029f0d204d407cdfd6c0590a731c4bcba4"},
+      "docs": {"exit": 0, "result": "13 tests passed; 259 Markdown files checked", "log": ".temp/goal/jobs/2b5ce35c-6bc6-421a-bae5-736f224636e9.2.log", "sha256": "24692a5b3c33b105c116d296013ebb75c0af1b5276d54e372f896acbac3cf790"},
+      "worker": {"exit": 0, "result": "Types: no TypeScript workspace changed; no automatic tests named in brief; lint, ast and ten selected repository guard files passed", "log": ".temp/goal/jobs/2b5ce35c-6bc6-421a-bae5-736f224636e9.3.log", "sha256": "8e4c0512035d38edb991b4976a03d68a69d63dd84acc27defa087301b68ebf60", "output": ".temp/goal/check/run-qV8emr/output.log"},
+      "finalReceiptUpdate": "Only passing gate receipts and the scope of the directory hash comparison were clarified after these checks; executed source, frozen assertions, result values and historical evidence remain unchanged"
+    }
+  }
+}

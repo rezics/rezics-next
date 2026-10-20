@@ -809,6 +809,52 @@ export const typeRegistry = {
       }
     }
   },
+  "https://rezics.com/vocab/SourceDatasetEpisode": {
+    "type": "https://rezics.com/vocab/SourceDatasetEpisode",
+    "base": "resource",
+    "default": false,
+    "creatable": false,
+    "creation": "contributor",
+    "interest": null,
+    "primaryAction": "visit",
+    "presentation": "default",
+    "cover": "document",
+    "priority": 100,
+    "labels": {
+      "en": {
+        "one": "Source episode record",
+        "other": "Source episode records"
+      },
+      "zh-Hant": {
+        "one": "來源分集紀錄",
+        "other": "來源分集紀錄"
+      },
+      "zh-Hans": {
+        "one": "来源分集记录",
+        "other": "来源分集记录"
+      },
+      "ja": {
+        "one": "出典のエピソード記録",
+        "other": "出典のエピソード記録"
+      },
+      "ko": {
+        "one": "출처 에피소드 기록",
+        "other": "출처 에피소드 기록"
+      },
+      "de": {
+        "one": "Episodendatensatz der Quelle",
+        "other": "Episodendatensätze der Quelle"
+      },
+      "fr": {
+        "one": "Fiche d’épisode source",
+        "other": "Fiches d’épisodes source"
+      },
+      "es": {
+        "one": "Registro de episodio de origen",
+        "other": "Registros de episodios de origen"
+      }
+    }
+  },
   "https://rezics.com/vocab/TextContribution": {
     "type": "https://rezics.com/vocab/TextContribution",
     "base": "record",
@@ -1159,6 +1205,52 @@ export const typeRegistry = {
       }
     }
   },
+  "https://schema.org/DefinedTerm": {
+    "type": "https://schema.org/DefinedTerm",
+    "base": "resource",
+    "default": false,
+    "creatable": false,
+    "creation": "contributor",
+    "interest": null,
+    "primaryAction": "visit",
+    "presentation": "default",
+    "cover": "document",
+    "priority": 100,
+    "labels": {
+      "en": {
+        "one": "Term",
+        "other": "Terms"
+      },
+      "zh-Hant": {
+        "one": "術語",
+        "other": "術語"
+      },
+      "zh-Hans": {
+        "one": "术语",
+        "other": "术语"
+      },
+      "ja": {
+        "one": "用語",
+        "other": "用語"
+      },
+      "ko": {
+        "one": "용어",
+        "other": "용어"
+      },
+      "de": {
+        "one": "Begriff",
+        "other": "Begriffe"
+      },
+      "fr": {
+        "one": "Terme",
+        "other": "Termes"
+      },
+      "es": {
+        "one": "Término",
+        "other": "Términos"
+      }
+    }
+  },
   "https://schema.org/DigitalDocument": {
     "type": "https://schema.org/DigitalDocument",
     "base": "work",
@@ -1437,6 +1529,98 @@ export const typeRegistry = {
       }
     }
   },
+  "https://schema.org/Organization": {
+    "type": "https://schema.org/Organization",
+    "base": "resource",
+    "default": false,
+    "creatable": false,
+    "creation": "contributor",
+    "interest": null,
+    "primaryAction": "visit",
+    "presentation": "default",
+    "cover": "square",
+    "priority": 100,
+    "labels": {
+      "en": {
+        "one": "Organization",
+        "other": "Organizations"
+      },
+      "zh-Hant": {
+        "one": "組織",
+        "other": "組織"
+      },
+      "zh-Hans": {
+        "one": "机构",
+        "other": "机构"
+      },
+      "ja": {
+        "one": "組織",
+        "other": "組織"
+      },
+      "ko": {
+        "one": "단체",
+        "other": "단체"
+      },
+      "de": {
+        "one": "Organisation",
+        "other": "Organisationen"
+      },
+      "fr": {
+        "one": "Organisation",
+        "other": "Organisations"
+      },
+      "es": {
+        "one": "Organización",
+        "other": "Organizaciones"
+      }
+    }
+  },
+  "https://schema.org/Person": {
+    "type": "https://schema.org/Person",
+    "base": "resource",
+    "default": false,
+    "creatable": false,
+    "creation": "contributor",
+    "interest": null,
+    "primaryAction": "visit",
+    "presentation": "default",
+    "cover": "square",
+    "priority": 100,
+    "labels": {
+      "en": {
+        "one": "Person",
+        "other": "People"
+      },
+      "zh-Hant": {
+        "one": "人物",
+        "other": "人物"
+      },
+      "zh-Hans": {
+        "one": "人物",
+        "other": "人物"
+      },
+      "ja": {
+        "one": "人物",
+        "other": "人物"
+      },
+      "ko": {
+        "one": "인물",
+        "other": "인물"
+      },
+      "de": {
+        "one": "Person",
+        "other": "Personen"
+      },
+      "fr": {
+        "one": "Personne",
+        "other": "Personnes"
+      },
+      "es": {
+        "one": "Persona",
+        "other": "Personas"
+      }
+    }
+  },
   "https://schema.org/Place": {
     "type": "https://schema.org/Place",
     "base": "resource",
@@ -1481,6 +1665,52 @@ export const typeRegistry = {
       "es": {
         "one": "Lugar",
         "other": "Lugares"
+      }
+    }
+  },
+  "https://schema.org/PublicationEvent": {
+    "type": "https://schema.org/PublicationEvent",
+    "base": "resource",
+    "default": false,
+    "creatable": false,
+    "creation": "contributor",
+    "interest": null,
+    "primaryAction": "visit",
+    "presentation": "default",
+    "cover": "document",
+    "priority": 100,
+    "labels": {
+      "en": {
+        "one": "Publication event",
+        "other": "Publication events"
+      },
+      "zh-Hant": {
+        "one": "發行事件",
+        "other": "發行事件"
+      },
+      "zh-Hans": {
+        "one": "发行事件",
+        "other": "发行事件"
+      },
+      "ja": {
+        "one": "刊行イベント",
+        "other": "刊行イベント"
+      },
+      "ko": {
+        "one": "발행 행사",
+        "other": "발행 행사"
+      },
+      "de": {
+        "one": "Veröffentlichungsereignis",
+        "other": "Veröffentlichungsereignisse"
+      },
+      "fr": {
+        "one": "Événement de publication",
+        "other": "Événements de publication"
+      },
+      "es": {
+        "one": "Evento de publicación",
+        "other": "Eventos de publicación"
       }
     }
   },
@@ -1762,4 +1992,4 @@ export const typeRegistry = {
   }
 } as const;
 export type AdmittedType = keyof typeof typeRegistry;
-export const typeRegistryDigest = "3bebf2a97ac2def1cc47fcd9f7727512d0b9fadd3305a0f6009b01de76129948";
+export const typeRegistryDigest = "0c6fdfc6b145ffecad6ff52fecc3dd86d016ebb29d4fd2f7eb3d96464faa7e27";
