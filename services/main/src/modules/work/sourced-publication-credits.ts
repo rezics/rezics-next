@@ -11,7 +11,7 @@ export async function sourcedPublicationCreditReferences(session: WorkReadSessio
   for (const work of works) {
     const basis = await readWorkBasis(session, work);
     const attribution = await selectedPublicationAttribution(session, basis.structuredPublication);
-    if (!attribution || !basis.structuredPublication) continue;
+    if (!attribution || !basis.structuredPublication || !('record' in attribution)) continue;
     const transcriber = await readCreditAttribution(session, attribution.transcriber);
     const hex = hash(basis.structuredPublication.source).slice(0, 32);
     const authorId = `https://rezics.com/id/${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;

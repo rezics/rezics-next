@@ -1,4 +1,17 @@
-import { expect, test } from 'bun:test';
+import { afterEach, expect, test } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { Value } from 'typebox/value';
+import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
+import { publicationRoutes } from '../src/routes/publication.ts';
+import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
+import { workHeader } from '../src/modules/work/read-contract.ts';
+import { readWorkBasis, readWorkHeader } from '../src/modules/work/read-header.ts';
+import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
+import { readPublishedStructuredWorkSource } from '../src/modules/work/public-patterns.ts';
+import { selectedPublicationAttribution } from '../src/modules/work/sourced-structure-publication.ts';
+import { WorkReadMissing, WorkReadMoved, WorkReadSession } from '../src/modules/work/read-session.ts';
 import { AdmissionDenied, type RegisteredAdmission } from '../src/modules/access/admission.ts';
 import { receiptFamilyFor } from '../src/modules/access/receipt-families.ts';
 import { ownerOutboxEventHandler } from '../src/modules/outbox/event-handlers.ts';
@@ -418,3 +431,238 @@ test('WORK10: original-contribution proof rejects imports, references, media and
   } } } as never, source, async () => 'https://rezics.com/id/00000000-0000-4000-8000-000000000099');
   expect(otherEditor).toBe(false);
 });
+
+const manualInput = { ...publishInput, rightsBasis: 'public-domain' as const,
+  rightsAssessmentId: '00000000-0000-4000-8000-000000000011',
+  citation: { url: 'https://www.nhlbi.nih.gov/health/educational/lose_wt/eat/recipes.htm',
+    author: 'National Heart, Lung, and Blood Institute', license: null } };
+const publicationObjects: string[] = [];
+afterEach(() => { for (const directory of publicationObjects.splice(0)) rmSync(directory, { recursive: true }); });
+
+/** Owner/route fixture: graph and Rights transports are controlled, never a fabricated Source intake. */
+function manualPublicationFixture() {
+  const root = join(process.cwd(), '.temp/goal/manual-native-publication/objects');
+  mkdirSync(root, { recursive: true });
+  const directory = mkdtempSync(join(root, 'publication-'));
+  publicationObjects.push(directory);
+  const state = { rights: true, allowed: true, denied: false, stale: false,
+    revokeBeforeCommit: false, revokeAtEmission: false, rightsReads: 0, claims: 0,
+    updates: [] as string[], terminal: null as WorkStructurePublicationReceipt | null,
+    attribution: null as unknown, source: '', recorded: 0, structureVisible: true, publicationMoved: false };
+  const row = (values: Record<string, string>) => Object.fromEntries(Object.entries(values)
+    .map(([key, value]) => [key, { value }]));
+  const fuseki = {
+    commandHealth: async () => ({ profiles: Object.fromEntries(Object.entries(profileRegistry)
+      .map(([id, value]) => [id, value.sha256])) }),
+    query: async (query: string) => {
+      if (query.includes('ASK')) return { boolean: !query.includes('InvalidProfile') };
+      if (query.includes('SELECT ?epoch ?sequence ?hold ?r')) return { results: { bindings: [{ ...row({
+        epoch: dataEpoch, sequence: '27', r: work, type: 'work', work, head: workHead, public: 'true' }),
+        label: { value: 'Native recipe', 'xml:lang': 'en' } }] } };
+      if (query.includes('SELECT ?epoch ?sequence')) return { results: { bindings: [row({ epoch: dataEpoch, sequence: '27' })] } };
+      if (query.includes('SELECT ?head ?main ?mainHead')) return { results: { bindings: [row({
+        head: workHead, main: mainVersion, mainHead: mainVersion, public: 'true',
+        publicationHead: state.terminal!.publicationDecision! })] } };
+      if (query.includes('SELECT ?resource ?head')) return { results: { bindings: [row({ resource: work, head: workHead })] } };
+      if (query.includes('SELECT ?selection ?language') || query.includes('SELECT ?text WHERE'))
+        return { results: { bindings: [] } };
+      if (query.includes('SELECT ?work ?parent')) return { results: { bindings: [row({ work })] } };
+      if (query.includes('SELECT ?outcome')) return { results: { bindings: state.terminal ? [graphRow(state.terminal)] : [] } };
+      if (query.includes('SELECT DISTINCT ?parent')) return { results: { bindings: [] } };
+      if (query.includes('SELECT ?component ?profile')) return { results: { bindings: [row({
+        component: mainVersion, profile: `${RV}RecipeComposition`, head: state.stale ? decision : structureHead,
+        generation, count: '0', manifest: sourceRoot })] } };
+      if (query.includes('SELECT ?owner')) return { results: { bindings: [row({ owner: work })] } };
+      if (query.includes('SELECT ?occurrence ?target ?selector')) return { results: { bindings: [] } };
+      if (query.includes('SELECT ?workHead ?mainVersion')) return { results: { bindings: [row({
+        workHead, mainVersion })] } };
+      if (query.includes('SELECT ?structuredDecision')) return { results: { bindings: state.terminal ? [row({
+        structuredDecision: state.publicationMoved ? decision : state.terminal.publicationDecision!, structuredSource: state.source,
+        structuredStructure: structure, structuredSourceMain: mainVersion, structuredProfile: `${RV}RecipeComposition`,
+        structuredRevision: structureHead, structuredGeneration: generation, structuredRoot: sourceRoot,
+        structuredAssessment: `urn:rezics:rights:assessment:${manualInput.rightsAssessmentId}`, structuredExact: 'true',
+      })] : [] } };
+      if (query.includes('SELECT ?citation')) return { results: { bindings: [row({ citation: JSON.stringify(state.attribution) })] } };
+      throw new Error(`Unexpected manual publication query: ${query}`);
+    },
+    commandWithReceipt: async (envelope: { update: string }) => {
+      state.updates.push(envelope.update);
+      if (envelope.update.includes('rv:Published')) {
+        const decisionId = envelope.update.match(/<(https:\/\/rezics\.com\/id\/[0-9a-f-]{36})> a rv:WorkStructurePublicationDecision/)?.[1];
+        state.source = envelope.update.match(/urn:rezics:work-source:[0-9a-f]{64}/)![0];
+        const citation = envelope.update.match(/<https:\/\/schema.org\/citation> ("(?:[^"\\]|\\.)*") ;/)![1]!;
+        state.attribution = JSON.parse(JSON.parse(citation));
+        state.terminal = terminalReceipt(manualInput, { publicationDecision: decisionId });
+        if (state.revokeAtEmission) state.rights = false;
+      } else state.terminal = cancelledReceipt(manualInput,
+        envelope.update.includes('AuthorityDenied') ? 'authority-denied' : 'stale-head');
+      return { status: 'committed' };
+    },
+  };
+  const deps = { environment: { fuseki, objectDirectory: directory, lineage: { dataEpoch, routingEpoch: '4' } },
+    account: { verify: async () => ({ issuer: actor, subject: actor }) },
+    access: { register: async (input: { requireExplicitGrant: boolean; scope: string; action: string; requestDigest: string }) => {
+      expect(input).toMatchObject({ requireExplicitGrant: true, scope, action: 'work.publish' });
+      expect(input.requestDigest).toBe(workStructurePublicationDigest(manualInput));
+      if (state.denied) throw new AdmissionDenied('No Work publication grant');
+      return admission(manualInput, { state: state.terminal ? 'sealed' : 'registered',
+        dispatchEligible: !state.terminal, replayed: !!state.terminal });
+    }, claim: async () => { state.claims++; return { ...admission(manualInput,
+      { state: 'claimed', dispatchEligible: true, replayed: false }), claimedAt: '2026-10-20T00:00:00Z' }; },
+    recordGraphOutcome: async () => { state.recorded++; } },
+    governance: { store: { withPublicationFence: async (_resources: string[],
+      dispatch: (allowed: boolean) => Promise<unknown>) => dispatch(state.allowed) } },
+    sourceIntake: { read: async () => { throw new Error('Manual publication must never acquire retained bytes'); } },
+    rights: { store: { currentWikiDisplayObligations: async (materials: unknown[]) => materials.map(() => ({ status: 'unassessed' })),
+      currentPublicDomainAssessment: async (target: string, assessment: string) => {
+      expect(target).toBe(work); expect(assessment).toBe(manualInput.rightsAssessmentId);
+      state.rightsReads++;
+      return state.rights && !(state.revokeBeforeCommit && state.rightsReads > 1);
+    } } },
+  } as unknown as MainWorkDependencies;
+  configureFixtureDisclosureAncestry(deps.environment, target => target.work
+    ? { resource: target.work, head: workHead, protectedRevision: target.workRevision } : undefined);
+  configureDisclosure(deps.environment, fixtureDisclosureReader(async targets => targets
+    .map(target => target.component === 'structure' && !state.structureVisible ? 'hidden' : 'visible')));
+  const app = publicationRoutes(deps.environment.fuseki, deps);
+  const post = (body: unknown = manualInput) => app.handle(new Request('https://main.invalid/v1/work-publications', {
+    method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer fixture',
+      'idempotency-key': 'publication-one' }, body: JSON.stringify(body),
+  }));
+  return { state, deps, post };
+}
+
+test('manual cited public-domain publication binds citation and exact Rights without a retained observation', () => {
+  const digest = workStructurePublicationDigest(manualInput);
+  expect(workStructurePublicationDigest({ ...manualInput, citation: { license: null,
+    author: manualInput.citation.author, url: manualInput.citation.url } })).toBe(digest);
+  expect(workStructurePublicationDigest({ ...manualInput, rightsAssessmentId: admissionId })).not.toBe(digest);
+  expect(workStructurePublicationDigest({ ...manualInput, citation: { ...manualInput.citation, author: null } })).not.toBe(digest);
+  for (const invalid of [{ ...manualInput, sourceObservation: actor }, { ...manualInput, rightsAssessmentId: undefined },
+    { ...manualInput, citation: undefined }, { ...manualInput, citation: { ...manualInput.citation, url: 'javascript:alert(1)' } },
+    { ...manualInput, rightsBasis: 'original-contribution' }])
+    expect(() => workStructurePublicationDigest(invalid as never)).toThrow();
+});
+
+test('actual publication route commits cited native identity atomically and replays without source or Rights re-admission', async () => {
+  const fixture = manualPublicationFixture();
+  const response = await fixture.post();
+  expect(response.status).toBe(201);
+  const result = await response.json();
+  expect(result).toMatchObject({ work, mainVersion, structure, structureRevision: structureHead,
+    selectedGeneration: generation, sourceRoot, replayed: false });
+  expect(fixture.state.rightsReads).toBe(3);
+  expect(fixture.state.updates).toHaveLength(1);
+  const update = fixture.state.updates[0]!;
+  expect(update).toContain('rv:rightsBasis rv:PublicDomain');
+  expect(update).toContain(`rv:rightsAssessment <urn:rezics:rights:assessment:${manualInput.rightsAssessmentId}>`);
+  expect(update).not.toContain('rv:sourceObservation');
+  expect(update).toContain(`rv:structureHead <${structureHead}>`);
+  expect(update).toContain(`rv:head <${workHead}>`);
+  expect(update).toContain('rv:WorkStructurePublicationEvent');
+  expect(update).toContain('rv:OperationReceipt');
+  expect(fixture.state.attribution).toMatchObject({ kind: 'manual-citation', ...manualInput.citation,
+    rightsAssessmentId: manualInput.rightsAssessmentId, transcriber: actor });
+  fixture.state.rights = false;
+  const replay = await fixture.post();
+  expect(replay.status).toBe(200);
+  expect(await replay.json()).toEqual({ ...result, replayed: true });
+  expect(fixture.state.rightsReads).toBe(3);
+  expect(fixture.state.claims).toBe(1);
+  expect(fixture.state.updates).toHaveLength(1);
+});
+
+test.each([
+  { ...manualInput, citation: { ...manualInput.citation, url: 'file:///private/recipe' } },
+  { ...manualInput, citation: { ...manualInput.citation, author: '' } },
+  { ...manualInput, rightsAssessmentId: undefined },
+  { ...manualInput, citation: undefined },
+  { ...manualInput, rightsBasis: 'imported-material' },
+  { ...manualInput, sourceObservation: actor },
+])('actual publication route refuses an unsupported citation or Rights request before dispatch: %j', async body => {
+  const fixture = manualPublicationFixture();
+  const response = await fixture.post(body);
+  expect([400, 422]).toContain(response.status);
+  expect(fixture.state.claims).toBe(0);
+  expect(fixture.state.rightsReads).toBe(0);
+  expect(fixture.state.updates).toHaveLength(0);
+});
+
+test.each(['denied', 'allowed', 'stale', 'rights', 'revokeBeforeCommit'] as const)(
+  'manual publication %s refusal never publishes a replacement source', async condition => {
+    const fixture = manualPublicationFixture();
+    if (condition === 'allowed' || condition === 'rights') fixture.state[condition] = false;
+    else fixture.state[condition] = true;
+    const response = await fixture.post();
+    expect(response.status).toBe(condition === 'stale' ? 409 : 403);
+    expect(fixture.state.updates.every(update => !update.includes('rv:WorkStructurePublicSource'))).toBe(true);
+    expect(fixture.state.terminal?.outcome ?? 'cancelled').toBe('cancelled');
+  });
+
+test('manual publication refuses a Rights movement at final emission while preserving its exact committed replay', async () => {
+  const fixture = manualPublicationFixture();
+  fixture.state.revokeAtEmission = true;
+  const response = await fixture.post();
+  expect(response.status).toBe(403);
+  expect(fixture.state.terminal?.outcome).toBe('succeeded');
+  const replay = await fixture.post();
+  expect(replay.status).toBe(200);
+  expect((await replay.json()).replayed).toBe(true);
+  expect(fixture.state.updates).toHaveLength(1);
+});
+
+test('selected manual publication reader emits truthful attribution at its exact revision and fences current Rights', async () => {
+  const fixture = manualPublicationFixture();
+  expect((await fixture.post()).status).toBe(201);
+  const source = await readPublishedStructuredWorkSource(fixture.deps.environment, work, mainVersion);
+  expect(source).toMatchObject({ work, mainVersion, structure, structureRevision: structureHead,
+    selectedGeneration: generation, sourceRoot, rightsAssessmentId: manualInput.rightsAssessmentId });
+  expect(source).not.toHaveProperty('sourceObservation');
+  const session = new WorkReadSession(fixture.deps, new Request(`https://main.invalid/v1/works/${work.slice(-36)}`),
+    {}, { dataEpoch, sequence: '27' });
+  const attribution = await selectedPublicationAttribution(session, source);
+  expect(attribution).toMatchObject({ kind: 'manual-citation', ...manualInput.citation });
+  for (const key of ['record', 'observation', 'provider', 'externalId']) expect(attribution).not.toHaveProperty(key);
+  expect(Value.Check(workHeader.properties.rights, { basis: 'public-domain', source: attribution })).toBe(true);
+  await session.fenceDependencies();
+  fixture.state.rights = false;
+  await expect(session.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
+  const next = new WorkReadSession(fixture.deps, session.request, {}, { dataEpoch, sequence: '27' });
+  await expect(selectedPublicationAttribution(next, source)).rejects.toBeInstanceOf(WorkReadMissing);
+});
+
+test.each(['rights', 'disclosure', 'publication'] as const)(
+  'native Work header retains exact manual attribution and refuses final %s movement', async movement => {
+    const fixture = manualPublicationFixture();
+    expect((await fixture.post()).status).toBe(201);
+    const session = new WorkReadSession(fixture.deps, new Request(`https://main.invalid/v1/works/${work.slice(-36)}`),
+      { localBasis: true }, { dataEpoch, sequence: '27' });
+    const header = await readWorkHeader(session, work);
+    expect(header).toMatchObject({ id: work, mainVersion, publicationState: 'published',
+      rights: { basis: 'public-domain', source: { kind: 'manual-citation', ...manualInput.citation,
+        rightsAssessmentId: manualInput.rightsAssessmentId } } });
+    expect(Value.Check(workHeader, header)).toBe(true);
+    await session.fenceDependencies();
+    if (movement === 'rights') fixture.state.rights = false;
+    if (movement === 'disclosure') fixture.state.structureVisible = false;
+    if (movement === 'publication') fixture.state.publicationMoved = true;
+    await expect(session.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
+  });
+
+test.each(['admission', 'final'] as const)(
+  'native readers without an attribution output must retain manual publication Rights at %s', async phase => {
+    const fixture = manualPublicationFixture();
+    expect((await fixture.post()).status).toBe(201);
+    const session = new WorkReadSession(fixture.deps, new Request(`https://main.invalid/v1/works/${work.slice(-36)}/recipe`),
+      { localBasis: true }, { dataEpoch, sequence: '27' });
+    if (phase === 'admission') {
+      fixture.state.rights = false;
+      await expect(readWorkBasis(session, work)).rejects.toBeInstanceOf(WorkReadMissing);
+    } else {
+      expect((await readWorkBasis(session, work)).structuredPublication?.rightsAssessmentId)
+        .toBe(manualInput.rightsAssessmentId);
+      await session.fenceDependencies();
+      fixture.state.rights = false;
+      await expect(session.fenceDependencies()).rejects.toBeInstanceOf(WorkReadMoved);
+    }
+  });

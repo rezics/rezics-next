@@ -1574,56 +1574,110 @@
                 "type": "string"
               },
               "source": {
-                "properties": {
-                  "author": {
-                    "~elyTyp": 7,
-                    "nullable": true,
-                    "type": [
-                      "string",
-                      "null"
-                    ]
+                "anyOf": [
+                  {
+                    "properties": {
+                      "author": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "externalId": {
+                        "type": "string"
+                      },
+                      "license": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "observation": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "provider": {
+                        "type": "string"
+                      },
+                      "record": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "transcriber": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "url": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "record",
+                      "observation",
+                      "provider",
+                      "externalId",
+                      "url",
+                      "license",
+                      "author",
+                      "transcriber"
+                    ],
+                    "type": "object"
                   },
-                  "externalId": {
-                    "type": "string"
-                  },
-                  "license": {
-                    "~elyTyp": 7,
-                    "nullable": true,
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
-                  "observation": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "provider": {
-                    "type": "string"
-                  },
-                  "record": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "transcriber": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "url": {
-                    "type": "string"
+                  {
+                    "properties": {
+                      "author": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "kind": {
+                        "const": "manual-citation",
+                        "type": "string"
+                      },
+                      "license": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "rightsAssessmentId": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "transcriber": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "url": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "rightsAssessmentId",
+                      "url",
+                      "license",
+                      "author",
+                      "transcriber"
+                    ],
+                    "type": "object"
                   }
-                },
+                ],
                 "required": [
-                  "record",
-                  "observation",
-                  "provider",
-                  "externalId",
                   "url",
                   "license",
                   "author",
                   "transcriber"
-                ],
-                "type": "object"
+                ]
               }
             },
             "required": [
@@ -781812,56 +781866,110 @@
                                         "type": "string"
                                       },
                                       "source": {
-                                        "properties": {
-                                          "author": {
-                                            "~elyTyp": 7,
-                                            "nullable": true,
-                                            "type": [
-                                              "string",
-                                              "null"
-                                            ]
+                                        "anyOf": [
+                                          {
+                                            "properties": {
+                                              "author": {
+                                                "~elyTyp": 7,
+                                                "nullable": true,
+                                                "type": [
+                                                  "string",
+                                                  "null"
+                                                ]
+                                              },
+                                              "externalId": {
+                                                "type": "string"
+                                              },
+                                              "license": {
+                                                "~elyTyp": 7,
+                                                "nullable": true,
+                                                "type": [
+                                                  "string",
+                                                  "null"
+                                                ]
+                                              },
+                                              "observation": {
+                                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                                "type": "string"
+                                              },
+                                              "provider": {
+                                                "type": "string"
+                                              },
+                                              "record": {
+                                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                                "type": "string"
+                                              },
+                                              "transcriber": {
+                                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                                "type": "string"
+                                              },
+                                              "url": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "record",
+                                              "observation",
+                                              "provider",
+                                              "externalId",
+                                              "url",
+                                              "license",
+                                              "author",
+                                              "transcriber"
+                                            ],
+                                            "type": "object"
                                           },
-                                          "externalId": {
-                                            "type": "string"
-                                          },
-                                          "license": {
-                                            "~elyTyp": 7,
-                                            "nullable": true,
-                                            "type": [
-                                              "string",
-                                              "null"
-                                            ]
-                                          },
-                                          "observation": {
-                                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                                            "type": "string"
-                                          },
-                                          "provider": {
-                                            "type": "string"
-                                          },
-                                          "record": {
-                                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                                            "type": "string"
-                                          },
-                                          "transcriber": {
-                                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                                            "type": "string"
-                                          },
-                                          "url": {
-                                            "type": "string"
+                                          {
+                                            "properties": {
+                                              "author": {
+                                                "~elyTyp": 7,
+                                                "nullable": true,
+                                                "type": [
+                                                  "string",
+                                                  "null"
+                                                ]
+                                              },
+                                              "kind": {
+                                                "const": "manual-citation",
+                                                "type": "string"
+                                              },
+                                              "license": {
+                                                "~elyTyp": 7,
+                                                "nullable": true,
+                                                "type": [
+                                                  "string",
+                                                  "null"
+                                                ]
+                                              },
+                                              "rightsAssessmentId": {
+                                                "format": "uuid",
+                                                "type": "string"
+                                              },
+                                              "transcriber": {
+                                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                                "type": "string"
+                                              },
+                                              "url": {
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "kind",
+                                              "rightsAssessmentId",
+                                              "url",
+                                              "license",
+                                              "author",
+                                              "transcriber"
+                                            ],
+                                            "type": "object"
                                           }
-                                        },
+                                        ],
                                         "required": [
-                                          "record",
-                                          "observation",
-                                          "provider",
-                                          "externalId",
                                           "url",
                                           "license",
                                           "author",
                                           "transcriber"
-                                        ],
-                                        "type": "object"
+                                        ]
                                       }
                                     },
                                     "required": [
@@ -790836,56 +790944,110 @@
                               "type": "string"
                             },
                             "source": {
-                              "properties": {
-                                "author": {
-                                  "~elyTyp": 7,
-                                  "nullable": true,
-                                  "type": [
-                                    "string",
-                                    "null"
-                                  ]
+                              "anyOf": [
+                                {
+                                  "properties": {
+                                    "author": {
+                                      "~elyTyp": 7,
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
+                                    },
+                                    "externalId": {
+                                      "type": "string"
+                                    },
+                                    "license": {
+                                      "~elyTyp": 7,
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
+                                    },
+                                    "observation": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "provider": {
+                                      "type": "string"
+                                    },
+                                    "record": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "transcriber": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "url": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "record",
+                                    "observation",
+                                    "provider",
+                                    "externalId",
+                                    "url",
+                                    "license",
+                                    "author",
+                                    "transcriber"
+                                  ],
+                                  "type": "object"
                                 },
-                                "externalId": {
-                                  "type": "string"
-                                },
-                                "license": {
-                                  "~elyTyp": 7,
-                                  "nullable": true,
-                                  "type": [
-                                    "string",
-                                    "null"
-                                  ]
-                                },
-                                "observation": {
-                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                                  "type": "string"
-                                },
-                                "provider": {
-                                  "type": "string"
-                                },
-                                "record": {
-                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                                  "type": "string"
-                                },
-                                "transcriber": {
-                                  "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                                  "type": "string"
-                                },
-                                "url": {
-                                  "type": "string"
+                                {
+                                  "properties": {
+                                    "author": {
+                                      "~elyTyp": 7,
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
+                                    },
+                                    "kind": {
+                                      "const": "manual-citation",
+                                      "type": "string"
+                                    },
+                                    "license": {
+                                      "~elyTyp": 7,
+                                      "nullable": true,
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ]
+                                    },
+                                    "rightsAssessmentId": {
+                                      "format": "uuid",
+                                      "type": "string"
+                                    },
+                                    "transcriber": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "url": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "rightsAssessmentId",
+                                    "url",
+                                    "license",
+                                    "author",
+                                    "transcriber"
+                                  ],
+                                  "type": "object"
                                 }
-                              },
+                              ],
                               "required": [
-                                "record",
-                                "observation",
-                                "provider",
-                                "externalId",
                                 "url",
                                 "license",
                                 "author",
                                 "transcriber"
-                              ],
-                              "type": "object"
+                              ]
                             }
                           },
                           "required": [
@@ -984140,6 +984302,46 @@
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
                       },
+                      "citation": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "author": {
+                            "~elyTyp": 7,
+                            "maxLength": 200,
+                            "minLength": 1,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "license": {
+                            "~elyTyp": 7,
+                            "format": "uri",
+                            "maxLength": 2048,
+                            "minLength": 1,
+                            "nullable": true,
+                            "pattern": "^https?://[^\\s]+$",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "url": {
+                            "format": "uri",
+                            "maxLength": 2048,
+                            "minLength": 1,
+                            "pattern": "^https?://[^\\s]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "license",
+                          "author"
+                        ],
+                        "type": "object"
+                      },
                       "disclosure": {
                         "const": "public",
                         "type": "string"
@@ -984169,6 +984371,11 @@
                       },
                       "profile": {
                         "const": "work-structure-publication-v1",
+                        "type": "string"
+                      },
+                      "rightsAssessmentId": {
+                        "format": "uuid",
+                        "pattern": "^[0-9a-f-]{36}$",
                         "type": "string"
                       },
                       "rightsBasis": {
@@ -984252,6 +984459,46 @@
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
                       },
+                      "citation": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "author": {
+                            "~elyTyp": 7,
+                            "maxLength": 200,
+                            "minLength": 1,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "license": {
+                            "~elyTyp": 7,
+                            "format": "uri",
+                            "maxLength": 2048,
+                            "minLength": 1,
+                            "nullable": true,
+                            "pattern": "^https?://[^\\s]+$",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "url": {
+                            "format": "uri",
+                            "maxLength": 2048,
+                            "minLength": 1,
+                            "pattern": "^https?://[^\\s]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "license",
+                          "author"
+                        ],
+                        "type": "object"
+                      },
                       "disclosure": {
                         "const": "public",
                         "type": "string"
@@ -984281,6 +984528,11 @@
                       },
                       "profile": {
                         "const": "work-structure-publication-v1",
+                        "type": "string"
+                      },
+                      "rightsAssessmentId": {
+                        "format": "uuid",
+                        "pattern": "^[0-9a-f-]{36}$",
                         "type": "string"
                       },
                       "rightsBasis": {
@@ -984364,6 +984616,46 @@
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
                       },
+                      "citation": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "author": {
+                            "~elyTyp": 7,
+                            "maxLength": 200,
+                            "minLength": 1,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "license": {
+                            "~elyTyp": 7,
+                            "format": "uri",
+                            "maxLength": 2048,
+                            "minLength": 1,
+                            "nullable": true,
+                            "pattern": "^https?://[^\\s]+$",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "url": {
+                            "format": "uri",
+                            "maxLength": 2048,
+                            "minLength": 1,
+                            "pattern": "^https?://[^\\s]+$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "url",
+                          "license",
+                          "author"
+                        ],
+                        "type": "object"
+                      },
                       "disclosure": {
                         "const": "public",
                         "type": "string"
@@ -984393,6 +984685,11 @@
                       },
                       "profile": {
                         "const": "work-structure-publication-v1",
+                        "type": "string"
+                      },
+                      "rightsAssessmentId": {
+                        "format": "uuid",
+                        "pattern": "^[0-9a-f-]{36}$",
                         "type": "string"
                       },
                       "rightsBasis": {
