@@ -29,7 +29,8 @@ export async function preparePostImageDraft(
     : { intent, progress: newPostProgress() };
   const step = record.progress;
   const basis = (): ReplyImageDraft => ({ reply: step.reply, variantId: step.variantId,
-    revisionId: step.revisionId!, rootTarget: record.intent.work, rootRevision: step.rootRevision! });
+    revisionId: step.revisionId!, rootTarget: record.intent.work, rootRevision: step.rootRevision!,
+    originRealm: record.intent.realm });
   if (step.revisionId && step.rootRevision && postWriteState(step) === 'acknowledged') return basis();
   if (postWriteState(step) === 'none') {
     record.intent = intent;

@@ -13,7 +13,8 @@ const revisionId = '44444444-4444-4444-8444-444444444444';
 const representation = 'f02b9465-dafb-422b-b77e-565b84e8f2ed';
 const occurrence = 'e26349cf-dbcc-497e-8e3f-9e0c3344342c';
 const use = '55555555-5555-4555-8555-555555555555';
-const receipt = { reply, variantId, revisionId, rootTarget: root, rootRevision };
+const originRealm = 'https://rezics.com/id/66666666-6666-4666-8666-666666666666';
+const receipt = { reply, variantId, revisionId, rootTarget: root, rootRevision, originRealm };
 const memberTarget = (retained = false) => ({ retained, prepare: async () => receipt });
 const memberReplyDraft = { profile: 'member-reply-draft-image-v1', variantId,
   expectedHead: revisionId, rootTarget: root, rootRevision };
@@ -29,20 +30,25 @@ function transport(status = 201) {
   const send = (async (url, init) => {
     const path = String(url);
     if (init?.method === 'PUT') return Response.json({ status: 'activated', representation }, { status: 201 });
-    commands.push({ path, body: JSON.parse(String(init?.body)) });
+    const body = JSON.parse(String(init?.body));
+    commands.push({ path, body });
     if (path.endsWith('/uploads')) return Response.json({ upload: 'upload' }, { status: 201 });
     if (path.endsWith('/inferences')) return Response.json({}, { status: 201 });
-    if (path.endsWith('/uses')) return status === 201 ? Response.json({ use }, { status }) : new Response(null, { status });
+    if (path.endsWith('/uses')) {
+      // Media fences a reply Use whose context differs from the acknowledged draft's immutable origin.
+      if (body.memberReplyDraft && body.context !== receipt.originRealm) return new Response(null, { status: 403 });
+      return status === 201 ? Response.json({ use }, { status }) : new Response(null, { status });
+    }
     throw new Error(`Unexpected request ${path}`);
   }) as typeof fetch;
   return { commands, send };
 }
 
-test('upload binds to the acknowledged native reply, variant/head and exact root, without a metadata read', async () => {
+test('upload binds to the acknowledged native reply, origin Realm, variant/head and exact root, without a metadata read', async () => {
   const owner = transport();
   const uploaded = await storedImageUpload(actor, memberTarget(), owner.send)(file, occurrence);
   expect(owner.commands.find(command => command.path.endsWith('/uses'))?.body).toEqual({
-    actingSubject: actor, target: reply, representation, occurrence, conceal: false, memberReplyDraft,
+    actingSubject: actor, target: reply, context: originRealm, representation, occurrence, conceal: false, memberReplyDraft,
   });
   expect(uploaded).toMatchObject({ representationId: representation, mediaUseId: use });
   expect(uploaded.src).toContain(`use=${use}`);
@@ -75,7 +81,7 @@ test('unavailable reply preparation prevents reserve and byte writes and remains
   expect(owner.commands).toHaveLength(0);
   available = true;
   await upload(file, occurrence);
-  expect(owner.commands.find(command => command.path.endsWith('/uses'))?.body).toMatchObject({ target: reply, memberReplyDraft });
+  expect(owner.commands.find(command => command.path.endsWith('/uses'))?.body).toMatchObject({ target: reply, context: originRealm, memberReplyDraft });
 });
 
 for (const refusal of [403, 503]) test(`binding ${refusal} retains current image/text until a successful same-context retry`, async () => {
@@ -97,7 +103,7 @@ for (const refusal of [403, 503]) test(`binding ${refusal} retains current image
   denied = false;
   expect(await publication.retry()).toBe(true);
   expect(attempts).toEqual([1, 2].map(() => ({ actingSubject: actor, target: reply,
-    representation, occurrence, conceal: false, memberReplyDraft })));
+    context: originRealm, representation, occurrence, conceal: false, memberReplyDraft })));
   const reopened = parseStoredDocument(saved!);
   expect(documentText(reopened!)).toBe('Current complete text.\n');
   expect(reopened!.doc.content?.[1]?.attrs).toMatchObject({ representationId: representation, mediaUseId: use, id: occurrence });
@@ -118,5 +124,5 @@ test('changing member reply context rebinds old occurrences instead of treating 
   const reconcile = imageUseReconciler(current, actor, memberTarget(false), owner.send);
   await reconcile(current);
   expect(owner.commands).toHaveLength(1);
-  expect(owner.commands[0]?.body).toMatchObject({ target: reply, memberReplyDraft });
+  expect(owner.commands[0]?.body).toMatchObject({ target: reply, context: originRealm, memberReplyDraft });
 });

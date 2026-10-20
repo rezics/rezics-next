@@ -6,7 +6,8 @@ type DraftReceipt = NonNullable<Awaited<ReturnType<DraftOperation>>['data']>;
 
 /** Only the acknowledged Content receipt can supply the reply's current image basis. */
 export type ReplyImageDraft = Pick<DraftReceipt, 'reply' | 'variantId' | 'revisionId'>
-  & Pick<DraftInput, 'rootTarget' | 'rootRevision'>;
+  & Pick<DraftInput, 'rootTarget' | 'rootRevision'>
+  & { originRealm: NonNullable<DraftInput['originRealm']> };
 export type ImageUseTarget = string | {
   /** The opening document's Uses belong to this same persisted reply draft. */
   retained: boolean;
@@ -19,6 +20,7 @@ export async function imageUseTarget(target: ImageUseTarget) {
   const draft = await target.prepare();
   return {
     target: draft.reply,
+    context: draft.originRealm,
     memberReplyDraft: {
       profile: 'member-reply-draft-image-v1' as const,
       variantId: draft.variantId,

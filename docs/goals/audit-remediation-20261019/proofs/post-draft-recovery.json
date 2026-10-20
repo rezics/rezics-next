@@ -3293,5 +3293,399 @@
       "mainBundleCopy": "Manager must copy this additive directory to main .temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/. Maintainer confines worker writes to own worktree and /tmp; no main or peer write attempted.",
       "mainCopyPerformedByWorker": false
     }
+  },
+  "replyImageOriginContextDeltaReviewV1": {
+    "recordedAt": "2026-10-20T12:10:06.086469+00:00",
+    "worker": "G-2830",
+    "engine": "codex-1 / GPT-6.1 Sol / xhigh; no fallback or nested agents",
+    "result": "PASS: scoped four-file source delta; no blocking source counterexample found",
+    "scope": "One first independent review of the new saved-origin correction only. Accepted source reviews and original outcome assertions were not replayed. Source approval does not close D2-003 or satisfy canonical composition gates.",
+    "pins": {
+      "reportBase": "13da9b1ca0100e2c8e8e7104af5d147b5a7ea076",
+      "candidate": "a4526283ca0f046f0830e980fe3e39b88391de14",
+      "base": "089d4941946c127f5e26cbc8518b483f253650a1",
+      "tree": "6288cd4f60982562f8b74bb2a5c82d0be068ca00",
+      "authoredTests": "d1d6d042a77a89287756292071cb1f0775bcf647",
+      "authoredProduct": "714a38bcbc5e4d486cbb037fcc2cdbcf13053d14",
+      "authorManifestCommit": "08d611a203",
+      "candidateManifestSha256": "29a83000ede81462a718435608fb68183e065a3147988820cceb14c9506fafd5",
+      "authorManifestSha256": "a24d043ce882e23ee7adcf4b9105c0edbd455d1b4bf92135539bf0511beb56ea",
+      "patchSha256": "29741f36827545131dc1ffc5693a87dc1dc36d58e7e7879a53936436f6f757a8",
+      "files": [
+        {
+          "path": "apps/web/features/document-editor/body-editor.tsx",
+          "candidateBlob": "f3c54cd091b144d026cf303cbd9ffbca6e33c538",
+          "sha256": "f2892be0a3d27b1b106ff5f5eec30aaf66726c8485f5e95038a3ecb94efc5bd1",
+          "baseSha256": "f2892be0a3d27b1b106ff5f5eec30aaf66726c8485f5e95038a3ecb94efc5bd1",
+          "changed": false,
+          "workingBytesMatchCandidate": true,
+          "authorManifestMatch": true
+        },
+        {
+          "path": "apps/web/features/document-editor/image-target.ts",
+          "candidateBlob": "b76106daea1ce7a6047d3b910326b4a2bb29b166",
+          "sha256": "85dc4172713a28add79854dc86abcd4ab580301a824afdde222bc35eb5da95f9",
+          "baseSha256": "a668c9edea2bdd2c9632c9c92dea29c281a397e4580f100fad2b4e4b586a16b7",
+          "changed": true,
+          "workingBytesMatchCandidate": true,
+          "authorManifestMatch": true
+        },
+        {
+          "path": "apps/web/features/document-editor/image-uses.ts",
+          "candidateBlob": "4b24ce613851e11a925e138f736aa9cdb977b83e",
+          "sha256": "8ea7f122767522bc7a9a7dfe3fd82dacaeb2f52676a5f452de6730b9d87f288d",
+          "baseSha256": "8ea7f122767522bc7a9a7dfe3fd82dacaeb2f52676a5f452de6730b9d87f288d",
+          "changed": false,
+          "workingBytesMatchCandidate": true,
+          "authorManifestMatch": true
+        },
+        {
+          "path": "apps/web/features/document-editor/local-image.ts",
+          "candidateBlob": "fa7e6bc008731ab723da40a9c76caedbee0afffd",
+          "sha256": "7c9e72bc5fbfc92b93825c9a21edc4aae5eea8e0c62171a6c8db9e6d533fa8d8",
+          "baseSha256": "7c9e72bc5fbfc92b93825c9a21edc4aae5eea8e0c62171a6c8db9e6d533fa8d8",
+          "changed": false,
+          "workingBytesMatchCandidate": true,
+          "authorManifestMatch": true
+        },
+        {
+          "path": "apps/web/features/document-editor/member-reply-images.test.ts",
+          "candidateBlob": "116eedd59664a51abb4c60dc7bce388e57cfbed4",
+          "sha256": "3e4d9bc0998af6f96a42b851ab7db6c72da510c5d6d104066247e2cf76c5c5c0",
+          "baseSha256": "96550aae909aa523e7b4f7c277e961d14f88cd399204b9e9025579f6610e5777",
+          "changed": true,
+          "workingBytesMatchCandidate": true,
+          "authorManifestMatch": true
+        },
+        {
+          "path": "apps/web/features/post-composer/api.ts",
+          "candidateBlob": "339bcbd0c833ac41d3daac8a8b98e1dc4550ad64",
+          "sha256": "142beb054e1033390d874e940a7e1258c11944574ab1ce11bb152d8c0af0b1de",
+          "baseSha256": "142beb054e1033390d874e940a7e1258c11944574ab1ce11bb152d8c0af0b1de",
+          "changed": false,
+          "workingBytesMatchCandidate": true,
+          "authorManifestMatch": true
+        },
+        {
+          "path": "apps/web/features/post-composer/composer.tsx",
+          "candidateBlob": "f145e549ca618d07fdb27cabc6c0e28f5f51c5c3",
+          "sha256": "8e087e1bd308bf58eb808d4b5ebf099ba7055db28e2414665ab24444a00e2e95",
+          "baseSha256": "8e087e1bd308bf58eb808d4b5ebf099ba7055db28e2414665ab24444a00e2e95",
+          "changed": false,
+          "workingBytesMatchCandidate": true,
+          "authorManifestMatch": true
+        },
+        {
+          "path": "apps/web/features/post-composer/image-draft.test.ts",
+          "candidateBlob": "8e816b1a0581c26d97ff4e6a3ba4668a1420ef9c",
+          "sha256": "0a484a324855ad6e09faa3b055fc40ddf22b63d815aa65bc667fa2f6eaaca779",
+          "baseSha256": "381dfa8471788392afb41119eee02845d604e3af2b805d0778e0491c8a3664f3",
+          "changed": true,
+          "workingBytesMatchCandidate": true,
+          "authorManifestMatch": true
+        },
+        {
+          "path": "apps/web/features/post-composer/image-draft.ts",
+          "candidateBlob": "20a9642b67c289678c8f43226dc1a8b07b28c98f",
+          "sha256": "9a8c4159d467add6e17304d6ebbca81814474d3dbbcc05c02c12ef0c576f48c9",
+          "baseSha256": "c72500e78933551aa0ee5b5210293901722acfc99a9fbadf5a8c7bae27e203e2",
+          "changed": true,
+          "workingBytesMatchCandidate": true,
+          "authorManifestMatch": true
+        }
+      ],
+      "unchangedTypedContracts": [
+        {
+          "path": "services/main/src/routes/member-replies.ts",
+          "blob": "0fd9bb8cb7ea39bdbdf3636eec16e5a5999ac2a7",
+          "sha256": "ab9613e42ea9ffe6e17b92ce39757158dd595d61bd16f15648b04f93dddc68ce",
+          "unchanged": true
+        },
+        {
+          "path": "services/main/src/routes/media.ts",
+          "blob": "05236204854351c06dd276185033ccb7ef1db5e0",
+          "sha256": "8ef11b495760d53268f317044dbafa40fb1673d3ef3b953e12ccf00a152c1981",
+          "unchanged": true
+        },
+        {
+          "path": "services/main/src/modules/media/presentation-contract.ts",
+          "blob": "5caa930e28e8a49ab4e07164a16255f44bd4f9c4",
+          "sha256": "be66424a1431f2c5bc2fcf715c00b1a32d89e22481d7bfd816341003655bfecd",
+          "unchanged": true
+        },
+        {
+          "path": "services/main/src/modules/media/context-input.ts",
+          "blob": "ca157141f86246d00b81ea5fabfd85c1caf5e0ef",
+          "sha256": "3b22cf99ea9e1b48486af25d82544ac91b67aedf2a38adb44f50cf2489f89dcb",
+          "unchanged": true
+        },
+        {
+          "path": "services/main/src/modules/media/presentation.ts",
+          "blob": "bc3ae3bf4c1bccb8a5add68cb1bf6678de5c5652",
+          "sha256": "c22602f98765e71d1e71a90f6513cf0c4fb5c5eb969f02efdc08a9f1693fb1ab",
+          "unchanged": true
+        },
+        {
+          "path": "services/main/src/modules/media/commands.ts",
+          "blob": "153b75be40174312e41c9d33e1cfc9bbf53f7958",
+          "sha256": "31b4ef0460c40fdc766a551e4d4b7861e7178a01c7b15fbc386f0e0634a3bb38",
+          "unchanged": true
+        },
+        {
+          "path": "services/main/src/modules/content-publication/reply-draft.ts",
+          "blob": "6d8d741b3987032ec7d539434177498a735ef04a",
+          "sha256": "b43ace59908bc7b56e6685e1f6a6534561874f212636a18a14212cfc5740c577",
+          "unchanged": true
+        }
+      ],
+      "verification": "Clean candidate HEAD, single base parent, exact tree, four changed paths and blobs verified. All nine consumer SHA256 values match the author manifest. The other five consumer files, including the complete composer bytes preserving all four Main titleInput removals, match base exactly."
+    },
+    "reviewedBehavior": [
+      {
+        "subject": "Saved origin is required and flows through the common image binding",
+        "verdict": "pass",
+        "evidence": [
+          "apps/web/features/document-editor/image-target.ts:3-10,18-39",
+          "apps/web/features/post-composer/image-draft.ts:27-34,53-73"
+        ],
+        "reason": "ReplyImageDraft adds a non-null originRealm derived from the public DraftInput, without pretending it is a new response field. The common basis returns record.intent.realm, the same persisted immutable origin sent by the acknowledged draft request. imageUseTarget sends it as context with the existing reply, variant, expected head and exact root pair. imageUseCommand still assigns to the typed public Media operation."
+      },
+      {
+        "subject": "Fresh, reused, uncertain and lost-device-acknowledgement drafts",
+        "verdict": "pass",
+        "evidence": [
+          "apps/web/features/post-composer/image-draft.ts:13-73",
+          "apps/web/features/post-composer/image-draft.test.ts:76-163"
+        ],
+        "reason": "The shared basis serves both the acknowledged early return and successful fresh/replayed receipt. Unknown writes retain stored.intent and progress, preserving the original request, key, root and reply identity independently of newer editor text. A durable pending device record still precedes dispatch; acknowledged receipt persistence must succeed before the basis returns. Existing receipt validation, truthful write states and confirmed-403 restart behavior are unchanged. Changing actor/Realm selects a distinct context rather than rebinding a saved reply; returning to saved intent reuses its persisted origin."
+      },
+      {
+        "subject": "Upload, reconciliation, retained references and ordinary Work controls",
+        "verdict": "pass",
+        "evidence": [
+          "apps/web/features/document-editor/member-reply-images.test.ts:28-127",
+          "apps/web/features/document-editor/local-image.ts:10-38",
+          "apps/web/features/document-editor/image-uses.ts:15-81"
+        ],
+        "reason": "Both unchanged consumers obtain the new binding through imageUseTarget. Upload prepares the reply before reservation or bytes, then includes saved context in the Use. Reconciliation includes the same context on copied/retried occurrences. Current text, stable representation/Use/occurrence attributes and retained-reference no-metadata fast path are untouched. The string Work branch still returns only target, and ordinary upload/reconciliation request equality controls remain in the authored tests."
+      },
+      {
+        "subject": "Existing typed owner contract, authority and fences",
+        "verdict": "pass",
+        "evidence": [
+          "services/main/src/routes/member-replies.ts:23-57",
+          "services/main/src/modules/media/presentation-contract.ts:58-63",
+          "services/main/src/modules/media/context-input.ts:5-10",
+          "services/main/src/routes/media.ts:504-513",
+          "services/main/src/modules/media/commands.ts:363-378",
+          "services/main/src/modules/media/presentation.ts:346-383",
+          "apps/web/features/post-composer/composer.tsx:121-151"
+        ],
+        "reason": "The unchanged Draft request accepts native originRealm; Media accepts native context and already fences it against saved origin_realm together with exact author, reply model, availability, variant, root and current head. The delta supplies the missing input; it changes no server authority, actor, grant, default-context handling, idempotency digest, CAS or composer context fence. Contract snapshots were read only as necessary to assess these new hunks."
+      },
+      {
+        "subject": "Complete authored test changes and causal receipt",
+        "verdict": "pass with unit-test boundary",
+        "reason": "Both complete test files and the entire four-file diff were read. Added assertions cover fresh/reused/replayed origin and separate actor/Realm context; changed Media expectations retain exact root/head and ordinary Work controls. The transport rejects mismatched reply context and both 403/503 recovery cases preserve current document text and image fields. These are injected unit transports, not genuine upload, persistence or OAuth receipts."
+      }
+    ],
+    "retainedChecks": {
+      "policy": "Reused hash-verified author receipts as directed; no product check rerun because review identified no concrete unresolved delta concern. Prior accepted 16-test/80-assertion receipt remains historical evidence.",
+      "command": "bun scripts/goal/goalctl.ts test apps/web/features/post-composer/image-draft.test.ts apps/web/features/document-editor/member-reply-images.test.ts",
+      "red": {
+        "job": "d8d70b1b-8c11-4f47-922b-b44e34abdcdd",
+        "productSource": "3a771978a30fdf53eaeeed8dae714193a11a9ce0",
+        "testBytesNowCommittedAt": "d1d6d042a77a89287756292071cb1f0775bcf647",
+        "exit": 1,
+        "tests": 17,
+        "passed": 8,
+        "failed": 9,
+        "assertions": 69,
+        "causes": "Origin missing from fresh/reused/replayed image basis and from upload/reconciliation/retry Uses. Test transport enforces the frozen origin/context equality for reply Uses; ordinary Work controls pass.",
+        "log": {
+          "path": ".temp/goal/jobs/d8d70b1b-8c11-4f47-922b-b44e34abdcdd.log",
+          "sha256": "5b9b15beea931a887b75e3c96e9e2186bc2ef389ec15d7d6f596c222e62d3553"
+        }
+      },
+      "green": {
+        "job": "fc2ec726-96f1-4a1d-a197-dadef5d328f3",
+        "step": 1,
+        "pin": "714a38bcbc5e4d486cbb037fcc2cdbcf13053d14",
+        "exit": 0,
+        "tests": 17,
+        "passed": 17,
+        "failed": 0,
+        "assertions": 90,
+        "log": {
+          "path": ".temp/goal/jobs/fc2ec726-96f1-4a1d-a197-dadef5d328f3.1.log",
+          "sha256": "168bbe9b0af08614aea8f011438f466a71c73caa5aa1b371b92eec2cc6be7a70"
+        }
+      },
+      "static": {
+        "job": "fc2ec726-96f1-4a1d-a197-dadef5d328f3",
+        "step": 2,
+        "pin": "714a38bcbc5e4d486cbb037fcc2cdbcf13053d14",
+        "command": "task goal -- check --only types,lint,guards",
+        "exit": 201,
+        "log": {
+          "path": ".temp/goal/jobs/fc2ec726-96f1-4a1d-a197-dadef5d328f3.2.log",
+          "sha256": "4bd4c361a94e712502b1ae5872c5410be0dab2b08303b78250e38df55ef342f3"
+        },
+        "detail": {
+          "path": ".temp/goal/check/run-tDMFgB/output.log",
+          "sha256": "7b6f607536cef4b3ec3a2a29dad74b05901d4208edf2d7a1b01aebd2bb275c67"
+        },
+        "types": "PASS; no type errors in 3,032 selected files",
+        "lint": "PASS",
+        "ast": "PASS",
+        "guards": {
+          "result": "FAIL; 127/129 tests pass in 10 selected guard files; two outcome assertions fail",
+          "cases": [
+            {
+              "file": "scripts/static/web-continuations.test.ts",
+              "case": "production web projection syntax introduces no new violations"
+            },
+            {
+              "file": "scripts/static/web-page-filtering.test.ts",
+              "case": "production web page predicates have structural evidence or an explicit API gap"
+            }
+          ],
+          "observedFiles": [
+            "apps/web/features/entity-page/identity-read.ts",
+            "apps/web/features/entity-page/identity-relations.ts",
+            "apps/web/features/entity-page/sections.tsx",
+            "apps/web/features/home/continue-strip.tsx",
+            "apps/web/features/tracking/series-progress-panel.tsx",
+            "apps/web/features/work-levels/relation-rows.ts",
+            "apps/web/features/zones/site-route.tsx",
+            "scripts/static/web-continuations.test.ts",
+            "scripts/static/web-continuations.inventory.json",
+            "scripts/static/web-page-filtering.test.ts",
+            "scripts/static/web-page-filtering.inventory.json"
+          ],
+          "classification": "Reported production paths, guard implementations and inventories are unchanged between worker base and product pin and outside this delta. No baseline rerun, inventory relaxation or unrelated fix performed."
+        },
+        "inference": {
+          "scopedDelta": "PASS within margins over worker base; this does not satisfy the canonical merge baseline",
+          "absoluteCanonicalResult": "FAIL inherited: main.instantiations 27163414 exceeds 26950993.650000002 (recorded baseline 25667613, +5%)",
+          "base": {
+            "main": 27163414,
+            "web": 38864296,
+            "eden": 19054964,
+            "appBytes": 1160026,
+            "routesBytes": 1177185
+          },
+          "head": {
+            "main": 27163414,
+            "web": 38864336,
+            "eden": 19054964,
+            "appBytes": 1160067,
+            "routesBytes": 1177185
+          },
+          "delta": {
+            "mainInstantiations": 0,
+            "webInstantiations": 40,
+            "edenInstantiations": 0,
+            "appBytes": 41,
+            "routesBytes": 0
+          },
+          "baselineChanged": false
+        },
+        "noBroadCheckReplay": "No static rerun after these unaffected failures; the final manifest only adds documentation"
+      },
+      "verifiedLogCopies": [
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2748/.temp/goal/jobs/d8d70b1b-8c11-4f47-922b-b44e34abdcdd.log",
+          "copy": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/reply-image-origin-context-a4526283ca0f/author-checks/d8d70b1b-8c11-4f47-922b-b44e34abdcdd.log",
+          "sha256": "5b9b15beea931a887b75e3c96e9e2186bc2ef389ec15d7d6f596c222e62d3553",
+          "bytes": 10039
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2748/.temp/goal/jobs/fc2ec726-96f1-4a1d-a197-dadef5d328f3.1.log",
+          "copy": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/reply-image-origin-context-a4526283ca0f/author-checks/fc2ec726-96f1-4a1d-a197-dadef5d328f3.1.log",
+          "sha256": "168bbe9b0af08614aea8f011438f466a71c73caa5aa1b371b92eec2cc6be7a70",
+          "bytes": 254
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2748/.temp/goal/jobs/fc2ec726-96f1-4a1d-a197-dadef5d328f3.2.log",
+          "copy": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/reply-image-origin-context-a4526283ca0f/author-checks/fc2ec726-96f1-4a1d-a197-dadef5d328f3.2.log",
+          "sha256": "4bd4c361a94e712502b1ae5872c5410be0dab2b08303b78250e38df55ef342f3",
+          "bytes": 2029
+        },
+        {
+          "source": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2748/.temp/goal/check/run-tDMFgB/output.log",
+          "copy": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/reply-image-origin-context-a4526283ca0f/author-checks/output.log",
+          "sha256": "7b6f607536cef4b3ec3a2a29dad74b05901d4208edf2d7a1b01aebd2bb275c67",
+          "bytes": 180454
+        }
+      ],
+      "interpretation": "17/17 tests and 90 assertions pass on authored product 714a38bcbc; before repair 8/17 pass and nine fail with 69 assertions. Affected types (3,032 files), lint and AST pass. Author guard result is FAIL: 127/129 with web-continuations and web-page-filtering outcome failures. Canonical inference is FAIL: main 27,163,414 exceeds 26,950,993.65. Scoped inference (+40 web instantiations, +41 app bytes) passing against worker base does not satisfy that canonical gate. Retained checks are not a fresh complete candidate gate."
+    },
+    "actualFindings": [],
+    "unexecutedLimits": {
+      "D2-002": "Accepted; unchanged.",
+      "D2-003": "OPEN. No original image/focus outcome executed or closed by this source verdict.",
+      "historicalUse403": "UNCONFIRMED. No rejecting boundary or exception class inferred; finished owner inspection not reopened.",
+      "originalLowLevelUploadException": "Unresolved; not reproduced or diagnosed in this turn.",
+      "singleCharacterIssue": "Unconfirmed; entry/restoration not replayed.",
+      "originalImageAndSlashMenuPremises": "Historical setup failures retained; no assertion or test-premise edits.",
+      "genuineMatrix": "1440/390 x en/zh-Hans upload/Use/save/reopen, unavailable metadata, Retry/Remove/export, truthful device acknowledgement, same-operation deduplication and focus remain for a separately admitted finite turn after accepted correction, composition and normal gates."
+    },
+    "custody": {
+      "runtimeBrowserOAuthOrApiExecuted": false,
+      "actualApiWrites": 0,
+      "newReceipts": 0,
+      "newScreenshotsViewed": 0,
+      "leaseAcquisitions": 0,
+      "ownedServersStarted": 0,
+      "borrowedSessionsStarted": 0,
+      "prepareRestoreImportOrCorpusWrites": 0,
+      "productEdits": 0,
+      "independentAssertionEdits": 0,
+      "nestedAgents": 0,
+      "backend": "G-2823 retains Main42963/Account42701 and stop custody; product 76c5955006dbea2016e84465d8f3e79fdf4fc979 / support d2f04140fe615eadef0379a52c26291e6e083217 are historical pins, not newly executed.",
+      "leases": "No lease acquired or session borrowed in this turn. Image lease remains released; default lease remains protected.",
+      "oauth": "Final historical OAuth revocation remains unconfirmed; no OAuth request made."
+    },
+    "administrativeChecks": {
+      "job": "ec02c328-bfe5-41d8-8266-6a4e18fe3f51",
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job --then 'task goal -- check' -- task docs:check",
+      "reportBase": "13da9b1ca0100e2c8e8e7104af5d147b5a7ea076",
+      "docs": {
+        "result": "pass",
+        "exit": 0,
+        "tests": 13,
+        "markdownFiles": 259,
+        "log": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/reply-image-origin-context-a4526283ca0f/administrative-checks/ec02c328-bfe5-41d8-8266-6a4e18fe3f51.1.log"
+      },
+      "worker": {
+        "result": "pass",
+        "exit": 0,
+        "log": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/reply-image-origin-context-a4526283ca0f/administrative-checks/ec02c328-bfe5-41d8-8266-6a4e18fe3f51.2.log",
+        "detail": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/reply-image-origin-context-a4526283ca0f/administrative-checks/output.log",
+        "selection": "Report-only: no TypeScript workspace/source changed and no tests named in brief; AST passes; selected repository guard passes 2 tests / 6 assertions. This administrative pass is not the candidate product gate."
+      },
+      "preservation": "PASS: all 29 pre-existing top-level values are unchanged; sole tracked changed path is the claimed proof JSON; git diff --check passes.",
+      "productChecksRerun": false
+    },
+    "preservation": {
+      "historicalFields": 29,
+      "historicalReportSha256": "9a0aaeadeefef6172065772c9afb0f2183f940a5eeb61953d0904c5849c68e7e",
+      "rule": "Every pre-existing top-level value and historical record retained exactly as parsed; this single top-level review property is the only report addition. No accepted verdict rewritten."
+    },
+    "artifacts": {
+      "privateBundle": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/reply-image-origin-context-a4526283ca0f",
+      "pinVerification": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/reply-image-origin-context-a4526283ca0f/pin-verification.json",
+      "artifactManifest": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/reply-image-origin-context-a4526283ca0f/artifact-manifest.json",
+      "mainCopyOwner": "Manager: current worker instruction makes Main read-only. Bundle is retained here for manager copy to the existing main .temp proof bundle; worker did not write there."
+    },
+    "instructionEffect": {
+      "file": "docs/goals/audit-remediation-20261019/tasks/G-2830.md at report base 13da9b1ca0100e2c8e8e7104af5d147b5a7ea076",
+      "decision": "2026-10-20T12:04:50Z",
+      "quote": "This first-review turn performs no runtime/browser/OAuth/API, lease acquisition, prepare/restore/import or original image assertions.",
+      "effect": "Completed only the four-file first source review and additive report; genuine original image verification awaits separate admission. The current user filesystem constraint also prohibits the older brief request to copy artifacts into Main, so manager delivery is explicit."
+    },
+    "next": "Manager assesses this scoped source verdict, reconciles unchanged inherited guards/canonical inference through normal composition gates, copies the private bundle, then admits the original owner for the outstanding genuine D2-003 image matrix. No automatic landing or finding closure."
   }
+
 }
