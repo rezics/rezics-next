@@ -4510,55 +4510,455 @@
       "docsCheck": "Pending recorded task docs:check after this additive append; separate result will resolve this entry."
     }
   },
-  "cas9StatusDateSemanticRestorationAdministrativeCheck": {
-    "atUTC": "2026-10-20T12:42:40.047123+00:00",
-    "scope": "Administrative documentation check and final evidence preservation only. Resolves pending docsCheck in cas9StatusDateSemanticRestoration; no original Home/AT callback or product acceptance.",
-    "checkedReportCommit": "58379b1453a5c4d3659123125c5bfcb2d2005906",
-    "command": "task docs:check",
-    "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task docs:check",
-    "recordedJob": "e00eb32a-c831-4376-a168-a34891d39b4d",
-    "exitStatus": 0,
-    "result": "passed",
-    "testsPassed": 13,
-    "markdownFilesChecked": 259,
-    "log": ".temp/reading-home-CAS9-cleanup-G-2831-20261020T1240Z/docs-check.log",
-    "logSHA256": "2e567cac606c49ecfd05ffb84a3fd827fcda4a52d68b13b6c5da3b62446d408c",
-    "affectedCleanupSelection": {
-      "job": "96bc9b47-7bf4-4c51-b265-8173fe1a3b53",
-      "result": "passed",
-      "bunWrapperPassed": 1,
-      "playwrightCleanupPassed": 1,
-      "originalCallbackTestsRun": 0
+  "homeDEFRStatusOnlyPreparationV3": {
+    "atUTC": "2026-10-20T13:31:36.546093+00:00",
+    "worker": "G-2831",
+    "scope": "Only finite Decision2026-10-20T13:18:25Z: fresh guarded Home custody for reviewed native-window support-v3; no review/AT/borrow",
+    "result": "NEW CAS11 READY. Fresh own normal OAuth; same lawful actor/Book/continuation. Actual CAS10 supported PUT200 -> reading CAS11/null dates. TWO genuine complete five-API readbacks preserve every guarded semantic field. Owned frontend/browser/job stopped; state held for separate Root lease and SAME-owner cleanup.",
+    "preparationComplete": true,
+    "cleanupNeeded": true,
+    "rootLeaseIssuedOrBorrowed": false,
+    "lawfulActor": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+    "book": {
+      "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+      "title": "The Lantern Road 8805d7a2",
+      "nextUnread": {
+        "occurrence": "https://rezics.com/id/5caa0cc4-f716-876a-8a46-fa048620c48d",
+        "title": "At the harbour",
+        "href": "/w/01a10aff-93e5-7069-b80a-cd33bb6ce57c/read/5caa0cc4-f716-876a-8a46-fa048620c48d?language=en"
+      }
     },
-    "all24PreexistingReportFieldsPreserved": true,
-    "allFiveCustodyHashesUnchanged": {
-      "ready-for-G2847-HomeDEFR-CAS9.json": "df5ebbab8875848c168d44cc665b28690e1efb78138fe804d4f4c2fa25162c2b",
-      "private/before-backup.json": "92cf460178d98622e3c68d69247c8e9de797d4b418d7dbc3f891a17969bcd2d0",
-      "private/lease-state.json": "fdd873b0c4809c011faaf8146cf9daec7b2a01943e3078eb448be4b93f23d559",
-      "same-owner-cleanup-operation.json": "792f5b966f6b8f1242b15124b55b36b1bb834fa7671962723c7f7434cffa2823",
-      "source/retained-supported-cleanup-callback.ts": "b1d6b4ecac9df4879b7a59a18976b54cdee9b80778561db52c9707f6e27e4c79"
+    "sourceAndRuntime": {
+      "reportBranchPinBeforeAppend": "0423ab5358c4c9ea8773ec67a42c3a98ea27021c",
+      "frontendProductAndTestPin": "8b8a2c0a97b5662e6283fa7531a8f1c600f37fd0",
+      "frontendTree": "eee44fe2a371148bd2c502981b01c1185c3043ad",
+      "backendServedPin": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "mainOrigin": "http://127.0.0.1:3001",
+      "accountsOrigin": "http://127.0.0.1:3004",
+      "temporaryFrontend": "http://127.0.0.1:43131 (stopped)",
+      "sourceReceipt": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v3-G-2831-20261020T1325Z/source/frontend-source-receipt.json",
+        "sha256": "2b8d8b80fbf6d8a30672926398ac644223296d5664394cc5f4e8abec9aa82ba1",
+        "bytes": 630
+      },
+      "runtimeReceipt": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v3-G-2831-20261020T1325Z/source/backend-served-revision.json",
+        "sha256": "fe78e239322186b28fb1f13583cdae6929852939d493b523212c05d9cc711980",
+        "bytes": 785
+      },
+      "sourceRuntimeCallbackHashes": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v3-G-2831-20261020T1325Z/source/runtime-and-callback-hashes.json",
+        "sha256": "130815724218f0d20bfe11a41758877975560faab4e3b24f95af0e85478474ff",
+        "bytes": 7279
+      },
+      "dependencyBinding": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v3-G-2831-20261020T1325Z/source/dependency-binding.json",
+        "sha256": "7c4d9c213428cbfb96f97a3356a15cb88294fb46c673c94e8c1916dbe69eede1",
+        "bytes": 3205
+      },
+      "scopeLimit": "Existing frozen8b8a2c0a Web-consumer status-only recovery binding Main3001/Accounts3004 installed75409 only. Actual repeated per-record reads; no atomic snapshot, current native, Studio, Book transfer, integration or regression acceptance."
     },
-    "knownOwnedRunnerAndJobPidsAbsent": [
-      1140656,
-      1140751,
-      1149672,
-      1149968,
-      1150948,
-      1155612,
-      1213740,
-      1213862
-    ],
-    "owned43131AndBorrower52181Closed": true,
-    "Task1677097StartTicksUnchanged": "10065363",
-    "mainProcess1372265CwdStillInstalled75409": true,
-    "productSourceAndOriginalTestsChanged": false,
-    "otherTrackedPathsChanged": false,
-    "wholeGoalCheckOrOriginalSourceReviewOrATRerun": false,
-    "checkScopeReason": "Latest committed finite decision authorizes affected cleanup and docs:check, then exit; no broad check or rerun of original outcomes belongs to cleanup.",
-    "writeBoundaryQualification": "Only this worktree was manually written. Recorded goalctl commands may write their authorized bookkeeping under main .temp/goal-orchestration. No peer runtime/control/lease/source/storage was changed.",
-    "gitCommitAdministrativeObservation": "First report commit succeeded58379b145. Optional auto pack-refs emitted main-only-moves-forward hook rejection; no correction or shared Git maintenance attempted. Final evidence commit disables optional auto-maintenance for that invocation.",
-    "nativeCallbacksOrNewBorrowRun": false,
-    "originalFindingOrClassClosed": false,
-    "audit": "ACTIVE"
+    "supportedCommand": {
+      "method": "PUT",
+      "url": "http://127.0.0.1:43131/api/main/v1/works/01a10aff-93e5-7069-b80a-cd33bb6ce57c/reader-status",
+      "requestBody": {
+        "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+        "expectedVersion": 10,
+        "status": "reading",
+        "startedOn": null,
+        "finishedOn": null
+      },
+      "idempotencyKey": "4ec18c87-2c28-4c41-abb1-ced93301dd45",
+      "attemptedAtUTC": "2026-10-20T13:27:24.059Z",
+      "response": {
+        "status": 200,
+        "body": {
+          "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+          "status": "reading",
+          "startedOn": null,
+          "finishedOn": null,
+          "version": 11,
+          "changedAt": "2026-10-20 13:27:24.480706+00",
+          "replayed": false
+        },
+        "receivedAtUTC": "2026-10-20T13:27:24.505Z"
+      }
+    },
+    "beforeBackup": {
+      "path": ".temp/reading-home-HomeDEFR-preparation-v3-G-2831-20261020T1325Z/private/before-backup.json",
+      "sha256": "06ffd0e8110a0ee46f6b8a345035043cc1bc9550b5c7576af8c0c498a3716420",
+      "guardedSemanticStateSHA256": "03c29dcc0055bf07e003c1c458806866511a46ca6ed1dd6924760a600705a02b",
+      "twoFreshCompleteFiveAPIReadSetsAgreed": true,
+      "statusBefore": {
+        "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+        "status": null,
+        "startedOn": null,
+        "finishedOn": null,
+        "version": 10,
+        "changedAt": "2026-10-20 12:38:32.629726+00"
+      },
+      "noAtomicSnapshotClaim": true
+    },
+    "postWriteVerification": {
+      "completeFiveAPIInvariantReadbackSets": 2,
+      "successfulGETs": 10,
+      "answers": [
+        {
+          "label": "actual readback A reader",
+          "status": 200,
+          "receivedAtUTC": "2026-10-20T13:27:24.955Z",
+          "path": "/v1/works/01a10aff-93e5-7069-b80a-cd33bb6ce57c/reader-state?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839"
+        },
+        {
+          "label": "actual readback A directory",
+          "status": 200,
+          "receivedAtUTC": "2026-10-20T13:27:25.168Z",
+          "path": "/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839&limit=20"
+        },
+        {
+          "label": "actual readback A reading",
+          "status": 200,
+          "receivedAtUTC": "2026-10-20T13:27:25.527Z",
+          "path": "/v1/me/shelves/status/reading/works?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839&sort=last-read&order=desc&limit=3"
+        },
+        {
+          "label": "actual readback A follow",
+          "status": 200,
+          "receivedAtUTC": "2026-10-20T13:27:25.913Z",
+          "path": "/v1/me/follow-state?target=https%3A%2F%2Frezics.com%2Fid%2F01a10aff-93e5-7069-b80a-cd33bb6ce57c&kind=work&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839"
+        },
+        {
+          "label": "actual readback A continuation",
+          "status": 200,
+          "receivedAtUTC": "2026-10-20T13:27:26.294Z",
+          "path": "/v1/me/continue/01a10aff-93e5-7069-b80a-cd33bb6ce57c?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839"
+        },
+        {
+          "label": "actual readback B reader",
+          "status": 200,
+          "receivedAtUTC": "2026-10-20T13:27:26.571Z",
+          "path": "/v1/works/01a10aff-93e5-7069-b80a-cd33bb6ce57c/reader-state?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839"
+        },
+        {
+          "label": "actual readback B directory",
+          "status": 200,
+          "receivedAtUTC": "2026-10-20T13:27:26.724Z",
+          "path": "/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839&limit=20"
+        },
+        {
+          "label": "actual readback B reading",
+          "status": 200,
+          "receivedAtUTC": "2026-10-20T13:27:27.343Z",
+          "path": "/v1/me/shelves/status/reading/works?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839&sort=last-read&order=desc&limit=3"
+        },
+        {
+          "label": "actual readback B follow",
+          "status": 200,
+          "receivedAtUTC": "2026-10-20T13:27:28.750Z",
+          "path": "/v1/me/follow-state?target=https%3A%2F%2Frezics.com%2Fid%2F01a10aff-93e5-7069-b80a-cd33bb6ce57c&kind=work&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839"
+        },
+        {
+          "label": "actual readback B continuation",
+          "status": 200,
+          "receivedAtUTC": "2026-10-20T13:27:29.472Z",
+          "path": "/v1/me/continue/01a10aff-93e5-7069-b80a-cd33bb6ce57c?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F71473997-6e2e-4e59-9044-01627a79e839"
+        }
+      ],
+      "currentStatus": {
+        "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+        "status": "reading",
+        "startedOn": null,
+        "finishedOn": null,
+        "version": 11,
+        "changedAt": "2026-10-20 13:27:24.480706+00"
+      },
+      "invariants": {
+        "datesPreserved": true,
+        "progressUnchanged": true,
+        "customShelvesUnchanged": true,
+        "ratingUnchanged": true,
+        "followBasisUnchanged": true,
+        "continuationUnchanged": true,
+        "currentCASUsed": true,
+        "uniqueIdempotencyKey": true,
+        "twoActualReadbacks": true
+      },
+      "readingCount": {
+        "value": 1,
+        "kind": "exact-page",
+        "total": null
+      },
+      "rawActualAnswers": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v3-G-2831-20261020T1325Z/private/preparation-result.json",
+        "sha256": "16904fe202f91029cd2003096e7027030e61c12425abe30b5f1eeef6c4ee3279",
+        "bytes": 31538
+      }
+    },
+    "writeAccounting": {
+      "statusWriteAttempts": 1,
+      "progressWrites": 0,
+      "otherDirectDataWrites": 0,
+      "browserMainNonGetRequests": []
+    },
+    "execution": {
+      "recordedJob": "a695df0a-f67a-4b87-9893-47db40be6a3a",
+      "attempt": 43,
+      "exitStatus": 0,
+      "resultClass": "passed",
+      "normalTaskAdmission": true,
+      "qaId": null,
+      "qaIdQualification": "No standalone QA ID emitted; exact recorded job, admitted Task command and private logs retained.",
+      "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- bun scripts/goal/goalctl.ts test ./.temp/reading-home-HomeDEFR-preparation-v3-G-2831-20261020T1325Z/capture.test.ts",
+      "qaCommand": "bun scripts/goal/goalctl.ts test ./.temp/reading-home-HomeDEFR-preparation-v3-G-2831-20261020T1325Z/capture.test.ts",
+      "browserCommand": "task web:e2e -- --config .temp/reading-home-HomeDEFR-preparation-v3-G-2831-20261020T1325Z/playwright.config.ts prepare.spec.ts",
+      "bunWrapper": {
+        "passed": 1,
+        "failed": 0,
+        "expectations": 8
+      },
+      "playwrightPreparation": {
+        "passed": 1,
+        "failed": 0,
+        "durationMs": 41678.612
+      },
+      "assertionReach": [
+        "Fresh eligible own OAuth and same real Book identity",
+        "Two complete actual prewrite five-API snapshots agree with restored CAS9 version10 and all semantic guards",
+        "One supported unique-command CAS10 PUT200 -> reading/null dates version11",
+        "Two complete postwrite five-API readback sets preserve all guarded semantic fields; useful real reading card and exact continuation retained"
+      ],
+      "ATOrOriginalOutcomeReached": false,
+      "lifecycle": {
+        "startedAtUTC": "2026-10-20T13:26:36.976Z",
+        "source": "8b8a2c0a97b5662e6283fa7531a8f1c600f37fd0",
+        "normalTaskAdmission": true,
+        "qaRunId": null,
+        "jobId": null,
+        "browserExited": true,
+        "browserExit": 0,
+        "browserError": null,
+        "ownedWebStopExit": 0,
+        "ownedWebStopError": null,
+        "reportBranchReturned": true,
+        "returnError": null,
+        "endedAtUTC": "2026-10-20T13:27:31.467Z"
+      },
+      "completedJob": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v3-G-2831-20261020T1325Z/source/completed-preparation-job.json",
+        "sha256": "af7cd4a248e61754eb640ced0449f265de33b883a7ab0e0c5a8fe3355be4f568",
+        "bytes": 954
+      },
+      "log": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v3-G-2831-20261020T1325Z/recorded-job.log",
+        "sha256": "3dc4e19c11a0a74653880b484a73ed3b123209cf8629a7d71c7553367ed79840",
+        "bytes": 431
+      }
+    },
+    "ownedShutdown": {
+      "atUTC": "2026-10-20T13:31:35.074460+00:00",
+      "knownOwnedRunnerAndJobPids": [
+        1690313,
+        1690610,
+        1691249,
+        1693139
+      ],
+      "remainingOwnedAndJobPids": [],
+      "ownedFrontendProcessGroup": 1691249,
+      "remainingGroupMembers": [],
+      "priorBorrowerAndCleanupPids": [
+        714336,
+        714502,
+        715364,
+        715512,
+        723604,
+        723780,
+        723783,
+        723963,
+        723966,
+        723969,
+        724023,
+        724049,
+        726890,
+        1140656,
+        1140751,
+        1149672,
+        1149968,
+        1150948,
+        1155612
+      ],
+      "remainingPriorBorrowerAndCleanupPids": [],
+      "portsListening": {
+        "43131": false,
+        "52181": false,
+        "3001": true,
+        "3004": true
+      },
+      "recordedJobCompletedExit0": true,
+      "frontendStopReceipt": {
+        "ownedWebStopped": true,
+        "pid": 1691249,
+        "origin": "http://127.0.0.1:43131",
+        "stoppedAtUTC": "2026-10-20T13:27:31.372Z",
+        "onlyOwnedProcessGroupTouched": true
+      },
+      "browserShutdownEvidence": "Admitted Task Playwright preparation and provider teardown exited0; known Playwright runner absent. Browser child PIDs were not captured, so no separate per-child absence claim.",
+      "ownedATStarted": false,
+      "protected": {
+        "1677097": {
+          "exists": true,
+          "cwd": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2791",
+          "startTime": "10065363"
+        },
+        "77717": {
+          "exists": false,
+          "cwd": null,
+          "startTime": null
+        },
+        "78038": {
+          "exists": false,
+          "cwd": null,
+          "startTime": null
+        },
+        "1372265": {
+          "exists": true,
+          "cwd": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+          "startTime": "6976859"
+        },
+        "1370402": {
+          "exists": true,
+          "cwd": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+          "startTime": "6976343"
+        },
+        "1370400": {
+          "exists": true,
+          "cwd": "/home/edge/projects/rezics/rezics-next/apps/web",
+          "startTime": "6976343"
+        }
+      },
+      "readOnlyVerification": true,
+      "signalsSentByVerification": false,
+      "onlyOwnedFrontendStopped": true,
+      "backendAccountsKEEPAndPeerActionsPerformed": false
+    },
+    "ready": {
+      "path": ".temp/reading-home-HomeDEFR-preparation-v3-G-2831-20261020T1325Z/ready-for-G2847-HomeDEFR-CAS11.json",
+      "sha256": "ce99bd43ba061789e528798f45528d561d94597d884c5d6cbfe0867c031cbf24",
+      "bytes": 39530
+    },
+    "sameOwnerCleanupOperation": {
+      "path": ".temp/reading-home-HomeDEFR-preparation-v3-G-2831-20261020T1325Z/same-owner-cleanup-operation.json",
+      "sha256": "c95f0af4a7f1864a0ffdcf1cdd4ebc4945654b38e83eeefb05bdf44c54276aa2",
+      "bytes": 3223
+    },
+    "cleanupPlan": {
+      "owner": "SAME G-2831",
+      "when": "Only after Root explicitly authorizes and releases THIS new later borrow with actual borrower/job/frontend/browser/AT shutdown receipts. No borrow authorized by this READY.",
+      "supportedOperation": {
+        "method": "PUT",
+        "path": "/v1/works/01a10aff-93e5-7069-b80a-cd33bb6ce57c/reader-status",
+        "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+        "expectedVersion": "Fresh actual current version from two complete five-API snapshots after exact held status/version11/dates and semantic guards; never force CAS11 or reuse spent CAS5/CAS7/CAS9.",
+        "status": null,
+        "startedOn": null,
+        "finishedOn": null,
+        "idempotencyKey": "NEW unique command identity generated only at cleanup time"
+      },
+      "beforeBackup": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v3-G-2831-20261020T1325Z/private/before-backup.json",
+        "sha256": "06ffd0e8110a0ee46f6b8a345035043cc1bc9550b5c7576af8c0c498a3716420",
+        "bytes": 11199
+      },
+      "heldState": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v3-G-2831-20261020T1325Z/private/lease-state.json",
+        "sha256": "a7a1d41b3f4d34c13bf1715bff091c98f2e05b2e9bb703c629552a86152ac6a7",
+        "bytes": 5778
+      },
+      "retainedSupportedCleanupCallback": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v3-G-2831-20261020T1325Z/source/retained-supported-cleanup-callback.ts",
+        "sha256": "b897388042d86f7abf19e1de028c6052728f7731bdf9f0e6abcf8b28d58016ae",
+        "bytes": 16048
+      },
+      "retainedCallbackBindingLimit": "Retained callback contains spent CAS9 release guards. Its same supported operation and semantic comparators must bind THIS new custody and actual future Root release before execution; no old authority revived.",
+      "exactSetupFailureCleanup": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v3-G-2831-20261020T1325Z/source/owned-failed-setup-cleanup-callback.ts.retained",
+        "sha256": "a28691b56008572ef974c1e12bb0516e9699ed2050c58f9952590e3553d8ed12",
+        "bytes": 2769
+      },
+      "executableSetupFailureCleanup": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v3-G-2831-20261020T1325Z/prepare.spec.ts",
+        "sha256": "793d11212c2c6f617efff3ff7eb80a5cf410cbf7ecf145da782cefb2309670e6",
+        "bytes": 14454
+      },
+      "guards": [
+        "Rehash THIS READY/before/held-state and verify actual new Root release plus owned borrower shutdown",
+        "Fresh own normal OAuth retains eligible actor71473997, Book01a10aff, frozen8b8a2c0a frontend, Main3001/Accounts3004 installed75409 and nextUnread5caa0cc4",
+        "Two complete genuine five-API snapshots agree and match THIS held reading/null dates/version11 and all progress/shelves/rating/follow basis/continuation fields",
+        "Restore only original status/startedOn/finishedOn null using current actual expectedVersion and new idempotency key",
+        "Require TWO complete genuine five-API invariant readback sets; retain actual version/changedAt history"
+      ],
+      "conflictHandling": "Return one exact conflict and existing owner. Never force stale CAS or overwrite an intervening reader change.",
+      "semanticRestorationOnly": true,
+      "byteExactRollbackOrHistoryDeletionClaimed": false,
+      "executedBySuccessfulPreparation": false
+    },
+    "nativeSupportV3": {
+      "acceptedOfflineCommit": "55d438069",
+      "retainedOfflineResult": "3tests/81assertions plus17Python controls and docs pass; reused, no review or rerun",
+      "futureBinding": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v3-G-2831-20261020T1325Z/source/v3-future-binding.json",
+        "sha256": "282b132428e23f5b0125a98fe9abe08d61275395981e13ad0e39541975f205e5",
+        "bytes": 6667
+      },
+      "actualConsumedHashes": {
+        "path": ".temp/reading-home-HomeDEFR-preparation-v3-G-2831-20261020T1325Z/source/v3-binding-consumption.json",
+        "sha256": "df64f473223ddea20aed28a825bc66adbf1a5e08c3fbf82b0938d9da1bac5129",
+        "bytes": 3176
+      },
+      "originalCallbacksUnchanged": true,
+      "nativeMaterializationOrExecutionHere": false
+    },
+    "preservation": {
+      "priorReportTopLevelFieldsUnchanged": 26,
+      "priorReportSHA256": "76efd3cbc44dc1c9ddc79a6695f701dda1b95019915139f2e29d8beff2dc4b01",
+      "CAS5CAS7CAS9BundlesAndAllHistoricalFailuresRetained": true,
+      "priorCAS9BackupSHA256": "92cf460178d98622e3c68d69247c8e9de797d4b418d7dbc3f891a17969bcd2d0",
+      "completedCAS9CleanupRetained": [
+        "58379b145",
+        "9e12bbf7a1"
+      ],
+      "oldCAS9SpentAndNeverRebound": true,
+      "sourceSupportReviewRepeated": false,
+      "offlineControlsRepeated": false,
+      "ATCallbacksRun": false,
+      "productFilesOrOriginalTestsChanged": false,
+      "mainOtherWorktreesOrSharedControlFilesWritten": false,
+      "corpusRestoreImportResetSharedRefreshOrNativeBuild": false,
+      "backendStartedOrChanged": false,
+      "G2823RuntimeImageDefaultLeasesSoleStopCustodyStoragePreserved": true,
+      "Task1677097KEEPAndPeerResourcesPreserved": true,
+      "hosts77717And78038UntouchedAlreadyAbsent": true,
+      "originalFindingOrClassClosed": false
+    },
+    "findingAcceptance": {
+      "D4-003": "No new outcome acceptance; all prior proof and live blockers retained.",
+      "D4-011": "No AT/Home outcome acceptance; original HomeDE390/HomeFR390 remain for separately authorized G-2847 callback.",
+      "audit": "ACTIVE"
+    },
+    "evidence": {
+      "privateBundle": ".temp/reading-home-HomeDEFR-preparation-v3-G-2831-20261020T1325Z",
+      "manifest": ".temp/reading-home-HomeDEFR-preparation-v3-G-2831-20261020T1325Z/artifact-manifest.json",
+      "managerCopy": "Not performed: current user permits writes only in G-2831 worktree and /tmp. Root may copy private bundle; no credentials published."
+    },
+    "administrativeChecks": {
+      "affectedPreparationSelection": {
+        "recordedJob": "a695df0a-f67a-4b87-9893-47db40be6a3a",
+        "exitStatus": 0,
+        "bunPassed": 1,
+        "expectations": 8,
+        "playwrightPassed": 1
+      },
+      "docsCheck": "Pending required recorded task docs:check after this additive append; separate result will resolve this field.",
+      "noBroadGoalOrRegressionGate": "Latest finite Decision authorizes affected preparation and docs:check only; product/original tests unchanged."
+    }
   }
 }
