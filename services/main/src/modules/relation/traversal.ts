@@ -310,7 +310,8 @@ async function resolveCandidate(
 }
 
 /** Fixed work budget, O(page participants + selected labels); no full catalogue scan.
- * A cursor exists only after finding a later visible row. Summary references fit one owner batch.
+ * Unselected cursors require a later visible row; selected cursors may also carry an
+ * opaque bounded-scan frontier. Summary references fit one owner batch.
  * Position is rechecked after resolution so concurrent updates yield a stale page, never mixed state. */
 export async function readResourceRelations(env: WorkActivationEnvironment,
   input: Parameters<typeof readResourceRelationsAtPosition>[1], session?: WorkReadSession) {
