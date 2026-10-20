@@ -10,6 +10,17 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 const draftKey = 'rezics:post-draft:https://rezics.com/id/a2d4f6e8-1c3b-4a5d-9e7f-0b2c4d6e8f1a';
 
+async function exportRecovery(canvasElement: HTMLElement, label: string, raw: string) {
+  const create = spyOn(URL, 'createObjectURL');
+  const download = spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+  try {
+    await userEvent.click(within(canvasElement).getByRole('button', { name: label }));
+    await expect(download).toHaveBeenCalled();
+    await expect(await (create.mock.calls.at(-1)![0] as Blob).text()).toBe(raw);
+    await expect(JSON.parse(localStorage.getItem(draftKey)!).recoveryBody).toBe(raw);
+  } finally { create.mockRestore(); download.mockRestore(); }
+}
+
 /** Supplements the unchanged independent snapshot assertion with keyboard recovery, focus and reopen. */
 export const RetryThenRemoveKeepsCurrentDocument: Story = {
   async play({ canvasElement, args }) {
@@ -72,14 +83,7 @@ const arrangedRecovery: Story = {
     const raw = JSON.parse(localStorage.getItem(draftKey)!).recoveryBody;
     await expect(raw).toContain('/invalid-image.png');
 
-    const create = spyOn(URL, 'createObjectURL');
-    const download = spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
-    try {
-      await userEvent.click(canvas.getByRole('button', { name: t.exportDocument }));
-      await expect(download).toHaveBeenCalled();
-      await expect(await (create.mock.calls.at(-1)![0] as Blob).text()).toBe(raw);
-      await expect(JSON.parse(localStorage.getItem(draftKey)!).recoveryBody).toBe(raw);
-    } finally { create.mockRestore(); download.mockRestore(); }
+    await exportRecovery(canvasElement, t.exportDocument, raw);
 
     // A page return must hydrate raw recovery, including the invalid and stable images.
     await userEvent.click(canvas.getByRole('button', { name: 'Reopen draft' }));
@@ -117,3 +121,20 @@ const arrangedRecovery: Story = {
 
 export const SnapshotRecoveryPhone: Story = { ...arrangedRecovery, globals: { viewport: { value: 'phone' } } };
 export const SnapshotRecoveryPhoneChinese: Story = { ...arrangedRecovery, args: { locale: 'zh-Hans' }, globals: { locale: 'zh-Hans', viewport: { value: 'phone' } } };
+
+export const IncompleteDocumentExportPhoneChinese: Story = {
+  parameters: { recovery: 'snapshot' }, args: { locale: 'zh-Hans' },
+  globals: { locale: 'zh-Hans', viewport: { value: 'phone' } },
+  async play({ canvasElement, args }) {
+    const canvas = within(canvasElement), locale = args.locale, t = editorMessages[locale];
+    await expect(await canvas.findByText(postText.draftIncomplete[locale])).toBeVisible();
+    const raw = JSON.parse(localStorage.getItem(draftKey)!).recoveryBody;
+    await expect(raw).toContain('Retained current text.');
+    await expect(raw).toContain('/invalid-image.png');
+    await exportRecovery(canvasElement, t.exportDocument, raw);
+    await expect(canvas.queryByText(postText.draftSaved[locale])).toBeNull();
+    await expect(canvas.getByRole('button', { name: postText.post[locale] })).toBeDisabled();
+    await expect(canvas.getByRole('button', { name: t.retrySave })).toBeEnabled();
+    await expect(canvas.getByRole('button', { name: t.removeImages })).toBeEnabled();
+  },
+};

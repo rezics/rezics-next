@@ -215,8 +215,11 @@ const unwrittenRecovery: Story = {
     await expect(editor).toHaveFocus();
     await expect(canvas.queryByRole('alert')).toBeNull();
     await expect(canvas.getByDisplayValue('A complete draft')).not.toHaveAttribute('readonly');
-    await userEvent.keyboard('{End} Continued after cancel.');
+    // Testing Library does not implement End selection inside a contenteditable.
+    // Paste into the restored focus; preserve outcomes without depending on caret-node shape.
+    await userEvent.paste('Continued after cancel. ');
     await expect(editor).toHaveTextContent('Continued after cancel.');
+    await expect(editor).toHaveTextContent('Keep the text through failures.');
     await waitFor(() => expect(JSON.parse(localStorage.getItem(draftKey)!).progress).toBeNull());
     await userEvent.click(canvas.getByRole('button', { name: 'Reopen draft' }));
     await expect(await canvas.findByRole('textbox', { name: postText.body[locale] })).toHaveTextContent('Continued after cancel.');
@@ -257,8 +260,9 @@ const storageRecovery: Story = {
     await expect(await canvas.findByText(t.draftSaved[locale])).toBeVisible();
     await expect(canvas.queryByRole('button', { name: t.retrySave[locale] })).toBeNull();
     await expect(canvas.getByRole('textbox', { name: t.body[locale] })).toHaveFocus();
-    await userEvent.keyboard('{End} Continued after saving.');
+    await userEvent.paste('Continued after saving. ');
     await expect(canvas.getByRole('textbox', { name: t.body[locale] })).toHaveTextContent('Continued after saving.');
+    await expect(canvas.getByRole('textbox', { name: t.body[locale] })).toHaveTextContent('Keep the text through failures.');
     await userEvent.click(canvas.getByRole('button', { name: 'Reopen draft' }));
     await expect(await canvas.findByDisplayValue('A complete draft revised')).toBeVisible();
     await expect(canvas.getByRole('textbox', { name: t.body[locale] })).toHaveTextContent('Continued after saving.');
