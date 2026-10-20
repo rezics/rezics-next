@@ -7134,5 +7134,759 @@
     },
     "next": "Manager assesses native-input support mismatch with exact geometry/events/selection and accepts partial en390 recovery evidence; any continuation requires a new finite authorization. Preserve all history, release only this borrow, deliver private bundle to main within manager authority. D2-003 remains OPEN.",
     "rawEvidenceReachLabelNote": "actual-product-result.json retains its early reached label genuine stable image saved; eight explicit passed assertions, body receipts and stage captures establish the later completed recovery stages listed here. Raw evidence remains unchanged."
+  },
+  "productionStorybookCriterionAssessmentV1": {
+    "schemaVersion": 1,
+    "recordedAt": "2026-10-20T14:59:28.961922+00:00",
+    "worker": "G-2830",
+    "engineSelection": "codex-1 / GPT-6.1 Sol / xhigh; no fallback or nested agents",
+    "result": "done: independent bounded criterion assessment complete; manager acceptance pending",
+    "conclusion": "Recommend D2-003 acceptance: all three original bounded criteria have explicit passing current production-component UI evidence plus matching retained genuine upload/Use/recovery/publication/idempotent replay/authenticated durable readback. D2-002 stays accepted. This report does not edit canonical finding status or relabel historical failed attempts; normal candidate composition/gates and manager acceptance remain required.",
+    "policy": {
+      "authority": "Maintainer Storybook acceptance documentation381e2d0fcb and latest committed Storybook Decisions/manager note",
+      "document": "docs/development/storybook.md",
+      "reason": "Passing production-component Storybook interactions establish the UI outcomes they actually assert; combine matching server receipts rather than repeat backend journeys per viewport/locale. Retired full-phone/native-caret cut and withdrawn turn032 authorization remain unused.",
+      "supersededEvidenceRequirement": "No full phone E2E/all-in-one matrix, native touch/caret helper or historical exception reproduction required for these bounded UI criteria."
+    },
+    "pins": {
+      "reportBase": "bf5023202c0b085a26e88700e41966c5cf2f19fc",
+      "reportBranch": "goal/g-2830",
+      "candidate": "9b51a31f8821aa5bf720ae217761312d36a1ea32",
+      "candidateTree": "71fed384b806caf4418fdb83518064f77dcde0f1",
+      "authorTested": "37a3b90b6311a37581687d17061f529e1e418f56",
+      "patchSha256": "a0c605feec1ca23486f015bb685b963b78074c47e54153c474292b7e84fb2956",
+      "newSourceFiles": [
+        "apps/web/features/document-editor/draft-recovery.stories.tsx",
+        "apps/web/features/post-composer/composer.tsx",
+        "apps/web/features/post-composer/draft-recovery.stories.tsx",
+        "apps/web/features/post-composer/snapshot-recovery.stories.tsx"
+      ],
+      "loadedSourceVerification": "loaded-source-verification.json",
+      "postRunSourceVerification": "post-run-source-verification.json",
+      "matchingUnchangedInputs": 463,
+      "manifestFileCount": 12,
+      "genuineApiFrontend": "3878e8dda94eaff1fa51f4f8e0e58fc14265d1a5",
+      "genuineApiBackendProduct": "76c5955006dbea2016e84465d8f3e79fdf4fc979",
+      "genuineApiBackendSupportOverlay": "d2f04140fe615eadef0379a52c26291e6e083217"
+    },
+    "historicalPreservation": {
+      "priorTopLevelFieldCount": 33,
+      "priorReportSha256": "201573039d2c1a21e500690501098e0fa92c8b9569f2d65f268c45df6a491087",
+      "everyExistingTopLevelValueUnchanged": true,
+      "priorKeys": [
+        "schemaVersion",
+        "goal",
+        "worker",
+        "engine",
+        "result",
+        "conclusion",
+        "pins",
+        "isolation",
+        "commands",
+        "renderedMatrix",
+        "receipts",
+        "sourceReview",
+        "acceptanceByFinding",
+        "liveJourney",
+        "screenshots",
+        "testPremises",
+        "artifactDelivery",
+        "administrativeChecks",
+        "next",
+        "harnessWarnings",
+        "recordedAt",
+        "historicalScope",
+        "repairedVerification",
+        "scopeBeforeOriginalD2002Completion",
+        "memberReplyMediaSourceReview",
+        "memberReplyMediaAccessSourceReview",
+        "imageConsumerFirstSourceReview",
+        "imageConsumerCorrectionSourceReview",
+        "currentMainImageVerification",
+        "replyImageOriginContextDeltaReviewV1",
+        "landedOriginGenuineImageProofV1",
+        "landedOriginPhoneImageProofV2",
+        "landedOriginPhoneImageProofV3"
+      ],
+      "frozenCallbacksAndOriginalStoryHashesUnchanged": true,
+      "independentOriginalExportsByteIdentical": [
+        {
+          "path": "apps/web/features/post-composer/draft-recovery.stories.tsx",
+          "case": "UnwrittenAttemptAfterReopen",
+          "entireOriginalExportByteIdenticalToBase": true,
+          "sha256": "8878d63807d78d1e2e0124cafb2ce8f67bcea188ebe8868c69e652aa5e683204"
+        },
+        {
+          "path": "apps/web/features/post-composer/draft-recovery.stories.tsx",
+          "case": "CancelUnwrittenAttempt",
+          "entireOriginalExportByteIdenticalToBase": true,
+          "sha256": "d9028e2ea3f62574dbcd60bd32f4a01d0c16f59b4be9bfdace53dcd67b42c8e1"
+        },
+        {
+          "path": "apps/web/features/post-composer/draft-recovery.stories.tsx",
+          "case": "UnknownWriteAfterReopen",
+          "entireOriginalExportByteIdenticalToBase": true,
+          "sha256": "9c565ff285a6462162fda14c4dea6a4c18b115f7c30af766f0de78116da97abb"
+        },
+        {
+          "path": "apps/web/features/post-composer/draft-recovery.stories.tsx",
+          "case": "DeviceStorageUnavailable",
+          "entireOriginalExportByteIdenticalToBase": true,
+          "sha256": "696e58a476a132ae6948d00cd77c03e40b2943fe9d6e35db4519e83ceba9bc0e"
+        },
+        {
+          "path": "apps/web/features/post-composer/draft-recovery.stories.tsx",
+          "case": "StableImageWithoutPreview",
+          "entireOriginalExportByteIdenticalToBase": true,
+          "sha256": "49ff2b2d5125d8e77d8f3a9f1902a08784662bf6999bd5919e162fc499f7276c"
+        },
+        {
+          "path": "apps/web/features/post-composer/draft-recovery.stories.tsx",
+          "case": "SnapshotFailureKeepsCurrentText",
+          "entireOriginalExportByteIdenticalToBase": true,
+          "sha256": "818748d116a6ffae4634fe08385d81440afcc975dffad93dc02f4912271887c8"
+        },
+        {
+          "path": "apps/web/features/post-composer/snapshot-recovery.stories.tsx",
+          "case": "RetryThenRemoveKeepsCurrentDocument",
+          "entireOriginalExportByteIdenticalToBase": true,
+          "sha256": "11b2fbbc9d945c18b9bd8e782fee322931456aeab6456d5192f3627cfb1aa521"
+        },
+        {
+          "path": "apps/web/features/document-editor/draft-recovery.stories.tsx",
+          "case": "StableImageWithoutPreview",
+          "entireOriginalExportByteIdenticalToBase": true,
+          "sha256": "71a9d0bc58bdc11123805f197348cf0dcc0a29f9199edb64df4b9666b84b91bc"
+        },
+        {
+          "path": "apps/web/features/document-editor/draft-recovery.stories.tsx",
+          "case": "RetryBindingAfterReopen",
+          "entireOriginalExportByteIdenticalToBase": true,
+          "sha256": "f0052895068925e0f3d67c4b32581e6ea1f45bee1d74e10ad21da0ba7f04b6be"
+        },
+        {
+          "path": "apps/web/features/document-editor/draft-recovery.stories.tsx",
+          "case": "RemoveFailedImage",
+          "entireOriginalExportByteIdenticalToBase": true,
+          "sha256": "e26ef0e7cdd58bab569aef847ee9f600862dc8588f7ffc7c48ee47f8bd2f8661"
+        },
+        {
+          "path": "apps/web/features/document-editor/draft-recovery.stories.tsx",
+          "case": "CancelFailedUpload",
+          "entireOriginalExportByteIdenticalToBase": true,
+          "sha256": "3a34b6866045d4d9772a4f50d582f50e4f227f9c7520bab3ea91f2cc1f9badd8"
+        }
+      ],
+      "oldPhoneV2V3AndAllFailedMatrices": "Preserved as failed; no phone-v4 edit or execution, no native input rewrite.",
+      "historicalUse403Attribution": "UNCONFIRMED; not re-investigated",
+      "originalLowLevelException": "UNRESOLVED historical evidence; not attributed or diagnosed",
+      "singleCharacterDiscrepancy": "UNCONFIRMED; no new loss assertion or causal diagnosis"
+    },
+    "changedDeltaReview": {
+      "verdict": "PASS: no blocking new source counterexample found",
+      "reviewedOnce": true,
+      "scope": "Only exact four-file candidate diff against bf5023202c; directly necessary unchanged persist/change handlers and existing Storybook screenshot/a11y support. Prior Media/Access/consumer source verdicts reused, not replayed.",
+      "productionDelta": "Two event handlers focus only the current form-owned contenteditable after cancellation of unwritten progress or successful persist(draft). persist acknowledges after exact localStorage write; failed storage Retry remains on Retry. No titleInput ref/focus restored; all four main removals preserved. No authority/session/grant/root/head/receipt/idempotency behavior changed.",
+      "storyDelta": "Meaningful phone en/zh-Hans cancel/storage/snapshot/binding recovery with exact export, text/mark/image identity, retry/remove/reopen/focus assertions. New arranged state intentionally starts with older complete document plus newer raw recovery. Existing compact toolbar mode and typed MediaImageProvider labels qualify fixtures; original outcome exports unchanged. Native download is intercepted only to inspect actual exported Blob.",
+      "acceptedSourceVerdictsReused": [
+        "7d3e19b7d37ee7dfcd57d55dbe9bcdc07aaa5488",
+        "f610f1da0061bb7dda9b05552e715daf15a5411f",
+        "replyImageOriginContextDeltaReviewV1"
+      ],
+      "independentAssertionEdits": false,
+      "actualTestFinding": null
+    },
+    "independentExecution": {
+      "recordedJob": "ab14fa3d-f65b-40ee-b9c2-313fe4f8fd34",
+      "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task storybook:test -- features/post-composer/draft-recovery.stories.tsx features/post-composer/snapshot-recovery.stories.tsx features/document-editor/draft-recovery.stories.tsx",
+      "screenshotEnvironment": "REZICS_STORY_SCREENSHOTS_DIR=/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2830/.temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/storybook-criteria-9b51a31f8821/screenshots",
+      "cwd": "/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2830",
+      "provider": "Existing Task admission and repository Vitest Storybook Playwright browser provider; no Browser MCP or alternate provider",
+      "qaRunId": null,
+      "qaRunIdNote": "Direct Storybook admission printed no separate QA run ID; durable recorded job and complete output retained.",
+      "result": "PASS",
+      "exitCode": 0,
+      "files": 3,
+      "tests": 22,
+      "durationSeconds": 19.53,
+      "log": "independent-storybook-job.log",
+      "cases": {
+        "apps/web/features/document-editor/draft-recovery.stories.tsx": [
+          "StableImageWithoutPreview",
+          "RetryBindingAfterReopen",
+          "RemoveFailedImage",
+          "CancelFailedUpload",
+          "ImageRecoveryPhone",
+          "ImageRecoveryPhoneChinese",
+          "RemoveRecoveryPhone",
+          "RemoveRecoveryPhoneChinese"
+        ],
+        "apps/web/features/post-composer/draft-recovery.stories.tsx": [
+          "UnwrittenAttemptAfterReopen",
+          "CancelUnwrittenAttempt",
+          "UnknownWriteAfterReopen",
+          "DeviceStorageUnavailable",
+          "StableImageWithoutPreview",
+          "SnapshotFailureKeepsCurrentText",
+          "UnwrittenPhone",
+          "UnwrittenPhoneChinese",
+          "DeviceStorageRecoveryPhone",
+          "DeviceStorageRecoveryPhoneChinese"
+        ],
+        "apps/web/features/post-composer/snapshot-recovery.stories.tsx": [
+          "RetryThenRemoveKeepsCurrentDocument",
+          "SnapshotRecoveryPhone",
+          "SnapshotRecoveryPhoneChinese",
+          "IncompleteDocumentExportPhoneChinese"
+        ]
+      },
+      "assertionsReached": "All22 selected play cases reached and passed their existing/current outcome assertions; 11 original exports byte-identical to main base.",
+      "accessibility": {
+        "result": "PASS",
+        "scope": "Mandatory final-state configured axe sweep at390x844 and1280x860 in light/dark for every selected case; serious/critical blocking rule, not all intermediate states or physical-device/screen-reader testing.",
+        "source": "scripts/qa/story-accessibility.setup.ts"
+      },
+      "warnings": [
+        "Non-blocking Vite future native-config ESM/CommonJS warnings for existing story-screenshots.ts/story-browser.ts",
+        "Failed to resolve optimizeDeps.include @storybook/react-dom-shim warning; actual stories imported/executed and22 passed."
+      ]
+    },
+    "visualReview": {
+      "actualPNGsCaptured": 22,
+      "actualPNGsViewed": 13,
+      "phonePNGsViewed": 11,
+      "manifest": "screenshots-viewed.json",
+      "observations": [
+        {
+          "path": "screenshots/apps-web-features-document-editor-draft-recovery.stories.tsx/ImageRecoveryPhone.png",
+          "case": "ImageRecoveryPhone",
+          "sha256": "a4334260db439f80f9fc8db43a4b8ee7efcb20ac9c25ef63f1602637b9a54159",
+          "bytes": 17359,
+          "width": 390,
+          "height": 844,
+          "viewedBy": "G-2830 via view_image during this continuation",
+          "observation": "Retained current text and both image placeholders in focused editor; fixture ready/count2 after retry/reopen. No overlap or horizontal clipping."
+        },
+        {
+          "path": "screenshots/apps-web-features-document-editor-draft-recovery.stories.tsx/ImageRecoveryPhoneChinese.png",
+          "case": "ImageRecoveryPhoneChinese",
+          "sha256": "bc10d0f0e0c7e901430f9e319fdc5506b6091c1b217c75e1c5435eb886b76e27",
+          "bytes": 17856,
+          "width": 390,
+          "height": 844,
+          "viewedBy": "G-2830 via view_image during this continuation",
+          "observation": "Localized unavailable labels on both retained images; current English authored content unchanged. Focused editor, fixture ready/count2."
+        },
+        {
+          "path": "screenshots/apps-web-features-document-editor-draft-recovery.stories.tsx/RemoveRecoveryPhone.png",
+          "case": "RemoveRecoveryPhone",
+          "sha256": "7d2d34ce39efd53ab3f3fc089cec508d14d518072df05b025fe67b439567b6a0",
+          "bytes": 13812,
+          "width": 390,
+          "height": 844,
+          "viewedBy": "G-2830 via view_image during this continuation",
+          "observation": "Current text retained, no image, fixture ready/count0. Final Reopen button is focused; recovery editor focus was asserted before that click."
+        },
+        {
+          "path": "screenshots/apps-web-features-document-editor-draft-recovery.stories.tsx/RemoveRecoveryPhoneChinese.png",
+          "case": "RemoveRecoveryPhoneChinese",
+          "sha256": "7d2d34ce39efd53ab3f3fc089cec508d14d518072df05b025fe67b439567b6a0",
+          "bytes": 13812,
+          "width": 390,
+          "height": 844,
+          "viewedBy": "G-2830 via view_image during this continuation",
+          "observation": "Current text retained, no image, fixture ready/count0. Final Reopen button is focused; not a claim of editor focus after reopening."
+        },
+        {
+          "path": "screenshots/apps-web-features-post-composer-draft-recovery.stories.tsx/DeviceStorageRecoveryPhone.png",
+          "case": "DeviceStorageRecoveryPhone",
+          "sha256": "c45a5f40f537611114eaba52626d5c06b113f5b48ffc39fa035a2201f19864f0",
+          "bytes": 46179,
+          "width": 390,
+          "height": 844,
+          "viewedBy": "G-2830 via view_image during this continuation",
+          "observation": "Revised title and continued plus original body text retained after successful device Retry/reopen; saved status visible at bottom. Final Reopen focus differs from immediately asserted editor recovery focus."
+        },
+        {
+          "path": "screenshots/apps-web-features-post-composer-draft-recovery.stories.tsx/DeviceStorageRecoveryPhoneChinese.png",
+          "case": "DeviceStorageRecoveryPhoneChinese",
+          "sha256": "17b29b7d51dbe1d8d5c9b7cb28e3afb31e5ec247d5bab6f0424b2ef5bf4aa3a5",
+          "bytes": 49118,
+          "width": 390,
+          "height": 844,
+          "viewedBy": "G-2830 via view_image during this continuation",
+          "observation": "Localized saved status and controls, revised title and current text retained after device recovery/reopen. Final Reopen button focus visible."
+        },
+        {
+          "path": "screenshots/apps-web-features-post-composer-draft-recovery.stories.tsx/DeviceStorageUnavailable.png",
+          "case": "DeviceStorageUnavailable",
+          "sha256": "874e0ee8933734f5843f61c7d86c0fd2a0e65ff7d81dc56811ec1b85cdbeebd3",
+          "bytes": 54443,
+          "width": 1200,
+          "height": 900,
+          "viewedBy": "G-2830 via view_image during this continuation",
+          "observation": "Original initial-device-failure case retains complete text, failure alert and Retry saving/Export. Bottom status is partly below this desktop viewport; interaction assertions verify no false saved acknowledgement."
+        },
+        {
+          "path": "screenshots/apps-web-features-post-composer-draft-recovery.stories.tsx/SnapshotFailureKeepsCurrentText.png",
+          "case": "SnapshotFailureKeepsCurrentText",
+          "sha256": "92e18561754b067b25c44cae8bfcce9f484748d68729d03f6f9d6edbfe778c63",
+          "bytes": 47271,
+          "width": 1200,
+          "height": 900,
+          "viewedBy": "G-2830 via view_image during this continuation",
+          "observation": "Original independent snapshot assertion ends with current text retained, editor focus visible, enabled publication and saved-device status after removing failed image."
+        },
+        {
+          "path": "screenshots/apps-web-features-post-composer-draft-recovery.stories.tsx/UnwrittenPhone.png",
+          "case": "UnwrittenPhone",
+          "sha256": "ee672ca0150e714325cb8b551d6cc276ec64416f8c27451fd6a51d10b261346a",
+          "bytes": 45239,
+          "width": 390,
+          "height": 844,
+          "viewedBy": "G-2830 via view_image during this continuation",
+          "observation": "Continued text plus original text retained after cancel and reopen; enabled publication/export, truthful saved-device status. Final fixture Reopen button focused."
+        },
+        {
+          "path": "screenshots/apps-web-features-post-composer-draft-recovery.stories.tsx/UnwrittenPhoneChinese.png",
+          "case": "UnwrittenPhoneChinese",
+          "sha256": "816a87b18f98853ef545f3291c93434ae6cb2bad41c59f4741bafdc4742a9542",
+          "bytes": 48189,
+          "width": 390,
+          "height": 844,
+          "viewedBy": "G-2830 via view_image during this continuation",
+          "observation": "Localized product labels and saved-device status with original/current authored English text retained. No clipping or overlap; final Reopen focus visible."
+        },
+        {
+          "path": "screenshots/apps-web-features-post-composer-snapshot-recovery.stories.tsx/IncompleteDocumentExportPhoneChinese.png",
+          "case": "IncompleteDocumentExportPhoneChinese",
+          "sha256": "abd6b7b24062cedd57cabb963f1d2e654e325535c7bc7ebc04f19b6e3f9f20de",
+          "bytes": 48846,
+          "width": 390,
+          "height": 844,
+          "viewedBy": "G-2830 via view_image during this continuation",
+          "observation": "Visible newer bold text and two unavailable-image placeholders; localized unsupported-document warning, Retry/Remove/Export, disabled Post and truthful incomplete-current-draft status. Export has visible focus. No clipped or overlapping recovery controls."
+        },
+        {
+          "path": "screenshots/apps-web-features-post-composer-snapshot-recovery.stories.tsx/SnapshotRecoveryPhone.png",
+          "case": "SnapshotRecoveryPhone",
+          "sha256": "7ec06192a4f96367afa8933f0ab668259c4c247f3899ecfe9a5cb61d7b515c75",
+          "bytes": 38807,
+          "width": 390,
+          "height": 844,
+          "viewedBy": "G-2830 via view_image during this continuation",
+          "observation": "Newer bold text and one stable unavailable-image placeholder retained after Remove/reopen. Editor focus ring visible. Lower publication controls extend beyond the viewport; no assertion of every control being simultaneously visible."
+        },
+        {
+          "path": "screenshots/apps-web-features-post-composer-snapshot-recovery.stories.tsx/SnapshotRecoveryPhoneChinese.png",
+          "case": "SnapshotRecoveryPhoneChinese",
+          "sha256": "a98f72babad6f5351088545597282167bb789d42c480b0afd3f7474b384f14ef",
+          "bytes": 45160,
+          "width": 390,
+          "height": 844,
+          "viewedBy": "G-2830 via view_image during this continuation",
+          "observation": "Localized unavailable preview and retained bold current text with one stable image. Editor focus ring visible after reopen; readable labels with no horizontal clipping."
+        }
+      ],
+      "verdict": "No in-scope clipping, overlap, unreadable recovery text or horizontal overflow visible in the inspected states. Fixture English Reopen/count outputs and authored English document content are distinct from localized product UI. Some controls extend below the screenshot viewport; tests reached them by interaction. Recovery focus is asserted at the actual recovery step; a later Reopen click can leave that fixture button focused.",
+      "inputBoundary": "Storybook browser pointer clicks and keyboard Enter/paste at phone390, with accessibility viewport sweeps. No claim of physical touch hardware, trusted native phone gesture/caret qualification, or heard screen-reader output."
+    },
+    "originalCriterionEvidenceMap": [
+      {
+        "id": "D2-003/acceptance-1",
+        "originalAcceptance": "只有当前完整文档快照已持久化才显示已保存；图片上传、绑定、快照转换任一步失败都显示未保存状态，明确保留了哪个版本。",
+        "status": "PASS: combined current component and retained genuine evidence",
+        "uiEvidence": [
+          {
+            "file": "post-composer/draft-recovery.stories.tsx",
+            "cases": [
+              "DeviceStorageUnavailable",
+              "DeviceStorageRecoveryPhone",
+              "DeviceStorageRecoveryPhoneChinese",
+              "SnapshotFailureKeepsCurrentText"
+            ],
+            "assertions": "Original initial-device-failure does not show saved. Phone title edit/export retains current unsaved title while stored title remains old; failed Retry keeps warning/focus and no false saved; successful Retry acknowledges current title/body, restores editor focus, accepts further input and reopens those edits. Original current-text failure/Retry/Remove assertion remains byte-identical."
+          },
+          {
+            "file": "post-composer/snapshot-recovery.stories.tsx",
+            "cases": [
+              "SnapshotRecoveryPhone",
+              "SnapshotRecoveryPhoneChinese",
+              "IncompleteDocumentExportPhoneChinese"
+            ],
+            "assertions": "Last complete body is deliberately older than marked raw recovery. Snapshot failure and Retry retain current text plus stable/invalid images, keep publication disabled and saved acknowledgement absent, show localized incomplete/current-versus-older-version feedback and preserve raw export. Remove persists complete current text and the valid image before saved acknowledgement and reopen."
+          },
+          {
+            "file": "document-editor/draft-recovery.stories.tsx",
+            "cases": [
+              "CancelFailedUpload",
+              "RetryBindingAfterReopen",
+              "ImageRecoveryPhone",
+              "ImageRecoveryPhoneChinese"
+            ],
+            "assertions": "Upload failure stays failed until cancelled; failed Use reconciliation retains recovery, current text and images. Keyboard Retry returns ready only with complete current body, cleared raw recovery and retained stable references. These are component/platform fixtures, not new server receipts."
+          }
+        ],
+        "genuineApiEvidence": {
+          "record": "landedOriginGenuineImageProofV1",
+          "artifacts": [
+            {
+              "path": "retained-en-desktop-actual-product-result.json",
+              "sha256": "96367c483fc8c5fefad9b3d6b16d2ac655a4b542a5a9fdc7a90162f6ce6cbde8",
+              "source": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/landed-origin-3878e8dda94e/first-full-matrix/actual-product-result.json"
+            },
+            {
+              "path": "retained-zh-Hans-desktop-actual-product-result.json",
+              "sha256": "3f1d88b594f08b54fcd2ca1871316de37da73d539543b3f3970860596fa30760",
+              "source": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/landed-origin-3878e8dda94e/remaining-three-matrix/actual-product-result.json"
+            }
+          ],
+          "assertions": [
+            "deviceFailureNoFalseSavedAcknowledgement",
+            "deviceRetryAcknowledgesExactCurrentDocument",
+            "rawExportRetainsCurrentTextAndStableReference",
+            "retryRetainsCurrentTextAndEditorFocus",
+            "removeOnlyFailedImageKeepsValidImageTextAndFocus"
+          ],
+          "outcome": "Both retained desktop locales had genuine upload/Use and controlled snapshot/quota failures with truthful current-draft feedback, retry/export, exact saved-device acknowledgement and subsequent current-document readback. Device quota and invalid-node injection are labelled controlled; genuine server receipts remain distinct."
+        }
+      },
+      {
+        "id": "D2-003/acceptance-2",
+        "originalAcceptance": "上传成功的稳定图片节点和文字在刷新后完整恢复；图片预览/metadata 读取失败不会阻止保存稳定引用。",
+        "status": "PASS: current phone component coverage plus genuine desktop reload/API/readback",
+        "uiEvidence": [
+          {
+            "file": "document-editor/draft-recovery.stories.tsx",
+            "cases": [
+              "StableImageWithoutPreview",
+              "ImageRecoveryPhone",
+              "ImageRecoveryPhoneChinese"
+            ],
+            "assertions": "Actual BodyEditor serialization/reconciliation keeps text and stable node/representation/Use identities; retry/reopen retains both images while preview metadata remains unavailable with localized fallback. The four original image outcome exports are byte-identical; compact toolbar setup now reaches them."
+          },
+          {
+            "file": "post-composer/draft-recovery.stories.tsx",
+            "cases": [
+              "StableImageWithoutPreview"
+            ],
+            "assertions": "Stored composer document includes image and current text through reopen despite unavailable preview fixture."
+          },
+          {
+            "file": "post-composer/snapshot-recovery.stories.tsx",
+            "cases": [
+              "SnapshotRecoveryPhone",
+              "SnapshotRecoveryPhoneChinese"
+            ],
+            "assertions": "Retained acknowledged imageDraft intent/progress equal the pre-recovery basis. Retry/export/reopen retain raw current document; Remove drops only invalid image, preserving exact valid node/representation/Use IDs and bold current text; final reopen retains complete saved document."
+          }
+        ],
+        "genuineApiEvidence": {
+          "record": "landedOriginGenuineImageProofV1",
+          "artifacts": [
+            {
+              "path": "retained-en-desktop-actual-product-result.json",
+              "sha256": "96367c483fc8c5fefad9b3d6b16d2ac655a4b542a5a9fdc7a90162f6ce6cbde8",
+              "source": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/landed-origin-3878e8dda94e/first-full-matrix/actual-product-result.json"
+            },
+            {
+              "path": "retained-zh-Hans-desktop-actual-product-result.json",
+              "sha256": "3f1d88b594f08b54fcd2ca1871316de37da73d539543b3f3970860596fa30760",
+              "source": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/landed-origin-3878e8dda94e/remaining-three-matrix/actual-product-result.json"
+            }
+          ],
+          "assertions": [
+            "genuineUploadAndUse",
+            "completeDeviceReload",
+            "realReferencesSurviveControlledMetadata503Reload",
+            "recoveredCompleteDocumentReopensExactly",
+            "genuinePublishedRevisionContainsExactTextAndStableImage"
+          ],
+          "outcome": "Both retained normal-OAuth desktop chains have actual draft/reserve/bytes/inference/Use201, real metadata200 unavailable-item results and controlled metadata503 replay separately labelled. Full page reload retained current text/stable references. Genuine final native revision/identity/placement and authenticated thread200 readback contain exact current text and same node/representation/Use IDs."
+        }
+      },
+      {
+        "id": "D2-003/acceptance-3",
+        "originalAcceptance": "失败时可重试、撤销该图片或导出保留中的内容；不得把旧文本草稿已保存说成当前图片已保存。",
+        "status": "PASS: current recovery interactions plus retained genuine outcomes",
+        "uiEvidence": [
+          {
+            "file": "post-composer/snapshot-recovery.stories.tsx",
+            "cases": [
+              "RetryThenRemoveKeepsCurrentDocument",
+              "SnapshotRecoveryPhone",
+              "SnapshotRecoveryPhoneChinese",
+              "IncompleteDocumentExportPhoneChinese"
+            ],
+            "assertions": "Keyboard Retry preserves newer marked current text and raw recovery; export Blob equals raw retained bytes; failed current snapshot keeps Post disabled and no saved claim. Remove drops invalid image only, restores usable editor focus, persists current text/valid image and reopens."
+          },
+          {
+            "file": "document-editor/draft-recovery.stories.tsx",
+            "cases": [
+              "RetryBindingAfterReopen",
+              "RemoveFailedImage",
+              "CancelFailedUpload",
+              "ImageRecoveryPhone",
+              "ImageRecoveryPhoneChinese",
+              "RemoveRecoveryPhone",
+              "RemoveRecoveryPhoneChinese"
+            ],
+            "assertions": "Real component retry/remove/cancel/export/reopen outcomes reached. Phone export equals retained complete recovery object; Retry saves both current images, Remove saves image-free current text; each recovery clears retained state only after complete save and restores editor focus."
+          },
+          {
+            "file": "post-composer/draft-recovery.stories.tsx",
+            "cases": [
+              "DeviceStorageRecoveryPhone",
+              "DeviceStorageRecoveryPhoneChinese"
+            ],
+            "assertions": "Export includes current unsaved edits, failed Retry retains warning/control/focus, successful Retry allows continued body editing and reopen without losing current text/title."
+          }
+        ],
+        "genuineApiEvidence": {
+          "record": "landedOriginGenuineImageProofV1",
+          "artifacts": [
+            {
+              "path": "retained-en-desktop-actual-product-result.json",
+              "sha256": "96367c483fc8c5fefad9b3d6b16d2ac655a4b542a5a9fdc7a90162f6ce6cbde8",
+              "source": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/landed-origin-3878e8dda94e/first-full-matrix/actual-product-result.json"
+            },
+            {
+              "path": "retained-zh-Hans-desktop-actual-product-result.json",
+              "sha256": "3f1d88b594f08b54fcd2ca1871316de37da73d539543b3f3970860596fa30760",
+              "source": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/landed-origin-3878e8dda94e/remaining-three-matrix/actual-product-result.json"
+            }
+          ],
+          "assertions": [
+            "rawExportRetainsCurrentTextAndStableReference",
+            "retryRetainsCurrentTextAndEditorFocus",
+            "removeOnlyFailedImageKeepsValidImageTextAndFocus",
+            "recoveredCompleteDocumentReopensExactly",
+            "deviceFailureNoFalseSavedAcknowledgement",
+            "sameImmutablePlacementRequestAndKey",
+            "realPlacementReplayReusesSameIdentityAndRevision",
+            "sameOperationRealPlacementLostResponseRetry",
+            "genuinePublishedRevisionContainsExactTextAndStableImage"
+          ],
+          "outcome": "Both genuine desktop chains cover retained export/Retry/Remove/focus and exact reload. Lost-ack transport abort happens after actual placement201; retry sends identical operation/key/request bytes, returns actual200/replayed=true with every other receipt field equal, followed by one exact matching revision in authenticated thread readback. No additional final identity/native draft writes on placement retry; no fabricated success."
+        }
+      }
+    ],
+    "matchingGenuineApiEvidence": {
+      "inspectionArtifact": "retained-desktop-receipt-inspection.json",
+      "originalRecord": "landedOriginGenuineImageProofV1",
+      "evidenceReusedWithoutNetwork": true,
+      "receipts": [
+        {
+          "locale": "en",
+          "width": 1440,
+          "recordedJob": "53ef3d38-efad-4149-929d-da6bc0aeb4ca",
+          "originalAggregateJobResult": "FAIL; unchanged historical supplemental/input failures remain failed",
+          "sourceArtifact": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/landed-origin-3878e8dda94e/first-full-matrix/actual-product-result.json",
+          "copiedArtifact": "retained-en-desktop-actual-product-result.json",
+          "sha256": "96367c483fc8c5fefad9b3d6b16d2ac655a4b542a5a9fdc7a90162f6ce6cbde8",
+          "reuseOnly": true,
+          "normalOAuth": {
+            "status": 200,
+            "normalPKCE": true,
+            "lawfulRetainedActorMatchesHistoricalEvidence": true
+          },
+          "stableImageReferences": [
+            {
+              "attrs": {
+                "alt": null,
+                "conceal": false,
+                "dir": null,
+                "height": null,
+                "id": "134806c2-e875-4896-89f7-18756a66ea96",
+                "lang": null,
+                "mediaUseId": "e76be01d-8bba-4ce2-a924-20dfa7881466",
+                "representationId": "e77e1078-9eeb-42a0-a384-168dbecab958",
+                "src": "/api/main/v1/media/representations/e77e1078-9eeb-42a0-a384-168dbecab958/bytes?use=e76be01d-8bba-4ce2-a924-20dfa7881466",
+                "title": null,
+                "width": null
+              },
+              "type": "image"
+            }
+          ],
+          "authenticatedRead": {
+            "path": "/v1/realms/01a15329-8fb1-70b5-ab3e-a07479b4bc0d/threads/25113b47-efeb-45f1-899a-a012137dbf34?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5c4e27f1-4e3d-40da-89e6-e248d38fdf0a",
+            "status": 200,
+            "complete": true,
+            "matchingReplyCount": 1,
+            "revisionId": "d64b0eba-cadf-40ac-9f9c-9b96c94ec028",
+            "exactCurrentBodyText": "Image draft en 1440. Current text after genuine upload.Retained current text. Device edit retained.",
+            "publishedTitle": "Image recovery en 1440",
+            "publishedDocumentText": "Image recovery en 1440Image draft en 1440. Current text after genuine upload.Retained current text. Device edit retained.",
+            "exactPublishedDocumentEqualsFinalNativeRequest": true,
+            "exactTitlePlusBodyEqualsBeforePublish": true,
+            "documentBoundary": "Published native document includes the title heading plus the body; full readback equals the final submitted native document exactly.",
+            "exactStableNodeRepresentationAndUseIds": [
+              [
+                "134806c2-e875-4896-89f7-18756a66ea96",
+                "e77e1078-9eeb-42a0-a384-168dbecab958",
+                "e76be01d-8bba-4ce2-a924-20dfa7881466"
+              ]
+            ]
+          },
+          "receiptEquivalence": {
+            "operationKeyEqual": true,
+            "requestBytesEqual": true,
+            "everyOtherReceiptFieldEqual": true,
+            "initialReplayed": false,
+            "retryReplayed": true
+          }
+        },
+        {
+          "locale": "zh-Hans",
+          "width": 1440,
+          "recordedJob": "4fcb9b70-4898-4685-9346-5539f2e67ade",
+          "originalAggregateJobResult": "FAIL; unchanged historical supplemental/input failures remain failed",
+          "sourceArtifact": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/landed-origin-3878e8dda94e/remaining-three-matrix/actual-product-result.json",
+          "copiedArtifact": "retained-zh-Hans-desktop-actual-product-result.json",
+          "sha256": "3f1d88b594f08b54fcd2ca1871316de37da73d539543b3f3970860596fa30760",
+          "reuseOnly": true,
+          "normalOAuth": {
+            "status": 200,
+            "normalPKCE": true,
+            "lawfulRetainedActorMatchesHistoricalEvidence": true
+          },
+          "stableImageReferences": [
+            {
+              "attrs": {
+                "alt": null,
+                "conceal": false,
+                "dir": null,
+                "height": null,
+                "id": "1eddbcdd-06e9-4990-bee5-fe0476b0e716",
+                "lang": null,
+                "mediaUseId": "dab14f19-18b9-4598-8d5a-6f3ce330d33d",
+                "representationId": "3b514f26-f417-4dd7-9b05-f722ba1bcc10",
+                "src": "/api/main/v1/media/representations/3b514f26-f417-4dd7-9b05-f722ba1bcc10/bytes?use=dab14f19-18b9-4598-8d5a-6f3ce330d33d",
+                "title": null,
+                "width": null
+              },
+              "type": "image"
+            }
+          ],
+          "authenticatedRead": {
+            "path": "/v1/realms/01a15329-8fb1-70b5-ab3e-a07479b4bc0d/threads/a672439d-a363-494d-a320-d8b8177cd8a0?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5c4e27f1-4e3d-40da-89e6-e248d38fdf0a",
+            "status": 200,
+            "complete": true,
+            "matchingReplyCount": 1,
+            "revisionId": "ca13ea75-4bf7-42d7-a0d9-c9b2ade4823c",
+            "exactCurrentBodyText": "Image draft zh-Hans 1440. Current text after genuine upload.Retained current text. Device edit retained.",
+            "publishedTitle": "Image recovery zh-Hans 1440",
+            "publishedDocumentText": "Image recovery zh-Hans 1440Image draft zh-Hans 1440. Current text after genuine upload.Retained current text. Device edit retained.",
+            "exactPublishedDocumentEqualsFinalNativeRequest": true,
+            "exactTitlePlusBodyEqualsBeforePublish": true,
+            "documentBoundary": "Published native document includes the title heading plus the body; full readback equals the final submitted native document exactly.",
+            "exactStableNodeRepresentationAndUseIds": [
+              [
+                "1eddbcdd-06e9-4990-bee5-fe0476b0e716",
+                "3b514f26-f417-4dd7-9b05-f722ba1bcc10",
+                "dab14f19-18b9-4598-8d5a-6f3ce330d33d"
+              ]
+            ]
+          },
+          "receiptEquivalence": {
+            "operationKeyEqual": true,
+            "requestBytesEqual": true,
+            "everyOtherReceiptFieldEqual": true,
+            "initialReplayed": false,
+            "retryReplayed": true
+          }
+        }
+      ],
+      "semantics": "Original aggregate jobs stay FAIL. Independently passing named outcome assertions, actual immutable receipts and authenticated reads remain valid per newest decision. Literal whole receipt equality remains failed historically; exact comparison confirms replayed is the sole changed field. No old assertion modified or marked passing.",
+      "writeBoundary": "No new backend/API writes this turn. Retained original normal OAuth200 and draft/reserve/bytes/inference/Use201, final CAS revision201/identity201/placement201 then200 replay, and authenticated thread200 supply server evidence. Local story fetch/storage fixtures and controlled metadata/quota/snapshot/lost-ack injection remain labelled.",
+      "durabilityBoundary": "Authenticated persisted revision plus exact stable image IDs after browser reload/reopen; no backend restart, backup-restore or global historical duplicate-count guarantee."
+    },
+    "acceptanceByFinding": {
+      "D2-002": {
+        "status": "ACCEPTED; unchanged retained proof, not replayed as a new acceptance gate"
+      },
+      "D2-003": {
+        "recommendation": "ACCEPT after manager accepts bounded criterion map and candidate integration",
+        "allThreeOriginalBoundedCriteriaCovered": true,
+        "missingOriginalOutcome": [],
+        "currentFailedOutcome": [],
+        "canonicalFindingStatusEdited": false,
+        "reason": "Current22 production component stories cover remaining phone UI states; both retained genuine desktop receipt chains cover actual upload/Use/persistence/authority/idempotency. Full phone backend repetition is no longer required. Historical source/receipt/helper failures are kept explicit."
+      }
+    },
+    "inheritedMergeConditions": {
+      "authorGuards": "FAIL:123/125; two production continuation/page-filtering assertions on out-of-slice unchanged source. Author guard-baseline-evidence.json retained. G-2758 owns predicates/continuations; selected story success does not waive these conditions.",
+      "authorCanonicalInference": "FAIL inherited; Main27024319 exceeds26950993.65; delta-only margin PASS is not a canonical passing gate. No baseline relaxation or unchanged rerun.",
+      "authorAffectedChecksReused": {
+        "storyTypes": "PASS1494 files at final author-tested pin",
+        "productAndAffectedCallerTypes": "PASS2019 files in preceding source-equivalent receipt",
+        "fourFileLint": "PASS",
+        "fourFileAST": "PASS",
+        "causalFocusFailure": "Author outcome assertion reached BODY after device Retry before production focus repair; final independent phone en/zh-Hans cases now pass.",
+        "artifacts": [
+          "author-check-results.json",
+          "author-guard-baseline-evidence.json",
+          "author-43bd18a9-221e-4cfa-848a-ed2367ff7163.2.log",
+          "author-43bd18a9-221e-4cfa-848a-ed2367ff7163.3.log",
+          "author-5e893e86-a8d6-4093-aa08-2cf4e3d1fa1b.2.log"
+        ]
+      }
+    },
+    "lifecycle": {
+      "newLeaseAcquired": false,
+      "withdrawnTurn032LeaseAcquired": false,
+      "oauthOrBackendJourneyStarted": false,
+      "backendStartStopPrepareRestoreImportResetOrNativeBuild": false,
+      "ownedFrontendStarted": false,
+      "storybookProvider": "Owned finite admitted Storybook test/browser process returned exit0; no persistent dev server started. Job owner/executor absent after completion; no owned Vite/Vitest/browser process remained in inspected worktree process list.",
+      "temporarySourceLoading": "Loaded exact candidate four files only for execution; tracked bytes matched candidate before and after. Restored all four base files afterwards; report remains the sole tracked change.",
+      "protectedResources": "G-2823 actual named leases, backend lifetime and stop custody untouched; no default borrow or session revocation attempted.",
+      "leaseRelease": "Not applicable: no borrow this turn; withdrawn turn032 authorization unused. Historical actual revocation/signout/release receipts unchanged.",
+      "cleanupVerification": "cleanup-verification.json"
+    },
+    "administrativeChecks": {
+      "reportPreservation": "PASS: exact equality of all33 prior top-level values; only this versioned field appended; no historical record rewritten",
+      "jsonParse": "PASS",
+      "gitDiffCheck": "PASS",
+      "docsCheck": {
+        "command": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task docs:check",
+        "jobId": "3954296b-e13b-426e-944d-ef1d110b9cdb",
+        "result": "PASS",
+        "exitCode": 0,
+        "tests": 13,
+        "markdownFiles": 258,
+        "log": "docs-check-job.log",
+        "limits": "Local links, fragments and design navigation; no external URL/runtime outcome claimed."
+      },
+      "affectedChecks": "Reuse exact author affected types/lint/AST; report-only docs check required. No unchanged broad/source/backend regression replay."
+    },
+    "artifactDelivery": {
+      "privateRoot": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/storybook-criteria-9b51a31f8821",
+      "managerDestination": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/storybook-criteria-9b51a31f8821/",
+      "workerCopiedIntoMain": false,
+      "reason": "Current explicit write boundary permits only this worktree and/tmp, plus goalctl-owned bookkeeping. Manager must copy the prepared private bundle to the existing main proof directory.",
+      "manifest": "artifact-manifest.json",
+      "transferArchive": "proof-bundle.tar.gz",
+      "retainedOriginalApiArtifacts": [
+        {
+          "path": "retained-en-desktop-actual-product-result.json",
+          "sha256": "96367c483fc8c5fefad9b3d6b16d2ac655a4b542a5a9fdc7a90162f6ce6cbde8",
+          "source": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/landed-origin-3878e8dda94e/first-full-matrix/actual-product-result.json"
+        },
+        {
+          "path": "retained-zh-Hans-desktop-actual-product-result.json",
+          "sha256": "3f1d88b594f08b54fcd2ca1871316de37da73d539543b3f3970860596fa30760",
+          "source": ".temp/audit-remediation-20261019/proofs/post-draft-recovery-G-2830/landed-origin-3878e8dda94e/remaining-three-matrix/actual-product-result.json"
+        }
+      ]
+    },
+    "unexecutedLimits": [
+      "No new OAuth/runtime/API/backend/corpus journey or phone native-input matrix; genuine matching server receipts reused unchanged.",
+      "Component contract-shaped fixtures establish UI only; they do not grant server authority or manufacture new persistence outcomes.",
+      "Historical low-level exception and one-character/Use403 attribution remain unresolved/unconfirmed; no new causal conclusion.",
+      "Normal integration gates remain with manager; inherited two guard failures/canonical inference failure are not waived.",
+      "No original canonical finding status closed by this report."
+    ],
+    "next": "Manager copy private bundle, review additive criterion map and normal immutable candidate integration/gates, then accept D2-003 when satisfied; do not replay full phone backend matrix or historical source reviews."
   }
 }
