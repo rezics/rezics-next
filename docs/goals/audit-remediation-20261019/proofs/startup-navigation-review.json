@@ -10157,5 +10157,356 @@
       "resultReportedInWorkerHandoff": true
     },
     "managerNext": "Consume this support-only verdict and exact future-binding artifact. Preserve all original failures and open assertions. Only a separate authorization with fresh custody can execute the two original Home callbacks; no runtime, lease or class closure follows from this offline result."
+  },
+  "originalHomeDefrCAS11Callbacks20261020": {
+    "atUTC": "2026-10-20T13:56:04.069922+00:00",
+    "worker": "G-2847",
+    "reviewer": {
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "sameReviewer": true,
+      "fallbackOrNestedAgents": false
+    },
+    "decision": "2026-10-20T13:43:07Z only; one finite card-home-de-390/card-home-fr-390 execution on fresh CAS11 custody",
+    "result": "partial; both original callbacks executed once and failed their heading assertion; actual owned shutdown and explicit root-bound release verified",
+    "verdict": "No original acceptance or class closure. V3 EWMH/X11 owned-client receipts passed, but retained Orca structural navigation used another document. These reached original heading failures do not independently confirm a product-source defect.",
+    "pins": {
+      "reportBaseline": "8cbc0e2d03ef75baffb93d4e2f2cbcd8233e0e88",
+      "immutableFrontend": "8b8a2c0a97b5662e6283fa7531a8f1c600f37fd0",
+      "installedBackend": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+      "backendOrigin": "http://127.0.0.1:3001",
+      "accountsOrigin": "http://127.0.0.1:3004",
+      "acceptedNativeSupportCommit": "55d438069f8134755534b46508bbda46cdb88e4c",
+      "nativeSupportVersion": "owned-window-binding-v3-20261020",
+      "nativeHelperSHA256": "fe35508068db359186514d76f98c2a5e7273ffbd3a3048016100e35be41290db",
+      "originalCallbackSHA256": "9c56d91f687e9a03a00ce05dc88171ba22d63beab60d7de6b55592d0296aa4e8",
+      "templateAndExecutedTestSHA256": "22e5b9c90dc1fd0fce2cf412df44a46ab01bf354b72a9b74f6008a9b830868bc",
+      "normalTaskDependencyDigestAndStamp": "afed563fd4dcabbfa62a2354edc5c7b7b8856b5067fc2a39011e76ff75b59c64"
+    },
+    "binding": {
+      "rootLeaseVersion": "HomeDEFR-CAS11-2026-10-20T13:43:07Z",
+      "rootLeaseSHA256": "bccb92165b7cfbb220d7e45c6d0e6eb6a842602e244323ecee1b5b21776be098",
+      "readySHA256": "ce99bd43ba061789e528798f45528d561d94597d884c5d6cbfe0867c031cbf24",
+      "currentCAS": 11,
+      "actor": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839",
+      "work": "https://rezics.com/id/01a10aff-93e5-7069-b80a-cd33bb6ce57c",
+      "nextUnread": "https://rezics.com/id/5caa0cc4-f716-876a-8a46-fa048620c48d",
+      "selection": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/selection-manifest.json",
+        "sha256": "bc937056d7db098a8b3ed9c7091c29bda9feab1a69da4b1bb6cad7d25d075f7e",
+        "bytes": 4328
+      },
+      "sourceSelection": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/leased-source-selection.json",
+        "sha256": "c5c610d15c616422054bf2523a73a192b30983ae213f3976c0b9bc0fc0d2c4e6",
+        "bytes": 8540
+      },
+      "ready": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/renewed-ready.json",
+        "sha256": "ce99bd43ba061789e528798f45528d561d94597d884c5d6cbfe0867c031cbf24",
+        "bytes": 39530
+      },
+      "rootLease": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/root-lease.json",
+        "sha256": "bccb92165b7cfbb220d7e45c6d0e6eb6a842602e244323ecee1b5b21776be098",
+        "bytes": 2590
+      },
+      "managerCustodyReceipt": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/site-turn031-home-root-binding.json",
+        "sha256": "0b845fe853df853b60412b0ea87ff7f802bda6cd98b6032202f665157a31b245",
+        "bytes": 5726
+      },
+      "verifiedAndLocallyCopiedCustodyHashCount": 17,
+      "bindingVerification": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/binding-verification.json",
+        "sha256": "b00ceefa9a2e2a75627b327dbcb46c28a0aa6f6365c0b1488c2feecfc89107c8",
+        "bytes": 9748
+      },
+      "actualDependencies": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/actual-dependency-hashes.json",
+        "sha256": "8b7736f25577a0eb1197a42dbdc6205e25dcbfdb55fc92174df88e8327f1f854",
+        "bytes": 21411
+      },
+      "dependencyPreparation": "Revalidated unchanged full dependency digest/stamp before admission. Own clean frontend snapshot has the same full dependency digest; current matching own-worktree dependencies reflinked, workspace links preserved. No immutable install was needed or invoked by this continuation. The producer automatic-install metadata side effect remains disclosed in prior support evidence.",
+      "frontendPort": 57529,
+      "newResultDirectory": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/CAS11-home-defr-run-20261020T134733Z",
+      "oldCAS5CAS7CAS9BindingsReused": false
+    },
+    "executablePreservation": {
+      "templateCopiedByteForByte": true,
+      "originalCallbackRetainedByteForByte": true,
+      "callbackEdits": false,
+      "productSourceOrTestEdits": false,
+      "atSessionAndPassiveModeObserver": "Accepted v2 current-live-prompt-baseline helpers unchanged; an empty actual launch baseline was recorded. Refusal controls reused without rerun.",
+      "nativeSupport": "Only the separately accepted v3 native helper was materialized. Its support review, 3 tests/81 assertions and 17 Python controls were reused without repetition.",
+      "sourceReviewsIdentityAndOtherAcceptanceCellsReplayed": false,
+      "preservedPriorReport": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/CAS11-main-report-preservation.json",
+        "sha256": "22b22b7ceda3bf15426491af50fcadb905d71f3f5d7746f446677139cb537721",
+        "bytes": 510
+      },
+      "priorEvidence": "All 47 prior report fields, all common fields from current main, accepted native-radio recovery, historical Studio400, source reviews, old callback failures and fixture-free native-input qualifiers retain their exact existing values."
+    },
+    "execution": {
+      "recordedCommand": "bun /home/edge/projects/rezics/rezics-next/scripts/goal/goalctl.ts job -- task goal -- test ./.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/aud012-home-only.test.ts",
+      "normalTaskAdmission": true,
+      "qaCommand": "task goal -- test ./.temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/aud012-home-only.test.ts",
+      "job": "0a551447-60bf-4742-b879-056a41428017",
+      "attempt": 68,
+      "continuationAttempt": 69,
+      "exitStatus": 201,
+      "resultClass": "assertion",
+      "taskExitStatus": 1,
+      "bunResult": {
+        "passed": 0,
+        "failed": 1,
+        "expectCalls": 20,
+        "testDurationMs": 111835.34
+      },
+      "qaRunId": null,
+      "qaRunIdQualification": "No standalone QA run ID emitted; exact normal-admission command, durable job record and full log retained.",
+      "jobRecord": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/CAS11-completed-job.json",
+        "sha256": "42d72b613040b13c339d62dfdc3105ed50c58ac3127914f2ce51743dbceca672",
+        "bytes": 1031
+      },
+      "log": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/CAS11-recorded-job.log",
+        "sha256": "e3b38ee4f0a0c72347bd701721ab68e6e1dc05a6d4d756963be3115d9daeffef",
+        "bytes": 2414
+      },
+      "originalDriverResult": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/CAS11-home-defr-run-20261020T134733Z/result.json",
+        "sha256": "bd1e655a977fdd74487cee4766664c6a82b98a8cc5570e901ca325633ad3a731",
+        "bytes": 839771
+      },
+      "finiteExecutions": 1,
+      "reruns": 0
+    },
+    "actualPremises": {
+      "freshOwnNormalOAuth": true,
+      "copiedPeerSession": false,
+      "authMethod": "Unchanged exact-pin signInAtAccounts normal OAuth PKCE using existing configured same fixture member; no saved/peer refresh state",
+      "eligibleSameActorBeforeAndAfter": true,
+      "initialSessionAgent": {
+        "at": "2026-10-20T13:49:00.795Z",
+        "status": 200,
+        "eligible": true,
+        "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839"
+      },
+      "finalSessionAgent": {
+        "status": 200,
+        "eligible": true,
+        "actingSubject": "https://rezics.com/id/71473997-6e2e-4e59-9044-01627a79e839"
+      },
+      "backend": {
+        "refreshRevision": "75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "source": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+        "observedAt": "2026-10-20T13:48:09.859Z",
+        "provenanceLimit": "Current shared refresh and source directory, not immutable historical runtime identity",
+        "processes": [
+          {
+            "pid": 1372265,
+            "source": "/home/edge/projects/rezics/rezics-next/.temp/stack/rezics-dev/backend-revisions/75409ac3c379a9f84212e48a8abdc6540c5c44a2",
+            "checkoutHead": "75409ac3c379a9f84212e48a8abdc6540c5c44a2"
+          }
+        ],
+        "readiness": {
+          "origin": "http://127.0.0.1:3001",
+          "status": 200
+        }
+      },
+      "ownedFrontendWarmupStatus": 200,
+      "liveBeforeAndAfterReadbacks": "Two genuine borrower reader-state200/continuation200 pairs. Both showed reading/null dates/CAS11, null progress, empty custom shelves, null global/realm rating, exact nextUnread5caa0cc4 and exact unread count1. Entire returned reader and continuation objects agree.",
+      "fiveApiQualification": "G-2831 NEW preparation supplied two complete five-API invariant readbacks, retained under source-custody. The unchanged borrower callback performs reader-state and continuation readbacks; it did not independently repeat the follow API or a five-API suite.",
+      "liveBeforeBorrowAtUTC": "2026-10-20T13:49:07.866Z",
+      "liveAfterCallbacksAtUTC": "2026-10-20T13:49:58.493Z",
+      "readerStateStatusWrites": 0,
+      "prohibitedReaderStateRequests": [],
+      "observedAutomaticBrowserWrites": [
+        {
+          "at": "2026-10-20T13:49:11.942Z",
+          "method": "PUT",
+          "url": "http://127.0.0.1:57529/api/main/v1/me/feed-watermarks/following",
+          "prohibited": false
+        },
+        {
+          "at": "2026-10-20T13:49:37.701Z",
+          "method": "PUT",
+          "url": "http://127.0.0.1:57529/api/main/v1/me/feed-watermarks/following",
+          "prohibited": false
+        }
+      ],
+      "automaticWriteQualification": "Both Home loads automatically emitted PUT /api/main/v1/me/feed-watermarks/following. The unchanged driver classified these outside its prohibited reader-state requests and recorded no response status. Do not claim zero application writes or infer their success.",
+      "requestFailures": [
+        {
+          "at": "2026-10-20T13:49:03.829Z",
+          "url": "http://127.0.0.1:57529/en",
+          "method": "GET",
+          "type": "fetch",
+          "error": "net::ERR_ABORTED"
+        }
+      ],
+      "requestFailureQualification": "One retained /en fetch net::ERR_ABORTED during setup; no browser console or page errors. No product failure inferred from the aborted request.",
+      "emptyActualPromptBaseline": true,
+      "nativePermissionOutcome": "qualified",
+      "persistentOptionTouched": false
+    },
+    "assertionReach": {
+      "cards": [
+        {
+          "id": "card-home-de-390",
+          "outcome": "failed",
+          "failure": {
+            "file": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/aud012-home-only.test.ts",
+            "line": 258,
+            "expression": "expect(headingReached).toBe(true)",
+            "actual": false,
+            "originalHeadingAssertionReached": true,
+            "originalDescriptionStatusAssertionReached": false,
+            "laterScreenshotAndAxeReached": false
+          },
+          "expectedHeading": "Weiterlesen",
+          "nativeCommands": {
+            "Control+Home": 1,
+            "h": 24
+          },
+          "nativeReceiptsAllV3OwnedBeforeAndAfter": true,
+          "uniqueOwnedClient": [
+            46137348
+          ],
+          "headingSpeechMatches": 0
+        },
+        {
+          "id": "card-home-fr-390",
+          "outcome": "failed",
+          "failure": {
+            "file": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/aud012-home-only.test.ts",
+            "line": 258,
+            "expression": "expect(headingReached).toBe(true)",
+            "actual": false,
+            "originalHeadingAssertionReached": true,
+            "originalDescriptionStatusAssertionReached": false,
+            "laterScreenshotAndAxeReached": false
+          },
+          "expectedHeading": "Reprendre la lecture",
+          "nativeCommands": {
+            "Control+Home": 1,
+            "h": 24
+          },
+          "nativeReceiptsAllV3OwnedBeforeAndAfter": true,
+          "uniqueOwnedClient": [
+            46137348
+          ],
+          "headingSpeechMatches": 0
+        }
+      ],
+      "domObservations": "Both original callbacks observed document200, the real localized Home card, title, localized badge, At the harbour and exact continuation href before native heading navigation. These DOM observations do not replace AT acceptance.",
+      "initialOwnedFocusAndBrowseMode": "Both locales recorded actual owned AT-SPI focus and passive False/Browse-mode observations for their REZICS document. No blind toggle occurred.",
+      "nativeReceipts": "All 50 original Control+Home/h receipts had supportVersion3, unique managed usable owned client46137348/browser2022683, qualified _NET_ACTIVE_WINDOW and X11 focus before and after.",
+      "actualOrcaContext": "Despite those receipts, Control+Home and heading navigation used retained active-frame GitHub and GitHub document structural roots/caret contexts in both locale spans. Neither expected Home heading appeared in its original speech span.",
+      "subsequentOriginalAssertions": "Sixteen Down commands, description/status speech, connected dispatcher/Pulse/AT-SPI outcome checks, screenshots and axe were not reached after headingReached=false. Final unchanged cell aggregate assertion failed at line269.",
+      "noHiddenOutcomeCatch": "The unchanged per-cell collector retained both failures and its final aggregate assertion failed the recorded job; no outcome was suppressed or relabeled as passing."
+    },
+    "inspectedEvidence": {
+      "speechAndReachInspection": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/CAS11-speech-and-reach-inspection.json",
+        "sha256": "3eb9b30eef9df2118cf02244b9e38143d1381ffa3fc000e4e332557fedc6da41",
+        "bytes": 16122
+      },
+      "nativeOrcaLog": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/CAS11-home-defr-run-20261020T134733Z/orca.debug",
+        "sha256": "6c0760106d9124ff53307be6e1f21e8e63cdb1c969ae0e22005433fbedcbe3cb",
+        "bytes": 4342372
+      },
+      "dispatcherLog": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/CAS11-home-defr-run-20261020T134733Z/speech-logs/speech-dispatcher.log",
+        "sha256": "27da9fa123899f60c339e37092396915a35c37c5a99704dc02c5249170ea70d7",
+        "bytes": 3108587
+      },
+      "atSpiEvents": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/CAS11-home-defr-run-20261020T134733Z/atspi.jsonl",
+        "sha256": "c428a08a427a6ab66ea203a03921be59dfa54da9d3b257d4e280c1b42b221ad7",
+        "bytes": 15259
+      },
+      "speechTransport": "Inspected native speech and dispatcher excerpts. Owned dispatcher retained222 Pulse: Wrote data rows. A73.5-second non-silent owned-sink PCM recording is retained; audio was not listened to or transcribed, and transport does not qualify the missing original heading/content outcome.",
+      "audio": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/CAS11-home-defr-run-20261020T134733Z/speech.wav",
+        "sha256": "736a6f65e8b3cef286373ca6c4bec4124f69a653467de75b4db8eb3e682eddd9",
+        "bytes": 2352078
+      },
+      "screenshots": {
+        "found": [],
+        "inspected": [],
+        "qualification": "Both heading assertions failed before the unchanged callbacks take screenshots. No PNG was generated or inspected; no new browser capture or substitute DOM assertion was made."
+      },
+      "axe": {
+        "reached": false,
+        "qualification": "Both callbacks failed before axe; no axe acceptance inferred."
+      },
+      "privateArtifactManifest": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/CAS11-private-artifact-manifest.json",
+        "sha256": "35bb67526b726a687ee859500954d4a268d13103e3d4664b95b50cf09f9ada53",
+        "bytes": 24465
+      }
+    },
+    "custody": {
+      "borrowerRelease": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/CAS11-home-defr-run-20261020T134733Z/borrower-release.json",
+        "sha256": "e89a74936a1d93cb817a09a366bcd2aaa16653ed7a52a2617f4184923ea01d16",
+        "bytes": 4764
+      },
+      "explicitRootBoundRelease": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/CAS11-explicit-root-bound-release.json",
+        "sha256": "0b0eb5425131a0c73dc91435da4565bca27b6a0b08faf6e291f3dba0fa7a346b",
+        "bytes": 7442
+      },
+      "releaseWriteQualification": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/CAS11-root-bound-release-write-qualification.json",
+        "sha256": "12b6f7a17f74d069c0b07d6a44eebd55364899341e247bb8a6fc317d10bd30d7",
+        "bytes": 1777
+      },
+      "independentActualShutdown": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/CAS11-independent-shutdown-verification.json",
+        "sha256": "b8e6fcb759e958a9cab0f5cc7335bfc34dc429ce60d26ddee364246974950f33",
+        "bytes": 1622
+      },
+      "ownedCleanupVerification": {
+        "path": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/CAS11-home-defr-run-20261020T134733Z/owned-cleanup-verification.json",
+        "sha256": "6913deb776b10fda49abdaff13c82b6289c69cb9dbfeeb625a17b1d44202f730",
+        "bytes": 1248
+      },
+      "thisNewRootBoundBorrowReleased": true,
+      "testReleaseAtUTC": "2026-10-20T13:50:00.676Z",
+      "ownedFrontendBrowserATInputAudioSocketsSinkAndJobStopped": true,
+      "actualProcessGroupAndPortAbsenceVerified": true,
+      "signalSentUsedAsShutdownProof": false,
+      "protectedTask1677097IdentityUnchanged": true,
+      "protectedHosts77717And78038": "Absent in before and after observations; never revived or acted on.",
+      "protectedPeerBackendOrKeepActions": false,
+      "restorationPerformedByBorrower": false,
+      "cleanupStillRequiredOwner": "SAME G-2831 only after Root consumes this exact CAS11 release and actual owned shutdown. Fresh actual current CAS, restore prior status/startedOn/finishedOn, TWO complete five-API invariant readbacks; abort intervening changes.",
+      "centralBundleCopy": "Private artifacts are already under the existing startup-review-G-2847 bundle in this allowed worktree. Main and every peer tree are read-only; manager copies this versioned bundle to central main storage."
+    },
+    "limits": [
+      "One finite execution only. Both original heading assertions failed; later genuine description/status/screenshot/axe acceptance remains unexecuted.",
+      "Owned EWMH/X11 focus and initial REZICS AT-SPI/Browse mode do not establish subsequent Orca frame/document alignment. Actual foreign-document context remains evidence, not a source defect verdict.",
+      "Installed75409 Web-consumer proof only; no current-main native/model/Studio qualification, new source review, production readiness or original class closure.",
+      "Library/identity/navigation and other reached cells, accepted source/offline controls and old failures were reused, not repeated.",
+      "No frontend or callback retry, product edit, reader-state write/reacquisition/restoration, actor/grant substitution, backend lifecycle, corpus/import operation or G-2823 image/default lease use."
+    ],
+    "instructionDisposition": {
+      "file": "docs/goals/audit-remediation-20261019/tasks/G-2847.md",
+      "decision": "2026-10-20T13:43:07Z",
+      "quote": "Cut to ONE finite original command for card-home-de-390/card-home-fr-390 only.",
+      "effect": "After the single failed command, inspect and preserve exact evidence, verify owned shutdown, release this CAS11 borrow and append the report. No runtime repair/retry or additional source/support review is authorized."
+    },
+    "documentationValidation": {
+      "command": "task docs:check",
+      "resultReceipt": ".temp/audit-remediation-20261019/two-hour-sprint/startup-review-G-2847/aud012-home-mode-observation-preparation-v3-owned-window-binding/CAS11-docs-check-receipt.json",
+      "resultReportedInWorkerHandoff": true
+    },
+    "managerNext": "Consume exact CAS11 release plus real shutdown and write qualifier; SAME G-2831 performs guarded semantic restoration. Assess actual original heading failures and persistent Orca other-document context with existing native-support owner. No original AUD-012/class closure or further original run follows from this result."
   }
 }
