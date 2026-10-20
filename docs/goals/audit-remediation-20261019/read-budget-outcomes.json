@@ -5243,5 +5243,154 @@
       "adapterAuthored": false
     },
     "claimsAndCustody": "All existing matrix evidence and persona expectations remain unchanged. No runtime, corpus, restore, new owner/instrumentation or proof closure. G-2791 sole production and G-2823 lifecycle/borrowers/stop custody remain intact; G-2762 owns Fuseki diagnostics and G-2764 consumes them."
+  },
+  "authenticatedMixedExecutableHandoff": {
+    "format": "original-authenticated-mixed-executable-support-v1",
+    "decision": "2026-10-20T11:15:14Z split full authenticated cross-hop and mixed-reader executable bodies from the verified notification selector",
+    "productMail": "3b2cfe30-f7d5-4641-85c1-fa15fdafcf49",
+    "result": "partial-source-handoff; executable bodies supplied; original public proof unexecuted",
+    "compilingPin": "ea5582f1b9245c17e4166561453ed4ac06df13de",
+    "immutablePacket": ".temp/original-read-cancellation-full-v1/handoff.json",
+    "mapping": {
+      "path": ".temp/original-read-cancellation-full-v1/outcome-mapping.json",
+      "sha256": "ff92cb202befb9c791c15f8d78095c8fc347214562c1cd7f5684db6e92625b13"
+    },
+    "sourceAndSupport": {
+      "selections.ts": {
+        "path": ".temp/original-read-cancellation-full-v1/selections.ts",
+        "sha256": "a8b99b1cb5381eaf170d47531e48d30c2aa385647641a68972b5c5e9ed9d6192"
+      },
+      "runtime.ts": {
+        "path": ".temp/original-read-cancellation-full-v1/runtime.ts",
+        "sha256": "580338b50c664a0e325397ff0f8e9b9935da83ffedbfac0329afc03eb2a849bc"
+      },
+      "authenticated-read-cancellation.test.ts": {
+        "path": ".temp/original-read-cancellation-full-v1/authenticated-read-cancellation.test.ts",
+        "sha256": "6c93b673644c830330b9895b87063583492c8970090de58be2fa2c0b8382df58"
+      },
+      "mixed-read-cancellation.test.ts": {
+        "path": ".temp/original-read-cancellation-full-v1/mixed-read-cancellation.test.ts",
+        "sha256": "b169c57325ff5c74272f5e19447f9054af077f7e08988d085212a917be1a1336"
+      },
+      "selection-check.ts": {
+        "path": ".temp/original-read-cancellation-full-v1/selection-check.ts",
+        "sha256": "b6685d7f4371f4f179532cd3364c2e70181dd07970e287f489350a64f978f8a2"
+      },
+      "Taskfile.yml": {
+        "path": ".temp/original-read-cancellation-full-v1/Taskfile.yml",
+        "sha256": "4a20985e4e3aa712cb9cb9e811625d6f7c47d79a11dad98556668235af3d80c4"
+      },
+      "README.md": {
+        "path": ".temp/original-read-cancellation-full-v1/README.md",
+        "sha256": "183a30b46428b1ea41ac7c28a6939867484efa18ec73e5b70710b017273bd065"
+      }
+    },
+    "exactRegistrations": {
+      "path": ".temp/original-read-cancellation-full-v1/selection.json",
+      "sha256": "b234bf8103ac4fe4927e988d169db35825a2d4e59fdee8f6724da240ac06954b"
+    },
+    "registrationCounts": {
+      "authenticatedSupport": 70,
+      "mixedSupport": 4,
+      "originalCanonicalAcceptance": 61,
+      "originalAcceptanceCellsClosed": 0
+    },
+    "originalRequirementMappings": {
+      "authenticated": "outcome-mapping.json#/lanes/authenticated: full executable file/cases and all original IAM02/IAM10/cross-hop predicates",
+      "mixed": "outcome-mapping.json#/lanes/mixed: full executable readers1/2/4/8 and original D5-001/assertions2/3; retained native capture1414-1422",
+      "notification": "Reuse .temp/original-read-cancellation-handoff/handoff.json and verification jobdb701d5f, unchanged five original bodies; do not restage or compile again."
+    },
+    "supersedesSourceAbsenceOnly": [
+      "originalCancellationSelectionHandoff.authenticatedCancellation.originalExecutable=null",
+      "originalCancellationSelectionHandoff.mixedReaders.originalExecutable=null"
+    ],
+    "personaMapping": [
+      {
+        "persona": "visitor",
+        "canonicalPersonaPointer": "#/personas/0",
+        "notificationCancellation": "irrelevant: anonymous personal inbox admission401; keep denial/privacy control",
+        "authenticatedCrossHop": "irrelevant to positive authenticated lane: no lawful session; anonymous denial retained",
+        "mixed": "anonymous401 disclosure control only; no personal notification positive read"
+      },
+      {
+        "persona": "stranger",
+        "canonicalPersonaPointer": "#/personas/1",
+        "notificationCancellation": "unchanged original selector in reused notification packet",
+        "authenticatedCrossHop": "all14 authenticated support titles for this persona in exactRegistrations",
+        "mixed": "normal-OAuth reader sessions preserve canonical authority/disclosure; exact reader-count sessions supplied by released runtime binding"
+      },
+      {
+        "persona": "member",
+        "canonicalPersonaPointer": "#/personas/2",
+        "notificationCancellation": "unchanged original selector in reused notification packet",
+        "authenticatedCrossHop": "all14 authenticated support titles for this persona in exactRegistrations",
+        "mixed": "normal-OAuth reader sessions preserve canonical authority/disclosure; exact reader-count sessions supplied by released runtime binding"
+      },
+      {
+        "persona": "owner",
+        "canonicalPersonaPointer": "#/personas/3",
+        "notificationCancellation": "unchanged original selector in reused notification packet",
+        "authenticatedCrossHop": "all14 authenticated support titles for this persona in exactRegistrations",
+        "mixed": "normal-OAuth reader sessions preserve canonical authority/disclosure; exact reader-count sessions supplied by released runtime binding"
+      },
+      {
+        "persona": "moderator",
+        "canonicalPersonaPointer": "#/personas/4",
+        "notificationCancellation": "unchanged original selector in reused notification packet",
+        "authenticatedCrossHop": "all14 authenticated support titles for this persona in exactRegistrations",
+        "mixed": "normal-OAuth reader sessions preserve canonical authority/disclosure; exact reader-count sessions supplied by released runtime binding"
+      },
+      {
+        "persona": "operator",
+        "canonicalPersonaPointer": "#/personas/5",
+        "notificationCancellation": "unchanged original selector in reused notification packet",
+        "authenticatedCrossHop": "all14 authenticated support titles for this persona in exactRegistrations",
+        "mixed": "normal-OAuth reader sessions preserve canonical authority/disclosure; exact reader-count sessions supplied by released runtime binding"
+      }
+    ],
+    "runtimeInput": {
+      "variable": "REZICS_ORIGINAL_CANCELLATION_INPUT",
+      "descriptor": "Private original-read-cancellation-input-v1 JSON: module {path,sha256}, qualification {path,sha256}; hashes checked before module import. This is an executable input descriptor, not a corpus/ready manifest.",
+      "export": "G-2762-owned module exports bindOriginalCancellation(input): Promise<Bindings> as runtime.ts; no default/mock/empty fallback.",
+      "actualHttp": "Real Web /api/main/v1/... BFF, real OAuth cookie, real Main and Account servers/owners. No local/anonymous/synthetic Account replacement.",
+      "missingInputs": [
+        {
+          "owner": "G-2791",
+          "operation": "Release genuine compatible governance/query consumer corpus and stopped backup/copies; exact receipts and five recipients with >=24 visible acknowledged non-null realm_role_change subjects each. Original-baseline producer/restore compatibility remains unsupported.",
+          "retainedGovernanceManifest": ".temp/audit-bounded-reads/notifications-governance/corpus.json",
+          "retainedGovernanceBackup": ".temp/audit-bounded-reads/notifications-governance/owners/backup.json",
+          "newPreparationMs": 0,
+          "runtimeAssertionReached": false
+        },
+        {
+          "owner": "G-2823",
+          "operation": "Qualify and release exact isolated real Web/Main/Account runtime/custody, supported normal OAuth/private sessions, product/affected-source/native/model/migration/backup compatibility and independent reader-count copy identities. Existing Book/image borrowers and stop custody unchanged; no lease offered by this packet."
+        },
+        {
+          "owner": "G-2762",
+          "operation": "Bind existing supported actual shared-JWKS/introspection/final-currentAssertion/native-active controls, Request/principal/handoff captures, complete real owner release/pending transitions and unchanged cost allocations to Bindings. Source/runtime input binding is required; no request to G-2823 for transport instrumentation, no shared production API/new diagnostic owner."
+        }
+      ],
+      "missingVersusExecutable": "The two executable bodies are now supplied; their execution still requires actual owner runtime inputs. Missing/unknown/incomplete/unavailable observations raise Prerequisite and never count as pending-zero or a canonical defect assertion.",
+      "lifecycle": "releaseSupport only releases this test support; no runtime, restore, borrower, owner stop or storage cleanup operation is authored."
+    },
+    "stackFreeChecks": {
+      "finalCompileAndTypesJob": "96320fd5-efa5-4896-8c2a-2535a5f7f5ca",
+      "result": "passed",
+      "registrationJob": "06221e37-3145-49f6-aff0-e5d1f9fb58ba (registration step passed; its later first type step failed and is retained in mapping)",
+      "registrationReused": "Exact test registration loops/titles/30-second timeouts unchanged by later body corrections. No callback or public assertion executed.",
+      "documentation": "task docs:check after this append; final actual result is in immutable packet and worker handoff."
+    },
+    "unchangedClaims": {
+      "originalBaselineFailures": "pending",
+      "fixedProductPasses": "pending",
+      "originalOutcomeAssertionsReachedThisContinuation": false,
+      "canonicalClassClosures": [],
+      "original61Acceptance": "unchanged",
+      "historicalEvidence": "All prior matrix keys/values, runs, failures, assertion reach and passing controls preserved. Later observations remain supplementary; no original/fixed proof relabelled.",
+      "rootCauseGaps": "D5-002 SQL-timeout confounder, notification allocation exhaustion and Feed identity premise, refresh persistent-fault trigger remain unconfirmed.",
+      "ownership": "Existing G-2763/G-2765/G-2786 repairs, G-2764 discovery, G-2766 refresh unchanged. G-2762 alone owns pre-debit diagnostics; G-2764 consumes them. No duplicate owner or exited wave restart."
+    },
+    "next": "Relay this versioned source packet to existing G-2762/G-2823. They consume executable selections with G-2791 sole producer inputs and explicit separate runtime/proof admission. No original outcome or canonical class closes from this support handoff."
   }
 }
