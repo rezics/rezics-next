@@ -81,16 +81,16 @@ test('a refused call debit is observed before transport with unchanged enclosing
   } finally { await f.stop(); }
 });
 
-test('a refused body debit reports delivered bytes and HTTP status without spending any enclosing bytes', async () => {
+test('a refused body debit reports delivered bytes without a debit HTTP status or spending any enclosing bytes', async () => {
   const f = fixture(), events: FusekiReadObservation[] = [];
   try {
     await expect(withFusekiReadRequest(request(), { ...limits, bytes: bytes - 1 },
       () => f.graph.query('ASK {}'), keep(events))).rejects.toBeInstanceOf(FusekiReadBudgetExceeded);
     const refusal = events.find(event => event.stage === 'refused-debit')!;
-    expect(refusal).toMatchObject({ cause: 'byte-budget', httpStatus: 200, actualBytes: bytes,
+    expect(refusal).toMatchObject({ cause: 'byte-budget', httpStatus: null, actualBytes: bytes,
       debit: { counter: 'bytesLeft', amount: bytes } });
     expect(counters(refusal)).toEqual([[71, bytes - 1]]);
-    expect(events.at(-1)).toMatchObject({ status: 'refused', actualBytes: bytes });
+    expect(events.at(-1)).toMatchObject({ status: 'refused', httpStatus: 200, actualBytes: bytes });
     expect(f.transports()).toBe(1);
   } finally { await f.stop(); }
 });

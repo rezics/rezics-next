@@ -163,7 +163,7 @@ function shortenReadDeadline(budget: FusekiReadBudget, deadline: number): void {
 
 /** Enter before admission/readiness. Owners keep their published allocations;
  * an operation without an explicit owner uses the bounded fallback. The optional
- * private sink observes this owner's lifetime; it is detached on exit and never awaited. */
+ * private sink observes this request until exit and is never awaited. */
 export async function withFusekiReadRequest<T>(request: Request, limits: ReadLimits,
   read: () => T | Promise<T>, observer?: FusekiReadObserver): Promise<T> {
   // Web forwards a positive safe-integer Unix timestamp. Convert its remaining
@@ -187,11 +187,12 @@ export async function withFusekiReadRequest<T>(request: Request, limits: ReadLim
     // allocation already. This is observation, not a new budget or transport.
     const scope = readScopes.get(parent)!;
     const previous = scope.observation;
+    const previousCaller = scope.caller;
     const observation: ReadObservationState = { observer, nextCall: 0, nextOwner: 0, owners: new WeakMap() };
     scope.observation = observation;
     scope.caller ??= readCaller();
     try { return await read(); }
-    finally { observation.observer = undefined; scope.observation = previous; }
+    finally { observation.observer = undefined; scope.observation = previous; scope.caller = previousCaller; }
   }
   const controller = new AbortController();
   const budget: FusekiReadBudget = {
@@ -305,7 +306,7 @@ function emitReadObservation(call: ObservedReadCall | undefined, stage: FusekiRe
     debit: debit && Object.freeze({ ...debit }), nativeMethod: call.nativeMethod,
     httpMethod: call.nativeMethod === 'commandHealth' || call.nativeMethod === 'searchDeltaSince' ? 'GET' : 'POST',
     endpoint: call.nativeMethod === 'query' ? 'query' : 'command', queryHash: call.queryHash,
-    caller: call.caller, status, httpStatus: call.httpStatus, actualBytes: call.actualBytes,
+    caller: call.caller, status, httpStatus: stage === 'refused-debit' ? null : call.httpStatus, actualBytes: call.actualBytes,
     aborted: call.signal?.aborted ?? allocations.some(allocation => allocation.aborted),
     cause: call.cause, allocations: Object.freeze(allocations) });
   try {
