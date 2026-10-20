@@ -40,16 +40,21 @@ function sourceQuote(quote: SourceQuote): void {
     throw new Error(`Public corpus quote is absent from frozen source: ${quote.file}`);
 }
 
-function admissionJson(pin: AuditFilePin, label: string): unknown {
+function admissionBytes(pin: AuditFilePin, label: string): Buffer {
   if (!pin || typeof pin.file !== 'string' || typeof pin.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(pin.sha256))
     throw new Error(`TEST PREMISE: ${label} needs an existing producer file/digest pin`);
   try {
     const bytes = readFileSync(localFile(pin.file));
     if (createHash('sha256').update(bytes).digest('hex') !== pin.sha256) throw new Error('digest differs');
-    return JSON.parse(bytes.toString('utf8'));
+    return bytes;
   } catch (error) {
     throw new Error(`TEST PREMISE: ${label} pinned evidence is invalid: ${pin.file}`, { cause: error });
   }
+}
+function admissionJson(pin: AuditFilePin, label: string): unknown {
+  const bytes = admissionBytes(pin, label);
+  try { return JSON.parse(bytes.toString('utf8')); }
+  catch (error) { throw new Error(`TEST PREMISE: ${label} pinned evidence is invalid: ${pin.file}`, { cause: error }); }
 }
 
 /** Fixture admission only; genuine source, rights, structure and publication checks still follow. */
@@ -65,6 +70,119 @@ export function assertPublicDomainWorkAdmission(corpus: Pick<PublicDomainCorpus,
     if (!pin) throw new Error(`TEST PREMISE: additional native Work ${target.work} is missing its creation receipt`);
     assertPublicDomainNativeCreation(target, admissionJson({ file: pin.path, sha256: pin.sha256 }, 'native creation receipt'));
   }
+}
+
+function recipePremise(condition: unknown, detail: string): asserts condition {
+  if (!condition) throw new Error(`TEST PREMISE: public Recipe ${detail}`);
+}
+function recipeRecord(value: unknown): Record<string, unknown> {
+  recipePremise(value && typeof value === 'object' && !Array.isArray(value), 'receipt/projection is missing');
+  return value as Record<string, unknown>;
+}
+function nativeIdentity(value: unknown): value is string {
+  return typeof value === 'string' && /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(value);
+}
+function nonempty(value: unknown): value is string { return typeof value === 'string' && !!value.trim(); }
+function recipeReceipt(pin: PublicRecipe['rightsReceipt'], method: 'GET' | 'POST', path: string, recipe: PublicRecipe) {
+  recipePremise(pin, `needs its actual ${path} receipt pin`);
+  const receipt = recipeRecord(admissionJson({ file: pin.path, sha256: pin.sha256 }, 'Recipe owner receipt'));
+  const caller = recipeRecord(receipt.caller), result = recipeRecord(receipt.answer);
+  recipePremise(nonempty(receipt.id) && nonempty(receipt.phase) && !('error' in receipt)
+    && receipt.method === method && typeof receipt.startedAt === 'number' && Number.isFinite(receipt.startedAt)
+    && receipt.startedAt > 0 && typeof receipt.finishedAt === 'number' && Number.isFinite(receipt.finishedAt)
+    && receipt.finishedAt >= receipt.startedAt && nonempty(caller.realm) && caller.persona === recipe.publisher
+    && nonempty(caller.accountId) && nativeIdentity(caller.actingSubject), 'needs a successful authenticated owner receipt');
+  if (method === 'GET') {
+    recipePremise(typeof receipt.path === 'string' && receipt.path.startsWith(`${path}?`), 'read receipt targets another Work');
+    const query = new URLSearchParams(receipt.path.slice(path.length + 1));
+    recipePremise(query.size === 1 && query.get('actingSubject') === caller.actingSubject
+      && receipt.status === 200 && receipt.key === null && receipt.body === null, 'read receipt is failed or misbound');
+  } else recipePremise(receipt.path === path && typeof receipt.key === 'string'
+    && /^[A-Za-z0-9:_./-]{1,128}$/.test(receipt.key)
+    && (receipt.status === 201 && result.replayed === false || receipt.status === 200 && result.replayed === true),
+  'write receipt is failed or lacks its replay identity');
+  return { receipt, caller, result, body: method === 'POST' ? recipeRecord(receipt.body) : {},
+    startedAt: receipt.startedAt, finishedAt: receipt.finishedAt };
+}
+
+function assertCitedRecipeHeader(recipe: PublicRecipe, value: unknown): void {
+  const header = recipeRecord(value), rights = recipeRecord(header.rights);
+  recipePremise(header.id === recipe.work && header.revision === recipe.workRevision && header.mainVersion === recipe.mainVersion
+    && header.publicationState === 'published' && header.disclosure === 'public'
+    && header.structurePublicationHead === recipe.publicationDecision
+    && rights.basis === 'public-domain' && isDeepStrictEqual(rights.source, recipe.citation),
+  'current publication head or cited source differs from its actual publication');
+}
+
+/** Qualify producer metadata, never substitute observed reads for independent source expectations. */
+export function assertPublicRecipeAdmission(recipe: PublicRecipe): void {
+  recipePremise(recipe.source && nonempty(recipe.source.author) && nonempty(recipe.source.url)
+    && (recipe.source.license === null || nonempty(recipe.source.license)), 'needs truthful source attribution');
+  if ('record' in recipe.source || 'observation' in recipe.source) {
+    recipePremise(nativeIdentity(recipe.source.record) && nativeIdentity(recipe.source.observation) && recipe.citation === undefined,
+      'retained Source needs both native identities and cannot masquerade as a manual citation');
+    return;
+  }
+  recipePremise(recipe.creationReceipt, 'independent citation needs its native creation receipt');
+  const creation = recipeRecord(admissionJson({ file: recipe.creationReceipt.path, sha256: recipe.creationReceipt.sha256 },
+    'native creation receipt'));
+  assertPublicDomainNativeCreation(recipe, creation);
+  const rights = recipeReceipt(recipe.rightsReceipt, 'POST', '/v1/rights/use-assessments', recipe);
+  const publication = recipeReceipt(recipe.publicationReceipt, 'POST', '/v1/work-publications', recipe);
+  const header = recipeReceipt(recipe.sourceReceipt, 'GET', `/v1/works/${short(recipe.work)}`, recipe);
+  const read = recipeReceipt(recipe.publishedRecipeReceipt, 'GET', `/v1/recipes/works/${short(recipe.work)}`, recipe);
+  const citation = { kind: 'manual-citation', ...recipe.source, rightsAssessmentId: recipe.rightsAssessmentId,
+    transcriber: publication.caller.actingSubject };
+  recipePremise(typeof recipe.rightsAssessmentId === 'string'
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(recipe.rightsAssessmentId)
+    && isDeepStrictEqual(recipe.citation, citation) && isDeepStrictEqual(recipe.observedSource, citation)
+    && [recipe.work, recipe.workRevision, recipe.mainVersion, recipe.structure, recipe.revision].every(nativeIdentity)
+    && [recipe.publicationDecision, recipe.selectedGeneration, recipe.sourceRoot].every(nonempty),
+  'independent citation or publication identities are incomplete');
+  recipePremise([rights, header, read].every(item => isDeepStrictEqual(item.caller, publication.caller))
+    && Number(creation.finishedAt) <= rights.startedAt && rights.finishedAt <= publication.startedAt
+    && publication.finishedAt <= header.startedAt && publication.finishedAt <= read.startedAt,
+  'owner or ordered creation/Rights/publication/read custody differs');
+  const material = recipeRecord(rights.body.material);
+  recipePremise(rights.body.profile === 'rights-use-assessment-v1' && rights.body.actingSubject === rights.caller.actingSubject
+    && rights.body.idempotencyKey === rights.receipt.key && material.scopeKind === 'work' && material.workId === recipe.work
+    && material.component === 'body' && ['provider', 'namespace', 'sourceRecordId', 'contentVariantId', 'mediaAsset']
+      .every(field => material[field] === null)
+    && nonempty(rights.result.profile) && rights.result.assessmentId === recipe.rightsAssessmentId
+    && nonempty(rights.result.materialId) && rights.body.expectedAssessment === rights.result.predecessor
+    && (rights.result.predecessor === null || nonempty(rights.result.predecessor))
+    && Object.entries({ expressionKind: 'expression', family: 'data_rights', useKind: 'redistribution',
+      useScope: 'rezics:public-text', basis: 'public_domain', outcome: 'supported' })
+      .every(([field, value]) => rights.body[field] === value && rights.result[field] === value),
+  'Rights receipt does not support this exact public Work body/use');
+  const evidence = recipeRecord(rights.body.evidence), source = recipeRecord(evidence.source), terms = recipeRecord(evidence.terms);
+  recipePremise(source.url === recipe.source.url && nonempty(terms.url)
+    && [...recipe.ingredients, ...recipe.steps].some(item => item.evidence.file === source.file && item.evidence.sha256 === source.sha256),
+  'Rights source evidence differs from the independent source quotes');
+  for (const value of Object.values(evidence)) {
+    const item = recipeRecord(value);
+    admissionBytes({ file: item.file as string, sha256: item.sha256 as string }, 'Recipe Rights source');
+    if ('exact' in item) sourceQuote(item as unknown as SourceQuote);
+  }
+  recipePremise(nonempty(terms.exact), 'Rights terms need their frozen exact quote');
+  const request = publication.body, result = publication.result;
+  recipePremise(request.profile === 'work-structure-publication-v1' && request.operation === 'publish'
+    && request.work === recipe.work && request.actingSubject === publication.caller.actingSubject
+    && request.expectedWorkHead === recipe.workRevision && request.expectedMainVersion === recipe.mainVersion
+    && request.structure === recipe.structure && request.expectedStructureHead === recipe.revision
+    && request.expectedPublicationHead === result.predecessor && (result.predecessor === null || nonempty(result.predecessor))
+    && request.disclosure === 'public' && request.rightsBasis === 'public-domain' && !('sourceObservation' in request)
+    && isDeepStrictEqual(request.citation, recipe.source) && request.rightsAssessmentId === recipe.rightsAssessmentId
+    && result.profile === request.profile && result.operation === 'publish' && result.work === recipe.work
+    && result.mainVersion === recipe.mainVersion && result.structure === recipe.structure && result.structureRevision === recipe.revision
+    && result.structureProfile === 'recipe-composition' && result.publicationDecision === recipe.publicationDecision
+    && result.selectedGeneration === recipe.selectedGeneration && result.sourceRoot === recipe.sourceRoot,
+  'publication receipt/head does not bind this exact cited Recipe');
+  assertCitedRecipeHeader(recipe, header.result);
+  recipePremise(read.result.profile === 'recipe-work-page-v1' && read.result.structure === recipe.structure
+    && read.result.revision === recipe.revision && Array.isArray(read.result.measures)
+    && isDeepStrictEqual(recipe.publishedRecipeRead, read.result) && isDeepStrictEqual(recipe.observedMeasures, read.result.measures),
+  'published readback must come from its pinned actual response, separately from expected measures');
 }
 
 export function loadPublicDomainCorpus(selection: PublicDomainSelection): PublicDomainCorpus {
@@ -96,8 +214,7 @@ export function assertPublicDomainSelectedPremises(corpus: PublicDomainSelectedC
     .filter((item): item is PublicRecipe => item !== undefined);
   assertPublicDomainWorkAdmission(corpus, [...availableRecipes, ...(corpus.book ? [corpus.book] : [])]);
   for (const item of availableRecipes) {
-    if (!item.source.author || !item.source.observation)
-      throw new Error('TEST PREMISE: real recipes need source attribution and nonempty structure');
+    assertPublicRecipeAdmission(item);
     for (const citation of [...item.ingredients, ...item.steps, ...item.measures, ...item.substitutions]) sourceQuote(citation.evidence);
   }
   const book = corpus.book;
@@ -122,8 +239,7 @@ export function assertPublicDomainSelectedPremises(corpus: PublicDomainSelectedC
   const recipes = selection === 'recipe' ? [corpus.richRecipe!]
     : [corpus.noNutritionRecipe!, ...corpus.nutritionRecipes!];
   for (const item of recipes) {
-    if (!item.source.author || !item.source.observation
-      || !item.ingredients.length || !item.steps.length)
+    if (!item.ingredients.length || !item.steps.length)
       throw new Error('TEST PREMISE: real recipes need source attribution and nonempty structure');
     const serving = item.measures.find(measure => measure.value.kind === 'servings')?.value.value;
     if (!serving || serving.numerator <= 0 || serving.denominator <= 0
@@ -398,18 +514,25 @@ export async function publicDomainFixture(selection: PublicDomainSelection) {
   } };
 }
 
-/** Setup asserts the grant, truthful publication and anonymous non-null receipt
- * before any test.failing body can classify an outcome failure. */
+/** Retained Source consumers publish once; independent citations verify the
+ * producer's existing publication without issuing a second null-head command. */
 export async function publishPublicRecipe(people: PersonaSessions, recipe: PublicRecipe): Promise<void> {
   const publisher = people[recipe.publisher];
-  await grantPersonaFixtureAuthority(publisher, [{ scope: `work:publish:${recipe.work}`, action: 'work.publish' }]);
-  const receipt = await answer<{ publicationDecision: string }>(publisher.main('POST', '/v1/work-publications', {
-    profile: 'work-structure-publication-v1', operation: 'publish', work: recipe.work,
-    actingSubject: publisher.actingSubject, expectedWorkHead: recipe.workRevision,
-    expectedMainVersion: recipe.mainVersion, structure: recipe.structure, expectedStructureHead: recipe.revision,
-    expectedPublicationHead: null, disclosure: 'public', rightsBasis: 'public-domain', sourceObservation: recipe.source.observation,
-  }), 201);
-  expect(receipt.publicationDecision).toBeString();
+  assertPublicRecipeAdmission(recipe);
+  if (recipe.citation) {
+    recipePremise(publisher.actingSubject === recipe.citation.transcriber, 'publisher differs from its actual citation owner');
+    const header = await answer(people.visitor.main('GET', `/v1/works/${short(recipe.work)}`));
+    assertCitedRecipeHeader(recipe, header);
+  } else {
+    await grantPersonaFixtureAuthority(publisher, [{ scope: `work:publish:${recipe.work}`, action: 'work.publish' }]);
+    const receipt = await answer<{ publicationDecision: string }>(publisher.main('POST', '/v1/work-publications', {
+      profile: 'work-structure-publication-v1', operation: 'publish', work: recipe.work,
+      actingSubject: publisher.actingSubject, expectedWorkHead: recipe.workRevision,
+      expectedMainVersion: recipe.mainVersion, structure: recipe.structure, expectedStructureHead: recipe.revision,
+      expectedPublicationHead: null, disclosure: 'public', rightsBasis: 'public-domain', sourceObservation: recipe.source.observation,
+    }), 201);
+    expect(receipt.publicationDecision).toBeString();
+  }
   const page = await answer<RecipePage | null>(people.visitor.main('GET', `/v1/recipes/works/${short(recipe.work)}`));
   expect(page, 'TEST PREMISE: successful publication must have an anonymous non-null recipe').not.toBeNull();
   expect(page?.revision).toBe(recipe.revision);

@@ -6,8 +6,8 @@ import type { AuditCommandReceipt, AuditOriginals } from '../fixtures/audit-corp
 import { assertPublicDomainNativeCreation, assertPublicDomainOriginalWorks, type PublicDomainSelectedCorpus,
   type PublicDomainCorpus, type PublicRecipe, type RealBook, type Measure } from '../fixtures/catalogue-public-domain.ts';
 import { assertPublicDomainWorkAdmission, assertPublicDomainSelectedPremises, assertPublicDomainBorrowedBook,
-  attachPublicDomainBook, loadPublicDomainBorrowedBook } from '../support/catalogue-public-domain.ts';
-import { personaNames } from '../support/personas.ts';
+  assertPublicRecipeAdmission, attachPublicDomainBook, loadPublicDomainBorrowedBook, publishPublicRecipe } from '../support/catalogue-public-domain.ts';
+import { personaNames, type PersonaSessions } from '../support/personas.ts';
 
 // Synthetic metadata exercises admission only; none of these IDs or receipts is product evidence.
 const id = (value: number) => `https://rezics.com/id/00000000-0000-4000-8000-${value.toString(16).padStart(12, '0')}`;
@@ -205,6 +205,198 @@ function unitRecipe(): PublicRecipe {
     measures: ['servings', 'cooking-duration'].map(kind => ({ value: measure(kind as Measure['kind']), evidence })),
     nutrition: 'absent', substitutions: [] };
 }
+
+function citedRecipe() {
+  const recipe = unitRecipe(), terms = citation();
+  recipe.source = { author: recipe.source.author, url: recipe.source.url, license: recipe.source.license };
+  recipe.rightsAssessmentId = id(70_000).slice(-36);
+  recipe.publicationDecision = id(70_001);
+  recipe.selectedGeneration = 'unit-selected-generation';
+  recipe.sourceRoot = 'unit-source-root';
+  recipe.citation = { kind: 'manual-citation', ...recipe.source, rightsAssessmentId: recipe.rightsAssessmentId, transcriber: actor };
+  const receipt = (name: string, path: string, body: object, result: object, startedAt: number): AuditCommandReceipt => ({
+    ...creation(), id: `unit-${name}`, key: `unit-${name}`, path, body, answer: result,
+    startedAt, finishedAt: startedAt + 1,
+  } as AuditCommandReceipt);
+  const rights = receipt('rights', '/v1/rights/use-assessments', {
+    profile: 'rights-use-assessment-v1', actingSubject: actor, material: { scopeKind: 'work', workId: work,
+      component: 'body', provider: null, namespace: null, sourceRecordId: null, contentVariantId: null, mediaAsset: null },
+    expressionKind: 'expression', family: 'data_rights', useKind: 'redistribution', useScope: 'rezics:public-text',
+    basis: 'public_domain', outcome: 'supported', expectedAssessment: null, idempotencyKey: 'unit-rights',
+    evidence: { source: { ...recipe.ingredients[0]!.evidence, url: recipe.source.url },
+      terms: { ...terms, url: 'https://example.invalid/unit-terms' } },
+  }, { profile: 'rights-use-assessment-v1', assessmentId: recipe.rightsAssessmentId, materialId: id(70_002).slice(-36),
+    expressionKind: 'expression', family: 'data_rights', useKind: 'redistribution', useScope: 'rezics:public-text',
+    basis: 'public_domain', outcome: 'supported', predecessor: null, replayed: false }, 1002);
+  const publication = receipt('publication', '/v1/work-publications', {
+    profile: 'work-structure-publication-v1', operation: 'publish', work, actingSubject: actor,
+    expectedWorkHead: recipe.workRevision, expectedMainVersion: mainVersion,
+    structure: recipe.structure, expectedStructureHead: recipe.revision, expectedPublicationHead: null,
+    disclosure: 'public', rightsBasis: 'public-domain', citation: recipe.source, rightsAssessmentId: recipe.rightsAssessmentId,
+  }, { profile: 'work-structure-publication-v1', operation: 'publish', work, mainVersion,
+    structure: recipe.structure, structureRevision: recipe.revision, structureProfile: 'recipe-composition',
+    publicationDecision: recipe.publicationDecision, selectedGeneration: recipe.selectedGeneration, sourceRoot: recipe.sourceRoot,
+    predecessor: null, replayed: false }, 1004);
+  const read = (name: string, path: string, result: object, startedAt: number): AuditCommandReceipt => ({
+    ...receipt(name, `${path}?${new URLSearchParams({ actingSubject: actor })}`, {}, result, startedAt),
+    method: 'GET', body: null, key: null, status: 200,
+  });
+  const header = read('cited-header', `/v1/works/${work.slice(-36)}`, {
+    id: work, revision: recipe.workRevision, mainVersion, disclosure: 'public', publicationState: 'published',
+    structurePublicationHead: recipe.publicationDecision, rights: { basis: 'public-domain', source: structuredClone(recipe.citation) },
+  }, 1006);
+  const published = read('published-recipe', `/v1/recipes/works/${work.slice(-36)}`, {
+    profile: 'recipe-work-page-v1', structure: recipe.structure, revision: recipe.revision,
+    occurrences: [], ingredients: [], measures: recipe.measures.map(item => structuredClone(item.value)),
+  }, 1008);
+  recipe.observedSource = structuredClone(recipe.citation);
+  recipe.publishedRecipeRead = structuredClone(published.answer) as unknown as PublicRecipe['publishedRecipeRead'];
+  recipe.observedMeasures = structuredClone(answer(published).measures) as Measure[];
+  return { recipe, rights, publication, header, published };
+}
+function pinCitedRecipe(input: ReturnType<typeof citedRecipe>) {
+  input.recipe.rightsReceipt = receiptPin(input.rights);
+  input.recipe.publicationReceipt = receiptPin(input.publication);
+  input.recipe.sourceReceipt = receiptPin(input.header);
+  input.recipe.publishedRecipeReceipt = receiptPin(input.published);
+  return input.recipe;
+}
+
+test('retained Source admission keeps the existing representation and requires both native Source identities', () => {
+  const recipe = unitRecipe();
+  expect(() => assertPublicRecipeAdmission(recipe)).not.toThrow();
+  for (const field of ['record', 'observation'] as const) {
+    const incomplete = structuredClone(recipe);
+    delete (incomplete.source as Partial<typeof incomplete.source>)[field];
+    expect(() => assertPublicRecipeAdmission(incomplete)).toThrow('both native identities');
+  }
+  recipe.citation = citedRecipe().recipe.citation;
+  expect(() => assertPublicRecipeAdmission(recipe)).toThrow('cannot masquerade');
+});
+
+test('independent citation admits only separate actual creation/Rights/publication/read receipts without fabricating Source IDs', () => {
+  const recipe = pinCitedRecipe(citedRecipe()), before = structuredClone(recipe);
+  expect(() => assertPublicRecipeAdmission(recipe)).not.toThrow();
+  expect(() => assertPublicDomainSelectedPremises(selected({ richRecipe: recipe }), 'recipe')).not.toThrow();
+  expect(recipe).toEqual(before);
+  expect('record' in recipe.source).toBe(false);
+  expect('observation' in recipe.source).toBe(false);
+});
+
+for (const field of ['creationReceipt', 'rightsReceipt', 'publicationReceipt', 'sourceReceipt', 'publishedRecipeReceipt',
+  'citation', 'rightsAssessmentId', 'publicationDecision', 'selectedGeneration', 'sourceRoot',
+  'observedSource', 'publishedRecipeRead', 'observedMeasures'] as const) {
+  test(`independent citation refuses missing ${field} before outcomes`, () => {
+    const recipe = pinCitedRecipe(citedRecipe());
+    delete recipe[field];
+    expect(() => assertPublicRecipeAdmission(recipe)).toThrow('TEST PREMISE');
+  });
+}
+
+test('unexecuted references or inline expected success cannot admit an independent citation', () => {
+  const recipe = citedRecipe().recipe;
+  recipe.rightsReceipt = { $audit: 'ref', from: 'receipt:unexecuted-rights', pointer: '' } as unknown as PublicRecipe['rightsReceipt'];
+  expect(() => assertPublicRecipeAdmission(recipe)).toThrow('existing producer file/digest pin');
+  recipe.rightsReceipt = { status: 201, answer: { outcome: 'supported' } } as unknown as PublicRecipe['rightsReceipt'];
+  expect(() => assertPublicRecipeAdmission(recipe)).toThrow('existing producer file/digest pin');
+});
+
+type CitedInput = ReturnType<typeof citedRecipe>;
+const citationRefusals: Array<[string, (input: CitedInput) => void]> = [
+  ['failed Rights', input => { input.rights.status = 403; }],
+  ['transport error', input => { input.rights.error = 'unit transport error'; }],
+  ['another Rights Work', input => { (input.rights.body as Record<string, unknown>).material = { scopeKind: 'work', workId: id(90_000) }; }],
+  ['unsupported actual Rights', input => { answer(input.rights).outcome = 'unsupported'; }],
+  ['missing actual Rights profile', input => { delete answer(input.rights).profile; }],
+  ['another Rights use', input => { answer(input.rights).useScope = 'unit:private-use'; }],
+  ['stale Rights predecessor', input => { answer(input.rights).predecessor = id(90_000).slice(-36); }],
+  ['another assessment', input => { answer(input.rights).assessmentId = id(90_000).slice(-36); }],
+  ['different receipt owner', input => { input.header.caller.accountId = 'unit-another-account'; }],
+  ['different publisher persona', input => { input.publication.caller.persona = 'operator'; }],
+  ['read before publication', input => { input.published.startedAt = 1001; input.published.finishedAt = 1002; }],
+  ['stale Work head', input => { (input.publication.body as Record<string, unknown>).expectedWorkHead = id(90_000); }],
+  ['stale Structure head', input => { (input.publication.body as Record<string, unknown>).expectedStructureHead = id(90_000); }],
+  ['stale publication CAS', input => { answer(input.publication).predecessor = id(90_000); }],
+  ['wrong publication assessment', input => { (input.publication.body as Record<string, unknown>).rightsAssessmentId = id(90_000).slice(-36); }],
+  ['fabricated Source observation', input => { (input.publication.body as Record<string, unknown>).sourceObservation = id(90_000); }],
+  ['altered citation', input => { (input.publication.body as Record<string, unknown>).citation = { ...input.recipe.source, author: 'Another author' }; }],
+  ['wrong publication decision', input => { answer(input.publication).publicationDecision = id(90_000); }],
+  ['wrong selected generation', input => { answer(input.publication).selectedGeneration = 'another-generation'; }],
+  ['wrong source root', input => { answer(input.publication).sourceRoot = 'another-root'; }],
+  ['stale current publication head', input => { answer(input.header).structurePublicationHead = id(90_000); }],
+  ['another current Work', input => { answer(input.header).id = id(90_000); }],
+  ['wrong current citation', input => { answer(input.header).rights = { basis: 'public-domain', source: { ...input.recipe.citation, url: 'https://example.invalid/other' } }; }],
+  ['wrong read target', input => { input.published.path = `/v1/recipes/works/${id(90_000).slice(-36)}?actingSubject=${actor}`; }],
+  ['wrong read actor', input => { input.published.path = `/v1/recipes/works/${work.slice(-36)}?actingSubject=${id(90_000)}`; }],
+  ['extra read selector', input => { input.published.path += '&servings=3'; }],
+  ['failed actual read', input => { input.published.status = 404; }],
+  ['null actual read', input => { input.published.answer = null; }],
+  ['different read revision', input => { answer(input.published).revision = id(90_000); }],
+];
+for (const [name, alter] of citationRefusals) {
+  test(`independent citation refuses ${name}`, () => {
+    const input = citedRecipe();
+    alter(input);
+    expect(() => assertPublicRecipeAdmission(pinCitedRecipe(input))).toThrow('TEST PREMISE');
+  });
+}
+
+test('citation receipt and Rights evidence digests/locality remain mandatory', () => {
+  const input = citedRecipe(), recipe = pinCitedRecipe(input);
+  writeFileSync(recipe.publicationReceipt!.path, JSON.stringify({ ...input.publication, status: 403 }));
+  expect(() => assertPublicRecipeAdmission(recipe)).toThrow('pinned evidence is invalid');
+  pinCitedRecipe(input);
+  recipe.sourceReceipt!.path = resolve(recipe.sourceReceipt!.path);
+  expect(() => assertPublicRecipeAdmission(recipe)).toThrow('pinned evidence is invalid');
+  pinCitedRecipe(input);
+  const evidence = (input.rights.body as Record<string, unknown>).evidence as Record<string, Record<string, unknown>>;
+  evidence.terms!.sha256 = '0'.repeat(64);
+  expect(() => assertPublicRecipeAdmission(pinCitedRecipe(input))).toThrow('Recipe Rights source pinned evidence is invalid');
+});
+
+test('observed measures stay bound to the actual read while unchanged expected values remain the outcome oracle', () => {
+  const recipe = pinCitedRecipe(citedRecipe());
+  recipe.measures[0]!.value.value.numerator = 999;
+  // A product mismatch belongs to the original assertions; admission cannot rewrite either side.
+  expect(() => assertPublicRecipeAdmission(recipe)).not.toThrow();
+  recipe.observedMeasures = recipe.measures.map(item => structuredClone(item.value));
+  expect(() => assertPublicRecipeAdmission(recipe)).toThrow('separately from expected measures');
+});
+
+test('independent NHLBI unknown/pepper-only partial metadata cannot qualify the original full nutrition matrix', () => {
+  const input = citedRecipe(), evidence = input.recipe.ingredients[0]!.evidence;
+  input.recipe.nutrition = 'stated';
+  for (let index = 0; index < 10; index++) input.recipe.measures.push({ evidence, value: { kind: 'nutrient',
+    nutrient: `unit:nutrient-${index}`, unit: 'https://qudt.org/vocab/unit/MilliGM', basis: 'per-serving',
+    value: index === 9 ? { numerator: 5, denominator: 16 } : { numerator: index + 1, denominator: 1 },
+    coverage: index === 9 ? 'partial' : 'unknown', provenance: index === 9 ? 'computed' : 'source-stated' } });
+  answer(input.published).measures = input.recipe.measures.map(item => structuredClone(item.value));
+  input.recipe.publishedRecipeRead = structuredClone(input.published.answer) as unknown as PublicRecipe['publishedRecipeRead'];
+  input.recipe.observedMeasures = structuredClone(answer(input.published).measures) as Measure[];
+  const recipe = pinCitedRecipe(input), before = structuredClone(recipe.measures);
+  expect(() => assertPublicDomainSelectedPremises(selected({ richRecipe: recipe }), 'recipe')).not.toThrow();
+  expect(() => assertPublicDomainSelectedPremises(selected({ noNutritionRecipe: unitRecipe(), nutritionRecipes: [recipe] }),
+    'nutrition')).toThrow('retained nutrition evidence must exercise');
+  expect(recipe.measures).toEqual(before);
+});
+
+test('already published independent Recipe setup only verifies anonymous reads and never republishes or grants', async () => {
+  const input = citedRecipe(), recipe = pinCitedRecipe(input), calls: string[] = [];
+  const people = { owner: { actingSubject: actor }, visitor: { main: async (method: string, path: string) => {
+    calls.push(`${method} ${path}`);
+    return Response.json(path.startsWith('/v1/works/') ? input.header.answer : input.published.answer);
+  } } } as unknown as PersonaSessions;
+  await publishPublicRecipe(people, recipe);
+  expect(calls).toEqual([`GET /v1/works/${work.slice(-36)}`, `GET /v1/recipes/works/${work.slice(-36)}`]);
+  calls.length = 0;
+  answer(input.header).structurePublicationHead = id(90_000);
+  await expect(publishPublicRecipe(people, recipe)).rejects.toThrow('current publication head');
+  expect(calls).toEqual([`GET /v1/works/${work.slice(-36)}`]);
+  calls.length = 0;
+  people.owner.actingSubject = id(90_000);
+  await expect(publishPublicRecipe(people, recipe)).rejects.toThrow('publisher differs');
+  expect(calls).toEqual([]);
+});
 function selected(fields: Partial<Pick<PublicDomainSelectedCorpus, 'book' | 'richRecipe' | 'noNutritionRecipe' | 'nutritionRecipes'>>)
   : PublicDomainSelectedCorpus {
   // This helper tests selection metadata; actual Git execution/backup checks remain in the loader.

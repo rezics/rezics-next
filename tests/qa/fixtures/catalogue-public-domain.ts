@@ -21,6 +21,14 @@ export interface SourceQuote {
   sha256: string;
   exact: string;
 }
+export interface RecipeCitation {
+  kind: 'manual-citation';
+  author: string;
+  url: string;
+  license: string | null;
+  rightsAssessmentId: string;
+  transcriber: string;
+}
 export interface PublicRecipe {
   work: string;
   /** Existing producer's receipt:<command-id> pin, required for an additional native Work. */
@@ -30,7 +38,23 @@ export interface PublicRecipe {
   structure: string;
   revision: string;
   publisher: 'owner' | 'operator';
-  source: { record: string; observation: string; author: string; url: string; license: string | null };
+  source: { author: string; url: string; license: string | null } & (
+    | { record: string; observation: string }
+    | { record?: never; observation?: never });
+  /** Independent citations have no retained Source record/observation. These
+   * projections and local receipt pins come only from successful producer commands. */
+  citation?: RecipeCitation;
+  rightsAssessmentId?: string;
+  rightsReceipt?: { path: string; sha256: string };
+  publicationDecision?: string;
+  selectedGeneration?: string;
+  sourceRoot?: string;
+  publicationReceipt?: { path: string; sha256: string };
+  sourceReceipt?: { path: string; sha256: string };
+  publishedRecipeReceipt?: { path: string; sha256: string };
+  observedSource?: RecipeCitation;
+  publishedRecipeRead?: RecipePage;
+  observedMeasures?: Measure[];
   title: string;
   language: string;
   /** Complete depth-first receipt order, including groups and empty groups. */
