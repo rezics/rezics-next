@@ -2183,5 +2183,197 @@
       "D5003": "open",
       "publicPersonaAndWorkloadObligations": "unchanged; no outcome waived or closed"
     }
+  },
+  "preDebitDiagnosticDeltaReviewV1": {
+    "schemaVersion": 1,
+    "reviewId": "G-2822-DIAGNOSTIC-DELTA-01",
+    "reviewedAtUtc": "2026-10-20T11:24:07.794941+00:00",
+    "reviewer": {
+      "owner": "G-2822",
+      "engine": "codex-1",
+      "model": "gpt-6.1-sol",
+      "effort": "xhigh",
+      "sameExistingReviewOwner": true,
+      "independentSourceReviewCount": 1,
+      "nestedOrFallbackAgents": false
+    },
+    "scope": {
+      "base": "08f385a2a2cbd9aa963f55428ae7c4bf0b01fa8f",
+      "head": "3b984698aa35b937b2ad833897f218cfaf074ae2",
+      "frozenProduct": "76c5955006dbea2016e84465d8f3e79fdf4fc979",
+      "workerHead": "de080cc004b0eb610a4ef18e2fdf957133824171",
+      "privatePinnedSnapshot": ".temp/request-budget-delta-review-v1/candidate",
+      "sourceFixedDuringReview": true,
+      "changedPaths": [
+        "services/main/src/infrastructure/fuseki.ts",
+        "services/main/tests/request-read-budget-observation.test.ts"
+      ],
+      "candidateSourceSha256": "34ecb3614ca445657ab52c74ca149e793c4faad9275704d3d5048b86afea4925",
+      "candidateTestSha256": "d30ec19e2094706eaa7778846ab98a0d66f24e1c2008f9bcf1431318c8222a3d",
+      "frozenAndBaseFusekiIdentical": true,
+      "frozenAndBaseFusekiSha256": "913bd1d766a215932a0efd88e0362b083b2e0a0843d0f2f19b7ad47c9171de13",
+      "ignoredCallback": {
+        "path": ".temp/request-budget-delta-review-v1/producer/observe-main.ts",
+        "sha256": "ae8ebf644cf2f7f117f86f02ee63d9a104a41f6efe72433eb9a9b5fabd0f6e17"
+      },
+      "affectedInputComparison": {
+        "path": ".temp/request-budget-delta-review-v1/producer/affected-input-comparison.json",
+        "sha256": "2872cacdbfa8e68a245a56efbbcc21c8f43affd64e891dbe994393257681633f"
+      },
+      "inheritedWaveDifferences": 470,
+      "inheritedWaveChangesReviewedOrAdmitted": false
+    },
+    "sourceVerdict": "APPROVE the two-path diagnostic delta for composition onto the exact frozen product, subject to the composed-input requirements below. No blocking executable source finding in this delta. This does not admit the producer whole-wave tree or prove the public request outcome.",
+    "reviewedSemantics": [
+      {
+        "invariant": "Observe before successful and refused call/byte debits",
+        "evidence": "takeReadCost emits before-debit before the original active/refusal checks; all owners are checked before the existing missing-debit loop; after-debit follows success, refused-debit precedes rethrow. The extracted readCostLeft is the original effective fallback expression. No debit or refusal arithmetic changed."
+      },
+      {
+        "invariant": "True enclosing allocation snapshots",
+        "evidence": "budgetChain follows actual readScopes parents, innermost first; immutable snapshots use readCostLeft for the same effective counters as admission. Owner IDs are observer-local; actual caller, inherited minimum deadline, abort, attempt and phase remain data values. Getter-linked parents still pay once."
+      },
+      {
+        "invariant": "Private method/hash/caller/status/bytes",
+        "evidence": "queryLive and templateQuery hash authored query text with SHA256; events carry no query/body/capability/Request/signal/budget object. noteReadResponse retains HTTP status; each delivered chunk increments actualBytes before its byte debit, including a refused chunk. Refused debit status is null; completion can still retain the received HTTP status. Existing command-body byte debits are observed without adding a command call charge."
+      },
+      {
+        "invariant": "Optional sink lifecycle and failure isolation",
+        "evidence": "No observer means no stack/hash/snapshot emission. Events and nested values are frozen. The callback and promise assimilation run inside fusekiReadBudget.exit; synchronous throw and async rejection are swallowed without awaiting the sink. Request completion clears the sink; sequential nested attachment restores the previous sink. The ignored adapter requires an existing owner and invokes the same Request/handler without a new owner or transport."
+      },
+      {
+        "invariant": "Deadline/cancellation/transport/fences/errors",
+        "evidence": "Inspected all changed method wrappers and retry boundaries: original fetch arguments, readSignal/readBudgetHeaders, fencedGraphQuery/noteGraphReadVersion, active checks, cancellation/body cleanup and thrown objects remain. withReadCall wraps the original call charge and body; membership retry catches remain outside the same operation. Observation adds no Account/native instrumentation."
+      }
+    ],
+    "affectedComparison": {
+      "actualSourceAndComparisonInspected": true,
+      "transportCalls": {
+        "fetch": 16,
+        "fencedGraphQuery": 1,
+        "noteGraphReadVersion": 1,
+        "readBudgetHeaders": 8,
+        "readSignal": 9
+      },
+      "unchangedBoundaryFunctions": 9,
+      "criticalInputsUnchangedExceptFuseki": [
+        "services/main/src/modules/work/read-session.ts",
+        "services/main/src/modules/work/read-problems.ts",
+        "services/main/src/modules/account/verify-assertion.ts",
+        "services/main/src/infrastructure/graph-read-fence.ts",
+        "infra/jena/command-module/src/main/java/com/rezics/jena/QueryWorkService.java",
+        "infra/jena/command-module/src/main/java/com/rezics/jena/SearchDeltaJournal.java"
+      ],
+      "interpretation": "AST transport/boundary parity alone is insufficient; the actual debit, wrappers, callbacks, cleanup and error paths were independently read. All 470 inherited path differences are outside this diagnostic approval.",
+      "independentlyVerifiedBlobMetadata": 956,
+      "twoFilePatchAppliedToExactFrozenPreimage": true
+    },
+    "reusedChecks": {
+      "job": "3be546f0-a9e7-42d8-ad79-e50352adfdc5",
+      "qa": "20261020t111405-ad97a9",
+      "source": "3b984698aa35b937b2ad833897f218cfaf074ae2",
+      "sourceStable": true,
+      "command": "bun scripts/goal/goalctl.ts test services/main/tests/request-read-budget-observation.test.ts services/main/tests/request-read-budget.test.ts services/main/tests/request-read-budget-deadline.test.ts services/main/tests/request-read-budget-account.test.ts services/main/tests/fuseki-maintenance-read.test.ts",
+      "junit": {
+        "tests": 85,
+        "passed": 85,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "assertions": 546,
+        "files": 5
+      },
+      "observationFile": {
+        "tests": 25,
+        "passed": 25,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "assertions": 169
+      },
+      "mainTypes": {
+        "status": "passed",
+        "files": 2844
+      },
+      "callbackTypes": {
+        "status": "passed",
+        "files": 3
+      },
+      "frozenInputComparison": "passed; 5 transport/fence groups and 9 boundary functions",
+      "independentlyParsedJUnitAndReadLogs": true,
+      "retainedReceipts": ".temp/request-budget-delta-review-v1/evidence-retention.json",
+      "newProductTestExecutions": 0,
+      "reasonNoRerun": "Exact-source recorded evidence covers the reviewed behavior; no additional source counterexample warranted another product test. A new static composition/report check verifies the pins and overlay separately."
+    },
+    "composedInputRequirements": [
+      "Start from immutable product 76c5955006dbea2016e84465d8f3e79fdf4fc979, not the producer sourcePin tree. Overlay only fuseki.ts and the new observation test bytes from 3b984698aa35b937b2ad833897f218cfaf074ae2; its frozen Fuseki preimage is exactly the reviewed base. Exclude every inherited wave path and record the actual composed revision/tree and two file hashes.",
+      "Keep Account, native sources, image/runner, read-session/read-problems, graph-read-fence and every other product input at the frozen product. Preserve accepted G-2813/G-2817 reviews, native566 and G-2765 readiness approval; no old proof is relabelled as execution of this diagnostic composition.",
+      "Use the retained 990-byte observe-main.ts callback (SHA256 ae8ebf644cf2f7f117f86f02ee63d9a104a41f6efe72433eb9a9b5fabd0f6e17) with its import resolving to the SAME composed Fuseki module instance as Main. Attach once inside the consumer existing allocation and call the original in-process Main handler with the original Request; no detached replacement client, nested parallel observer attachment or new transport/budget.",
+      "Retain exact anonymous POST /v1/query resource-list-v1/global/all/newest/page20 body: 100 bytes, SHA256 49d9dabeefeedbd562209a078d92873c8ca56cada2841d75abb76cadd0db0c24. Retain 72 calls, 8388608 bytes, 10000ms, page20 and every tighter enclosing allowance/deadline/signal; no query repair or limit increase.",
+      "G-2764 remains sole query consumer. Its one exact capture follows composition and input admission on the released default lease under G-2823 runtime/stop custody. G-2762 owns source continuation. This worker starts no runtime/capture/image build and changes no shared data.",
+      "Stream events privately using a bounded synchronous append owned by the consumer; retain complete per-call stages and explicit sink I/O success before interpreting absence of an event. Sink failures are intentionally swallowed by product code, so an incomplete/private log is not proof of an unattempted call. Diagnostic capture adds observation work and does not itself establish baseline latency or persona success."
+    ],
+    "executableFindings": [],
+    "preservation": {
+      "priorFieldsUnchanged": 17,
+      "originalReportSha256": "d356bb2c7c977cad08db20c29529dc958abb94b340582771111445ce2ab46ff2",
+      "historical92b8a78Native571FailurePreserved": true,
+      "acceptedNative566Preserved": true,
+      "allPriorArtifactsAndPublicFailuresPreserved": true,
+      "acceptedReviewsReopened": false,
+      "fullTierReplay": false,
+      "runtimeOrCaptureExecuted": false,
+      "sourceOrAssertionsEdited": false
+    },
+    "residuals": {
+      "D5-001": "open",
+      "D5-002": "open",
+      "D5-003": "open",
+      "publicPersonaProof": "open; no original finding closes from this review or the 85 source tests",
+      "exactCapture": "not executed by G-2822; G-2764 only after composed-input admission"
+    },
+    "artifacts": {
+      "pin": ".temp/request-budget-delta-review-v1/pin.json",
+      "originalReport": ".temp/request-budget-delta-review-v1/original-report.json",
+      "retention": ".temp/request-budget-delta-review-v1/evidence-retention.json",
+      "verification": ".temp/request-budget-delta-review-v1/verification.json"
+    },
+    "checks": {
+      "status": "passed",
+      "job": "fb7dfc28-38f9-4695-a9ae-cfb6a19d350b",
+      "steps": [
+        {
+          "command": "task -t .temp/request-budget-delta-review-v1/Taskfile.yml report:validate",
+          "exit": 0,
+          "log": ".temp/goal/jobs/fb7dfc28-38f9-4695-a9ae-cfb6a19d350b.1.log"
+        },
+        {
+          "command": "task docs:check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/fb7dfc28-38f9-4695-a9ae-cfb6a19d350b.2.log"
+        },
+        {
+          "command": "env GOAL_CHECK_PREPARED_TREE=/home/edge/projects/rezics/rezics-next/.temp/worktrees/g-2822 task goal -- check",
+          "exit": 0,
+          "log": ".temp/goal/jobs/fb7dfc28-38f9-4695-a9ae-cfb6a19d350b.3.log"
+        }
+      ],
+      "docs": {
+        "markdownFiles": 249,
+        "checkerTests": 13,
+        "status": "passed"
+      },
+      "workerCheck": {
+        "types": "not selected; no TypeScript workspace changed",
+        "tests": "not selected; no test files named in brief",
+        "lint": "not selected; no source file changed",
+        "ast": "passed",
+        "guards": "passed; 1/44 selected",
+        "output": ".temp/goal/check/run-9cAyEW/output.log"
+      },
+      "sourceProofReruns": 0,
+      "runtimeOrCaptureExecuted": false
+    },
+    "landingDisposition": "Report-only landing after affected checks; G-2762 may compose the approved diagnostic delta with the exact requirements above. No whole-wave admission, new review chain, query capture or public-finding closure."
   }
 }
