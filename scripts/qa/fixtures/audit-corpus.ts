@@ -382,7 +382,7 @@ export interface AuditRuntime {
   mappers: readonly DatasetNativeMapper[];
   open(inspection: AuditInspection, budget: FixtureWorkBudget, observe: (event: RetainedJson) => void): Promise<AuditSession>;
   cut(context: SourceContext, session: AuditSession): Promise<{ backup: string; rdfDigest: string; ownerState: RetainedOwnerState }>;
-  restore(backup: string, metadata: Pick<AuditPreparationMetadata, 'realms'>, budget: FixtureWorkBudget, runId?: string): Promise<AuditSession>;
+  restore(backup: string, metadata: Pick<AuditPreparationMetadata, 'realms' | 'sourcePins'>, budget: FixtureWorkBudget, runId?: string): Promise<AuditSession>;
   verify(context: SourceContext, manifest: RetainedSourceManifest<RetainedJson>): Promise<string[]>;
   remove(key: string): Promise<void>;
 }
