@@ -1,0 +1,793 @@
+{
+  "profile": "catalogue-collection-purpose-source-review-v1",
+  "goal": "audit-remediation-20261019",
+  "worker": "G-2849",
+  "reviewer": {
+    "engine": "codex-1",
+    "model": "gpt-6.1-sol",
+    "effort": "xhigh",
+    "independentFirstSourceReview": true,
+    "delegation": false,
+    "fallback": false
+  },
+  "reviewedAt": "2026-10-20T11:03:23Z",
+  "decision": {
+    "reviewStatus": "complete",
+    "disposition": "bounded-source-review-complete-with-explicit-consumer-and-proof-dependencies",
+    "introducedBackendDefectDemonstrated": false,
+    "confirmedNewPublicOutcomeFailures": [],
+    "summary": "The actual eleven-path A17 delivery was inspected against its exact base, including both original C29 specifications and direct/embedded callers. No additional introduced backend defect was demonstrated. Delivery remains incomplete at web consumers and original public proof; this report grants no product acceptance or landing approval.",
+    "A17": "open",
+    "C29": "open",
+    "classClosure": false,
+    "genuineNativeAcceptance": false,
+    "priorReviews": "Query, registry, native credit, Source and other native approvals/reports remain unchanged and accepted by the brief. None was rerun or reviewed again."
+  },
+  "pins": {
+    "base": "dc97b9ac7fe35aa3d5d7f234dd62ec3d1ac3ec2c",
+    "head": "27560115bb7c270ab3cb91b8012c8fcbdd363f4b",
+    "authoredBeforeRecovery": "1e283dfe5028265a394fb2e8f00c59a7748731d3",
+    "preRebaseAuthored": "18acb29eca6b89001f221470dc7d23358ce7a810",
+    "recoveryRange": "1e283dfe5028265a394fb2e8f00c59a7748731d3..27560115bb7c270ab3cb91b8012c8fcbdd363f4b",
+    "reviewWorktreeHead": "389d39ea1aaf0fe13d320c0df2e46319c0f811b5",
+    "changedPathCount": 11,
+    "recoveryChangedPaths": [
+      "services/main/tests/g-904-derived.test.ts",
+      "services/main/tests/selected-owner-read-fences.test.ts"
+    ],
+    "changedPaths": [
+      {
+        "path": "generated/openapi/main/public.json",
+        "base": {
+          "blob": "94bd0bdeb050deeb85162a791b6c4349e4b6231a",
+          "sha256": "43c9551e0a4d04fb23c035d82255d5e3a3d27203eb485fcaf28ab9234a4669b5"
+        },
+        "head": {
+          "blob": "292255e7dcdd586988b19fec69c596e0be7354de",
+          "sha256": "d58ba906b8019d0d04429ad86df4ccdd7ce30538c879d9e27bae0e7abfb16b2f"
+        }
+      },
+      {
+        "path": "services/main/src/modules/collection/purpose.ts",
+        "base": null,
+        "head": {
+          "blob": "4a1b05dc7f96c49ecfd404ea1cfd346792498eca",
+          "sha256": "7e6a81ef2349c01a160f20decb2fd11d6541871196b6bf497a61d9a7718b25c3"
+        }
+      },
+      {
+        "path": "services/main/src/modules/entity-page/contract.ts",
+        "base": {
+          "blob": "e416b7a9def196594f49c6e8e574d62c8138cc3f",
+          "sha256": "11d09143359d7e1ad689b9687f262cddb096250b5274b703c95b2ae1c788f0ef"
+        },
+        "head": {
+          "blob": "aba4c383917202595f8ad875b3d01b8f7e79afc7",
+          "sha256": "d04789b43372edcbe99511682401d1390855a8d5d28e78a3611f8576e307a2b6"
+        }
+      },
+      {
+        "path": "services/main/src/modules/relation/traversal.ts",
+        "base": {
+          "blob": "b503db450886df88de006f3e917a2c634626dec5",
+          "sha256": "89a76a33926995c39075cbce1d595ae457c2c1f799b44c4e46248d584e8d0f49"
+        },
+        "head": {
+          "blob": "3d91a7bc43da463da3a522f0077fcc9952c2aa99",
+          "sha256": "5f7eeabd014c0eb383ec5f2ea30d0b3a2c5fe67cfdd8ad31f8190ffe0c74d4ce"
+        }
+      },
+      {
+        "path": "services/main/src/modules/statement/qualification.ts",
+        "base": {
+          "blob": "f2beda60a0e4b5ce4a617a9dbe0fe57e1c8409f7",
+          "sha256": "615dafe8bf38f832a29fee916580a69853c82ef58e33f960846f1a3145893089"
+        },
+        "head": {
+          "blob": "27ddca3d201a603ea78cb2e98296cfcdba6b73cc",
+          "sha256": "a099a7e5b41e4f957ec247b2a33de64ace1f18463fb1991a0def966dbae4ea36"
+        }
+      },
+      {
+        "path": "services/main/src/modules/statement/subject-read.ts",
+        "base": {
+          "blob": "32b6d43acf3c58cc259a8fca2ae19d7bef1ff274",
+          "sha256": "cd81313b1343961ad328c4f5310a3c1c3b731be70a41d275b3d592ab3c6a750d"
+        },
+        "head": {
+          "blob": "4b2d7c8ddea1937025a37a64406d377510990d08",
+          "sha256": "a71abcd9f182176493d6f666395f7601013b91208ede405cd125a082fcb59a63"
+        }
+      },
+      {
+        "path": "services/main/src/routes/resource-relations.ts",
+        "base": {
+          "blob": "7873a15bdeaea0944787e4685cbda3409d5de815",
+          "sha256": "6d940a0ab4a6f502e2d4444e25ff67697a713c61d2ab26df1100b29344981a66"
+        },
+        "head": {
+          "blob": "01f64b9158085781dfc04a01942a8c4aaa6d84e9",
+          "sha256": "092bde8106125754dd59e3cf5fa6ac2b08f5b5c338422f28fc3eb559b20a82a2"
+        }
+      },
+      {
+        "path": "services/main/tests/g-904-derived.test.ts",
+        "base": {
+          "blob": "c4e7a67df966978b3a14fe2d52bf815c15bb64f9",
+          "sha256": "1d9415f395558092fe3e5c8dc2ae6d9205448e8634839ff53871527edcfa6258"
+        },
+        "head": {
+          "blob": "e7b26c703560436cd7b454b89d2601161fd58b07",
+          "sha256": "91192c6320576037cb816d8d23401d19f37ed68abb8dc1181eb9380bda9f230d"
+        }
+      },
+      {
+        "path": "services/main/tests/relation-collection-purpose.test.ts",
+        "base": null,
+        "head": {
+          "blob": "218d4889e9e86c630d5b1ee3ec79412097d6468d",
+          "sha256": "4971e8fc164fca037c35918f3fd33ecda5050a3ba220b8f98790f1323de24f1b"
+        }
+      },
+      {
+        "path": "services/main/tests/selected-owner-read-fences.test.ts",
+        "base": {
+          "blob": "3c8515212a74e57aabaa47328395292c35d179ee",
+          "sha256": "3cb573af53dcaa5268396d4534ea3b44189b2506245f43b0010f8b717378fe20"
+        },
+        "head": {
+          "blob": "623fc142f1e7eff42eff36893c6aa6fe9bc90c37",
+          "sha256": "a1e1de074813e8ce001da7ebf9275544287b1192224dcd7dd243ac05e575b646"
+        }
+      },
+      {
+        "path": "services/main/tests/statement-collection-purpose.test.ts",
+        "base": null,
+        "head": {
+          "blob": "ee22c0a8fc49b5d43e6b65c9251341ec6958aa12",
+          "sha256": "3a3631cacd39899fcabc37a9d75d5b0976c8fd0fc86d1fd9e1c983dd0413edac"
+        }
+      }
+    ]
+  },
+  "inputs": {
+    "handoff": {
+      "location": ".temp/worktrees/g-2799/.temp/goal/collection-purpose-recovery-handoff.md",
+      "sha256": "dd29d84bead49017560ac2dd3c6eb97733e075d877b1668451813f6ebf275b82"
+    },
+    "originalSpecifications": [
+      {
+        "path": "tests/qa/integration/collection-domain-roles.test.ts",
+        "blob": "c70b79027c5c91f6a2b62a4e33b29a9364984e4d",
+        "sha256": "c6d149bc04ca1080c5c2333950615adccc90b3cae6e798ae19ad9a058dee25fa"
+      },
+      {
+        "path": "tests/qa/integration/support/catalogue-information.ts",
+        "blob": "d757ab29ce4faba937f9abe54b28c3fa7c213c9a",
+        "sha256": "3fc81eed5c0090521d49a669c25c608b07182a1a2ec23042780193bd4dc7c94f"
+      },
+      {
+        "path": "tests/qa/fixtures/catalogue-information-matrix.ts",
+        "blob": "9ac7412a0284574f4a54a4fb0d4b92f011a7b402",
+        "sha256": "3b0e44e66960fda1b416618908e3cd65e0a70e7ff37d032f40a487ebea4e545c"
+      },
+      {
+        "path": "apps/web/tests/catalogue-detail-contract.e2e.ts",
+        "blob": "b6045fca00f40afd56dd8ac13148ed929f7d4cd9",
+        "sha256": "b6889bcde1f06083da74aa0507f85c35a91627a80dea75cb9e3f586b8ebfa2c3"
+      }
+    ],
+    "specificationWorkingFilesMatchHead": true,
+    "additionalInspectedContext": [
+      {
+        "path": "services/main/src/modules/entity-page/relations.ts",
+        "blob": "3eeb0bea05569c4300c4dc00c99578f99df0d77f",
+        "sha256": "340bda9f69a765f3b490e45c1e438d6a7bc5bcf041c8510740cc0f0a0b8e2624"
+      },
+      {
+        "path": "services/main/src/modules/work/read-session.ts",
+        "blob": "85381184a0704f74645f97e0b0327a2b13d0d27d",
+        "sha256": "1e057f09ae28386be2ee2a737826a5060bf67aabe3dd4ce8abe105183659b4db"
+      },
+      {
+        "path": "services/main/src/modules/statement/graph.ts",
+        "blob": "360b2ce85ac099896e8d0cd35edd2cef0d077d09",
+        "sha256": "76cf510a62ecd577f279b51a96cad7114158ed83d4cd96d344a23982a912a1e9"
+      },
+      {
+        "path": "services/main/src/modules/statement/read.ts",
+        "blob": "2ab48d70afbbf48a768c6e1d59e24a853526f77f",
+        "sha256": "3809b893b8008f2becd64a8a2b486d4044a021309cee0bd824143cefbb2fe6cc"
+      },
+      {
+        "path": "services/main/src/modules/relation/change.ts",
+        "blob": "e910a5bbba10c84c04df71d6910e0d099b1e1795",
+        "sha256": "b8fa30d89aeb0e6afa494a5225d2581e32f582c34fe247dea0d6851200d5c494"
+      },
+      {
+        "path": "services/main/src/modules/composition/disclosure-read.ts",
+        "blob": "f0331a5b00ddfee85e39af5c56645f2912936fd2",
+        "sha256": "d829380646a066f8032049b3b89df8d556aff314ce49936e2aa9bf56f8627e89"
+      },
+      {
+        "path": "services/main/src/modules/structure/graph.ts",
+        "blob": "ca6f9bdba18c0331e940b73c7406ac1b9e22e69b",
+        "sha256": "23467f889e786f734cee745e6eddaba122209075db52c2bdf828854a7cc99382"
+      },
+      {
+        "path": "services/main/src/routes/entity-pages.ts",
+        "blob": "65dc7e19d7e65a2f8ed51e92d709bd4a56004c15",
+        "sha256": "93b44d1fcde79815d36cb65e7bd52086bcc57949e0a08d3c7ad9d3d1911812aa"
+      },
+      {
+        "path": "services/main/src/modules/entity-page/read.ts",
+        "blob": "51ffb2c2624d96d3d38b1c5e1392fd2e5d8a08f5",
+        "sha256": "9a7e2362d44a5ab65b7b87fb3312198b9669dd19b15e0b8a01a3dd2c31d2a9a6"
+      },
+      {
+        "path": "apps/web/features/entity-page/views.tsx",
+        "blob": "c8b3084dd8c531bc9f9a710d4ddfe87266cff902",
+        "sha256": "5d91d3f55484112f4f77d9f7552c200e847332fb1f4e8d0b2cf20a62f9ea7ebc"
+      },
+      {
+        "path": "apps/web/features/work-levels/previews.tsx",
+        "blob": "aeb11e78c774a6d4cf6c4ade3c177888a5cad1fd",
+        "sha256": "d5de5a427f34e4f582bef42aae65cb882537f508995bff6b4f23e931993d53b0"
+      },
+      {
+        "path": "apps/web/features/work-page/anime-relations-recorded-page.ts",
+        "blob": "ebdee2f8f39ae131af58cfebe86285d5d214e3e6",
+        "sha256": "e8a07cf6291c4af76aeb319b06739f81fa59138f0ad1b168d3608165759c1dbc"
+      }
+    ],
+    "nullableConsumerPins": [
+      {
+        "path": "apps/web/features/entity-page/identity-read.ts",
+        "blob": "96f9afc6e3bc0589035894ebe7c7faaf049a8a0e",
+        "sha256": "c9eddfee1c0f31ccfed4da1f2c80bfc5a19eec63f90df5b59382446f2004a26f"
+      },
+      {
+        "path": "apps/web/features/entity-page/identity-reads.test.ts",
+        "blob": "2c8b6a90e3421bcdeddb5145466ae12fbb67f7d4",
+        "sha256": "45dc016442be6b5c316d5088a7d1ee4f9bc7a6011cab725fbf424300331c53ef"
+      },
+      {
+        "path": "apps/web/features/entity-page/identity-relations.test.ts",
+        "blob": "6e5f4ea7cc123285c6a5a1d5ded3569e951e908f",
+        "sha256": "8d5dddcb99315b1cdaeec7b681c62214bd088e70881afe4fafe84f67d7cd9174"
+      },
+      {
+        "path": "apps/web/features/entity-page/identity-relations.ts",
+        "blob": "fd38b89808aa5eb5c2875c8fb13f1ae1b94bf597",
+        "sha256": "25b9848aa03465d99ff5337959aa1b85cd29ce4ce48f90372da994d36a69cc32"
+      },
+      {
+        "path": "apps/web/features/entity-page/sections.tsx",
+        "blob": "976d693b23a8f9c66d6ec2a95d23437032d8e292",
+        "sha256": "f575cfb366715cbfed3ebbf866eca653e115dc2ff1f60ba6beabc7d08688b237"
+      },
+      {
+        "path": "apps/web/features/tracking/series-progress-panel.tsx",
+        "blob": "e9321def93fb820604da9e361cbbb76ad618a2e7",
+        "sha256": "17e02b65ebaced1a38cd75515facd03e9a38795c939d5fee53ea008d721fc1a5"
+      },
+      {
+        "path": "apps/web/features/work-levels/relation-rows.ts",
+        "blob": "bf23c121a263035f726786aaeb5c0d4c59db27d9",
+        "sha256": "91c210fce603439c7363d0b3743cbeb84c8f73d10c7dbd253d5b5823c175453a"
+      }
+    ]
+  },
+  "actualSourceReview": [
+    {
+      "invariant": "Only an explicit current exact adopted property establishes purpose",
+      "locations": [
+        "services/main/src/modules/collection/purpose.ts:61",
+        "services/main/src/modules/statement/qualification.ts:45",
+        "services/main/src/modules/statement/qualification.ts:551"
+      ],
+      "observation": "The key collection-purpose-v1 resolves a readable property Definition and sealed exact revision. Current component head, active lifecycle, notation, no successor and zero roles are checked. Selected Statements must pin that current revision and predicate, have acceptance, no applicability/interpretation definitions/qualification, and one of four exact untagged xsd:string values. No title, rdf:type or first-Statement heuristic supplies purpose.",
+      "evidence": "Source inspection; retained statement/relation owner tests. Not a reproduced public API result."
+    },
+    {
+      "invariant": "Collection subject uses its actual membership owner",
+      "locations": [
+        "services/main/src/modules/statement/subject-read.ts:200",
+        "services/main/src/modules/statement/subject-read.ts:215"
+      ],
+      "observation": "Admission requires a readable native Collection, the current reading boundary, one active Collection Structure root and a collection-membership header whose owner and component equal the Collection. Public subject Statements can fall back from TargetNotBound/TargetUnavailable to that owner. It creates no generic Work or discussion capability revision.",
+      "evidence": "Actual subject reader, structure/composition owners and public statements route were inspected; retained Collection-subject and retirement tests cover the owner path with substituted external transport."
+    },
+    {
+      "invariant": "Global adoption and complete absence are distinct from unavailable or ambiguous",
+      "locations": [
+        "services/main/src/modules/statement/subject-read.ts:231",
+        "services/main/src/modules/statement/subject-read.ts:260",
+        "services/main/src/modules/statement/subject-read.ts:750",
+        "services/main/src/modules/collection/purpose.ts:81"
+      ],
+      "observation": "The finite property owner requires a real Global acceptance scope and seek owner, refuses corrupt coverage and forces a subject-and-predicate neighbourhood scan with 20-row batches. It ignores the enclosing generic cursor and uses an internal limit of two with visible lookahead. Only accepted candidates enter the result; proposals/wiki evidence alone, rejected/withdrawn or inactive Statements do not establish purpose. Zero disclosed eligible Statements after a completed scan yields null; duplicate visible claims, incomplete acceptance, invalid value, stale meaning or exhausted budgets refuse. It never selects an arbitrary first visible Statement.",
+      "evidence": "Retained 65-proposal scan test, duplicate/invalid/unavailable/deadline tests and current acceptance resolver inspected. No real-stack bounded-load proof was run."
+    },
+    {
+      "invariant": "Hidden assertions do not supply ambiguity, value, citation or cursor state",
+      "locations": [
+        "services/main/src/modules/statement/subject-read.ts:403",
+        "services/main/src/modules/statement/subject-read.ts:507",
+        "services/main/src/modules/statement/subject-read.ts:620",
+        "services/main/src/modules/collection/purpose.ts:61"
+      ],
+      "observation": "For finite selection, graph disclosure and reading visibility filter candidates before acceptance resolution. Context/Realm access then filters hydration before value/qualification/source interpretation and citation reads. Unavailable adoption is deferred until that visibility is established. Selection fences compare the disclosed purpose tuple or null rather than retaining raw hidden candidates. Internal raw scan positions are not returned by the purpose API. References and private Context access are rechecked before emission.",
+      "evidence": "Source plus retained hidden/private malformed-value/source and changed-selection owner tests. These substitute graph/access/index transport and do not establish the six-persona public privacy outcome."
+    },
+    {
+      "invariant": "Sources and native command authorities stay independent",
+      "locations": [
+        "services/main/src/modules/collection/purpose.ts:95",
+        "services/main/src/modules/statement/graph.ts:205",
+        "services/main/src/modules/statement/graph.ts:480"
+      ],
+      "observation": "An accepted directly authored Statement may return sources:[] or ordinary manual citations. Purpose reading adds no converter, mapper, retained-evidence or provider-identity prerequisite. Qualification validation reuses exact Definition guards; recording and Global decision adoption retain their original separate command/receipt identities. The new reader does not write or transform providers. Existing per-slot expected-head CAS, committed-request replay, rejection, withdrawal and idempotency conflict remain the owners of command semantics.",
+      "evidence": "Actual command owner and new N3-backed transport-fixture tests inspected, including lost reply, stale/raced head and independent conflicting slots. Public command proof was not executed."
+    },
+    {
+      "invariant": "One relation contract for direct and embedded callers",
+      "locations": [
+        "services/main/src/routes/resource-relations.ts:167",
+        "services/main/src/modules/entity-page/relations.ts:53",
+        "services/main/src/modules/relation/traversal.ts:190"
+      ],
+      "observation": "The direct route now passes boundary.session. The embedded page reader already passes its session. Both invoke the same traversal and purpose selection, with real Access/disclosure/reading gates and selected dependency/authority fences. Missing sessions now explicitly refuse Collection resolution. Both repaired fixtures supply native owner prerequisites; the restricted payload branch still throws, and their expected identities, next cursor, attempt count, source position and changed-counterpart fence assertions are preserved.",
+      "evidence": "Actual routes/callers, parent and recovery diffs, retained direct/embedded and selected-owner test evidence; no public HTTP request was made."
+    },
+    {
+      "invariant": "Structural rendering preserves meaning and repeated membership identity",
+      "locations": [
+        "services/main/src/modules/collection/purpose.ts:21",
+        "services/main/src/modules/collection/purpose.ts:38",
+        "services/main/src/modules/relation/traversal.ts:497",
+        "services/main/src/modules/entity-page/contract.ts:162"
+      ],
+      "observation": "Collection rendering has meaning:null, occurrence:null and actual structuralBasis {profile:collection-membership,collection,member}; role bindings use those resources. The five closed headings are Collections, Reading lists, Recipe selections, Series and Franchises. Fixed vocabulary retains recorded English language and explicit script/language fallback. No native relation Definition or repeated membership occurrence is fabricated. Existing DISTINCT incidence inventory remains one Collection edge; canonical Structure pages retain each occurrence, order and continuation, including repeated equal targets.",
+      "evidence": "Closed schema and render tests, existing traversal cursor and Structure reader inspected; retained repeated-three-occurrence test proves its fixture only. Original command-built C29 membership proof remains due."
+    }
+  ],
+  "generatedPublicProjection": {
+    "disposition": "included-and-inspected",
+    "freshGenerationByReviewer": false,
+    "changedOperationPaths": [
+      "/v1/resources/{resource}/page",
+      "/v1/resources/{resource}/relations"
+    ],
+    "semanticDiff": "Parsed base/head JSON: only paths changed, with ten differing leaf/subtree locations, all inside the two HTTP 200 relation-entry projections. No component, other operation or unrelated wave contract changed. Each projection adds optional nullable collectionPurpose and widens nullable rendering to ordinary relation rendering or meaning:null plus required structuralBasis.",
+    "limitation": "Generation/type evidence is retained from the producer. Projection compatibility does not establish consumer handling or original C29 acceptance."
+  },
+  "findings": [
+    {
+      "id": "A17-NULLABLE-MEANING-CONSUMERS",
+      "kind": "exact-missing-consumer-dependency",
+      "priority": "before-composition-or-landing",
+      "owner": "existing G-2758",
+      "finding": "Native Collection entries now intentionally carry non-null rendering with meaning:null; seven web consumers/tests still assume meaning is non-null. The retained web typecheck reports nine diagnostics. Several actual consumers dereference meaning.definition after guarding only rendering; relationRows already skips collection at runtime, so its diagnostic alone is not a demonstrated crash.",
+      "diagnostics": [
+        {
+          "path": "apps/web/features/entity-page/identity-read.ts",
+          "line": 149,
+          "code": "TS18047"
+        },
+        {
+          "path": "apps/web/features/entity-page/identity-reads.test.ts",
+          "line": 15,
+          "code": "TS2531"
+        },
+        {
+          "path": "apps/web/features/entity-page/identity-reads.test.ts",
+          "line": 16,
+          "code": "TS2531"
+        },
+        {
+          "path": "apps/web/features/entity-page/identity-reads.test.ts",
+          "line": 17,
+          "code": "TS2531"
+        },
+        {
+          "path": "apps/web/features/entity-page/identity-relations.test.ts",
+          "line": 33,
+          "code": "TS2531"
+        },
+        {
+          "path": "apps/web/features/entity-page/identity-relations.ts",
+          "line": 45,
+          "code": "TS18047"
+        },
+        {
+          "path": "apps/web/features/entity-page/sections.tsx",
+          "line": 49,
+          "code": "TS18047"
+        },
+        {
+          "path": "apps/web/features/tracking/series-progress-panel.tsx",
+          "line": 36,
+          "code": "TS18047"
+        },
+        {
+          "path": "apps/web/features/work-levels/relation-rows.ts",
+          "line": 132,
+          "code": "TS18047"
+        }
+      ],
+      "evidenceClass": "retained compiler result plus independent source inference; no reproduced API/browser outcome assertion",
+      "receipt": {
+        "location": ".temp/worktrees/g-2799/.temp/goal/jobs/bf2bf7dd-99f2-4d10-83bc-d10f3d3b6a4f.3.log",
+        "sha256": "45f2eaa1c47f64c0a266fd83aba416f8b500ef066cad1e98843c1e9f6ab4b2ff"
+      },
+      "unappliedPatch": {
+        "location": ".temp/worktrees/g-2799/.temp/goal/collection-purpose-web-meaning-guards.patch",
+        "sha256": "fdb9c7bad06e8090ffd522d1513af934895aa29e40d8b425ed418db37765ea2e"
+      },
+      "requiredPatchSha256": "fdb9c7bad06e8090ffd522d1513af934895aa29e40d8b425ed418db37765ea2e",
+      "next": "Existing owner applies compatible nullable guards and checks the affected consumers. The supplied patch does not implement purpose grouping or establish C29."
+    },
+    {
+      "id": "A17-PURPOSE-GROUPING",
+      "kind": "existing-ui-dependency-exposed-by-new-contract",
+      "priority": "before-C29-acceptance",
+      "owner": "existing UI owner through manager",
+      "finding": "franchisesOf still returns every Collection counterpart, discarding collectionPurpose; entity-page RelationsView and Work previews present the result as franchises, and the recorded anime relations page feeds the same helper into connections. relationRows skips Collection entries, so native purpose headings do not themselves reach these rendered groups.",
+      "locations": [
+        "apps/web/features/work-levels/relation-rows.ts:160",
+        "apps/web/features/entity-page/views.tsx:356",
+        "apps/web/features/work-levels/previews.tsx:138",
+        "apps/web/features/work-page/anime-relations-recorded-page.ts:120"
+      ],
+      "introducedByThisSlice": false,
+      "evidenceClass": "independent source inference; original C29 browser assertion not run",
+      "requiredOutcome": "Map exact null/reading-list/recipe-selection/series/franchise to the five agreed groups, keep title links and repeated ordered Members occurrence identities, and run the untouched original C29 proof. No title/type inference."
+    }
+  ],
+  "retainedEvidence": [
+    {
+      "run": "20261020t040623-5396e8",
+      "job": null,
+      "scope": "53 owner tests / 393 assertions; stable dirty source, not public acceptance",
+      "recordedSource": {
+        "head": "f1c42d420130d899605fcd06e1a6ab2b3e14faf7",
+        "fingerprint": "3999339687be5074a361d824c47f9f2c1a78a1f17b730c337c2a2424043289e9",
+        "clean": false
+      },
+      "sourceStable": true,
+      "cases": 53,
+      "failedCases": [],
+      "files": [
+        {
+          "location": ".temp/worktrees/g-2799/.artifacts/qa/20261020t040623-5396e8/acceptance.json",
+          "sha256": "f203e50793de56861539d25b451c3c5e067495d6439e2ed5dad3c4b689f0399c"
+        },
+        {
+          "location": ".temp/worktrees/g-2799/.artifacts/qa/20261020t040623-5396e8/owner.xml",
+          "sha256": "264f2281ef7f8789e9b689b0cef1d766c33cc635b837cf539f76a442710d71c8"
+        },
+        {
+          "location": ".temp/worktrees/g-2799/.artifacts/qa/20261020t040623-5396e8/logs/owner.log",
+          "sha256": "051125db3550136b1ce345357a5a7e6950e3dd0121f1bd426280e98cf1106bae"
+        }
+      ],
+      "reused": true,
+      "rerunByReviewer": false,
+      "selectedFiles": [
+        "services/main/tests/statement-collection-purpose.test.ts",
+        "services/main/tests/relation-collection-purpose.test.ts",
+        "services/main/tests/statement-qualification.test.ts",
+        "services/main/tests/statement-seek-progress.test.ts"
+      ],
+      "commandProvenance": "The surviving QA metadata/XML/log proves this selected file set and result; the original top-level invocation/job ID was not found and is not reconstructed as an exact command."
+    },
+    {
+      "run": "20261020t104058-ff4eaa",
+      "job": "0bb4d164-9d37-4e82-adb5-85aa81e479ab",
+      "command": "bun scripts/goal/goalctl.ts test services/main/tests/g-904-derived.test.ts",
+      "scope": "Exact clean base: 12 pass / 4 fail / 166 assertions",
+      "recordedSource": {
+        "head": "dc97b9ac7fe35aa3d5d7f234dd62ec3d1ac3ec2c",
+        "fingerprint": "bbc785df0555ad6f652caea897add3f7019e4e1d40ad48851dba3f3aee398c38",
+        "clean": true
+      },
+      "sourceStable": true,
+      "cases": 16,
+      "failedCases": [
+        "G-904: rankings fill admitted scores and use only admitted lookahead (anonymous)",
+        "G-904: identifier Release pages admit the derivative before state and withhold a Release with a hidden parent (anonymous)",
+        "G-904: rankings fill admitted scores and use only admitted lookahead (signed)",
+        "G-904: identifier Release pages admit the derivative before state and withhold a Release with a hidden parent (signed)"
+      ],
+      "files": [
+        {
+          "location": ".temp/worktrees/g-2799/.artifacts/qa/20261020t104058-ff4eaa/acceptance.json",
+          "sha256": "744b51599e32632d0e0f8515d094a783d35f2c2ab3bef2a9dc9bde866902acfa"
+        },
+        {
+          "location": ".temp/worktrees/g-2799/.artifacts/qa/20261020t104058-ff4eaa/owner.xml",
+          "sha256": "01f2bc70de99ba322c676b4784314193d9777bca5063ddbf9f80bd21dd573872"
+        },
+        {
+          "location": ".temp/worktrees/g-2799/.artifacts/qa/20261020t104058-ff4eaa/logs/owner.log",
+          "sha256": "be6b217ac6a8f6a29336f181a046f888f5e8f4d4ffff7406ae104ea8a059e9f2"
+        }
+      ],
+      "reused": true,
+      "rerunByReviewer": false
+    },
+    {
+      "run": "20261020t104339-6a5fd9",
+      "job": "ce984532-75aa-4be4-954e-9568ab6709ea",
+      "command": "bun scripts/goal/goalctl.ts test services/main/tests/g-904-derived.test.ts services/main/tests/selected-owner-read-fences.test.ts",
+      "scope": "Selected-owner file: 25/25 pass; combined run: 36 pass / 5 fail, including subsequently repaired restricted-relation setup",
+      "recordedSource": {
+        "head": "1e283dfe5028265a394fb2e8f00c59a7748731d3",
+        "fingerprint": "7b19711adc18180b6c270f186705abe555c15ca564902d228164658ecf854df5",
+        "clean": false
+      },
+      "sourceStable": true,
+      "cases": 41,
+      "failedCases": [
+        "G-904: rankings fill admitted scores and use only admitted lookahead (anonymous)",
+        "G-904: identifier Release pages admit the derivative before state and withhold a Release with a hidden parent (anonymous)",
+        "G-904: rankings fill admitted scores and use only admitted lookahead (signed)",
+        "G-904: identifier Release pages admit the derivative before state and withhold a Release with a hidden parent (signed)",
+        "G-904: a restricted relation occurrence is gated before retained payload resolution even with readable subject Works"
+      ],
+      "files": [
+        {
+          "location": ".temp/worktrees/g-2799/.artifacts/qa/20261020t104339-6a5fd9/acceptance.json",
+          "sha256": "59c07673bda329901711ad2a736e9b4aee33e943ed756f3ecca64a22a5fc5ea0"
+        },
+        {
+          "location": ".temp/worktrees/g-2799/.artifacts/qa/20261020t104339-6a5fd9/owner.xml",
+          "sha256": "7d6059ab309d7e074680488de13654bbef3cad17c411e9412b4bae5fec24e7db"
+        },
+        {
+          "location": ".temp/worktrees/g-2799/.artifacts/qa/20261020t104339-6a5fd9/logs/owner.log",
+          "sha256": "6d441668945eb0369425fbae646d5389d7ba29ce85160868be3c3f95b165e918"
+        }
+      ],
+      "reused": true,
+      "rerunByReviewer": false
+    },
+    {
+      "run": "20261020t104438-223492",
+      "job": "77920e0c-fffb-43d3-ade1-94851ab0c714",
+      "command": "bun scripts/goal/goalctl.ts test services/main/tests/g-904-derived.test.ts",
+      "scope": "Recovery working tree: 12 pass / same 4 fail / 174 assertions; restricted relation original assertions pass",
+      "recordedSource": {
+        "head": "1e283dfe5028265a394fb2e8f00c59a7748731d3",
+        "fingerprint": "438363d982ac72341e7223a06e88ff07eeade22a79bcc8b002bb94eebb91ac33",
+        "clean": false
+      },
+      "sourceStable": true,
+      "cases": 16,
+      "failedCases": [
+        "G-904: rankings fill admitted scores and use only admitted lookahead (anonymous)",
+        "G-904: identifier Release pages admit the derivative before state and withhold a Release with a hidden parent (anonymous)",
+        "G-904: rankings fill admitted scores and use only admitted lookahead (signed)",
+        "G-904: identifier Release pages admit the derivative before state and withhold a Release with a hidden parent (signed)"
+      ],
+      "files": [
+        {
+          "location": ".temp/worktrees/g-2799/.artifacts/qa/20261020t104438-223492/acceptance.json",
+          "sha256": "f3c5783b848775aac474919865be94966782fee1dce1f0f9361ded123a41e705"
+        },
+        {
+          "location": ".temp/worktrees/g-2799/.artifacts/qa/20261020t104438-223492/owner.xml",
+          "sha256": "b600430242a96812a91ec4b07874a18955b36527a5881e9df8a251cfb96cd575"
+        },
+        {
+          "location": ".temp/worktrees/g-2799/.artifacts/qa/20261020t104438-223492/logs/owner.log",
+          "sha256": "1e9a40131871aad33dd02d995f1b1245247562bda557e85280b13c2ed0855d84"
+        }
+      ],
+      "reused": true,
+      "rerunByReviewer": false
+    },
+    {
+      "run": "20261020t104726-ec5d52",
+      "job": "ed6d4b87-8219-40d3-a48b-4946cefa7fc3",
+      "command": "bun scripts/goal/goalctl.ts test scripts/static/access-fixture-writes.test.ts",
+      "scope": "Exact clean delivered head: 5 pass, no acceptance qualification",
+      "recordedSource": {
+        "head": "27560115bb7c270ab3cb91b8012c8fcbdd363f4b",
+        "fingerprint": "b4550dadf7e195f522fd63cd93b150a66c51332cac0e5fa977c681139651b203",
+        "clean": true
+      },
+      "sourceStable": true,
+      "cases": 5,
+      "failedCases": [],
+      "files": [
+        {
+          "location": ".temp/worktrees/g-2799/.artifacts/qa/20261020t104726-ec5d52/acceptance.json",
+          "sha256": "5dc08210db3f557e48d0f1a22e80d5fda1219a79d3159be5a2d8b215770fe112"
+        },
+        {
+          "location": ".temp/worktrees/g-2799/.artifacts/qa/20261020t104726-ec5d52/owner.xml",
+          "sha256": "cf89e25065f02592360e4af245f92fb47fcde11f9ca009f460038888912619b9"
+        },
+        {
+          "location": ".temp/worktrees/g-2799/.artifacts/qa/20261020t104726-ec5d52/logs/owner.log",
+          "sha256": "12412a0faf0efd07c0a9bf4474afa37b00e62f3abaf6efad44ab43043edc2bab"
+        }
+      ],
+      "reused": true,
+      "rerunByReviewer": false
+    }
+  ],
+  "additionalRetainedChecks": [
+    {
+      "job": "320fd4bb-a101-4ce9-baef-9320b1b8bb4b",
+      "commands": [
+        "task main:typecheck",
+        "task goal -- check --only lint,tests"
+      ],
+      "result": "Main 2,842 files pass; lint and AST pass; dataset-relation-mapping 33 tests / 266 assertions pass",
+      "logs": [
+        {
+          "location": ".temp/worktrees/g-2799/.temp/goal/jobs/320fd4bb-a101-4ce9-baef-9320b1b8bb4b.1.log",
+          "sha256": "cb347a2b705853c101c8dfe6fe6cc4fdc3971d7309a5d9499a8374242d25dea4"
+        },
+        {
+          "location": ".temp/worktrees/g-2799/.temp/goal/jobs/320fd4bb-a101-4ce9-baef-9320b1b8bb4b.2.log",
+          "sha256": "90268dfb9209a89eac97a28e2866b5b9c2ba26fe4c3242019e4e8c7b5ba2cf24"
+        },
+        {
+          "location": ".temp/worktrees/g-2799/.temp/goal/check/run-DE0WK0/tests-0.log",
+          "sha256": "9f5174b93a12c0a611a54cfcf6513ce45920e1a1490a5d1a766975b1e171a2c1"
+        }
+      ]
+    },
+    {
+      "job": "ed6d4b87-8219-40d3-a48b-4946cefa7fc3",
+      "command": "task main:typecheck",
+      "result": "Main 2,842 files pass after exact-head fixture guard check",
+      "log": {
+        "location": ".temp/worktrees/g-2799/.temp/goal/jobs/ed6d4b87-8219-40d3-a48b-4946cefa7fc3.2.log",
+        "sha256": "9456bec5164ea3998fb17fc05c4cb3c5538a4ec918755116f9cd7f19d1f50869"
+      }
+    },
+    {
+      "job": "2d47708c-a949-422d-ae05-64b6cd5d957f",
+      "run": "20261020t104311-0c39ef",
+      "result": "Historical fixture parse/setup failure: 0 pass / 2 errors, no test body or outcome assertion reached; subsequently repaired, receipt retained",
+      "log": {
+        "location": ".temp/worktrees/g-2799/.temp/goal/jobs/2d47708c-a949-422d-ae05-64b6cd5d957f.log",
+        "sha256": "bdea505975ee09aae60601f0e7c4ee976780ca9f15a53fdf9e435f59e9b92b56"
+      }
+    },
+    {
+      "job": "619fc649-118d-4f95-af16-0c2fc48bd35d",
+      "run": "20261020t041647-d1b7c0",
+      "result": "Original 132 owner passes / 6 failures and unit pass remain retained; no historical evidence replaced",
+      "log": {
+        "location": ".temp/worktrees/g-2799/.temp/goal/jobs/619fc649-118d-4f95-af16-0c2fc48bd35d.log",
+        "sha256": "6c47d30c740cca94ecf64599dae4ceec45f65e461765c099720011394e5dd32f"
+      }
+    },
+    {
+      "result": "Existing broad continuation guard failures in ContinueStrip/ZoneSiteRoute remain unresolved outside this slice; no whole-guard success is inferred from targeted lint/AST/dataset passes",
+      "log": {
+        "location": ".temp/worktrees/g-2799/.temp/goal/check/run-FgV0gN/guards-0.log",
+        "sha256": "d9c32a24b0c97e1b33a2d441b4448a721d3e2dd2759867c4fd52ed0d07d122b5"
+      }
+    }
+  ],
+  "baseFailureComparison": {
+    "rerunByReviewer": false,
+    "comparison": "Retained exact clean base dc97b9ac.. QA 20261020t104058-ff4eaa versus recovery working-tree QA 20261020t104438-223492; exact same four failing case names and failure classes.",
+    "rankings": {
+      "personas": [
+        "anonymous",
+        "signed"
+      ],
+      "testBodyReached": true,
+      "outcomeAssertionReached": false,
+      "classification": "fixture/prerequisite failure inside reader before outcome assertions",
+      "failure": "readRankingPage at services/main/src/modules/rankings/read.ts:33 reads projection.clock.at on an absent clock."
+    },
+    "identifierRelease": {
+      "personas": [
+        "anonymous",
+        "signed"
+      ],
+      "testBodyReached": true,
+      "outcomeAssertionReached": true,
+      "assertionKind": "owner-test parent-hydration/disclosure-target assertion, not genuine public outcome proof",
+      "baseLine": 460,
+      "recoveryLine": 468,
+      "failure": "Expected later disclosure targets only id(2), id(3); actual set also includes id(11), id(12), id(13). Earlier identity/cursor assertions were reached. All original assertions remain."
+    },
+    "restrictedRelation": {
+      "exactBase": "passes",
+      "initialRecovery": "setup failure, Disclosure owner is unavailable, before original assertions",
+      "finalRecovery": "passes both unchanged admitted-identity and null end-cursor assertions after current owner prerequisites/session were supplied"
+    },
+    "conclusion": "None of these four unchanged-base failures demonstrates an introduced A17 defect. The extra original fixture failures are not product counterexamples."
+  },
+  "receiptReuseBoundary": {
+    "verifiedGitEquality": {
+      "from": "18acb29eca6b89001f221470dc7d23358ce7a810",
+      "to": "27560115bb7c270ab3cb91b8012c8fcbdd363f4b",
+      "scope": "all services/main/src plus statement-collection-purpose, relation-collection-purpose, statement-qualification and statement-seek-progress test files",
+      "diff": "empty"
+    },
+    "authoredRecoveryProductionDiff": "empty; exactly two fixture files differ between 1e283dfe.. and 27560115bb..",
+    "importantLimit": "The 53-test receipt identifies stable dirty source at f1c42d.. with fingerprint 3999339687be..., not a clean candidate commit. Recovery selected25 and G-904 receipts likewise identify stable dirty snapshots at 1e283dfe.., not clean 27560115bb. Reuse follows the supplied exact-file continuity attestation and verified original-authored/final blob equality; no per-file manifest or clean full-runtime replay for those dirty snapshots is claimed. The exact clean delivered-head fixture-authority receipt and Main typecheck remain separate evidence.",
+    "focusedRerunDecision": "No new unresolved introduced product counterexample required execution. Accepted focused suites, exact-base failures and known nullable diagnostics were not rerun."
+  },
+  "originalOutcomeRequirements": {
+    "personas": [
+      "visitor",
+      "stranger",
+      "member",
+      "owner",
+      "moderator",
+      "operator"
+    ],
+    "api": {
+      "file": "tests/qa/integration/collection-domain-roles.test.ts",
+      "case": "${persona}: ordinary membership, a book list, recipe selection, series and franchise stay distinct",
+      "helper": "tests/qa/integration/support/catalogue-information.ts:795",
+      "requirements": "Exact native purpose Statement/revision/sources and heading; misleading ordinary title does not establish series; public hidden pages 404 and no hidden serialization; canonical Collection page limit=1 returns every original repeated occurrence in order with exclusive finite continuation. Separate existing source-support and cursor/CAS/private/public mutation assertions remain untouched.",
+      "executedByReviewer": false
+    },
+    "browser": {
+      "file": "apps/web/tests/catalogue-detail-contract.e2e.ts",
+      "case": "C29 / visitor / reading lists curations genuine series and unknown collections preserve their roles and occurrences",
+      "line": 338,
+      "requirements": "Exact named role region and Collection title link, actual Collection header, every Members data-occurrence in order, member titles/hrefs, no Series/Franchises headings on other roles, mandatory repeated-member control.",
+      "executedByReviewer": false
+    },
+    "prerequisites": "Use the existing public-command fixture/proof owners. The eleven-path delivery adds no corpus preparation or runtime bootstrap for collection-purpose-v1. The reader intentionally refuses unavailable DefinitionKey/current Definition, active canonical Structure, Global scope/decisions or seek owner rather than reporting false absence. Their real retained availability was not inspected or established by fabricated fixture responses.",
+    "publicOutcomeAssertionFailuresReproducedByReviewer": []
+  },
+  "reviewerChecks": {
+    "readOnlyAnalysis": [
+      "Exact eleven-path base/head extraction and SHA-256/Git blob manifest",
+      "Parent/recovery diffs and unchanged original-authored production/focused-test comparison",
+      "Parsed generated OpenAPI structural diff",
+      "Retained XML/log/source metadata and nine diagnostics inspected",
+      "Original C29 working specification bytes matched frozen head",
+      "Unapplied seven-file patch SHA-256 matched brief"
+    ],
+    "recorded": [
+      {
+        "job": "296cecb8-b498-4307-815b-33044963f393",
+        "command": "task docs:check",
+        "exitCode": 0,
+        "result": "PASS: 13 documentation-check self-tests and 249 Markdown files; runtime/external URLs excluded",
+        "log": ".temp/goal/jobs/296cecb8-b498-4307-815b-33044963f393.1.log",
+        "logSha256": "b9498c2f566b082e7d977f034db5a4592928ade1a593a45d035106d4d3fb5334"
+      },
+      {
+        "job": "296cecb8-b498-4307-815b-33044963f393",
+        "command": "task goal -- check",
+        "exitCode": 0,
+        "result": "PASS: types/lint/tests skipped with no relevant source or named tests; AST pass; selected repository guard pass (1/44). Selection included historical report paths from branch ancestry; they were not edited or rereviewed.",
+        "log": ".temp/goal/jobs/296cecb8-b498-4307-815b-33044963f393.2.log",
+        "logSha256": "719f375bc512aa3dc1bf3b7a3897ca9ea5501cb5bb2e9977bf8ebbfe354a502c"
+      }
+    ],
+    "workerCheckOutput": ".temp/goal/check/run-aceNeg/output.log",
+    "treeCurrency": "Existing review worktree stayed at 389d39ea1aaf0fe13d320c0df2e46319c0f811b5; the check warned of seven missing main harness commits. Its uncommitted report prevented automatic rebase. No branch/rebase or implementation change was made.",
+    "gitDiffCheck": "pass"
+  },
+  "limitations": [
+    "This is one first independent changed-slice source/API-contract review. Compilation and transport-fixture owner tests are not product acceptance.",
+    "No implementation, historical report key, original assertion, fixture identity or corpus data was edited. No service, browser, import, reset, shared lifecycle, landing or nested worker was started.",
+    "No genuine HTTP/API, rendered 1440/390, C29 persona, large-fanout latency/capacity or real retained native acceptance outcome was run.",
+    "The finite reader shares the 20-candidate subject batch, deadline and graph budgets; exhausted reads refuse rather than expose truncated absence. Per-Collection lookup composition at large fanout is not certified by the three-Collection fixture.",
+    "Nine nullable consumer diagnostics and purpose-specific rendered grouping remain explicit dependencies. Patch identity alone is neither application nor grouping proof.",
+    "A17 and C29 stay open; Source/query/registry/native/credit findings and approvals remain outside this review."
+  ],
+  "managerNext": [
+    "Route the exact nullable patch to existing G-2758 and complete purpose-aware grouping with the existing UI owner.",
+    "Use existing public-command fixture/proof owners for the untouched six-persona C29 API case and browser assertion. Preserve original corpus epochs, identities and all assertions.",
+    "Keep the four evidenced base failures and earlier setup failures separate from new public outcome failures; do not make unrelated full-wave/runtime checks prerequisites for this source report."
+  ]
+}
